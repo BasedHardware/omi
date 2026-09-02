@@ -324,7 +324,8 @@ final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
       context: ChatFirstMaterializationContext(ownerID: "owner", controlGeneration: 3),
       pendingReceipts: batch,
       response: ChatFirstMaterializePromptsResponse(intents: []))
-    driver.fetchError = APIError.httpError(statusCode: 422)
+    let serverDetail = "raw pydantic validation body must stay private"
+    driver.fetchError = APIError.httpError(statusCode: 422, detail: serverDetail)
     var messages: [String] = []
     let coordinator = ChatFirstPromptMaterializationCoordinator(logger: { messages.append($0) })
     coordinator.activate(driver: driver)
@@ -332,7 +333,8 @@ final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
     coordinator.chatTranscriptFirstPageDidLoad()
     for _ in 0..<40 where messages.isEmpty { await Task.yield() }
 
-    XCTAssertTrue(messages.first?.contains("422") == true)
+    XCTAssertTrue(messages.first?.contains("status=422") == true)
+    XCTAssertFalse(messages.first?.contains(serverDetail) == true)
     XCTAssertTrue(messages.first?.contains("receipts=1 rejections=1 deferrals=1") == true)
   }
 }

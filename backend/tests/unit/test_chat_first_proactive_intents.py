@@ -71,6 +71,7 @@ class _Document:
     def get(self, transaction=None):
         if transaction is not None:
             transaction.read()
+            self._database.transaction_reads[self._path] = self._database.transaction_reads.get(self._path, 0) + 1
             hook = self._database.transaction_read_hooks.pop(self._path, None)
             if hook is not None:
                 hook()
@@ -158,10 +159,25 @@ class _FilteredCollection:
                 matched.append(snap)
             elif op == '<=' and actual is not None and actual <= value:
                 matched.append(snap)
+            elif op == 'in' and actual in value:
+                matched.append(snap)
         return _FilteredCollection(matched)
 
     def limit(self, count):
         return _FilteredCollection(self._snapshots[:count])
+
+    def order_by(self, field):
+        def value(snapshot):
+            actual = snapshot.to_dict() or {}
+            for component in field.split('.'):
+                if not isinstance(actual, dict):
+                    return None
+                actual = actual.get(component)
+            return actual
+
+        return _FilteredCollection(
+            sorted((snapshot for snapshot in self._snapshots if value(snapshot) is not None), key=value)
+        )
 
 
 class _Transaction:
@@ -183,6 +199,7 @@ class _Firestore:
         self.transaction_count = 0
         self.transaction_read_hooks = {}
         self.point_reads = {}
+        self.transaction_reads = {}
 
     def collection(self, name):
         return _Collection(self, (name,))
@@ -273,6 +290,19 @@ def test_agent_intent_reserves_then_receipt_accounts_one_turn_idempotently(fires
     assert replayed == delivered
     assert budget.reservations == []
     assert budget.materialized_at == [NOW]
+    delivered_path = ('users', UID, intents_db.INTENTS_COLLECTION, intent.intent_id)
+    parsed_by_old_reader = _OldStrictProactiveIntent.model_validate(firestore.rows[delivered_path])
+
+    # The merge-base acknowledged receipts by parsing first and branching on
+    # delivered state second. Preserve that exact rolling-reader shape.
+    def merge_base_acknowledgement_shape(payload):
+        parsed = _OldStrictProactiveIntent.model_validate(payload)
+        if parsed.delivery_state == 'delivered':
+            return parsed
+        raise AssertionError('expected the old idempotent delivered branch')
+
+    assert merge_base_acknowledgement_shape(firestore.rows[delivered_path]) == parsed_by_old_reader
+    assert set(firestore.rows[delivered_path]) == set(_OldStrictProactiveIntent.model_fields)
 
 
 def test_budget_gate_counts_reservations_before_a_provider_call(firestore):
@@ -510,6 +540,8 @@ def test_legacy_transient_dead_letter_requeues_once_from_next_fetch_after_repair
         materialization_attempts=3,
         last_rejection_code='kernel_materialization_failed',
         last_rejection_at=NOW,
+        last_fetched_at=NOW,
+        requeue_count=0,
     )
 
     repaired = intents_db.fetch_ready_intents(
@@ -905,12 +937,16 @@ def test_fetch_requeues_transient_dead_letter_once_but_never_deterministic_death
     firestore.rows[transient_path].update(
         delivery_state='dead_letter',
         dead_letter_reason='unacknowledged_after_fetch_budget',
+        last_fetched_at=NOW,
+        requeue_count=0,
     )
     transient_attempt_path = ('users', UID, intents_db.DELIVERY_ATTEMPTS_COLLECTION, transient.intent_id)
     firestore.rows[transient_attempt_path] = {
         'fetch_count': intents_db.UNACKNOWLEDGED_FETCH_BUDGET + 1,
         'last_fetched_at': NOW,
         'requeue_count': 0,
+        'first_deferred_at': NOW - timedelta(days=2),
+        'last_deferral_at': NOW - timedelta(days=1),
     }
     deterministic_path = ('users', UID, intents_db.INTENTS_COLLECTION, 'deterministic-death')
     deterministic = {**firestore.rows[transient_path], 'intent_id': 'deterministic-death'}
@@ -925,11 +961,15 @@ def test_fetch_requeues_transient_dead_letter_once_but_never_deterministic_death
     )
     assert [item.intent_id for item in fetched] == [transient.intent_id]
     assert fetched[0].requeue_count == 1
+    assert firestore.rows[transient_attempt_path]['first_deferred_at'] == NOW - timedelta(days=2)
+    assert firestore.rows[transient_attempt_path]['last_deferral_at'] == NOW - timedelta(days=1)
     assert firestore.rows[deterministic_path]['delivery_state'] == 'dead_letter'
 
     firestore.rows[transient_path].update(
         delivery_state='dead_letter',
-        dead_letter_reason='unacknowledged_after_fetch_budget',
+        dead_letter_reason=intents_db.TRANSIENT_DEATH_AFTER_REQUEUE_REASON,
+        last_fetched_at=NOW,
+        requeue_count=1,
     )
     firestore.rows[transient_attempt_path].update(last_fetched_at=NOW, requeue_count=1)
     assert (
@@ -956,13 +996,17 @@ def test_sibling_point_reads_are_bounded_by_candidate_scan_limit(firestore):
             firestore_client=firestore,
         )
 
+    non_transaction_reads_before = sum(firestore.point_reads.values())
+    transaction_reads_before = sum(firestore.transaction_reads.values())
     intents_db.fetch_ready_intent_batch(
         UID, account_generation=GENERATION, limit=8, now=NOW + timedelta(hours=1), firestore_client=firestore
     )
-    sibling_reads = sum(
-        count for path, count in firestore.point_reads.items() if intents_db.DELIVERY_ATTEMPTS_COLLECTION in path
-    )
-    assert sibling_reads <= intents_db.FETCH_CANDIDATE_SCAN_MULTIPLIER * 8
+    non_transaction_reads = sum(firestore.point_reads.values()) - non_transaction_reads_before
+    transaction_reads = sum(firestore.transaction_reads.values()) - transaction_reads_before
+    # One control read plus, for at most 2 * limit candidates, one sibling
+    # hydration read and two transactional point reads (intent + sibling).
+    read_bound = 1 + (intents_db.FETCH_CANDIDATE_SCAN_MULTIPLIER * 8 * 3)
+    assert non_transaction_reads + transaction_reads <= read_bound
 
 
 def test_transient_dead_letter_repair_scan_is_bounded(firestore, monkeypatch):
@@ -997,7 +1041,110 @@ def test_transient_dead_letter_repair_scan_is_bounded(firestore, monkeypatch):
     assert len(scanned) == intents_db.FETCH_CANDIDATE_SCAN_MULTIPLIER * 8
 
 
-def test_malformed_delivery_attempt_is_repaired_and_fetched_with_metric_event(firestore):
+def test_repair_query_does_not_starve_repairable_row_behind_requeued_deaths(firestore):
+    created = []
+    for index in range(20):
+        intent, _ = intents_db.create_intent(
+            UID,
+            source='capture_arrival',
+            continuity_key=f'capture:repair-starvation:{index}',
+            subject=ChatFirstSubject(kind='capture', id=f'repair-starvation-{index}'),
+            blocks=[CaptureLinkSpec(type='captureLink', conversation_id=f'repair-{index}', summary='Repair')],
+            account_generation=GENERATION,
+            now=NOW + timedelta(seconds=index),
+            firestore_client=firestore,
+        )
+        created.append(intent)
+    repairable = max(created, key=lambda intent: intent.intent_id)
+    for intent in created:
+        intent_path = ('users', UID, intents_db.INTENTS_COLLECTION, intent.intent_id)
+        attempt_path = ('users', UID, intents_db.DELIVERY_ATTEMPTS_COLLECTION, intent.intent_id)
+        requeue_count = 0 if intent == repairable else 1
+        firestore.rows[intent_path].update(
+            delivery_state='dead_letter',
+            dead_letter_reason='unacknowledged_after_fetch_budget',
+            last_fetched_at=NOW,
+            requeue_count=requeue_count,
+        )
+        firestore.rows[attempt_path] = {
+            'fetch_count': intents_db.UNACKNOWLEDGED_FETCH_BUDGET + 1,
+            'last_fetched_at': NOW,
+            'requeue_count': requeue_count,
+        }
+
+    fetched = intents_db.fetch_ready_intents(
+        UID, account_generation=GENERATION, now=NOW + timedelta(days=5), firestore_client=firestore
+    )
+
+    assert [intent.intent_id for intent in fetched] == [repairable.intent_id]
+
+
+def test_repair_scan_skips_young_rows_without_transactions(firestore):
+    for index in range(16):
+        intent, _ = intents_db.create_intent(
+            UID,
+            source='capture_arrival',
+            continuity_key=f'capture:young-death:{index}',
+            subject=ChatFirstSubject(kind='capture', id=f'young-death-{index}'),
+            blocks=[CaptureLinkSpec(type='captureLink', conversation_id=f'young-{index}', summary='Young')],
+            account_generation=GENERATION,
+            now=NOW,
+            firestore_client=firestore,
+        )
+        firestore.rows[('users', UID, intents_db.INTENTS_COLLECTION, intent.intent_id)].update(
+            delivery_state='dead_letter',
+            dead_letter_reason='unacknowledged_after_fetch_budget',
+            last_fetched_at=NOW,
+            requeue_count=0,
+        )
+    transactions_before = firestore.transaction_count
+
+    batch = intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(hours=1), firestore_client=firestore
+    )
+
+    assert batch.intents == []
+    assert firestore.transaction_count == transactions_before
+
+
+def test_twice_dead_intent_gets_terminal_reason_and_is_never_scanned_again(firestore):
+    intent, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:twice-dead',
+        subject=ChatFirstSubject(kind='capture', id='twice-dead'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='twice-dead', summary='Twice dead')],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+    intent_path = ('users', UID, intents_db.INTENTS_COLLECTION, intent.intent_id)
+    attempt_path = ('users', UID, intents_db.DELIVERY_ATTEMPTS_COLLECTION, intent.intent_id)
+    firestore.rows[attempt_path] = {
+        'fetch_count': intents_db.UNACKNOWLEDGED_FETCH_BUDGET,
+        'requeue_count': 1,
+    }
+
+    assert (
+        intents_db.fetch_ready_intents(
+            UID, account_generation=GENERATION, now=NOW + timedelta(hours=1), firestore_client=firestore
+        )
+        == []
+    )
+    assert firestore.rows[intent_path]['dead_letter_reason'] == intents_db.TRANSIENT_DEATH_AFTER_REQUEUE_REASON
+    assert firestore.rows[intent_path]['requeue_count'] == 1
+    transactions_before = firestore.transaction_count
+
+    assert (
+        intents_db.fetch_ready_intents(
+            UID, account_generation=GENERATION, now=NOW + timedelta(days=5), firestore_client=firestore
+        )
+        == []
+    )
+    assert firestore.transaction_count == transactions_before
+
+
+def test_invalid_rejection_code_is_repaired_and_fetched_with_metric_event(firestore):
     intent, _ = intents_db.create_intent(
         UID,
         source='capture_arrival',
@@ -1009,7 +1156,11 @@ def test_malformed_delivery_attempt_is_repaired_and_fetched_with_metric_event(fi
         firestore_client=firestore,
     )
     attempt_path = ('users', UID, intents_db.DELIVERY_ATTEMPTS_COLLECTION, intent.intent_id)
-    firestore.rows[attempt_path] = {'fetch_count': 'garbage', 'requeue_count': -1}
+    firestore.rows[attempt_path] = {
+        'fetch_count': 0,
+        'requeue_count': 0,
+        'last_rejection_code': 'Bad Code!',
+    }
 
     batch = intents_db.fetch_ready_intent_batch(
         UID, account_generation=GENERATION, now=NOW + timedelta(minutes=1), firestore_client=firestore
@@ -1018,6 +1169,31 @@ def test_malformed_delivery_attempt_is_repaired_and_fetched_with_metric_event(fi
     assert [item.intent_id for item in batch.intents] == [intent.intent_id]
     assert firestore.rows[attempt_path]['fetch_count'] == 1
     assert firestore.rows[attempt_path]['requeue_count'] == 0
+    assert firestore.rows[attempt_path]['last_rejection_code'] is None
+    assert [event.event for event in batch.lifecycle_events] == ['malformed_attempt_reset']
+
+
+def test_malformed_fetch_count_reset_preserves_valid_requeue_count(firestore):
+    intent, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:malformed-fetch-count',
+        subject=ChatFirstSubject(kind='capture', id='malformed-fetch-count'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='malformed-fetch-count', summary='Repair')],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+    attempt_path = ('users', UID, intents_db.DELIVERY_ATTEMPTS_COLLECTION, intent.intent_id)
+    firestore.rows[attempt_path] = {'fetch_count': 'garbage', 'requeue_count': 1}
+
+    batch = intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(minutes=1), firestore_client=firestore
+    )
+
+    assert [item.intent_id for item in batch.intents] == [intent.intent_id]
+    assert firestore.rows[attempt_path]['fetch_count'] == 1
+    assert firestore.rows[attempt_path]['requeue_count'] == 1
     assert [event.event for event in batch.lifecycle_events] == ['malformed_attempt_reset']
 
 
@@ -1397,6 +1573,37 @@ def test_fetch_orders_daily_and_meeting_intents_ahead_of_capture_link_backlog(fi
 
     assert [intent.intent_id for intent in batch.intents[:2]] == [daily.intent_id, meeting.intent_id]
     assert len(batch.intents) == 8
+    assert batch.stalled_source == 'capture_arrival'
+
+
+def test_stall_scan_includes_old_low_priority_intent_below_response_window(firestore):
+    for index in range(20):
+        intents_db.create_intent(
+            UID,
+            source='daily_opener',
+            continuity_key=f'daily:fresh-priority:{index}',
+            subject=None,
+            blocks=[CaptureLinkSpec(type='captureLink', conversation_id=f'fresh-{index}', summary='Fresh')],
+            account_generation=GENERATION,
+            now=NOW + timedelta(seconds=index),
+            firestore_client=firestore,
+        )
+    old, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:old-low-priority',
+        subject=ChatFirstSubject(kind='capture', id='old-low-priority'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='old-low-priority', summary='Old')],
+        account_generation=GENERATION,
+        now=NOW - timedelta(days=30),
+        firestore_client=firestore,
+    )
+
+    batch = intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, limit=8, now=NOW + timedelta(minutes=1), firestore_client=firestore
+    )
+
+    assert old.intent_id not in {intent.intent_id for intent in batch.intents}
     assert batch.stalled_source == 'capture_arrival'
 
 
