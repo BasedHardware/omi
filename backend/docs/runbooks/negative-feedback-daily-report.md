@@ -115,8 +115,12 @@ date.
 ## Known limits
 
 - **Report cap.** One report is one Firestore document (1 MiB), so it holds at
-  most `MAX_REPORT_ENTRIES` (500) entries. Beyond that the report sets
-  `truncated: true` rather than silently showing a partial day.
+  most `MAX_REPORT_ENTRIES` (500) entries, read from at most `RAW_FETCH_LIMIT`
+  (2000) ledger rows. Hitting *either* bound sets `truncated: true` rather than
+  silently showing a partial day. The two limits differ because one thumbs-down
+  can write several ledger rows that collapse to one entry, so judging the cap
+  only on collapsed entries would let a day overrun the fetch and still look
+  complete.
 - **Deleted messages.** A conversation deleted between the nightly run and a
   reviewer's read comes back in `unavailable` rather than as a gap.
 - **No history before deploy.** The ledger starts empty; the first report covers

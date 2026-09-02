@@ -404,3 +404,32 @@ def test_notification_ratings_are_a_separate_surface(fake_db):
     report = generate_report(date.today())
 
     assert report.counts_by_surface == {'chat_notification': 1}
+
+
+def test_truncation_is_judged_on_raw_rows_not_collapsed_entries(fake_db, monkeypatch):
+    """A reasoned thumbs-down writes two ledger rows that collapse to one entry.
+    If the fetch limit were measured after collapsing, a day that overran the
+    fetch could still report `truncated: False` while silently dropping half
+    its thumbs-down — the one failure the flag exists to rule out."""
+    from datetime import date
+
+    import database.feedback as feedback_db
+    from jobs.feedback_daily_report import generate_report
+
+    # Cap of 4 entries, raw fetch of 8 rows.
+    monkeypatch.setattr(feedback_db, 'MAX_REPORT_ENTRIES', 4)
+    monkeypatch.setattr(feedback_db, 'RAW_FETCH_LIMIT', 8)
+
+    # 6 distinct rated messages, each rated twice (tap, then reason) = 12 raw
+    # rows. That overruns the 8-row fetch, but collapses to at most 4 entries —
+    # under the entry cap, so only the raw-row check can notice.
+    messages = [_message(f'rated{i}', 'ai', i) for i in range(6)]
+    _seed_messages(fake_db, messages)
+    for i in range(6):
+        _record(fake_db, target_id=f'rated{i}')
+        _record(fake_db, target_id=f'rated{i}', reason='too_verbose')
+
+    report = generate_report(date.today())
+
+    assert report.truncated, 'a report that could not read the whole day must say so'
+    assert report.total_negative <= 4

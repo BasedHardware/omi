@@ -57,13 +57,25 @@ def generate_report(day: date_cls) -> FeedbackReport:
     """Build (and return) the report for one UTC day. Does not persist."""
     start_at, end_at = _day_bounds(day)
     cap = feedback_db.MAX_REPORT_ENTRIES
-    events = feedback_db.list_negative_events(start_at, end_at, limit=cap + 1)
 
-    events = _collapse_per_target(events)
+    # Fetch with headroom, and judge truncation on the *raw* rows rather than
+    # the collapsed ones. A reasoned thumbs-down writes two ledger rows (the
+    # tap, then the reason), so a fetch capped at `cap + 1` could collapse to
+    # half that many entries and still look complete — a silently partial
+    # report, which is the one thing `truncated` exists to rule out.
+    raw_limit = feedback_db.RAW_FETCH_LIMIT
+    raw_events = feedback_db.list_negative_events(start_at, end_at, limit=raw_limit + 1)
+    hit_raw_limit = len(raw_events) > raw_limit
 
-    truncated = len(events) > cap
+    events = _collapse_per_target(raw_events[:raw_limit])
+
+    truncated = hit_raw_limit or len(events) > cap
     if truncated:
-        logger.warning(f'Feedback report {day.isoformat()}: more than {cap} thumbs-down; report is capped.')
+        logger.warning(
+            f'Feedback report {day.isoformat()}: capped — '
+            f'{len(raw_events)} raw row(s) fetched (limit {raw_limit}), '
+            f'{len(events)} entries after collapse (cap {cap}).'
+        )
         events = events[:cap]
 
     entries: list[FeedbackReportEntry] = []

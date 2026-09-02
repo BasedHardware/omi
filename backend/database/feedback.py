@@ -54,6 +54,13 @@ _DOCUMENT_ID_FIELD = '__name__'
 # rather than silently showing a partial picture.
 MAX_REPORT_ENTRIES = 500
 
+# How many raw ledger rows one report run reads before it declares itself
+# capped. Larger than MAX_REPORT_ENTRIES because the ledger is append-only and
+# one thumbs-down can write several rows — the tap, then the reason, then a
+# toggle — which collapse to a single report entry. 4x leaves room for that
+# without letting a runaway day read unboundedly.
+RAW_FETCH_LIMIT = MAX_REPORT_ENTRIES * 4
+
 
 def record_feedback_event(
     uid: str,
