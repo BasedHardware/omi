@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// Wraps onboarding step content so each step fades and slides up into place
-/// when the flow advances to a new page, instead of cutting abruptly between
-/// screens. Swap the `child`/`pageKey` (e.g. to the current TabController
-/// index) to trigger the transition.
+/// Wraps onboarding step content so each step slowly fades out and fades
+/// back in when the flow advances to a new page, instead of cutting
+/// abruptly between screens. Swap the `child`/`pageKey` (e.g. to the current
+/// TabController index) to trigger the transition.
 class OnboardingPageTransition extends StatelessWidget {
   final Object pageKey;
   final Widget child;
@@ -13,21 +13,17 @@ class OnboardingPageTransition extends StatelessWidget {
     super.key,
     required this.pageKey,
     required this.child,
-    this.duration = const Duration(milliseconds: 420),
+    this.duration = const Duration(milliseconds: 700),
   });
 
   @override
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
       duration: duration,
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
+      switchInCurve: Curves.easeIn,
+      switchOutCurve: Curves.easeOut,
       transitionBuilder: (widgetChild, animation) {
-        final slide = Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero).animate(animation);
-        return FadeTransition(
-          opacity: animation,
-          child: SlideTransition(position: slide, child: widgetChild),
-        );
+        return FadeTransition(opacity: animation, child: widgetChild);
       },
       layoutBuilder: (currentChild, previousChildren) {
         return Stack(

@@ -5,10 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -38,13 +36,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
       end: 1.0,
     ).animate(CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut));
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      // Check if user has set primary language
-      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
-        await LanguageSelectionDialog.show(context);
-      }
-    });
     // Onboarding completion is now handled by the completion screen
   }
 
@@ -138,15 +129,22 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
             },
             showError: (error) {
               if (error == 'SOCKET_INIT_FAILED') {
+                // Retrying "Get Started" would just re-attempt the same
+                // connection and fail the same way, leaving onboarding stuck
+                // with no way out — offer the same "Skip for now" escape as
+                // STT_UNAVAILABLE below instead of a dead-end "OK".
                 showDialog(
                   context: context,
                   builder: (c) => getDialog(
                     context,
-                    () => Navigator.pop(context),
+                    () {
+                      provider.close();
+                      widget.onSkip();
+                    },
                     () {},
                     context.l10n.connectionError,
                     context.l10n.connectionErrorDesc,
-                    okButtonText: context.l10n.ok,
+                    okButtonText: context.l10n.skipForNow,
                     singleButton: true,
                   ),
                   barrierDismissible: false,
@@ -333,11 +331,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                   height: 56,
                                   child: ElevatedButton(
                                     onPressed: () async {
-                                      // Check if user has set primary language, if not, show dialog
-                                      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
-                                        await LanguageSelectionDialog.show(context);
-                                      }
-
                                       await stopAllRecording();
 
                                       // Initialize speech profile with phone mic as input source

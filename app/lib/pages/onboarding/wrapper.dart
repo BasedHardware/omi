@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -10,7 +11,6 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
 import 'package:omi/pages/onboarding/auth.dart';
@@ -19,7 +19,6 @@ import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
-import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/widgets/omi_device_glow.dart';
@@ -29,11 +28,13 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
+import 'package:omi/widgets/omi_logo_spinner.dart';
 
 class OnboardingWrapper extends StatefulWidget {
   const OnboardingWrapper({super.key, this.forceAuthPage = false});
@@ -50,18 +51,19 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kAuthPage = 1;
   static const int kAiConsentPage = 2; // Data-and-AI disclosure with explicit consent
   static const int kNamePage = 3;
-  static const int kPrimaryLanguagePage = 4;
-  static const int kFoundOmiPage = 5;
-  static const int kPermissionsPage = 6;
-  static const int kUserReviewPage = 7; // "Loving Omi?" screen
-  static const int kWelcomePage = 8;
-  static const int kFindDevicesPage = 9;
-  static const int kSpeechProfilePage = 10; // Speech profile with questions (requires device)
-  static const int kKnowledgeGraphPage = 11; // Memory graph preview
-  static const int kCompletePage = 12; // "You're all set" completion screen
+  // Primary language is set automatically to English on the Name step
+  // (see its goNext) instead of asking the user to pick one.
+  static const int kFoundOmiPage = 4;
+  static const int kPermissionsPage = 5;
+  static const int kUserReviewPage = 6; // "Loving Omi?" screen
+  static const int kWelcomePage = 7;
+  static const int kFindDevicesPage = 8;
+  static const int kSpeechProfilePage = 9; // Speech profile with questions (requires device)
+  static const int kKnowledgeGraphPage = 10; // Memory graph preview
+  static const int kCompletePage = 11; // "You're all set" completion screen
 
   // Special index values used in comparisons
-  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 
   // Splash, sign-in, and data & privacy all share the same device + glow
   // backdrop (instead of each having its own background), so it never
@@ -69,14 +71,31 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   bool get _showsDeviceBackdrop =>
       _controller!.index == kSplashPage || _controller!.index == kAuthPage || _controller!.index == kAiConsentPage;
 
+  // Pages that share the spinning-dots backdrop — persistent (see build())
+  // so it doesn't restart when moving between them.
+  static const List<int> kSpinnerBackdropPages = [
+    kNamePage,
+    kFoundOmiPage,
+    kPermissionsPage,
+    kUserReviewPage,
+    kSpeechProfilePage,
+    kKnowledgeGraphPage,
+  ];
+  bool get _showsSpinnerBackdrop => kSpinnerBackdropPages.contains(_controller!.index);
+
+  // The spinner only starts fading in once the device backdrop has fully
+  // faded out — sequential, not simultaneous — so this lags _showsSpinnerBackdrop
+  // by exactly the device's fade-out duration when turning on, and drops
+  // immediately when turning off.
+  static const Duration _backdropFadeDuration = Duration(milliseconds: 2200);
+  bool _spinnerVisible = false;
+  Timer? _spinnerRevealTimer;
+
   TabController? _controller;
-  late AnimationController _backgroundAnimationController;
-  late Animation<double> _backgroundFadeAnimation;
   // Plays once, exactly when leaving the splash page, so the device's glow
   // eases on for sign-in without ever being on during the splash itself.
   late final AnimationController _deviceGlowController;
   late final Animation<double> _deviceGlowAnimation;
-  String _currentBackgroundImage = Assets.images.onboardingBg2.path;
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
   SpeechProfileProvider? _speechProfileProvider;
   Future<void>? _knowledgeGraphPrebuildFuture;
@@ -87,37 +106,37 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       _speechProfileProvider = SpeechProfileProvider();
     }
     _controller = TabController(
-      length: 13,
+      length: 12,
       vsync: this,
-    ); // Splash, Auth, AiConsent, Name, Lang, FoundOmi, Permissions, Review, Welcome, FindDevices, SpeechProfile, KnowledgeGraph, Complete
+    ); // Splash, Auth, AiConsent, Name, FoundOmi, Permissions, Review, Welcome, FindDevices, SpeechProfile, KnowledgeGraph, Complete
     _controller!.addListener(() {
       if (!mounted) return;
       setState(() {});
-      // Update background image when page changes
-      _updateBackgroundImage(_controller!.index);
-      // Precache next image for smoother transitions
-      _precacheNextImage(_controller!.index);
       if (_controller!.previousIndex == kSplashPage && _controller!.index == kAuthPage) {
         _deviceGlowController.forward();
       }
       if (_controller!.index == kSpeechProfilePage && _knowledgeGraphPrebuildFuture == null) {
         _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError((_) {});
       }
+      final showsSpinner = _showsSpinnerBackdrop;
+      if (showsSpinner != _spinnerVisible) {
+        _spinnerRevealTimer?.cancel();
+        if (showsSpinner) {
+          _spinnerRevealTimer = Timer(_backdropFadeDuration, () {
+            if (mounted && _showsSpinnerBackdrop) {
+              setState(() => _spinnerVisible = true);
+            }
+          });
+        } else {
+          setState(() => _spinnerVisible = false);
+        }
+      }
     });
 
     // Initialize animation controllers
-    _backgroundAnimationController = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
     _deviceGlowController = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
     _deviceGlowAnimation = CurvedAnimation(parent: _deviceGlowController, curve: Curves.easeIn);
 
-    // Initialize animations
-    _backgroundFadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _backgroundAnimationController, curve: Curves.easeInOut));
-
-    // Start initial animations
-    _backgroundAnimationController.forward();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Let's not update permissions here because of Apple's review process
       // if (mounted) {
@@ -159,9 +178,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   @override
   void dispose() {
     _controller?.dispose();
-    _backgroundAnimationController.dispose();
     _deviceGlowController.dispose();
     _speechProfileProvider?.dispose();
+    _spinnerRevealTimer?.cancel();
     super.dispose();
   }
 
@@ -221,87 +240,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     );
   }
 
-  void _updateBackgroundImage(int pageIndex) {
-    String newImage = _currentBackgroundImage;
-
-    switch (pageIndex) {
-      case kNamePage:
-        newImage = Assets.images.onboardingBg1.path;
-        break;
-      case kPrimaryLanguagePage:
-        newImage = Assets.images.onboardingBg4.path;
-        break;
-      case kFoundOmiPage:
-        newImage = Assets.images.onboardingBg1.path;
-        break;
-      case kPermissionsPage:
-        newImage = Assets.images.onboardingBg3.path;
-        break;
-      case kUserReviewPage:
-        newImage = Assets.images.onboardingBg6.path;
-        break;
-      case kSpeechProfilePage:
-        newImage = Assets.images.onboardingBg3.path;
-        break;
-      case kKnowledgeGraphPage:
-        newImage = Assets.images.onboardingBg6.path;
-        break;
-      case kCompletePage:
-        newImage = Assets.images.onboardingBg6.path;
-        break;
-      default:
-        // Splash, auth, and AI consent use the device backdrop, not a photo.
-        return;
-    }
-
-    if (_currentBackgroundImage != newImage) {
-      setState(() {
-        _currentBackgroundImage = newImage;
-      });
-      _backgroundAnimationController.reset();
-      _backgroundAnimationController.forward();
-    }
-  }
-
-  void _precacheNextImage(int currentIndex) {
-    // Get the next background image path
-    String? nextImagePath = _getBackgroundImageForIndex(currentIndex + 1);
-    if (nextImagePath != null && mounted) {
-      // Precache the next image
-      precacheImage(
-        ResizeImage(
-          AssetImage(nextImagePath),
-          width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
-          height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
-        ),
-        context,
-      );
-    }
-  }
-
-  String? _getBackgroundImageForIndex(int pageIndex) {
-    switch (pageIndex) {
-      case kNamePage:
-        return Assets.images.onboardingBg1.path;
-      case kPrimaryLanguagePage:
-        return Assets.images.onboardingBg4.path;
-      case kFoundOmiPage:
-        return Assets.images.onboardingBg1.path;
-      case kPermissionsPage:
-        return Assets.images.onboardingBg3.path;
-      case kUserReviewPage:
-        return Assets.images.onboardingBg6.path;
-      case kSpeechProfilePage:
-        return Assets.images.onboardingBg3.path;
-      case kKnowledgeGraphPage:
-        return Assets.images.onboardingBg6.path;
-      case kCompletePage:
-        return Assets.images.onboardingBg6.path;
-      default:
-        return null;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     List<Widget> pages = [
@@ -345,19 +283,21 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       NameWidget(
         goNext: () {
-          _goNext(); // Go to Primary Language page
+          // Onboarding no longer asks the user to pick a language — default
+          // everyone to English instead (users can still change it later
+          // from Settings). Fire-and-forget so this network call never
+          // blocks the onboarding flow from advancing.
+          context.read<HomeProvider>().updateUserPrimaryLanguage(
+                'en',
+                userProvider: context.read<UserProvider>(),
+              );
+          _goNext(); // Go to Found Omi page
           IntercomManager.instance.updateUser(
             FirebaseAuth.instance.currentUser!.email,
             FirebaseAuth.instance.currentUser!.displayName,
             FirebaseAuth.instance.currentUser!.uid,
           );
           PlatformManager.instance.analytics.onboardingStepCompleted('Name');
-        },
-      ),
-      PrimaryLanguageWidget(
-        goNext: () {
-          _goNext(); // Go to Found Omi page
-          PlatformManager.instance.analytics.onboardingStepCompleted('Primary Language');
         },
       ),
       FoundOmiWidget(
@@ -414,24 +354,42 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
-      // Debug-only: long-press the sign-in page to skip real auth (useful
-      // when local dev builds can't complete Firebase sign-in). Compiled
-      // out of release builds via kDebugMode.
-      onLongPress: kDebugMode && _controller!.index == kAuthPage ? () => _controller!.animateTo(kAiConsentPage) : null,
+      // Debug-only: long-press any step to skip straight to the next one
+      // (useful when local dev builds can't complete real sign-in, or a
+      // step's Continue button is gated on a backend call that has nothing
+      // to talk to locally). Compiled out of release builds via kDebugMode.
+      onLongPress: kDebugMode ? _goNext : null,
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         body: Stack(
           children: [
-            // Persistent across splash/sign-in/data & privacy — never part
-            // of the page-transition crossfade, so it never restarts.
-            if (_showsDeviceBackdrop) _deviceBackground(),
+            // Both backdrops stay mounted for the whole onboarding flow —
+            // never part of the page-transition crossfade, so they never
+            // restart — and cross-fade against each other via opacity only,
+            // instead of popping in/out instantly, right as data & privacy
+            // hands off to the name step.
+            IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: _showsDeviceBackdrop ? 1 : 0,
+                duration: _backdropFadeDuration,
+                curve: Curves.easeInOut,
+                child: _deviceBackground(),
+              ),
+            ),
+            IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: _spinnerVisible ? 1 : 0,
+                duration: _backdropFadeDuration,
+                curve: Curves.easeInOut,
+                child: OmiLogoSpinner(burstTrigger: _controller!.index),
+              ),
+            ),
             OnboardingPageTransition(
               pageKey: _controller!.index,
               child: _controller!.index == kSplashPage || _controller!.index == kAuthPage
                   ? pages[_controller!.index]
                   : _controller!.index == kAiConsentPage ||
                           _controller!.index == kNamePage ||
-                          _controller!.index == kPrimaryLanguagePage ||
                           _controller!.index == kFoundOmiPage ||
                           _controller!.index == kPermissionsPage ||
                           _controller!.index == kUserReviewPage ||
@@ -439,36 +397,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                           _controller!.index == kSpeechProfilePage ||
                           _controller!.index == kKnowledgeGraphPage ||
                           _controller!.index == kCompletePage
-                      ? Stack(
-                          children: [
-                            // Animated background image (skip for welcome, complete, and data & privacy pages)
-                            if (_controller!.index != kWelcomePage &&
-                                _controller!.index != kCompletePage &&
-                                _controller!.index != kAiConsentPage)
-                              FadeTransition(
-                                opacity: _backgroundFadeAnimation,
-                                child: Container(
-                                  height: MediaQuery.of(context).size.height,
-                                  decoration: BoxDecoration(
-                                    image: DecorationImage(
-                                      image: ResizeImage(
-                                        AssetImage(_currentBackgroundImage),
-                                        width: (MediaQuery.of(context).size.width *
-                                                MediaQuery.of(context).devicePixelRatio)
-                                            .round(),
-                                        height: (MediaQuery.of(context).size.height *
-                                                MediaQuery.of(context).devicePixelRatio)
-                                            .round(),
-                                      ),
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            // Page component (no transition for content)
-                            pages[_controller!.index],
-                          ],
-                        )
+                      ? pages[_controller!.index]
                       : SingleChildScrollView(
                           child: Stack(
                             children: [
