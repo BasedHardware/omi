@@ -10,14 +10,8 @@ import XCTest
 /// next day. The V1 migration could not tell a user's decline from "never set".
 /// These tests pin the policy that replaced both.
 final class LaunchAtLoginPreferenceTests: XCTestCase {
-  private var defaults: UserDefaults!
-  private var suiteName: String!
-
-  override func setUp() {
-    super.setUp()
-    suiteName = "LaunchAtLoginPreferenceTests.\(UUID().uuidString)"
-    defaults = UserDefaults(suiteName: suiteName)
-  }
+  private let suiteName = "LaunchAtLoginPreferenceTests.\(UUID().uuidString)"
+  private var defaults: UserDefaults { UserDefaults(suiteName: suiteName) ?? .standard }
 
   override func tearDown() {
     defaults.removePersistentDomain(forName: suiteName)
@@ -71,7 +65,7 @@ final class LaunchAtLoginPreferenceTests: XCTestCase {
 
   func testV2KeyIsDistinctFromV1SoTheInstallBaseIsReEvaluated() {
     // V1 already ran for everyone under the old semantics; a V2 that shared its key would never run.
-    defaults.set(true, forKey: "didMigrateLaunchAtLoginV1")
+    defaults.set(true, forKey: LaunchAtLoginPreference.legacyMigrationV1Key)
     let decision = LaunchAtLoginPreference.migrationDecision(defaults: defaults, hasCompletedOnboarding: true)
     XCTAssertTrue(decision.shouldRun)
     XCTAssertTrue(decision.shouldEnable)

@@ -15,8 +15,8 @@ import XCTest
 /// reducer-published protocol token — so these drive the pure policies the controller now
 /// consults for every one of those decisions.
 final class RealtimeScreenEvidenceHonestFailureTests: XCTestCase {
-  private let turnID = VoiceTurnID(UUID(uuidString: "00000000-0000-0000-0000-0000000000a1")!)
-  private let otherTurnID = VoiceTurnID(UUID(uuidString: "00000000-0000-0000-0000-0000000000a2")!)
+  private let turnID = VoiceTurnID(UUID(uuidString: "00000000-0000-0000-0000-0000000000a1") ?? UUID())
+  private let otherTurnID = VoiceTurnID(UUID(uuidString: "00000000-0000-0000-0000-0000000000a2") ?? UUID())
   private let responseID = VoiceResponseID("response-1")
   private let sessionObjectID = ObjectIdentifier(RealtimeScreenEvidenceHonestFailureTests.self)
 

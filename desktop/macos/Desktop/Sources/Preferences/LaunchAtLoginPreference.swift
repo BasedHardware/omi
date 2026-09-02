@@ -9,6 +9,8 @@ import Foundation
 /// re-evaluated exactly once (V2) and enabled unless the decline marker exists.
 enum LaunchAtLoginPreference {
   static let migrationV2Key = "didMigrateLaunchAtLoginV2"
+  /// V1's key. Never read by the app any more; named so tests can pin that V2 does not share it.
+  static let legacyMigrationV1Key = "didMigrateLaunchAtLoginV1"
 
   struct MigrationDecision: Equatable {
     let shouldRun: Bool

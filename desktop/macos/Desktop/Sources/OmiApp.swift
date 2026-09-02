@@ -546,6 +546,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // the process. The policy checks sign-in at decision time instead, and the
     // coordinator re-scopes its history on `runtimeOwnerDidChange`.
     IntegrationNudgeCoordinator.shared.start()
+    // The daily summary's day-change/wake cadence and its "new summary" notch card should not
+    // wait for the user to open Chat; arm them at launch like the other proactive coordinators.
+    Task { @MainActor in await ChatDailySummaryCoordinator.shared.activate() }
 
     // Once per fresh install, after onboarding, the first real app the user
     // opens gets the tap-to-ask card. Started here for the same reason as the
