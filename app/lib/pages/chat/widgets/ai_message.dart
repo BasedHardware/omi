@@ -34,6 +34,7 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
 import 'chart_message_widget.dart';
 import 'package:omi/widgets/components/chat_evidence_card.dart';
+import 'package:omi/utils/share_sheet.dart';
 import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
@@ -1304,7 +1305,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               if (widget.messageText.isEmpty) return;
               HapticFeedback.lightImpact();
-              await Share.share(widget.messageText);
+              await Share.share(widget.messageText, sharePositionOrigin: shareSheetOrigin());
               PlatformManager.instance.analytics.track(
                 'Chat Message Shared',
                 properties: {'message': widget.messageText},
