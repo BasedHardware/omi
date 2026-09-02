@@ -64,6 +64,26 @@ function nativeErrorCode(value: unknown): string | null {
   return typeof code === 'string' ? code : null;
 }
 
+// A chat failure that means "this client no longer holds a usable cloud
+// session": a backend 401 / reauthenticate action, or native credentials that
+// never resolved. Callers use it to re-probe the session instead of keeping a
+// signed-in shell up with a dead Bearer.
+export function chatSessionLost(error: unknown): boolean {
+  if (error instanceof ChatBackendError) {
+    return error.status === 401 || error.action === 'reauthenticate';
+  }
+  const code =
+    error !== null && typeof error === 'object'
+      ? (error as {code?: unknown}).code
+      : null;
+  return (
+    code === 'OMI_HTTP_UNCONFIGURED' ||
+    code === 'OMI_HTTP_UNAUTHORIZED' ||
+    (error instanceof Error &&
+      error.message === 'Native HTTP configuration is unavailable')
+  );
+}
+
 export function chatHistoryErrorCopy(error: unknown): string {
   if (error instanceof ChatBackendError) {
     return chatErrorCopy(error);

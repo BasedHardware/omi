@@ -108,8 +108,6 @@ test('a signed-out session still offers the native sign-in', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(false);
   const connectors = await renderPage(ConnectorsPage);
   expect(textOf(connectors)).toContain('Signed out');
-  expect(textOf(connectors)).toContain(
-    'Omi cloud needs a signed-in session.',
-  );
+  expect(textOf(connectors)).toContain('Omi cloud needs a signed-in session.');
   expect(labelsOf(connectors)).toContain('Sign in');
 });
