@@ -11,17 +11,21 @@ import XCTest
 final class QuestionTelemetryTests: XCTestCase {
   private var captured: [(String, [String: Any])] = []
 
-  override func setUp() async throws {
-    try await super.setUp()
-    captured = []
-    AnalyticsManager.shared.questionTelemetryCaptureForTests = { [weak self] name, props in
-      MainActor.assumeIsolated { self?.captured.append((name, props)) }
+  // Sync hooks: the pinned SDK's async setUp/tearDown transfer the non-Sendable
+  // test instance across actors (see scripts/check-main-actor-xctest-hooks.py).
+  override func setUp() {
+    super.setUp()
+    MainActor.assumeIsolated {
+      captured = []
+      AnalyticsManager.shared.questionTelemetryCaptureForTests = { [weak self] name, props in
+        self?.captured.append((name, props))
+      }
     }
   }
 
-  override func tearDown() async throws {
-    AnalyticsManager.shared.questionTelemetryCaptureForTests = nil
-    try await super.tearDown()
+  override func tearDown() {
+    MainActor.assumeIsolated { AnalyticsManager.shared.questionTelemetryCaptureForTests = nil }
+    super.tearDown()
   }
 
   func testFloatingBarVoiceQueryEmitsQuestionAskedWithTheTurnID() {
