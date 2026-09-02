@@ -26,9 +26,8 @@ extension DesktopAutomationActionRegistry {
       guard AppBuild.isNonProduction else {
         return ["error": "daily_summary_snapshot is disabled on production bundles"]
       }
-      let coordinator = ChatDailySummaryCoordinator.shared
-      await coordinator.refreshIfNeeded()
-      let store = coordinator.store
+      // Read only: no refresh here, because a refresh can post the "new summary" notch card.
+      let store = ChatDailySummaryCoordinator.shared.store
       guard let latest = store.latest else {
         return [
           "hasSummary": "false",

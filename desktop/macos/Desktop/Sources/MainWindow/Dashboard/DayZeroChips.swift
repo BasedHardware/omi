@@ -12,8 +12,11 @@ import Foundation
 /// a fact they just taught Omi. Every chip below is gated on the signal that
 /// makes it answerable right now, with zero history.
 struct DayZeroChipSignals: Equatable, Sendable {
-  /// Screen Recording is granted and capture is not blocked.
+  /// Screen Recording is granted and live in this process (a grant made after
+  /// launch only takes effect on relaunch, so it does not count yet).
   var canSeeScreen = false
+  /// Screen analysis is on, so screen history exists to answer "the last hour".
+  var screenHistoryEnabled = false
   /// Endonym of the system language when it differs from the language Omi
   /// listens and replies in (e.g. "Español"). `nil` when they already match.
   var systemLanguageName: String? = nil
@@ -21,8 +24,14 @@ struct DayZeroChipSignals: Equatable, Sendable {
   /// Reads the live signals. Cheap and synchronous: no I/O, no model.
   @MainActor
   static func live() -> DayZeroChipSignals {
-    DayZeroChipSignals(
-      canSeeScreen: CGPreflightScreenCaptureAccess(),
+    let grantedNow = CGPreflightScreenCaptureAccess()
+    let liveInThisProcess =
+      grantedNow
+      && !ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: grantedNow, grantedAtLaunch: ScreenCaptureService.grantedAtProcessStart)
+    return DayZeroChipSignals(
+      canSeeScreen: liveInThisProcess,
+      screenHistoryEnabled: liveInThisProcess && UserDefaults.standard.bool(forKey: .screenAnalysisEnabled),
       systemLanguageName: languageMismatchName(
         systemLanguageCode: Locale.current.language.languageCode?.identifier,
         omiLanguageCode: AssistantSettings.shared.transcriptionLanguage)
@@ -72,7 +81,9 @@ enum DayZeroChips {
     }
     if signals.canSeeScreen {
       chips.append(summarizeScreen)
-      chips.append(lastHour)
+      if signals.screenHistoryEnabled {
+        chips.append(lastHour)
+      }
       chips.append(screenToTasks)
     }
     chips.append(rememberDraft)

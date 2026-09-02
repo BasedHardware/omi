@@ -1467,9 +1467,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       defaults: UserDefaults.standard,
       hasCompletedOnboarding: UserDefaults.standard.bool(forKey: .hasCompletedOnboarding))
     guard decision.shouldRun else { return }
-    // Mark migration as done first so it only ever runs once, even if the work below fails.
-    LaunchAtLoginPreference.markMigrationDone(defaults: UserDefaults.standard)
     guard decision.shouldEnable else {
+      LaunchAtLoginPreference.markMigrationDone(defaults: UserDefaults.standard)
       log("LaunchAtLogin migration V2: skipped (\(decision.reason))")
       return
     }
@@ -1481,9 +1480,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
         if success {
           AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "migration_v2")
         }
+        // A failed registration (transient, or a non-production bundle that never
+        // registers) leaves the one shot open so the next launch retries.
+        guard success else { return }
       } else {
         log("LaunchAtLogin migration V2: already enabled, skipping")
       }
+      LaunchAtLoginPreference.markMigrationDone(defaults: UserDefaults.standard)
     }
   }
 

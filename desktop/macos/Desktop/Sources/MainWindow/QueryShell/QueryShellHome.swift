@@ -471,6 +471,8 @@ struct QueryShellHome: View {
 
   private func takePendingDraftIfAny() {
     guard !usesLegacyPresentation, let draft = MainChatNavigationRequestStore.shared.consumeDraft() else { return }
+    // Leave search-results mode first, or the prefilled composer stays hidden behind the results.
+    searchText = HomeBridgeIntent.openChat.searchTextAfter(searchText)
     chatProvider.draftText = draft
     claimCaret()
   }

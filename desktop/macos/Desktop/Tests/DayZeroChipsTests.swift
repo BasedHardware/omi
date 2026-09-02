@@ -11,14 +11,24 @@ final class DayZeroChipsTests: XCTestCase {
   func testScreenPermissionUnlocksTheThreeScreenChipsInOrder() {
     var signals = DayZeroChipSignals()
     signals.canSeeScreen = true
+    signals.screenHistoryEnabled = true
     XCTAssertEqual(
       DayZeroChips.chips(for: signals),
       [DayZeroChips.summarizeScreen, DayZeroChips.lastHour, DayZeroChips.screenToTasks, DayZeroChips.rememberDraft])
   }
 
+  func testLastHourNeedsScreenHistoryNotJustPermission() {
+    var signals = DayZeroChipSignals()
+    signals.canSeeScreen = true
+    XCTAssertEqual(
+      DayZeroChips.chips(for: signals),
+      [DayZeroChips.summarizeScreen, DayZeroChips.screenToTasks, DayZeroChips.rememberDraft])
+  }
+
   func testLanguageMismatchLeadsAndTheDraftCloses() {
     var signals = DayZeroChipSignals()
     signals.canSeeScreen = true
+    signals.screenHistoryEnabled = true
     signals.systemLanguageName = "日本語"
     let chips = DayZeroChips.chips(for: signals)
     XCTAssertEqual(chips.first, "Switch to 日本語")
@@ -31,6 +41,7 @@ final class DayZeroChipsTests: XCTestCase {
   func testEveryChipFitsTheHomeChipBudget() {
     var signals = DayZeroChipSignals()
     signals.canSeeScreen = true
+    signals.screenHistoryEnabled = true
     signals.systemLanguageName = "Português"
     for chip in DayZeroChips.chips(for: signals) {
       XCTAssertLessThanOrEqual(chip.count, HomeSuggestionComposer.maxPersonalizedLength, chip)

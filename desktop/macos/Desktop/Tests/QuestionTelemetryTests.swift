@@ -92,21 +92,25 @@ final class QuestionTelemetryTests: XCTestCase {
   }
 
   func testChatTerminalEventsEmitQuestionAnsweredJoinedByAttemptID() {
-    let context = ChatQueryTelemetryContext(attemptId: "attempt-9", surface: "main_chat", harness: "kernel")
+    let first = ChatQueryTelemetryContext(attemptId: "attempt-9", surface: "main_chat", harness: "kernel")
+    let second = ChatQueryTelemetryContext(attemptId: "attempt-10", surface: "main_chat", harness: "kernel")
     let metrics = ChatQueryCompletionMetrics(
       toolCallCount: 1, toolNames: ["capture_screen"], costUsd: 0, responseLength: 10,
       screenToolRequested: true, screenToolSucceeded: false, screenToolApprovalRequired: false,
       screenToolFailureCodes: ["image_unavailable"])
-    AnalyticsManager.shared.chatQueryTelemetry(.started(context))
-    AnalyticsManager.shared.chatQueryTelemetry(.completed(context, durationMs: 1200, metrics: metrics))
+    AnalyticsManager.shared.chatQueryTelemetry(.started(first))
+    AnalyticsManager.shared.chatQueryTelemetry(.completed(first, durationMs: 1200, metrics: metrics))
+    AnalyticsManager.shared.chatQueryTelemetry(.started(second))
     AnalyticsManager.shared.chatQueryTelemetry(
-      .cancelled(context, durationMs: 300, reason: .userStop, partialResponse: false))
+      .cancelled(second, durationMs: 300, reason: .userStop, partialResponse: false))
 
     let answered = captured.filter { $0.0 == "question_answered" }
-    XCTAssertEqual(answered.count, 2, "started is not a terminal outcome")
+    XCTAssertEqual(answered.count, 2, "started is not a terminal outcome; one answer per attempt")
     XCTAssertEqual(answered[0].1["outcome"] as? String, "screen_failed")
     XCTAssertEqual(answered[0].1["attempt_id"] as? String, "attempt-9")
     XCTAssertEqual(answered[0].1["surface"] as? String, "chat_window")
     XCTAssertEqual(answered[1].1["outcome"] as? String, "cancelled")
+    XCTAssertEqual(answered[1].1["attempt_id"] as? String, "attempt-10")
   }
+
 }

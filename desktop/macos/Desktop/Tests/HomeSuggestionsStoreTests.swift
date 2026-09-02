@@ -47,6 +47,7 @@ final class HomeSuggestionComposerTests: XCTestCase {
   func testDayZeroTopUpIsGatedOnLiveSignalsAndNeverWeekScale() {
     var signals = DayZeroChipSignals()
     signals.canSeeScreen = true
+    signals.screenHistoryEnabled = true
     let chips = HomeSuggestionComposer.compose(personalized: [], onboarding: [], dayZero: signals)
     XCTAssertEqual(chips, ["What should I do today?", DayZeroChips.summarizeScreen, DayZeroChips.lastHour])
 
