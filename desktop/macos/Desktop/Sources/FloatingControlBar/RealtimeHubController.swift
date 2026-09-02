@@ -87,6 +87,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// image before the model can ask for it.
   var screenEvidenceSpeechEndedAt: Date?
   var screenEvidence: RealtimeScreenEvidence?
+  /// `evidenceID|session` of the PTT-down frame already attached to the live turn.
+  var attachedTurnScreenFrameKey: String?
   var screenEvidenceReadiness: RealtimeScreenEvidenceReadiness?
   var screenGroundingState: RealtimeScreenGroundingState = .inactive
   /// Latest safe protocol disposition, surfaced only through the non-production automation

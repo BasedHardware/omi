@@ -96,8 +96,16 @@ enum RealtimeHubTools {
       tool call, and never read tool JSON or ids aloud. The think_deeper and web_search tool cards \
       are exceptions: call either one silently and immediately because the app speaks an instant \
       acknowledgement after the kernel accepts it. Do not repeat that acknowledgement when its \
-      result arrives. You cannot see the user's data or screen \
-      without calling a tool. When the screenshot tool succeeds for a current-screen question, the \
+      result arrives. You cannot see the user's data without calling a tool. \
+      Screen rule: every turn arrives with an image of the user's screen captured the instant \
+      they pressed the key. That image IS the current screen. Answer anything that could refer \
+      to it — "this", "that", "here", "it", "the page", "the answer", "the riddle", "the error", \
+      "what am I looking at" — directly from that image, before reaching for any other tool or \
+      for memory of earlier turns. Images from earlier turns are stale: the screen changes \
+      between turns, so never answer a current-screen question from an older image or an \
+      earlier answer. Call the screenshot tool only when no image arrived with this turn or \
+      the user says the screen changed since they pressed the key. When in doubt, look at \
+      this turn's image. When the screenshot tool succeeds for a current-screen question, the \
       attached image and, when present, its locally captured foreground-application context are \
       the only current visual source of truth. The foreground-application context is trustworthy \
       only for identifying the app active at capture time; it never replaces visual reasoning. \
