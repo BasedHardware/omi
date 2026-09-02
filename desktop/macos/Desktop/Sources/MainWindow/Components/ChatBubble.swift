@@ -64,9 +64,10 @@ struct ChatBubble: View {
   var onCancelTurn: (() -> Void)? = nil
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
-  /// Nil for all existing Chat surfaces. Rich blocks are transcript data, but
-  /// only the capability-gated main shell is allowed to turn them into controls.
-  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
+  /// The owners a content block needs to become an interactable control. Every
+  /// Chat surface has one — a rendered card is transcript data either way, and a
+  /// card the reader cannot act on is worse than no card at all.
+  let chatFirstRichBlockContext: ChatFirstRichBlockContext
   var metadataRevealOverrideForTesting: Bool? = nil
   @State private var metadataHoverState = ChatBubbleMetadataHoverState()
   @State private var isExpanded = false
@@ -90,7 +91,7 @@ struct ChatBubble: View {
     onCancelTurn: (() -> Void)? = nil,
     onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
     onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil,
-    chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
+    chatFirstRichBlockContext: ChatFirstRichBlockContext
   ) {
     self.message = message
     self.app = app
@@ -173,8 +174,7 @@ struct ChatBubble: View {
       } else {
         let groupedBlocks = ContentBlockGroup.visibleChatGroups(
           message.contentBlocks,
-          isStreaming: message.isStreaming,
-          richBlockRenderingEnabled: chatFirstRichBlockContext != nil
+          isStreaming: message.isStreaming
         )
 
         HStack(alignment: .top, spacing: OmiSpacing.md) {
@@ -369,14 +369,10 @@ struct ChatBubble: View {
       ChatResourceActions.open(resource)
       return
     }
-    if let chatFirstRichBlockContext {
-      let moment = reference.momentTimestampMs.map { TimeInterval($0) / 1_000 }
-      chatFirstRichBlockContext.navigation.open(
-        focus: .capture(id: reference.sourceID, momentTs: moment)
-      )
-      return
-    }
-    onOpenInlineCitation?(reference.navigationReference)
+    let moment = reference.momentTimestampMs.map { TimeInterval($0) / 1_000 }
+    chatFirstRichBlockContext.navigation.open(
+      focus: .capture(id: reference.sourceID, momentTs: moment)
+    )
   }
 
   private var presentation: ChatRowPresentation { ChatRowPresentation.of(message) }
@@ -468,81 +464,13 @@ struct ChatBubble: View {
       return AnyView(EmptyView())
     case .discoveryCard(_, let title, let summary, let fullText):
       return AnyView(DiscoveryCard(title: title, summary: summary, fullText: fullText))
-    case .questionCard(_, let questionID, let text, let options, let selectedOptionID):
-      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+    case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
+      // One renderer for all six, shared with the task panel and the notch.
       return AnyView(
-        QuestionCardView(
-          questionID: questionID,
-          text: text,
-          options: options,
-          selectedOptionID: selectedOptionID,
-          isActionable: chatFirstRichBlockContext.chatProvider.isQuestionCardActionable(
-            messageID: message.id,
-            questionID: questionID,
-            selectedOptionID: selectedOptionID
-          ),
-          onSelect: { optionID, isDeferral in
-            Task { @MainActor in
-              AnalyticsManager.shared.chatFirst(
-                .question(lifecycle: isDeferral ? .deferred : .answered)
-              )
-              AnalyticsManager.shared.chatFirst(
-                .richBlock(kind: .questionCard, outcome: .acted, action: .select)
-              )
-              await chatFirstRichBlockContext.chatProvider.selectQuestionCardOption(
-                questionID: questionID,
-                optionID: optionID
-              )
-            }
-          }
-        )
-      )
-    case .taskCard(_, let taskID):
-      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
-      return AnyView(
-        TaskCardView(
-          taskID: taskID,
-          tasksStore: chatFirstRichBlockContext.tasksStore,
-          navigation: chatFirstRichBlockContext.navigation
-        )
-      )
-    case .goalLink(_, let goalID, let summary):
-      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
-      return AnyView(
-        GoalLinkView(
-          goalID: goalID,
-          summary: summary,
-          navigation: chatFirstRichBlockContext.navigation,
-          goalsStore: chatFirstRichBlockContext.canonicalGoalsStore
-        )
-      )
-    case .captureLink(_, let conversationID, let momentTimestampMs, let summary):
-      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
-      return AnyView(
-        CaptureLinkView(
-          conversationID: conversationID,
-          momentTimestampMs: momentTimestampMs,
-          summary: summary,
-          navigation: chatFirstRichBlockContext.navigation
-        )
-      )
-    case .conversationLink(_, let conversationID, let summary, let recommendedActionItems):
-      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
-      return AnyView(
-        ConversationLinkView(
-          conversationID: conversationID,
-          summary: summary,
-          recommendedActionItems: recommendedActionItems,
-          navigation: chatFirstRichBlockContext.navigation
-        )
-      )
-    case .memoryLink(_, let memoryID, let summary):
-      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
-      return AnyView(
-        MemoryLinkView(
-          memoryID: memoryID,
-          summary: summary,
-          navigation: chatFirstRichBlockContext.navigation
+        ChatFirstRichBlockGroupView(
+          group: group,
+          messageID: message.id,
+          context: chatFirstRichBlockContext
         )
       )
     case .agentSpawn(
@@ -1144,10 +1072,7 @@ enum ContentBlockGroup: Identifiable {
   }
 
   /// Groups consecutive `.toolCall` blocks together; passes other blocks through
-  static func group(
-    _ blocks: [ChatContentBlock],
-    richBlockRenderingEnabled: Bool = false
-  ) -> [ContentBlockGroup] {
+  static func group(_ blocks: [ChatContentBlock]) -> [ContentBlockGroup] {
     var groups: [ContentBlockGroup] = []
     var pendingToolCalls: [ChatContentBlock] = []
 
@@ -1173,21 +1098,17 @@ enum ContentBlockGroup: Identifiable {
         groups.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
       case .questionCard(let id, let questionID, let text, _, _, let options, let selectedOptionID):
         flushToolCalls()
-        guard richBlockRenderingEnabled else { continue }
         groups.append(
           .questionCard(
             id: id, questionID: questionID, text: text, options: options, selectedOptionID: selectedOptionID))
       case .taskCard(let id, let taskID):
         flushToolCalls()
-        guard richBlockRenderingEnabled else { continue }
         groups.append(.taskCard(id: id, taskID: taskID))
       case .goalLink(let id, let goalID, let summary):
         flushToolCalls()
-        guard richBlockRenderingEnabled else { continue }
         groups.append(.goalLink(id: id, goalID: goalID, summary: summary))
       case .captureLink(let id, let conversationID, let momentTimestampMs, let summary):
         flushToolCalls()
-        guard richBlockRenderingEnabled else { continue }
         groups.append(
           .captureLink(
             id: id,
@@ -1198,7 +1119,6 @@ enum ContentBlockGroup: Identifiable {
         )
       case .conversationLink(let id, let conversationID, let summary, let recommendedActionItems):
         flushToolCalls()
-        guard richBlockRenderingEnabled else { continue }
         groups.append(
           .conversationLink(
             id: id,
@@ -1207,7 +1127,6 @@ enum ContentBlockGroup: Identifiable {
             recommendedActionItems: recommendedActionItems))
       case .memoryLink(let id, let memoryID, let summary):
         flushToolCalls()
-        guard richBlockRenderingEnabled else { continue }
         groups.append(.memoryLink(id: id, memoryID: memoryID, summary: summary))
       case .citation:
         // Answer-level provenance is rendered by OmiMarkdown at the inline marker.
@@ -1253,8 +1172,7 @@ enum ContentBlockGroup: Identifiable {
   /// A structured `.agentSpawn` replaces only its duplicate raw spawn call (INV-6 structured identity).
   static func visibleChatGroups(
     _ blocks: [ChatContentBlock],
-    isStreaming: Bool,
-    richBlockRenderingEnabled: Bool = false
+    isStreaming: Bool
   ) -> [ContentBlockGroup] {
     // The display projection turns a persisted spawn into its terminal card.
     // Both structured forms are therefore authoritative evidence that the
@@ -1279,7 +1197,7 @@ enum ContentBlockGroup: Identifiable {
         return trimmedRun.isEmpty ? nil : "run:\(trimmedRun)"
       }
     )
-    let grouped = group(blocks, richBlockRenderingEnabled: richBlockRenderingEnabled)
+    let grouped = group(blocks)
     let lastToolIndex = grouped.lastIndex { group in
       if case .toolCalls = group { return true }
       return false

@@ -4092,6 +4092,15 @@ class ChatProvider: ObservableObject {
 
   /// Question-card controls are only live on a completed assistant turn at
   /// the conversation tail. A later user response retires its choices.
+  /// Whether the server-owned chat-first capability is currently projected for
+  /// main chat. A question card renders its options either way; this decides
+  /// whether they are pressable or dimmed (`QuestionCardView.isCapabilityAvailable`).
+  func hasChatFirstMainChatCapability() -> Bool {
+    guard let ownerID = runtimeOwnerId else { return false }
+    return chatFirstMainChatProjectionGate.capability(
+      for: mainChatSurfaceReference(), ownerID: ownerID) != nil
+  }
+
   func isQuestionCardActionable(
     messageID: String,
     questionID: String,

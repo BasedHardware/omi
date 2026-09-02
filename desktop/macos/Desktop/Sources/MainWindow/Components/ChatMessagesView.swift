@@ -359,13 +359,14 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Horizontal inset of the message column. Home passes 0 so bubbles align
   /// exactly with the ask bar's edges; other surfaces keep the default gutter.
   var horizontalContentPadding: CGFloat = ChatComposerLayout.transcriptEdgeInset
-  /// Explicitly enables chat-first controls only in the Chat-first shell's main
-  /// Chat route. Nil keeps shared transcript projections safe elsewhere.
-  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
+  /// The owners a content block needs to become an interactable control. Every
+  /// host supplies one; there is no inert projection of the transcript.
+  let chatFirstRichBlockContext: ChatFirstRichBlockContext
   /// Optional transcript-window override for callers with a smaller initial
-  /// mount budget. When omitted, the existing 500-row default is preserved;
-  /// the existing Home-only rich-block capability selects the compact Home
-  /// policy automatically.
+  /// mount budget. When omitted, the 500-row default is preserved. Main chat
+  /// (`QueryAnswerThread`) passes `.compactHome` explicitly; this used to be
+  /// derived from "has a rich-block context", which every host now has, so the
+  /// derivation would have silently shrunk the task panel's window too.
   var transcriptWindowPolicy: ChatTranscriptWindow.Policy? = nil
   /// Vertical transcript inset. Home uses a tighter value because its page
   /// shell already provides the breathing room beneath the floating top bar.
@@ -495,8 +496,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   }
 
   private var effectiveTranscriptWindowPolicy: ChatTranscriptWindow.Policy {
-    transcriptWindowPolicy
-      ?? (chatFirstRichBlockContext == nil ? .standard : .compactHome)
+    transcriptWindowPolicy ?? .standard
   }
 
   /// A direct timeline choice leaves live-follow mode and places the selected

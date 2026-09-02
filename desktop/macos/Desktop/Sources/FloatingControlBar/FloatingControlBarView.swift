@@ -2172,9 +2172,19 @@ private struct AgentMainChatView: View {
           case .discoveryCard(_, let title, let summary, let fullText):
             DiscoveryCard(title: title, summary: summary, fullText: fullText)
               .frame(maxWidth: .infinity, alignment: .leading)
-          // Rich controls are main-chat-only; floating/notch stays passive.
+          // The notch projects the same journal as the main window, so it
+          // renders the same interactable cards. Taps route the one shell and
+          // summon the main window (`ChatFirstRichBlockContext.auxiliary`).
           case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
-            EmptyView()
+            if let context = ChatFirstRichBlockContext.floatingSurface {
+              ChatFirstRichBlockGroupView(
+                group: group,
+                messageID: message.id,
+                context: context
+              )
+              .environment(\.colorScheme, .light)
+              .frame(maxWidth: .infinity, alignment: .leading)
+            }
           case .agentSpawn(
             _, let pillId, let sessionId, let runId, let title, let objective, let provider
           ):

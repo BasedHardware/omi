@@ -64,6 +64,9 @@ struct TaskChatPanel: View {
           onLoadMore: {},
           onRate: { _, _ in },
           localSendToken: taskState.localSendToken,
+          // The task panel renders the same interactable content blocks as the
+          // main window; taps route the one shell (`ChatFirstRichBlockContext.auxiliary`).
+          chatFirstRichBlockContext: .auxiliary(chatProvider: coordinator.chatProvider),
           enablesPromptTimeline: false,
           welcomeContent: { taskWelcome }
         )

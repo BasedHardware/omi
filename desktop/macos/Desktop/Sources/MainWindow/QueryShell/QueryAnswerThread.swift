@@ -27,16 +27,16 @@ struct QueryAnswerThread: View {
   /// Re-sends the question that failed, through the host's one send — never a second send path. The
   /// host holds that question, because the composer is emptied by the send that failed.
   let onRetry: () -> Void
-  /// Enables the sampled Chat-first inline entity controls without giving this thread a second
-  /// provider, transcript, or lifecycle owner.
-  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
+  /// The inline entity controls' owners. It gives this thread no second provider, transcript, or
+  /// lifecycle owner.
+  let chatFirstRichBlockContext: ChatFirstRichBlockContext
 
   @State private var didReportChatFirstTranscriptPage = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       ChatMessagesView(
-        messages: citationSafeMessages,
+        messages: chatProvider.messages,
         conversationIdentity: chatProvider.currentSessionId
           ?? ChatConversationIdentity.mainChatDefault,
         isSending: chatProvider.isSending,
@@ -127,45 +127,17 @@ struct QueryAnswerThread: View {
     }
     .onDisappear {
       didReportChatFirstTranscriptPage = false
-      chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptDidDisappear()
+      chatFirstRichBlockContext.promptMaterializationCoordinator.chatTranscriptDidDisappear()
     }
   }
 
   /// Prompt materialization is visible-chat gated: the coordinator may run only after the one
   /// mounted transcript has its first page, and leaving answer mode immediately makes it inert.
   private func reportChatFirstTranscriptPageIfReady() {
-    guard !didReportChatFirstTranscriptPage,
-      chatFirstRichBlockContext != nil,
-      chatProvider.isMainChatJournalFirstPageReady
+    guard !didReportChatFirstTranscriptPage, chatProvider.isMainChatJournalFirstPageReady
     else { return }
     didReportChatFirstTranscriptPage = true
-    chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptFirstPageDidLoad()
-  }
-
-  /// The legacy shell has no exact goal destination. Preserve the historical source preview but
-  /// make its marker unavailable before it reaches the renderer, instead of presenting a button
-  /// whose action cannot honor the cited identity. Chat-first keeps its typed goal route.
-  private var citationSafeMessages: [ChatMessage] {
-    guard chatFirstRichBlockContext == nil else { return chatProvider.messages }
-    return chatProvider.messages.map { message in
-      var message = message
-      message.contentBlocks = message.contentBlocks.map { block in
-        guard case .citation(let id, let reference) = block, reference.kind == .goal else {
-          return block
-        }
-        return .citation(
-          id: id,
-          reference: ChatCitationReference(
-            ordinal: reference.ordinal,
-            kind: .unavailable,
-            sourceID: "",
-            title: reference.displayTitle,
-            preview: reference.preview,
-            createdAt: reference.createdAt,
-            appName: reference.appName))
-      }
-      return message
-    }
+    chatFirstRichBlockContext.promptMaterializationCoordinator.chatTranscriptFirstPageDidLoad()
   }
 
 }

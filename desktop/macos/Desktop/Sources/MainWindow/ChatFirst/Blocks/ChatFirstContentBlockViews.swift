@@ -30,6 +30,10 @@ struct QuestionCardView: View {
   let options: [[String: Any]]
   let selectedOptionID: String?
   let isActionable: Bool
+  /// False while the server-owned capability has not resolved, or for an account
+  /// it does not cover. The options still render — a question with its answers
+  /// hidden reads as a question nobody asked — but they cannot be pressed.
+  let isCapabilityAvailable: Bool
   let onSelect: (String, Bool) -> Void
 
   private var validOptions: [Option] { options.compactMap(Option.init) }
@@ -48,7 +52,11 @@ struct QuestionCardView: View {
       // A completed question remains useful transcript context, but its
       // suggestions disappear as soon as an answer exists or another bubble
       // has taken the tail. We never leave stale chips that look tappable.
-      if isActionable, selectedOptionID == nil, !validOptions.isEmpty {
+      //
+      // Capability-off is the one case that shows the chips *without* making
+      // them pressable: the question is real and its answers are the only thing
+      // that explains it, so they are dimmed rather than deleted.
+      if selectedOptionID == nil, !validOptions.isEmpty, isActionable || !isCapabilityAvailable {
         FlowLayout(spacing: OmiSpacing.sm) {
           ForEach(validOptions) { option in
             Button {
@@ -62,9 +70,18 @@ struct QuestionCardView: View {
                 .glassChip()
             }
             .buttonStyle(.plain)
+            .disabled(!isActionable)
+            .opacity(isActionable ? 1 : 0.45)
             .accessibilityLabel("Send suggestion: \(option.label)")
             .accessibilityIdentifier("chat-first-question-\(questionID)-option-\(option.id)")
           }
+        }
+
+        if !isActionable {
+          Text("Answering is unavailable right now")
+            .scaledFont(size: OmiType.caption)
+            .foregroundStyle(Ink.secondary)
+            .accessibilityIdentifier("chat-first-question-\(questionID)-unavailable")
         }
       }
     }

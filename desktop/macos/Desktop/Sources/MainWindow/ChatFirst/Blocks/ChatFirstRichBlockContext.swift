@@ -34,6 +34,16 @@ extension ChatFirstRichBlockContext {
   /// panel and the floating/notch renderers. They own no navigation or goal
   /// state, so they bind the shell's process-wide owners: a card tapped in the
   /// notch routes the main window instead of a private copy of it.
+  /// The auxiliary context for a surface that has no `ChatProvider` in hand —
+  /// the floating bar and the notch, which render over `ChatProvider.mainInstance`
+  /// (INV-6: there is no second provider to fall back to). Nil only before the
+  /// main window has created it, which is also the only moment those surfaces
+  /// have no transcript to project.
+  static var floatingSurface: ChatFirstRichBlockContext? {
+    guard let provider = ChatProvider.mainInstance else { return nil }
+    return auxiliary(chatProvider: provider)
+  }
+
   static func auxiliary(chatProvider: ChatProvider) -> ChatFirstRichBlockContext {
     ChatFirstRichBlockContext(
       navigation: .shared,

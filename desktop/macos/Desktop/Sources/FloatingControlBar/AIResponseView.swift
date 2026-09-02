@@ -217,10 +217,19 @@ struct AIResponseView: View {
         case .discoveryCard(_, let title, let summary, let fullText):
           DiscoveryCard(title: title, summary: summary, fullText: fullText)
             .frame(maxWidth: .infinity, alignment: .leading)
-        // The floating/notch surface never opts into rich chat-first controls.
-        // Keep journaled blocks inert if an older runtime projects them here.
+        // The notch projects the same journal as the main window, so it renders
+        // the same interactable cards. Taps route the one shell and summon the
+        // main window (`ChatFirstRichBlockContext.auxiliary`).
         case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
-          EmptyView()
+          if let context = ChatFirstRichBlockContext.floatingSurface {
+            ChatFirstRichBlockGroupView(
+              group: group,
+              messageID: message.id,
+              context: context
+            )
+            .environment(\.colorScheme, .light)
+            .frame(maxWidth: .infinity, alignment: .leading)
+          }
         case .agentSpawn(
           _, let pillId, let sessionId, let runId, let title, let objective, let provider
         ):
