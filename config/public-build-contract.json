@@ -261,6 +261,7 @@
           "--ingress=internal-and-cloud-load-balancing"
         ],
         "runtime_secrets": {
+          "DD_API_KEY": "DD_API_KEY:latest",
           "PUBLIC_SHARED_CONVERSATION_CHAT_IP_HMAC_KEY": "PUBLIC_SHARED_CONVERSATION_CHAT_IP_HMAC_KEY:latest"
         },
         "remove_runtime_secrets": [
