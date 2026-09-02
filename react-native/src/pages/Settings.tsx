@@ -10,6 +10,7 @@ import {
 } from '../desktopCloudClient';
 import {
   desktopBackendConfigurationCopy,
+  desktopBackendServiceCopy,
   desktopBackendUnauthorizedCopy,
   desktopReadErrorCopy,
 } from '../desktopReadClient';
@@ -89,7 +90,17 @@ export function SettingsPage({
       return;
     }
     if (auth !== undefined && auth !== null) {
-      const hasSession = await auth.hasCloudSession();
+      let hasSession: boolean;
+      try {
+        hasSession = await auth.hasCloudSession();
+      } catch {
+        // A probe that cannot settle (session refresh transport failed) must
+        // stay retryable instead of stranding the page on Loading forever.
+        setSnapshot(null);
+        setError(desktopBackendServiceCopy);
+        setPhase('error');
+        return;
+      }
       if (!hasSession) {
         setSnapshot(null);
         setError(desktopBackendUnauthorizedCopy);
