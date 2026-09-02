@@ -135,14 +135,19 @@ enum HomeKnowsRotationPolicy {
   }
 
   /// Freshness order inside one slot: never-shown first, then fewest shows,
-  /// then most recently updated. The key breaks ties so the order is stable.
+  /// then most recently updated.
+  ///
+  /// Deliberately not tie-broken on the row key: candidates arrive in the
+  /// caller's own priority order (the most pressing task, the best-ranked
+  /// suggested question), and hashing that order away would silently reorder
+  /// equally-fresh rows. Callers break remaining ties on the source index.
   static func freshnessRank(
     _ facts: HomeKnowsCandidateFacts,
     ledger: HomeKnowsImpressionLedger
-  ) -> (Int, Int, Double, String) {
+  ) -> (Int, Int, Double) {
     let shows = ledger.entry(facts.key)?.shows ?? 0
     let updated = facts.updatedAt?.timeIntervalSince1970 ?? 0
-    return (shows == 0 ? 0 : 1, shows, -updated, facts.key)
+    return (shows == 0 ? 0 : 1, shows, -updated)
   }
 
   /// The one reason worth reporting when a whole slot came up empty. Fixed

@@ -136,7 +136,8 @@ enum HomeKnowsListComposer {
         !candidate.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
           && seenTaskIDs.insert(candidate.id).inserted
       }
-      .map { candidate in
+      .enumerated()
+      .map { index, candidate in
         Scored(
           element: candidate,
           facts: HomeKnowsCandidateFacts(
@@ -145,20 +146,23 @@ enum HomeKnowsListComposer {
               text: candidate.text, updatedAt: candidate.updatedAt),
             updatedAt: candidate.updatedAt,
             dueAt: candidate.dueAt,
-            isActive: candidate.isActive))
+            isActive: candidate.isActive),
+          order: index)
       }
 
     let insightCandidates =
       insights
       .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-      .map { candidate in
+      .enumerated()
+      .map { index, candidate in
         Scored(
           element: candidate,
           facts: HomeKnowsCandidateFacts(
             key: HomeKnowsRotationPolicy.insightKey(candidate.id),
             contentHash: HomeKnowsRotationPolicy.contentHash(
               text: candidate.text, updatedAt: candidate.updatedAt),
-            updatedAt: candidate.updatedAt))
+            updatedAt: candidate.updatedAt),
+          order: index)
       }
 
     let trimmedTip = tip?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -171,13 +175,16 @@ enum HomeKnowsListComposer {
       questions
       .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
       .filter { !$0.isEmpty && seenQuestions.insert($0).inserted }
-      .map { text in Scored(element: text, facts: questionFacts(text)) }
+      .enumerated()
+      .map { index, text in Scored(element: text, facts: questionFacts(text), order: index) }
 
     let taskPool = pool(taskCandidates, ledger: ledger, now: now, calendar: calendar)
     let insightPool = pool(insightCandidates, ledger: ledger, now: now, calendar: calendar)
     let questionPool = pool(questionCandidates, ledger: ledger, now: now, calendar: calendar)
     let tipPool = cleanTip.map { text in
-      pool([Scored(element: text, facts: questionFacts(text))], ledger: ledger, now: now, calendar: calendar)
+      pool(
+        [Scored(element: text, facts: questionFacts(text), order: 0)],
+        ledger: ledger, now: now, calendar: calendar)
     }
 
     // Rotate each pool so the hub cycles through the qualifying candidates while
@@ -261,10 +268,12 @@ enum HomeKnowsListComposer {
 
   // MARK: Internals
 
-  /// A candidate paired with the facts the rotation rules read.
+  /// A candidate paired with the facts the rotation rules read, and its
+  /// position in the caller's own priority order.
   private struct Scored<Element> {
     let element: Element
     let facts: HomeKnowsCandidateFacts
+    let order: Int
   }
 
   /// The qualifying candidates for one slot, plus why the rest were held back.
@@ -329,9 +338,13 @@ enum HomeKnowsListComposer {
     if eligible.isEmpty {
       (eligible, reasons) = pass(allowSameDayRepeat: true)
     }
-    let ordered = eligible.sorted {
-      HomeKnowsRotationPolicy.freshnessRank($0.facts, ledger: ledger)
-        < HomeKnowsRotationPolicy.freshnessRank($1.facts, ledger: ledger)
+    // `sorted(by:)` is not stable, so the caller's order is the explicit final
+    // tie-break rather than something the sort happens to preserve.
+    let ordered = eligible.sorted { lhs, rhs in
+      let lhsRank = HomeKnowsRotationPolicy.freshnessRank(lhs.facts, ledger: ledger)
+      let rhsRank = HomeKnowsRotationPolicy.freshnessRank(rhs.facts, ledger: ledger)
+      if lhsRank != rhsRank { return lhsRank < rhsRank }
+      return lhs.order < rhs.order
     }
     return Pool(eligible: ordered, emptyReason: HomeKnowsRotationPolicy.dominantReason(reasons))
   }

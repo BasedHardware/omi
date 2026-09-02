@@ -235,6 +235,16 @@ final class HomeKnowsComposerTests: XCTestCase {
     XCTAssertEqual(composition.rows.map(\.showsBefore), [0, 1])
   }
 
+  /// Equal freshness must fall back to the caller's own priority order. An
+  /// earlier revision tie-broke on the ledger key, which is a hash, and silently
+  /// reordered the suggested questions the caller had already ranked.
+  func testEquallyFreshCandidatesKeepTheCallersOrder() {
+    let composition = HomeKnowsListComposer.compose(
+      tasks: [], insights: [], questions: questions, now: HomeKnowsLedgerFixture.noon)
+
+    XCTAssertEqual(composition.rows.first?.text, questions[0])
+  }
+
   func testFreshnessOrderBreaksTiesOnMostRecentUpdate() {
     let now = HomeKnowsLedgerFixture.noon
     let candidates = [
@@ -278,7 +288,7 @@ final class HomeKnowsComposerTests: XCTestCase {
 /// Shared ledger fixtures. A fixed instant keeps the calendar-day rules
 /// deterministic regardless of when the suite runs.
 enum HomeKnowsLedgerFixture {
-  /// 2026-03-05 12:00:00 UTC — mid-day, so "same calendar day" is unambiguous.
+  /// 2026-03-07 12:00:00 UTC — mid-day, so "same calendar day" is unambiguous.
   static let noon = Date(timeIntervalSince1970: 1_772_884_800)
 
   /// An instant guaranteed to be the same *local* calendar day as `now`, so the
