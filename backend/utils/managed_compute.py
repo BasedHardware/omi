@@ -137,7 +137,7 @@ def _decision(
     )
 
 
-def _request_carries_validated_byok_key(feature: str) -> bool:
+def request_carries_validated_byok_key(feature: str) -> bool:
     """True when this request carries a validated key for the feature's provider.
 
     Reuses the existing helpers; does not re-implement fingerprint checks.
@@ -303,7 +303,7 @@ def _authorize_byok(
     byok_active: Any,
 ) -> Decision:
     try:
-        if not _request_carries_validated_byok_key(feature):
+        if not request_carries_validated_byok_key(feature):
             return _decision(
                 allowed=False,
                 reason='byok_not_validated',
