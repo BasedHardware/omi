@@ -55,6 +55,7 @@ struct ChatBubble: View {
   let app: OmiApp?
   let showsOmiMark: Bool
   let onRate: (Int?) -> Void
+  var onRateReason: ((String) -> Void)? = nil
   var onCitationTap: ((Citation) -> Void)? = nil
   var onOpenInlineCitation: ((ChatCitationReference) -> Void)? = nil
   var isDuplicate: Bool = false
@@ -72,6 +73,7 @@ struct ChatBubble: View {
   @State private var isExpanded = false
   @State private var showCopied = false
   @State private var showRatingFeedback = false
+  @State private var showReasonChips = false
   @State private var showInfoPopover = false
 
   /// Automation seam: the bridge's `main_chat_open_response_context` posts this
@@ -583,7 +585,7 @@ struct ChatBubble: View {
     let isVisible =
       metadataRevealOverrideForTesting
       ?? (metadataHoverState.keepsMetadataVisible || isMetadataControlFocused || showRatingFeedback
-        || showCopied || showInfoPopover)
+        || showReasonChips || showCopied || showInfoPopover)
     // **One cluster under the message.** Controls far left and timestamp far right
     // of one line is how two halves of a row end up reading as page furniture.
     HStack(alignment: .center, spacing: OmiSpacing.sm) {
@@ -648,7 +650,11 @@ struct ChatBubble: View {
         guard newRating != lastSubmittedRating else { return }
         lastSubmittedRating = newRating
         onRate(newRating)
-        if newRating != nil { showRatingFeedbackBriefly() }
+        if newRating == -1 {
+          showReasonChipsBriefly()
+        } else {
+          showReasonChips = false
+        }
       }) {
         Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
           .scaledFont(size: OmiType.caption)
@@ -663,7 +669,9 @@ struct ChatBubble: View {
       .focused($isMetadataControlFocused)
       .help("Not helpful")
 
-      if showRatingFeedback {
+      if showReasonChips {
+        reasonChips
+      } else if showRatingFeedback {
         Text("Thank you")
           .scaledFont(size: OmiType.micro)
           .foregroundColor(Ink.secondary)
@@ -671,6 +679,7 @@ struct ChatBubble: View {
       }
     }
     .omiAnimation(.easeInOut(duration: 0.2), value: showRatingFeedback)
+    .omiAnimation(.easeInOut(duration: 0.2), value: showReasonChips)
     // Keep the dedupe shadow in sync with the live rating. Without this, an
     // external rating change (background sync/poll updates message.rating on a
     // stable .id(message.id) view) leaves lastSubmittedRating stale, so a later
@@ -683,8 +692,39 @@ struct ChatBubble: View {
 
   private func showRatingFeedbackBriefly() {
     showRatingFeedback = true
+    showReasonChips = false
     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
       showRatingFeedback = false
+    }
+  }
+
+  private func showReasonChipsBriefly() {
+    showReasonChips = true
+    showRatingFeedback = false
+    DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+      showReasonChips = false
+    }
+  }
+
+  @ViewBuilder
+  private var reasonChips: some View {
+    HStack(spacing: OmiSpacing.xxs) {
+      ForEach(
+        ChatRatingReason.chips(
+          isProactiveNotification: ChatContinuityInvariants.isProactiveNotification(message)),
+        id: \.rawValue
+      ) { reason in
+        Button(reason.chipLabel) {
+          onRateReason?(reason.rawValue)
+          showReasonChips = false
+          showRatingFeedbackBriefly()
+        }
+        .buttonStyle(.plain)
+        .scaledFont(size: OmiType.micro)
+        .foregroundColor(Ink.secondary)
+        .padding(.horizontal, OmiSpacing.xxs)
+        .help(reason.chipLabel)
+      }
     }
   }
 

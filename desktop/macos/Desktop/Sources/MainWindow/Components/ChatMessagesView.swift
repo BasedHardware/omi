@@ -335,6 +335,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   let app: OmiApp?
   let onLoadMore: () async -> Void
   let onRate: (String, Int?) -> Void
+  var onRateReason: ((String, String) -> Void)? = nil
   var onCitationTap: ((Citation) -> Void)? = nil
   var onOpenInlineCitation: ((ChatCitationReference) -> Void)? = nil
   var sessionsLoadError: String? = nil
@@ -1028,6 +1029,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           showsOmiMark: message.sender == .ai,
           onRate: { rating in
             onRate(message.id, rating)
+          },
+          onRateReason: { reason in
+            onRateReason?(message.id, reason)
           },
           onCitationTap: { citation in
             onCitationTap?(citation)

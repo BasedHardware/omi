@@ -433,6 +433,7 @@ class GenerateReplyResponse(BaseModel):
 
 class RateMessageRequest(BaseModel):
     rating: Optional[int] = None
+    reason: Optional[str] = None
 
 
 class ShareChatMessagesRequest(BaseModel):

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import 'package:collection/collection.dart';
@@ -9,9 +7,9 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart'
     hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
-import 'package:omi/backend/http/api/conversations.dart' as conv_api
+import 'package:omi/backend/http/api/conversations.dart'
+    as conv_api
     show unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
-import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -271,28 +269,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  bool hasConversationSummaryRatingSet = false;
-  Timer? _ratingTimer;
-  bool showRatingUI = false;
-
-  void setShowRatingUi(bool value) {
-    showRatingUI = value;
-    notifyListeners();
-  }
-
-  void setConversationRating(int value) {
-    setConversationSummaryRating(conversation.id, value);
-    hasConversationSummaryRatingSet = true;
-    setShowRatingUi(false);
-  }
-
   Future initConversation() async {
     // updateLoadingState(true);
     titleController?.dispose();
     titleFocusNode?.dispose();
-    _ratingTimer?.cancel();
-    showRatingUI = false;
-    hasConversationSummaryRatingSet = false;
 
     titleController = TextEditingController();
     titleFocusNode = FocusNode();
@@ -317,24 +297,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     // Pre-cache audio files in background
     if (conversation.hasAudio()) {
       precacheConversationAudio(conversation.id);
-    }
-
-    if (!conversation.discarded) {
-      getHasConversationSummaryRating(conversation.id).then((value) {
-        if (_isDisposed) return;
-        hasConversationSummaryRatingSet = value;
-        notifyListeners();
-        if (!hasConversationSummaryRatingSet) {
-          _ratingTimer = Timer(const Duration(seconds: 15), () {
-            if (_isDisposed) return;
-            final conv = conversationOrNull;
-            if (conv == null) return;
-            setConversationSummaryRating(conv.id, -1); // set -1 to indicate is was shown
-            showRatingUI = true;
-            notifyListeners();
-          });
-        }
-      });
     }
 
     // updateLoadingState(false);
@@ -468,8 +430,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       if (_isDisposed) return;
 
       // Preserve locally added apps that aren't in the API response yet
-      final locallyAddedApps =
-          _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
+      final locallyAddedApps = _cachedEnabledConversationApps
+          .where((app) => _locallyAddedAppIds.contains(app.id))
+          .toList();
 
       _cachedEnabledConversationApps.clear();
       _cachedEnabledConversationApps.addAll(apps);
@@ -744,7 +707,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   @override
   void dispose() {
     _isDisposed = true;
-    _ratingTimer?.cancel();
     super.dispose();
   }
 }

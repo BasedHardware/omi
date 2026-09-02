@@ -427,6 +427,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   var onHide: (() -> Void)?
   var onSendQuery: ((String) -> Void)?
   var onRate: ((String, Int?) -> Void)?
+  var onRateReason: ((String, String) -> Void)?
   var onShareLink: (() async -> String?)?
 
   override init(
@@ -754,6 +755,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       onEscape: { [weak self] in self?.handleEscapeKey() },
       onClearVisibleConversation: { [weak self] in self?.clearVisibleConversationFromUI() },
       onRate: { [weak self] messageId, rating in self?.onRate?(messageId, rating) },
+      onRateReason: { [weak self] messageId, reason in self?.onRateReason?(messageId, reason) },
       onShareLink: { [weak self] in await self?.onShareLink?() }
     ).environmentObject(state)
 
@@ -3109,6 +3111,12 @@ class FloatingControlBarManager {
         await provider.rateMessage(messageId, rating: rating, surface: "voice")
       }
     }
+    barWindow.onRateReason = { [weak chatProvider] messageId, reason in
+      guard let provider = chatProvider else { return }
+      Task { @MainActor in
+        await provider.rateMessage(messageId, reason: reason, surface: "voice")
+      }
+    }
 
     barWindow.onShareLink = { [weak self, weak barWindow] in
       guard let self, let barWindow = barWindow else { return nil }
@@ -3790,6 +3798,26 @@ class FloatingControlBarManager {
       evaluationID: evaluation, suggestionID: stored.notificationID)
   }
 
+  func storedNotification(forContinuityKey key: String?) -> StoredNotificationMessage? {
+    guard let key, let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return nil }
+    return storedNotificationMessages.values.first {
+      $0.messageClientTurnId == key && $0.ownerID == ownerID
+    }
+  }
+
+  func feedbackIdentity(forContinuityKey key: String?) -> SuggestionAssistantTelemetry.NotificationIdentity? {
+    guard let stored = storedNotification(forContinuityKey: key) else { return nil }
+    if let identity = stored.suggestionIdentity { return identity }
+    let evaluation =
+      UUID(uuidString: stored.context?.provenanceRef ?? "") ?? stored.notificationID
+    return SuggestionAssistantTelemetry.NotificationIdentity(
+      evaluationID: evaluation, suggestionID: stored.notificationID)
+  }
+
+  func notificationDetail(forContinuityKey key: String?) -> String? {
+    storedNotification(forContinuityKey: key)?.context?.detail
+  }
+
   /// Hub journal finalization is the realtime path into the ledger. Same
   /// mutation owner as the batch `sendVoiceOnlyQuery` path.
   func consumeInterjectHubTranscript(_ text: String) async {
@@ -3814,6 +3842,7 @@ class FloatingControlBarManager {
       suggestionID: identity.suggestionID,
       verb: verb
     )
+    SuggestionTaskNudgeEngagement.record(fromContinuityKey: recentInterjectReplyCard()?.messageClientTurnId)
   }
 
   func consumeInterjectVoiceReplyAsync(_ text: String) async {
@@ -3827,6 +3856,8 @@ class FloatingControlBarManager {
       suggestionID: identity.suggestionID,
       verb: verb
     )
+    SuggestionTaskNudgeEngagement.record(
+      fromContinuityKey: recentInterjectReplyCard()?.messageClientTurnId)
   }
 
   func shouldAttachInterjectClassification(createdAt: Date? = nil, now: Date = Date()) -> Bool {
@@ -4548,6 +4579,9 @@ class FloatingControlBarManager {
     }
 
     if trackDismissal, let dismissedNotification {
+      if kind == .user {
+        SuggestionTaskNudgeEngagement.record(from: dismissedNotification)
+      }
       let attention: InterjectAttention? =
         InterjectFeature.isEnabled && kind == .timeout
         ? InterjectAttention.timeoutAttention(didHover: interjectCardDidHover)

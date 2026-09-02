@@ -757,7 +757,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     },
   },
   web_search: {
-    surfaces: ["realtime_voice"],
+    surfaces: ["desktop_chat", "realtime_voice"],
     capabilityDoc: doc(
       "Web Search",
       "Search the live public web through Omi's typed-chat retrieval lane, then speak a grounded answer.",
@@ -1506,7 +1506,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     inputSchema: schema(
       {
         action_item_id: { type: "string", description: "Task ID (required)" },
-        completed: { type: "boolean" },
+        completed: { type: "boolean", description: "Set true to mark the task done." },
         description: { type: "string" },
         due_at: { type: "string" },
       },
@@ -1746,8 +1746,8 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
     name: "web_search",
     label: "Web Search",
-    description: "Search the live public web through the full typed-chat retrieval lane, then speak its answer.",
-    promptSnippet: "web_search - Search the live public web for a spoken answer",
+    description: "Search the live public web through the typed-chat retrieval lane.",
+    promptSnippet: "web_search - Search the live public web",
     latency: "async background",
     inputSchema: schema(
       {
@@ -1760,8 +1760,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     timeoutClass: "long",
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     intendedForAgents: true,
-    runtimePreconditions: ["Realtime voice only; requires the typed-chat public-web retrieval lane."],
-    adapters: {},
+    runtimePreconditions: ["Requires the typed-chat public-web retrieval lane. Paid plans only on desktop chat."],
+    adapters: {
+      "pi-mono": { advertised: true },
+    },
   },
   {
     name: "screenshot",
@@ -2275,9 +2277,8 @@ export function toolNamesForAdapter(
 
 /// Surface projection over the same manifest that generates the Swift surface
 /// allowlists. Realtime-voice runs authorize Swift-executed voice tools (e.g.
-/// think_deeper, web_search, point_click) that no chat adapter advertises, so the
-/// kernel capability allowlist must include the run surface's tools — an
-/// adapter-only projection structurally rejects every voice-only tool.
+/// think_deeper, web_search, point_click); desktop chat now also advertises
+/// web_search as a real tool rather than a phrase-gated retrieval prefix.
 export function toolsForSurface(surface: OmiToolSurface): OmiToolManifestEntry[] {
   return omiToolManifest.filter((tool) => tool.surfaces.includes(surface));
 }

@@ -18,6 +18,7 @@ struct AIResponseView: View {
   /// Typing lives in the main app now — the bar only offers a jump there.
   var onOpenMainApp: (() -> Void)?
   var onRate: ((String, Int?) -> Void)?
+  var onRateReason: ((String, String) -> Void)? = nil
   var onShareLink: (() async -> String?)?
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)?
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
@@ -299,6 +300,9 @@ struct AIResponseView: View {
       message: message,
       onRate: { [id = message.id] rating in
         onRate?(id, rating)
+      },
+      onRateReason: { [id = message.id] reason in
+        onRateReason?(id, reason)
       }
     ) {
       contentBlocksView(for: message)
@@ -547,6 +551,7 @@ struct AIResponseView: View {
 struct MessageHoverOverlay<Content: View>: View {
   let message: ChatMessage
   let onRate: (Int?) -> Void
+  var onRateReason: ((String) -> Void)? = nil
   @ViewBuilder let content: () -> Content
 
   @State private var isHovered = false
@@ -555,6 +560,7 @@ struct MessageHoverOverlay<Content: View>: View {
   @State private var showInfoPopover = false
   @State private var hideWorkItem: DispatchWorkItem?
   @State private var showRatingFeedback = false
+  @State private var showReasonChips = false
   @State private var lastSubmittedRating: Int?
 
   private var shouldShowBar: Bool {
@@ -628,7 +634,11 @@ struct MessageHoverOverlay<Content: View>: View {
             guard newRating != lastSubmittedRating else { return }
             lastSubmittedRating = newRating
             onRate(newRating)
-            if newRating != nil { showRatingFeedbackBriefly() }
+            if newRating == -1 {
+              showReasonChipsBriefly()
+            } else {
+              showReasonChips = false
+            }
           }) {
             Image(systemName: currentRating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
               .scaledFont(size: OmiType.caption)
@@ -671,7 +681,24 @@ struct MessageHoverOverlay<Content: View>: View {
           }
         }
 
-        if showRatingFeedback {
+        if showReasonChips {
+          HStack(spacing: OmiSpacing.xxs) {
+            ForEach(
+              ChatRatingReason.chips(
+                isProactiveNotification: ChatContinuityInvariants.isProactiveNotification(message)),
+              id: \.rawValue
+            ) { reason in
+              Button(reason.chipLabel) {
+                onRateReason?(reason.rawValue)
+                showReasonChips = false
+                showRatingFeedbackBriefly()
+              }
+              .buttonStyle(.plain)
+              .scaledFont(size: OmiType.micro)
+              .foregroundColor(.secondary)
+            }
+          }
+        } else if showRatingFeedback {
           Text("Thank you")
             .scaledFont(size: OmiType.micro)
             .foregroundColor(.secondary)
@@ -680,6 +707,7 @@ struct MessageHoverOverlay<Content: View>: View {
       }
     }
     .omiAnimation(.easeInOut(duration: 0.2), value: showRatingFeedback)
+    .omiAnimation(.easeInOut(duration: 0.2), value: showReasonChips)
     .frame(maxWidth: .infinity, alignment: .trailing)
     .onHover { hovering in
       isBarHovered = hovering
@@ -693,8 +721,17 @@ struct MessageHoverOverlay<Content: View>: View {
 
   private func showRatingFeedbackBriefly() {
     showRatingFeedback = true
+    showReasonChips = false
     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
       showRatingFeedback = false
+    }
+  }
+
+  private func showReasonChipsBriefly() {
+    showReasonChips = true
+    showRatingFeedback = false
+    DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+      showReasonChips = false
     }
   }
 

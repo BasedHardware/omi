@@ -216,6 +216,10 @@ struct ScopedDefaultsKey {
   static func taskInterruptionLedger(ownerID: String) -> Self {
     Self(rawValue: "proactiveTaskInterruptionLedger.v1.\(ownerID)")
   }
+
+  static func suggestionTaskNudgeLedger(ownerID: String) -> Self {
+    Self(rawValue: "suggestionTaskNudgeLedger.v1.\(ownerID)")
+  }
 }
 
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.

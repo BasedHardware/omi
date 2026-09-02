@@ -20605,6 +20605,17 @@
               }
             ],
             "title": "Rating"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           }
         },
         "title": "RateMessageRequest",
@@ -55505,7 +55516,7 @@
     },
     "/v1/users/analytics/chat_message": {
       "post": {
-        "description": "Submit feedback rating for a chat message.\n\nArgs:\n    message_id: ID of the message being rated\n    value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = neutral/removed)\n    reason: Optional reason for thumbs down. Valid values:\n        - 'too_verbose': Response was too long or wordy\n        - 'incorrect_or_hallucination': Response contained incorrect information\n        - 'not_helpful_or_irrelevant': Response didn't address the question\n        - 'didnt_follow_instructions': Response didn't follow user instructions\n        - 'other': Other reason",
+        "description": "Submit feedback rating for a chat message.\n\nArgs:\n    message_id: ID of the message being rated\n    value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = user cleared)\n    reason: Optional reason for thumbs down. Enum keys only.",
         "operationId": "set_chat_message_analytics_v1_users_analytics_chat_message_post",
         "parameters": [
           {
@@ -64318,6 +64329,22 @@
             "schema": {
               "title": "Message Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-platform",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Platform"
             }
           },
           {

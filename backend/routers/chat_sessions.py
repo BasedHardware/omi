@@ -25,6 +25,7 @@ from models.chat_session import (
 )
 from models.shared import StatusResponse
 from utils.chat import initial_message_util
+from utils.chat_rating_triage import RATING_REASON_PATTERN, extract_rating_triage_fields, normalize_rating_reason
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
 from utils.other import endpoints as auth
@@ -72,6 +73,7 @@ class SaveMessageRequest(BaseModel):
 class RateMessageRequest(BaseModel):
     rating: int | None = Field(None, ge=-1, le=1)
     app_version: str | None = None
+    reason: str | None = Field(None, pattern=RATING_REASON_PATTERN)
 
 
 class InitialMessageRequest(BaseModel):
@@ -256,12 +258,23 @@ def rate_message(
 ):
     if request.rating is not None and request.rating not in (1, -1):
         raise HTTPException(status_code=400, detail='Rating must be 1, -1, or null')
-    if not chat_db.update_message_rating(uid, message_id, request.rating):
+    snapshot = chat_db.update_message_rating(uid, message_id, request.rating)
+    if snapshot is None:
         raise HTTPException(status_code=404, detail='Message not found')
     # Also write to analytics collection (same as mobile endpoint) so ratings
     # appear in the admin dashboard chat ratings chart.
     value = request.rating if request.rating is not None else 0
-    set_chat_message_rating_score(uid, message_id, value, platform='desktop', app_version=request.app_version)
+    triage = extract_rating_triage_fields(snapshot)
+    set_chat_message_rating_score(
+        uid,
+        message_id,
+        value,
+        reason=normalize_rating_reason(request.reason),
+        platform='desktop',
+        app_version=request.app_version,
+        notification_kind=triage.get('notification_kind'),
+        app_id=triage.get('app_id'),
+    )
     return {'status': 'ok'}
 
 

@@ -578,6 +578,9 @@ struct DashboardPage: View {
         onRate: { messageId, rating in
           Task { await chatProvider.rateMessage(messageId, rating: rating) }
         },
+        onRateReason: { messageId, reason in
+          Task { await chatProvider.rateMessage(messageId, reason: reason) }
+        },
         onCitationTap: { citation in
           handleCitationTap(citation)
         },
@@ -1053,6 +1056,9 @@ struct DashboardPage: View {
         onLoadMore: { await chatProvider.loadMoreMessages() },
         onRate: { messageId, rating in
           Task { await chatProvider.rateMessage(messageId, rating: rating) }
+        },
+        onRateReason: { messageId, reason in
+          Task { await chatProvider.rateMessage(messageId, reason: reason) }
         },
         onCitationTap: { citation in
           handleCitationTap(citation)
