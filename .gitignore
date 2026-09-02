@@ -17,3 +17,4 @@ pwa/dist/
 apps/backend-worker/.wrangler/
 .dev.vars
 .dev.vars.*
+.omi-pi*.md
