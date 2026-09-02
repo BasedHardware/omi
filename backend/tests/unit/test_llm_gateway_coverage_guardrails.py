@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import ast
+import os
+import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -82,6 +85,32 @@ INVENTORIED_DIRECT_EXCEPTION_FILES = {
     'routers/desktop_proactivity.py',
     'routers/omni_relay.py',
 }
+
+_RESOLVER_CALL_NAMES = frozenset(
+    {'get_llm', 'get_model', 'get_provider', 'get_route_ref', '_get_model_config', 'get_model_config'}
+)
+_RESOLVER_NAME_RE = re.compile(r'\b(?:' + '|'.join(sorted(_RESOLVER_CALL_NAMES, key=len, reverse=True)) + r')\b')
+_RESOLVER_DEFINITION_FILE = 'utils/llm/model_config.py'
+# Reviewed non-literal (path, callee, arg). A new triple fails until reviewed.
+# persona.py: ternary persona_chat / persona_chat_premium.
+# config_loader.py and clients.get_qos_info: iterate get_all_configured_features().
+# clients.get_llm: pass-through of the caller's feature into _get_model_config.
+# clients._so_gemini: iterates the active profile.
+# judge.py: model_feature defaults to the pinned screen_frame_judge key.
+# managed_compute.py: pass-through of authorize_managed_compute's feature into get_provider.
+KNOWN_DYNAMIC_FEATURE_SITES = frozenset(
+    {
+        ('utils/llm/persona.py', 'get_llm', 'feature'),
+        ('llm_gateway/gateway/config_loader.py', 'get_model', 'feature'),
+        ('llm_gateway/gateway/config_loader.py', 'get_provider', 'feature'),
+        ('utils/llm/clients.py', '_get_model_config', 'feature'),
+        ('utils/llm/clients.py', '_get_model_config', 'f'),
+        ('utils/screen_frames/judge.py', 'get_llm', 'model_feature'),
+        ('utils/managed_compute.py', 'get_provider', 'feature'),
+    }
+)
+_FEATURE_SCAN_SKIP_DIRS = {'.venv', 'venv', '.openapi-venv', '__pycache__', 'tests'}
+_SNIPPET_CONFIGURED = {'chat_agent', 'memory_l1', 'conv_structure', 'what_matters_now'}
 
 
 def test_every_model_config_feature_has_inventory_and_gateway_lane():
@@ -215,6 +244,184 @@ def test_direct_exception_files_follow_their_declared_gateway_policy():
             raise AssertionError(f'unknown direct gateway policy {policy!r} for {rel_path}')
 
 
+def scan_resolver_feature_calls(
+    rel_path: str, source: str, configured: set[str]
+) -> tuple[list[str], set[tuple[str, str, str]]]:
+    """Return (unknown_literals, dynamic_sites) for one module's source.
+
+    Prefilter matches resolver names as bare words, not ``name(``, so
+    ``from utils.llm.clients import get_llm as resolve; resolve(x)`` is parsed.
+    """
+    if _RESOLVER_NAME_RE.search(source) is None:
+        return [], set()
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return [], set()
+
+    import_aliases: dict[str, str] = {}
+    name_assigns: list[tuple[str, ast.AST]] = []
+    dict_nodes: list[ast.Dict] = []
+    partial_calls: list[ast.Call] = []
+    attr_assigns: list[tuple[ast.Attribute, ast.AST]] = []
+    calls: list[ast.Call] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                import_aliases[alias.asname or alias.name.split('.')[0]] = alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            for alias in node.names:
+                import_aliases[alias.asname or alias.name] = f'{node.module}.{alias.name}'
+        elif isinstance(node, ast.Dict):
+            dict_nodes.append(node)
+        elif isinstance(node, ast.Call):
+            if _is_partial_call(node):
+                partial_calls.append(node)
+            elif not _is_cast_call(node):
+                calls.append(node)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    name_assigns.append((target.id, node.value))
+                elif isinstance(target, ast.Attribute):
+                    attr_assigns.append((target, node.value))
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            if isinstance(node.target, ast.Name):
+                name_assigns.append((node.target.id, node.value))
+            elif isinstance(node.target, ast.Attribute):
+                attr_assigns.append((node.target, node.value))
+
+    local_aliases = _aliases_from_assignments(name_assigns, import_aliases)
+    unknown_literals: list[str] = []
+    dynamic_sites: set[tuple[str, str, str]] = set()
+
+    for dict_node in dict_nodes:
+        for value in dict_node.values:
+            basename = _resolver_basename_from_value(value, import_aliases, local_aliases)
+            if basename is not None:
+                dynamic_sites.add((rel_path, basename, ast.unparse(dict_node)))
+    for partial in partial_calls:
+        for value in list(partial.args) + [keyword.value for keyword in partial.keywords]:
+            basename = _resolver_basename_from_value(value, import_aliases, local_aliases)
+            if basename is not None:
+                dynamic_sites.add((rel_path, basename, ast.unparse(partial)))
+                break
+    for target, value in attr_assigns:
+        basename = _resolver_basename_from_value(value, import_aliases, local_aliases)
+        if basename is not None:
+            dynamic_sites.add((rel_path, basename, ast.unparse(target)))
+
+    for node in calls:
+        callee = _resolver_call_name(node.func, import_aliases, local_aliases)
+        if callee is None:
+            continue
+        arg = _feature_call_arg(node)
+        if arg is None:
+            continue
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            if arg.value not in configured:
+                unknown_literals.append(f'{rel_path}:{node.lineno} {callee}({arg.value!r})')
+            continue
+        dynamic_sites.add((rel_path, callee, ast.unparse(arg)))
+
+    return unknown_literals, dynamic_sites
+
+
+def test_resolver_scan_imported_alias():
+    source = "from utils.llm.clients import get_llm as resolve\nresolve('chat_agent')\n"
+    unknown, dynamic = scan_resolver_feature_calls('snippet.py', source, _SNIPPET_CONFIGURED)
+    assert unknown == []
+    assert dynamic == set()
+
+
+def test_resolver_scan_imported_alias_unknown_literal():
+    source = "from utils.llm.clients import get_llm as resolve\nresolve('made_up_feature')\n"
+    unknown, dynamic = scan_resolver_feature_calls('snippet.py', source, _SNIPPET_CONFIGURED)
+    assert unknown == ["snippet.py:2 get_llm('made_up_feature')"]
+    assert dynamic == set()
+
+
+def test_resolver_scan_module_qualified_call():
+    source = "import utils.llm.clients\nutils.llm.clients.get_llm('chat_agent')\n"
+    unknown, dynamic = scan_resolver_feature_calls('snippet.py', source, _SNIPPET_CONFIGURED)
+    assert unknown == []
+    assert dynamic == set()
+
+
+def test_resolver_scan_feature_keyword():
+    source = "get_llm(feature='chat_agent')\n"
+    unknown, dynamic = scan_resolver_feature_calls('snippet.py', source, _SNIPPET_CONFIGURED)
+    assert unknown == []
+    assert dynamic == set()
+
+
+def test_resolver_scan_cast_alias():
+    source = "from typing import Any, cast\nllm_factory = cast(Any, get_llm)\nllm_factory('memory_l1')\n"
+    unknown, dynamic = scan_resolver_feature_calls('snippet.py', source, _SNIPPET_CONFIGURED)
+    assert unknown == []
+    assert dynamic == set()
+    source = "from typing import Any, cast\nllm_factory = cast(Any, get_llm)\nllm_factory('made_up_feature')\n"
+    unknown, dynamic = scan_resolver_feature_calls('snippet.py', source, _SNIPPET_CONFIGURED)
+    assert unknown == ["snippet.py:3 get_llm('made_up_feature')"]
+    assert dynamic == set()
+
+
+def test_resolver_scan_one_step_name_alias():
+    source = "resolve = get_llm\nresolve('chat_agent')\n"
+    unknown, dynamic = scan_resolver_feature_calls('snippet.py', source, _SNIPPET_CONFIGURED)
+    assert unknown == []
+    assert dynamic == set()
+    unknown, dynamic = scan_resolver_feature_calls(
+        'snippet.py', "resolve = get_llm\nresolve('made_up_feature')\n", set()
+    )
+    assert unknown == ["snippet.py:2 get_llm('made_up_feature')"]
+    assert dynamic == set()
+
+
+def test_resolver_scan_get_model_config_literal():
+    source = "get_model_config('conv_structure')\n"
+    unknown, dynamic = scan_resolver_feature_calls('snippet.py', source, _SNIPPET_CONFIGURED)
+    assert unknown == []
+    assert dynamic == set()
+    unknown, dynamic = scan_resolver_feature_calls('snippet.py', "get_model_config('made_up_feature')\n", set())
+    assert unknown == ["snippet.py:1 get_model_config('made_up_feature')"]
+    assert dynamic == set()
+
+
+def test_resolver_scan_unfollowable_alias_is_dynamic():
+    source = "ROUTES = {'x': get_llm}\n"
+    unknown, dynamic = scan_resolver_feature_calls('snippet.py', source, _SNIPPET_CONFIGURED)
+    assert unknown == []
+    assert dynamic == {('snippet.py', 'get_llm', "{'x': get_llm}")}
+
+
+def test_resolver_feature_literals_are_configured_and_dynamic_sites_are_reviewed():
+    """Every literal feature must be mapped; new dynamic sites need review.
+
+    Fail closed: never a silent fall-through to luna for an unmapped feature.
+    """
+    configured = get_all_configured_features()
+    unknown_literals: list[str] = []
+    dynamic_sites: set[tuple[str, str, str]] = set()
+    started = time.perf_counter()
+    for path in _iter_backend_py_files():
+        rel = path.relative_to(BACKEND_DIR).as_posix()
+        if rel == _RESOLVER_DEFINITION_FILE:
+            continue
+        source = path.read_text(encoding='utf-8')
+        file_unknown, file_dynamic = scan_resolver_feature_calls(rel, source, configured)
+        unknown_literals.extend(file_unknown)
+        dynamic_sites.update(file_dynamic)
+    elapsed = time.perf_counter() - started
+    # Isolated walk is ~0.2s; do not hard-fail on noisy combined-run wall time.
+    print(f'tree_scan_elapsed_s={elapsed:.3f}')
+    assert unknown_literals == [], 'literal features missing from get_all_configured_features(): ' + '; '.join(
+        unknown_literals
+    )
+    assert dynamic_sites == KNOWN_DYNAMIC_FEATURE_SITES
+
+
 def test_file_chat_completions_hop_the_gateway_in_feature_mode():
     """File chat's model call is gateway-routed; only the kill-switch path stays direct.
 
@@ -340,3 +547,85 @@ def _direct_exception_policy(migration_status: str) -> str:
     if 'blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway' in migration_status:
         return 'blocked'
     raise AssertionError(f'direct exception surface has no declared gateway policy: {migration_status!r}')
+
+
+def _iter_backend_py_files():
+    for dirpath, dirnames, filenames in os.walk(BACKEND_DIR):
+        dirnames[:] = [d for d in dirnames if d not in _FEATURE_SCAN_SKIP_DIRS]
+        for name in filenames:
+            if name.endswith('.py'):
+                yield Path(dirpath) / name
+
+
+def _unwrap_cast(node: ast.AST) -> ast.AST:
+    current = node
+    for _ in range(4):
+        if not isinstance(current, ast.Call) or not _is_cast_call(current) or len(current.args) < 2:
+            return current
+        current = current.args[1]
+    return current
+
+
+def _call_basename(func: ast.AST) -> str | None:
+    dotted = _dotted_name(func)
+    if dotted is None:
+        return None
+    return dotted.rsplit('.', 1)[-1]
+
+
+def _is_cast_call(node: ast.Call) -> bool:
+    return _call_basename(node.func) == 'cast'
+
+
+def _is_partial_call(node: ast.Call) -> bool:
+    return _call_basename(node.func) == 'partial'
+
+
+def _resolver_basename_from_value(
+    node: ast.AST, import_aliases: dict[str, str], local_aliases: dict[str, str]
+) -> str | None:
+    node = _unwrap_cast(node)
+    dotted = _dotted_name(node)
+    if dotted is None:
+        return None
+    if dotted in local_aliases:
+        return local_aliases[dotted]
+    head, _, tail = dotted.partition('.')
+    if not tail and head in local_aliases:
+        return local_aliases[head]
+    expanded = _expanded_name(dotted, import_aliases)
+    if expanded is None:
+        return None
+    basename = expanded.rsplit('.', 1)[-1]
+    return basename if basename in _RESOLVER_CALL_NAMES else None
+
+
+def _aliases_from_assignments(
+    name_assigns: list[tuple[str, ast.AST]], import_aliases: dict[str, str]
+) -> dict[str, str]:
+    local: dict[str, str] = {}
+    for _ in range(4):
+        grew = False
+        for target, value in name_assigns:
+            if target in local:
+                continue
+            basename = _resolver_basename_from_value(value, import_aliases, local)
+            if basename is not None:
+                local[target] = basename
+                grew = True
+        if not grew:
+            break
+    return local
+
+
+def _resolver_call_name(func: ast.AST, import_aliases: dict[str, str], local_aliases: dict[str, str]) -> str | None:
+    return _resolver_basename_from_value(func, import_aliases, local_aliases)
+
+
+def _feature_call_arg(node: ast.Call) -> ast.AST | None:
+    if node.args:
+        return node.args[0]
+    for keyword in node.keywords:
+        if keyword.arg == 'feature':
+            return keyword.value
+    return None
