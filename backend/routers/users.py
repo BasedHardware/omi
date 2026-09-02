@@ -118,6 +118,8 @@ from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from models.notification_message import NotificationMessage
+from models.daily_summary_payload import LearnedMemoryRef
+from utils.memory.learned_today import memory_review_card_block
 from utils.other import endpoints as auth
 from utils.other.storage import (
     delete_all_conversation_recordings,
@@ -312,6 +314,10 @@ class DailySummaryResponse(BaseModel):
     unresolved_questions: Optional[List[DailySummaryUnresolvedQuestion]] = None
     decisions_made: Optional[List[DailySummaryDecisionMade]] = None
     knowledge_nuggets: Optional[List[DailySummaryKnowledgeNugget]] = None
+    # Memories the day actually produced, addressed by canonical memory id, so a
+    # shell can render a native review card. Older summaries have no field;
+    # clients prefer this over `knowledge_nuggets` when it is non-empty.
+    memories_learned: List[LearnedMemoryRef] = Field(default_factory=list)
     locations: Optional[List[DailySummaryLocationPin]] = None
 
 
@@ -1680,12 +1686,22 @@ def test_daily_summary(
     if len(summary_body) > 150:
         summary_body = summary_body[:147] + "..."
 
+    # Native review card for the memories this day produced. The message text is
+    # unchanged, so a client that does not know the block renders exactly what it
+    # rendered before; the block is omitted entirely when nothing qualifies.
+    review_block = memory_review_card_block(
+        summary_id,
+        date=date_str,
+        memories_learned=summary_data.get('memories_learned') or [],
+    )
+
     ai_message = NotificationMessage(
         text=summary_body,
         from_integration='false',
         type='day_summary',
         notification_type='daily_summary',
         navigate_to=f"/daily-summary/{summary_id}",
+        content_blocks=[review_block] if review_block else None,
     )
 
     send_notification(
