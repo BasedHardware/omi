@@ -467,6 +467,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Set immediately by the scroll wheel monitor to win the race against
   /// throttled programmatic scrolls during streaming.
   @State private var userIsScrolling = false
+  /// When this transcript last moved its own viewport. The scroll detector
+  /// reads it so a follow-scroll landing under an open mouse press is not
+  /// mistaken for the reader taking the viewport.
+  @State private var programmaticScroll = ChatProgrammaticScrollSignal()
   /// Tracks work items for delayed initial bottom scrolls so they can be
   /// canceled on user scroll or disappear.
   @State private var initialScrollWorkItems: [DispatchWorkItem] = []
@@ -574,6 +578,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     userIsScrolling = false
     scrollMode = .freeScrolling
     hasActivityBelow = false
+    programmaticScroll.markProgrammaticScroll()
     OmiMotion.withGated(ChatPromptTimelineMetrics.jumpAnimation) {
       proxy.scrollTo(markID, anchor: .top)
     }
@@ -943,6 +948,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     for (index, delay) in delays.enumerated() {
       let isLast = index == delays.index(before: delays.endIndex)
       let work = DispatchWorkItem { [self] in
+        // Both branches below move the viewport, so claim the movement before
+        // either runs rather than after.
+        programmaticScroll.markProgrammaticScroll()
         if !once.applied,
           let snapshot,
           let scrollView = transcriptGeometry.scrollView,
@@ -1158,7 +1166,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       } onScrollViewResolved: { scrollView in
         transcriptGeometry.scrollView = scrollView
       }
-      UserScrollDetector {
+      UserScrollDetector(programmaticScroll: programmaticScroll) {
         scrollMode = .freeScrolling
         userIsScrolling = true
         hasActivityBelow = false
@@ -1241,6 +1249,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     guard !userIsScrolling else { return }
     guard !messages.isEmpty else { return }
     transcriptGeometry.setFollowingLiveEdge(true)
+    programmaticScroll.markProgrammaticScroll()
     proxy.scrollTo("bottom-anchor", anchor: .bottom)
   }
 

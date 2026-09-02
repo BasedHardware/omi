@@ -326,6 +326,59 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         + "(scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))")
   }
 
+  /// A press inside the transcript is ordinary now that every content block is
+  /// something you can click, and the transcript re-reaches the live edge every
+  /// `ChatScrollFollowThrottle.interval` while an answer streams. Reading its
+  /// own follow-scroll as "the reader took the viewport" would abandon the
+  /// reader for the rest of the answer, so the press-promotion test in
+  /// `ChatPressPromotionPolicy` discounts movement the app just caused.
+  func testAClickWhileAnAnswerStreamsDoesNotStopTheTranscriptFollowingIt() throws {
+    let harness = try makeHarness()
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+    XCTAssertTrue(harness.isAtBottom, "precondition: the transcript opens at the live edge")
+
+    harness.sendLeftMouseDown()
+    var worstDrift: CGFloat = 0
+    for chunk in 0..<40 {
+      harness.appendStreamingText(" Streamed chunk \(chunk) with enough prose to grow the row. ")
+      harness.pump(0.035)
+      worstDrift = max(worstDrift, harness.maximumScrollTop - harness.scrollTop)
+    }
+    harness.sendLeftMouseUp()
+
+    XCTAssertLessThan(
+      worstDrift, 120,
+      "a click that never moved the viewport must not end follow mode "
+        + "(drifted \(worstDrift) pt of a \(harness.viewportHeight) pt viewport)")
+  }
+
+  /// A press whose release is delivered somewhere else — the "Select Text\u{2026}"
+  /// popover and context menus present in their own window — could leave the
+  /// press candidate open for the life of the scroll view, where the next
+  /// follow-scroll would promote it. The monitor now closes a press on any
+  /// release, whichever window carried it.
+  func testAPressReleasedInAnotherWindowDoesNotStrandTheTranscript() throws {
+    let harness = try makeHarness()
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+
+    harness.sendLeftMouseDown()
+    harness.sendLeftMouseUp(inWindowNumber: harness.windowNumber + 4_242)
+
+    var worstDrift: CGFloat = 0
+    for chunk in 0..<40 {
+      harness.appendStreamingText(" Streamed chunk \(chunk) after the popover took the release. ")
+      harness.pump(0.035)
+      worstDrift = max(worstDrift, harness.maximumScrollTop - harness.scrollTop)
+    }
+
+    XCTAssertLessThan(
+      worstDrift, 120,
+      "a release the transcript's window never saw must still close the press "
+        + "(drifted \(worstDrift) pt of a \(harness.viewportHeight) pt viewport)")
+  }
+
   /// Dragging the scrollbar genuinely moves the viewport, so it must still take
   /// ownership away from live-follow.
   func testAMouseDragThatMovesTheViewportStillTakesOwnership() throws {
@@ -435,6 +488,10 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
   final class Harness {
     let model: TranscriptModel
     private let window: NSWindow
+
+    /// The transcript's own window, so a test can address a release to some
+    /// other window the way a popover or a menu does.
+    var windowNumber: Int { window.windowNumber }
     private let hostingView: NSHostingView<HarnessChatHost>
     private var pendingMessages: [ChatMessage] = []
     private(set) var scrollView: NSScrollView
@@ -653,11 +710,12 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       pump(0.05)
     }
 
-    func sendLeftMouseUp() {
+    func sendLeftMouseUp(inWindowNumber windowNumber: Int? = nil) {
       guard
         let event = NSEvent.mouseEvent(
           with: .leftMouseUp, location: NSPoint(x: 450, y: 300), modifierFlags: [],
-          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+          timestamp: ProcessInfo.processInfo.systemUptime,
+          windowNumber: windowNumber ?? window.windowNumber,
           context: nil, eventNumber: 0, clickCount: 1, pressure: 0)
       else { return }
       NSApplication.shared.sendEvent(event)

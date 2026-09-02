@@ -105,6 +105,65 @@ enum ChatScrollFollowThrottle {
   }
 }
 
+/// The moments the transcript moved its own viewport.
+///
+/// `UserScrollDetector` promotes an open mouse press to reader ownership as
+/// soon as the clip view moves, because a scrollbar-track click repositions the
+/// viewport without ever emitting a drag. That test could not tell the app's
+/// own follow-scroll apart from the reader's: while an answer streams the
+/// transcript re-reaches the live edge every
+/// `ChatScrollFollowThrottle.interval`, so a press still open when one of those
+/// lands reads as "the reader took the viewport" and ends follow mode for the
+/// rest of the answer. Now that every content block is something you can click,
+/// a press inside a streaming transcript is ordinary.
+///
+/// Read and written only on the main thread, like every other participant in
+/// the transcript's scroll handling.
+final class ChatProgrammaticScrollSignal: @unchecked Sendable {
+  private(set) var lastScrollAt: TimeInterval?
+
+  /// Call immediately *before* moving the viewport, so the bounds change AppKit
+  /// posts afterwards falls inside the grace window.
+  func markProgrammaticScroll(at now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+    lastScrollAt = now
+  }
+}
+
+/// Whether viewport movement observed during a press belongs to the reader.
+enum ChatPressPromotionPolicy {
+  /// How late a programmatic scroll's bounds change may still arrive. AppKit
+  /// posts it on the same or the next main turn, so this only has to outlive a
+  /// runloop hop — not a gesture.
+  static let programmaticScrollGrace: TimeInterval = 0.2
+
+  enum Movement: Equatable {
+    /// The reader moved the viewport: the press owns it now.
+    case promotesPress
+    /// The transcript moved itself. Measure the reader's next movement from
+    /// where it left the viewport rather than from where the press began,
+    /// otherwise one follow-scroll's displacement is charged to the reader for
+    /// as long as the press stays open.
+    case rebaselines
+    /// Nothing moved far enough to mean anything.
+    case ignores
+  }
+
+  static func classify(
+    movement: CGFloat,
+    epsilon: CGFloat,
+    now: TimeInterval,
+    lastProgrammaticScrollAt: TimeInterval?
+  ) -> Movement {
+    guard abs(movement) >= epsilon else { return .ignores }
+    guard let lastProgrammaticScrollAt else { return .promotesPress }
+    let elapsed = now - lastProgrammaticScrollAt
+    // A clock that went backwards must not hand the app an open-ended excuse to
+    // discount reader movement.
+    guard elapsed >= 0, elapsed <= programmaticScrollGrace else { return .promotesPress }
+    return .rebaselines
+  }
+}
+
 /// A stable representable host that tells its coordinator when SwiftUI moves it
 /// between transcript hierarchies. The enclosing NSScrollView is not guaranteed
 /// to survive a lazy document replacement, especially during a fast gesture.
@@ -125,6 +184,9 @@ private final class ScrollDetectorHostView: NSView {
 /// Detects user scroll-wheel / trackpad gestures, mouse interactions, and
 /// keyboard scroll-navigation on the enclosing NSScrollView.
 struct UserScrollDetector: NSViewRepresentable {
+  /// The transcript's own record of when it last moved the viewport. Shared so
+  /// the coordinator can tell an app-driven bounds change from the reader's.
+  let programmaticScroll: ChatProgrammaticScrollSignal
   let onUserScroll: () -> Void
   var onUserScrollEnded: () -> Void = {}
   var onScrollSettledAtBottom: () -> Void = {}
@@ -152,6 +214,7 @@ struct UserScrollDetector: NSViewRepresentable {
   func makeCoordinator() -> Coordinator {
     Coordinator(
       onUserScroll: onUserScroll,
+      programmaticScroll: programmaticScroll,
       onUserScrollEnded: onUserScrollEnded,
       onScrollSettledAtBottom: onScrollSettledAtBottom
     )
@@ -161,6 +224,7 @@ struct UserScrollDetector: NSViewRepresentable {
     let onUserScroll: () -> Void
     let onUserScrollEnded: () -> Void
     let onScrollSettledAtBottom: () -> Void
+    private let programmaticScroll: ChatProgrammaticScrollSignal
     private var monitor: Any?
     private weak var installedScrollView: NSScrollView?
     private var settleWorkItem: DispatchWorkItem?
@@ -191,12 +255,17 @@ struct UserScrollDetector: NSViewRepresentable {
       119,  // End
     ]
 
+    /// `programmaticScroll` defaults to a signal that has never fired — "the app
+    /// has not moved the viewport" — which is what a coordinator built outside
+    /// the transcript means. Production always passes the transcript's own.
     init(
       onUserScroll: @escaping () -> Void,
+      programmaticScroll: ChatProgrammaticScrollSignal = ChatProgrammaticScrollSignal(),
       onUserScrollEnded: @escaping () -> Void = {},
       onScrollSettledAtBottom: @escaping () -> Void
     ) {
       self.onUserScroll = onUserScroll
+      self.programmaticScroll = programmaticScroll
       self.onUserScrollEnded = onUserScrollEnded
       self.onScrollSettledAtBottom = onScrollSettledAtBottom
     }
@@ -259,6 +328,16 @@ struct UserScrollDetector: NSViewRepresentable {
 
         let handler: @MainActor (NSEvent) -> NSEvent? = { [weak self] event in
           guard let self else { return event }
+          // A press must never outlive its own release. Clicking inside the
+          // transcript can open something that presents in its own window — the
+          // "Select Text\u{2026}" popover, a context menu — and the release is
+          // then delivered there, where the same-window guard below dropped it.
+          // The candidate would stay open for the life of the scroll view, and
+          // the next follow-scroll promote it.
+          if event.type == .leftMouseUp {
+            self.endPressCandidate(on: targetScrollView)
+            return event
+          }
           guard event.window == targetScrollView.window else { return event }
 
           if event.type == .keyDown {
@@ -289,8 +368,6 @@ struct UserScrollDetector: NSViewRepresentable {
               let locationInScrollView = targetScrollView.convert(event.locationInWindow, from: nil)
               guard targetScrollView.bounds.contains(locationInScrollView) else { break }
               self.beginPressCandidate(on: targetScrollView)
-            case .leftMouseUp:
-              self.endPressCandidate(on: targetScrollView)
             default:
               // Deliberately not bounds-checked: a scrollbar drag and a
               // selection autoscroll both leave the transcript's bounds while
@@ -360,6 +437,12 @@ struct UserScrollDetector: NSViewRepresentable {
 
     @MainActor
     private func beginPressCandidate(on scrollView: NSScrollView) {
+      // A press whose release never reached this monitor must not leave its
+      // observer registered behind the new one.
+      if let observation = pressBoundsObservation {
+        NotificationCenter.default.removeObserver(observation)
+        pressBoundsObservation = nil
+      }
       pressOriginScrollTop = Self.scrollTop(of: scrollView)
       pressCandidateOwnsViewport = false
       // A scrollbar track click repositions the viewport during mouse-down and
@@ -379,9 +462,21 @@ struct UserScrollDetector: NSViewRepresentable {
     @MainActor
     private func promotePressCandidateIfMoved(on scrollView: NSScrollView) {
       guard let origin = pressOriginScrollTop, !pressCandidateOwnsViewport else { return }
-      guard abs(Self.scrollTop(of: scrollView) - origin) >= Self.dragMovementEpsilon else { return }
-      pressCandidateOwnsViewport = true
-      onUserScroll()
+      let current = Self.scrollTop(of: scrollView)
+      switch ChatPressPromotionPolicy.classify(
+        movement: current - origin,
+        epsilon: Self.dragMovementEpsilon,
+        now: ProcessInfo.processInfo.systemUptime,
+        lastProgrammaticScrollAt: programmaticScroll.lastScrollAt
+      ) {
+      case .ignores:
+        return
+      case .rebaselines:
+        pressOriginScrollTop = current
+      case .promotesPress:
+        pressCandidateOwnsViewport = true
+        onUserScroll()
+      }
     }
 
     @MainActor
@@ -618,6 +713,9 @@ struct ChatScrollContainer<Content: View>: View {
   @State private var lastViewportSize: CGSize = .zero
   @State private var lastFollowScrollTime: TimeInterval?
   @State private var hasQueuedFollowScroll = false
+  /// Same contract as `ChatMessagesView`: a follow-scroll landing under an open
+  /// press is the app moving the viewport, not the reader taking it.
+  @State private var programmaticScroll = ChatProgrammaticScrollSignal()
 
   var body: some View {
     ScrollViewReader { proxy in
@@ -659,7 +757,7 @@ struct ChatScrollContainer<Content: View>: View {
   }
 
   private var scrollDetectors: some View {
-    UserScrollDetector {
+    UserScrollDetector(programmaticScroll: programmaticScroll) {
       scrollMode = .freeScrolling
       userIsScrolling = true
       hasActivityBelow = false
@@ -760,6 +858,7 @@ struct ChatScrollContainer<Content: View>: View {
 
   private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
     guard scrollMode == .followingBottom, !userIsScrolling else { return }
+    programmaticScroll.markProgrammaticScroll()
     if animated {
       OmiMotion.withGated(.easeOut(duration: 0.15)) {
         proxy.scrollTo(bottomAnchorId, anchor: .bottom)
