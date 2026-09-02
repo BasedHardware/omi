@@ -191,15 +191,15 @@ extension SBOnboardingModel {
     // The see beat's permission is answered by the relaunch itself, but the trip to the browser
     // is still the user's click. Resume on the offer, not one beat past it: skipping to the card
     // would fire a card about a page nobody opened.
-    let resume: Step
+    let resumeStep: Step
     if step == .see {
-      resume = .see
+      resumeStep = .see
       seePhase = .openPage
       persistScenarioProgress()
     } else {
-      resume = Step(rawValue: step.rawValue + 1) ?? step
+      resumeStep = Step(rawValue: step.rawValue + 1) ?? step
     }
-    UserDefaults.standard.set(resume.rawValue, forKey: Self.resumeStepKey)
+    UserDefaults.standard.set(resumeStep.rawValue, forKey: Self.resumeStepKey)
     restart()
     return true
   }

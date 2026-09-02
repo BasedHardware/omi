@@ -72,7 +72,7 @@ struct FirstRunState: Codable, Equatable, Sendable {
 enum FirstRunReducerEvent: Equatable, Sendable {
   case start
   case launch
-  case resume
+  case restorePendingEffect
   case context(FirstRunObservedContext)
   case dwellElapsed(FirstRunObservedContext)
   case voiceTurn(String)
@@ -175,7 +175,7 @@ enum FirstRunReducer {
         effects.append(.showInstruction)
       }
 
-    case .resume:
+    case .restorePendingEffect:
       guard state.step.isActive, let pending = state.pendingEffect else { break }
       switch pending {
       case .advance(let step, let deadline):
@@ -563,7 +563,7 @@ final class FirstRunCoordinator {
       }
       if !didResume {
         didResume = true
-        send(.resume)
+        send(.restorePendingEffect)
       }
     } else if defaults.bool(forKey: Self.pendingKey) {
       didCountLaunch = true

@@ -110,7 +110,7 @@ final class FirstRunEngineTests: XCTestCase {
     state.transitionPending = true
     state.pendingEffect = .advance(step: .openWork, deadline: start.addingTimeInterval(3))
 
-    let effects = apply(&state, .resume, offset: 1)
+    let effects = apply(&state, .restorePendingEffect, offset: 1)
 
     XCTAssertEqual(effects, [.scheduleAdvance(expected: .openWork, seconds: 2)])
   }

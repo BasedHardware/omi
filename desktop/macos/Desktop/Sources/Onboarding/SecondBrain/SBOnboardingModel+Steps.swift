@@ -443,8 +443,11 @@ extension SBOnboardingModel {
       shortcutRecording = false
     }
     GlobalShortcutManager.shared.setRegistrationSuspended(true)
-    if savedMainMenu == nil { savedMainMenu = NSApp.mainMenu }
-    NSApp.mainMenu = nil
+    // `NSApplication.shared`, not the implicitly unwrapped `NSApp`: a test process that has never
+    // touched the application object has `NSApp == nil`, and CI runs each suite in its own process.
+    let application = NSApplication.shared
+    if savedMainMenu == nil { savedMainMenu = application.mainMenu }
+    application.mainMenu = nil
     installShortcutMonitors()
   }
 
@@ -452,7 +455,7 @@ extension SBOnboardingModel {
     for m in shortcutMonitors { NSEvent.removeMonitor(m) }
     shortcutMonitors.removeAll()
     if let saved = savedMainMenu {
-      NSApp.mainMenu = saved
+      NSApplication.shared.mainMenu = saved
       savedMainMenu = nil
     }
     GlobalShortcutManager.shared.setRegistrationSuspended(false)
@@ -496,7 +499,7 @@ extension SBOnboardingModel {
       // instead: the first key the user happens to type anywhere on the Mac — a terminal, a
       // browser, a message — becomes their Omi chord, and the step then congratulates them on it.
       // Only what is typed at Omi may set it.
-      guard Self.acceptsRecordingSource(appIsActive: NSApp.isActive) else { return false }
+      guard Self.acceptsRecordingSource(appIsActive: NSApplication.shared.isActive) else { return false }
       return recordShortcut(from: event)
     }
     guard !shortcutPressed else { return false }
