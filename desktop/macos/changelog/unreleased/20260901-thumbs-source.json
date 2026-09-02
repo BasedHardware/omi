@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Thumbs up/down on responses now records whether it was a chat or a voice reply, powering the team quality dashboards."
+  ]
+}
