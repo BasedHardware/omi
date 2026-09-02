@@ -16,7 +16,7 @@ from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.notifications import send_bulk_notification, send_notification
-from utils.webhooks import day_summary_webhook
+from utils.webhooks import DaySummaryWebhookResult, day_summary_webhook
 import database.daily_summaries as daily_summaries_db
 import logging
 
@@ -52,6 +52,7 @@ class DailySummaryRunSummary:
     skipped: int = 0
     failed: int = 0
     webhook_completed: int = 0
+    webhook_skipped: int = 0
     webhook_failed: int = 0
     query_failures: int = 0
 
@@ -61,6 +62,7 @@ class DailySummaryRunSummary:
         self.skipped += other.skipped
         self.failed += other.failed
         self.webhook_completed += other.webhook_completed
+        self.webhook_skipped += other.webhook_skipped
         self.webhook_failed += other.webhook_failed
         self.query_failures += other.query_failures
 
@@ -68,12 +70,13 @@ class DailySummaryRunSummary:
 def _log_daily_summary_run(summary: DailySummaryRunSummary) -> None:
     logger.info(
         "daily_summary_run selected=%d delivered=%d skipped=%d failed=%d "
-        "webhook_completed=%d webhook_failed=%d query_failures=%d",
+        "webhook_completed=%d webhook_skipped=%d webhook_failed=%d query_failures=%d",
         summary.selected,
         summary.delivered,
         summary.skipped,
         summary.failed,
         summary.webhook_completed,
+        summary.webhook_skipped,
         summary.webhook_failed,
         summary.query_failures,
     )
@@ -305,8 +308,15 @@ async def _send_bulk_summary_notification(users: List[Tuple[Any, ...]]) -> Daily
                 if isinstance(result, Exception):
                     summary.webhook_failed += 1
                     logger.error("Daily summary webhook failed before job completion: %s", type(result).__name__)
-                else:
+                elif not isinstance(result, DaySummaryWebhookResult):
+                    summary.webhook_failed += 1
+                    logger.error("Daily summary webhook returned an invalid delivery result")
+                elif result.outcome == "delivered":
                     summary.webhook_completed += 1
+                elif result.outcome.startswith("skipped_"):
+                    summary.webhook_skipped += 1
+                else:
+                    summary.webhook_failed += 1
     return summary
 
 

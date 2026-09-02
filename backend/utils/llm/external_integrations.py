@@ -48,7 +48,9 @@ def _bound_daily_summary_history(
         return history, original_tokens, original_tokens
 
     marker_tokens = token_counter(_DAILY_SUMMARY_TRUNCATION_MARKER)
-    content_budget = max(0, max_tokens - marker_tokens)
+    if marker_tokens >= max_tokens:
+        return "", original_tokens, 0
+    content_budget = max_tokens - marker_tokens
     low = 0
     high = len(history)
     while low < high:
@@ -60,6 +62,46 @@ def _bound_daily_summary_history(
     bounded = history[:low].rstrip() + _DAILY_SUMMARY_TRUNCATION_MARKER
     retained_tokens = token_counter(bounded)
     return bounded, original_tokens, retained_tokens
+
+
+def _render_bounded_daily_summary_history(
+    conversations: List[Conversation],
+    people: List[Person],
+    *,
+    max_tokens: int = DAILY_SUMMARY_HISTORY_TOKEN_BUDGET,
+    token_counter: Callable[[str], int] | None = None,
+) -> tuple[List[Conversation], str, int, int]:
+    """Render the largest complete conversation prefix that fits the budget."""
+    if max_tokens <= 0:
+        raise ValueError("max_tokens must be positive")
+    token_counter = token_counter or num_tokens_from_string
+    full_history = conversations_to_string(conversations, people=people)
+    original_tokens = token_counter(full_history)
+    if original_tokens <= max_tokens:
+        return conversations, full_history, original_tokens, original_tokens
+
+    marker = _DAILY_SUMMARY_TRUNCATION_MARKER.lstrip()
+    marker_tokens = token_counter(marker)
+    if marker_tokens >= max_tokens:
+        return [], "", original_tokens, 0
+
+    def render_prefix(count: int) -> tuple[str, int]:
+        prefix = conversations_to_string(conversations[:count], people=people)
+        candidate = f"{prefix.rstrip()}\n{marker}" if prefix else marker
+        return candidate, token_counter(candidate)
+
+    low = 0
+    high = len(conversations) - 1
+    while low < high:
+        midpoint = (low + high + 1) // 2
+        _, candidate_tokens = render_prefix(midpoint)
+        if candidate_tokens <= max_tokens:
+            low = midpoint
+        else:
+            high = midpoint - 1
+
+    bounded_history, retained_tokens = render_prefix(low)
+    return conversations[:low], bounded_history, original_tokens, retained_tokens
 
 
 def _content_str(response: Any) -> str:
@@ -252,8 +294,12 @@ def generate_comprehensive_daily_summary(
     # Get user's language preference for generating summary in their language
     output_language = user_profile.get('language', '') or 'en'
 
+    # Aggregate stats and stored metadata cover the whole day. Prompt evidence is
+    # separately bounded below and only contains complete, non-discarded records.
+    non_discarded = [c for c in conversations if not c.discarded]
+
     all_person_ids: List[str] = []
-    for m in conversations:
+    for m in non_discarded:
         all_person_ids.extend(m.get_person_ids())
 
     people: List[Person] = []
@@ -261,8 +307,9 @@ def generate_comprehensive_daily_summary(
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
         people = [Person(**p) for p in people_data]
 
-    conversation_history = conversations_to_string(conversations, people=people)
-    conversation_history, history_tokens, retained_history_tokens = _bound_daily_summary_history(conversation_history)
+    prompt_conversations, conversation_history, history_tokens, retained_history_tokens = (
+        _render_bounded_daily_summary_history(non_discarded, people)
+    )
     if retained_history_tokens < history_tokens:
         logger.warning(
             "daily_summary_history_truncated original_tokens=%d retained_tokens=%d budget=%d",
@@ -272,7 +319,6 @@ def generate_comprehensive_daily_summary(
         )
 
     # Calculate stats - exclude discarded conversations
-    non_discarded = [c for c in conversations if not c.discarded]
     total_conversations = len(non_discarded)
     total_duration_minutes = sum(
         (c.finished_at - c.started_at).total_seconds() / 60 for c in non_discarded if c.finished_at and c.started_at
@@ -318,7 +364,18 @@ def generate_comprehensive_daily_summary(
             )
 
     # Build conversation ID mapping for the LLM
-    convo_id_map = {i + 1: c.id for i, c in enumerate(non_discarded)}
+    convo_id_map = {i + 1: c.id for i, c in enumerate(prompt_conversations)}
+    prompt_conversation_count = len(prompt_conversations)
+    prompt_conversation_range = (
+        f"numbered 1-{prompt_conversation_count}"
+        if prompt_conversation_count
+        else "no numbered conversation records retained"
+    )
+    conversation_reference_rule = (
+        f"Reference which retained conversation (1-{prompt_conversation_count}) it came from."
+        if prompt_conversation_count
+        else "No complete conversation fit the evidence budget; skip all evidence-linked sections."
+    )
 
     prompt = f"""You are creating a daily summary for {user_name}. {memories_str}
 OUTPUT LANGUAGE: {output_language}. You MUST write every word of this summary in {output_language}, regardless of the language the conversations are in.
@@ -326,7 +383,7 @@ OUTPUT LANGUAGE: {output_language}. You MUST write every word of this summary in
 Today's date: {date_str}
 Conversations: {total_conversations}
 
-Here are {user_name}'s conversations from today (numbered 1-{total_conversations}):
+Here are {prompt_conversation_count} of {total_conversations} conversations from today ({prompt_conversation_range}):
 ```
 {conversation_history}
 ```
@@ -370,7 +427,7 @@ RULES:
 - unresolved_questions: Max 3. Short, punchy questions only. Keep each question short and snappy, less than 15 words.
 - decisions_made: Max 3. Concrete decisions only. Only add here if it is something that the user has decided on. Tasks or action items don't belong here. Keep each decision short and snappy, less than 15 words.
 - knowledge_nuggets: Max 3. Genuinely interesting learnings. Learnings are new learnings for the user, not something they might have already known. Shouldn't be very generic, should be a very specific learning. Keep each learning short and snappy, less than 15 words.
-- conversation_number: Reference which conversation (1-{total_conversations}) it came from.
+- conversation_number: {conversation_reference_rule}
 - SKIP sections entirely if no quality content.
 - Be snappy. No fluff. No corporate speak. Only include sections that are genuinely useful and relevant.
 - OUTPUT LANGUAGE: Every word — headline, overview, highlights, questions, decisions, knowledge nuggets — MUST be in {output_language}. Do not use any other language.
@@ -417,19 +474,23 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
         # Process unresolved questions
         unresolved_questions: List[Dict[str, Any]] = []
         for q in summary_data.unresolved_questions:
-            unresolved_questions.append(
-                {"question": q.question, "conversation_id": get_convo_id(q.conversation_number)}
-            )
+            conversation_id = get_convo_id(q.conversation_number)
+            if conversation_id:
+                unresolved_questions.append({"question": q.question, "conversation_id": conversation_id})
 
         # Process decisions made
         decisions_made: List[Dict[str, Any]] = []
         for d in summary_data.decisions_made:
-            decisions_made.append({"decision": d.decision, "conversation_id": get_convo_id(d.conversation_number)})
+            conversation_id = get_convo_id(d.conversation_number)
+            if conversation_id:
+                decisions_made.append({"decision": d.decision, "conversation_id": conversation_id})
 
         # Process knowledge nuggets
         knowledge_nuggets: List[Dict[str, Any]] = []
         for k in summary_data.knowledge_nuggets:
-            knowledge_nuggets.append({"insight": k.insight, "conversation_id": get_convo_id(k.conversation_number)})
+            conversation_id = get_convo_id(k.conversation_number)
+            if conversation_id:
+                knowledge_nuggets.append({"insight": k.insight, "conversation_id": conversation_id})
 
         # Build the complete summary object
         summary_id = str(uuid.uuid4())

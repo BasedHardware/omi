@@ -22,6 +22,13 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
     async def no_async_work(*_args: Any, **_kwargs: Any) -> None:
         return None
 
+    class DaySummaryWebhookResult:
+        def __init__(self, outcome: str):
+            self.outcome = outcome
+
+    async def delivered_webhook(*_args: Any, **_kwargs: Any) -> DaySummaryWebhookResult:
+        return DaySummaryWebhookResult('delivered')
+
     def no_db_work(*_args: Any, **_kwargs: Any) -> list[Any]:
         return []
 
@@ -59,7 +66,11 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
             send_bulk_notification=no_async_work,
             send_notification=lambda *_args, **_kwargs: None,
         ),
-        'utils.webhooks': _module('utils.webhooks', day_summary_webhook=no_async_work),
+        'utils.webhooks': _module(
+            'utils.webhooks',
+            DaySummaryWebhookResult=DaySummaryWebhookResult,
+            day_summary_webhook=delivered_webhook,
+        ),
         'database.daily_summaries': _module(
             'database.daily_summaries',
             get_daily_summary_by_date=lambda *_args: None,
@@ -180,9 +191,12 @@ def test_bulk_summary_waits_for_owned_webhook_before_returning() -> None:
                     ),
                 )
 
-            async def blocking_webhook(_uid: str, _summary: str, _summary_json: dict[str, Any]) -> None:
+            async def blocking_webhook(
+                _uid: str, _summary: str, _summary_json: dict[str, Any]
+            ) -> notifications.DaySummaryWebhookResult:
                 webhook_started.set()
                 await release_webhook.wait()
+                return notifications.DaySummaryWebhookResult('delivered')
 
             notifications.run_blocking = fake_run_blocking
             notifications.day_summary_webhook = blocking_webhook
@@ -219,8 +233,11 @@ def test_bulk_summary_reports_delivered_skipped_and_failed_users() -> None:
                     ),
                 )
 
-            async def record_webhook(uid: str, _summary: str, _summary_json: dict[str, Any]) -> None:
+            async def record_webhook(
+                uid: str, _summary: str, _summary_json: dict[str, Any]
+            ) -> notifications.DaySummaryWebhookResult:
                 webhook_calls.append(uid)
+                return notifications.DaySummaryWebhookResult('delivered')
 
             notifications.run_blocking = fake_run_blocking
             notifications.day_summary_webhook = record_webhook
@@ -237,5 +254,42 @@ def test_bulk_summary_reports_delivered_skipped_and_failed_users() -> None:
                 webhook_completed=1,
             )
             assert webhook_calls == ['uid-delivered']
+
+        asyncio.run(exercise())
+
+
+def test_bulk_summary_reports_webhook_delivery_outcomes_truthfully() -> None:
+    with _loaded_other_notifications() as (notifications, _notification_db):
+
+        async def exercise() -> None:
+            async def fake_run_blocking(_executor: Any, _func: Any, user: tuple[Any, ...]):
+                return notifications.DailySummaryUserResult(
+                    'delivered',
+                    notifications.DailySummaryWebhookPayload(
+                        uid=user[0], summary='legacy-summary', summary_json={'headline': 'Done'}
+                    ),
+                )
+
+            outcomes = iter(('delivered', 'skipped_disabled', 'failed'))
+
+            async def webhook(
+                _uid: str, _summary: str, _summary_json: dict[str, Any]
+            ) -> notifications.DaySummaryWebhookResult:
+                return notifications.DaySummaryWebhookResult(next(outcomes))
+
+            notifications.run_blocking = fake_run_blocking
+            notifications.day_summary_webhook = webhook
+
+            result = await notifications._send_bulk_summary_notification(
+                [('uid-delivered', [], 'UTC'), ('uid-skipped', [], 'UTC'), ('uid-failed', [], 'UTC')]
+            )
+
+            assert result == notifications.DailySummaryRunSummary(
+                selected=3,
+                delivered=3,
+                webhook_completed=1,
+                webhook_skipped=1,
+                webhook_failed=1,
+            )
 
         asyncio.run(exercise())

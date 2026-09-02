@@ -521,6 +521,7 @@ class TestNotificationWebhookWiring:
 
     def test_send_summary_does_not_fire_and_forget_webhook(self):
         """The Cloud Run job must await webhooks instead of orphaning executor work."""
+        import ast
         import os
 
         # Read source to verify pattern without triggering Firestore imports
@@ -528,9 +529,36 @@ class TestNotificationWebhookWiring:
         with open(os.path.join(backend_dir, 'utils', 'other', 'notifications.py'), encoding='utf-8') as f:
             src = f.read()
 
-        assert 'postprocess_executor.submit(asyncio.run, day_summary_webhook(' not in src
-        assert 'await asyncio.gather(' in src
-        assert 'day_summary_webhook(payload.uid, payload.summary, payload.summary_json)' in src
+        tree = ast.parse(src)
+        bulk_sender = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.AsyncFunctionDef) and node.name == '_send_bulk_summary_notification'
+        )
+        webhook_calls = [
+            node
+            for node in ast.walk(bulk_sender)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'day_summary_webhook'
+        ]
+        awaited_gathers = [
+            node.value
+            for node in ast.walk(bulk_sender)
+            if isinstance(node, ast.Await)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Attribute)
+            and isinstance(node.value.func.value, ast.Name)
+            and node.value.func.value.id == 'asyncio'
+            and node.value.func.attr == 'gather'
+        ]
+        awaited_webhook_calls = [
+            call
+            for gather in awaited_gathers
+            for call in ast.walk(gather)
+            if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id == 'day_summary_webhook'
+        ]
+
+        assert len(webhook_calls) == 1
+        assert awaited_webhook_calls == webhook_calls
         assert 'critical_executor' not in src
         assert 'storage_executor' not in src
 

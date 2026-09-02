@@ -3,8 +3,9 @@ import json
 import os
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Literal, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from database.redis_db import (
@@ -31,6 +32,20 @@ from utils.notifications import send_notification
 import logging
 
 logger = logging.getLogger(__name__)
+
+DaySummaryWebhookOutcome = Literal[
+    'delivered',
+    'skipped_disabled',
+    'skipped_missing_url',
+    'skipped_circuit_open',
+    'failed',
+]
+
+
+@dataclass(frozen=True)
+class DaySummaryWebhookResult:
+    outcome: DaySummaryWebhookOutcome
+
 
 _DEV_WEBHOOK_RETRY_DELAYS = (1.0, 5.0, 30.0)
 
@@ -280,7 +295,7 @@ async def conversation_created_webhook(uid, memory: Conversation):
         return
 
 
-async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = None):
+async def day_summary_webhook(uid: str, summary: str, summary_json: Optional[dict] = None) -> DaySummaryWebhookResult:
     """Send the daily summary to the developer webhook.
 
     ``summary`` is the legacy ``str(summary_data)`` Python repr field, kept
@@ -289,51 +304,54 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
     legacy ``summary`` field will be deprecated in a future release.
     """
     toggled = await run_blocking(db_executor, user_webhook_status_db, uid, WebhookType.day_summary)
-    if toggled:
-        webhook_url = await run_blocking(db_executor, get_user_webhook_db, uid, WebhookType.day_summary)
-        if not webhook_url:
-            return
-        webhook_url = _append_query_params(webhook_url, {'uid': uid})
-        cb = get_webhook_circuit_breaker(webhook_url)
-        if not cb.allow_request():
-            logger.info(f'day_summary_webhook: circuit breaker open for {webhook_url[:80]}')
-            return
-        try:
-            response = await _post_dev_webhook(
-                'day_summary_webhook',
-                webhook_url,
-                json={
-                    'summary': summary,
-                    'summary_json': summary_json,
-                    'uid': uid,
-                    'created_at': datetime.now(timezone.utc).isoformat(),
-                },
-                headers={'Content-Type': 'application/json'},
-                dlq_uid=uid,
-            )
-            if response.status_code >= 200 and response.status_code < 300:
-                cb.record_success()
-                await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.day_summary)
-            else:
-                cb.record_failure()
-                should_disable = await run_blocking(
-                    db_executor,
-                    record_dev_webhook_failure,
-                    uid,
-                    WebhookType.day_summary,
-                    response.status_code,
-                    f'HTTP {response.status_code}',
-                )
-                await _handle_dev_webhook_disable(uid, WebhookType.day_summary, should_disable)
-        except Exception as e:
-            cb.record_failure()
-            should_disable = await run_blocking(
-                db_executor, record_dev_webhook_failure, uid, WebhookType.day_summary, 0, type(e).__name__
-            )
-            await _handle_dev_webhook_disable(uid, WebhookType.day_summary, should_disable)
-            logger.error(f"Error sending day summary to developer webhook: {e}")
-    else:
-        return
+    if not toggled:
+        return DaySummaryWebhookResult('skipped_disabled')
+
+    webhook_url = await run_blocking(db_executor, get_user_webhook_db, uid, WebhookType.day_summary)
+    if not webhook_url:
+        return DaySummaryWebhookResult('skipped_missing_url')
+    webhook_url = _append_query_params(webhook_url, {'uid': uid})
+    cb = get_webhook_circuit_breaker(webhook_url)
+    if not cb.allow_request():
+        logger.info(f'day_summary_webhook: circuit breaker open for {webhook_url[:80]}')
+        return DaySummaryWebhookResult('skipped_circuit_open')
+    try:
+        response = await _post_dev_webhook(
+            'day_summary_webhook',
+            webhook_url,
+            json={
+                'summary': summary,
+                'summary_json': summary_json,
+                'uid': uid,
+                'created_at': datetime.now(timezone.utc).isoformat(),
+            },
+            headers={'Content-Type': 'application/json'},
+            dlq_uid=uid,
+        )
+        if 200 <= response.status_code < 300:
+            cb.record_success()
+            await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.day_summary)
+            return DaySummaryWebhookResult('delivered')
+
+        cb.record_failure()
+        should_disable = await run_blocking(
+            db_executor,
+            record_dev_webhook_failure,
+            uid,
+            WebhookType.day_summary,
+            response.status_code,
+            f'HTTP {response.status_code}',
+        )
+        await _handle_dev_webhook_disable(uid, WebhookType.day_summary, should_disable)
+        return DaySummaryWebhookResult('failed')
+    except Exception as e:
+        cb.record_failure()
+        should_disable = await run_blocking(
+            db_executor, record_dev_webhook_failure, uid, WebhookType.day_summary, 0, type(e).__name__
+        )
+        await _handle_dev_webhook_disable(uid, WebhookType.day_summary, should_disable)
+        logger.error(f"Error sending day summary to developer webhook: {e}")
+        return DaySummaryWebhookResult('failed')
 
 
 async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind: ClientKind = 'unknown'):

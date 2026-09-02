@@ -117,7 +117,12 @@ def ensure_scheduler(
         "--quiet",
     ]
     describe = runner(describe_args, capture_output=True, text=True, check=False)
+    existing_state: str | None = None
     if describe.returncode == 0:
+        existing_payload = json.loads(describe.stdout)
+        if not isinstance(existing_payload, dict) or existing_payload.get("state") not in {"ENABLED", "PAUSED"}:
+            raise ValueError("existing notifications scheduler state must be ENABLED or PAUSED")
+        existing_state = existing_payload["state"]
         action = "update"
     elif "not found" in describe.stderr.lower() or "not_found" in describe.stderr.lower():
         action = "create"
@@ -139,7 +144,7 @@ def ensure_scheduler(
         ),
         check=True,
     )
-    if action == "update":
+    if action == "update" and existing_state == "PAUSED":
         runner(
             [
                 "gcloud",

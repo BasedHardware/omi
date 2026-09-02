@@ -371,8 +371,9 @@ class TestDaySummaryWebhookJsonField:
         legacy_summary_str = str(self._SAMPLE_SUMMARY_JSON)
 
         with patch("utils.webhooks.get_webhook_client", return_value=mock_client):
-            await day_summary_webhook("uid-1", legacy_summary_str, self._SAMPLE_SUMMARY_JSON)
+            result = await day_summary_webhook("uid-1", legacy_summary_str, self._SAMPLE_SUMMARY_JSON)
 
+        assert result.outcome == "delivered"
         mock_client.post.assert_called_once()
         payload = mock_client.post.call_args.kwargs["json"]
 
@@ -397,11 +398,48 @@ class TestDaySummaryWebhookJsonField:
         mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch("utils.webhooks.get_webhook_client", return_value=mock_client):
-            await day_summary_webhook("uid-1", "{'legacy': 'repr'}")
+            result = await day_summary_webhook("uid-1", "{'legacy': 'repr'}")
 
+        assert result.outcome == "delivered"
         payload = mock_client.post.call_args.kwargs["json"]
         assert payload["summary_json"] is None
         assert payload["summary"] == "{'legacy': 'repr'}"
+
+    @pytest.mark.asyncio
+    async def test_disabled_webhook_reports_skipped(self):
+        with patch.object(webhooks_module, "user_webhook_status_db", return_value=False):
+            result = await day_summary_webhook("uid-1", "summary")
+
+        assert result.outcome == "skipped_disabled"
+
+    @pytest.mark.asyncio
+    async def test_missing_url_reports_skipped(self):
+        with patch.object(webhooks_module, "get_user_webhook_db", return_value=None):
+            result = await day_summary_webhook("uid-1", "summary")
+
+        assert result.outcome == "skipped_missing_url"
+
+    @pytest.mark.asyncio
+    async def test_open_circuit_reports_skipped(self):
+        circuit_breaker = MagicMock()
+        circuit_breaker.allow_request.return_value = False
+        with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=circuit_breaker):
+            result = await day_summary_webhook("uid-1", "summary")
+
+        assert result.outcome == "skipped_circuit_open"
+
+    @pytest.mark.asyncio
+    async def test_non_success_response_reports_failed(self):
+        response = MagicMock(status_code=500)
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=response)
+
+        with patch("utils.webhooks.get_webhook_client", return_value=mock_client), patch(
+            "utils.webhooks._get_dev_webhook_retry_delays", return_value=()
+        ):
+            result = await day_summary_webhook("uid-1", "summary")
+
+        assert result.outcome == "failed"
 
 
 class TestSendSummaryNotificationWiresSummaryJson:

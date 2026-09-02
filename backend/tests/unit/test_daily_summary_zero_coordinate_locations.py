@@ -22,7 +22,7 @@ backend/docs/test_isolation.md and testing/import_isolation.load_module_fresh.
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytz  # noqa: F401  (real dependency used by the module under test)
@@ -170,3 +170,76 @@ def test_daily_summary_history_is_bounded_deterministically(ext):
     assert retained_tokens == len(bounded) <= 120
     assert bounded.endswith(ext._DAILY_SUMMARY_TRUNCATION_MARKER)
     assert history.startswith(bounded[: -len(ext._DAILY_SUMMARY_TRUNCATION_MARKER)])
+
+
+def test_daily_summary_history_honors_budget_smaller_than_marker(ext):
+    bounded, original_tokens, retained_tokens = ext._bound_daily_summary_history(
+        "history that must be truncated", max_tokens=5, token_counter=len
+    )
+
+    assert bounded == ""
+    assert original_tokens > 5
+    assert retained_tokens == 0
+
+
+def test_daily_summary_prompt_keeps_only_complete_conversation_records(ext):
+    conversations = [_Convo("first"), _Convo("second"), _Convo("third")]
+
+    def render(values, *, people):
+        del people
+        return "\n---\n".join(
+            f"Conversation #{index + 1}\n{conversation.id * 20}" for index, conversation in enumerate(values)
+        )
+
+    ext.conversations_to_string = render
+    marker = ext._DAILY_SUMMARY_TRUNCATION_MARKER.lstrip()
+    first_record = render(conversations[:1], people=[])
+    budget = len(first_record) + 1 + len(marker)
+
+    retained, history, original_tokens, retained_tokens = ext._render_bounded_daily_summary_history(
+        conversations,
+        [],
+        max_tokens=budget,
+        token_counter=len,
+    )
+
+    assert [conversation.id for conversation in retained] == ["first"]
+    assert history == f"{first_record}\n{marker}"
+    assert "second" not in history
+    assert original_tokens == len(render(conversations, people=[]))
+    assert retained_tokens == len(history) <= budget
+
+
+def test_daily_summary_maps_only_retained_conversation_numbers(ext):
+    _configure(ext)
+    conversations = [_Convo("first"), _Convo("omitted")]
+    ext._render_bounded_daily_summary_history = lambda _conversations, _people: (
+        conversations[:1],
+        "Conversation #1\nfirst",
+        200,
+        20,
+    )
+    ext.DailySummaryPayload.model_validate = MagicMock(
+        return_value=SimpleNamespace(
+            headline="Done",
+            overview="Summary",
+            day_emoji="📅",
+            highlights=[SimpleNamespace(topic="Kept", emoji="✅", summary="Supported", conversation_numbers=[1, 2])],
+            unresolved_questions=[
+                SimpleNamespace(question="Supported?", conversation_number=1),
+                SimpleNamespace(question="Unsupported?", conversation_number=2),
+            ],
+            decisions_made=[SimpleNamespace(decision="Unsupported", conversation_number=2)],
+            knowledge_nuggets=[SimpleNamespace(insight="Unsupported", conversation_number=2)],
+        )
+    )
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value.content = "{}"
+    ext.get_llm = MagicMock(return_value=mock_llm)
+
+    result = ext.generate_comprehensive_daily_summary("uid", conversations, "2026-06-29")
+
+    assert result["highlights"][0]["conversation_ids"] == ["first"]
+    assert result["unresolved_questions"] == [{"question": "Supported?", "conversation_id": "first"}]
+    assert result["decisions_made"] == []
+    assert result["knowledge_nuggets"] == []

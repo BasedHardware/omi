@@ -40,9 +40,17 @@ def _state(scheduler: ModuleType, *, schedule: str = '0 * * * *', state: str = '
 
 
 class _Runner:
-    def __init__(self, scheduler: ModuleType, *, existing: bool = True, describe_error: str | None = None):
+    def __init__(
+        self,
+        scheduler: ModuleType,
+        *,
+        existing: bool = True,
+        existing_state: str = 'ENABLED',
+        describe_error: str | None = None,
+    ):
         self.scheduler = scheduler
         self.existing = existing
+        self.existing_state = existing_state
         self.describe_error = describe_error
         self.calls: list[list[str]] = []
         self.describe_calls = 0
@@ -55,7 +63,8 @@ class _Runner:
                 return SimpleNamespace(returncode=1, stdout='', stderr=self.describe_error)
             if self.describe_calls == 1 and not self.existing:
                 return SimpleNamespace(returncode=1, stdout='', stderr='NOT_FOUND: scheduler job')
-            return SimpleNamespace(returncode=0, stdout=json.dumps(_state(self.scheduler)), stderr='')
+            state = self.existing_state if self.describe_calls == 1 else 'ENABLED'
+            return SimpleNamespace(returncode=0, stdout=json.dumps(_state(self.scheduler, state=state)), stderr='')
         return SimpleNamespace(returncode=0, stdout='', stderr='')
 
 
@@ -68,7 +77,7 @@ def _ensure(scheduler: ModuleType, runner: _Runner) -> str:
     )
 
 
-def test_existing_scheduler_is_updated_to_exact_hourly_contract_and_resumed(scheduler: ModuleType) -> None:
+def test_enabled_scheduler_is_updated_without_invalid_resume(scheduler: ModuleType) -> None:
     runner = _Runner(scheduler)
 
     assert _ensure(scheduler, runner) == 'update'
@@ -77,8 +86,26 @@ def test_existing_scheduler_is_updated_to_exact_hourly_contract_and_resumed(sche
     assert '--schedule=0 * * * *' in update
     assert '--time-zone=Etc/UTC' in update
     assert '--http-method=POST' in update
-    assert any(call[1:4] == ['scheduler', 'jobs', 'resume'] for call in runner.calls)
+    assert not any(call[1:4] == ['scheduler', 'jobs', 'resume'] for call in runner.calls)
     assert not any('--schedule=*/1 * * * *' in call for call in runner.calls)
+
+
+def test_paused_scheduler_is_resumed_after_update(scheduler: ModuleType) -> None:
+    runner = _Runner(scheduler, existing_state='PAUSED')
+
+    assert _ensure(scheduler, runner) == 'update'
+
+    assert any(call[1:5] == ['scheduler', 'jobs', 'update', 'http'] for call in runner.calls)
+    assert any(call[1:4] == ['scheduler', 'jobs', 'resume'] for call in runner.calls)
+
+
+def test_unknown_existing_scheduler_state_fails_before_mutation(scheduler: ModuleType) -> None:
+    runner = _Runner(scheduler, existing_state='UPDATE_FAILED')
+
+    with pytest.raises(ValueError, match='ENABLED or PAUSED'):
+        _ensure(scheduler, runner)
+
+    assert len(runner.calls) == 1
 
 
 def test_missing_scheduler_is_created_without_resume(scheduler: ModuleType) -> None:
