@@ -247,14 +247,14 @@ final class OnboardingScenarioTests: XCTestCase {
 
     XCTAssertEqual(opened.urls.map(\.lastPathComponent), ["order.html"])
     XCTAssertEqual(model.seePhase, .waitingForPage)
-    XCTAssertEqual(model.thread.last?.text, "Open the order page")
+    XCTAssertEqual(model.thread.last?.text, "Open the page")
     XCTAssertNotNil(model.scenarioDetectionTask, "the click starts the watch for the page")
     model.scenarioDetectionTask?.cancel()
 
     // A retry from the waiting phase opens again without a second user bubble.
     model.openOrderPage()
     XCTAssertEqual(opened.urls.count, 2)
-    XCTAssertEqual(model.thread.filter { $0.text == "Open the order page" }.count, 1)
+    XCTAssertEqual(model.thread.filter { $0.text == "Open the page" }.count, 1)
     model.scenarioDetectionTask?.cancel()
   }
 
@@ -363,7 +363,7 @@ final class OnboardingScenarioTests: XCTestCase {
     XCTAssertTrue(model.scenarioWriteUnreadable)
     XCTAssertTrue(model.scenarioMemoryChips.isEmpty && model.scenarioTaskChips.isEmpty)
     XCTAssertEqual(returned.count, 1, "the user still comes back to Omi, with the truth")
-    XCTAssertTrue(model.thread.last?.text.contains("kept nothing") == true)
+    XCTAssertTrue(model.thread.last?.text.contains("Nothing kept") == true)
   }
 
   @MainActor

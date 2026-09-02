@@ -58,11 +58,11 @@ steps:
     do: "Allow Screen Recording (or Skip for now). Nothing opens yet: Omi says what will happen in the browser and that it will bring you back, and offers one button."
     expect:
       text_visible:
-        - "Open the order page"
+        - "Open the page"
 
   - id: S4
     name: See — the page opens on the click
-    do: "Press 'Open the order page'. The default browser opens 'Omi Welcome · Order confirmed · Norrland Goods' with real dates and a cue line saying a card is on its way. Within a poll of the page becoming frontmost (or ~3 s timed fallback without Screen Recording) a persistent card is at the notch ('Aurora desk lamp' / return window)."
+    do: "Press 'Open the page'. The default browser opens 'Omi Welcome · Order confirmed · Norrland Goods' with real dates and a cue line saying a card is on its way. Within a poll of the page becoming frontmost (or ~3 s timed fallback without Screen Recording) a persistent card is at the notch ('Aurora desk lamp' / return window)."
     expect:
       text_visible:
         - "Look up. The card is at the top of your screen."

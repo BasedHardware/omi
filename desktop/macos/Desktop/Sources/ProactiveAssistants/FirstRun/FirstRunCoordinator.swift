@@ -248,7 +248,7 @@ enum FirstRunReducer {
         completeStep(.openWork)
         effects.append(
           .showTransient(
-            title: "✓ \(project.normalizedTitle). I'll know this place when you come back.",
+            title: "✓ \(project.normalizedTitle). I'll know this place when you're back.",
             message: ""))
         effects.append(.scheduleAdvance(expected: .openWork, seconds: 3))
 
@@ -290,7 +290,7 @@ enum FirstRunReducer {
       state.pendingEffect = .advance(step: .setReminder, deadline: now.addingTimeInterval(3))
       effects.append(
         .showTransient(
-          title: "✓ Got it. Next time you're back in \(projectTitle), I'll bring that up.",
+          title: "✓ Got it. Next time you're in \(projectTitle), I'll bring it up.",
           message: ""))
       effects.append(.scheduleAdvance(expected: .setReminder, seconds: 3))
 
@@ -720,7 +720,7 @@ final class FirstRunCoordinator {
     case .showSummary(let conversationID):
       presentGuideChip(
         title: "Here's what we did",
-        message: "I wrote it up like a meeting. Open Omi.",
+        message: "I wrote it up. Take a look.",
         countAgainstDailyCap: false,
         action: FirstRunCardActions.make(.openSummary(conversationID: conversationID)))
     case .scheduleConversationRetry(let seconds):
@@ -745,16 +745,16 @@ final class FirstRunCoordinator {
     let copy: (String, String)?
     switch state.step {
     case .openWork:
-      copy = ("Open something you're working on", "a doc, a repo, a design, a deck. Anything real.")
+      copy = ("Open something you're working on", "A doc, a repo, a deck. Anything real.")
     case .setReminder:
       copy = (
-        "Hold \(Self.talkChordLabel()) and tell me something to bring up next time you open this",
-        "e.g. 'remind me to ping Priya about the pricing table'"
+        "Hold \(Self.talkChordLabel()) and tell me what to bring up next time you're here",
+        "Like: remind me to ping Priya about pricing"
       )
     case .drift:
       copy = (
-        "Now go scroll something for a bit",
-        "news, Reddit, anything you'd normally drift to. I'll be watching."
+        "Now go scroll something",
+        "News, Reddit, whatever you'd drift to. I'll be watching."
       )
     default:
       copy = nil
@@ -824,7 +824,7 @@ final class FirstRunCoordinator {
     guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
     NotificationService.shared.sendNotification(
       ownerID: ownerID,
-      title: "✓ That's the loop: I notice where you are, and I bring back what you told me.",
+      title: "✓ That's the loop. I notice where you are and bring back what you told me.",
       message: "",
       assistantId: "first_run_card",
       respectFrequency: false,

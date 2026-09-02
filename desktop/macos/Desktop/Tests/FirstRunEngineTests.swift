@@ -32,7 +32,7 @@ final class FirstRunEngineTests: XCTestCase {
     XCTAssertTrue(
       effects.contains(
         .showTransient(
-          title: "✓ Got it. Next time you're back in Pricing Engine, I'll bring that up.",
+          title: "✓ Got it. Next time you're in Pricing Engine, I'll bring it up.",
           message: "")))
 
     _ = apply(&state, .advance(expected: .setReminder), offset: 17)

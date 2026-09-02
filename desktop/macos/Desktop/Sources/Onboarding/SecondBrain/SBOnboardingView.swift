@@ -242,7 +242,7 @@ struct SBOnboardingView: View {
     case .see:
       switch model.seePhase {
       case .permission:
-        permStepWidget("screen_recording", "Screen Recording", "so I can see what you're looking at") {
+        permStepWidget("screen_recording", "Screen Recording", "so I can see what you see") {
           model.answerScreen()
         }
       case .openPage, .waitingForPage:
@@ -253,7 +253,7 @@ struct SBOnboardingView: View {
     case .talk:
       switch model.talkPhase {
       case .microphone:
-        permStepWidget("microphone", "Microphone", "so I can hear your push-to-talk question") {
+        permStepWidget("microphone", "Microphone", "so I can hear you") {
           model.answerMic()
         }
       case .shortcut:
@@ -273,15 +273,15 @@ struct SBOnboardingView: View {
     VStack(alignment: .leading, spacing: 10) {
       handoffRow(
         symbol: "safari",
-        title: "A demo order page, in your browser.",
-        detail: "Norrland Goods, one desk lamp. Opens in your default browser; nothing on it is real."
+        title: "Your order confirmation",
+        detail: "A demo page. Opens in your browser."
       )
       if model.seePhase == .openPage {
-        SBInkButton(title: "Open the order page", isDefaultAction: true) { model.openOrderPage() }
+        SBInkButton(title: "Open the page", isDefaultAction: true) { model.openOrderPage() }
       } else {
         HStack(spacing: 8) {
           ProgressView().controlSize(.small)
-          Text("Opening… look up once it's there.").inkStyle(InkType.statusLabel, color: Ink.secondary)
+          Text("Opening…").inkStyle(InkType.statusLabel, color: Ink.secondary)
         }
         Button {
           model.openOrderPage()
@@ -324,18 +324,18 @@ struct SBOnboardingView: View {
         scenarioWriteRow(symbol: "checkmark.circle", label: "TASK", text: task)
       }
       if model.cardPhase == .notifications {
-        permStepWidget("notifications", "Notifications", "reach you away from the notch") {
+        permStepWidget("notifications", "Notifications", "so I can reach you when I'm not in front") {
           model.answerNotifications()
         }
       } else {
         handoffRow(
           symbol: "arrow.up",
-          title: "Look up. The card is at the top of your screen.",
-          detail: "It offers a reminder. Pick either answer; I'll bring you back here."
+          title: "Look up. There's a card at the top of your screen.",
+          detail: "Pick either answer."
         )
         HStack(spacing: 8) {
           ProgressView().controlSize(.small)
-          Text("Waiting for you to answer the card…").inkStyle(InkType.statusLabel, color: Ink.secondary)
+          Text("Waiting for your answer…").inkStyle(InkType.statusLabel, color: Ink.secondary)
         }
       }
     }
@@ -370,9 +370,8 @@ struct SBOnboardingView: View {
       case .intro:
         handoffRow(
           symbol: "envelope",
-          title: "A note to Sam, already drafted.",
-          detail:
-            "Send it as it is, or make it yours, then press Send. Demo mailbox; nothing leaves your Mac, and I'll bring you back."
+          title: "A note to Sam",
+          detail: "Drafted for you. Send it as is, or rewrite it. Nothing leaves your Mac."
         )
         SBInkButton(title: "Open the note", isDefaultAction: true) { model.openComposePage() }
         Button {
@@ -384,11 +383,11 @@ struct SBOnboardingView: View {
       case .waitingForSend:
         handoffRow(
           symbol: "envelope",
-          title: "The note is open in your browser.",
-          detail: "Send it as it is, or in your words. I'm reading along, and I'll bring you back here."
+          title: "The note is in your browser.",
+          detail: "Press Send when it reads right."
         )
         if model.scenarioWriteDetectionTimedOut {
-          Text("I haven't seen the note go out yet. Open it again, or skip this one.")
+          Text("Still waiting on Send. Open it again, or skip.")
             .inkStyle(InkType.statusLabel, color: Ink.secondary)
             .fixedSize(horizontal: false, vertical: true)
         } else {
@@ -427,7 +426,7 @@ struct SBOnboardingView: View {
           }
         } else {
           if model.scenarioMemoryChips.isEmpty && model.scenarioTaskChips.isEmpty {
-            Text("Nothing to keep from that note. That happens; I only save what you actually said.")
+            Text("Nothing worth keeping in that one. I only save what matters.")
               .inkStyle(InkType.statusLabel, color: Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }
@@ -474,7 +473,7 @@ struct SBOnboardingView: View {
           .fixedSize(horizontal: false, vertical: true)
       }
       if action == .reopen {
-        Text("\(name) is on, but macOS only hands it to a fresh launch. Reopen me and I'll pick up right here.")
+        Text("\(name) is on, but macOS only applies it after a relaunch. Reopen me and we'll pick up right here.")
           .inkStyle(InkType.statusLabel, color: Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)
         Button {
@@ -489,7 +488,7 @@ struct SBOnboardingView: View {
         Button {
           onContinue()
         } label: {
-          Text("Later — \(name) stays off until you reopen")
+          Text("Later. \(name) stays off until you reopen.")
             .inkStyle(InkType.statusLabel, color: Ink.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -634,8 +633,8 @@ struct SBOnboardingView: View {
         // has just answered.
         Text(
           model.shortcutNeedsModifier
-            ? "That one's on its own — add ⌘, ⌃ or ⌥ to it."
-            : "Press the shortcut you want to use."
+            ? "That one's on its own. Add ⌘, ⌃ or ⌥."
+            : "Press the shortcut you want."
         )
         .inkStyle(InkType.rowCopy, color: Ink.primary)
         .fixedSize(horizontal: false, vertical: true)
@@ -655,7 +654,7 @@ struct SBOnboardingView: View {
           Text(
             model.shortcutPressed
               ? "Perfect, that works."
-              : "Now press it to test."
+              : "Press it to test."
           )
           .inkStyle(InkType.rowCopy, color: model.shortcutPressed ? Ink.primary : Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)
@@ -685,17 +684,17 @@ struct SBOnboardingView: View {
           HStack(spacing: 5) {
             Text("Hold").inkStyle(InkType.rowCopy, color: Ink.primary)
             ForEach(model.voiceChordTokens, id: \.self) { tok in keycap(tok) }
-            Text("and ask about the order, out loud.").inkStyle(InkType.rowCopy, color: Ink.primary)
+            Text("and ask about the order.").inkStyle(InkType.rowCopy, color: Ink.primary)
           }
           Text(
-            "Try “When does this arrive?” I still have the order page in mind, and I answer at the top of your screen, in \(model.selectedResponseLanguageName)."
+            "Try “When does it arrive?” I answer at the top of your screen."
           )
           .inkStyle(InkType.statusLabel, color: Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)
         }
       } else if model.screenDemoPTTUnavailable {
         VStack(alignment: .leading, spacing: 8) {
-          Text("Voice setup isn't available yet. You can retry, or skip for now.")
+          Text("Voice isn't ready yet. Try again, or skip for now.")
             .inkStyle(InkType.rowCopy, color: Ink.primary)
             .fixedSize(horizontal: false, vertical: true)
           Button("Try again") {
@@ -736,14 +735,14 @@ struct SBOnboardingView: View {
       Button {
         model.capture(SBOnboardingModel.defaultCaptureSelection)
       } label: {
-        Text("Only Meetings").frame(maxWidth: .infinity)
+        Text("Only in meetings").frame(maxWidth: .infinity)
       }
       .buttonStyle(InkButtonStyle(kind: .primary))
       .keyboardShortcut(.defaultAction)
       Button {
         model.capture(.always)
       } label: {
-        Text("Always On").frame(maxWidth: .infinity)
+        Text("Always").frame(maxWidth: .infinity)
       }
       .buttonStyle(InkButtonStyle(kind: .secondary))
     }

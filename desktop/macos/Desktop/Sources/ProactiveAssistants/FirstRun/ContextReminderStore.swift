@@ -125,7 +125,7 @@ actor ContextReminderStore {
     NotificationService.shared.sendNotification(
       ownerID: ownerID,
       title: reminder.contextKey.normalizedTitle,
-      message: "Welcome back. You asked me to remind you: \(reminder.text)",
+      message: "You're back. You asked me to remind you: \(reminder.text)",
       assistantId: "first_run_card",
       action: FirstRunCardActions.make(.contextReminder(reminderID: reminder.id)),
       respectFrequency: false,

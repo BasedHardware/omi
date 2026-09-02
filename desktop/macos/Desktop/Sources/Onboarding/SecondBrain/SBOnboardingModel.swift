@@ -314,28 +314,27 @@ final class SBOnboardingModel: ObservableObject {
     switch step {
     case .hello:
       return
-        "Hi, I'm Omi. I sit at the top of your screen and pay attention to what you're doing, "
-        + "so I can help before you ask. Rather than explain it, let's do one real thing together. "
-        + "About four minutes. What should I call you?"
+        "Hi, I'm Omi. I keep an eye on your screen so I can help before you ask. "
+        + "Let's try it for real. Four minutes. What should I call you?"
     case .see:
+      // The disclosure is not decoration: capture is ongoing once set up, the archive is called
+      // Rewind, and it can be switched off. Said once, plainly, on the step that asks for it.
       return
-        "First, what I notice. I'll show you a demo order page in your browser. "
-        + "To see it the way you do, I need Screen Recording."
+        "First: what I notice. I'll need to see your screen. Once we're set up I keep a shot every few "
+        + "seconds so you can rewind your day, and you can turn it off anytime."
     case .card:
       return
-        "That's a card, up at the notch. When I spot something on screen worth a heads-up, I show one there "
-        + "and then get out of the way. Answer it, and I'll bring you back here."
+        "That's a card. When I spot something worth a heads-up, that's where it goes. Then I get out of the way."
     case .talk:
-      return "Now ask me about that order, out loud. I need the microphone."
+      return "Now ask me about it. Out loud."
     case .write:
       return
-        "Last one: I remember what you write, too. Tell your friend Sam about the lamp. "
-        + "I've drafted the note in a demo mailbox; send it as it is, or say it your way. "
-        + "Watch what I keep from it: a promise becomes a task, and what you tell Sam becomes a memory."
+        "Last one. I remember what you write, too. Tell Sam about the lamp; I drafted it. "
+        + "Send it as is, or make it yours."
     case .ready:
       return
-        "That's the whole idea: I watch, I speak up, I remember. Now let's do it with your real work. "
-        + "I'll guide you from the notch, five short steps. One question first: when should I listen, \(name)?"
+        "That's the loop: I watch, I speak up, I remember. Now let's do it with your real work. "
+        + "I'll guide you from the top of your screen. One thing first: when should I listen, \(name)?"
     }
   }
 

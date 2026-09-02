@@ -335,7 +335,7 @@ final class OnboardingFlowTests: XCTestCase {
     let secondBrainSource = try desktopSourceFile("Onboarding/SecondBrain/SBOnboardingView.swift")
     // The two hand-off buttons ("Open the order page", "Open the note") are proceed actions too:
     // they are the only way forward on their beats, so Return must open the page.
-    for title in ["Looks right", "Continue", "Open the order page", "Open the note"] {
+    for title in ["Looks right", "Continue", "Open the page", "Open the note"] {
       XCTAssertTrue(
         secondBrainSource.contains("SBInkButton(title: \"\(title)\", isDefaultAction: true)"),
         "the second-brain \(title) action must accept Return")
@@ -371,8 +371,8 @@ final class OnboardingFlowTests: XCTestCase {
         .contains(".keyboardShortcut(.defaultAction)"),
       "Return must choose the meeting-only capture default")
     XCTAssertFalse(secondBrainSource.contains("reaches me anytime"))
-    XCTAssertTrue(secondBrainSource.contains("Text(\"Only Meetings\")"))
-    XCTAssertTrue(secondBrainSource.contains("Text(\"Always On\")"))
+    XCTAssertTrue(secondBrainSource.contains("Text(\"Only in meetings\")"))
+    XCTAssertTrue(secondBrainSource.contains("Text(\"Always\")"))
     XCTAssertFalse(secondBrainSource.contains("from my calendar"))
   }
 

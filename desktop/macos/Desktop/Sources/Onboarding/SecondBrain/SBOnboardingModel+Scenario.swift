@@ -43,8 +43,7 @@ extension SBOnboardingModel {
     seePhase = .openPage
     persistScenarioProgress()
     appendScenarioOmiLine(
-      "Say you just bought a desk lamp. When you open the confirmation page, watch the top of your screen: "
-        + "a card will show up there. Answer it, and I'll bring you back here."
+      "Say you just bought a lamp. Open the receipt, then look up: I'll leave you a card. Answer it and I'll bring you back."
     )
   }
 
@@ -52,8 +51,8 @@ extension SBOnboardingModel {
   func openOrderPage() {
     guard step == .see, seePhase == .openPage || seePhase == .waitingForPage else { return }
     if seePhase == .openPage {
-      thread.append(Msg(isOmi: false, text: "Open the order page"))
-      OnboardingScenarioJournal().append(who: "user", text: "Open the order page")
+      thread.append(Msg(isOmi: false, text: "Open the page"))
+      OnboardingScenarioJournal().append(who: "user", text: "Open the page")
     }
     do {
       _ = try OnboardingScenarioPageRenderer.writeAndOpen(
@@ -153,7 +152,7 @@ extension SBOnboardingModel {
         scenarioReturnToOmi()
         showScenarioNotificationsPrompt(
           userAnswer: nil,
-          preface: "The notch was busy, so that card never got its turn; the next one will.")
+          preface: "The top of your screen was busy, so that card will wait.")
         return
       }
       scenarioCardTimeoutTask?.cancel()
@@ -170,7 +169,7 @@ extension SBOnboardingModel {
       let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
     else {
       showScenarioNotificationsPrompt(
-        userAnswer: nil, preface: "I couldn't show the card just now; the next one will land.")
+        userAnswer: nil, preface: "I couldn't show the card just now.")
       return
     }
     scenarioCardPresented = true
@@ -198,7 +197,7 @@ extension SBOnboardingModel {
       self.scenarioReturnToOmi()
       self.showScenarioNotificationsPrompt(
         userAnswer: nil,
-        preface: "That one got out of the way on its own; cards do that. There'll be more.")
+        preface: "That card left on its own. They do that.")
     }
   }
 
@@ -267,7 +266,7 @@ extension SBOnboardingModel {
     cardPhase = .notifications
     persistScenarioProgress()
     let ask =
-      "To reach you when I'm not in front, I'll ask for notifications. The notch works without it; the lock screen doesn't."
+      "Want me to reach you when Omi isn't open? That takes notifications."
     appendScenarioOmiLine(preface.map { "\($0) \(ask)" } ?? ask)
     precheckPerm("notifications")
   }
@@ -290,7 +289,7 @@ extension SBOnboardingModel {
     OnboardingScenarioJournal().append(who: "user", text: answer)
     talkPhase = .shortcut
     persistScenarioProgress()
-    appendScenarioOmiLine("And to talk to me hands-free? Choose one, or pick Custom to hold your own modifier key.")
+    appendScenarioOmiLine("Pick a key to hold while you talk.")
     armShortcutSummon()
   }
 
@@ -302,7 +301,7 @@ extension SBOnboardingModel {
     persistScenarioProgress()
     OnboardingScenarioJournal().append(who: "user", text: "Talk shortcut selected")
     appendScenarioOmiLine(
-      "Hold \(voiceChordTokens.joined(separator: " ")) and say: 'when does this arrive?' Let go when you're done.")
+      "Hold \(voiceChordTokens.joined(separator: " ")) and ask: when does it arrive? Let go when you're done.")
     startScreenDemo()
   }
 
@@ -397,8 +396,8 @@ extension SBOnboardingModel {
     manager.dismissNotifications(assistantID: FirstRunNotchCardIdentity.scenarioGuide, kind: .replaced)
     NotificationService.shared.sendNotification(
       ownerID: ownerID,
-      title: "Send the note to Sam, as it is or in your words",
-      message: "I'm reading along. Press Send and I'll bring you back.",
+      title: "Send the note to Sam",
+      message: "As is, or in your words. I'll bring you back.",
       assistantId: FirstRunNotchCardIdentity.scenarioGuide,
       respectFrequency: false,
       isPersistent: true,
@@ -469,7 +468,7 @@ extension SBOnboardingModel {
     thread.append(Msg(isOmi: false, text: "Sent"))
     OnboardingScenarioJournal().append(who: "user", text: "Sent")
     appendScenarioOmiLine(
-      "I saw it go out, but the note itself didn't reach me on this Mac, so I kept nothing. That's on me, not you.")
+      "I saw it go out, but the note didn't reach me. Nothing kept this time. My fault, not yours.")
     scenarioReturnToOmi()
   }
 
@@ -493,8 +492,8 @@ extension SBOnboardingModel {
     OnboardingScenarioJournal().append(who: "user", text: "Sent")
     appendScenarioOmiLine(
       effects.taskTitle == nil
-        ? "Got it. Here's what I kept from that note."
-        : "Got it. You made Sam a promise in there, so that's a task now; the rest I'll remember.")
+        ? "Got it. Here's what I kept."
+        : "Got it. You promised Sam a link, so that's a task. The rest I'll remember.")
     Task { [weak self] in
       guard let self, let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
         let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
