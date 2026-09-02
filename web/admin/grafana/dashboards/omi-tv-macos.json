@@ -322,7 +322,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "% of first-seen macOS users who asked 2+ chat questions within their first 48 hours (PostHog; matured signups only). The aha moment \u2014 biggest controllable lever, first-5-minutes work.",
+      "description": "% of first-seen macOS users who asked 2+ questions (typed chat or push-to-talk) after completing onboarding, within their first 48 hours (PostHog; matured signups only). The aha moment \u2014 biggest controllable lever, first-5-minutes work.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -4310,7 +4310,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "Daily activation rate: % of that day's first-seen macOS users who asked 2+ questions within 48h. Only matured days (older than 48h) appear.",
+      "description": "Daily activation rate: % of that day's first-seen macOS users who asked 2+ questions (typed or PTT) after onboarding, within 48h. Only matured days (older than 48h) appear.",
       "fieldConfig": {
         "defaults": {
           "color": {

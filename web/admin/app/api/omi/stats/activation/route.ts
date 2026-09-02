@@ -13,10 +13,15 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
 
 // Activation (Nik, 2026-08-28): a macOS signup counts as activated when they
-// ask 2+ chat questions within their first 48 hours. Signup = first-seen
+// ask 2+ questions within their first 48 hours. Signup = first-seen
 // macOS actor in PostHog (the same person-deduped anchor every other board
-// cohort uses); question = the `Chat Message Sent` event every main-window
-// chat surface funnels through. Signups younger than the 48h window are not
+// cohort uses); question = typed chat (`Chat Message Sent`, every main-window
+// chat surface) PLUS floating-bar/push-to-talk queries
+// (`floating_bar_query_sent`) — PTT is ~a third of question volume and must
+// count (Nik, 2026-09-01). Only questions asked AFTER `Onboarding Completed`
+// count: the onboarding chat itself sends questions, and finishing onboarding
+// is part of being activated — a user who never completed it is not
+// activated regardless of onboarding-chat activity (Nik, 2026-09-01). Signups younger than the 48h window are not
 // yet matured and are excluded so the rate is never depressed by users whose
 // window is still open. Replaces the older Firestore definition (>=1
 // conversation within 7 days).
@@ -24,7 +29,7 @@ export const ACTIVATION_QUESTIONS = 2;
 export const ACTIVATION_WINDOW_HOURS = 48;
 
 export function activationCacheKey(days: number): string {
-  return `activation:v2:macos-2q48h:${days}`;
+  return `activation:v4:macos-2q48h-ptt-postonb:${days}`;
 }
 
 export type ActivationDailyPoint = {
@@ -90,14 +95,24 @@ export async function computeActivation(
         GROUP BY actor
         HAVING first_ts >= now() - INTERVAL ${days} DAY
           AND first_ts <= now() - INTERVAL ${ACTIVATION_WINDOW_HOURS} HOUR
+      ),
+      onboarded AS (
+        SELECT COALESCE(person_id, distinct_id) AS actor, min(timestamp) AS onb_ts
+        FROM events
+        WHERE event = 'Onboarding Completed' AND properties.$os_name = 'macOS'
+          AND timestamp >= now() - INTERVAL ${days + 2} DAY
+        GROUP BY actor
       )
       SELECT toString(any(f.first_ts)) AS first_ts,
              countIf(
-               e.event = 'Chat Message Sent'
+               e.event IN ('Chat Message Sent', 'floating_bar_query_sent')
+               AND o.onb_ts > toDateTime(0)
+               AND e.timestamp >= o.onb_ts
                AND e.timestamp >= f.first_ts
                AND e.timestamp <= f.first_ts + INTERVAL ${ACTIVATION_WINDOW_HOURS} HOUR
              ) AS questions
       FROM firsts f
+      LEFT JOIN onboarded o ON o.actor = f.actor
       LEFT JOIN events e
         ON COALESCE(e.person_id, e.distinct_id) = f.actor
         AND e.timestamp >= now() - INTERVAL ${days + 2} DAY

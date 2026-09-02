@@ -74,7 +74,15 @@ describe("computeActivation (2+ questions within 48h)", () => {
     expect(query).toContain(
       `first_ts <= now() - INTERVAL ${ACTIVATION_WINDOW_HOURS} HOUR`,
     );
-    expect(query).toContain("Chat Message Sent");
+    // Questions = typed chat AND floating-bar/PTT queries — counting only
+    // one of them undercounts activation by ~a third (user-reported).
+    expect(query).toContain("'Chat Message Sent', 'floating_bar_query_sent'");
+    // Only post-onboarding questions count; a user who never completed
+    // onboarding cannot activate (onboarding-chat questions are not product
+    // usage).
+    expect(query).toContain("Onboarding Completed");
+    expect(query).toContain("e.timestamp >= o.onb_ts");
+    expect(query).toContain("o.onb_ts > toDateTime(0)");
     expect(query).toContain(
       `f.first_ts + INTERVAL ${ACTIVATION_WINDOW_HOURS} HOUR`,
     );
