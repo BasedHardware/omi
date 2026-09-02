@@ -6,6 +6,26 @@ enum ChatBubbleMetadataControlMetrics {
   static let leadingInset = OmiSpacing.xxs
   static let topInset = leadingInset
   static let targetSize: CGFloat = 24
+
+  /// What an assistant row reserves under its last line for the hover strip.
+  /// The transcript's row spacing subtracts it, so the gap under a reply is the
+  /// band itself rather than the band *plus* a full inter-exchange gap.
+  static let bandHeight: CGFloat = topInset + targetSize
+}
+
+/// `.keyboardShortcut` is unconditional on a `Button`, so the guard has to be
+/// the modifier's presence rather than an argument to it.
+struct ChatCopyKeyboardShortcut: ViewModifier {
+  let isActive: Bool
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if isActive {
+      content.keyboardShortcut("c", modifiers: .command)
+    } else {
+      content
+    }
+  }
 }
 
 enum ChatBubbleMetadataHoverRegion {
@@ -218,11 +238,18 @@ struct ChatBubble: View {
         .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
       }
     }
+    // The reserved mark height is for **an empty streaming reply**, which has no
+    // content of its own and would otherwise clip the mark. A settled row is
+    // always taller than the mark, so reserving it there only centred short
+    // content — a one-line answer or a memory card — inside a 32 pt box and
+    // floated it in symmetric dead space.
     .frame(
       maxWidth: .infinity,
-      minHeight: ChatOmiMarkPlacement.rowHeight(
-        showsMark: message.sender == .ai && app == nil && showsOmiMark),
-      alignment: message.sender == .user ? .trailing : .leading
+      minHeight: message.isStreaming
+        ? ChatOmiMarkPlacement.rowHeight(
+          showsMark: message.sender == .ai && app == nil && showsOmiMark)
+        : 0,
+      alignment: message.sender == .user ? .topTrailing : .topLeading
     )
     .overlay(alignment: .topLeading) {
       if message.sender == .ai, app == nil, showsOmiMark {
@@ -243,6 +270,39 @@ struct ChatBubble: View {
     }
     .contentShape(Rectangle())
     .onHover { updateMetadataHover(.row, hovering: $0) }
+    // A settled row may be selected with the cursor; a streaming one may not.
+    .environment(
+      \.chatTextSelectable,
+      ChatTextSelectionPolicy.isSelectable(isStreaming: message.isStreaming)
+    )
+    // Copy without hunting for the hover strip — and the only copy affordance a
+    // user turn has ever had.
+    .contextMenu { messageContextMenu }
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel(message.sender == .user ? "You" : "Omi")
+  }
+
+  /// The text the row's copy actions put on the pasteboard. `copyableText`
+  /// excludes pre-tool commentary, but it is empty for a user turn, whose whole
+  /// body is the message.
+  private var copyPayload: String {
+    message.copyableText.isEmpty ? message.text : message.copyableText
+  }
+
+  private func copyMessageToPasteboard() {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(copyPayload, forType: .string)
+    showCopied = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+      showCopied = false
+    }
+  }
+
+  @ViewBuilder
+  private var messageContextMenu: some View {
+    if !copyPayload.isEmpty {
+      Button("Copy Message") { copyMessageToPasteboard() }
+    }
   }
 
   @ViewBuilder
@@ -343,13 +403,23 @@ struct ChatBubble: View {
     // `ChatTurnFailureNotice`). The blanket "Couldn't save this reply" caption
     // both duplicated that reason in different words and named the wrong
     // cause — the turn failed, no save was attempted. Keep a stamp only for a
-    // failed row that has nothing of its own to say.
-    if message.sender == .ai && !message.isStreaming && message.journalStatus == .failed
-      && message.text.isEmpty && message.contentBlocks.isEmpty
-    {
+    // failed row that has nothing of its own to say — and, for a row that was
+    // cut off mid-sentence, a quiet mark so the reader can see it was cut.
+    switch ChatTurnFailurePresentation.of(message) {
+    case .none:
+      EmptyView()
+    case .emptyTurnStamp:
       Text("This turn didn't finish")
         .scaledFont(size: OmiType.micro, weight: .medium)
         .foregroundColor(PageGlass.warning)
+    case .truncatedAnswer:
+      HStack(spacing: OmiSpacing.xxs) {
+        Text("\u{2026}")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+        Text("Interrupted")
+          .scaledFont(size: OmiType.micro, weight: .medium)
+      }
+      .foregroundColor(Ink.secondary)
     }
 
     switch ChatBubbleMetadataBand.of(message) {
@@ -536,6 +606,9 @@ struct ChatBubble: View {
     .onHover { updateMetadataHover(.controls, hovering: $0) }
     .opacity(isVisible ? 1 : 0)
     .allowsHitTesting(isVisible)
+    // Opacity and hit-testing hide the strip from the eye and the mouse; without
+    // this VoiceOver still walked through invisible thumbs and a copy button.
+    .accessibilityHidden(!isVisible)
     .omiAnimation(.easeInOut(duration: 0.15), value: isVisible)
   }
 
@@ -618,14 +691,7 @@ struct ChatBubble: View {
 
   @ViewBuilder
   private var copyButton: some View {
-    Button(action: {
-      NSPasteboard.general.clearContents()
-      NSPasteboard.general.setString(message.copyableText, forType: .string)
-      showCopied = true
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-        showCopied = false
-      }
-    }) {
+    Button(action: copyMessageToPasteboard) {
       Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
         .scaledFont(size: OmiType.caption)
         .foregroundColor(showCopied ? Ink.listeningGreen : Ink.secondary)
@@ -637,6 +703,9 @@ struct ChatBubble: View {
     }
     .buttonStyle(.plain)
     .focused($isMetadataControlFocused)
+    // Only while this row's control strip holds keyboard focus. A window-wide
+    // ⌘C would take the shortcut away from selected prose and the composer.
+    .modifier(ChatCopyKeyboardShortcut(isActive: isMetadataControlFocused))
     .help("Copy message")
   }
 

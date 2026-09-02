@@ -1905,6 +1905,10 @@ struct OnboardingChatBubble: View {
               // Fallback for messages loaded from backend (no contentBlocks, only flat text)
               if !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 OmiMarkdown(text: message.text, style: .assistant)
+                  .environment(
+                    \.chatTextSelectable,
+                    ChatTextSelectionPolicy.isSelectable(isStreaming: message.isStreaming)
+                  )
                   .padding(.horizontal, OmiSpacing.md)
                   .padding(.vertical, OmiSpacing.sm)
                   .glassCard()
@@ -1916,6 +1920,10 @@ struct OnboardingChatBubble: View {
 
               if !allText.isEmpty {
                 OmiMarkdown(text: allText, style: .assistant)
+                  .environment(
+                    \.chatTextSelectable,
+                    ChatTextSelectionPolicy.isSelectable(isStreaming: message.isStreaming)
+                  )
                   .padding(.horizontal, OmiSpacing.md)
                   .padding(.vertical, OmiSpacing.sm)
                   .glassCard()
@@ -1943,6 +1951,10 @@ struct OnboardingChatBubble: View {
           } else {
             if !message.text.isEmpty {
               OmiMarkdown(text: message.text, style: .onboardingUser)
+                .environment(
+                  \.chatTextSelectable,
+                  ChatTextSelectionPolicy.isSelectable(isStreaming: message.isStreaming)
+                )
                 .padding(.horizontal, OmiSpacing.md)
                 .padding(.vertical, OmiSpacing.sm)
                 .glassCard(emphasized: true)
