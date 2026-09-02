@@ -6785,6 +6785,45 @@
         "title": "ClickUpTeamsResponse",
         "type": "object"
       },
+      "ClientProcessing": {
+        "additionalProperties": false,
+        "properties": {
+          "action_items": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectedActionItem"
+            },
+            "maxItems": 25,
+            "title": "Action Items",
+            "type": "array"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProjectionProvenance"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "structure": {
+            "$ref": "#/components/schemas/ProjectedStructure"
+          },
+          "transcript_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Transcript Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "transcript_sha256",
+          "structure",
+          "provenance"
+        ],
+        "title": "ClientProcessing",
+        "type": "object"
+      },
       "ColdStartSequence": {
         "additionalProperties": false,
         "description": "Explicit local-only identity for the fixed sparse cold-start script.",
@@ -7117,6 +7156,16 @@
               }
             ],
             "title": "Client Platform"
+          },
+          "client_processing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientProcessing"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "conversation_audio": {
             "anyOf": [
@@ -8184,6 +8233,16 @@
             ],
             "title": "Client Platform"
           },
+          "client_processing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientProcessing"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "conversation_audio": {
             "anyOf": [
               {
@@ -8823,6 +8882,16 @@
             ],
             "description": "Client platform (ios/android/macos)",
             "title": "Client Platform"
+          },
+          "client_processing": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler: a malformed projection is dropped and the conversation still lands. Display only — never an input to intelligence.",
+            "title": "Client Processing"
           },
           "client_session_id": {
             "anyOf": [
@@ -20059,6 +20128,16 @@
                 "type": "null"
               }
             ]
+          },
+          "client_processing": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler so a malformed projection cannot 422 a finished recording. Hash-bound to the persisted transcript. Display only — never an input to intelligence.",
+            "title": "Client Processing"
           }
         },
         "title": "ProcessConversationRequest",
@@ -20174,6 +20253,151 @@
           }
         },
         "title": "ProgressExtractUpdateResponse",
+        "type": "object"
+      },
+      "ProjectedActionItem": {
+        "additionalProperties": false,
+        "description": "Display-only action item. No ids, owners, due dates, or capture fields.",
+        "properties": {
+          "completed": {
+            "default": false,
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "ProjectedActionItem",
+        "type": "object"
+      },
+      "ProjectedEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "duration": {
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "Duration",
+            "type": "integer"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "start",
+          "duration"
+        ],
+        "title": "ProjectedEvent",
+        "type": "object"
+      },
+      "ProjectedSection": {
+        "additionalProperties": false,
+        "properties": {
+          "body_markdown": {
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "heading": {
+            "title": "Heading",
+            "type": "string"
+          }
+        },
+        "required": [
+          "heading",
+          "body_markdown"
+        ],
+        "title": "ProjectedSection",
+        "type": "object"
+      },
+      "ProjectedStructure": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/CategoryEnum",
+            "default": "other"
+          },
+          "emoji": {
+            "default": "🧠",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectedEvent"
+            },
+            "maxItems": 12,
+            "title": "Events",
+            "type": "array"
+          },
+          "overview": {
+            "default": "",
+            "title": "Overview",
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectedSection"
+            },
+            "maxItems": 12,
+            "title": "Sections",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "ProjectedStructure",
+        "type": "object"
+      },
+      "ProjectionProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "device_class": {
+            "title": "Device Class",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "runtime": {
+            "title": "Runtime",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_id",
+          "runtime",
+          "device_class",
+          "generated_at"
+        ],
+        "title": "ProjectionProvenance",
         "type": "object"
       },
       "PublicFairUseCaseStatusResponse": {

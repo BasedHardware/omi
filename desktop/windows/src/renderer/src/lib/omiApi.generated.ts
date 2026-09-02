@@ -1058,6 +1058,14 @@ export interface ClickUpTeamsResponse {
   teams?: Array<Record<string, unknown>>;
 }
 
+export interface ClientProcessing {
+  action_items?: Array<ProjectedActionItem>;
+  provenance: ProjectionProvenance;
+  schema_version: 1;
+  structure: ProjectedStructure;
+  transcript_sha256: string;
+}
+
 export interface ColdStartSequence {
   sequence_id: string;
   step: number;
@@ -1114,6 +1122,7 @@ export interface Conversation {
   call_id?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
+  client_processing?: ClientProcessing | null;
   conversation_audio?: ConversationAudio | null;
   created_at: string;
   data_protection_level?: string | null;
@@ -1290,6 +1299,7 @@ export interface ConversationSearchItem {
   call_id?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
+  client_processing?: ClientProcessing | null;
   conversation_audio?: ConversationAudio | null;
   created_at: string;
   data_protection_level?: string | null;
@@ -1387,6 +1397,7 @@ export interface CreateCheckoutRequest {
 export interface CreateConversationFromTranscriptRequest {
   client_device_id?: string | null;
   client_platform?: string | null;
+  client_processing?: unknown | null;
   client_session_id?: string | null;
   conversation_finalization_reason?: "user_stop" | "finish_and_continue" | "meeting_started" | "meeting_ended" | "max_duration_rotation" | "crash_recovery" | "retry" | null;
   conversation_role?: "ambient" | "meeting";
@@ -3258,6 +3269,7 @@ export interface ProactiveNotification {
 
 export interface ProcessConversationRequest {
   calendar_meeting_context?: CalendarMeetingContext | null;
+  client_processing?: unknown | null;
 }
 
 export interface ProgressExtractRequest {
@@ -3276,6 +3288,39 @@ export interface ProgressExtractUpdateResponse {
   new_value?: number | number | string | null;
   previous_value?: number | number | string | null;
   reasoning?: string;
+}
+
+export interface ProjectedActionItem {
+  completed?: boolean;
+  description: string;
+}
+
+export interface ProjectedEvent {
+  description?: string;
+  duration: number;
+  start: string;
+  title: string;
+}
+
+export interface ProjectedSection {
+  body_markdown: string;
+  heading: string;
+}
+
+export interface ProjectedStructure {
+  category?: CategoryEnum;
+  emoji?: string;
+  events?: Array<ProjectedEvent>;
+  overview?: string;
+  sections?: Array<ProjectedSection>;
+  title: string;
+}
+
+export interface ProjectionProvenance {
+  device_class: string;
+  generated_at: string;
+  model_id: string;
+  runtime: string;
 }
 
 export interface PublicFairUseCaseStatusResponse {
@@ -4840,6 +4885,7 @@ export interface OmiApiSchemas {
   "ClickUpListsResponse": ClickUpListsResponse;
   "ClickUpSpacesResponse": ClickUpSpacesResponse;
   "ClickUpTeamsResponse": ClickUpTeamsResponse;
+  "ClientProcessing": ClientProcessing;
   "ColdStartSequence": ColdStartSequence;
   "ColdStartSequenceTerminalReceipt": ColdStartSequenceTerminalReceipt;
   "ConnectorSynthesisRequest": ConnectorSynthesisRequest;
@@ -5135,6 +5181,11 @@ export interface OmiApiSchemas {
   "ProgressExtractRequest": ProgressExtractRequest;
   "ProgressExtractResponse": ProgressExtractResponse;
   "ProgressExtractUpdateResponse": ProgressExtractUpdateResponse;
+  "ProjectedActionItem": ProjectedActionItem;
+  "ProjectedEvent": ProjectedEvent;
+  "ProjectedSection": ProjectedSection;
+  "ProjectedStructure": ProjectedStructure;
+  "ProjectionProvenance": ProjectionProvenance;
   "PublicFairUseCaseStatusResponse": PublicFairUseCaseStatusResponse;
   "QuestionCardSpec": QuestionCardSpec;
   "QuestionOption": QuestionOption;
