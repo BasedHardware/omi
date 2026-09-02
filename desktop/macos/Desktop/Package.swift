@@ -103,7 +103,7 @@ let package = Package(
       ],
       resources: [
         .process("GoogleService-Info.plist"),
-        // Bundles everything under Resources/ (incl. *_logo.png brand marks, first_use_*.jpg site captures,
+        // Bundles everything under Resources/ (incl. *_logo.png brand marks,
         // signin_bg.png, provider-native VoicePhrases/*.wav, Resources/Fonts/*.ttf —
         // Geist / Geist Mono — and
         // Resources/Fonts/*.otf — Open Runde, the glass display face — and
