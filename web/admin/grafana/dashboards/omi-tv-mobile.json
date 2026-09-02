@@ -3753,7 +3753,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "Positive share of thumbs on assistant responses (up / rated, macOS only). Text = main-window chat, Voice = floating-bar responses; ratings from builds before the split count only toward All. Last bucket is the current partial day.",
+      "description": "Positive share of thumbs on assistant responses (up / rated, macOS only). Text = main-window chat, Voice = floating-bar responses; ratings from builds before the split count only toward All. Proactive-notification thumbs (focus/insight/task/memory cards) are excluded from every series; only pre-tag legacy events can't be separated and stay in All. Last bucket is the current partial day.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3896,7 +3896,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "Positive share of thumbs on assistant responses (up / rated, macOS only). Text = main-window chat, Voice = floating-bar responses; ratings from builds before the split count only toward All. NYC Monday weeks; last bucket is the partial current week.",
+      "description": "Positive share of thumbs on assistant responses (up / rated, macOS only). Text = main-window chat, Voice = floating-bar responses; ratings from builds before the split count only toward All. Proactive-notification thumbs (focus/insight/task/memory cards) are excluded from every series; only pre-tag legacy events can't be separated and stay in All. NYC Monday weeks; last bucket is the partial current week.",
       "fieldConfig": {
         "defaults": {
           "color": {

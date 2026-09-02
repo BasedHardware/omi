@@ -8,7 +8,7 @@ import { computeMessageRatings } from "@/app/api/omi/stats/message-ratings/route
 
 const ENV_KEYS = ["POSTHOG_PERSONAL_API_KEY", "POSTHOG_PROJECT_ID"] as const;
 const originalEnv = Object.fromEntries(
-  ENV_KEYS.map((k) => [k, process.env[k]]),
+  ENV_KEYS.map((k) => [k, process.env[k]])
 );
 
 afterEach(() => {
@@ -24,9 +24,13 @@ describe("computeMessageRatings (macOS thumbs positive share)", () => {
     process.env.POSTHOG_PERSONAL_API_KEY = "phx";
     process.env.POSTHOG_PROJECT_ID = "1";
     // Monday 2026-08-24: text 3↑1↓, voice 1↑1↓; Tuesday: legacy 2↑0↓.
+    // Notification thumbs (proactive focus/insight/task/memory cards) must
+    // not move any series — they rate the notification, not a response.
     posthogResults.mockResolvedValue([
       ["2026-08-24", "text", 3, 1],
       ["2026-08-24", "voice", 1, 1],
+      ["2026-08-24", "notification", 0, 9],
+      ["2026-08-24", "mystery-future-source", 7, 0],
       ["2026-08-25", "legacy", 2, 0],
     ]);
     const payload = await computeMessageRatings(30);
@@ -38,7 +42,8 @@ describe("computeMessageRatings (macOS thumbs positive share)", () => {
     const monday = payload.daily.find((p) => p.date === "2026-08-24")!;
     expect(monday.text).toBe(75); // one number %: up / rated
     expect(monday.voice).toBe(50);
-    expect(monday.all).toBeCloseTo(66.7);
+    expect(monday.all).toBeCloseTo(66.7); // 9 notification downs excluded
+    expect(monday.downAll).toBe(2);
     const tuesday = payload.daily.find((p) => p.date === "2026-08-25")!;
     expect(tuesday.text).toBeNull(); // legacy events never fake a split series
     expect(tuesday.voice).toBeNull();
