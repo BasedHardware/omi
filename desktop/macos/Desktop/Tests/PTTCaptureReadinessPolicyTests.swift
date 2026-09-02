@@ -122,6 +122,23 @@ final class PTTCaptureReadinessPolicyTests: XCTestCase {
       "a 200 ms tap judged on the hub warm deadline must stay a tap")
   }
 
+  /// The tap-to-lock window is the second post-release wait, it is on by default,
+  /// and it is longer than the commit gate. A tap short enough to open it is by
+  /// definition shorter than the gate, so it can never be a late capture — but
+  /// only while the hold is latched at key-up. Latching at finalization instead
+  /// puts every default-install tap at `lockDecision` (0.4 s) ≥ the gate, i.e.
+  /// reports every accidental tap as a capture failure.
+  func testATapToLockTapCanNeverBeJudgedALateCapture() {
+    XCTAssertLessThan(
+      PushToTalkManager.tapToLockMaxHoldDuration, PushToTalkManager.minTurnAudioSeconds)
+    XCTAssertEqual(
+      PTTTurnDiscardJudgement.judge(
+        holdSeconds: PushToTalkManager.tapToLockMaxHoldDuration,
+        deliveredAudioSeconds: PushToTalkManager.tapToLockMaxHoldDuration,
+        minTurnAudioSeconds: PushToTalkManager.minTurnAudioSeconds),
+      .shortTap)
+  }
+
   /// First call wins: a re-entered finalization must not extend a hold that has
   /// already ended.
   func testReleaseIsLatchedOnce() {

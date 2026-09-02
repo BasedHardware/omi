@@ -276,7 +276,11 @@ class PushToTalkManager: ObservableObject {
   private var lastOptionDownTime: TimeInterval = 0
   private var lastOptionUpTime: TimeInterval = 0
   private let doubleTapThreshold: TimeInterval = 0.4
-  private let tapToLockMaxHoldDuration: TimeInterval = 0.22
+  /// Longest hold that still counts as a tap and opens the tap-to-lock window.
+  /// Read by the discard judgement's tests: a tap this short must always be a
+  /// short tap, never a late capture, and that only holds while the hold is
+  /// latched at key-up rather than at the lock deadline.
+  nonisolated static let tapToLockMaxHoldDuration: TimeInterval = 0.22
 
   // Transcription
   private var transcriptionService: TranscriptionService?
@@ -626,8 +630,14 @@ class PushToTalkManager: ObservableObject {
     switch phase {
     case .recording:
       let holdDuration = now - lastOptionDownTime
+      // The key is up: latch the hold here, not at finalization. Finalization can
+      // be a whole `lockDecision` window (0.4 s) later on the tap-to-lock path —
+      // which is on by default — and a second or more later on a cold realtime
+      // hub. Either wait would otherwise be counted as part of the user's press,
+      // and every sub-220 ms tap would be reported as a capture failure.
+      pttLifecycle.noteRelease()
 
-      if ShortcutSettings.shared.doubleTapForLock && holdDuration < tapToLockMaxHoldDuration {
+      if ShortcutSettings.shared.doubleTapForLock && holdDuration < Self.tapToLockMaxHoldDuration {
         lastOptionUpTime = now
         enterPendingLockDecision()
       } else {
@@ -997,7 +1007,7 @@ class PushToTalkManager: ObservableObject {
   /// STT models hallucinate short phrases (often in random languages, e.g.
   /// "¿Qué es el número de cuenta?") when given silence instead of returning
   /// empty — so silent turns must be dropped before transcription, not after.
-  nonisolated private static let minTurnAudioSeconds: Double = 0.35
+  nonisolated static let minTurnAudioSeconds: Double = 0.35
   nonisolated private static let minVoicedSeconds: Double = 0.2
   /// RMS threshold (int16 samples) above which a 20ms frame counts as voiced.
   /// ~-41 dBFS: comfortably above quiet-room mic noise, far below soft speech.
@@ -1186,10 +1196,9 @@ class PushToTalkManager: ObservableObject {
       voiceTurnCoordinator.activeTurn?.phase == .finalizing
     else { return }
     lastOptionUpTime = 0
-    // Latch the hold length here, at the one shared entry every discard path runs
-    // through, and before the hub-warm branch below parks the turn for up to a
-    // second. Every later reader of `holdSeconds` then sees the user's press, not
-    // the press plus however long the hub took.
+    // Backstop for the endings that do not come from a key-up — locked recording
+    // finalized by the next chord press, the mic button, the automation bridge.
+    // `noteRelease` is idempotent, so a hold already latched at key-up wins.
     pttLifecycle.noteRelease()
     // Dictation is over — restore any audio we muted so the track resumes immediately.
     SystemAudioMuteController.shared.restore()
@@ -2180,6 +2189,12 @@ class PushToTalkManager: ObservableObject {
 
   private func discardParkedMicCapture() {
     _ = releaseParkedMicCapture()
+    // Not awaited: this runs from terminal cleanup and capture rebuilds, which
+    // have no async boundary. Clearing the reference is what makes the warm
+    // start's own completion stop the capture instead of parking it, which is
+    // the same fire-and-forget contract `discardLateStartsThroughGeneration`
+    // already gives a turn's late start.
+    _ = releaseInFlightWarmCapture()
   }
 
   /// Release the parked warm capture (if any) and hand it back so the caller
@@ -2189,12 +2204,7 @@ class PushToTalkManager: ObservableObject {
   func releaseParkedMicCapture() -> AudioCaptureService? {
     parkedMicExpiryTask?.cancel()
     parkedMicExpiryTask = nil
-    guard let parked = parkedMicCapture else {
-      // A warm capture whose start has not resolved is holding the same device
-      // just as surely as a parked one, and its caller needs the same physical
-      // handshake. Admission guarantees at most one of the two exists.
-      return releaseInFlightWarmCapture()
-    }
+    guard let parked = parkedMicCapture else { return nil }
     parkedMicCapture = nil
     parked.service.stopCapture()
     return parked.service
@@ -2293,20 +2303,31 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
-  /// The warm capture whose CoreAudio start has not resolved yet. A reference,
-  /// not a flag: an in-flight warm capture has already registered in the
-  /// active-capture registry and is about to own an IOProc, so every path that
-  /// releases a *parked* capture has to be able to release this one too.
-  var warmCaptureInFlight: AudioCaptureService?
+  /// The warm capture whose CoreAudio start has not resolved yet, together with
+  /// the work that finishes it. A reference, not a flag: an in-flight warm
+  /// capture has already registered in the active-capture registry and is about
+  /// to own an IOProc, so every path that gives up a *parked* capture has to be
+  /// able to give up this one too.
+  private var warmCapture: (service: AudioCaptureService, start: Task<Void, Never>)?
 
-  /// Give up a warm capture whose start is still in flight and hand it back so
-  /// the caller can await its HAL teardown. Clearing the reference is what makes
-  /// the start's own completion drop it instead of parking it.
-  private func releaseInFlightWarmCapture() -> AudioCaptureService? {
-    guard let capture = warmCaptureInFlight else { return nil }
-    warmCaptureInFlight = nil
-    capture.stopCapture()
-    return capture
+  var warmCaptureInFlight: AudioCaptureService? { warmCapture?.service }
+
+  /// Give up a warm capture whose start has not resolved, and hand back the work
+  /// that tears it down so the caller can await a real physical boundary.
+  ///
+  /// Neither `stopCapture()` nor `waitForPhysicalStop()` can be that boundary
+  /// here. `AudioCaptureService.stopCapture` returns immediately while
+  /// `isCapturing` is false, and `isCapturing` only flips at the *end* of the HAL
+  /// setup — so for the whole ~900 ms window this warm-up exists to hide, a stop
+  /// is a no-op and `waitForPhysicalStop` degrades into "wait for the start to
+  /// finish", handing the caller a capture that is now running. Clearing the
+  /// reference is what tells the start's own completion to stop the capture
+  /// instead of parking it, and awaiting that completion is what makes the
+  /// teardown real.
+  func releaseInFlightWarmCapture() -> Task<Void, Never>? {
+    guard let warm = warmCapture else { return nil }
+    warmCapture = nil
+    return warm.start
   }
 
   /// Ask for a warm capture on the next main-actor hop. Used from paths that are
@@ -2333,32 +2354,33 @@ class PushToTalkManager: ObservableObject {
   /// Nothing the user did is behind this, which is why admission is stricter than
   /// a press: it refuses unless routing has resolved a device that is safe to
   /// hold open unattended (never an explicit microphone choice, never Bluetooth —
-  /// see `unattendedWarmCaptureRoute`), and it never raises a permission prompt.
+  /// see `unattendedWarmCaptureRoute`), it re-checks the device it actually
+  /// opened before keeping it, and it never raises a permission prompt.
   ///
   /// INV-VOICE-1: no turn events are published and no lifecycle authority is
   /// taken. The lease is created parked, so every frame the device delivers
   /// before a real turn adopts it is dropped inside `snapshotIfActive()`.
   func prewarmMicCapture(trigger: PTTWarmCaptureAdmission.Trigger) {
     hasMicPermission = AudioCaptureService.checkPermission()
-    // Kicks the next HAL read as a side effect, so a refusal for an unresolved
-    // snapshot resolves one for the trigger that follows.
-    let route = unattendedWarmCaptureRoute()
     let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+    // Cheap gates first: resolving the route kicks a HAL read as a side effect,
+    // and a signed-out or push-to-talk-off install should not pay for one.
+    guard ShortcutSettings.shared.pttEnabled, hasMicPermission, ownerID != nil else { return }
+    let route = unattendedWarmCaptureRoute()
     let admission = PTTWarmCaptureAdmission.Input(
-      pttEnabled: ShortcutSettings.shared.pttEnabled,
-      micPermissionGranted: hasMicPermission,
+      pttEnabled: true,
+      micPermissionGranted: true,
       onboardingComplete: UserDefaults.standard.bool(forKey: .hasCompletedOnboarding),
-      isSignedIn: ownerID != nil,
+      isSignedIn: true,
       routeIsSafeToWarmUnattended: route != .refused,
       hasActiveTurn: voiceTurnCoordinator.activeTurnID != nil,
       hasCaptureAlready: parkedMicCapture != nil || audioCaptureService != nil
-        || micCaptureStartInFlight || warmCaptureInFlight != nil)
+        || micCaptureStartInFlight || warmCapture != nil)
     guard PTTWarmCaptureAdmission.admits(admission),
       case .device(let overrideDeviceID) = route
     else { return }
 
     let capture = overrideDeviceID.map(AudioCaptureService.init(overrideDeviceID:)) ?? AudioCaptureService()
-    warmCaptureInFlight = capture
     // A lease that starts parked: the capture is running, nothing may consume it.
     // `batchMode` and `turnID` are placeholders — the adopting turn overwrites
     // both through `renew` before a single frame is admitted.
@@ -2369,50 +2391,61 @@ class PushToTalkManager: ObservableObject {
     let onAudioChunk = micAudioChunkHandler(lease: lease)
     let onAudioLevel = micAudioLevelHandler(lease: lease)
 
-    Task { @MainActor [weak self] in
+    let start = Task { @MainActor [weak self] in
       do {
         try await capture.startCapture(onAudioChunk: onAudioChunk, onAudioLevel: onAudioLevel)
-        guard let self else {
-          capture.stopCapture()
-          return
-        }
-        // One authoritative test for "may this still park": every path that
-        // supersedes a warm capture — a turn starting, terminal cleanup, a
-        // capture rebuild, ambient transcription taking the device, an owner
-        // transition — goes through `releaseInFlightWarmCapture`, which clears
-        // this reference and has already stopped the service.
-        guard self.warmCaptureInFlight === capture else {
-          log("PushToTalkManager: warm capture (\(trigger.rawValue)) superseded before parking")
-          return
-        }
-        self.warmCaptureInFlight = nil
-        // The owner can change while a HAL start is in flight. A capture opened
-        // for the previous owner must never be left running under the next one.
-        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,
-          self.voiceTurnCoordinator.activeTurnID == nil,
-          self.audioCaptureService == nil, self.parkedMicCapture == nil,
-          !self.micCaptureStartInFlight
-        else {
-          capture.stopCapture()
-          log("PushToTalkManager: warm capture (\(trigger.rawValue)) no longer admissible — stopped")
-          return
-        }
-        self.lastNotedInputRouteClass = PTTAttemptLifecycleRecorder.InputRouteClass.from(
-          deviceDescription: capture.currentDeviceDescription,
-          isBluetooth: capture.isCurrentDeviceBluetoothTransport)
-        self.parkMicCapture(capture, lease: lease, overrideID: overrideDeviceID)
-        log("PushToTalkManager: warm capture parked ahead of the first press (\(trigger.rawValue))")
       } catch {
         capture.stopCapture()
-        if self?.warmCaptureInFlight === capture { self?.warmCaptureInFlight = nil }
+        if self?.warmCapture?.service === capture { self?.warmCapture = nil }
         // Deliberately silent to the user and to remote telemetry: nobody asked
         // for this capture, and the press that follows still runs its own start
         // with its own error handling — and emits its own lifecycle snapshot, so
         // a warm-up that never works remains visible as the `capture_start_outcome`
         // of real attempts rather than needing an event of its own.
         logError("PushToTalkManager: warm capture failed (\(trigger.rawValue))", error: error)
+        return
       }
+      // Past this point the capture is physically running, so `stopCapture()` is
+      // finally real — and every exit below must take it unless the capture is
+      // handed to `parkMicCapture`.
+      guard let self, self.warmCapture?.service === capture else {
+        // Somebody released this warm capture while its start was in flight.
+        // Stopping it here is the teardown they are awaiting.
+        capture.stopCapture()
+        await capture.waitForPhysicalStop()
+        log("PushToTalkManager: warm capture (\(trigger.rawValue)) superseded before parking — stopped")
+        return
+      }
+      self.warmCapture = nil
+      let routeClass = PTTAttemptLifecycleRecorder.InputRouteClass.from(
+        deviceDescription: capture.currentDeviceDescription,
+        isBluetooth: capture.isCurrentDeviceBluetoothTransport)
+      // The snapshot decided whether to try; the device actually opened decides
+      // whether to keep. `.device(nil)` follows the system default, which can
+      // become a headset between the snapshot landing and the device opening —
+      // and holding a Bluetooth input open unattended is what flips the user's
+      // headset out of A2DP for the whole keep-alive window.
+      guard routeClass != .bluetooth, !capture.isCurrentDeviceBluetoothTransport else {
+        capture.stopCapture()
+        log("PushToTalkManager: warm capture (\(trigger.rawValue)) opened a Bluetooth input — stopped")
+        return
+      }
+      // The owner can change while a HAL start is in flight. A capture opened for
+      // the previous owner must never be left running under the next one.
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+        self.voiceTurnCoordinator.activeTurnID == nil,
+        self.audioCaptureService == nil, self.parkedMicCapture == nil,
+        !self.micCaptureStartInFlight
+      else {
+        capture.stopCapture()
+        log("PushToTalkManager: warm capture (\(trigger.rawValue)) no longer admissible — stopped")
+        return
+      }
+      self.lastNotedInputRouteClass = routeClass
+      self.parkMicCapture(capture, lease: lease, overrideID: overrideDeviceID)
+      log("PushToTalkManager: warm capture parked ahead of the first press (\(trigger.rawValue))")
     }
+    warmCapture = (capture, start)
   }
 
   private func startMicCapture(
@@ -2468,6 +2501,10 @@ class PushToTalkManager: ObservableObject {
     // could even resolve to the same device, e.g. nil-override on the built-in
     // default vs. an explicit built-in override).
     let displacedParkedCapture = releaseParkedMicCapture()
+    // A warm capture whose start has not resolved holds the same device just as
+    // surely as a parked one, and cannot be stopped from here — awaiting its own
+    // completion is the only real boundary. See `releaseInFlightWarmCapture`.
+    let displacedWarmStart = releaseInFlightWarmCapture()
 
     let capture = overrideDeviceID.map(AudioCaptureService.init(overrideDeviceID:)) ?? AudioCaptureService()
     let lease = MicCaptureLease(generation: generation, batchMode: batchMode, turnID: turnID)
@@ -2479,8 +2516,9 @@ class PushToTalkManager: ObservableObject {
 
     Task { @MainActor [weak self] in
       guard let self else { return }
-      if let displacedParkedCapture {
-        await displacedParkedCapture.waitForPhysicalStop()
+      await displacedWarmStart?.value
+      if displacedWarmStart != nil || displacedParkedCapture != nil {
+        await displacedParkedCapture?.waitForPhysicalStop()
         // The turn may have been cancelled — and another started — while the
         // displaced teardown was in flight. Revalidate before opening the
         // device so a stale start can never overlap a newer turn's capture.

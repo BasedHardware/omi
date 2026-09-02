@@ -91,37 +91,58 @@ final class PTTWarmMicKeepAliveTests: XCTestCase {
       "a warm capture must not publish turn events (INV-VOICE-1)")
   }
 
-  /// A warm capture whose CoreAudio start has not resolved yet holds the same
-  /// device as a parked one. Every caller that gives up the parked capture — a
-  /// turn starting, terminal cleanup, an owner transition, ambient transcription
-  /// taking the device — must get the in-flight one too, or two HAL starts race
-  /// on one input.
-  func testAnInFlightWarmCaptureIsReleasedByTheParkedCaptureHandshake() throws {
+  /// A warm capture whose CoreAudio start has not resolved holds the same device
+  /// as a parked one, and it cannot be stopped: `AudioCaptureService.stopCapture`
+  /// returns immediately while `isCapturing` is false, and that flag only flips
+  /// at the end of the HAL setup — the whole window the warm-up exists to hide.
+  /// So the boundary every caller awaits is the warm start's own completion, and
+  /// that completion is what has to stop the capture.
+  func testAnInFlightWarmCaptureIsTornDownByItsOwnCompletion() throws {
     let source = try pushToTalkManagerSource()
 
-    XCTAssertTrue(source.contains("var warmCaptureInFlight: AudioCaptureService?"))
-    XCTAssertTrue(source.contains("return releaseInFlightWarmCapture()"))
+    XCTAssertTrue(source.contains("func releaseInFlightWarmCapture() -> Task<Void, Never>?"))
     XCTAssertTrue(
-      source.contains("guard self.warmCaptureInFlight === capture else {"),
+      source.contains("guard let self, self.warmCapture?.service === capture else {"),
       "the warm start's completion must defer to whoever released it")
+    guard let superseded = source.range(of: "guard let self, self.warmCapture?.service === capture else {")
+    else { return XCTFail("the superseded branch moved") }
+    let branch = String(source[superseded.lowerBound...].prefix(500))
+    XCTAssertTrue(
+      branch.contains("capture.stopCapture()") && branch.contains("await capture.waitForPhysicalStop()"),
+      "a superseded warm capture must be stopped and drained, not merely dropped")
     XCTAssertTrue(
       source.contains("guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,"),
       "a capture opened for the previous owner must not park under the next one")
+    XCTAssertTrue(
+      source.contains("await displacedWarmStart?.value"),
+      "a turn starting must await the warm teardown before opening the device")
   }
 
-  /// The hold is latched at release, at the one shared finalization entry, before
-  /// the realtime-hub branch can park the turn for a second or more.
-  func testTheHoldIsLatchedAtReleaseBeforeTheHubWarmBranch() throws {
+  /// The device the snapshot vetted and the device that actually opened are not
+  /// the same thing: `.device(nil)` follows the system default, which can become
+  /// a headset in between. Holding a Bluetooth input open unattended is the harm.
+  func testAWarmCaptureThatOpensABluetoothInputIsStopped() throws {
     let source = try pushToTalkManagerSource()
 
-    guard let release = source.range(of: "pttLifecycle.noteRelease()"),
-      let hubWait = source.range(of: "finalizing while realtime hub warms")
+    XCTAssertTrue(
+      source.contains("guard routeClass != .bluetooth, !capture.isCurrentDeviceBluetoothTransport else {"))
+  }
+
+  /// The hold is latched where the key comes up, not at finalization —
+  /// finalization is a whole `lockDecision` window later on the default
+  /// tap-to-lock path, and longer still on a cold realtime hub.
+  func testTheHoldIsLatchedAtKeyUpNotAtFinalization() throws {
+    let source = try pushToTalkManagerSource()
+
+    guard let keyUp = source.range(of: "private func handleShortcutUp() {"),
+      let release = source.range(of: "pttLifecycle.noteRelease()", range: keyUp.upperBound..<source.endIndex),
+      let lockWindow = source.range(of: "enterPendingLockDecision()", range: keyUp.upperBound..<source.endIndex)
     else {
-      return XCTFail("the release latch or the hub-warm branch moved")
+      return XCTFail("the release latch or the tap-to-lock branch moved")
     }
     XCTAssertLessThan(
-      release.lowerBound, hubWait.lowerBound,
-      "noteRelease must run before finalization can park the turn on the hub warm wait")
+      release.lowerBound, lockWindow.lowerBound,
+      "noteRelease must run before the tap-to-lock window defers finalization")
   }
 
   /// A turn that ends because capture was not ready keeps its capture parked —
