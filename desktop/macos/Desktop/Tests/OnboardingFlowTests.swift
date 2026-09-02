@@ -405,14 +405,14 @@ final class OnboardingFlowTests: XCTestCase {
       "the file-index onboarding Continue button must accept Return")
 
     let secondBrainSource = try desktopSourceFile("Onboarding/SecondBrain/SBOnboardingView.swift")
-    for title in ["Set up Omi →", "Continue"] {
+    for title in ["Set up Omi →", "Continue", "Open the doors"] {
       XCTAssertTrue(
         secondBrainSource.contains("SBInkButton(title: \"\(title)\", isDefaultAction: true)"),
         "the second-brain \(title) action must accept Return")
     }
     XCTAssertEqual(
       secondBrainSource.components(separatedBy: "isDefaultAction: true").count - 1,
-      8,
+      9,
       "every visible second-brain proceed action must register Return")
     XCTAssertTrue(
       secondBrainSource.contains("SBInkButton(title: \"Take me to Omi\", isDefaultAction: true)"),
