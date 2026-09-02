@@ -8,6 +8,9 @@ import json
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -203,6 +206,82 @@ def _gcloud_json(arguments: Sequence[str]) -> Mapping[str, Any]:
     return result
 
 
+def _gcloud_access_token() -> str:
+    """Return the current gcloud access token. Never log or print it."""
+
+    try:
+        completed = subprocess.run(
+            ["gcloud", "auth", "print-access-token"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        # stdout is the bearer token on success; never include it in diagnostics.
+        raise RuntimePreflightError(
+            "gcloud auth print-access-token failed",
+            category="unauthenticated",
+        ) from exc
+    token = ""
+    for line in completed.stdout.splitlines():
+        if line.strip():
+            token = line.strip()
+    if not token:
+        raise RuntimePreflightError(
+            "gcloud auth print-access-token returned no token",
+            category="unauthenticated",
+        )
+    return token
+
+
+def _test_service_account_iam_permissions(
+    *,
+    service_account: str,
+    project_id: str,
+    permissions: Sequence[str],
+) -> Mapping[str, Any]:
+    """POST IAM testIamPermissions. Fake this in tests; never log the token."""
+
+    token = _gcloud_access_token()
+    quoted_project = urllib.parse.quote(project_id, safe=".-")
+    quoted_account = urllib.parse.quote(service_account, safe=".-")
+    url = (
+        f"https://iam.googleapis.com/v1/projects/{quoted_project}"
+        f"/serviceAccounts/{quoted_account}:testIamPermissions"
+    )
+    request = urllib.request.Request(
+        url,
+        data=json.dumps({"permissions": list(permissions)}).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        try:
+            exc.close()
+        except Exception:
+            pass
+        raise RuntimePreflightError(
+            f"IAM testIamPermissions HTTP {exc.code}",
+            category="unknown",
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimePreflightError("IAM testIamPermissions request failed", category="unknown") from exc
+    try:
+        result = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimePreflightError("IAM testIamPermissions returned invalid JSON") from exc
+    if not isinstance(result, Mapping):
+        raise RuntimePreflightError("IAM testIamPermissions returned an unexpected JSON document")
+    return result
+
+
 def _cloud_run_service_exists(*, target: Target, project_id: str) -> bool:
     """Use an authenticated, name-filtered list to classify a first create."""
 
@@ -312,15 +391,10 @@ def validate_service_account(*, service_account: str, project_id: str) -> list[s
     except RuntimePreflightError as exc:
         return [f"{identity}: Cloud Run runtime identity does not exist or cannot be described ({exc})"]
     try:
-        result = _gcloud_json(
-            [
-                "iam",
-                "service-accounts",
-                "test-iam-permissions",
-                identity,
-                "--permissions=iam.serviceAccounts.actAs",
-                f"--project={project_id}",
-            ]
+        result = _test_service_account_iam_permissions(
+            service_account=identity,
+            project_id=project_id,
+            permissions=("iam.serviceAccounts.actAs",),
         )
     except RuntimePreflightError as exc:
         return [f"{identity}: cannot test iam.serviceAccounts.actAs ({exc})"]

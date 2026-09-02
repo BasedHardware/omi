@@ -1309,70 +1309,190 @@ class RuntimeServiceAccountPreflightTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
+    def _stub_describe(self, *, describe):
+        original = RUNTIME_PREFLIGHT._gcloud_json
+
+        def fake_gcloud(arguments):
+            if arguments[:3] == ["iam", "service-accounts", "describe"]:
+                return describe(arguments)
+            raise AssertionError(arguments)
+
+        RUNTIME_PREFLIGHT._gcloud_json = fake_gcloud
+        return original
+
     def test_skips_service_account_checks_when_none_is_supplied(self) -> None:
         self.assertEqual(RUNTIME_PREFLIGHT.validate_service_account(service_account="", project_id="fake-project"), [])
 
     def test_runtime_preflight_accepts_an_existing_service_account_the_deployer_can_act_as(self) -> None:
-        calls: list[list[str]] = []
-        original = RUNTIME_PREFLIGHT._gcloud_json
+        describe_calls: list[list[str]] = []
+        iam_calls: list[dict] = []
+        original_gcloud = self._stub_describe(
+            describe=lambda arguments: describe_calls.append(list(arguments)) or {"email": self.SA}
+        )
+        original_iam = RUNTIME_PREFLIGHT._test_service_account_iam_permissions
 
-        def fake_gcloud(arguments):
-            calls.append(list(arguments))
-            if arguments[:3] == ["iam", "service-accounts", "describe"]:
-                return {"email": self.SA}
-            if arguments[:3] == ["iam", "service-accounts", "test-iam-permissions"]:
-                return {"permissions": ["iam.serviceAccounts.actAs"]}
-            raise AssertionError(arguments)
+        def fake_iam(**kwargs):
+            iam_calls.append(kwargs)
+            return {"permissions": ["iam.serviceAccounts.actAs"]}
 
-        RUNTIME_PREFLIGHT._gcloud_json = fake_gcloud
+        RUNTIME_PREFLIGHT._test_service_account_iam_permissions = fake_iam
         try:
             self.assertEqual(
                 RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project"),
                 [],
             )
         finally:
-            RUNTIME_PREFLIGHT._gcloud_json = original
+            RUNTIME_PREFLIGHT._gcloud_json = original_gcloud
+            RUNTIME_PREFLIGHT._test_service_account_iam_permissions = original_iam
 
-        self.assertEqual(calls[0][:4], ["iam", "service-accounts", "describe", self.SA])
-        self.assertEqual(calls[1][:4], ["iam", "service-accounts", "test-iam-permissions", self.SA])
-        self.assertIn("--permissions=iam.serviceAccounts.actAs", calls[1])
+        self.assertEqual(describe_calls[0][:4], ["iam", "service-accounts", "describe", self.SA])
+        self.assertEqual(iam_calls[0]["service_account"], self.SA)
+        self.assertEqual(iam_calls[0]["project_id"], "fake-project")
+        self.assertEqual(iam_calls[0]["permissions"], ("iam.serviceAccounts.actAs",))
 
     def test_runtime_preflight_rejects_a_missing_service_account(self) -> None:
-        original = RUNTIME_PREFLIGHT._gcloud_json
+        original_gcloud = RUNTIME_PREFLIGHT._gcloud_json
+        original_iam = RUNTIME_PREFLIGHT._test_service_account_iam_permissions
+        iam_called = False
 
         def missing(_arguments):
             raise RUNTIME_PREFLIGHT.RuntimePreflightError("resource not found", category="not_found")
 
+        def fake_iam(**_kwargs):
+            nonlocal iam_called
+            iam_called = True
+            raise AssertionError("testIamPermissions must not run when describe fails")
+
         RUNTIME_PREFLIGHT._gcloud_json = missing
+        RUNTIME_PREFLIGHT._test_service_account_iam_permissions = fake_iam
         try:
             errors = RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project")
         finally:
-            RUNTIME_PREFLIGHT._gcloud_json = original
+            RUNTIME_PREFLIGHT._gcloud_json = original_gcloud
+            RUNTIME_PREFLIGHT._test_service_account_iam_permissions = original_iam
 
+        self.assertFalse(iam_called)
         self.assertEqual(len(errors), 1)
         self.assertIn(self.SA, errors[0])
         self.assertIn("does not exist", errors[0])
 
     def test_runtime_preflight_rejects_missing_act_as_permission(self) -> None:
-        original = RUNTIME_PREFLIGHT._gcloud_json
+        original_gcloud = self._stub_describe(describe=lambda _arguments: {"email": self.SA})
+        original_iam = RUNTIME_PREFLIGHT._test_service_account_iam_permissions
 
-        def fake_gcloud(arguments):
-            if arguments[:3] == ["iam", "service-accounts", "describe"]:
-                return {"email": self.SA}
-            if arguments[:3] == ["iam", "service-accounts", "test-iam-permissions"]:
-                return {"permissions": []}
-            raise AssertionError(arguments)
+        def fake_iam(**_kwargs):
+            return {}
 
-        RUNTIME_PREFLIGHT._gcloud_json = fake_gcloud
+        RUNTIME_PREFLIGHT._test_service_account_iam_permissions = fake_iam
         try:
             errors = RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project")
         finally:
-            RUNTIME_PREFLIGHT._gcloud_json = original
+            RUNTIME_PREFLIGHT._gcloud_json = original_gcloud
+            RUNTIME_PREFLIGHT._test_service_account_iam_permissions = original_iam
 
         self.assertEqual(
             errors,
             [f"{self.SA}: deployer is missing permission iam.serviceAccounts.actAs"],
         )
+
+    def test_runtime_preflight_rejects_act_as_probe_http_failure(self) -> None:
+        original_gcloud = self._stub_describe(describe=lambda _arguments: {"email": self.SA})
+        original_iam = RUNTIME_PREFLIGHT._test_service_account_iam_permissions
+
+        def fake_iam(**_kwargs):
+            raise RUNTIME_PREFLIGHT.RuntimePreflightError("IAM testIamPermissions HTTP 401", category="unknown")
+
+        RUNTIME_PREFLIGHT._test_service_account_iam_permissions = fake_iam
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original_gcloud
+            RUNTIME_PREFLIGHT._test_service_account_iam_permissions = original_iam
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn(self.SA, errors[0])
+        self.assertIn("cannot test iam.serviceAccounts.actAs", errors[0])
+        self.assertIn("HTTP 401", errors[0])
+
+    def test_test_iam_permissions_posts_to_iam_rest_without_exposing_the_token(self) -> None:
+        token = "super-secret-token-value"
+        captured: dict[str, object] = {}
+        original_token = RUNTIME_PREFLIGHT._gcloud_access_token
+        original_urlopen = RUNTIME_PREFLIGHT.urllib.request.urlopen
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return b'{"permissions":["iam.serviceAccounts.actAs"]}'
+
+        def fake_urlopen(request, timeout=None):
+            captured["url"] = request.full_url
+            captured["method"] = request.get_method()
+            captured["body"] = request.data
+            captured["authorization"] = request.get_header("Authorization")
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        RUNTIME_PREFLIGHT._gcloud_access_token = lambda: token
+        RUNTIME_PREFLIGHT.urllib.request.urlopen = fake_urlopen
+        try:
+            result = RUNTIME_PREFLIGHT._test_service_account_iam_permissions(
+                service_account=self.SA,
+                project_id="fake-project",
+                permissions=("iam.serviceAccounts.actAs",),
+            )
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_access_token = original_token
+            RUNTIME_PREFLIGHT.urllib.request.urlopen = original_urlopen
+
+        self.assertEqual(result, {"permissions": ["iam.serviceAccounts.actAs"]})
+        self.assertEqual(captured["method"], "POST")
+        self.assertEqual(captured["timeout"], 30)
+        self.assertEqual(
+            captured["url"],
+            "https://iam.googleapis.com/v1/projects/fake-project/serviceAccounts/"
+            "frontend-invoker%40fake-project.iam.gserviceaccount.com:testIamPermissions",
+        )
+        self.assertEqual(json.loads(captured["body"]), {"permissions": ["iam.serviceAccounts.actAs"]})
+        self.assertEqual(captured["authorization"], f"Bearer {token}")
+        self.assertNotIn(token, captured["url"])
+
+    def test_test_iam_permissions_token_failure_does_not_call_http(self) -> None:
+        original_token = RUNTIME_PREFLIGHT._gcloud_access_token
+        original_urlopen = RUNTIME_PREFLIGHT.urllib.request.urlopen
+        http_called = False
+
+        def fake_token():
+            raise RUNTIME_PREFLIGHT.RuntimePreflightError(
+                "gcloud auth print-access-token failed",
+                category="unauthenticated",
+            )
+
+        def fake_urlopen(*_args, **_kwargs):
+            nonlocal http_called
+            http_called = True
+            raise AssertionError("must not HTTP after token failure")
+
+        RUNTIME_PREFLIGHT._gcloud_access_token = fake_token
+        RUNTIME_PREFLIGHT.urllib.request.urlopen = fake_urlopen
+        try:
+            with self.assertRaises(RUNTIME_PREFLIGHT.RuntimePreflightError) as caught:
+                RUNTIME_PREFLIGHT._test_service_account_iam_permissions(
+                    service_account=self.SA,
+                    project_id="fake-project",
+                    permissions=("iam.serviceAccounts.actAs",),
+                )
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_access_token = original_token
+            RUNTIME_PREFLIGHT.urllib.request.urlopen = original_urlopen
+
+        self.assertFalse(http_called)
+        self.assertIn("print-access-token failed", str(caught.exception))
 
 
 if __name__ == "__main__":
