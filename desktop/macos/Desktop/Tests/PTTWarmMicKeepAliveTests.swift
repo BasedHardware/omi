@@ -114,8 +114,28 @@ final class PTTWarmMicKeepAliveTests: XCTestCase {
       source.contains("guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,"),
       "a capture opened for the previous owner must not park under the next one")
     XCTAssertTrue(
-      source.contains("await displacedWarmStart?.value"),
-      "a turn starting must await the warm teardown before opening the device")
+      source.contains("if displacedWarmCapture { await self.drainInFlightWarmCapture() }"),
+      "a turn starting must drain the warm teardown before opening the device")
+  }
+
+  /// Releasing must not consume the teardown handle. Terminal cleanup and capture
+  /// rebuilds release with no async boundary to wait on; if that dropped the
+  /// handle it would disarm the wait every other caller makes — including the
+  /// owner-transition drain, which is INV-AUTH-1 fencing rather than latency.
+  func testReleasingAWarmCaptureKeepsTheTeardownHandleForOtherCallers() throws {
+    let source = try pushToTalkManagerSource()
+
+    XCTAssertTrue(source.contains("func releaseInFlightWarmCapture() {"))
+    XCTAssertTrue(source.contains("warmTeardown = warm.start"))
+    XCTAssertFalse(
+      source.contains("func releaseInFlightWarmCapture() -> Task<Void, Never>?"),
+      "handing the only handle to one caller is what disarmed the other waits")
+    XCTAssertTrue(
+      source.contains("await drainInFlightWarmCapture(timeout: nil)"),
+      "the owner transition must drain a previous owner's warm capture completely")
+    XCTAssertTrue(
+      source.contains("|| warmCapture != nil || warmTeardown != nil)"),
+      "a second warm capture must not start while one is still tearing down")
   }
 
   /// The device the snapshot vetted and the device that actually opened are not

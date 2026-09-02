@@ -486,12 +486,10 @@ extension AppState {
       guard let current = audioCaptureService, current === mic else { return false }
     }
     // A warm PTT capture whose CoreAudio start has not resolved holds the same
-    // device and cannot be stopped from here — awaiting its own completion is
+    // device and cannot be stopped from here — waiting for its own completion is
     // the boundary. See `PushToTalkManager.releaseInFlightWarmCapture`.
-    if let warmStart = PushToTalkManager.shared.releaseInFlightWarmCapture() {
-      await warmStart.value
-      guard let current = audioCaptureService, current === mic else { return false }
-    }
+    await PushToTalkManager.shared.drainInFlightWarmCapture()
+    guard let current = audioCaptureService, current === mic else { return false }
 
     do {
       let useLocalSTT = sttSession.useLocalSTT

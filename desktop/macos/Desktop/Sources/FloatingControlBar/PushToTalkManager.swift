@@ -635,6 +635,12 @@ class PushToTalkManager: ObservableObject {
       // which is on by default — and a second or more later on a cold realtime
       // hub. Either wait would otherwise be counted as part of the user's press,
       // and every sub-220 ms tap would be reported as a capture failure.
+      //
+      // The modifier-only chord starts its attempt `modifierOnlyShortcutActivationDelay`
+      // after the physical key-down, so the hold under-reports by that much. That
+      // is the safe direction: it can only turn a capture failure into "hold
+      // longer", never the reverse, so it cannot contaminate the
+      // `capture_never_operational` measurement.
       pttLifecycle.noteRelease()
 
       if ShortcutSettings.shared.doubleTapForLock && holdDuration < Self.tapToLockMaxHoldDuration {
@@ -862,6 +868,10 @@ class PushToTalkManager: ObservableObject {
     performTerminalCleanup(discardBufferedAudio: true)
     FloatingBarVoicePlaybackService.shared.stop()
     await captureBeingStopped?.waitForPhysicalStop()
+    // A warm capture opened for the previous owner must not still be starting
+    // when the defaults/auth mutation becomes visible. Unbounded on purpose:
+    // this drain is INV-AUTH-1 fencing, not a latency optimization.
+    await drainInFlightWarmCapture(timeout: nil)
     await RealtimeHubController.shared.quiesceForEffectiveOwnerTransition(
       previousOwnerID: previousOwnerID,
       cleanupCapability: cleanupCapability)
@@ -2190,11 +2200,10 @@ class PushToTalkManager: ObservableObject {
   private func discardParkedMicCapture() {
     _ = releaseParkedMicCapture()
     // Not awaited: this runs from terminal cleanup and capture rebuilds, which
-    // have no async boundary. Clearing the reference is what makes the warm
-    // start's own completion stop the capture instead of parking it, which is
-    // the same fire-and-forget contract `discardLateStartsThroughGeneration`
-    // already gives a turn's late start.
-    _ = releaseInFlightWarmCapture()
+    // have no async boundary. The handle stays on the manager, so whoever does
+    // have one — the next press, ambient transcription, the owner transition —
+    // still waits for the teardown this release started.
+    releaseInFlightWarmCapture()
   }
 
   /// Release the parked warm capture (if any) and hand it back so the caller
@@ -2312,22 +2321,62 @@ class PushToTalkManager: ObservableObject {
 
   var warmCaptureInFlight: AudioCaptureService? { warmCapture?.service }
 
-  /// Give up a warm capture whose start has not resolved, and hand back the work
-  /// that tears it down so the caller can await a real physical boundary.
+  /// The teardown of a warm capture somebody gave up, kept on the manager rather
+  /// than handed to one caller. Cleared by the warm start's own completion.
+  private var warmTeardown: Task<Void, Never>?
+
+  /// How long a press will wait for a displaced warm teardown before opening the
+  /// device anyway. A CoreAudio start has no timeout and no cancellation — after
+  /// wake from sleep `coreaudiod` can take seconds to answer — and a warm-up that
+  /// exists to take latency *out* of the press must never be what holds one up.
+  private static let displacedWarmCaptureWaitSeconds: TimeInterval = 0.5
+
+  /// Give up a warm capture whose start has not resolved.
   ///
-  /// Neither `stopCapture()` nor `waitForPhysicalStop()` can be that boundary
-  /// here. `AudioCaptureService.stopCapture` returns immediately while
-  /// `isCapturing` is false, and `isCapturing` only flips at the *end* of the HAL
-  /// setup — so for the whole ~900 ms window this warm-up exists to hide, a stop
-  /// is a no-op and `waitForPhysicalStop` degrades into "wait for the start to
-  /// finish", handing the caller a capture that is now running. Clearing the
-  /// reference is what tells the start's own completion to stop the capture
-  /// instead of parking it, and awaiting that completion is what makes the
-  /// teardown real.
-  func releaseInFlightWarmCapture() -> Task<Void, Never>? {
-    guard let warm = warmCapture else { return nil }
+  /// Neither `stopCapture()` nor `waitForPhysicalStop()` is a boundary here.
+  /// `AudioCaptureService.stopCapture` returns immediately while `isCapturing` is
+  /// false, and `isCapturing` only flips at the *end* of the HAL setup — so for
+  /// the whole ~900 ms window this warm-up exists to hide, a stop is a no-op and
+  /// `waitForPhysicalStop` degrades into "wait for the start to finish", handing
+  /// the caller a capture that is now running. Clearing the reference is what
+  /// tells the start's own completion to stop and drain the capture instead of
+  /// parking it, and `drainInFlightWarmCapture` is how a caller waits for that.
+  ///
+  /// Idempotent, and it keeps the handle rather than returning it: terminal
+  /// cleanup and capture rebuilds have no async boundary to await on, and if
+  /// releasing there consumed the handle it would disarm the wait every *other*
+  /// caller makes — including the owner-transition drain.
+  func releaseInFlightWarmCapture() {
+    guard let warm = warmCapture else { return }
     warmCapture = nil
-    return warm.start
+    warmTeardown = warm.start
+  }
+
+  /// Release a warm capture and wait for its teardown.
+  ///
+  /// `timeout: nil` waits as long as it takes, for callers where an incomplete
+  /// drain is a correctness failure rather than a latency one — the owner
+  /// transition, which must leave no previous-owner capture running. Everyone
+  /// else takes the bounded wait: a warm capture that outlives it is still
+  /// stopped by its own completion, so the only thing given up is the overlap
+  /// guarantee, in the case where waiting would have cost the user their press.
+  ///
+  /// Waits on the handle rather than `Task.value` under a bound because awaiting
+  /// a non-throwing task ignores cancellation, so it cannot be given a deadline.
+  func drainInFlightWarmCapture(timeout: TimeInterval? = displacedWarmCaptureWaitSeconds) async {
+    releaseInFlightWarmCapture()
+    guard let teardown = warmTeardown else { return }
+    guard let timeout else {
+      await teardown.value
+      return
+    }
+    let deadline = Date().addingTimeInterval(timeout)
+    while warmTeardown != nil, Date() < deadline {
+      try? await Task.sleep(nanoseconds: 20_000_000)
+    }
+    if warmTeardown != nil {
+      log("PushToTalkManager: warm capture teardown outran its wait — opening the device anyway")
+    }
   }
 
   /// Ask for a warm capture on the next main-actor hop. Used from paths that are
@@ -2375,7 +2424,7 @@ class PushToTalkManager: ObservableObject {
       routeIsSafeToWarmUnattended: route != .refused,
       hasActiveTurn: voiceTurnCoordinator.activeTurnID != nil,
       hasCaptureAlready: parkedMicCapture != nil || audioCaptureService != nil
-        || micCaptureStartInFlight || warmCapture != nil)
+        || micCaptureStartInFlight || warmCapture != nil || warmTeardown != nil)
     guard PTTWarmCaptureAdmission.admits(admission),
       case .device(let overrideDeviceID) = route
     else { return }
@@ -2392,6 +2441,9 @@ class PushToTalkManager: ObservableObject {
     let onAudioLevel = micAudioLevelHandler(lease: lease)
 
     let start = Task { @MainActor [weak self] in
+      // Runs on every exit below. Admission refuses a second warm capture while
+      // either reference is set, so this can only ever clear its own handle.
+      defer { self?.warmTeardown = nil }
       do {
         try await capture.startCapture(onAudioChunk: onAudioChunk, onAudioLevel: onAudioLevel)
       } catch {
@@ -2425,6 +2477,12 @@ class PushToTalkManager: ObservableObject {
       // become a headset between the snapshot landing and the device opening —
       // and holding a Bluetooth input open unattended is what flips the user's
       // headset out of A2DP for the whole keep-alive window.
+      //
+      // Residual: opening the device is itself the flip, so that race still costs
+      // the user a start-and-stop of HFP rather than 120 s of it. Pinning
+      // `.device(defaultInputDeviceID)` instead would close it, but the parked
+      // capture's `overrideID` would then stop matching the press-time `nil`
+      // override and no turn would ever adopt it — which is the whole feature.
       guard routeClass != .bluetooth, !capture.isCurrentDeviceBluetoothTransport else {
         capture.stopCapture()
         log("PushToTalkManager: warm capture (\(trigger.rawValue)) opened a Bluetooth input — stopped")
@@ -2502,9 +2560,12 @@ class PushToTalkManager: ObservableObject {
     // default vs. an explicit built-in override).
     let displacedParkedCapture = releaseParkedMicCapture()
     // A warm capture whose start has not resolved holds the same device just as
-    // surely as a parked one, and cannot be stopped from here — awaiting its own
-    // completion is the only real boundary. See `releaseInFlightWarmCapture`.
-    let displacedWarmStart = releaseInFlightWarmCapture()
+    // surely as a parked one, and cannot be stopped from here — waiting for its
+    // own completion is the only real boundary. See `releaseInFlightWarmCapture`.
+    // Released synchronously so a warm start already in flight learns it is
+    // superseded before this turn's own start is queued behind it.
+    let displacedWarmCapture = warmCaptureInFlight != nil
+    releaseInFlightWarmCapture()
 
     let capture = overrideDeviceID.map(AudioCaptureService.init(overrideDeviceID:)) ?? AudioCaptureService()
     let lease = MicCaptureLease(generation: generation, batchMode: batchMode, turnID: turnID)
@@ -2516,8 +2577,8 @@ class PushToTalkManager: ObservableObject {
 
     Task { @MainActor [weak self] in
       guard let self else { return }
-      await displacedWarmStart?.value
-      if displacedWarmStart != nil || displacedParkedCapture != nil {
+      if displacedWarmCapture { await self.drainInFlightWarmCapture() }
+      if displacedWarmCapture || displacedParkedCapture != nil {
         await displacedParkedCapture?.waitForPhysicalStop()
         // The turn may have been cancelled — and another started — while the
         // displaced teardown was in flight. Revalidate before opening the
