@@ -301,10 +301,42 @@ def validate_secret_references(*, service_name: str, references: Mapping[str, st
     return errors
 
 
-def preflight_deployment_result(*, target: Target, project_id: str) -> tuple[list[str], dict[str, str], bool]:
+def validate_service_account(*, service_account: str, project_id: str) -> list[str]:
+    """Prove a Cloud Run runtime identity exists and the deployer can act as it."""
+
+    identity = service_account.strip()
+    if not identity:
+        return []
+    try:
+        _gcloud_json(["iam", "service-accounts", "describe", identity, f"--project={project_id}"])
+    except RuntimePreflightError as exc:
+        return [f"{identity}: Cloud Run runtime identity does not exist or cannot be described ({exc})"]
+    try:
+        result = _gcloud_json(
+            [
+                "iam",
+                "service-accounts",
+                "test-iam-permissions",
+                identity,
+                "--permissions=iam.serviceAccounts.actAs",
+                f"--project={project_id}",
+            ]
+        )
+    except RuntimePreflightError as exc:
+        return [f"{identity}: cannot test iam.serviceAccounts.actAs ({exc})"]
+    granted = result.get("permissions")
+    if not isinstance(granted, list) or "iam.serviceAccounts.actAs" not in granted:
+        return [f"{identity}: deployer is missing permission iam.serviceAccounts.actAs"]
+    return []
+
+
+def preflight_deployment_result(
+    *, target: Target, project_id: str, service_account: str = ""
+) -> tuple[list[str], dict[str, str], bool]:
     """Validate the runtime and report whether the Cloud Run service exists."""
 
     errors = validate_secret_versions(target=target, project_id=project_id)
+    errors.extend(validate_service_account(service_account=service_account, project_id=project_id))
     fallback_runtime_secrets: dict[str, str] = {}
     service_exists = False
     try:
@@ -322,23 +354,24 @@ def preflight_deployment_result(*, target: Target, project_id: str) -> tuple[lis
     return errors, fallback_runtime_secrets, service_exists
 
 
-def preflight_result(*, target: Target, project_id: str) -> tuple[list[str], dict[str, str]]:
+def preflight_result(*, target: Target, project_id: str, service_account: str = "") -> tuple[list[str], dict[str, str]]:
     """Validate the runtime for callers that do not need deployment metadata."""
 
     errors, fallback_runtime_secrets, _service_exists = preflight_deployment_result(
-        target=target, project_id=project_id
+        target=target, project_id=project_id, service_account=service_account
     )
     return errors, fallback_runtime_secrets
 
 
-def preflight(*, target: Target, project_id: str) -> list[str]:
-    return preflight_result(target=target, project_id=project_id)[0]
+def preflight(*, target: Target, project_id: str, service_account: str = "") -> list[str]:
+    return preflight_result(target=target, project_id=project_id, service_account=service_account)[0]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", required=True)
     parser.add_argument("--project-id", required=True)
+    parser.add_argument("--service-account", default="")
     parser.add_argument("--contract", type=Path, default=ROOT / "config" / "public-build-contract.json")
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args(argv)
@@ -350,7 +383,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     errors, fallback_runtime_secrets, service_exists = preflight_deployment_result(
-        target=target, project_id=args.project_id
+        target=target, project_id=args.project_id, service_account=args.service_account
     )
     if errors:
         print("public-build runtime preflight failed:", file=sys.stderr)

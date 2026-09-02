@@ -248,6 +248,59 @@ jobs:
                     with self.assertRaisesRegex(ValueError, "runtime binding groups cannot overlap"):
                         self.target()
 
+    def test_parses_remove_runtime_env_vars(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["remove_runtime_env_vars"] = ["STALE_PLAINTEXT"]
+        self.write_json("config/public-build-contract.json", contract)
+
+        self.assertEqual(self.target().deployment.remove_runtime_env_vars, ("STALE_PLAINTEXT",))
+
+    def test_rejects_remove_runtime_env_vars_overlap_with_runtime_secrets(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["remove_runtime_env_vars"] = ["FAKE_RUNTIME_SECRET"]
+        self.write_json("config/public-build-contract.json", contract)
+
+        with self.assertRaisesRegex(ValueError, "remove_runtime_env_vars cannot overlap"):
+            self.target()
+
+    def test_rejects_remove_runtime_env_vars_overlap_with_runtime_env_vars(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["runtime_env_vars"] = {"FAKE_RUNTIME_CONFIG": "reviewed.example"}
+        contract["targets"]["fake"]["deployment"]["remove_runtime_env_vars"] = ["FAKE_RUNTIME_CONFIG"]
+        self.write_json("config/public-build-contract.json", contract)
+
+        with self.assertRaisesRegex(ValueError, "remove_runtime_env_vars cannot overlap"):
+            self.target()
+
+    def test_shared_flags_list_applies_to_every_environment(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["flags"] = ["--memory=2Gi"]
+        self.write_json("config/public-build-contract.json", contract)
+        deployment = self.target().deployment
+
+        self.assertEqual(deployment.flags_for("development"), ("--memory=2Gi",))
+        self.assertEqual(deployment.flags_for("prod"), ("--memory=2Gi",))
+
+    def test_per_environment_flags_object_resolves_for_the_requested_environment(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["flags"] = {
+            "prod": ["--ingress=internal-and-cloud-load-balancing"],
+            "development": [],
+        }
+        self.write_json("config/public-build-contract.json", contract)
+        deployment = self.target().deployment
+
+        self.assertEqual(deployment.flags_for("prod"), ("--ingress=internal-and-cloud-load-balancing",))
+        self.assertEqual(deployment.flags_for("development"), ())
+
+    def test_rejects_flags_for_an_unknown_environment(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["flags"] = {"staging": ["--memory=2Gi"]}
+        self.write_json("config/public-build-contract.json", contract)
+
+        with self.assertRaisesRegex(ValueError, "unknown environment 'staging'"):
+            self.target()
+
     def test_rejects_runtime_env_values_that_cannot_be_rendered_as_action_input(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["runtime_env_vars"] = {"FAKE_RUNTIME_CONFIG": "one,two"}
@@ -1219,7 +1272,13 @@ class AcceptanceRouteFixture(unittest.TestCase):
         # h.omi.me fronts the `frontend` service, whose contract restricts ingress
         # to the balancer; without this URL no prod frontend candidate can ever be accepted.
         target = STATIC.load_contract(STATIC.DEFAULT_CONTRACT).targets["frontend"]
-        self.assertIn("--ingress=internal-and-cloud-load-balancing", target.deployment.flags)
+        self.assertEqual(
+            target.deployment.flags_for("prod"),
+            ("--ingress=internal-and-cloud-load-balancing",),
+        )
+        self.assertEqual(target.deployment.flags_for("development"), ())
+        self.assertEqual(target.deployment.remove_runtime_env_vars, ("OPENAI_API_KEY",))
+        self.assertEqual(target.deployment.runtime_secrets["DD_API_KEY"], "DD_API_KEY:latest")
         self.assertEqual(target.candidate_acceptance.public_urls.get("prod"), "https://h.omi.me")
 
     def test_shipped_frontend_contract_declares_expect_sha(self) -> None:
@@ -1233,6 +1292,86 @@ class AcceptanceRouteFixture(unittest.TestCase):
                 sha="0123456789abcdef0123456789abcdef01234567",
             )[-2:],
             ("--expect-sha", "0123456789abcdef0123456789abcdef01234567"),
+        )
+
+
+class RuntimeServiceAccountPreflightTests(unittest.TestCase):
+    SA = "frontend-invoker@fake-project.iam.gserviceaccount.com"
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="omi-public-build-sa-")
+        self.root = Path(self.temp_dir.name)
+        contract_path = self.root / "config/public-build-contract.json"
+        contract_path.parent.mkdir(parents=True)
+        contract_path.write_text(json.dumps(fixture_contract()), encoding="utf-8")
+        self.target = STATIC.load_contract(contract_path).targets["fake"]
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_skips_service_account_checks_when_none_is_supplied(self) -> None:
+        self.assertEqual(RUNTIME_PREFLIGHT.validate_service_account(service_account="", project_id="fake-project"), [])
+
+    def test_runtime_preflight_accepts_an_existing_service_account_the_deployer_can_act_as(self) -> None:
+        calls: list[list[str]] = []
+        original = RUNTIME_PREFLIGHT._gcloud_json
+
+        def fake_gcloud(arguments):
+            calls.append(list(arguments))
+            if arguments[:3] == ["iam", "service-accounts", "describe"]:
+                return {"email": self.SA}
+            if arguments[:3] == ["iam", "service-accounts", "test-iam-permissions"]:
+                return {"permissions": ["iam.serviceAccounts.actAs"]}
+            raise AssertionError(arguments)
+
+        RUNTIME_PREFLIGHT._gcloud_json = fake_gcloud
+        try:
+            self.assertEqual(
+                RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project"),
+                [],
+            )
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original
+
+        self.assertEqual(calls[0][:4], ["iam", "service-accounts", "describe", self.SA])
+        self.assertEqual(calls[1][:4], ["iam", "service-accounts", "test-iam-permissions", self.SA])
+        self.assertIn("--permissions=iam.serviceAccounts.actAs", calls[1])
+
+    def test_runtime_preflight_rejects_a_missing_service_account(self) -> None:
+        original = RUNTIME_PREFLIGHT._gcloud_json
+
+        def missing(_arguments):
+            raise RUNTIME_PREFLIGHT.RuntimePreflightError("resource not found", category="not_found")
+
+        RUNTIME_PREFLIGHT._gcloud_json = missing
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn(self.SA, errors[0])
+        self.assertIn("does not exist", errors[0])
+
+    def test_runtime_preflight_rejects_missing_act_as_permission(self) -> None:
+        original = RUNTIME_PREFLIGHT._gcloud_json
+
+        def fake_gcloud(arguments):
+            if arguments[:3] == ["iam", "service-accounts", "describe"]:
+                return {"email": self.SA}
+            if arguments[:3] == ["iam", "service-accounts", "test-iam-permissions"]:
+                return {"permissions": []}
+            raise AssertionError(arguments)
+
+        RUNTIME_PREFLIGHT._gcloud_json = fake_gcloud
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original
+
+        self.assertEqual(
+            errors,
+            [f"{self.SA}: deployer is missing permission iam.serviceAccounts.actAs"],
         )
 
 

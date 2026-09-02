@@ -147,12 +147,18 @@ class Deployment:
     region: str
     build_context: str
     platforms: tuple[str, ...]
-    flags: tuple[str, ...]
+    flags_by_environment: dict[str, tuple[str, ...]]
     runtime_secrets: dict[str, str]
     preserve_runtime_secrets: tuple[str, ...]
     fallback_runtime_secrets: dict[str, str]
     runtime_env_vars: dict[str, str]
     remove_runtime_secrets: tuple[str, ...]
+    remove_runtime_env_vars: tuple[str, ...]
+
+    def flags_for(self, environment: str) -> tuple[str, ...]:
+        """Return the gcloud flags that apply to one declared environment."""
+
+        return self.flags_by_environment.get(environment, ())
 
 
 @dataclass(frozen=True)
@@ -203,7 +209,44 @@ def _parse_input(raw_input: Any, *, target_name: str) -> PublicInput:
     return PublicInput(name=name, required=required, source=source, allowed_scopes=tuple(raw_scopes))
 
 
-def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
+def _parse_flag_list(raw_flags: Any, *, target_name: str, where: str) -> tuple[str, ...]:
+    if not isinstance(raw_flags, list) or not all(
+        isinstance(flag, str) and flag.startswith("--") and "\n" not in flag and "\r" not in flag for flag in raw_flags
+    ):
+        raise ValueError(f"target {target_name} {where} must be safe gcloud flags")
+    return tuple(raw_flags)
+
+
+def _parse_flags(raw_flags: Any, *, target_name: str, environments: tuple[str, ...]) -> dict[str, tuple[str, ...]]:
+    """Accept a shared flag list or an object keyed by declared environment."""
+
+    if isinstance(raw_flags, list):
+        flags = _parse_flag_list(raw_flags, target_name=target_name, where="deployment flags")
+        return {environment: flags for environment in environments}
+    if isinstance(raw_flags, Mapping):
+        unknown = sorted(str(environment) for environment in raw_flags if environment not in environments)
+        if unknown:
+            raise ValueError(f"target {target_name} deployment flags names unknown environment {unknown[0]!r}")
+        parsed = {environment: () for environment in environments}
+        for environment, env_flags in raw_flags.items():
+            if not isinstance(environment, str) or not environment:
+                raise ValueError(f"target {target_name} deployment flags must be keyed by environment name")
+            parsed[environment] = _parse_flag_list(
+                env_flags, target_name=target_name, where=f"deployment flags[{environment!r}]"
+            )
+        return parsed
+    raise ValueError(f"target {target_name} deployment flags must be a list or an object keyed by environment")
+
+
+def _parse_env_name_list(raw_names: Any, *, target_name: str, field: str) -> tuple[str, ...]:
+    if not isinstance(raw_names, list) or not all(isinstance(name, str) and NAME.fullmatch(name) for name in raw_names):
+        raise ValueError(f"target {target_name} deployment {field} must be environment names")
+    if len(set(raw_names)) != len(raw_names):
+        raise ValueError(f"target {target_name} deployment {field} must be unique")
+    return tuple(raw_names)
+
+
+def _parse_deployment(raw_deployment: Any, *, target_name: str, environments: tuple[str, ...]) -> Deployment:
     if not isinstance(raw_deployment, Mapping):
         raise ValueError(f"target {target_name} must declare deployment")
     region = _require_string(raw_deployment.get("region"), field=f"target {target_name} deployment region")
@@ -217,11 +260,7 @@ def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
         or not all(isinstance(platform, str) and platform for platform in raw_platforms)
     ):
         raise ValueError(f"target {target_name} deployment platforms must be non-empty strings")
-    raw_flags = raw_deployment.get("flags")
-    if not isinstance(raw_flags, list) or not all(
-        isinstance(flag, str) and flag.startswith("--") and "\n" not in flag and "\r" not in flag for flag in raw_flags
-    ):
-        raise ValueError(f"target {target_name} deployment flags must be safe gcloud flags")
+    flags_by_environment = _parse_flags(raw_deployment.get("flags"), target_name=target_name, environments=environments)
     raw_runtime_secrets = raw_deployment.get("runtime_secrets")
     if not isinstance(raw_runtime_secrets, Mapping) or not all(
         isinstance(name, str)
@@ -272,13 +311,22 @@ def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
             f"target {target_name} deployment runtime_env_vars must map environment names to non-empty deploy-safe values"
         )
 
-    raw_remove_runtime_secrets = raw_deployment.get("remove_runtime_secrets", [])
-    if not isinstance(raw_remove_runtime_secrets, list) or not all(
-        isinstance(name, str) and NAME.fullmatch(name) for name in raw_remove_runtime_secrets
-    ):
-        raise ValueError(f"target {target_name} deployment remove_runtime_secrets must be environment names")
-    if len(set(raw_remove_runtime_secrets)) != len(raw_remove_runtime_secrets):
-        raise ValueError(f"target {target_name} deployment remove_runtime_secrets must be unique")
+    raw_remove_runtime_secrets = _parse_env_name_list(
+        raw_deployment.get("remove_runtime_secrets", []),
+        target_name=target_name,
+        field="remove_runtime_secrets",
+    )
+    raw_remove_runtime_env_vars = _parse_env_name_list(
+        raw_deployment.get("remove_runtime_env_vars", []),
+        target_name=target_name,
+        field="remove_runtime_env_vars",
+    )
+    env_var_removal_overlaps = set(raw_remove_runtime_env_vars) & (set(raw_runtime_secrets) | set(raw_runtime_env_vars))
+    if env_var_removal_overlaps:
+        raise ValueError(
+            f"target {target_name} deployment remove_runtime_env_vars cannot overlap runtime_secrets or "
+            f"runtime_env_vars: {', '.join(sorted(env_var_removal_overlaps))}"
+        )
 
     binding_groups = {
         "runtime_secrets": set(raw_runtime_secrets),
@@ -310,12 +358,13 @@ def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
         region=region,
         build_context=build_context,
         platforms=tuple(raw_platforms),
-        flags=tuple(raw_flags),
+        flags_by_environment=flags_by_environment,
         runtime_secrets=dict(raw_runtime_secrets),
         preserve_runtime_secrets=tuple(raw_preserve_runtime_secrets),
         fallback_runtime_secrets=dict(raw_fallback_runtime_secrets),
         runtime_env_vars=dict(raw_runtime_env_vars),
-        remove_runtime_secrets=tuple(raw_remove_runtime_secrets),
+        remove_runtime_secrets=raw_remove_runtime_secrets,
+        remove_runtime_env_vars=raw_remove_runtime_env_vars,
     )
 
 
@@ -371,7 +420,9 @@ def load_contract(path: Path) -> Contract:
             dockerfile=_require_string(raw_target.get("dockerfile"), field=f"target {target_name} dockerfile"),
             workflow=_require_string(raw_target.get("workflow"), field=f"target {target_name} workflow"),
             gateway_required=gateway_required,
-            deployment=_parse_deployment(raw_target.get("deployment"), target_name=target_name),
+            deployment=_parse_deployment(
+                raw_target.get("deployment"), target_name=target_name, environments=environments
+            ),
             canary_component=_require_string(
                 raw_target.get("canary_component"), field=f"target {target_name} canary_component"
             ),
@@ -638,6 +689,9 @@ def validate_shared_actions(root: Path) -> list[str]:
             "fallback_runtime_secrets",
             ".deployment.runtime_env_vars",
             ".deployment.remove_runtime_secrets",
+            ".deployment.remove_runtime_env_vars",
+            "($flags[$env] // [])",
+            "--service-account",
             PREPARE_ACTION,
             "google-github-actions/auth@",
             "preflight_public_build_runtime.py",
@@ -653,6 +707,7 @@ def validate_shared_actions(root: Path) -> list[str]:
             "--tag=",
             "inputs.environment == 'development' && '--allow-unauthenticated' || ''",
             "--remove-secrets=",
+            "--remove-env-vars=",
             "require_gateway_url",
             "OMI_LLM_GATEWAY_URL must be a non-empty HTTP(S) URL",
             "env_vars_update_strategy: merge",
