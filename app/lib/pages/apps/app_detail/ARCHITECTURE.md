@@ -5,6 +5,7 @@ This package owns the mobile marketplace app-detail flow.
 ## Owners
 
 - `app_detail.dart`: app lifecycle, install/enable state, subscription actions, and page composition.
+- `app_summary.dart`: responsive app identity, rating, install count, and action presentation.
 - `reviews_section.dart`: rating summary plus create/edit/review presentation.
 - `reviews_list_page.dart`: the full reviews list.
 - `widgets/`: reusable presentation components with no page lifecycle ownership.

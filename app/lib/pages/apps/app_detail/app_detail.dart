@@ -19,6 +19,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/share_links.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:omi/pages/apps/app_detail/reviews_section.dart';
+import 'package:omi/pages/apps/app_detail/app_summary.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
@@ -761,162 +762,106 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                       const SizedBox(width: 20),
                       Expanded(
-                        child: SizedBox(
-                          height: 108,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    app.name.decodeString,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          app.author.decodeString,
-                                          style: const TextStyle(color: Colors.grey, fontSize: 16),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      if (app.official) ...[
-                                        const SizedBox(width: 4),
-                                        const FaIcon(FontAwesomeIcons.solidCircleCheck, size: 14, color: Colors.white),
-                                      ],
-                                    ],
-                                  ),
-                                  // Rating + installs inline
-                                  const SizedBox(height: 6),
-                                  GestureDetector(
-                                    onTap: () {
-                                      if (app.ratingCount > 0 && _reviewsSectionKey.currentContext != null) {
-                                        Scrollable.ensureVisible(
-                                          _reviewsSectionKey.currentContext!,
-                                          duration: const Duration(milliseconds: 300),
-                                          curve: Curves.easeInOut,
-                                        );
-                                      }
-                                    },
-                                    child: Row(
-                                      children: [
-                                        if (app.ratingCount > 0) ...[
-                                          const FaIcon(FontAwesomeIcons.solidStar, size: 11, color: Colors.white),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '${app.getRatingAvg()} (${app.ratingCount})',
-                                            style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-                                          ),
-                                          if (app.installs > 0) ...[
-                                            Text('  ·  ', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                                          ],
-                                        ],
-                                        if (app.installs > 0)
-                                          Text(
-                                            '${(app.installs / 10).round() * 10}+ users',
-                                            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              isLoading
+                        child: AppDetailSummary(
+                          name: app.name.decodeString,
+                          author: app.author.decodeString,
+                          official: app.official,
+                          ratingCount: app.ratingCount,
+                          rating: app.getRatingAvg(),
+                          installs: app.installs,
+                          onRatingTap: () {
+                            if (app.ratingCount > 0 && _reviewsSectionKey.currentContext != null) {
+                              Scrollable.ensureVisible(
+                                _reviewsSectionKey.currentContext!,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            }
+                          },
+                          action: isLoading
+                              ? AnimatedLoadingButton(
+                                  text: '',
+                                  width: 32,
+                                  height: 32,
+                                  onPressed: () async {},
+                                  color: const Color(0xFF35343B),
+                                )
+                              : app.enabled
                                   ? AnimatedLoadingButton(
-                                      text: '',
-                                      width: 32,
+                                      text: 'Disable',
+                                      width: 90,
                                       height: 32,
-                                      onPressed: () async {},
-                                      color: const Color(0xFF35343B),
+                                      onPressed: () => _toggleApp(app.id, false),
+                                      color: Colors.grey.shade700,
                                     )
-                                  : app.enabled
+                                  : (app.isPaid && !app.isUserPaid
                                       ? AnimatedLoadingButton(
-                                          text: 'Disable',
-                                          width: 90,
+                                          width: 100,
                                           height: 32,
-                                          onPressed: () => _toggleApp(app.id, false),
-                                          color: Colors.grey.shade700,
-                                        )
-                                      : (app.isPaid && !app.isUserPaid
-                                          ? AnimatedLoadingButton(
-                                              width: 100,
-                                              height: 32,
-                                              text: "Subscribe",
-                                              onPressed: () async {
-                                                // Track subscribe button clicked
-                                                PlatformManager.instance.analytics.appDetailSubscribeClicked(
-                                                  appId: app.id,
-                                                  appName: app.name,
-                                                );
+                                          text: "Subscribe",
+                                          onPressed: () async {
+                                            // Track subscribe button clicked
+                                            PlatformManager.instance.analytics.appDetailSubscribeClicked(
+                                              appId: app.id,
+                                              appName: app.name,
+                                            );
 
-                                                if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
-                                                  final uri = Uri.tryParse(app.paymentLink!);
-                                                  if (uri == null) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
-                                                    );
-                                                    return;
-                                                  }
-                                                  _checkPaymentStatus(app.id);
-                                                  await _launchUrlSafely(uri);
-                                                } else {
-                                                  await _toggleApp(app.id, true);
-                                                }
-                                              },
-                                              color: Colors.white,
-                                              // AnimatedLoadingButton defaults both to white; on a
-                                              // white surface the label and spinner vanish.
-                                              textStyle: const TextStyle(fontSize: 16, color: Colors.black),
-                                              loaderColor: Colors.black,
-                                            )
-                                          : AnimatedLoadingButton(
-                                              width: 75,
-                                              height: 32,
-                                              text: 'Enable',
-                                              onPressed: () async {
-                                                if (app.worksExternally()) {
-                                                  showDialog(
-                                                    context: context,
-                                                    builder: (ctx) {
-                                                      return StatefulBuilder(
-                                                        builder: (ctx, setState) {
-                                                          return ConfirmationDialog(
-                                                            title: context.l10n.dataAccessNotice,
-                                                            description: context.l10n.dataAccessNoticeDescription,
-                                                            onConfirm: () {
-                                                              _toggleApp(app.id, true);
-                                                              Navigator.pop(context);
-                                                            },
-                                                            onCancel: () {
-                                                              Navigator.pop(context);
-                                                            },
-                                                          );
+                                            if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
+                                              final uri = Uri.tryParse(app.paymentLink!);
+                                              if (uri == null) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
+                                                );
+                                                return;
+                                              }
+                                              _checkPaymentStatus(app.id);
+                                              await _launchUrlSafely(uri);
+                                            } else {
+                                              await _toggleApp(app.id, true);
+                                            }
+                                          },
+                                          color: Colors.white,
+                                          // AnimatedLoadingButton defaults both to white; on a
+                                          // white surface the label and spinner vanish.
+                                          textStyle: const TextStyle(fontSize: 16, color: Colors.black),
+                                          loaderColor: Colors.black,
+                                        )
+                                      : AnimatedLoadingButton(
+                                          width: 75,
+                                          height: 32,
+                                          text: 'Enable',
+                                          onPressed: () async {
+                                            if (app.worksExternally()) {
+                                              showDialog(
+                                                context: context,
+                                                builder: (ctx) {
+                                                  return StatefulBuilder(
+                                                    builder: (ctx, setState) {
+                                                      return ConfirmationDialog(
+                                                        title: context.l10n.dataAccessNotice,
+                                                        description: context.l10n.dataAccessNoticeDescription,
+                                                        onConfirm: () {
+                                                          _toggleApp(app.id, true);
+                                                          Navigator.pop(context);
+                                                        },
+                                                        onCancel: () {
+                                                          Navigator.pop(context);
                                                         },
                                                       );
                                                     },
                                                   );
-                                                } else {
-                                                  _toggleApp(app.id, true);
-                                                }
-                                              },
-                                              color: Colors.white,
-                                              // AnimatedLoadingButton defaults both to white; on a
-                                              // white surface the label and spinner vanish.
-                                              textStyle: const TextStyle(fontSize: 16, color: Colors.black),
-                                              loaderColor: Colors.black,
-                                            )),
-                            ],
-                          ),
+                                                },
+                                              );
+                                            } else {
+                                              _toggleApp(app.id, true);
+                                            }
+                                          },
+                                          color: Colors.white,
+                                          // AnimatedLoadingButton defaults both to white; on a
+                                          // white surface the label and spinner vanish.
+                                          textStyle: const TextStyle(fontSize: 16, color: Colors.black),
+                                          loaderColor: Colors.black,
+                                        )),
                         ),
                       ),
                       const SizedBox(width: 20),
