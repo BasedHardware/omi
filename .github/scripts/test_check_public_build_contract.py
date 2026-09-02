@@ -248,6 +248,72 @@ jobs:
                     with self.assertRaisesRegex(ValueError, "runtime binding groups cannot overlap"):
                         self.target()
 
+    def test_parses_remove_runtime_env_vars(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["remove_runtime_env_vars"] = ["STALE_PLAINTEXT"]
+        self.write_json("config/public-build-contract.json", contract)
+
+        self.assertEqual(self.target().deployment.remove_runtime_env_vars, ("STALE_PLAINTEXT",))
+
+    def test_rejects_remove_runtime_env_vars_overlap_with_runtime_secrets(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["remove_runtime_env_vars"] = ["FAKE_RUNTIME_SECRET"]
+        self.write_json("config/public-build-contract.json", contract)
+
+        with self.assertRaisesRegex(ValueError, "remove_runtime_env_vars cannot overlap"):
+            self.target()
+
+    def test_rejects_remove_runtime_env_vars_overlap_with_runtime_env_vars(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["runtime_env_vars"] = {"FAKE_RUNTIME_CONFIG": "reviewed.example"}
+        contract["targets"]["fake"]["deployment"]["remove_runtime_env_vars"] = ["FAKE_RUNTIME_CONFIG"]
+        self.write_json("config/public-build-contract.json", contract)
+
+        with self.assertRaisesRegex(ValueError, "remove_runtime_env_vars cannot overlap"):
+            self.target()
+
+    def test_rejects_remove_runtime_env_vars_overlap_with_preserve_runtime_secrets(self) -> None:
+        contract = fixture_contract()
+        deployment = contract["targets"]["fake"]["deployment"]
+        deployment["preserve_runtime_secrets"] = ["FAKE_PRESERVED_SECRET"]
+        deployment["fallback_runtime_secrets"] = {"FAKE_PRESERVED_SECRET": "fallback-fake-preserved-secret:latest"}
+        deployment["remove_runtime_env_vars"] = ["FAKE_PRESERVED_SECRET"]
+        self.write_json("config/public-build-contract.json", contract)
+
+        with self.assertRaisesRegex(
+            ValueError, "remove_runtime_env_vars cannot overlap.*preserve_runtime_secrets"
+        ):
+            self.target()
+
+    def test_shared_flags_list_applies_to_every_environment(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["flags"] = ["--memory=2Gi"]
+        self.write_json("config/public-build-contract.json", contract)
+        deployment = self.target().deployment
+
+        self.assertEqual(deployment.flags_for("development"), ("--memory=2Gi",))
+        self.assertEqual(deployment.flags_for("prod"), ("--memory=2Gi",))
+
+    def test_per_environment_flags_object_resolves_for_the_requested_environment(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["flags"] = {
+            "prod": ["--ingress=internal-and-cloud-load-balancing"],
+            "development": [],
+        }
+        self.write_json("config/public-build-contract.json", contract)
+        deployment = self.target().deployment
+
+        self.assertEqual(deployment.flags_for("prod"), ("--ingress=internal-and-cloud-load-balancing",))
+        self.assertEqual(deployment.flags_for("development"), ())
+
+    def test_rejects_flags_for_an_unknown_environment(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["flags"] = {"staging": ["--memory=2Gi"]}
+        self.write_json("config/public-build-contract.json", contract)
+
+        with self.assertRaisesRegex(ValueError, "unknown environment 'staging'"):
+            self.target()
+
     def test_rejects_runtime_env_values_that_cannot_be_rendered_as_action_input(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["runtime_env_vars"] = {"FAKE_RUNTIME_CONFIG": "one,two"}
@@ -1219,7 +1285,13 @@ class AcceptanceRouteFixture(unittest.TestCase):
         # h.omi.me fronts the `frontend` service, whose contract restricts ingress
         # to the balancer; without this URL no prod frontend candidate can ever be accepted.
         target = STATIC.load_contract(STATIC.DEFAULT_CONTRACT).targets["frontend"]
-        self.assertIn("--ingress=internal-and-cloud-load-balancing", target.deployment.flags)
+        self.assertEqual(
+            target.deployment.flags_for("prod"),
+            ("--ingress=internal-and-cloud-load-balancing",),
+        )
+        self.assertEqual(target.deployment.flags_for("development"), ())
+        self.assertEqual(target.deployment.remove_runtime_env_vars, ("OPENAI_API_KEY",))
+        self.assertEqual(target.deployment.runtime_secrets["DD_API_KEY"], "DD_API_KEY:latest")
         self.assertEqual(target.candidate_acceptance.public_urls.get("prod"), "https://h.omi.me")
 
     def test_shipped_frontend_contract_declares_expect_sha(self) -> None:
@@ -1234,6 +1306,206 @@ class AcceptanceRouteFixture(unittest.TestCase):
             )[-2:],
             ("--expect-sha", "0123456789abcdef0123456789abcdef01234567"),
         )
+
+
+class RuntimeServiceAccountPreflightTests(unittest.TestCase):
+    SA = "frontend-invoker@fake-project.iam.gserviceaccount.com"
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="omi-public-build-sa-")
+        self.root = Path(self.temp_dir.name)
+        contract_path = self.root / "config/public-build-contract.json"
+        contract_path.parent.mkdir(parents=True)
+        contract_path.write_text(json.dumps(fixture_contract()), encoding="utf-8")
+        self.target = STATIC.load_contract(contract_path).targets["fake"]
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _stub_describe(self, *, describe):
+        original = RUNTIME_PREFLIGHT._gcloud_json
+
+        def fake_gcloud(arguments):
+            if arguments[:3] == ["iam", "service-accounts", "describe"]:
+                return describe(arguments)
+            raise AssertionError(arguments)
+
+        RUNTIME_PREFLIGHT._gcloud_json = fake_gcloud
+        return original
+
+    def test_skips_service_account_checks_when_none_is_supplied(self) -> None:
+        self.assertEqual(RUNTIME_PREFLIGHT.validate_service_account(service_account="", project_id="fake-project"), [])
+
+    def test_runtime_preflight_accepts_an_existing_service_account_the_deployer_can_act_as(self) -> None:
+        describe_calls: list[list[str]] = []
+        iam_calls: list[dict] = []
+        original_gcloud = self._stub_describe(
+            describe=lambda arguments: describe_calls.append(list(arguments)) or {"email": self.SA}
+        )
+        original_iam = RUNTIME_PREFLIGHT._test_service_account_iam_permissions
+
+        def fake_iam(**kwargs):
+            iam_calls.append(kwargs)
+            return {"permissions": ["iam.serviceAccounts.actAs"]}
+
+        RUNTIME_PREFLIGHT._test_service_account_iam_permissions = fake_iam
+        try:
+            self.assertEqual(
+                RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project"),
+                [],
+            )
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original_gcloud
+            RUNTIME_PREFLIGHT._test_service_account_iam_permissions = original_iam
+
+        self.assertEqual(describe_calls[0][:4], ["iam", "service-accounts", "describe", self.SA])
+        self.assertEqual(iam_calls[0]["service_account"], self.SA)
+        self.assertEqual(iam_calls[0]["project_id"], "fake-project")
+        self.assertEqual(iam_calls[0]["permissions"], ("iam.serviceAccounts.actAs",))
+
+    def test_runtime_preflight_rejects_a_missing_service_account(self) -> None:
+        original_gcloud = RUNTIME_PREFLIGHT._gcloud_json
+        original_iam = RUNTIME_PREFLIGHT._test_service_account_iam_permissions
+        iam_called = False
+
+        def missing(_arguments):
+            raise RUNTIME_PREFLIGHT.RuntimePreflightError("resource not found", category="not_found")
+
+        def fake_iam(**_kwargs):
+            nonlocal iam_called
+            iam_called = True
+            raise AssertionError("testIamPermissions must not run when describe fails")
+
+        RUNTIME_PREFLIGHT._gcloud_json = missing
+        RUNTIME_PREFLIGHT._test_service_account_iam_permissions = fake_iam
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original_gcloud
+            RUNTIME_PREFLIGHT._test_service_account_iam_permissions = original_iam
+
+        self.assertFalse(iam_called)
+        self.assertEqual(len(errors), 1)
+        self.assertIn(self.SA, errors[0])
+        self.assertIn("does not exist", errors[0])
+
+    def test_runtime_preflight_rejects_missing_act_as_permission(self) -> None:
+        original_gcloud = self._stub_describe(describe=lambda _arguments: {"email": self.SA})
+        original_iam = RUNTIME_PREFLIGHT._test_service_account_iam_permissions
+
+        def fake_iam(**_kwargs):
+            return {}
+
+        RUNTIME_PREFLIGHT._test_service_account_iam_permissions = fake_iam
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original_gcloud
+            RUNTIME_PREFLIGHT._test_service_account_iam_permissions = original_iam
+
+        self.assertEqual(
+            errors,
+            [f"{self.SA}: deployer is missing permission iam.serviceAccounts.actAs"],
+        )
+
+    def test_runtime_preflight_rejects_act_as_probe_http_failure(self) -> None:
+        original_gcloud = self._stub_describe(describe=lambda _arguments: {"email": self.SA})
+        original_iam = RUNTIME_PREFLIGHT._test_service_account_iam_permissions
+
+        def fake_iam(**_kwargs):
+            raise RUNTIME_PREFLIGHT.RuntimePreflightError("IAM testIamPermissions HTTP 401", category="unknown")
+
+        RUNTIME_PREFLIGHT._test_service_account_iam_permissions = fake_iam
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original_gcloud
+            RUNTIME_PREFLIGHT._test_service_account_iam_permissions = original_iam
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn(self.SA, errors[0])
+        self.assertIn("cannot test iam.serviceAccounts.actAs", errors[0])
+        self.assertIn("HTTP 401", errors[0])
+
+    def test_test_iam_permissions_posts_to_iam_rest_without_exposing_the_token(self) -> None:
+        token = "super-secret-token-value"
+        captured: dict[str, object] = {}
+        original_token = RUNTIME_PREFLIGHT._gcloud_access_token
+        original_urlopen = RUNTIME_PREFLIGHT.urllib.request.urlopen
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return b'{"permissions":["iam.serviceAccounts.actAs"]}'
+
+        def fake_urlopen(request, timeout=None):
+            captured["url"] = request.full_url
+            captured["method"] = request.get_method()
+            captured["body"] = request.data
+            captured["authorization"] = request.get_header("Authorization")
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        RUNTIME_PREFLIGHT._gcloud_access_token = lambda: token
+        RUNTIME_PREFLIGHT.urllib.request.urlopen = fake_urlopen
+        try:
+            result = RUNTIME_PREFLIGHT._test_service_account_iam_permissions(
+                service_account=self.SA,
+                project_id="fake-project",
+                permissions=("iam.serviceAccounts.actAs",),
+            )
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_access_token = original_token
+            RUNTIME_PREFLIGHT.urllib.request.urlopen = original_urlopen
+
+        self.assertEqual(result, {"permissions": ["iam.serviceAccounts.actAs"]})
+        self.assertEqual(captured["method"], "POST")
+        self.assertEqual(captured["timeout"], 30)
+        self.assertEqual(
+            captured["url"],
+            "https://iam.googleapis.com/v1/projects/fake-project/serviceAccounts/"
+            "frontend-invoker%40fake-project.iam.gserviceaccount.com:testIamPermissions",
+        )
+        self.assertEqual(json.loads(captured["body"]), {"permissions": ["iam.serviceAccounts.actAs"]})
+        self.assertEqual(captured["authorization"], f"Bearer {token}")
+        self.assertNotIn(token, captured["url"])
+
+    def test_test_iam_permissions_token_failure_does_not_call_http(self) -> None:
+        original_token = RUNTIME_PREFLIGHT._gcloud_access_token
+        original_urlopen = RUNTIME_PREFLIGHT.urllib.request.urlopen
+        http_called = False
+
+        def fake_token():
+            raise RUNTIME_PREFLIGHT.RuntimePreflightError(
+                "gcloud auth print-access-token failed",
+                category="unauthenticated",
+            )
+
+        def fake_urlopen(*_args, **_kwargs):
+            nonlocal http_called
+            http_called = True
+            raise AssertionError("must not HTTP after token failure")
+
+        RUNTIME_PREFLIGHT._gcloud_access_token = fake_token
+        RUNTIME_PREFLIGHT.urllib.request.urlopen = fake_urlopen
+        try:
+            with self.assertRaises(RUNTIME_PREFLIGHT.RuntimePreflightError) as caught:
+                RUNTIME_PREFLIGHT._test_service_account_iam_permissions(
+                    service_account=self.SA,
+                    project_id="fake-project",
+                    permissions=("iam.serviceAccounts.actAs",),
+                )
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_access_token = original_token
+            RUNTIME_PREFLIGHT.urllib.request.urlopen = original_urlopen
+
+        self.assertFalse(http_called)
+        self.assertIn("print-access-token failed", str(caught.exception))
 
 
 if __name__ == "__main__":
