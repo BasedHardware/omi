@@ -25,7 +25,25 @@ extension RealtimeHubController {
       logScreenEvidence(
         stage: evidence.isReadyForProviderDelivery ? "encoded" : "encode_failed",
         evidence: evidence.descriptor)
+      attachTurnScreenFrameIfNeeded()
     }
+  }
+
+  /// Every Gemini turn carries the PTT-down frame as in-turn video, so the model sees the
+  /// current screen without first deciding to call `screenshot`. The frame rides the open
+  /// activity window (the session buffers it until activityStart and drops it at commit), and
+  /// is sent once per evidence per physical session so a barge-in replacement gets it again.
+  func attachTurnScreenFrameIfNeeded(session target: RealtimeHubSession? = nil) {
+    guard let live = target ?? session, sessionProvider == .gemini,
+      let evidence = screenEvidence, let jpeg = evidence.jpeg,
+      evidence.descriptor.canVerifyCurrentScreen,
+      VoiceTurnCoordinator.shared.activeTurnID == evidence.descriptor.turnID
+    else { return }
+    let key = "\(evidence.descriptor.evidenceID)|\(ObjectIdentifier(live).hashValue)"
+    guard attachedTurnScreenFrameKey != key else { return }
+    attachedTurnScreenFrameKey = key
+    live.sendVideoFrame(jpeg, mime: "image/jpeg", turnID: evidence.descriptor.turnID)
+    logScreenEvidence(stage: "turn_frame_attached", evidence: evidence.descriptor)
   }
 
   func startScreenEvidenceEncoding(_ evidence: RealtimeScreenEvidence) {

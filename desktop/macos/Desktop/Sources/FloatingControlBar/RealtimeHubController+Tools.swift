@@ -18,7 +18,14 @@ extension RealtimeHubController {
   ) async -> AuthorizedRealtimeToolExecutionResult {
     // The chat lane cannot see the screen; hand it what this turn's screenshot showed so
     // "what's the answer to this riddle?" resolves to the riddle on screen, not an earlier one.
-    let screenContext = screenContextByContinuityKey[turnIdempotencyKey]
+    // When the realtime model escalated without grounding on the image, fall back to the OCR
+    // text of the same PTT-down frame so the escalation is never blind to the current screen.
+    var screenContext = screenContextByContinuityKey[turnIdempotencyKey]
+    if screenContext == nil,
+      let ocr = await PushToTalkManager.shared.visibleScreenText(timeout: 1.5)
+    {
+      screenContext = "OCR text of the screen at the moment they pressed the key:\n\(ocr)"
+    }
     return await queryChatLaneForVoice(
       prompt: RealtimeHubTools.escalationUserPrompt(
         query: query, toolContext: toolContext, screenContext: screenContext),

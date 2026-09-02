@@ -2,6 +2,31 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.265",
+      "date": "2026-09-02",
+      "changes": [
+        "Fixed large voice-tool results so useful summaries load successfully and can be inspected in more detail.",
+        "Fixed meeting notes and daily opener cards getting stuck behind an undeliverable Chat item",
+        "Redesigned the first-use popup: pick what to try first (a game, design feedback, a post, shopping) and Try it now opens that site",
+        "The first-use popup previews are back to the drawn pages, with the site name larger at the top",
+        "Omi can ask users who never got going to walk through onboarding again on their next launch"
+      ]
+    },
+    {
+      "version": "0.12.260",
+      "date": "2026-09-02",
+      "changes": [
+        "Onboarding door 3 hint asks the question directly instead of telling Omi to check screen history, which is not searchable yet that early in onboarding"
+      ]
+    },
+    {
+      "version": "0.12.259",
+      "date": "2026-09-02",
+      "changes": [
+        "Voice questions about what is on screen now always see the current screen: the frame captured when you press the key is attached to every turn, and think-deeper answers read its text too"
+      ]
+    },
+    {
       "version": "0.12.258",
       "date": "2026-09-02",
       "changes": [

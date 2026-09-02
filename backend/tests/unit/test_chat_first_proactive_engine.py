@@ -48,6 +48,10 @@ def _trigger():
     return engine.ProactiveWakeTrigger(kind='goal_changed', subject=SUBJECT, continuity_key='goal-1-complete')
 
 
+def _empty_release_batch(*args, **kwargs):
+    return engine.intent_db.DeferralReleaseBatch(intents=[], malformed_count=0)
+
+
 def _question():
     return QuestionCardSpec(
         type='questionCard',
@@ -66,7 +70,7 @@ def test_cold_start_decision_table_requires_both_canonical_facts():
 
 
 def test_sparse_cold_start_suppresses_agent_tier_without_calling_the_judge(monkeypatch):
-    monkeypatch.setattr(engine.intent_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(engine.intent_db, 'release_due_deferrals', _empty_release_batch)
     monkeypatch.setattr(engine.intent_db, 'has_active_sparse_cold_start_sequence', lambda *args, **kwargs: True)
     monkeypatch.setattr(
         engine.intent_db,
@@ -88,7 +92,7 @@ def test_sparse_cold_start_suppresses_agent_tier_without_calling_the_judge(monke
 
 
 def test_agent_judgment_cannot_mint_a_conversation_link(monkeypatch):
-    monkeypatch.setattr(engine.intent_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(engine.intent_db, 'release_due_deferrals', _empty_release_batch)
     monkeypatch.setattr(
         engine.intent_db,
         'admit_agent_judgment',
@@ -402,7 +406,7 @@ def test_capture_arrival_failure_logs_redact_authenticated_uid(monkeypatch, capl
 
 
 def test_exhausted_budget_short_circuits_before_judge(monkeypatch):
-    monkeypatch.setattr(engine.intent_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(engine.intent_db, 'release_due_deferrals', _empty_release_batch)
     monkeypatch.setattr(
         engine.intent_db,
         'admit_agent_judgment',
@@ -428,7 +432,7 @@ def test_exhausted_budget_short_circuits_before_judge(monkeypatch):
 
 
 def test_empty_judgment_declines_without_consuming_or_creating(monkeypatch):
-    monkeypatch.setattr(engine.intent_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(engine.intent_db, 'release_due_deferrals', _empty_release_batch)
     monkeypatch.setattr(
         engine.intent_db,
         'admit_agent_judgment',
@@ -462,7 +466,7 @@ def test_empty_judgment_declines_without_consuming_or_creating(monkeypatch):
 
 def test_agent_admission_happens_before_the_judge_and_duplicate_wake_stays_quiet(monkeypatch):
     events = []
-    monkeypatch.setattr(engine.intent_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(engine.intent_db, 'release_due_deferrals', _empty_release_batch)
     monkeypatch.setattr(
         engine.intent_db,
         'admit_agent_judgment',

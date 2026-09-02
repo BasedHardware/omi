@@ -59,13 +59,14 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => ChatPageState();
 }
 
-class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
+class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   TextEditingController textController = TextEditingController();
   late ScrollController scrollController;
   late FocusNode textFieldFocusNode;
 
   bool _isInitialLoad = true;
   bool _hasInitialScrolled = false;
+  double _lastBottomInset = 0;
   MessageProvider? _messageProvider;
 
   ChatScrollMode _chatScrollMode = ChatScrollMode.followingBottom;
@@ -92,6 +93,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   @override
   void initState() {
+    WidgetsBinding.instance.addObserver(this);
     apps = prefs.appsList;
     scrollController = ScrollController();
     textFieldFocusNode = FocusNode();
@@ -177,8 +179,24 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     }
   }
 
+  /// The keyboard shrinks the viewport after the initial jump to the bottom,
+  /// which leaves the transcript parked mid-way (the list keeps its pixel offset
+  /// while maxScrollExtent grows). Re-pin to the live edge on every inset change
+  /// while the reader is following, so opening chat always lands on the last
+  /// message regardless of keyboard animation timing.
+  @override
+  void didChangeMetrics() {
+    final view = View.of(context);
+    final bottomInset = view.viewInsets.bottom / view.devicePixelRatio;
+    if ((bottomInset - _lastBottomInset).abs() < 1) return;
+    _lastBottomInset = bottomInset;
+    if (_chatScrollMode != ChatScrollMode.followingBottom) return;
+    _schedulePostFrameModeAwareScroll();
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _messageProvider?.removeListener(_onMessageProviderChanged);
     _cancelPendingScrolls();
     textController.dispose();

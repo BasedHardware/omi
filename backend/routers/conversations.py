@@ -30,16 +30,17 @@ from models.conversation import (
     SearchRequest,
     SetConversationActionItemsStateRequest,
     SetConversationEventsStateRequest,
+    SharedConversationResponse,
     TestPromptRequest,
     TranscriptMatchSnippet,
     UpdateActionItemDescriptionRequest,
     UpdateSegmentTextRequest,
     UpdateSummaryRequest,
+    project_shared_conversation,
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
-from utils.conversations.render import conversation_to_dict
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
     merge_typesense_page_with_transcript_hits,
@@ -283,12 +284,6 @@ class ConversationsCountResponse(BaseModel):
 
 class ConversationRecordingResponse(BaseModel):
     has_recording: bool
-
-
-class SharedConversationResponse(Conversation):
-    model_config = {"extra": "allow"}
-
-    people: List[Person] = []
 
 
 class ConversationSuggestedAppsResponse(BaseModel):
@@ -1634,14 +1629,6 @@ def get_shared_conversation_by_id(conversation_id: str):
     if not visibility or visibility == ConversationVisibility.private:
         raise HTTPException(status_code=404, detail="Conversation is private")
     conversation = deserialize_conversation(conversation)
-    # This endpoint is public and unauthenticated. Strip fields that are internal
-    # to the owner and never part of the shared transcript/summary the user chose
-    # to publish: precise geolocation, the server-side encryption tier, and
-    # external_data (which carries merge provenance — other conversation ids — and
-    # integration metadata).
-    conversation.geolocation = None
-    conversation.data_protection_level = None
-    conversation.external_data = None
 
     # Fetch people data for speaker names
     person_ids = conversation.get_person_ids()
@@ -1650,10 +1637,10 @@ def get_shared_conversation_by_id(conversation_id: str):
         people_data = users_db.get_people_by_ids(uid, person_ids)
         people = [Person(**p) for p in people_data]
 
-    # Return conversation with people data
-    response_dict = conversation_to_dict(conversation)
-    response_dict['people'] = [p.model_dump() for p in people]
-    return response_dict
+    # Public unauthenticated surface: return only the explicit allowlist.
+    # SharedConversationResponse does not inherit Conversation and ignores extras,
+    # so new Conversation fields and stored-document keys stay off this response.
+    return project_shared_conversation(conversation, people)
 
 
 class ConversationTopicRequest(BaseModel):

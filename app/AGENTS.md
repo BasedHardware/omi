@@ -6,7 +6,7 @@ Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds 
 
 ### Flavors
 - **dev**: Android `com.friend.ios.dev`, iOS `com.friend-app-with-wearable.ios12.development` — uses `.dev.env`, Firebase project `based-hardware-dev`
-- **prod**: Android `com.friend.ios`, iOS `com.friend-app-with-wearable.ios12` — uses `.prod.env`, Firebase project `based-hardware-prod`
+- **prod**: Android `com.friend.ios`, iOS `com.friend-app-with-wearable.ios12` — uses `.env`, Firebase project `based-hardware-prod`
 - **raybanDat**: camera-capable iOS target with the same iOS development identity; use `scripts/rayban_dat.sh`, which excludes mcumgr only for that transaction and restores the default graph.
 
 ### Generated Files (never edit manually)
@@ -23,6 +23,11 @@ Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds 
 bash setup.sh ios    # or: bash setup.sh android
 ```
 This handles: pub get, build_runner, gen-l10n, and flavor configuration.
+
+For physical-device builds, use the wrapper: it owns `dev + local_dev` and
+`prod + mobile_beta` pairing plus auth env setup. Direct builds must first run
+`scripts/validate_mobile_build_config.sh --flavor <dev|prod> --profile <profile>`
+with the matching `OMI_APP_PROFILE`; release/profile helpers do this too.
 
 ### Firebase Config
 Never run `flutterfire configure` — it overwrites prod credentials. Config files:

@@ -53,8 +53,6 @@ extension RealtimeHubController {
       return
     }
     toolEffectIdentityByTransportKey.removeValue(forKey: key)
-    DesktopDiagnosticsManager.shared.finishVoiceToolLatency(
-      key: key, toolName: name, provider: providerTag, resultBytes: output.utf8.count)
     let turnID = VoiceTurnID(identity.generation)
     let deferredScreenProtocol =
       name == HubTool.screenshot.rawValue
@@ -79,12 +77,14 @@ extension RealtimeHubController {
       provider: effectiveProvider,
       name: name,
       output: output)
-    if providerResult.wasOversized {
+    DesktopDiagnosticsManager.shared.finishVoiceToolLatency(
+      key: key, toolName: name, provider: providerTag, resultBytes: providerResult.originalByteCount)
+    if providerResult.wasTruncated {
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "realtime_hub",
         from: "tool_result_full",
-        to: "tool_result_error",
-        reason: "capability_mismatch",
+        to: "tool_result_bounded_projection",
+        reason: "provider_budget",
         outcome: .degraded,
         extra: [
           "tool": name,
@@ -92,6 +92,13 @@ extension RealtimeHubController {
           "provider_bytes": providerResult.output.utf8.count,
           "user_visible": true,
         ])
+    }
+    if providerResult.wasOversized && !providerResult.hasCanonicalEnvelope {
+      log(
+        "RealtimeHub[\(providerTag)]: INVARIANT VIOLATION unprojected tool result \(name) "
+          + "original_bytes=\(providerResult.originalByteCount) provider_bytes=\(providerResult.output.utf8.count) "
+          + "limit=\(RealtimeProviderToolResultPolicy.maximumByteCount)"
+      )
     }
     log(
       "RealtimeHub[\(providerTag)]: tool result \(name) raw_bytes=\(providerResult.originalByteCount) "

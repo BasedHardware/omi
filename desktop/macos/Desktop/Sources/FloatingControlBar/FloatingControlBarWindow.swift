@@ -4012,36 +4012,12 @@ class FloatingControlBarManager {
 
   /// Open the floating conversation surface. Harness/automation-only entry:
   /// every user-facing typed-input path now opens the main app instead.
+  /// "Ask Omi" lands in the main chat. The notch is not a text surface: it shows answers,
+  /// notifications and agent pills, and typed conversation belongs to the main window. This used to
+  /// open a composer inside the notch.
   func openAIInput() {
-    guard let window = window else { return }
-
-    // The bar is a non-activating panel, so it can become key for text input
-    // without surfacing the main Omi window.
-
-    // If a conversation is already showing, just focus the follow-up input
-    if window.state.showingAIConversation && window.state.showingAIResponse {
-      if !window.isVisible {
-        // Show without persisting enabled state — bar hides again when conversation closes
-        window.makeKeyAndOrderFront(nil)
-      }
-      window.makeKeyAndOrderFront(nil)
-      window.focusInputField()
-      return
-    }
-
     AnalyticsManager.shared.floatingBarAskOmiOpened(source: "shortcut")
-    if !window.isVisible {
-      // Show window without persisting enabled state — if the user has the bar
-      // disabled, it will hide again when the AI conversation closes.
-      window.makeKeyAndOrderFront(nil)
-    }
-
-    if openRecentNotificationConversationIfAvailable(in: window) {
-      return
-    }
-
-    window.showAIConversation()
-    window.orderFrontRegardless()
+    AppDelegate.summonWindowTarget()?.openMainAppChat()
   }
 
   /// Open AI input with a pre-filled query and auto-send (used by PTT).

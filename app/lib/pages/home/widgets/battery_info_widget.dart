@@ -291,9 +291,6 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
             decoration: BoxDecoration(
               color: isRecording ? Colors.red.shade700 : Colors.deepPurple,
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 6)),
-              ],
             ),
             child: isRecording
                 ? const Icon(Icons.stop_rounded, size: 24, color: Colors.white)

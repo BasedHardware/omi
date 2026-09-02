@@ -304,6 +304,43 @@ final class ChatCitationTests: XCTestCase {
       [original])
   }
 
+  func testDesktopChatTypedToolResultRoundTripsCitationLedger() throws {
+    let typed = ChatToolExecutor.typedReadToolResult(
+      toolName: "search_conversations",
+      sections: [
+        [
+          "name": "conversations",
+          "total": 1,
+          "items": [
+            [
+              "title": "Planning call",
+              "summary": "The team agreed to ship",
+              "sourceId": "conversation-7",
+              "citationMarker": "[7]",
+              "momentTimestampMs": 1_786_648_000_000,
+              "createdAt": "2026-08-13T15:00:00-04:00",
+              "appName": "Omi",
+            ]
+          ],
+        ]
+      ],
+      totals: ["conversations": 1])
+
+    XCTAssertEqual(
+      ChatCitationProvenanceRegistry.references(fromAnnotatedToolOutput: typed),
+      [
+        ChatCitationReference(
+          ordinal: 7,
+          kind: .conversation,
+          sourceID: "conversation-7",
+          title: "Planning call",
+          preview: "The team agreed to ship",
+          momentTimestampMs: 1_786_648_000_000,
+          createdAt: "2026-08-13T15:00:00-04:00",
+          appName: "Omi")
+      ])
+  }
+
   func testOpenabilityIsStrictlyTyped() {
     XCTAssertFalse(
       ChatCitationReference(
