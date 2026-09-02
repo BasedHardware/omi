@@ -100,6 +100,7 @@ let package = Package(
         "VoiceTurnDomain",
         "Bluetooth/ARCHITECTURE.md",
         "FloatingControlBar/ARCHITECTURE.md",
+        "MainWindow/Pages/MemoryGraph/ARCHITECTURE.md",
       ],
       resources: [
         .process("GoogleService-Info.plist"),
