@@ -10,7 +10,6 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationCardLead.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationJournalCopy.swift
   - desktop/macos/Desktop/Sources/MainWindow/ClickThroughView.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/AskAIInputView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/CursorScreenTracker.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/DelayedActionScheduler.swift
