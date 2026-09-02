@@ -178,6 +178,7 @@ extension SBOnboardingModel {
       title: "Aurora desk lamp",
       message: "Return window closes \(scenarioPageContext.returnDateText)",
       assistantId: "onboarding_scenario",
+      kind: .insight,
       action: .onboardingRemindMe(
         taskTitle: "Return the desk lamp if it's not right",
         dueDate: dueDate),
@@ -214,7 +215,7 @@ extension SBOnboardingModel {
         guard let self, let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
           let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
         else { return }
-        if await OnboardingScenarioWrites.createActionItem(
+        if let taskID = await OnboardingScenarioWrites.createActionItem(
           title: title, dueDate: dueDate, ownerID: ownerID, authorization: authorization)
         {
           guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
@@ -225,6 +226,8 @@ extension SBOnboardingModel {
           self.appendReceipt(.task(title))
           OnboardingScenarioJournal().append(who: "system", text: "Created task: \(title)")
           self.presentReminderConfirmationCard()
+          await OnboardingScenarioWrites.journalTaskCard(
+            taskID: taskID, title: title, chatProvider: self.chatProvider, ownerID: ownerID)
         } else {
           OnboardingScenarioJournal().append(who: "system", text: "The reminder task could not be saved")
         }
@@ -572,13 +575,15 @@ extension SBOnboardingModel {
       let dueDate = scenarioDates.atNineAM(scenarioDates.deliveryDate)
       Task { [weak self] in
         guard let self, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
-        if await OnboardingScenarioWrites.createActionItem(
+        if let taskID = await OnboardingScenarioWrites.createActionItem(
           title: taskTitle, dueDate: dueDate, ownerID: ownerID, authorization: authorization)
         {
           guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
           self.scenarioWriteReceipts.insert("task:\(taskTitle)")
           self.persistScenarioProgress()
           OnboardingScenarioJournal().append(who: "system", text: "Created task: \(taskTitle)")
+          await OnboardingScenarioWrites.journalTaskCard(
+            taskID: taskID, title: taskTitle, chatProvider: self.chatProvider, ownerID: ownerID)
         }
       }
     }

@@ -4669,6 +4669,10 @@ class FloatingControlBarManager {
       // instructions for the moment, not observations; in the chat history they read as Omi
       // narrating its own onboarding to the user.
       !FirstRunNotchCardIdentity.isGuide(notification),
+      // Transient first-run receipts ("✓ Reminder set", "✓ Task: …", "✓ That's the loop") are
+      // read at the notch and gone; the durable chat record for a task is the task card the
+      // onboarding journals itself, which the user can check off.
+      !(FirstRunNotchCardIdentity.isFirstRunCard(notification) && !notification.isPersistent),
       let provider = historyChatProvider
     else { return }
     let surface = provider.mainChatSurfaceReference()
