@@ -94,3 +94,76 @@ test('session probe settles from auth alone when native devices are unavailable'
   expect(hook.latest().onboardingRequired).toBe(false);
   expect(hook.latest().onboardingRequired).not.toBeNull();
 });
+
+test('a real sign-in records onboarding completion and leaves Welcome', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  mockAuth.signIn.mockResolvedValue({signedIn: true});
+  const refreshReads = jest.fn(async () => undefined);
+
+  const hook = await renderOnboarding(true, refreshReads);
+  expect(hook.latest().onboardingRequired).toBe(true);
+
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().completeFirstRun();
+  });
+
+  expect(mockAuth.signIn).toHaveBeenCalledTimes(1);
+  expect(mockAuth.markOnboardingComplete).toHaveBeenCalledTimes(1);
+  expect(hook.latest().onboardingRequired).toBe(false);
+  expect(refreshReads).toHaveBeenCalledWith(false);
+});
+
+test('a cancelled sign-in stays on Welcome without faking a session', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  mockAuth.signIn.mockResolvedValue({signedIn: false});
+  const refreshReads = jest.fn(async () => undefined);
+
+  const hook = await renderOnboarding(true, refreshReads);
+
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().signInAndRefresh();
+  });
+
+  expect(mockAuth.markOnboardingComplete).not.toHaveBeenCalled();
+  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(refreshReads).not.toHaveBeenCalled();
+});
+
+test('a rejected sign-in stays on Welcome and stops the busy flag', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  mockAuth.signIn.mockRejectedValue(new Error('OMI_AUTH_UNAUTHORIZED'));
+  const refreshReads = jest.fn(async () => undefined);
+
+  const hook = await renderOnboarding(true, refreshReads);
+
+  await ReactTestRenderer.act(async () => {
+    await hook
+      .latest()
+      .signInAndRefresh()
+      .catch(() => undefined);
+  });
+
+  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(hook.latest().signingIn).toBe(false);
+});
+
+test('sign-out returns the desktop to Welcome', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValueOnce(true).mockResolvedValue(false);
+  mockAuth.signOut.mockResolvedValue({signedOut: true});
+  const refreshReads = jest.fn(async () => undefined);
+
+  const hook = await renderOnboarding(true, refreshReads);
+  expect(hook.latest().onboardingRequired).toBe(false);
+
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().signOutAndRefresh();
+  });
+
+  expect(mockAuth.signOut).toHaveBeenCalledTimes(1);
+  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(refreshReads).toHaveBeenCalledWith(false);
+});
