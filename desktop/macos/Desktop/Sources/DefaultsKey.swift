@@ -174,6 +174,13 @@ struct ScopedDefaultsKey {
     Self(rawValue: "integrationNudgeBudget.v1.\(field).\(ownerID)")
   }
 
+  /// Owner-scoped id of the newest daily summary the owner has already been shown a notch card
+  /// for. Desktop receives no `daily_summary` push, so this is what keeps the announcement at
+  /// most once per summary, and per account on a shared Mac.
+  static func dailySummaryLastSeenID(ownerID: String) -> Self {
+    Self(rawValue: "dailySummary.lastSeenID.v1.\(ownerID)")
+  }
+
   static func importConnectorAvailabilityText(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
   }
@@ -212,6 +219,7 @@ extension UserDefaults {
   func bool(forKey key: DefaultsKey) -> Bool { bool(forKey: key.rawValue) }
   func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
   func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
+  func string(forKey key: ScopedDefaultsKey) -> String? { string(forKey: key.rawValue) }
   func data(forKey key: ScopedDefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: ScopedDefaultsKey) -> Bool { bool(forKey: key.rawValue) }
   func integer(forKey key: ScopedDefaultsKey) -> Int { integer(forKey: key.rawValue) }

@@ -379,6 +379,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   var timelineTrailingInset: CGFloat = 0
   /// Narrow sidebars (task chat) keep the rail off so it cannot sit on the text.
   var enablesPromptTimeline: Bool = true
+  /// Draws the daily summary above the transcript. On for the main chat in both shells — it is the
+  /// surface the app opens on, and the summary is a read the user should meet without navigating
+  /// to it. Task chat opts out: that thread is about one task, not about the day.
+  var showsDailySummary: Bool = true
   @ViewBuilder var welcomeContent: () -> WelcomeContent
 
   // MARK: - Scroll State
@@ -558,6 +562,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // important optimization here.
       VStack(spacing: OmiSpacing.lg) {
         loadMoreButton
+        // Chrome, above the thread — not a message. It renders once, at the top, whether or not
+        // the transcript has rows, and it records no turn (INV-CHAT-1).
+        if showsDailySummary {
+          ChatDailySummaryCard()
+        }
         messageContent
       }
       // **The transcript owns the assistant mark's gutter, not its host.** The
