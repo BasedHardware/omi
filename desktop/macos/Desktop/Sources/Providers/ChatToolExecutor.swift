@@ -2442,8 +2442,8 @@ class ChatToolExecutor {
     appState?.hasNotificationPermission = notificationsGranted
     appState?.hasAccessibilityPermission = accessibilityGranted
     appState?.isAccessibilityBroken = accessibilityProjection.isBroken
-    appState?.hasAutomationPermission = automationStatus == noErr
-    appState?.automationPermissionError = automationPermissionError(for: automationStatus)
+    // `-600` is "System Events unreachable", not an answer about the grant (see accessibility above).
+    let automationGranted = appState?.applyAutomationPermissionStatus(automationStatus) ?? (automationStatus == noErr)
     appState?.hasFullDiskAccess = fullDiskAccessGranted
 
     return onboardingPermissionStatusPayload(
@@ -2451,7 +2451,7 @@ class ChatToolExecutor {
       microphone: microphoneGranted,
       notifications: notificationsGranted,
       accessibility: accessibilityGranted,
-      automation: automationStatus == noErr,
+      automation: automationGranted,
       fullDiskAccess: fullDiskAccessGranted
     )
   }
