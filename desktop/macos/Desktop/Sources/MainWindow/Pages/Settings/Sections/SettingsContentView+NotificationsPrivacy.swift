@@ -44,11 +44,16 @@ extension SettingsContentView {
               settingId: "notifications.snooze"
             ) {
               Menu {
-                // Driven by the same constant the snooze tests assert against, so the menu
-                // and the service cannot drift apart the way three literals here would.
-                ForEach(NotificationService.snoozeDurations, id: \.label) { duration in
-                  Button(duration.label) { applyNotificationSnooze(duration.seconds) }
-                }
+                // Knowingly duplicated from `NotificationService.snoozeDurations`, and not
+                // guarded by a test: `testOfferedDurationsAreSaneAndAscending` checks that
+                // constant alone, so these three can drift from it silently. The obvious fix
+                // — a ForEach over the constant — was tried and reverted: this file feeds the
+                // release-mode whole-module compile, which already burns ~51 min of a 60 min
+                // job cap, and the added ViewBuilder work tipped the job over. Change both
+                // places together until that job has margin to spare.
+                Button("For 1 hour") { applyNotificationSnooze(60 * 60) }
+                Button("For 4 hours") { applyNotificationSnooze(4 * 60 * 60) }
+                Button("For 8 hours") { applyNotificationSnooze(8 * 60 * 60) }
                 Button("Until tomorrow") {
                   NotificationService.snoozeNotificationsUntilTomorrow()
                   notificationsSnoozedUntil = NotificationService.currentSnoozeExpiry()
