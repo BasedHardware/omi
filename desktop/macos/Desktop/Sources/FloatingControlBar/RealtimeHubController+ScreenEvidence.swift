@@ -541,7 +541,7 @@ extension RealtimeHubController {
     terminalProperties["failure_kind"] = Self.screenEvidenceFailureKind(evidence)
     // The same id `question_asked` / `question_answered` carry for this turn, so the local
     // failure (which terminalizes the turn as success) can be joined and reclassified downstream.
-    if let turnID = evidence?.descriptor.turnID ?? VoiceTurnCoordinator.shared.activeTurnID {
+    if let turnID = evidence?.turnID ?? VoiceTurnCoordinator.shared.activeTurnID {
       terminalProperties["attempt_id"] = turnID.description
     }
     DesktopDiagnosticsManager.shared.recordScreenEvidenceTerminal(properties: terminalProperties)
