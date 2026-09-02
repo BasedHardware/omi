@@ -57,6 +57,14 @@ enum DefaultsKey: String {
   /// Settings removes the marker. Never written `false`.
   case launchAtLoginUserDeclined = "launchAtLoginUserDeclined"
   case hasCompletedOnboarding = "hasCompletedOnboarding"
+  /// Three-state marker for the one-time first-real-app tap-to-ask card
+  /// (`FirstRealAppCardState`): absent = this build has never looked at this
+  /// install, `pending` = a fresh install still owes the card, `consumed` = it
+  /// fired, or the install gate retired it for a user who was already onboarded
+  /// when this build arrived. A `Bool` cannot express the first state, and
+  /// conflating "never written" with `false` is the exact ambiguity that made
+  /// the launch-at-login V1 migration re-enable a setting the user turned off.
+  case firstRealAppCardState = "firstRealAppCardState"
   case onboardingStep = "onboardingStep"
   case onboardingFurthestStep = "onboardingFurthestStep"
   case onboardingMemoryImportOwnerUserId = "onboardingMemoryImportOwnerUserID"

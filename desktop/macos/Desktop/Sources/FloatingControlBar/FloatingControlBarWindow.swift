@@ -4439,6 +4439,11 @@ class FloatingControlBarManager {
       // have nothing to resolve.
       MeetingSummaryShareActions.openSummary(conversationID: conversationID)
       return
+    case .askOmiPrefilled(let prompt):
+      // The one "ask this" entry that leaves the send to the user: the composer
+      // opens focused with the question in it, unsent.
+      FirstRealAppCardCoordinator.shared.handleCardTapped(prompt: prompt)
+      return
     case nil:
       break
     }
