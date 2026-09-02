@@ -65,6 +65,7 @@ from models.user_usage import UserUsageResponse, UsagePeriod
 from datetime import datetime, time, timedelta
 
 from models.users import (
+    TranscriptionAllowanceSnapshot,
     ChatUsageQuota,
     ChatQuotaUnit,
     WebhookType,
@@ -84,6 +85,7 @@ from models.users import (
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
+    resolve_transcription_allowance,
     request_has_llm_byok_key,
     enforce_chat_quota,
     get_chat_quota_snapshot,
@@ -1188,14 +1190,37 @@ def get_user_subscription_endpoint(
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
 ):
-    """Gets the user's subscription plan and usage."""
+    """Gets the user's subscription plan and usage, plus the one transcription-allowance answer."""
+    already_read: dict[str, Any] = {}
+    response = _user_subscription_response(uid, x_app_platform, x_app_version, already_read)
+    # The same resolver the listen socket enforces, so the client's startup
+    # snapshot and the server's gate cannot disagree about which STT mode to
+    # open. `X-App-Platform` plays the listen `source` role for the paywall,
+    # and the subscription/usage the snapshot already read are reused.
+    allowance = resolve_transcription_allowance(uid, source=x_app_platform, **already_read)
+    response.transcription_allowance = TranscriptionAllowanceSnapshot(**allowance.as_dict())
+    return response
+
+
+def _user_subscription_response(
+    uid: str, x_app_platform: Optional[str], x_app_version: Optional[str], already_read: dict[str, Any]
+) -> UserSubscriptionResponse:
+    """The subscription/usage snapshot, unchanged; the endpoint decorates it.
+
+    ``already_read`` receives the BYOK enrolment, the valid subscription
+    (``None`` when there is none) and the monthly usage this snapshot reads,
+    so the allowance is resolved from the same reads rather than repeating
+    them.
+    """
     # BYOK free plan: unlimited chat/insights only for a validated LLM-capability
     # key (same predicate as enforce_chat_quota). Deepgram-only does not unlock this.
     # Synthetic paid-tier quota for BYOK / marketplace-reviewer overrides so
     # these users aren't surprised by a disabled phone-call feature.
     unlimited_phone_quota = PhoneCallQuota(has_access=True, is_paid=True)
 
-    if users_db.is_byok_active(uid) and request_has_llm_byok_key():
+    byok_active = users_db.is_byok_active(uid)
+    already_read['byok_active'] = byok_active
+    if byok_active and request_has_llm_byok_key():
         # Snapshot split: a validated LLM key unlocks unlimited chat/insights, but
         # backend transcription credits still flow through Omi's Deepgram, so the
         # transcription/words fields stay metered on the free tier unless this
@@ -1215,6 +1240,7 @@ def get_user_subscription_endpoint(
                 phone_call_quota=unlimited_phone_quota,
             )
         usage = get_monthly_usage_for_subscription(uid)
+        already_read['usage'] = dict(usage) if isinstance(usage, dict) else usage
         basic_limits = get_basic_plan_limits()
         return UserSubscriptionResponse(
             subscription=_byok_unlimited_subscription(
@@ -1263,6 +1289,10 @@ def get_user_subscription_endpoint(
 
     # Then re-evaluate using our normal "valid subscription" semantics.
     subscription = get_user_valid_subscription(uid)
+    # A copy: this object is remapped below for legacy clients (operator -> unlimited,
+    # wire_plan_for_client), and the allowance must be resolved for the plan that is
+    # actually subscribed, not the one the client is shown.
+    already_read['subscription'] = subscription.model_copy() if subscription else None
     if not subscription:
         # Return default basic plan if no valid subscription
         subscription = get_default_basic_subscription()
@@ -1291,6 +1321,7 @@ def get_user_subscription_endpoint(
 
     # Get current usage
     usage = get_monthly_usage_for_subscription(uid)
+    already_read['usage'] = dict(usage) if isinstance(usage, dict) else usage
 
     # Calculate usage metrics
     transcription_seconds_used = usage.get('transcription_seconds', 0)

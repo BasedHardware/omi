@@ -4213,6 +4213,12 @@ export interface TranscriptSegment {
   translations?: Array<Translation> | null;
 }
 
+export interface TranscriptionAllowanceSnapshot {
+  mode: string;
+  reason?: string;
+  remaining_seconds?: number | null;
+}
+
 export interface TranscriptionErrorDetail {
   error: string;
   message: string;
@@ -4490,6 +4496,7 @@ export interface UserSubscriptionResponse {
   phone_call_quota?: PhoneCallQuota | null;
   show_subscription_ui?: boolean;
   subscription: Subscription;
+  transcription_allowance?: TranscriptionAllowanceSnapshot | null;
   transcription_seconds_limit: number;
   transcription_seconds_used: number;
   words_transcribed_limit: number;
@@ -5263,6 +5270,7 @@ export interface OmiApiSchemas {
   "TrainingDataOptInResponse": TrainingDataOptInResponse;
   "TranscriptMatchSnippet": TranscriptMatchSnippet;
   "TranscriptSegment": TranscriptSegment;
+  "TranscriptionAllowanceSnapshot": TranscriptionAllowanceSnapshot;
   "TranscriptionErrorDetail": TranscriptionErrorDetail;
   "TranscriptionErrorResponse": TranscriptionErrorResponse;
   "TranscriptionOutcome": TranscriptionOutcome;
