@@ -2,11 +2,12 @@ version: 2
 name: chat-quota-banner
 tier: 2
 description: >-
-  The chat-quota warning appears above the composer at 75%, 90% and 100% of the plan
-  allowance, states the count and the reset, and says the right thing for the plan's
-  exhaustion policy. The same run proves the send gate: an overage plan past its
-  allowance is still allowed to send, because the backend serves and bills it, while a
-  hard-capped plan past its allowance is blocked.
+  The chat-quota warning appears at 75%, 90% and 100% of the plan allowance, states the
+  count and the reset, and says the right thing for the plan's exhaustion policy. Steps
+  assert both what the model derives and what the mounted banner actually rendered. The
+  run also reads the pre-send gate's own verdict for each seeded plan -- allowed past
+  the allowance on an overage plan, blocked on a hard-capped one -- without sending a
+  query itself; the send paths are covered by FloatingBarUsageLimiterTests.
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatQuotaBanner.swift
@@ -56,6 +57,9 @@ steps:
       result.detail.banner_title: "75% of your monthly limit"
       result.detail.banner_message:
         contains: "375 of 500 Operator questions used"
+      # The mounted view, not just the arithmetic behind it.
+      result.detail.rendered_banner_threshold: "75"
+      result.detail.rendered_banner_title: "75% of your monthly limit"
 
   - id: S5
     name: Crossing 90% replaces it with the second warning
@@ -75,6 +79,8 @@ steps:
     expect:
       result.detail.banner_threshold: "90"
       result.detail.banner_title: "90% of your monthly limit"
+      result.detail.rendered_banner_threshold: "90"
+      result.detail.rendered_banner_title: "90% of your monthly limit"
 
   - id: S7
     name: At the allowance an overage plan is told it is now billing, not blocked
@@ -94,6 +100,7 @@ steps:
     expect:
       result.detail.banner_threshold: "100"
       result.detail.banner_title: "Now billing overage"
+      result.detail.rendered_banner_title: "Now billing overage"
       result.detail.is_limit_reached: "false"
 
   - id: S9
@@ -114,6 +121,7 @@ steps:
     expect:
       result.detail.banner_threshold: "100"
       result.detail.banner_title: "Monthly limit reached"
+      result.detail.rendered_banner_title: "Monthly limit reached"
       result.detail.banner_message:
         contains: "Upgrade to keep chatting"
       result.detail.is_limit_reached: "true"

@@ -72,6 +72,26 @@ final class ChatQuotaBannerTests: XCTestCase {
     XCTAssertNil(shown, "a dollar quota must not be advanced by counting sends")
   }
 
+  func testCostQuotaWarnsWithDollarCopyAtAThreshold() throws {
+    // The only surface that states dollars rather than questions, and the
+    // branch the nil-below-threshold case above can never reach.
+    let shown = try XCTUnwrap(
+      try banner(used: 310, limit: 400, plan: "Architect", unit: "cost_usd"))
+    XCTAssertEqual(shown.threshold, 75)
+    XCTAssertEqual(
+      shown.message, "$310.00 of your $400 Architect monthly spend used. Resets in 11 days.")
+  }
+
+  func testCostQuotaAtItsLimitStillBillsOverage() throws {
+    let shown = try XCTUnwrap(
+      try banner(used: 400, limit: 400, plan: "Architect", unit: "cost_usd"))
+    XCTAssertEqual(shown.title, "Now billing overage")
+    XCTAssertEqual(
+      shown.message,
+      "$400.00 of your $400 Architect monthly spend used. Extra usage is billed at the end of "
+        + "your cycle. Resets in 11 days.")
+  }
+
   func testUnlimitedQuotaNeverWarns() throws {
     XCTAssertNil(try banner(used: 9_000, limit: nil, plan: "Free (BYOK)"))
   }

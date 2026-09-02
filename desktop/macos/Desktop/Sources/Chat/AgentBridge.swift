@@ -1676,6 +1676,18 @@ actor AgentBridge {
 
     let usesManagedCloud = session.profile.credentialScope == .managedCloud
     if usesManagedCloud {
+      // Refresh before the cached verdict is applied, not after it: a blocking
+      // snapshot must never be the reason it is itself never re-fetched. When
+      // the throw came first, upgrading an exhausted plan left this cache
+      // denying every send with no path back.
+      Task { [weak self, authorization] in
+        if let quota = await APIClient.shared.fetchChatUsageQuota(
+          authorizationSnapshot: authorization)
+        {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+          await self?.cacheQuota(quota, authorizationSnapshot: authorization)
+        }
+      }
       if let cached = currentQuota(for: authorization), !cached.allowed, cached.isOveragePlan != true {
         QueryTracerContext.current?.mark("quota_check", metadata: ["result": "exceeded_cached"])
         throw BridgeError.quotaExceeded(
@@ -1687,14 +1699,6 @@ actor AgentBridge {
         )
       }
       QueryTracerContext.current?.mark("quota_check", metadata: ["mode": "optimistic"])
-      Task { [weak self, authorization] in
-        if let quota = await APIClient.shared.fetchChatUsageQuota(
-          authorizationSnapshot: authorization)
-        {
-          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
-          await self?.cacheQuota(quota, authorizationSnapshot: authorization)
-        }
-      }
     }
 
     let requestId = UUID().uuidString

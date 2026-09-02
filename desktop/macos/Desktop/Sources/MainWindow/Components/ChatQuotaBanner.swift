@@ -165,3 +165,19 @@ final class ChatQuotaBannerDismissals: ObservableObject {
     return .chatQuotaBannerDismissals(ownerHash: String(digest.prefix(24)))
   }
 }
+
+/// What the banner view last rendered, for the automation bridge.
+///
+/// `ChatQuotaBanner.current` says what *should* show; this says what a mounted
+/// `ChatQuotaBannerView.Slot` actually put on screen. An e2e flow asserting only
+/// the former proves the arithmetic and nothing about the surface.
+@MainActor
+final class ChatQuotaBannerPresentation {
+  static let shared = ChatQuotaBannerPresentation()
+
+  private(set) var rendered: ChatQuotaBanner?
+
+  func record(_ banner: ChatQuotaBanner?) {
+    rendered = banner
+  }
+}

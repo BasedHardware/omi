@@ -19,12 +19,24 @@ struct ChatQuotaBannerView: View {
     @ObservedObject private var usageLimiter = FloatingBarUsageLimiter.shared
     @ObservedObject private var dismissals = ChatQuotaBannerDismissals.shared
 
-    var body: some View {
-      if let banner = ChatQuotaBanner.current(
+    private var banner: ChatQuotaBanner? {
+      ChatQuotaBanner.current(
         quota: usageLimiter.serverQuota,
         optimisticDelta: usageLimiter.optimisticDelta,
         dismissed: dismissals.dismissed)
-      {
+    }
+
+    var body: some View {
+      content
+        .onAppear { ChatQuotaBannerPresentation.shared.record(banner) }
+        .onChange(of: banner) { _, shown in
+          ChatQuotaBannerPresentation.shared.record(shown)
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+      if let banner {
         ChatQuotaBannerView(
           banner: banner,
           onViewPlan: {
@@ -72,6 +84,7 @@ struct ChatQuotaBannerView: View {
           .foregroundColor(Ink.secondary)
       }
       .buttonStyle(.plain)
+      .accessibilityLabel("Dismiss")
       .accessibilityIdentifier("chat-quota-banner-dismiss")
     }
     .padding(.horizontal, OmiSpacing.lg)

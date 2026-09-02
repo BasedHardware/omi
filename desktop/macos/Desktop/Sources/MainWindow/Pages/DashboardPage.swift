@@ -811,13 +811,13 @@ struct DashboardPage: View {
           .padding(.bottom, OmiSpacing.sm)
       }
 
+      ChatQuotaBannerView.Slot()
+        .frame(width: askBarWidth)
+        .padding(.bottom, OmiSpacing.sm)
+
       homeAskBar
         .frame(width: askBarWidth)
         .padding(.top, OmiSpacing.xxs)
-
-      ChatQuotaBannerView.Slot()
-        .frame(width: askBarWidth)
-        .padding(.top, OmiSpacing.sm)
 
       dashboardChatErrorCard
         .frame(width: askBarWidth)

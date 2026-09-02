@@ -885,6 +885,9 @@ final class DesktopAutomationActionRegistry {
           "remaining_queries": "\(limiter.remainingQueries)",
           "limit_description": limiter.limitDescription,
           "banner_threshold": banner.map { "\($0.threshold)" } ?? "none",
+          "rendered_banner_threshold": ChatQuotaBannerPresentation.shared.rendered
+            .map { "\($0.threshold)" } ?? "none",
+          "rendered_banner_title": ChatQuotaBannerPresentation.shared.rendered?.title ?? "",
           "banner_title": banner?.title ?? "",
           "banner_message": banner?.message ?? "",
         ]
@@ -942,6 +945,9 @@ final class DesktopAutomationActionRegistry {
       return await MainActor.run {
         let limiter = FloatingBarUsageLimiter.shared
         limiter.applyQuota(quota)
+        // Seeding a cycle must produce the banner it asks for; a dismissal left
+        // over from an earlier run would silently suppress it.
+        ChatQuotaBannerDismissals.shared.reset()
         return [
           "applied": "true",
           "used": "\(quota.used)",
