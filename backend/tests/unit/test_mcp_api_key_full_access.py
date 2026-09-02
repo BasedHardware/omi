@@ -35,7 +35,9 @@ class _DocReference:
     def collection(self, name):
         return self._collection._db.collection(f"{self._collection.name}/{self.id}/{name}")
 
-    def get(self):
+    # ``**_read_options`` mirrors the real Firestore signature: reads on the MCP
+    # auth path pass retry/timeout to bound their deadline (database/mcp_auth_read.py).
+    def get(self, **_read_options):
         return _DocSnapshot(self, self._collection._docs.get(self.id))
 
     def set(self, data, merge=False):
@@ -79,7 +81,7 @@ class _Query:
         self._limit = limit
         return self
 
-    def stream(self):
+    def stream(self, **_read_options):
         matches = [
             _DocSnapshot(_DocReference(self._collection, doc_id), data)
             for doc_id, data in self._collection._docs.items()
