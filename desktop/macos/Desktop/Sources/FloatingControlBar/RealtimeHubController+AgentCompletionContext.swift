@@ -45,5 +45,6 @@ extension RealtimeHubController {
       interrupting: interrupting,
       trustedTurnInstruction: pendingTrustedTurnInstruction
     )
+    attachTurnScreenFrameIfNeeded(session: live)
   }
 }

@@ -766,7 +766,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     ]),
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     voice: {
-      realtimeDescription: "Capture the user's current screen so you can see what they're looking at.",
+      realtimeDescription: "Take a fresh capture of the user's screen. Every turn already includes the screen as it was when the user pressed the key; call this only when no image arrived with this turn or the user says the screen changed since.",
     },
   },
   report_screen_observation: {

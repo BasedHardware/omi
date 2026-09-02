@@ -15,6 +15,21 @@ final class HubSystemInstructionTests: XCTestCase {
     XCTAssertEqual(RealtimeHubTools.escalationUserPrompt(query: "q", toolContext: ""), "q")
   }
 
+  func testVoiceInstructionTellsTheModelEveryTurnCarriesTheCurrentScreen() {
+    // Regression (Beta 0.12.257, two users): the model answered a current-screen question from a
+    // 13-second-old screenshot / an earlier answer without calling screenshot. Nothing in the
+    // prompt said when to look. The frame is now attached to every turn and the instruction
+    // must say so, mark earlier images stale, and keep screenshot for a fresh re-look only.
+    let instruction = RealtimeHubTools.systemInstruction(kernelContext: "ctx")
+    XCTAssertTrue(instruction.contains("every turn arrives with an image of the user's screen"))
+    XCTAssertTrue(instruction.contains("Images from earlier turns are stale"))
+    XCTAssertTrue(instruction.contains("Call the screenshot tool only when no image arrived with this turn"))
+    XCTAssertFalse(instruction.contains("You cannot see the user's data or screen without calling a tool"))
+    let tool = GeneratedRealtimeTools.baseOpenAITools(providerProperty: nil)
+      .first { ($0["name"] as? String) == HubTool.screenshot.rawValue }
+    XCTAssertTrue(((tool?["description"] as? String) ?? "").contains("Every turn already includes the screen"))
+  }
+
   func testOnboardingDemoNoteIsIncludedWhenPresentAndAbsentOtherwise() {
     let with = RealtimeHubTools.systemInstruction(
       kernelContext: "ctx", onboardingDemoContext: "Door 3 asks for the last word of the first riddle (answer: inside)."
