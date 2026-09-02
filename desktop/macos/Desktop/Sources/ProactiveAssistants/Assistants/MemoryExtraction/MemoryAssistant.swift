@@ -156,9 +156,10 @@ actor MemoryAssistant: ProactiveAssistant {
   func analyze(frame: CapturedFrame) async -> AssistantResult? {
     // Skip apps excluded from memory extraction (built-in + user's custom list)
     let exclusion = await MainActor.run {
+      let settings = MemoryAssistantSettings.shared
       (
-        MemoryAssistantSettings.shared.isAppExcluded(frame.appName),
-        MemoryAssistantSettings.shared.excludedHosts,
+        settings.isAppExcluded(frame.appName),
+        settings.excludedHosts,
         NegativeFeedbackRemediationFeature.isEnabled
       )
     }
