@@ -8,6 +8,14 @@ description: >-
   asserts the shell before it asserts a mode.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DayZeroChips.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailySummaryCard.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailySummaryCoordinator.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailySummaryPresentation.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/AnalyticsManager+DailySummary.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeDailySummarySection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeDailySummaryStore.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+DailySummaries.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/HomeAskBarControls.swift
