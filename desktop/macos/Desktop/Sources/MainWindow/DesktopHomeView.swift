@@ -214,8 +214,7 @@ struct DesktopHomeView: View {
       .onAppear {
         log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
 
-        // Chat-first renders starter prompts in main chat; only legacy may arm the floating popup.
-        FloatingPrimaryTextInputRouting.configure(routesToMainApp: usesChatFirstShell)
+        // Only the legacy shell arms the first-use popup; chat-first renders starters in main chat.
         if !usesChatFirstShell && PostOnboardingPromptSuggestions.shouldArmPopup() {
           showTryAskingPopup = true
         }
@@ -1316,7 +1315,6 @@ struct DesktopHomeView: View {
       .onChange(of: chatFirstNavigation.visibleRoute) { _, _ in reportAutomationState() }
       .onChange(of: chatFirstNavigation.isSidebarCollapsed) { _, _ in reportAutomationState() }
       .onChange(of: useLegacyHomeDesign) { _, newValue in
-        FloatingPrimaryTextInputRouting.configure(routesToMainApp: usesChatFirstShell)
         if usesChatFirstShell { showTryAskingPopup = false }
         OmiMotion.withGated(.easeInOut(duration: 0.2)) {
           isSidebarCollapsed = !newValue
