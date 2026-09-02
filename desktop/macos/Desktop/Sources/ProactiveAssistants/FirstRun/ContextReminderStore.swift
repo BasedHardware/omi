@@ -127,6 +127,7 @@ actor ContextReminderStore {
       title: reminder.contextKey.normalizedTitle,
       message: "You're back. You asked me to remind you: \(reminder.text)",
       assistantId: "first_run_card",
+      kind: .task,
       action: FirstRunCardActions.make(.contextReminder(reminderID: reminder.id)),
       respectFrequency: false,
       isPersistent: true)

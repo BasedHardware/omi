@@ -4665,6 +4665,10 @@ class FloatingControlBarManager {
       // backend already materializes, and journaling here would produce a
       // second Chat row for the same meeting.
       notification.assistantId != MeetingActionItemBannerPolicy.assistantID,
+      // Guidance chips ("Open something you're working on", "Send the note to Sam") are
+      // instructions for the moment, not observations; in the chat history they read as Omi
+      // narrating its own onboarding to the user.
+      !FirstRunNotchCardIdentity.isGuide(notification),
       let provider = historyChatProvider
     else { return }
     let surface = provider.mainChatSurfaceReference()

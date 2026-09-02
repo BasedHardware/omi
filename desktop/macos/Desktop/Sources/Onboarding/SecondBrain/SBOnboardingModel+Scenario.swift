@@ -261,6 +261,7 @@ extension SBOnboardingModel {
       title: title,
       message: message,
       assistantId: "onboarding_scenario",
+      kind: effects.taskTitle == nil ? .memory : .task,
       respectFrequency: false,
       isPersistent: false,
       authorizationSnapshot: authorization
@@ -281,6 +282,7 @@ extension SBOnboardingModel {
       title: "✓ Reminder set",
       message: formatter.string(from: dueDate),
       assistantId: "onboarding_scenario",
+      kind: .task,
       respectFrequency: false,
       isPersistent: false,
       authorizationSnapshot: authorization
