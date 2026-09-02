@@ -152,7 +152,10 @@ struct QueryShellHome: View {
             headerAccessory: { headerAccessory },
             footer: {
               if mode == .answer {
-                composerBar(draft: draft)
+                VStack(spacing: OmiSpacing.sm) {
+                  ChatQuotaBannerView.Slot()
+                  composerBar(draft: draft)
+                }
               }
             }
           ) {

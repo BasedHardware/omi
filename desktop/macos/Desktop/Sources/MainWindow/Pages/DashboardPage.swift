@@ -607,6 +607,9 @@ struct DashboardPage: View {
         )
       )
 
+      ChatQuotaBannerView.Slot()
+        .padding(.horizontal, OmiSpacing.section)
+
       dashboardChatErrorCard
         .padding(.horizontal, OmiSpacing.section)
 
@@ -811,6 +814,10 @@ struct DashboardPage: View {
       homeAskBar
         .frame(width: askBarWidth)
         .padding(.top, OmiSpacing.xxs)
+
+      ChatQuotaBannerView.Slot()
+        .frame(width: askBarWidth)
+        .padding(.top, OmiSpacing.sm)
 
       dashboardChatErrorCard
         .frame(width: askBarWidth)

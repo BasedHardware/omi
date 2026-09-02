@@ -903,6 +903,46 @@ final class DesktopAutomationActionRegistry {
         ]
       }
     }
+    // Seeds the quota snapshot the chat-quota warnings key off, so a harness can
+    // walk 75/90/100 without spending a month of real questions. Non-prod only.
+    register(
+      name: "apply_usage_quota",
+      summary: "Seed the chat usage-quota snapshot (threshold-warning harness). Non-prod only.",
+      params: ["used", "limit", "plan", "unit", "is_overage_plan", "reset_at"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "apply_usage_quota is disabled on production bundles"]
+      }
+      guard let used = params["used"].flatMap(Double.init) else {
+        throw DesktopAutomationActionError.invalidParams("used must be a number")
+      }
+      var json: [String: Any] = [
+        "plan": params["plan"] ?? "Operator",
+        "plan_type": "operator",
+        "unit": params["unit"] ?? "questions",
+        "used": used,
+        "percent": 0,
+        "allowed": true,
+      ]
+      if let limit = params["limit"].flatMap(Double.init) {
+        json["limit"] = limit
+        json["allowed"] = used < limit
+      }
+      if let resetAt = params["reset_at"].flatMap(Int.init) { json["reset_at"] = resetAt }
+      if let overage = params["is_overage_plan"] { json["is_overage_plan"] = overage == "true" }
+      let data = try JSONSerialization.data(withJSONObject: json)
+      let quota = try JSONDecoder().decode(APIClient.ChatUsageQuota.self, from: data)
+      return await MainActor.run {
+        let limiter = FloatingBarUsageLimiter.shared
+        limiter.applyQuota(quota)
+        return [
+          "applied": "true",
+          "used": "\(quota.used)",
+          "limit": "\(quota.limit ?? -1)",
+          "is_limit_reached": limiter.isLimitReached ? "true" : "false",
+        ]
+      }
+    }
     register(
       name: "task_capture_fixture",
       summary: "Evaluate canonical screen-capture policy facts without screenshot bytes",
