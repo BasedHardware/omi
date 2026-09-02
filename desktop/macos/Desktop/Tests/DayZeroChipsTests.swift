@@ -16,21 +16,21 @@ final class DayZeroChipsTests: XCTestCase {
       [DayZeroChips.summarizeScreen, DayZeroChips.lastHour, DayZeroChips.screenToTasks, DayZeroChips.rememberDraft])
   }
 
-  func testLanguageMismatchLeadsAndCalendarFollowsScreen() {
+  func testLanguageMismatchLeadsAndTheDraftCloses() {
     var signals = DayZeroChipSignals()
     signals.canSeeScreen = true
-    signals.calendarConnected = true
     signals.systemLanguageName = "日本語"
     let chips = DayZeroChips.chips(for: signals)
     XCTAssertEqual(chips.first, "Switch to 日本語")
     XCTAssertEqual(chips.last, DayZeroChips.rememberDraft)
-    XCTAssertTrue(chips.contains(DayZeroChips.calendarToday))
+    XCTAssertFalse(
+      chips.contains(DayZeroChips.calendarToday),
+      "The Home top-up has no live connector signal; the calendar chip comes from onboarding's setup state")
   }
 
   func testEveryChipFitsTheHomeChipBudget() {
     var signals = DayZeroChipSignals()
     signals.canSeeScreen = true
-    signals.calendarConnected = true
     signals.systemLanguageName = "Português"
     for chip in DayZeroChips.chips(for: signals) {
       XCTAssertLessThanOrEqual(chip.count, HomeSuggestionComposer.maxPersonalizedLength, chip)

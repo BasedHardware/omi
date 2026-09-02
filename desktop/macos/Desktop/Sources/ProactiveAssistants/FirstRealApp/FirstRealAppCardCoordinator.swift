@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import VoiceTurnDomain
 
 /// A cancellable piece of future work. One protocol for the dwell delay and the
 /// card timeout so both are driven by the same injected clock in tests — no
@@ -183,8 +184,19 @@ final class FirstRealAppCardCoordinator {
   /// `PushToTalkManager` calls `begin(intent:)`, on both the hold and the
   /// locked path.
   static let voiceTurnPTTObserver: PTTObserver = { onStart in
+    // `observeSnapshots` replays the current snapshot synchronously on
+    // subscribe. A turn already in flight at that moment (the user held the
+    // chord during the dwell) must not retire the card before it is seen; only
+    // a turn that begins after subscription counts as "PTT after the card".
+    var replayedTurnID: VoiceTurnID?
+    var isReplay = true
     let observation = VoiceTurnCoordinator.shared.observeSnapshots { model in
-      guard let turn = model.turn, !turn.phase.isTerminal else { return }
+      if isReplay {
+        isReplay = false
+        replayedTurnID = model.turn?.id
+        return
+      }
+      guard let turn = model.turn, !turn.phase.isTerminal, turn.id != replayedTurnID else { return }
       onStart()
     }
     return { observation.cancel() }

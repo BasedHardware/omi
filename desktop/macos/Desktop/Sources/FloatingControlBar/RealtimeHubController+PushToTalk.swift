@@ -460,7 +460,9 @@ extension RealtimeHubController {
       messageLength: turnTranscript.count,
       // A PTT turn does carry a screenshot whenever the pre-overlay capture produced usable
       // pixels. Hard-coding false made every screen-grounded voice turn look screenshot-free.
-      hasScreenshot: screenEvidence?.descriptor.canVerifyCurrentScreen == true,
+      // Only a Gemini session attaches the pre-overlay frame to the turn
+      // (`attachTurnScreenFrameIfNeeded`); elsewhere the image is not sent.
+      hasScreenshot: sessionProvider == .gemini && screenEvidence?.descriptor.canVerifyCurrentScreen == true,
       source: .pttRealtime,
       attemptID: turnID.description
     )

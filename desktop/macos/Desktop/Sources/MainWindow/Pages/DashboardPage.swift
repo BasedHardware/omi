@@ -2096,6 +2096,13 @@ struct DashboardPage: View {
 
   private func handleSuggestedPrompt(_ suggestion: String) {
     PostOnboardingPromptSuggestions.consume()
+    if DayZeroChips.isDraftPrompt(suggestion) {
+      // A sentence for the user to finish: prefill and focus, never send.
+      chatProvider.draftText = DayZeroChips.draftText(for: suggestion)
+      openHomeChat(focusInput: true)
+      homeAskFieldFocused = true
+      return
+    }
     FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
   }
 

@@ -567,7 +567,7 @@ final class DesktopDiagnosticsManager {
     record(.voiceTurnTerminal, properties: properties)
     if let outcome = AnalyticsManager.questionOutcome(forVoiceTerminalReason: reason, answerDelivered: answerDelivered)
     {
-      let surface: AnalyticsManager.QuestionSurface = route.contains("realtime") ? .pttRealtime : .ptt
+      let surface = AnalyticsManager.questionSurface(forVoiceRoute: route)
       Task { @MainActor in
         AnalyticsManager.shared.questionAnswered(
           surface: surface, outcome: outcome, attemptID: turnID, durationMs: durationMs)

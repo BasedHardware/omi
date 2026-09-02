@@ -14,22 +14,15 @@ import Foundation
 struct DayZeroChipSignals: Equatable, Sendable {
   /// Screen Recording is granted and capture is not blocked.
   var canSeeScreen = false
-  /// Calendar connector is on.
-  var calendarConnected = false
   /// Endonym of the system language when it differs from the language Omi
   /// listens and replies in (e.g. "Español"). `nil` when they already match.
   var systemLanguageName: String? = nil
 
   /// Reads the live signals. Cheap and synchronous: no I/O, no model.
   @MainActor
-  static func live(
-    calendarConnected: Bool = PostOnboardingPromptSuggestions.suggestions().contains(where: {
-      $0.localizedCaseInsensitiveContains("calendar")
-    })
-  ) -> DayZeroChipSignals {
+  static func live() -> DayZeroChipSignals {
     DayZeroChipSignals(
       canSeeScreen: CGPreflightScreenCaptureAccess(),
-      calendarConnected: calendarConnected,
       systemLanguageName: languageMismatchName(
         systemLanguageCode: Locale.current.language.languageCode?.identifier,
         omiLanguageCode: AssistantSettings.shared.transcriptionLanguage)
@@ -62,6 +55,8 @@ enum DayZeroChips {
   /// The teach-and-quiz thread was the longest observed first session. This
   /// chip is a draft, not a send: it lands in the composer for the user to finish.
   static let rememberDraft = "Remember that I…"
+  /// Emitted by `SBPostOnboardingGuidance` from the onboarding connector state;
+  /// the Home top-up has no live connector signal, so it does not offer this.
   static let calendarToday = "What's on my calendar today?"
 
   static func switchLanguage(to name: String) -> String { "Switch to \(name)" }
@@ -79,9 +74,6 @@ enum DayZeroChips {
       chips.append(summarizeScreen)
       chips.append(lastHour)
       chips.append(screenToTasks)
-    }
-    if signals.calendarConnected {
-      chips.append(calendarToday)
     }
     chips.append(rememberDraft)
     return chips

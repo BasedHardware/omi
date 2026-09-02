@@ -9,6 +9,10 @@ import Foundation
 @MainActor
 final class HomeDailySummaryStore: ObservableObject {
   typealias Fetch = @Sendable (Int) async throws -> [DailySummaryRecord]
+  /// Owner fence for one refresh: `nil` when no owner is signed in (do not
+  /// fetch), otherwise a check that the same owner is still current after the
+  /// await, so a result never publishes for an account that has since switched.
+  typealias OwnerFence = @MainActor () -> (@MainActor () -> Bool)?
 
   @Published private(set) var latest: DailySummaryRecord?
   @Published private(set) var isLoading = false
@@ -17,6 +21,7 @@ final class HomeDailySummaryStore: ObservableObject {
   /// Refetch no more often than this while the hub stays open; the record changes once a day.
   static let refreshInterval: TimeInterval = 15 * 60
 
+  private let ownerFence: OwnerFence
   private let fetch: Fetch
   private let now: () -> Date
   private var lastRefresh: Date?
@@ -25,9 +30,14 @@ final class HomeDailySummaryStore: ObservableObject {
   nonisolated(unsafe) private var ownerObserver: NSObjectProtocol?
 
   init(
+    ownerFence: @escaping OwnerFence = {
+      guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return nil }
+      return { RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot) }
+    },
     fetch: @escaping Fetch = { limit in try await APIClient.shared.getDailySummaries(limit: limit) },
     now: @escaping () -> Date = Date.init
   ) {
+    self.ownerFence = ownerFence
     self.fetch = fetch
     self.now = now
     ownerObserver = NotificationCenter.default.addObserver(
@@ -58,8 +68,14 @@ final class HomeDailySummaryStore: ObservableObject {
       guard let self else { return }
       self.isLoading = true
       defer { self.isLoading = false }
+      // INV-AUTH-1: the result publishes only for the owner it was fetched for.
+      guard let isOwnerStillCurrent = self.ownerFence() else { return }
       do {
         let summaries = try await self.fetch(1)
+        guard isOwnerStillCurrent() else {
+          log("HomeDailySummaryStore: dropped summary after account switch")
+          return
+        }
         self.latest = summaries.first
         self.lastError = nil
         self.lastRefresh = self.now()

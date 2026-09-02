@@ -22,9 +22,10 @@ final class MainChatNavigationRequestStore {
 
   func request(draft: String? = nil) {
     isPending = true
-    if let draft, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      pendingDraft = draft
-    }
+    // Every request owns the draft slot: a plain "Continue in Omi" must never
+    // surface a suggestion left over from an earlier, unconsumed request.
+    let trimmed = draft?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    pendingDraft = trimmed.isEmpty ? nil : draft
     NotificationCenter.default.post(name: .openMainChatRequested, object: nil)
   }
 

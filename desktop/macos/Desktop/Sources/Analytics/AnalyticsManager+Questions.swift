@@ -72,16 +72,29 @@ extension AnalyticsManager {
   nonisolated static func questionOutcome(forVoiceTerminalReason reason: String, answerDelivered: Bool)
     -> QuestionOutcome?
   {
+    if answerDelivered { return .grounded }
     switch reason {
-    case "too_short", "silent_rejected":
-      return nil
     case "success":
       return .grounded
+    // Terminal before any question was committed: no `question_asked` exists
+    // for these, so no answer record either (asked and answered stay paired).
+    case "too_short", "silent_rejected", "permission_denied", "capture_failed", "transcription_failed",
+      "hub_warm_timeout", "deferred_commit_timeout":
+      return nil
+    // A cancellation may land before or after the commit; the reason string
+    // cannot tell them apart, so a cancelled turn with no delivered answer is
+    // dropped rather than risk an orphan `cancelled` row.
     case "cancelled", "owner_changed", "interrupted_by_barge_in", "explicit_interrupt", "cleanup":
-      return answerDelivered ? .grounded : .cancelled
+      return nil
     default:
-      return answerDelivered ? .grounded : .error
+      return .error
     }
+  }
+
+  /// The realtime hub lanes carry the `hub` / `hub_warm_wait` route labels
+  /// (`VoiceTurnCoordinator.routeLabel`); everything else is the STT cascade.
+  nonisolated static func questionSurface(forVoiceRoute route: String) -> QuestionSurface {
+    route == "hub" || route == "hub_warm_wait" ? .pttRealtime : .ptt
   }
 
   nonisolated static func questionOutcome(forChatEvent event: ChatQueryTelemetryEvent) -> QuestionOutcome? {
@@ -97,16 +110,23 @@ extension AnalyticsManager {
     }
   }
 
-  nonisolated static func questionSurface(forChatSurface surface: String) -> QuestionSurface {
-    // Every ChatProvider send is the main-window chat; the floating bar's typed
-    // path retired into it. Voice turns report through the coordinator instead.
-    _ = surface
-    return .chatWindow
+  /// Which `ChatProvider` telemetry surfaces are user questions the chat path
+  /// answers for. Voice turns that route through `ChatProvider`
+  /// (`floating_voice`, `floating_text`) terminalize in `VoiceTurnCoordinator`,
+  /// which owns their answer record; onboarding and agent-pill sends are not
+  /// questions. Returns `nil` for surfaces the chat path must not answer for.
+  nonisolated static func questionSurface(forChatSurface surface: String) -> QuestionSurface? {
+    switch surface {
+    case "main_chat", "task_chat": return .chatWindow
+    default: return nil
+    }
   }
 
   /// Terminal chat lifecycle → one `question_answered`, joined by `attempt_id`.
   func questionAnswered(forChatEvent event: ChatQueryTelemetryEvent) {
     guard let outcome = Self.questionOutcome(forChatEvent: event) else { return }
+    // Known small overcount: a query-shell replay sends with countsAsQuestion:
+    // false (no `question_asked`) but still terminalizes here.
     let context: ChatQueryTelemetryContext
     let durationMs: Int?
     switch event {
@@ -123,8 +143,7 @@ extension AnalyticsManager {
       context = c
       durationMs = d
     }
-    questionAnswered(
-      surface: Self.questionSurface(forChatSurface: context.surface), outcome: outcome,
-      attemptID: context.attemptId, durationMs: durationMs)
+    guard let surface = Self.questionSurface(forChatSurface: context.surface) else { return }
+    questionAnswered(surface: surface, outcome: outcome, attemptID: context.attemptId, durationMs: durationMs)
   }
 }

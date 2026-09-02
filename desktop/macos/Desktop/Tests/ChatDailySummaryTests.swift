@@ -139,6 +139,7 @@ final class ChatDailySummaryTests: XCTestCase {
   @MainActor
   private func makeCoordinator(_ box: Box, defaults: UserDefaults) -> ChatDailySummaryCoordinator {
     let store = HomeDailySummaryStore(
+      ownerFence: { { true } },
       fetch: { _ in
         box.calls += 1
         return box.records
@@ -146,7 +147,7 @@ final class ChatDailySummaryTests: XCTestCase {
       now: { box.clock })
     return ChatDailySummaryCoordinator(
       store: store, defaults: defaults, ownerID: { box.owner },
-      cardSink: { title, body in box.cards.append((title, body)) })
+      cardSink: { _, title, body in box.cards.append((title, body)) })
   }
 
   @MainActor

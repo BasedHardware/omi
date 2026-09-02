@@ -54,17 +54,40 @@ final class QuestionTelemetryTests: XCTestCase {
   }
 
   func testVoiceTerminalReasonsMapToOutcomesAndUncommittedTurnsProduceNone() {
-    XCTAssertNil(AnalyticsManager.questionOutcome(forVoiceTerminalReason: "too_short", answerDelivered: false))
-    XCTAssertNil(AnalyticsManager.questionOutcome(forVoiceTerminalReason: "silent_rejected", answerDelivered: false))
+    // Nothing was committed for these, so no `question_asked` exists to pair with.
+    for reason in [
+      "too_short", "silent_rejected", "permission_denied", "capture_failed", "transcription_failed",
+      "hub_warm_timeout", "deferred_commit_timeout", "cancelled", "explicit_interrupt", "owner_changed",
+    ] {
+      XCTAssertNil(AnalyticsManager.questionOutcome(forVoiceTerminalReason: reason, answerDelivered: false), reason)
+    }
     XCTAssertEqual(
       AnalyticsManager.questionOutcome(forVoiceTerminalReason: "success", answerDelivered: true), .grounded)
-    XCTAssertEqual(
-      AnalyticsManager.questionOutcome(forVoiceTerminalReason: "explicit_interrupt", answerDelivered: false), .cancelled
-    )
     XCTAssertEqual(
       AnalyticsManager.questionOutcome(forVoiceTerminalReason: "explicit_interrupt", answerDelivered: true), .grounded)
     XCTAssertEqual(
       AnalyticsManager.questionOutcome(forVoiceTerminalReason: "provider_failed", answerDelivered: false), .error)
+  }
+
+  func testVoiceRouteLabelsMapToTheSurfaceTheAskUsed() {
+    XCTAssertEqual(AnalyticsManager.questionSurface(forVoiceRoute: "hub"), .pttRealtime)
+    XCTAssertEqual(AnalyticsManager.questionSurface(forVoiceRoute: "hub_warm_wait"), .pttRealtime)
+    XCTAssertEqual(AnalyticsManager.questionSurface(forVoiceRoute: "deepgram_batch"), .ptt)
+    XCTAssertEqual(AnalyticsManager.questionSurface(forVoiceRoute: "omni_stt"), .ptt)
+  }
+
+  func testChatPathAnswersOnlyForChatQuestionSurfaces() {
+    // Voice turns routed through ChatProvider terminalize in VoiceTurnCoordinator,
+    // which owns their answer record; a second row here would double count.
+    for surface in ["floating_voice", "floating_text", "onboarding", "agent_pill"] {
+      let context = ChatQueryTelemetryContext(attemptId: "a-\(surface)", surface: surface, harness: "kernel")
+      AnalyticsManager.shared.chatQueryTelemetry(
+        .cancelled(context, durationMs: 10, reason: .userStop, partialResponse: false))
+    }
+    XCTAssertTrue(captured.filter { $0.0 == "question_answered" }.isEmpty)
+    XCTAssertNil(AnalyticsManager.questionSurface(forChatSurface: "floating_voice"))
+    XCTAssertEqual(AnalyticsManager.questionSurface(forChatSurface: "main_chat"), .chatWindow)
+    XCTAssertEqual(AnalyticsManager.questionSurface(forChatSurface: "task_chat"), .chatWindow)
   }
 
   func testChatTerminalEventsEmitQuestionAnsweredJoinedByAttemptID() {

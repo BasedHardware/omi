@@ -18,7 +18,7 @@ final class ChatDailySummaryCoordinator: ObservableObject {
 
   /// Posts the notch card. Injected so a test can observe the announcement without a notification
   /// centre or a signed-in owner.
-  typealias CardSink = @MainActor (_ title: String, _ body: String) -> Void
+  typealias CardSink = @MainActor (_ ownerID: String, _ title: String, _ body: String) -> Void
 
   let store: HomeDailySummaryStore
 
@@ -84,14 +84,19 @@ final class ChatDailySummaryCoordinator: ObservableObject {
     guard let record = store.latest, let owner = ownerID() else { return }
     let key = ScopedDefaultsKey.dailySummaryLastSeenID(ownerID: owner)
     guard defaults.string(forKey: key) != record.id else { return }
-    defaults.set(record.id, forKey: key)
+    // A record whose overview has not filled in yet is not consumed: the id is
+    // marked seen only once a card was actually handed to the sink.
     guard let body = ChatDailySummaryPresentation.cardBody(for: record.overview) else { return }
-    cardSink(ChatDailySummaryPresentation.cardTitle(for: record), body)
+    cardSink(owner, ChatDailySummaryPresentation.cardTitle(for: record), body)
+    defaults.set(record.id, forKey: key)
     AnalyticsManager.shared.trackDailySummary(.cardShown)
   }
 
-  private static let defaultCardSink: CardSink = { title, body in
-    guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
+  private static let defaultCardSink: CardSink = { ownerID, title, body in
+    // Fenced to the owner the summary was fetched for, not whoever is current now.
+    guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID) else {
+      return
+    }
     NotificationService.shared.sendNotification(
       ownerID: snapshot.ownerID,
       title: title,
