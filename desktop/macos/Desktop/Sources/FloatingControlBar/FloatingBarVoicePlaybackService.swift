@@ -1124,6 +1124,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         // tappable next step into an answer that ends by asking out loud.
         case .followUp:
           return nil
+        // Nor is the review card: reading three stored memories aloud would narrate the card's
+        // controls instead of the answer.
+        case .memoryReviewCard:
+          return nil
         case .toolCall, .thinking:
           return nil
         }

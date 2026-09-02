@@ -851,6 +851,10 @@ extension ChatContentBlock {
     // A copied answer is what Omi said, not the control offering the next turn.
     case .followUp:
       return nil
+    // Same rule for the review card: it is three controls over memories that already exist, not
+    // prose the reader would expect to find in a copied answer.
+    case .memoryReviewCard:
+      return nil
     case .agentSpawn(_, _, _, _, let title, let objective, _):
       let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"

@@ -1355,6 +1355,10 @@ enum ContentBlockGroup: Identifiable {
       case .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
         .agentSpawn, .agentCompletion:
         return group
+      // Like the follow-up chip: a card asking to be answered has no business
+      // appearing before the turn it belongs to has finished arriving.
+      case .memoryReviewCard:
+        return isStreaming ? nil : group
       // The chip is only ever attached to a finished, grounded answer, so it
       // never appears mid-stream to be tapped before the answer it follows from.
       case .followUp:

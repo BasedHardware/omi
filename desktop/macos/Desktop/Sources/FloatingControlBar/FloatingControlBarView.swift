@@ -2194,7 +2194,7 @@ private struct AgentMainChatView: View {
           // follow-up chip belongs to the answer surface, not this agent-pill
           // transcript, which has no lane to send the next turn on.
           case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
-            .followUp:
+            .followUp, .memoryReviewCard:
             EmptyView()
           case .agentSpawn(
             _, let pillId, let sessionId, let runId, let title, let objective, let provider
