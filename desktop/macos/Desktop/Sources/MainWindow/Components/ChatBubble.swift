@@ -270,6 +270,13 @@ struct ChatBubble: View {
       }
     }
     .contentShape(Rectangle())
+    .onChange(of: message.isStreaming) { wasStreaming, isStreaming in
+      guard
+        ChatBubbleTruncation.settlingKeepsFullBody(
+          wasStreaming: wasStreaming, isStreaming: isStreaming)
+      else { return }
+      isExpanded = true
+    }
     .onHover { updateMetadataHover(.row, hovering: $0) }
     .overlay(alignment: .bottomLeading) { selectableTextAnchor }
     // Copy without hunting for the hover strip — and the only copy affordance a

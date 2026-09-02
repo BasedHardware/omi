@@ -653,6 +653,31 @@ final class ChatBubbleLayoutRegressionTests: XCTestCase {
     )
   }
 
+  /// An answer collapsing at the moment it settles is the one case truncation
+  /// must not cover: the reader watched the whole thing arrive, and the
+  /// transcript was following it down.
+  func testAnAnswerTheReaderJustWatchedArriveIsNotCollapsedWhenItSettles() {
+    XCTAssertTrue(
+      ChatBubbleTruncation.settlingKeepsFullBody(wasStreaming: true, isStreaming: false),
+      "a stream that just ended keeps the body the reader was reading")
+    XCTAssertTrue(
+      ChatBubbleTruncation.settlingKeepsFullBody(wasStreaming: true, isStreaming: nil),
+      "a row that loses its streaming flag entirely settled just the same")
+  }
+
+  /// Restored history is what truncation is for, so nothing about merely
+  /// appearing may expand a row.
+  func testRestoredHistoryStillCollapses() {
+    XCTAssertFalse(
+      ChatBubbleTruncation.settlingKeepsFullBody(wasStreaming: false, isStreaming: false),
+      "a row that was never streaming here is history, and history stays compact")
+    XCTAssertFalse(
+      ChatBubbleTruncation.settlingKeepsFullBody(wasStreaming: nil, isStreaming: false))
+    XCTAssertFalse(
+      ChatBubbleTruncation.settlingKeepsFullBody(wasStreaming: true, isStreaming: true),
+      "still streaming is not settled")
+  }
+
 }
 
 final class ChatTranscriptWindowTests: XCTestCase {

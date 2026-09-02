@@ -7,6 +7,19 @@ import SwiftUI
 enum ChatBubbleTruncation {
   static let threshold = 500
 
+  /// Whether an answer that has just finished streaming keeps its full body.
+  ///
+  /// Truncation is for restored history — a long transcript should not be
+  /// mostly one old reply. An answer the reader just watched arrive is the
+  /// opposite case: clamping it at the moment it settles takes back everything
+  /// they read, and shrinks the document by thousands of points under a
+  /// transcript that was following the live edge, so the reply they were
+  /// reading is replaced by its own first paragraph. A forty-item list
+  /// collapsed to three the instant it finished.
+  static func settlingKeepsFullBody(wasStreaming: Bool?, isStreaming: Bool?) -> Bool {
+    wasStreaming == true && isStreaming != true
+  }
+
   static func shouldTruncate(text: String, isStreaming: Bool, isExpanded: Bool) -> Bool {
     !isStreaming && text.count > threshold && !isExpanded
   }
