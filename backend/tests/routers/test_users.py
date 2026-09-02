@@ -835,3 +835,40 @@ def test_llm_only_byok_snapshot_reads_monthly_usage_once_for_snapshot_and_allowa
         'remaining_seconds': 1_000,
         'reason': 'plan_within_allowance',
     }
+
+
+def _route_dependency_names(path: str, method: str) -> list[str]:
+    app = FastAPI()
+    app.include_router(users_router.router)
+    route = next(
+        candidate
+        for candidate in app.routes
+        if getattr(candidate, 'path', None) == path and method in getattr(candidate, 'methods', set())
+    )
+    names: list[str] = []
+    stack = [route.dependant]
+    while stack:
+        current = stack.pop()
+        for dependency in getattr(current, 'dependencies', []) or []:
+            names.append(getattr(dependency.call, '__name__', None))
+            stack.append(dependency)
+    return names
+
+
+def test_get_memory_summary_rating_route_requires_auth():
+    assert 'get_current_user_uid' in _route_dependency_names('/v1/users/analytics/memory_summary', 'GET')
+
+
+def test_get_memory_summary_rating_returns_stored_score():
+    with patch.object(users_router, 'get_conversation_summary_rating_score', return_value={'value': 1}) as fetch:
+        result = users_router.get_memory_summary_rating(memory_id='mem-1')
+
+    fetch.assert_called_once_with('mem-1')
+    assert result == {'has_rating': True, 'rating': 1}
+
+
+def test_get_memory_summary_rating_without_score():
+    with patch.object(users_router, 'get_conversation_summary_rating_score', return_value=None):
+        result = users_router.get_memory_summary_rating(memory_id='mem-1')
+
+    assert result == {'has_rating': False}
