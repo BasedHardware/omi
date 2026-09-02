@@ -1,0 +1,88 @@
+import XCTest
+
+@testable import Omi_Computer
+
+/// `question_asked` / `question_answered` are one vocabulary across typed chat
+/// and push-to-talk. The in-app question counter (rating prompt, remote
+/// `question_count` prompts) advances from the same seam, so a voice question
+/// counts exactly like a typed one. Before this, the counter was typed-only and
+/// the activation dashboard undercounted push-to-talk by half.
+@MainActor
+final class QuestionTelemetryTests: XCTestCase {
+  private var captured: [(String, [String: Any])] = []
+
+  override func setUp() async throws {
+    try await super.setUp()
+    captured = []
+    AnalyticsManager.shared.questionTelemetryCaptureForTests = { [weak self] name, props in
+      MainActor.assumeIsolated { self?.captured.append((name, props)) }
+    }
+  }
+
+  override func tearDown() async throws {
+    AnalyticsManager.shared.questionTelemetryCaptureForTests = nil
+    try await super.tearDown()
+  }
+
+  func testFloatingBarVoiceQueryEmitsQuestionAskedWithTheTurnID() {
+    AnalyticsManager.shared.floatingBarQuerySent(
+      messageLength: 12, hasScreenshot: false, source: .pttRealtime, attemptID: "turn-1")
+    let asked = captured.filter { $0.0 == "question_asked" }
+    XCTAssertEqual(asked.count, 1)
+    XCTAssertEqual(asked.first?.1["surface"] as? String, "ptt_realtime")
+    XCTAssertEqual(asked.first?.1["attempt_id"] as? String, "turn-1")
+    XCTAssertEqual(asked.first?.1["source"] as? String, "ptt_realtime")
+  }
+
+  func testTypedChatEmitsQuestionAskedOnlyForAcceptedQuestions() {
+    AnalyticsManager.shared.chatMessageSent(messageLength: 5, source: "home_ask_bar")
+    AnalyticsManager.shared.chatMessageSent(messageLength: 5, source: "home_ask_bar", countsAsQuestion: false)
+    let asked = captured.filter { $0.0 == "question_asked" }
+    XCTAssertEqual(asked.count, 1, "A retry of the same logical question must not count twice")
+    XCTAssertEqual(asked.first?.1["surface"] as? String, "chat_window")
+    XCTAssertEqual(asked.first?.1["source"] as? String, "home_ask_bar")
+  }
+
+  func testEveryFloatingBarSourceMapsToASurface() {
+    let mapped = Dictionary(
+      FloatingBarQuerySource.allCases.map { ($0, AnalyticsManager.QuestionSurface($0)) },
+      uniquingKeysWith: { first, _ in first })
+    XCTAssertEqual(mapped[.typed], .floatingBarTyped)
+    XCTAssertEqual(mapped[.ptt], .ptt)
+    XCTAssertEqual(mapped[.pttVoiceOnly], .ptt)
+    XCTAssertEqual(mapped[.pttRealtime], .pttRealtime)
+  }
+
+  func testVoiceTerminalReasonsMapToOutcomesAndUncommittedTurnsProduceNone() {
+    XCTAssertNil(AnalyticsManager.questionOutcome(forVoiceTerminalReason: "too_short", answerDelivered: false))
+    XCTAssertNil(AnalyticsManager.questionOutcome(forVoiceTerminalReason: "silent_rejected", answerDelivered: false))
+    XCTAssertEqual(
+      AnalyticsManager.questionOutcome(forVoiceTerminalReason: "success", answerDelivered: true), .grounded)
+    XCTAssertEqual(
+      AnalyticsManager.questionOutcome(forVoiceTerminalReason: "explicit_interrupt", answerDelivered: false), .cancelled
+    )
+    XCTAssertEqual(
+      AnalyticsManager.questionOutcome(forVoiceTerminalReason: "explicit_interrupt", answerDelivered: true), .grounded)
+    XCTAssertEqual(
+      AnalyticsManager.questionOutcome(forVoiceTerminalReason: "provider_failed", answerDelivered: false), .error)
+  }
+
+  func testChatTerminalEventsEmitQuestionAnsweredJoinedByAttemptID() {
+    let context = ChatQueryTelemetryContext(attemptId: "attempt-9", surface: "main_chat", harness: "kernel")
+    let metrics = ChatQueryCompletionMetrics(
+      toolCallCount: 1, toolNames: ["capture_screen"], costUsd: 0, responseLength: 10,
+      screenToolRequested: true, screenToolSucceeded: false, screenToolApprovalRequired: false,
+      screenToolFailureCodes: ["image_unavailable"])
+    AnalyticsManager.shared.chatQueryTelemetry(.started(context))
+    AnalyticsManager.shared.chatQueryTelemetry(.completed(context, durationMs: 1200, metrics: metrics))
+    AnalyticsManager.shared.chatQueryTelemetry(
+      .cancelled(context, durationMs: 300, reason: .userStop, partialResponse: false))
+
+    let answered = captured.filter { $0.0 == "question_answered" }
+    XCTAssertEqual(answered.count, 2, "started is not a terminal outcome")
+    XCTAssertEqual(answered[0].1["outcome"] as? String, "screen_failed")
+    XCTAssertEqual(answered[0].1["attempt_id"] as? String, "attempt-9")
+    XCTAssertEqual(answered[0].1["surface"] as? String, "chat_window")
+    XCTAssertEqual(answered[1].1["outcome"] as? String, "cancelled")
+  }
+}

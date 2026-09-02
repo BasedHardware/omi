@@ -459,7 +459,8 @@ extension RealtimeHubController {
     AnalyticsManager.shared.floatingBarQuerySent(
       messageLength: turnTranscript.count,
       hasScreenshot: false,
-      source: .pttRealtime
+      source: .pttRealtime,
+      attemptID: turnID.description
     )
     VoiceTurnCoordinator.shared.publish(
       .hubCommitAccepted(

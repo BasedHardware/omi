@@ -5114,7 +5114,8 @@ class FloatingControlBarManager {
     AnalyticsManager.shared.floatingBarQuerySent(
       messageLength: message.count,
       hasScreenshot: screenshotData != nil,
-      source: .visibleQuery(fromVoice: queryFromVoice)
+      source: .visibleQuery(fromVoice: queryFromVoice),
+      attemptID: voiceTurnID?.description
     )
 
     let shouldPlayVoice = ShortcutSettings.shared.shouldSpeakFloatingBarResponse(
@@ -5368,7 +5369,8 @@ class FloatingControlBarManager {
     AnalyticsManager.shared.floatingBarQuerySent(
       messageLength: message.count,
       hasScreenshot: screenshotData != nil,
-      source: .pttVoiceOnly
+      source: .pttVoiceOnly,
+      attemptID: voiceTurnID.description
     )
 
     // Speaking shortly after a notch card is usually a follow-up about it. Tapping the

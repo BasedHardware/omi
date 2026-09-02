@@ -562,6 +562,14 @@ final class DesktopDiagnosticsManager {
       properties["duration_ms"] = max(0, durationMs)
     }
     record(.voiceTurnTerminal, properties: properties)
+    if let outcome = AnalyticsManager.questionOutcome(forVoiceTerminalReason: reason, answerDelivered: answerDelivered)
+    {
+      let surface: AnalyticsManager.QuestionSurface = route.contains("realtime") ? .pttRealtime : .ptt
+      Task { @MainActor in
+        AnalyticsManager.shared.questionAnswered(
+          surface: surface, outcome: outcome, attemptID: turnID, durationMs: durationMs)
+      }
+    }
 
     let breadcrumb = Breadcrumb(level: .info, category: "voice.turn.terminal")
     breadcrumb.message = "Voice turn reached terminal state"

@@ -826,9 +826,109 @@ class AnalyticsManager {
     // question (retries of a failed turn, busy no-op paths) so the one-time
     // prompt trigger counts each logical question exactly once.
     guard countsAsQuestion else { return }
+    questionAsked(surface: .chatWindow, source: source, messageLength: messageLength, attemptID: nil)
+  }
+
+  // MARK: - Questions (one vocabulary across typed chat and push-to-talk)
+
+  /// Where a question entered Omi. Coarser than the per-surface `source`
+  /// strings so activation can be measured with one event instead of a
+  /// union of `Chat Message Sent` and `floating_bar_query_sent`, which
+  /// undercounted push-to-talk by half in the 2026-09 activation analysis.
+  enum QuestionSurface: String, Sendable {
+    case chatWindow = "chat_window"
+    case floatingBarTyped = "floating_bar_typed"
+    case ptt
+    case pttRealtime = "ptt_realtime"
+
+    init(_ source: FloatingBarQuerySource) {
+      switch source {
+      case .typed: self = .floatingBarTyped
+      case .ptt, .pttVoiceOnly: self = .ptt
+      case .pttRealtime: self = .pttRealtime
+      }
+    }
+  }
+
+  /// How a question ended. `grounded` means an answer was delivered; the
+  /// name is deliberately not "helpful", which no client signal can know.
+  enum QuestionOutcome: String, Sendable {
+    case grounded
+    case screenFailed = "screen_failed"
+    case error
+    case cancelled
+  }
+
+  /// One accepted question, on any surface. Also the single place the
+  /// in-app question counter (rating prompt, remote `question_count`
+  /// prompts) is advanced, so a voice question counts exactly like a typed one.
+  func questionAsked(surface: QuestionSurface, source: String, messageLength: Int, attemptID: String?) {
+    var props: [String: Any] = [
+      "surface": surface.rawValue,
+      "source": source,
+      "message_length": messageLength,
+    ]
+    if let attemptID { props["attempt_id"] = attemptID }
+    questionTelemetryCaptureForTests?("question_asked", props)
+    PostHogManager.shared.track("question_asked", properties: props)
     Task { @MainActor in
       RatingPromptManager.shared.recordQuestionAsked()
     }
+  }
+
+  /// The terminal outcome of a question, joined to `question_asked` by
+  /// `attempt_id` where the surface mints one (voice turns; chat attempts).
+  func questionAnswered(surface: QuestionSurface, outcome: QuestionOutcome, attemptID: String?, durationMs: Int?) {
+    var props: [String: Any] = [
+      "surface": surface.rawValue,
+      "outcome": outcome.rawValue,
+    ]
+    if let attemptID { props["attempt_id"] = attemptID }
+    if let durationMs { props["duration_ms"] = max(0, durationMs) }
+    questionTelemetryCaptureForTests?("question_answered", props)
+    PostHogManager.shared.track("question_answered", properties: props)
+  }
+
+  /// Test seam: captures every `question_asked` / `question_answered`
+  /// payload so the pairing contract is asserted on production code.
+  nonisolated(unsafe) var questionTelemetryCaptureForTests: ((String, [String: Any]) -> Void)?
+
+  /// Maps a voice turn's terminal record onto the question vocabulary.
+  /// Turns that never committed a question (too short, silent) produce no
+  /// answer record, so asked and answered stay paired.
+  nonisolated static func questionOutcome(forVoiceTerminalReason reason: String, answerDelivered: Bool)
+    -> QuestionOutcome?
+  {
+    switch reason {
+    case "too_short", "silent_rejected":
+      return nil
+    case "success":
+      return .grounded
+    case "cancelled", "owner_changed", "interrupted_by_barge_in", "explicit_interrupt", "cleanup":
+      return answerDelivered ? .grounded : .cancelled
+    default:
+      return answerDelivered ? .grounded : .error
+    }
+  }
+
+  nonisolated static func questionOutcome(forChatEvent event: ChatQueryTelemetryEvent) -> QuestionOutcome? {
+    switch event {
+    case .started:
+      return nil
+    case .completed(_, _, let metrics):
+      return metrics.screenToolRequested && !metrics.screenToolSucceeded ? .screenFailed : .grounded
+    case .failed:
+      return .error
+    case .cancelled:
+      return .cancelled
+    }
+  }
+
+  nonisolated static func questionSurface(forChatSurface surface: String) -> QuestionSurface {
+    // Every ChatProvider send is the main-window chat; the floating bar's typed
+    // path retired into it. Voice turns report through the coordinator instead.
+    _ = surface
+    return .chatWindow
   }
 
   func desktopRatingSubmitted(rating: Int, revision: Int? = nil) {
@@ -952,6 +1052,27 @@ class AnalyticsManager {
   func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
     let payload = event.analyticsPayload
     PostHogManager.shared.track(payload.eventName, properties: payload.properties)
+    if let outcome = Self.questionOutcome(forChatEvent: event) {
+      let context: ChatQueryTelemetryContext
+      let durationMs: Int?
+      switch event {
+      case .started(let c):
+        context = c
+        durationMs = nil
+      case .completed(let c, let d, _):
+        context = c
+        durationMs = d
+      case .failed(let c, let d, _, _, _, _):
+        context = c
+        durationMs = d
+      case .cancelled(let c, let d, _, _):
+        context = c
+        durationMs = d
+      }
+      questionAnswered(
+        surface: Self.questionSurface(forChatSurface: context.surface), outcome: outcome,
+        attemptID: context.attemptId, durationMs: durationMs)
+    }
     if case .failed(_, _, let errorClass, _, _, _) = event {
       DesktopDiagnosticsManager.shared.recordChatFailure(errorClass: errorClass.rawValue)
     }
@@ -1579,7 +1700,14 @@ class AnalyticsManager {
   }
 
   /// Track when an AI query is sent from the floating bar
-  func floatingBarQuerySent(messageLength: Int, hasScreenshot: Bool, source: FloatingBarQuerySource) {
+  ///
+  /// `attemptID` is the voice turn id when the query came from push-to-talk,
+  /// so `question_asked` joins the coordinator's terminal record. Every call
+  /// here is one accepted question; the voice paths only reach it once the
+  /// transcript (or the realtime commit) exists.
+  func floatingBarQuerySent(
+    messageLength: Int, hasScreenshot: Bool, source: FloatingBarQuerySource, attemptID: String? = nil
+  ) {
     let props: [String: Any] = [
       "message_length": messageLength,
       "has_screenshot": hasScreenshot,
@@ -1587,6 +1715,9 @@ class AnalyticsManager {
     ]
     floatingBarQueryTelemetryCaptureForTests?("floating_bar_query_sent", props)
     PostHogManager.shared.track("floating_bar_query_sent", properties: props)
+    questionAsked(
+      surface: QuestionSurface(source), source: source.rawValue, messageLength: messageLength,
+      attemptID: attemptID)
   }
 
   /// Track when push-to-talk starts listening
