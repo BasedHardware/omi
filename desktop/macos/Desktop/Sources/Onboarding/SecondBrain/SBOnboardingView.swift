@@ -411,6 +411,8 @@ struct SBOnboardingView: View {
           }
           .buttonStyle(InkButtonStyle(kind: .secondary))
         }
+      case .review where model.scenarioWriteUnreadable:
+        SBInkButton(title: "Continue", isDefaultAction: true) { model.confirmScenarioWrites() }
       case .review:
         ForEach(model.scenarioMemoryChips, id: \.self) { memory in
           scenarioWriteRow(symbol: "sparkles", label: "MEMORY", text: memory)

@@ -157,6 +157,15 @@ final class SBOnboardingModel: ObservableObject {
   @Published var scenarioMemoryChips: [String] = []
   @Published var scenarioWriteNote: String?
   @Published var scenarioWriteDetectionTimedOut = false
+  /// The page said Sent but the note never reached the loopback receiver (a browser that blocks
+  /// loopback beacons, a firewall). The beat completes honestly with nothing kept.
+  @Published var scenarioWriteUnreadable = false
+  /// The loopback receiver for the note, alive only while the note page is open.
+  var scenarioNoteReceiver: OnboardingNoteReceiver?
+  /// The loopback port the page beacons to, resolved when the note beat opens its page.
+  var scenarioNotePort: UInt16 = 0
+  /// How long the "sent" title signal waits for the beacon before the beat is declared unreadable.
+  var scenarioNoteGrace: () async -> Void = { try? await Task.sleep(nanoseconds: 2_000_000_000) }
   @Published var scenarioWritesPending = false
   var scenarioWriteReceipts: Set<String> = []
 
@@ -657,6 +666,7 @@ final class SBOnboardingModel: ObservableObject {
       teardownVoiceDemo()
     case .write:
       dismissWriteGuideChip()
+      stopScenarioNoteReceiver()
     case .hello, .see, .ready: break
     }
   }
@@ -848,6 +858,7 @@ final class SBOnboardingModel: ObservableObject {
     streamTask?.cancel()
     scenarioDetectionTask?.cancel()
     scenarioDetectionTask = nil
+    stopScenarioNoteReceiver()
     scenarioCardTimeoutTask?.cancel()
     scenarioCardTimeoutTask = nil
     for pollTask in pollTasks.values {

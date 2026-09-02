@@ -3,7 +3,8 @@ import Foundation
 
 extension SBOnboardingModel {
   var scenarioPageContext: OnboardingScenarioPageContext {
-    OnboardingScenarioPageContext(name: displayName, dates: scenarioDates, nonce: scenarioPageNonce)
+    OnboardingScenarioPageContext(
+      name: displayName, dates: scenarioDates, nonce: scenarioPageNonce, notePort: scenarioNotePort)
   }
 
   func recordBeatExit(
@@ -324,6 +325,43 @@ extension SBOnboardingModel {
       OnboardingScenarioJournal().append(who: "user", text: "Open the note")
     }
     scenarioWriteDetectionTimedOut = false
+    guard scenarioNoteReceiver == nil else {
+      renderAndOpenComposePage()
+      return
+    }
+    Task { [weak self] in
+      guard let self else { return }
+      await self.startScenarioNoteReceiverIfNeeded()
+      guard self.step == .write, self.writePhase == .intro || self.writePhase == .waitingForSend else { return }
+      self.renderAndOpenComposePage()
+    }
+  }
+
+  /// The note comes back over loopback. The receiver is bound to this model's nonce, lives only
+  /// while the note page is open, and fires at most once; the page gets its port at render time.
+  func startScenarioNoteReceiverIfNeeded() async {
+    guard scenarioNoteReceiver == nil else { return }
+    let receiver = OnboardingNoteReceiver(nonce: scenarioPageNonce)
+    receiver.onNote = { [weak self] note in
+      self?.receiveScenarioNote(note)
+    }
+    do {
+      scenarioNotePort = try await receiver.start()
+      scenarioNoteReceiver = receiver
+    } catch {
+      log("Scenario onboarding could not start the note receiver: \(error.localizedDescription)")
+      OnboardingScenarioJournal().append(who: "system", text: "The note receiver could not start")
+      scenarioNotePort = 0
+    }
+  }
+
+  func stopScenarioNoteReceiver() {
+    scenarioNoteReceiver?.stop()
+    scenarioNoteReceiver = nil
+    scenarioNotePort = 0
+  }
+
+  private func renderAndOpenComposePage() {
     do {
       _ = try OnboardingScenarioPageRenderer.writeAndOpen(
         fileName: "compose.html",
@@ -393,17 +431,46 @@ extension SBOnboardingModel {
         wait: self.scenarioDetectionWait
       )
       guard !Task.isCancelled, self.step == .write, self.writePhase == .waitingForSend else { return }
-      guard case .matched(let title) = result,
-        let note = OnboardingScenarioTitleTransport.note(from: title, nonce: self.scenarioPageNonce)
-      else {
+      guard case .matched = result else {
         self.scenarioWriteDetectionTimedOut = true
         return
       }
-      OnboardingScenarioJournal().append(who: "system", text: "Detected the sent local note")
-      self.dismissWriteGuideChip()
-      self.applyScenarioNote(note)
-      self.scenarioReturnToOmi()
+      OnboardingScenarioJournal().append(who: "system", text: "Saw the sent signal in the window title")
+      // The beacon and the title change happen in the same click handler; give the beacon a
+      // moment, then complete honestly without the note if it never arrived.
+      await self.scenarioNoteGrace()
+      guard !Task.isCancelled, self.step == .write, self.writePhase == .waitingForSend else { return }
+      self.completeWriteBeatUnreadable()
     }
+  }
+
+  /// The note arrived over loopback: the one path that shows what Omi kept.
+  func receiveScenarioNote(_ note: String) {
+    guard step == .write, writePhase == .waitingForSend else { return }
+    scenarioDetectionTask?.cancel()
+    OnboardingScenarioJournal().append(who: "system", text: "Received the sent local note")
+    stopScenarioNoteReceiver()
+    dismissWriteGuideChip()
+    applyScenarioNote(note)
+    scenarioReturnToOmi()
+  }
+
+  /// Sent, but unreadable on this Mac. Nothing is written; the thread says so and offers Continue.
+  private func completeWriteBeatUnreadable() {
+    OnboardingScenarioJournal().append(who: "system", text: "The sent note never reached the receiver")
+    stopScenarioNoteReceiver()
+    dismissWriteGuideChip()
+    scenarioWriteUnreadable = true
+    scenarioMemoryChips = []
+    scenarioTaskChips = []
+    scenarioProposedTaskTitle = nil
+    writePhase = .review
+    persistScenarioProgress()
+    thread.append(Msg(isOmi: false, text: "Sent"))
+    OnboardingScenarioJournal().append(who: "user", text: "Sent")
+    appendScenarioOmiLine(
+      "I saw it go out, but the note itself didn't reach me on this Mac, so I kept nothing. That's on me, not you.")
+    scenarioReturnToOmi()
   }
 
   func retryWriteDetection() {

@@ -107,17 +107,16 @@ enum OnboardingScenarioTitleTransport {
         .contains(where: lower.contains)
   }
 
-  static func note(from title: String, nonce: String) -> String? {
-    let prefix = "\(sentToken) · \(nonce) · "
-    guard title.hasPrefix(prefix), let decoded = String(title.dropFirst(prefix.count)).removingPercentEncoding else {
-      return nil
-    }
-    let sanitized = decoded.unicodeScalars.filter { scalar in
-      !CharacterSet.controlCharacters.contains(scalar)
-    }
-    let bounded = String(String.UnicodeScalarView(sanitized).prefix(1_500))
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    return bounded.isEmpty ? nil : bounded
+  /// The window server middle-truncates window names (observed: a 36-character nonce plus a note
+  /// came back as "…8c1d2c…sale%20ends%20Monday."), so the title can only carry a short signal:
+  /// the token and the first eight characters of the nonce. The note itself travels over
+  /// loopback (`OnboardingNoteReceiver`).
+  static func shortNonce(_ nonce: String) -> String { String(nonce.prefix(8)) }
+
+  static func sentTitle(nonce: String) -> String { "\(sentToken) · \(shortNonce(nonce))" }
+
+  static func isSentSignal(_ title: String?, nonce: String) -> Bool {
+    title?.hasPrefix(sentTitle(nonce: nonce)) == true
   }
 }
 
@@ -160,7 +159,7 @@ enum OnboardingScenarioDetector {
         nilPolls = 0
         let titleMatches: Bool
         if let nonce {
-          titleMatches = OnboardingScenarioTitleTransport.note(from: title, nonce: nonce) != nil
+          titleMatches = OnboardingScenarioTitleTransport.isSentSignal(title, nonce: nonce)
         } else {
           titleMatches = OnboardingScenarioTitleTransport.matches(title, token: token)
         }

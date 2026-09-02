@@ -24,12 +24,24 @@ struct OnboardingScenarioPageContext: Equatable {
   let name: String
   let dates: OnboardingScenarioDates
   let nonce: String
+  /// The loopback port the note page beacons to; 0 when no receiver is listening (the page's
+  /// beacon then fails silently and the title signal alone reports the send).
+  let notePort: UInt16
 
-  init(name: String, dates: OnboardingScenarioDates, nonce: String = UUID().uuidString.lowercased()) {
+  init(
+    name: String,
+    dates: OnboardingScenarioDates,
+    nonce: String = UUID().uuidString.lowercased(),
+    notePort: UInt16 = 0
+  ) {
     self.name = name
     self.dates = dates
     self.nonce = nonce
+    self.notePort = notePort
   }
+
+  /// The part of the nonce that survives the window server's title truncation.
+  var nonceShort: String { OnboardingScenarioTitleTransport.shortNonce(nonce) }
 
   private static let dateFormatter: DateFormatter = {
     let formatter = DateFormatter()
@@ -64,6 +76,8 @@ struct OnboardingScenarioPageContext: Equatable {
       "{{deliveryWeekday}}": deliveryWeekday,
       "{{saleEndWeekday}}": saleEndWeekday,
       "{{nonce}}": nonce,
+      "{{nonceShort}}": nonceShort,
+      "{{notePort}}": String(notePort),
     ]
   }
 }

@@ -342,7 +342,7 @@ final class OnboardingFlowTests: XCTestCase {
     }
     XCTAssertEqual(
       secondBrainSource.components(separatedBy: "isDefaultAction: true").count - 1,
-      5,
+      6,
       "every visible second-brain proceed action must register Return")
     XCTAssertTrue(
       secondBrainSource.contains("Text(\"Continue →\")")

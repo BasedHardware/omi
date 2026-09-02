@@ -69,13 +69,19 @@ final class OnboardingScenarioTests: XCTestCase {
     }
   }
 
-  func testNoteTitleTransportRoundTripsBrowserEncoding() throws {
-    let note = "Hey Sam — lamp is great & arrives Friday."
-    let encoded = try XCTUnwrap(note.addingPercentEncoding(withAllowedCharacters: .alphanumerics))
-    let nonce = "nonce-123"
-    let title = "Omi Welcome · Sent · \(nonce) · \(encoded)"
-    XCTAssertEqual(OnboardingScenarioTitleTransport.note(from: title, nonce: nonce), note)
-    XCTAssertNil(OnboardingScenarioTitleTransport.note(from: title, nonce: "wrong"))
+  func testSentSignalIsShortEnoughToSurviveTitleTruncationAndBoundToTheNonce() {
+    let nonce = "8c1d2cfa-b9c9-4eb1-9115-7f0389d681a6"
+    let title = OnboardingScenarioTitleTransport.sentTitle(nonce: nonce)
+    XCTAssertEqual(title, "Omi Welcome · Sent · 8c1d2cfa")
+    XCTAssertLessThan(title.count, 40, "the window server truncates long window names")
+    XCTAssertTrue(OnboardingScenarioTitleTransport.isSentSignal(title, nonce: nonce))
+    XCTAssertTrue(OnboardingScenarioTitleTransport.isSentSignal(title + " - Google Chrome", nonce: nonce))
+    XCTAssertFalse(OnboardingScenarioTitleTransport.isSentSignal(title, nonce: "ffffffff-0000"))
+    XCTAssertFalse(OnboardingScenarioTitleTransport.isSentSignal("Omi Welcome · Note to Sam", nonce: nonce))
+    let context = OnboardingScenarioPageContext(
+      name: "D", dates: OnboardingScenarioDates.make(), nonce: nonce, notePort: 4_242)
+    XCTAssertEqual(context.replacements["{{nonceShort}}"], "8c1d2cfa")
+    XCTAssertEqual(context.replacements["{{notePort}}"], "4242")
   }
 
   func testDeterministicNoteEffects() {
@@ -274,7 +280,7 @@ final class OnboardingScenarioTests: XCTestCase {
   }
 
   @MainActor
-  func testWriteBeatWaitsForTheClickAndReturnsAfterSend() {
+  func testWriteBeatWaitsForTheClickAndReturnsAfterSend() async {
     let opened = OpenedBox()
     let returned = ReturnedBox()
     let model = scenarioModel(opened: opened, returned: returned)
@@ -282,6 +288,8 @@ final class OnboardingScenarioTests: XCTestCase {
     model.writePhase = .intro
 
     XCTAssertTrue(opened.urls.isEmpty, "the write beat's message opens nothing")
+    await model.startScenarioNoteReceiverIfNeeded()
+    XCTAssertNotEqual(model.scenarioNotePort, 0, "the page needs a port to beacon to")
     model.openComposePage()
     XCTAssertEqual(opened.urls.map(\.lastPathComponent), ["compose.html"])
     XCTAssertEqual(model.writePhase, .waitingForSend)
@@ -302,31 +310,60 @@ final class OnboardingScenarioTests: XCTestCase {
     let model = scenarioModel(opened: opened, returned: returned)
     model.step = .write
     model.writePhase = .intro
-    let sentTitle =
-      "\(OnboardingScenarioTitleTransport.sentToken) · \(model.scenarioPageNonce) · "
-      + "Hey%20Sam%20%E2%80%94%20lamp%20is%20great"
-    let polls = PollBox()
     model.scenarioWindowObservation = {
-      polls.count += 1
-      // Two polls of the compose page, then the Sent title from a browser.
-      let title = polls.count < 3 ? "Omi Welcome · Note to Sam" : sentTitle
-      return OnboardingScenarioWindowObservation(title: title, bundleID: "com.google.Chrome")
+      OnboardingScenarioWindowObservation(title: "Omi Welcome · Note to Sam", bundleID: "com.google.Chrome")
     }
     model.scenarioDetectionWait = {}
-
+    await model.startScenarioNoteReceiverIfNeeded()
     model.openComposePage()
-    let detection = try XCTUnwrap(model.scenarioDetectionTask)
-    await detection.value
+    XCTAssertEqual(model.writePhase, .waitingForSend)
+
+    // The note arrives over loopback, not through the title.
+    model.receiveScenarioNote("Hey Sam — lamp is great")
 
     XCTAssertEqual(model.writePhase, .review)
     XCTAssertEqual(model.scenarioWriteNote, "Hey Sam — lamp is great")
-    XCTAssertEqual(returned.count, 1, "Send seen is the one moment the write beat summons Omi")
+    XCTAssertEqual(returned.count, 1, "the note arriving is the one moment the write beat summons Omi")
     XCTAssertTrue(model.thread.contains { !$0.isOmi && $0.text == "Sent" })
     XCTAssertTrue(
       model.thread.last?.isOmi == true && model.thread.last?.text.contains("kept") == true,
       "the window comes back with Omi already explaining what it kept")
+    XCTAssertFalse(model.scenarioWriteUnreadable)
+    XCTAssertEqual(returned.chipsDown, 1)
+
+    // A second delivery is inert.
+    model.receiveScenarioNote("again")
+    XCTAssertEqual(returned.count, 1)
+    model.streamTask?.cancel()
+  }
+
+  @MainActor
+  func testSentSignalWithoutTheNoteCompletesHonestlyWithNothingKept() async throws {
+    let opened = OpenedBox()
+    let returned = ReturnedBox()
+    let model = scenarioModel(opened: opened, returned: returned)
+    model.step = .write
+    model.writePhase = .waitingForSend
+    let polls = PollBox()
+    let sent = OnboardingScenarioTitleTransport.sentTitle(nonce: model.scenarioPageNonce)
+    model.scenarioWindowObservation = {
+      polls.count += 1
+      return OnboardingScenarioWindowObservation(
+        title: polls.count < 3 ? "Omi Welcome · Note to Sam" : sent, bundleID: "com.google.Chrome")
+    }
+    model.scenarioDetectionWait = {}
+    model.scenarioNoteGrace = {}
+
+    model.startComposeDetection()
+    let detection = try XCTUnwrap(model.scenarioDetectionTask)
+    await detection.value
+
     XCTAssertEqual(polls.count, 3)
-    XCTAssertFalse(model.scenarioWriteDetectionTimedOut)
+    XCTAssertEqual(model.writePhase, .review)
+    XCTAssertTrue(model.scenarioWriteUnreadable)
+    XCTAssertTrue(model.scenarioMemoryChips.isEmpty && model.scenarioTaskChips.isEmpty)
+    XCTAssertEqual(returned.count, 1, "the user still comes back to Omi, with the truth")
+    XCTAssertTrue(model.thread.last?.text.contains("kept nothing") == true)
   }
 
   @MainActor
@@ -341,6 +378,7 @@ final class OnboardingScenarioTests: XCTestCase {
     }
     model.scenarioDetectionWait = {}
 
+    await model.startScenarioNoteReceiverIfNeeded()
     model.openComposePage()
     let detection = try XCTUnwrap(model.scenarioDetectionTask)
     await detection.value
