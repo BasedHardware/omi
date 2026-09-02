@@ -55,36 +55,31 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
   private var ownerID: String? = "owner-1"
   private var pttChordTokens = ["⌃", "⌥"]
 
-  // Sync hooks: the pinned SDK's async setUp/tearDown transfer the non-Sendable
-  // test instance across actors (see scripts/check-main-actor-xctest-hooks.py).
-  override func setUp() {
-    super.setUp()
-    MainActor.assumeIsolated {
-      suiteName = "FirstRealAppCardCoordinatorTests.\(UUID().uuidString)"
-      defaults = UserDefaults(suiteName: suiteName) ?? .standard
-      scheduler = ManualScheduler()
-      presented = []
-      dismissals = []
-      openedChatPrompts = []
-      telemetry = []
-      pttStart = nil
-      pttObservationStopped = false
-      frontmost = (realApp.bundleIdentifier, realApp.appName)
-      isOnboardingComplete = true
-      ownerID = "owner-1"
-      pttChordTokens = ["⌃", "⌥"]
-      FirstRealAppCardTelemetry.captureForTests = { [weak self] event, properties in
-        self?.telemetry.append((event, properties))
-      }
+  // Async hooks without `super` calls: awaiting the pinned SDK's nonisolated
+  // super.setUp()/tearDown() would transfer the non-Sendable test instance
+  // across actors (see scripts/check-main-actor-xctest-hooks.py).
+  override func setUp() async throws {
+    suiteName = "FirstRealAppCardCoordinatorTests.\(UUID().uuidString)"
+    defaults = UserDefaults(suiteName: suiteName) ?? .standard
+    scheduler = ManualScheduler()
+    presented = []
+    dismissals = []
+    openedChatPrompts = []
+    telemetry = []
+    pttStart = nil
+    pttObservationStopped = false
+    frontmost = (realApp.bundleIdentifier, realApp.appName)
+    isOnboardingComplete = true
+    ownerID = "owner-1"
+    pttChordTokens = ["⌃", "⌥"]
+    FirstRealAppCardTelemetry.captureForTests = { [weak self] event, properties in
+      self?.telemetry.append((event, properties))
     }
   }
 
-  override func tearDown() {
-    MainActor.assumeIsolated {
-      FirstRealAppCardTelemetry.captureForTests = nil
-      UserDefaults.standard.removePersistentDomain(forName: suiteName)
-    }
-    super.tearDown()
+  override func tearDown() async throws {
+    FirstRealAppCardTelemetry.captureForTests = nil
+    UserDefaults.standard.removePersistentDomain(forName: suiteName)
   }
 
   private func makeCoordinator() -> FirstRealAppCardCoordinator {
