@@ -388,6 +388,10 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
       output: output)
 
     XCTAssertTrue(result.wasOversized)
+    // The kernel delivered a projected (canonical) result that is merely over
+    // the transport cap. It must not be mislabeled as an unprojected invariant
+    // violation by the controller's oversized log gate.
+    XCTAssertTrue(result.hasCanonicalEnvelope)
     XCTAssertTrue(result.wasTruncated)
     XCTAssertLessThanOrEqual(result.output.utf8.count, RealtimeProviderToolResultPolicy.maximumByteCount)
     XCTAssertNotEqual(result.output, output)
@@ -397,6 +401,28 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
     XCTAssertEqual(envelope["status"] as? String, "succeeded")
     XCTAssertEqual(envelope["truncated"] as? Bool, true)
     XCTAssertEqual(envelope["fullOutputRef"] as? String, "artifact:unavailable")
+  }
+
+  func testUnprojectedOversizedResultIsFlaggedForTheInvariantLog() throws {
+    // A raw oversized payload without any canonical envelope is the only case
+    // that may log "INVARIANT VIOLATION unprojected".
+    var payload: [String: Any] = ["ok": true]
+    var text = ""
+    for _ in 0..<(RealtimeProviderToolResultPolicy.maximumByteCount / 32) {
+      text += "0123456789abcdef0123456789abcdef"
+    }
+    payload["payload"] = text
+    let data = try XCTUnwrap(JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))
+    let output = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+    let result = RealtimeProviderToolResultPolicy.prepare(
+      name: HubTool.listAgentSessions.rawValue,
+      output: output)
+
+    XCTAssertTrue(result.wasOversized)
+    XCTAssertFalse(result.hasCanonicalEnvelope)
+    XCTAssertTrue(result.wasTruncated)
+    XCTAssertLessThanOrEqual(result.output.utf8.count, RealtimeProviderToolResultPolicy.maximumByteCount)
   }
 
   func testOversizedProviderResultRetainsTheCanonicalArtifactReference() throws {
@@ -429,6 +455,7 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
     let envelope = try XCTUnwrap(object["toolResultEnvelope"] as? [String: Any])
 
     XCTAssertTrue(result.wasOversized)
+    XCTAssertTrue(result.hasCanonicalEnvelope)
     XCTAssertTrue(result.wasTruncated)
     XCTAssertLessThanOrEqual(result.output.utf8.count, RealtimeProviderToolResultPolicy.maximumByteCount)
     XCTAssertNotEqual(result.output, output)

@@ -414,12 +414,11 @@ function finalizeRelayResult(
     kernel: runtimeKernel,
     artifactRoot: agentArtifactsDir(),
     onDegraded: (record) => {
-      console.error(JSON.stringify({
-        event: "fallback",
-        area: "tool_result_projection",
-        outcome: "degraded",
-        ...record,
-      }));
+      // Projecting a large-but-successful result down to its model budget is
+      // the intended path here, not an error. logErr keeps the write pipe-safe
+      // (a destroyed stderr during shutdown must not throw) and off the
+      // error-level stream.
+      logErr(`fallback area=tool_result_projection outcome=degraded ${JSON.stringify(record)}`);
     },
   });
 }

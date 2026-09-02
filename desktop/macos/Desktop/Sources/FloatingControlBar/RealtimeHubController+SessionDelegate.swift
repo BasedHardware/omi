@@ -93,7 +93,7 @@ extension RealtimeHubController {
           "user_visible": true,
         ])
     }
-    if providerResult.wasOversized {
+    if providerResult.wasOversized && !providerResult.hasCanonicalEnvelope {
       log(
         "RealtimeHub[\(providerTag)]: INVARIANT VIOLATION unprojected tool result \(name) "
           + "original_bytes=\(providerResult.originalByteCount) provider_bytes=\(providerResult.output.utf8.count) "

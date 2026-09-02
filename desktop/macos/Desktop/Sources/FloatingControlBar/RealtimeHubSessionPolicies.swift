@@ -393,6 +393,9 @@ struct RealtimeProviderToolResult: Equatable {
   let originalByteCount: Int
   let wasOversized: Bool
   let wasTruncated: Bool
+  /// Whether the kernel already delivered a canonical envelope. An oversized
+  /// result that still carries one was projected, not left unprojected.
+  let hasCanonicalEnvelope: Bool
 }
 
 enum RealtimeProviderToolResultPolicy {
@@ -417,6 +420,9 @@ enum RealtimeProviderToolResultPolicy {
     {
       providerOutput = compact
     }
+    // Presence must be measured before `finalize`, which wraps unprojected
+    // payloads in a synthetic envelope of its own.
+    let hasCanonicalEnvelope = parsedCanonicalToolResultEnvelope(from: providerOutput) != nil
     let finalized = finalize(provider: provider, name: name, output: providerOutput)
     let wasOversized = finalized.utf8.count > maximumByteCount
     let bounded =
@@ -430,7 +436,8 @@ enum RealtimeProviderToolResultPolicy {
       output: bounded,
       originalByteCount: originalByteCount,
       wasOversized: wasOversized,
-      wasTruncated: wasTruncated)
+      wasTruncated: wasTruncated,
+      hasCanonicalEnvelope: hasCanonicalEnvelope)
   }
 
   /// Defence in depth for a kernel invariant breach. The provider still receives a successful,

@@ -1072,7 +1072,7 @@ describe("agent control tools", () => {
     vi.spyOn(kernel, "persistArtifact").mockImplementation(() => {
       throw new Error("deterministic artifact persistence failure");
     });
-    const degraded = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const degraded = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 
     const raw = await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
       ownerId: "owner",
@@ -1089,12 +1089,13 @@ describe("agent control tools", () => {
         fullOutputRef: "artifact:unavailable",
       },
     });
-    expect(degraded.mock.calls.some(([entry]) => {
-      try {
-        return JSON.parse(String(entry)).outcome === "degraded";
-      } catch {
-        return false;
-      }
+    // The degraded record is a pipe-safe operational stderr line, not
+    // error-level console output.
+    expect(degraded.mock.calls.some(([chunk]) => {
+      const line = String(chunk);
+      return line.includes("area=tool_result_projection")
+        && line.includes("outcome=degraded")
+        && !line.includes("UNSAVED_CONTEXT_SENTINEL");
     })).toBe(true);
     degraded.mockRestore();
     store.close();

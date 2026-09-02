@@ -2429,14 +2429,15 @@ function stringifyToolOutputPersistFailure(
 }
 
 function recordControlProjectionFallback(toolName: string, originalBytes: number, projectedBytes: number): void {
-  console.error(JSON.stringify({
-    event: "fallback",
-    area: "tool_result_projection",
-    outcome: "degraded",
-    toolName,
-    originalBytes,
-    projectedBytes,
-  }));
+  // Mirrors index.ts logErr: a bounded projection of a successful result is
+  // routine, so emit a plain operational line through a pipe-safe stderr write
+  // instead of error-level console output that can throw on a destroyed pipe.
+  try {
+    process.stderr.write(
+      `[agent] fallback area=tool_result_projection outcome=degraded toolName=${toolName} originalBytes=${originalBytes} projectedBytes=${projectedBytes}\n`);
+  } catch {
+    // Parent stderr pipe is gone; nothing to record.
+  }
 }
 
 function stringifyProjectedControlCancellation(
