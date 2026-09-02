@@ -1,0 +1,7 @@
+{
+  "version": "0.12.257",
+  "date": "2026-09-01",
+  "changes": [
+    "Fixed the onboarding riddle demo answering the first door again when you asked about the second: Omi now checks which door is on screen and passes it along when it thinks deeper"
+  ]
+}

@@ -11737,13 +11737,12 @@
             }
         }
     },
-    "shortConversationsCount": "{count, plural, =1{{count} short conversation} other{{count} short conversations}}",
-    "@shortConversationsCount": {
-        "description": "Collapsed group of the day’s short conversations on the home timeline",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
+    "transcriptionNoAudio": "Transcription not receiving audio",
+    "@transcriptionNoAudio": {
+        "description": "Status when an active call transcription socket receives no audio frames"
+    },
+    "tapPlusToStartRecording": "Tap + to start recording",
+    "@tapPlusToStartRecording": {
+        "description": "Empty-home hint pointing at the + record button"
     }
 }

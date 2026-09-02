@@ -637,18 +637,22 @@ final class KernelTurnProjection {
     resources: [ChatResource] = [],
     assistantStatus: KernelJournalTurnStatus = .completed,
     terminalReason: String? = nil,
+    userScreenContext: String? = nil,
     ownerID: String? = nil
   ) async -> Bool {
     let baseDate = Date()
     var writes: [KernelJournalTurnWrite] = []
     if !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      let user = ChatMessage(
+      var user = ChatMessage(
         id: Self.stableTurnID(continuityKey: continuityKey, role: "user"),
         clientTurnId: continuityKey,
         text: userText,
         createdAt: baseDate,
         sender: .user
       )
+      if let userScreenContext, !userScreenContext.isEmpty {
+        user.metadata = MessageMetadata(screenContext: userScreenContext)
+      }
       writes.append(
         user.journalWrite(
           origin: origin,

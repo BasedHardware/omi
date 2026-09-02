@@ -279,6 +279,18 @@ class PushToTalkManager: ObservableObject {
   private var hasMicPermission: Bool = false
   private var isCurrentSessionFollowUp = false
   private var currentContextSnapshot: PTTContextSnapshot?
+
+  /// OCR text of this turn's pre-overlay frame, waiting briefly for the in-flight OCR when the
+  /// realtime model escalates before it finished. Nil when no turn is capturing.
+  func visibleScreenText(timeout: TimeInterval) async -> String? {
+    let deadline = Date().addingTimeInterval(timeout)
+    while currentVoiceTurnID != nil {
+      if let snapshot = currentContextSnapshot { return snapshot.visibleText }
+      if Date() >= deadline { return nil }
+      try? await Task.sleep(nanoseconds: 100_000_000)
+    }
+    return nil
+  }
   private var contextCaptureTask: Task<Void, Never>?
 
   // Batch mode: accumulate raw audio for post-recording transcription

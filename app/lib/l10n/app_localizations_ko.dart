@@ -9748,12 +9748,8 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '짧은 대화 $count개',
-    );
-    return '$_temp0';
-  }
+  String get transcriptionNoAudio => '전사가 오디오를 받지 못하고 있습니다';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

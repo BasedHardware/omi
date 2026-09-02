@@ -254,9 +254,15 @@ _MANAGED_CHAT_ALIASES = {
 # Non-conversational desktop callers (the automation planner and the local-agent
 # loop) ask for a single-shot structured completion, not a chat turn. They select
 # the structured lane explicitly so they never inherit chat-agent routing.
+# Legacy Haiku specialist aliases used the company Anthropic key on this
+# router; remap them onto the same structured lane so leftover fielded clients
+# stop billing direct Haiku. Kill-switch / BYOK still resolve Haiku via
+# _MODEL_ROUTES when gateway_mode is off.
 _MANAGED_STRUCTURED_ALIASES = {
     'omi-structured',
     CHAT_STRUCTURED_AUTO_LANE_ID,
+    'claude-haiku-4-5-20251001',
+    'claude-haiku-4-5',
 }
 WEB_SEARCH_AUTO_LANE_ID = feature_auto_lane_id('web_search')
 _MAX_TOKENS = 16_384
@@ -278,14 +284,14 @@ def _managed_lane_id(body: Mapping[str, object]) -> str:
 
 
 def _uses_managed_chat_agent(body: Mapping[str, object]) -> bool:
-    """Route managed conversational traffic to Luna, but preserve specialist calls.
+    """Route managed desktop traffic onto gateway lanes.
 
     Desktop conversational traffic uses the managed Luna chat agent for Sonnet
-    and leftover Opus aliases plus explicit auto/Luna lane ids. Extraction jobs
-    still use Haiku; those legacy Anthropic calls must not inherit the chat-agent
-    personality/system prompt or have their requested model rewritten to Luna.
-    An omitted model uses the managed chat-agent default; an explicit unknown
-    model fails closed in the normal request validation path.
+    and leftover Opus aliases plus explicit auto/Luna lane ids. Legacy Haiku
+    extraction aliases join the structured lane so they do not inherit the
+    chat-agent personality or keep using the company Anthropic key. An omitted
+    model uses the managed chat-agent default; an explicit unknown model fails
+    closed in the normal request validation path.
     """
     if 'model' not in body:
         return True

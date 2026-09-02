@@ -28,14 +28,15 @@ def _make_receiver(audio_bytes_send):
             request=SimpleNamespace(codec='pcm', sample_rate=TARGET_SAMPLE_RATE, websocket=None),
             use_custom_stt=True,
             audio_bytes_send=audio_bytes_send,
-            state=SimpleNamespace(last_audio_received_time=0.0),
+            state=SimpleNamespace(last_audio_received_time=0.0, first_audio_byte_timestamp=1.0),
         ),
         channel_id_to_index={0: 0, 1: 1},
         multi_opus_decoders=[None, None],
         stt_sockets_multi=[None, None],
         channel_mix_buffers=[bytearray(), bytearray()],
     )
-    # Bind the real _capture so the mock exercises actual capture delegation.
+    # Bind the real _mark_first_audio so first-audio gating runs in this fake too.
+    recv._mark_first_audio = MethodType(receiver.ListenReceiver._mark_first_audio, recv)
     recv._capture = MethodType(receiver.ListenReceiver._capture, recv)
     return recv
 

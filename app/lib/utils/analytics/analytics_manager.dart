@@ -561,6 +561,34 @@ class AnalyticsManager {
   void phoneCallEnded({required int durationSeconds}) =>
       track('Phone Call Ended', properties: {'duration_seconds': durationSeconds});
 
+  /// End-of-call (or stall) snapshot of the live-transcript session.
+  /// Aggregate counts and closed status strings only — no raw audio samples,
+  /// contact/phone numbers, transcripts, or ids are tracked.
+  void phoneCallTranscriptSession({
+    required bool wsAccepted,
+    required int audioFramesSent,
+    required int audioBytesSent,
+    required int audioChannel1Frames,
+    required int audioChannel2Frames,
+    required int eventChannelErrors,
+    required int eventChannelCoerced,
+    required String transcriptionStatusFinal,
+    required int durationSeconds,
+    String? reason,
+  }) =>
+      track('Phone Call Transcript Session', properties: {
+        'ws_accepted': wsAccepted,
+        'audio_frames_sent': audioFramesSent,
+        'audio_bytes_sent': audioBytesSent,
+        'audio_channel_1_frames': audioChannel1Frames,
+        'audio_channel_2_frames': audioChannel2Frames,
+        'event_channel_errors': eventChannelErrors,
+        'event_channel_coerced': eventChannelCoerced,
+        'transcription_status_final': transcriptionStatusFinal,
+        'duration_seconds': durationSeconds,
+        if (reason != null) 'reason': reason,
+      });
+
   void phoneCallFailed({String? error}) => track('Phone Call Failed', properties: {'error': error ?? 'unknown'});
 
   // Phone Calls Dialpad

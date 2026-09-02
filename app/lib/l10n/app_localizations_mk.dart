@@ -9967,13 +9967,8 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Кратки разговори: $count',
-      one: '$count краток разговор',
-    );
-    return '$_temp0';
-  }
+  String get transcriptionNoAudio => 'Транскрипцијата не прима аудио';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

@@ -1076,6 +1076,165 @@ jobs:
             "unspecified browser smoke failure",
         )
 
+    def test_acceptance_command_renders_sha_placeholder(self) -> None:
+        command = (
+            "python3",
+            ".github/scripts/smoke_public_build_browser.py",
+            "--target",
+            "frontend",
+            "--base-url",
+            "{base_url}",
+            "--expect-sha",
+            "{sha}",
+        )
+        self.assertEqual(
+            STATIC.render_acceptance_command(
+                command,
+                base_url="https://h.omi.me",
+                sha="deadbeefcafebabe",
+            ),
+            (
+                "python3",
+                ".github/scripts/smoke_public_build_browser.py",
+                "--target",
+                "frontend",
+                "--base-url",
+                "https://h.omi.me",
+                "--expect-sha",
+                "deadbeefcafebabe",
+            ),
+        )
+        without_sha = command[:-2]
+        self.assertEqual(
+            STATIC.render_acceptance_command(without_sha, base_url="https://h.omi.me", sha="ignored"),
+            without_sha[:5] + ("https://h.omi.me",),
+        )
+
+    def test_acceptance_document_matches_marker_and_sha(self) -> None:
+        document = (
+            '<span data-omi-public-build-canary="frontend:ready" ' 'data-omi-public-build-sha="abc123" hidden></span>'
+        )
+        self.assertTrue(SMOKE.acceptance_document_matches(document, marker="frontend:ready"))
+        self.assertTrue(SMOKE.acceptance_document_matches(document, marker="frontend:ready", expect_sha="abc123"))
+        self.assertFalse(SMOKE.acceptance_document_matches(document, marker="frontend:ready", expect_sha="other"))
+        self.assertFalse(
+            SMOKE.acceptance_document_matches(
+                '<span data-omi-public-build-canary="frontend:pending" data-omi-public-build-sha="abc123">',
+                marker="frontend:ready",
+                expect_sha="abc123",
+            )
+        )
+
+    def test_browser_smoke_rejects_a_mismatched_sha_and_accepts_a_matching_one(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["candidate_acceptance"]["command"].extend(["--expect-sha", "{sha}"])
+        self.write_json("config/public-build-contract.json", contract)
+        original = SMOKE.render_candidate
+        SMOKE.render_candidate = (
+            lambda **_kwargs: '<span data-omi-public-build-canary="fake:ready" data-omi-public-build-sha="aaaa" />'
+        )
+        try:
+            with self.assertRaises(SMOKE.BrowserSmokeError) as caught:
+                SMOKE.smoke(
+                    target="fake",
+                    base_url="https://candidate.example",
+                    contract_path=self.root / "config/public-build-contract.json",
+                    environment={"OMI_BROWSER_BIN": "fake-browser"},
+                    expect_sha="bbbb",
+                )
+            self.assertEqual(str(caught.exception), "client public-build sha did not match")
+            SMOKE.smoke(
+                target="fake",
+                base_url="https://candidate.example",
+                contract_path=self.root / "config/public-build-contract.json",
+                environment={"OMI_BROWSER_BIN": "fake-browser"},
+                expect_sha="aaaa",
+            )
+        finally:
+            SMOKE.render_candidate = original
+        self.assertIn("client public-build sha did not match", SMOKE.SAFE_BROWSER_SMOKE_REASONS)
+
+
+class AcceptanceRouteFixture(unittest.TestCase):
+    """Restricted ingress hides the tagged candidate URL; the route must say so."""
+
+    RESTRICTED = "internal-and-cloud-load-balancing"
+
+    def load(self, contract: dict):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "public-build-contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            return STATIC.load_contract(path)
+
+    def with_public_urls(self, public_urls: dict) -> dict:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["candidate_acceptance"]["public_urls"] = public_urls
+        return contract
+
+    def test_open_ingress_smokes_the_tagged_candidate(self) -> None:
+        target = self.load(fixture_contract()).targets["fake"]
+        for ingress in ("", "all", " all "):
+            route = STATIC.acceptance_route(target, environment="prod", ingress=ingress)
+            self.assertEqual(route, STATIC.AcceptanceRoute(route="candidate_url", public_url=""))
+
+    def test_restricted_ingress_uses_the_declared_public_url(self) -> None:
+        target = self.load(self.with_public_urls({"prod": "https://fake.example"})).targets["fake"]
+        route = STATIC.acceptance_route(target, environment="prod", ingress=self.RESTRICTED)
+        self.assertEqual(route, STATIC.AcceptanceRoute(route="public_url", public_url="https://fake.example"))
+
+    def test_restricted_ingress_without_a_public_url_names_the_ingress(self) -> None:
+        target = self.load(self.with_public_urls({"prod": "https://fake.example"})).targets["fake"]
+        with self.assertRaises(ValueError) as caught:
+            STATIC.acceptance_route(target, environment="development", ingress=self.RESTRICTED)
+        self.assertIn(self.RESTRICTED, str(caught.exception))
+        self.assertIn("development", str(caught.exception))
+
+    def test_public_urls_must_be_https_for_known_environments(self) -> None:
+        for public_urls in (
+            {"staging": "https://fake.example"},
+            {"prod": "http://fake.example"},
+            {"prod": "https://fake.example/"},
+            ["https://fake.example"],
+        ):
+            with self.subTest(public_urls=public_urls):
+                with self.assertRaises(ValueError):
+                    self.load(self.with_public_urls(public_urls))
+
+    def test_serving_revision_prefers_the_largest_traffic_share(self) -> None:
+        document = {
+            "status": {
+                "traffic": [
+                    {"revisionName": "svc-old", "percent": 30},
+                    {"revisionName": "svc-live", "percent": 70},
+                    {"revisionName": "svc-candidate", "tag": "public-x", "percent": 0},
+                    {"latestRevision": True},
+                ]
+            }
+        }
+        self.assertEqual(STATIC.serving_revision(document), "svc-live")
+        self.assertEqual(STATIC.serving_revision({"status": {"traffic": []}}), "")
+        self.assertEqual(STATIC.serving_revision({}), "")
+
+    def test_shipped_frontend_contract_declares_its_balancer_hostname(self) -> None:
+        # h.omi.me fronts the `frontend` service, whose contract restricts ingress
+        # to the balancer; without this URL no prod frontend candidate can ever be accepted.
+        target = STATIC.load_contract(STATIC.DEFAULT_CONTRACT).targets["frontend"]
+        self.assertIn("--ingress=internal-and-cloud-load-balancing", target.deployment.flags)
+        self.assertEqual(target.candidate_acceptance.public_urls.get("prod"), "https://h.omi.me")
+
+    def test_shipped_frontend_contract_declares_expect_sha(self) -> None:
+        target = STATIC.load_contract(STATIC.DEFAULT_CONTRACT).targets["frontend"]
+        self.assertIn("--expect-sha", target.candidate_acceptance.command)
+        self.assertIn("{sha}", target.candidate_acceptance.command)
+        self.assertEqual(
+            STATIC.render_acceptance_command(
+                target.candidate_acceptance.command,
+                base_url="https://h.omi.me",
+                sha="0123456789abcdef0123456789abcdef01234567",
+            )[-2:],
+            ("--expect-sha", "0123456789abcdef0123456789abcdef01234567"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

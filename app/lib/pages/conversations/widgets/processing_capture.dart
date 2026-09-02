@@ -24,45 +24,6 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 
-/// The one line of live transcript on the capture card.
-///
-/// Speech recognition grows the *same* segment word by word, so an ellipsized
-/// line kept showing the words that arrived first and hid everything said
-/// since — the preview only appeared to move when a new segment began. This
-/// stays pinned to the end of the text instead, so what you read is what was
-/// just said. Short text still reads from the left.
-class LiveTranscriptPreview extends StatelessWidget {
-  const LiveTranscriptPreview({super.key, required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          // Anchors the viewport to the end of the line, and keeps it there as
-          // more words arrive.
-          reverse: true,
-          physics: const NeverScrollableScrollPhysics(),
-          child: ConstrainedBox(
-            // Until the line overflows there is nothing to follow, so it should
-            // sit against the left edge like ordinary text.
-            constraints: BoxConstraints(minWidth: constraints.maxWidth),
-            child: Text(
-              '... $text',
-              style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-              maxLines: 1,
-              softWrap: false,
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
 class ConversationCaptureWidget extends StatefulWidget {
   const ConversationCaptureWidget({super.key});
 
@@ -148,13 +109,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             routeToPage(context, ConversationCapturingPage(topConversationId: provider.topConversationId));
           },
           child: Container(
-            // Home's day timeline is flat — no cards, entries inset 24 with a
-            // time column. A filled, rounded panel dropped between the day
-            // headline and the day's conversations read as a component from a
-            // different screen, so the live capture keeps its content and loses
-            // the card. 14 + the inner 10 lands it on the timeline's own inset.
-            margin: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             width: double.maxFinite,
+            decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24)),
             child: Padding(
               padding: EdgeInsets.fromLTRB(
                 10,
@@ -514,7 +471,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
-                child: LiveTranscriptPreview(text: provider.segments.last.text),
+                child: Text(
+                  '... ${provider.segments.last.text} ...',
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             )
           else

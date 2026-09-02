@@ -417,6 +417,27 @@ OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
     ['provider', 'outcome', 'client_platform', 'deployment_environment', 'phase'],
 )
 
+# /v4/listen funnel for sources the client cannot self-report (phone_call today):
+# accepted socket -> first decoded audio -> transcript delivery. Sources and outcomes
+# are closed enums; no user, call, or session identifiers appear as labels.
+OMI_LISTEN_ACCEPTED_TOTAL = Counter(
+    'omi_listen_accepted_total',
+    'Accepted /v4/listen WebSocket sessions by bounded transcription source and client platform',
+    ['transcription_source', 'client_platform'],
+)
+
+OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
+    'omi_listen_audio_outcome_total',
+    'Per-session listen audio outcomes by bounded transcription source, outcome, and client platform',
+    ['transcription_source', 'outcome', 'client_platform'],
+)
+
+OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL = Counter(
+    'omi_listen_unknown_channel_prefix_total',
+    'Multi-channel frames dropped for an unknown channel prefix, by bounded source and client platform',
+    ['transcription_source', 'client_platform'],
+)
+
 TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(
     'task_workstream_association_total',
     'Canonical evidence association outcomes with bounded adjudication reasons',

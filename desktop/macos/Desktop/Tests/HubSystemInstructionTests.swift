@@ -3,6 +3,43 @@ import XCTest
 @testable import Omi_Computer
 
 final class HubSystemInstructionTests: XCTestCase {
+  func testEscalationPromptCarriesThisTurnsScreenContext() {
+    // Regression (Beta 0.12.256): think_deeper was called with only "What is the answer to this
+    // riddle?" and no screen info, so the chat lane answered the previous door. The escalation
+    // prompt must carry what this turn's screenshot showed.
+    let prompt = RealtimeHubTools.escalationUserPrompt(
+      query: "What is the answer to this riddle?", toolContext: "",
+      screenContext: "Door 2 of 3: Which planet has a day longer than its year?")
+    XCTAssertTrue(prompt.contains("this turn's screenshot"))
+    XCTAssertTrue(prompt.contains("Door 2 of 3"))
+    XCTAssertEqual(RealtimeHubTools.escalationUserPrompt(query: "q", toolContext: ""), "q")
+  }
+
+  func testVoiceInstructionTellsTheModelEveryTurnCarriesTheCurrentScreen() {
+    // Regression (Beta 0.12.257, two users): the model answered a current-screen question from a
+    // 13-second-old screenshot / an earlier answer without calling screenshot. Nothing in the
+    // prompt said when to look. The frame is now attached to every turn and the instruction
+    // must say so, mark earlier images stale, and keep screenshot for a fresh re-look only.
+    let instruction = RealtimeHubTools.systemInstruction(kernelContext: "ctx")
+    XCTAssertTrue(instruction.contains("every turn arrives with an image of the user's screen"))
+    XCTAssertTrue(instruction.contains("Images from earlier turns are stale"))
+    XCTAssertTrue(instruction.contains("Call the screenshot tool only when no image arrived with this turn"))
+    XCTAssertFalse(instruction.contains("You cannot see the user's data or screen without calling a tool"))
+    let tool = GeneratedRealtimeTools.baseOpenAITools(providerProperty: nil)
+      .first { ($0["name"] as? String) == HubTool.screenshot.rawValue }
+    XCTAssertTrue(((tool?["description"] as? String) ?? "").contains("Every turn already includes the screen"))
+  }
+
+  func testOnboardingDemoNoteIsIncludedWhenPresentAndAbsentOtherwise() {
+    let with = RealtimeHubTools.systemInstruction(
+      kernelContext: "ctx", onboardingDemoContext: "Door 3 asks for the last word of the first riddle (answer: inside)."
+    )
+    XCTAssertTrue(with.contains("## Onboarding demo"))
+    XCTAssertTrue(with.contains("(answer: inside)"))
+    let without = RealtimeHubTools.systemInstruction(kernelContext: "ctx")
+    XCTAssertFalse(without.contains("## Onboarding demo"))
+  }
+
   func testHigherModelAuthorsAShortSpeakableAnswerForFaithfulRealtimeDelivery() {
     let instruction = RealtimeHubTools.escalationSystemPrompt()
 

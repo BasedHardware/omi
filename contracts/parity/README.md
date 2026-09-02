@@ -84,6 +84,15 @@ in the same PR.
    sits on the strict side (it refuses to accept these forms, so it can never
    re-emit them); the `expected_by_model` cases in `wire_action_item.json` pin
    both client behaviors until the platforms converge.
+5. JIT empty watchlist. macOS (`KnowledgeLedgerTriggerWatchlistRuntime`,
+   `desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerRuntime.swift`)
+   routes a complete *empty* watchlist to the bounded ambient lane (owner decision
+   2026-09-01: an account with no standing trigger must not go silent). Windows
+   (`desktop/windows/src/shared/jitTriggerRuntime.ts`, `desktop/windows/src/main/jit/jitRuntime.ts`)
+   still returns `none` and suppresses `empty_watchlist`; its ambient lane is
+   caller-controlled and not wired. The beta cohort is macOS-only and the Windows JIT
+   client floor is unmet, so the losing platform is Windows and must adopt the macOS
+   behavior before any Windows cohort activates (JIT decision 19).
 
 ## Adding or changing a case
 
