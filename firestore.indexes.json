@@ -1415,7 +1415,7 @@
       ]
     },
     {
-      "collectionGroup": "chat_first_proactive_intents",
+      "collectionGroup": "chat_first_dead_letters",
       "queryScope": "COLLECTION",
       "fields": [
         {

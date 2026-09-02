@@ -172,6 +172,10 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
           let failure: String
           if case APIError.httpError(let statusCode, _) = error {
             failure = "status=\(statusCode)"
+          } else if let urlError = error as? URLError {
+            failure =
+              "error_type=\(String(describing: type(of: error))) "
+              + "url_error_code=\(urlError.code.rawValue)"
           } else {
             failure = "error_type=\(String(describing: type(of: error)))"
           }

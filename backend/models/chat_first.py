@@ -202,6 +202,15 @@ class ProactiveIntent(_StrictModel):
         return self.source == 'agent_judgment'
 
 
+class DeadLetteredProactiveIntent(ProactiveIntent):
+    """Full terminal record stored outside the rolling reader's collection."""
+
+    delivery_state: Literal['dead_letter'] = 'dead_letter'  # pyright: ignore[reportIncompatibleVariableOverride]
+    dead_letter_reason: str = Field(  # pyright: ignore[reportIncompatibleVariableOverride]
+        default='unknown', min_length=1, max_length=128, pattern=r'^[a-z0-9_:.-]+$'
+    )
+
+
 class MaterializableProactiveIntent(_StrictModel):
     """Wire-safe intent state; terminal dead letters never leave the store."""
 

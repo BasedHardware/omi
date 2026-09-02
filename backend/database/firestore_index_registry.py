@@ -1030,7 +1030,7 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
 
 CHAT_FIRST_TRANSIENT_DEAD_LETTER_REPAIR_QUERY = FirestoreQuerySpec(
     identifier='chat_first_transient_dead_letter_repair',
-    collection_group='chat_first_proactive_intents',
+    collection_group='chat_first_dead_letters',
     query_scope='COLLECTION',
     filters=(
         FirestoreQueryFilter('account_generation', '==', 'account_generation'),

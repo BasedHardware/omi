@@ -337,6 +337,24 @@ final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
     XCTAssertFalse(messages.first?.contains(serverDetail) == true)
     XCTAssertTrue(messages.first?.contains("receipts=1 rejections=1 deferrals=1") == true)
   }
+
+  @MainActor
+  func testURLErrorFailureLogIncludesTypeAndCode() async {
+    let driver = FakePromptMaterializationDriver(
+      context: ChatFirstMaterializationContext(ownerID: "owner", controlGeneration: 3),
+      pendingReceipts: .empty,
+      response: ChatFirstMaterializePromptsResponse(intents: []))
+    driver.fetchError = URLError(.timedOut)
+    var messages: [String] = []
+    let coordinator = ChatFirstPromptMaterializationCoordinator(logger: { messages.append($0) })
+    coordinator.activate(driver: driver)
+
+    coordinator.chatTranscriptFirstPageDidLoad()
+    for _ in 0..<40 where messages.isEmpty { await Task.yield() }
+
+    XCTAssertTrue(messages.first?.contains("error_type=") == true)
+    XCTAssertTrue(messages.first?.contains("url_error_code=\(URLError.Code.timedOut.rawValue)") == true)
+  }
 }
 
 @MainActor
