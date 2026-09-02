@@ -2,6 +2,40 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.267",
+      "date": "2026-09-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.266",
+      "date": "2026-09-02",
+      "changes": [
+        "Your daily summary now appears at the top of Chat — the day's headline, stats, highlights, and action items, with a one-tap follow-up question",
+        "The first app you open after setup now gets a notch card that opens Ask Omi with a question about your screen already typed",
+        "When Omi can't see your screen during a voice question, it now explains why — Screen Recording isn't granted, was granted after Omi launched and needs a reopen, or the screen just wasn't available — instead of flatly saying it couldn't verify the current screen."
+      ]
+    },
+    {
+      "version": "0.12.265",
+      "date": "2026-09-02",
+      "changes": [
+        "Fixed large voice-tool results so useful summaries load successfully and can be inspected in more detail.",
+        "Fixed meeting notes and daily opener cards getting stuck behind an undeliverable Chat item",
+        "Redesigned the first-use popup: pick what to try first (a game, design feedback, a post, shopping) and Try it now opens that site",
+        "The first-use popup previews are back to the drawn pages, with the site name larger at the top",
+        "Omi can ask users who never got going to walk through onboarding again on their next launch"
+      ]
+    },
+    {
+      "version": "0.12.260",
+      "date": "2026-09-02",
+      "changes": [
+        "Onboarding door 3 hint asks the question directly instead of telling Omi to check screen history, which is not searchable yet that early in onboarding"
+      ]
+    },
+    {
       "version": "0.12.259",
       "date": "2026-09-02",
       "changes": [

@@ -8,6 +8,8 @@ enum HubTool: String {
   case getAgentRun = "get_agent_run"
   case cancelAgentRun = "cancel_agent_run"
   case inspectAgentArtifacts = "inspect_agent_artifacts"
+  case readToolOutput = "read_tool_output"
+  case searchToolOutput = "search_tool_output"
   case updateAgentArtifactLifecycle = "update_agent_artifact_lifecycle"
   case spawnAgent = "spawn_agent"
   case setDesktopAttentionOverride = "set_desktop_attention_override"
@@ -195,6 +197,53 @@ enum GeneratedRealtimeTools {
         }
       },
       "required": []
+    }
+  },
+  {
+    "type": "function",
+    "name": "read_tool_output",
+    "description": "Read a bounded excerpt from an Omi tool-output artifact referenced by a prior toolResultEnvelope. Never request an arbitrary file path.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "description": "Canonical tool-output artifact id."
+        },
+        "maxBytes": {
+          "type": "number",
+          "description": "Maximum excerpt size in bytes. Default 4096, max 8192."
+        }
+      },
+      "required": [
+        "artifactId"
+      ]
+    }
+  },
+  {
+    "type": "function",
+    "name": "search_tool_output",
+    "description": "Search a saved Omi tool-output artifact for matching lines without returning the complete artifact.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "description": "Canonical tool-output artifact id."
+        },
+        "query": {
+          "type": "string",
+          "description": "Text to find in the saved output."
+        },
+        "maxMatches": {
+          "type": "number",
+          "description": "Maximum matching lines. Default 5."
+        }
+      },
+      "required": [
+        "artifactId",
+        "query"
+      ]
     }
   },
   {

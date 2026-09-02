@@ -38,6 +38,7 @@ TASK_EXPORT_COLLECTIONS = (
     'task_context_snapshots',
     'task_open_loop_snapshots',
     'chat_first_proactive_intents',
+    'chat_first_dead_letters',
     'chat_first_deferrals',
 )
 

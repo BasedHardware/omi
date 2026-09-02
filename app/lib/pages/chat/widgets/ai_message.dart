@@ -1235,7 +1235,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8, left: 4),
+      padding: const EdgeInsets.only(left: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1268,7 +1268,6 @@ class _MessageActionBarState extends State<MessageActionBar> {
               }
             },
           ),
-          const SizedBox(width: 20),
           // Thumbs up button
           _buildActionButton(
             icon: _selectedNps == 1 ? FontAwesomeIcons.solidThumbsUp : FontAwesomeIcons.thumbsUp,
@@ -1281,7 +1280,6 @@ class _MessageActionBarState extends State<MessageActionBar> {
               widget.setMessageNps?.call(_selectedNps ?? 0);
             },
           ),
-          const SizedBox(width: 20),
           // Thumbs down button
           _buildActionButton(
             icon: _selectedNps == -1 ? FontAwesomeIcons.solidThumbsDown : FontAwesomeIcons.thumbsDown,
@@ -1300,7 +1298,6 @@ class _MessageActionBarState extends State<MessageActionBar> {
               }
             },
           ),
-          const SizedBox(width: 20),
           // Share button
           _buildActionButton(
             icon: FontAwesomeIcons.share,
@@ -1325,13 +1322,19 @@ class _MessageActionBarState extends State<MessageActionBar> {
   }
 
   Widget _buildActionButton({required FaIconData icon, required VoidCallback onTap, bool isSelected = false}) {
+    // The 14pt glyph alone is far below the 44pt tap minimum; pad the hit area
+    // (34x38) so finger taps on copy/share actually land. Visual pitch is kept
+    // by dropping the 20pt gaps between buttons in favour of this padding.
     return InkWell(
       splashColor: Colors.transparent,
       focusColor: Colors.transparent,
       hoverColor: Colors.transparent,
       highlightColor: Colors.transparent,
       onTap: onTap,
-      child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade600, size: 14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade600, size: 14),
+      ),
     );
   }
 }

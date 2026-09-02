@@ -869,6 +869,13 @@ actor ChatCitationProvenanceRegistry {
   /// callbacks in a different process from terminal finalization, so the tool output is the durable
   /// handoff; the in-process registry remains only a fast path.
   static func references(fromAnnotatedToolOutput output: String) -> [ChatCitationReference] {
+    if let data = output.data(using: .utf8),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let sections = object["sections"] as? [[String: Any]]
+    {
+      let typed = references(fromTypedSections: sections)
+      if !typed.isEmpty { return typed }
+    }
     let text: String
     if let data = output.data(using: .utf8),
       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -905,6 +912,48 @@ actor ChatCitationProvenanceRegistry {
         appName: entry["app_name"] as? String,
         url: url)
     }
+  }
+
+  private static func references(fromTypedSections sections: [[String: Any]]) -> [ChatCitationReference] {
+    sections.flatMap { section -> [ChatCitationReference] in
+      guard let sectionName = section["name"] as? String,
+        let kind = citationKind(forSection: sectionName),
+        let items = section["items"] as? [[String: Any]]
+      else { return [] }
+      return items.compactMap { item in
+        guard let marker = item["citationMarker"] as? String,
+          let ordinal = citationOrdinal(from: marker),
+          let sourceID = item["sourceId"] as? String,
+          !sourceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        let rawURL = item["url"] as? String
+        return ChatCitationReference(
+          ordinal: ordinal,
+          kind: kind,
+          sourceID: sourceID,
+          title: item["title"] as? String ?? "",
+          preview: item["summary"] as? String ?? item["content"] as? String ?? "",
+          momentTimestampMs: ChatJSONScalar.int(item["momentTimestampMs"]),
+          createdAt: item["createdAt"] as? String,
+          appName: item["appName"] as? String,
+          url: rawURL.flatMap(safeWebURL))
+      }
+    }
+  }
+
+  private static func citationKind(forSection name: String) -> ChatCitationReference.Kind? {
+    switch name {
+    case "conversations": return .conversation
+    case "memories": return .memory
+    case "action_items", "tasks": return .task
+    default: return nil
+    }
+  }
+
+  private static func citationOrdinal(from marker: String) -> Int? {
+    let digits = marker.filter(\.isNumber)
+    guard let ordinal = Int(digits), ordinal > 0 else { return nil }
+    return ordinal
   }
 
   private static func safeWebURL(_ value: String) -> URL? {
