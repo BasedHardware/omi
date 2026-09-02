@@ -45,6 +45,14 @@ export interface OmiToolAnnotations {
   openWorldHint?: boolean;
 }
 
+export interface OmiToolResultContract {
+  /** Model-visible budgets. The kernel projector is the sole owner of these limits. */
+  budgets: Record<OmiToolSurface, number>;
+  sections: string[];
+  ranking: "priority" | "purpose_then_recency";
+  maxItemsPerSection: number;
+}
+
 export interface OmiToolInputSchema {
   type: "object";
   properties: Record<string, unknown>;
@@ -84,6 +92,7 @@ export interface OmiToolManifestEntry {
   intendedForAgents: boolean;
   runtimePreconditions: string[];
   adapters: Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>>;
+  resultContract?: OmiToolResultContract;
 }
 
 type OmiToolManifestEntryDraft = Omit<
@@ -206,6 +215,22 @@ function trustedDirectControlOnly(): Partial<Record<OmiToolAdapterId, OmiToolAda
 
 function doc(title: string, summary: string, bullets: string[]): OmiToolCapabilityDoc {
   return { title, summary, bullets };
+}
+
+const MODEL_RESULT_BUDGETS: Record<OmiToolSurface, number> = {
+  desktop_chat: 8 * 1024,
+  realtime_voice: 8 * 1024,
+  onboarding: 8 * 1024,
+  task_chat: 8 * 1024,
+};
+
+function boundedResult(sections: string[]): OmiToolResultContract {
+  return {
+    budgets: { ...MODEL_RESULT_BUDGETS },
+    sections,
+    ranking: "purpose_then_recency",
+    maxItemsPerSection: 500,
+  };
 }
 
 function mapControlSurfaces(surfaces: AgentControlManifestTool["surfaces"]): OmiToolSurface[] {
@@ -911,6 +936,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       ...piAndStdio(),
       "local-agent-api": { advertised: true },
     },
+    resultContract: boundedResult(["summary", "apps", "conversations", "tasks", "focus", "memories", "observations"]),
   },
   {
     name: "fill_cloud_connector_form",
@@ -1127,6 +1153,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     intendedForAgents: true,
     runtimePreconditions: ["Requires authenticated backend access."],
     adapters: piAndStdio(),
+    resultContract: boundedResult(["conversations"]),
   },
   {
     name: "search_conversations",
@@ -1150,6 +1177,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     intendedForAgents: true,
     runtimePreconditions: ["Requires authenticated backend access."],
     adapters: piAndStdio(),
+    resultContract: boundedResult(["conversations"]),
   },
   {
     name: "get_memories",
@@ -1169,6 +1197,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     intendedForAgents: true,
     runtimePreconditions: ["Requires authenticated backend access."],
     adapters: piAndStdio(),
+    resultContract: boundedResult(["memories"]),
   },
   {
     name: "search_memories",
@@ -1189,6 +1218,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     intendedForAgents: true,
     runtimePreconditions: ["Requires authenticated backend access."],
     adapters: piAndStdio(),
+    resultContract: boundedResult(["memories"]),
   },
   {
     name: "create_memory",
@@ -1444,6 +1474,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     intendedForAgents: true,
     runtimePreconditions: ["Requires authenticated backend access."],
     adapters: piAndStdio(),
+    resultContract: boundedResult(["action_items"]),
   },
   {
     name: "create_action_item",
