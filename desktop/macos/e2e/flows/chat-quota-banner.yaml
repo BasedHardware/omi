@@ -1,6 +1,6 @@
 version: 2
 name: chat-quota-banner
-tier: bridge
+tier: 2
 description: >-
   The chat-quota warning appears above the composer at 75%, 90% and 100% of the plan
   allowance, states the count and the reset, and says the right thing for the plan's
