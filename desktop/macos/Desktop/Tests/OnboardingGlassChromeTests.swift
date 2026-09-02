@@ -293,29 +293,70 @@ final class OnboardingGlassChromeTests: XCTestCase {
 
   /// The de-emphasis is visual only. A 12 pt run of type is a 12 pt hit target unless something says
   /// otherwise, and an escape people cannot land on is worse than a loud one.
+  ///
+  /// Sliced to `SBSkipLink`'s own body, not the file. Scanned file-wide these tokens are all satisfied
+  /// by unrelated call sites — `.underline()` by the GitHub link in `promiseWidget`, `.contentShape`
+  /// by two disclosure rows — so a file-wide scan would stay green through exactly the regression it
+  /// names. That is the bug this test had on its first draft.
   func testStaticCheckerTheSkipLinkStaysAComfortableTarget() throws {
-    let body = try code(Self.liveOnboardingSource)
+    let source = try code(Self.liveOnboardingSource)
+    let link = try XCTUnwrap(
+      declarationBody("private struct SBSkipLink", in: source),
+      "SBSkipLink no longer parses; this checker is reading the wrong declaration")
+
     XCTAssertTrue(
-      body.contains("skipLinkMinHeight: CGFloat = 28"),
+      link.contains("skipLinkMinHeight: CGFloat = 28"),
       "the skip link must reserve a real target height, not just set small type")
     XCTAssertTrue(
-      body.contains(".frame(minHeight: Self.skipLinkMinHeight)")
-        && body.contains(".contentShape(Rectangle())"),
+      link.contains(".frame(minHeight: Self.skipLinkMinHeight)")
+        && link.contains(".contentShape(Rectangle())"),
       "the reserved height must be hit-tested; a .plain button hit-tests only what it renders")
     XCTAssertTrue(
-      body.contains(".underline()"),
+      link.contains(".underline()"),
       "without the underline the link is a caption, which is the failure the capsule was fixing")
     XCTAssertTrue(
-      body.contains("NSCursor.pointingHand.push()"),
+      link.contains("NSCursor.pointingHand.push()"),
       "the pointer must change over the skip link so it still reads as pressable")
+  }
+
+  /// **Every `NSCursor` push owes exactly one pop.**
+  ///
+  /// `push`/`pop` is a stack, and SwiftUI delivers no `onHover(false)` to a view leaving the
+  /// hierarchy — which is what pressing this link does. An unbalanced push leaves the pointing-hand
+  /// riding over the next step's controls. The guard is the `didPushCursor` flag plus both exit
+  /// paths, so this asserts all three rather than the presence of a `pop` somewhere.
+  func testStaticCheckerTheSkipLinkBalancesItsCursorPushes() throws {
+    let source = try code(Self.liveOnboardingSource)
+    let link = try XCTUnwrap(declarationBody("private struct SBSkipLink", in: source))
+
+    XCTAssertTrue(
+      link.contains("@State private var didPushCursor = false"),
+      "the link must track whether it holds a pushed cursor; an unguarded push double-pushes on rehover")
+    XCTAssertTrue(
+      link.contains("if hovering, !didPushCursor") && link.contains("else if !hovering, didPushCursor"),
+      "push and pop must both be gated on the flag, which is what makes them balanced")
+    XCTAssertTrue(
+      link.contains(".onDisappear { setHovered(false) }"),
+      "unmounting while hovered is the path that strands the cursor; onDisappear is the only hook for it")
+    XCTAssertTrue(
+      link.contains("setHovered(false)\n        action()"),
+      "the tap must pop before it advances the step, since advancing unmounts this view")
   }
 
   // MARK: - Helpers
 
-  /// `permStepWidget`'s body, brace-matched from its signature. Slicing by function is what keeps the
-  /// checker above a rule about the permission card rather than about the whole file.
+  /// `permStepWidget`'s body. See `declarationBody`.
   private func permStepWidgetBody(in source: String) -> String? {
-    guard let start = source.range(of: "private func permStepWidget("),
+    declarationBody("private func permStepWidget(", in: source)
+  }
+
+  /// The brace-matched body of the declaration introduced by `signature`.
+  ///
+  /// **Slicing is the point.** A checker for one control that scans the whole file asserts only that
+  /// the tokens exist *somewhere*, and in a 1,000-line view they always do — so it passes through the
+  /// regression it was written to catch. Both checkers above slice first for that reason.
+  private func declarationBody(_ signature: String, in source: String) -> String? {
+    guard let start = source.range(of: signature),
       let open = source.range(of: "{", range: start.upperBound..<source.endIndex)
     else { return nil }
     var depth = 0
