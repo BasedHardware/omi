@@ -174,4 +174,22 @@ describe("manifest-owned tool result projection", () => {
     expect(projected.omitted.meta).toBeDefined();
   });
 
+  it("projects non-string reserved fields as meta and accounts for their truncation", () => {
+    const projected = projectToolResultPayload({
+      toolName: "get_daily_recap",
+      result: JSON.stringify({
+        ok: true,
+        content: { transcript: "Y".repeat(5_000) },
+        title: 42,
+        sections: [{ name: "summary", total: 1, items: [{ title: "Yesterday" }] }],
+      }),
+      maxBytes: 1_024,
+    });
+
+    expect(projected.text).toContain("meta (1 total)");
+    expect(projected.text).toContain("transcript");
+    expect(projected.text).toContain("Y");
+    expect(projectionIsComplete(projected)).toBe(false);
+  });
+
 });

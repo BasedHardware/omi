@@ -181,23 +181,29 @@ function renderItemExcerpt(value: unknown, maxBytes: number): { text: string; co
   // on content. This is deliberately independent of object insertion order.
   const parts: string[] = [];
   const fullParts: string[] = [];
-  const append = (label: string, field: unknown, budget: number) => {
+  const renderedReservedKeys = new Set<string>();
+  const append = (key: string, label: string, field: unknown, budget: number) => {
     if (typeof field !== "string" || field.length === 0) return;
     const normalized = field.replace(/\s+/g, " ").trim();
+    if (normalized.length === 0) return;
     parts.push(`${label}: ${utf8Excerpt(normalized, budget)}`);
     fullParts.push(`${label}: ${normalized}`);
+    renderedReservedKeys.add(key);
   };
-  append("title", value.title, Math.max(16, Math.floor(maxBytes * 0.28)));
-  append("summary", value.summary, Math.max(16, Math.floor(maxBytes * 0.36)));
-  append("citation", value.citationMarker, 48);
-  append("sourceId", value.sourceId, 96);
+  append("title", "title", value.title, Math.max(16, Math.floor(maxBytes * 0.28)));
+  append("summary", "summary", value.summary, Math.max(16, Math.floor(maxBytes * 0.36)));
+  append("citationMarker", "citation", value.citationMarker, 48);
+  append("sourceId", "sourceId", value.sourceId, 96);
+  if (typeof value.content === "string" && value.content.length > 0) {
+    renderedReservedKeys.add("content");
+  }
 
   // Content is the only separately budgeted excerpt. Every other item field
   // remains in the identity segment so a typed recap cannot silently lose
   // minutes/captures, task priority, focus status, memory category, or future
   // scalar fields while claiming the item was rendered completely.
   for (const [key, field] of Object.entries(value)) {
-    if (["title", "summary", "citationMarker", "sourceId", "content"].includes(key)) continue;
+    if (renderedReservedKeys.has(key)) continue;
     if (field === undefined) continue;
     const renderedField = typeof field === "string"
       ? field.replace(/\s+/g, " ").trim()

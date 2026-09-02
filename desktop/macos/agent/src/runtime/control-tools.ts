@@ -2225,7 +2225,7 @@ function stringifyToolResult(
       if (status === "cancelled") {
         return stringifyProjectedControlCancellation(toolName, originalBytes, null, scope?.context);
       }
-      return stringifyProviderBudgetFailure(toolName, undefined, null, scope?.context);
+      return stringifyProjectedControlSuccess(toolName, fullJson, originalBytes, null, scope?.context);
     }
     const toolResultEnvelope = makeToolResultEnvelope({
       status,
@@ -2251,7 +2251,9 @@ function stringifyToolResult(
       toolName, originalBytes, persistedFullOutputRef ?? null, scope?.context,
     );
   }
-  return stringifyProviderBudgetFailure(toolName, undefined, null, scope?.context);
+  return stringifyProjectedControlSuccess(
+    toolName, fullJson, originalBytes, persistedFullOutputRef ?? null, scope?.context,
+  );
 }
 
 function stringifyProjectedControlSuccess(
