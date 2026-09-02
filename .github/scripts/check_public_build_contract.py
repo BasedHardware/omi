@@ -321,11 +321,21 @@ def _parse_deployment(raw_deployment: Any, *, target_name: str, environments: tu
         target_name=target_name,
         field="remove_runtime_env_vars",
     )
-    env_var_removal_overlaps = set(raw_remove_runtime_env_vars) & (set(raw_runtime_secrets) | set(raw_runtime_env_vars))
+    # preserve_runtime_secrets are retained by the merge update strategies, so a
+    # removal emitted for the same runtime name would strip the preserved
+    # binding (env-var names and secret bindings share one runtime namespace).
+    # fallback_runtime_secrets is validated to mirror preserve_runtime_secrets.
+    env_var_removal_overlaps = set(raw_remove_runtime_env_vars) & (
+        set(raw_runtime_secrets)
+        | set(raw_runtime_env_vars)
+        | set(raw_preserve_runtime_secrets)
+        | set(raw_fallback_runtime_secrets)
+    )
     if env_var_removal_overlaps:
         raise ValueError(
-            f"target {target_name} deployment remove_runtime_env_vars cannot overlap runtime_secrets or "
-            f"runtime_env_vars: {', '.join(sorted(env_var_removal_overlaps))}"
+            f"target {target_name} deployment remove_runtime_env_vars cannot overlap runtime_secrets, "
+            f"runtime_env_vars, preserve_runtime_secrets, or fallback_runtime_secrets: "
+            f"{', '.join(sorted(env_var_removal_overlaps))}"
         )
 
     binding_groups = {

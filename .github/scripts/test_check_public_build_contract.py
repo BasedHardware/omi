@@ -272,6 +272,19 @@ jobs:
         with self.assertRaisesRegex(ValueError, "remove_runtime_env_vars cannot overlap"):
             self.target()
 
+    def test_rejects_remove_runtime_env_vars_overlap_with_preserve_runtime_secrets(self) -> None:
+        contract = fixture_contract()
+        deployment = contract["targets"]["fake"]["deployment"]
+        deployment["preserve_runtime_secrets"] = ["FAKE_PRESERVED_SECRET"]
+        deployment["fallback_runtime_secrets"] = {"FAKE_PRESERVED_SECRET": "fallback-fake-preserved-secret:latest"}
+        deployment["remove_runtime_env_vars"] = ["FAKE_PRESERVED_SECRET"]
+        self.write_json("config/public-build-contract.json", contract)
+
+        with self.assertRaisesRegex(
+            ValueError, "remove_runtime_env_vars cannot overlap.*preserve_runtime_secrets"
+        ):
+            self.target()
+
     def test_shared_flags_list_applies_to_every_environment(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["flags"] = ["--memory=2Gi"]
