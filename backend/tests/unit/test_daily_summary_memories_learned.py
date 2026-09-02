@@ -12,6 +12,8 @@ from datetime import datetime, timedelta, timezone
 from models.daily_summary_payload import LearnedMemoryRef
 from models.memories import MemoryCategory, MemoryDB
 from models.notification_message import NotificationMessage
+from routers.users import DailySummaryResponse
+from routers import users as users_router
 from utils.memory.learned_today import (
     MEMORIES_LEARNED_LIMIT,
     memories_learned_for_summary,
@@ -235,8 +237,6 @@ def test_notification_payload_encodes_blocks_as_fcm_safe_text():
 
 
 def test_response_model_round_trips_memories_learned():
-    from routers.users import DailySummaryResponse
-
     stored = {
         'id': 'sum-1',
         'date': '2026-09-01',
@@ -260,8 +260,6 @@ def test_response_model_round_trips_memories_learned():
 
 
 def test_response_model_defaults_to_empty_for_older_summaries():
-    from routers.users import DailySummaryResponse
-
     assert DailySummaryResponse.model_validate({'id': 'old', 'date': '2026-01-01'}).memories_learned == []
 
 
@@ -270,9 +268,8 @@ def test_response_model_defaults_to_empty_for_older_summaries():
 
 def _drive_day_summary_endpoint(monkeypatch, memories_learned):
     """Run the real /v1/users/daily-summary-settings/test path and capture the push data."""
-    from routers import users as users_router
-
     sent = {}
+    seen = {}
     monkeypatch.setattr(users_router, 'enforce_chat_quota', lambda *a, **k: None)
     monkeypatch.setattr(users_router.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     monkeypatch.setattr(users_router.notification_db, 'get_all_tokens', lambda uid: ['tok1'])
@@ -280,17 +277,22 @@ def _drive_day_summary_endpoint(monkeypatch, memories_learned):
         users_router.conversations_db, 'get_conversations', lambda *a, **k: [{'id': 'c1', 'is_locked': False}]
     )
     monkeypatch.setattr(users_router, 'deserialize_conversations', lambda data: [object()])
-    monkeypatch.setattr(
-        users_router,
-        'generate_comprehensive_daily_summary',
-        lambda *a, **k: {
+    # The endpoint owns the memory read and hands it to the generator; stub the
+    # read at that seam and let the fake generator echo it back, so the test
+    # covers the real read -> generate -> store -> block wiring.
+    monkeypatch.setattr(users_router, '_memories_learned_payload', lambda *a, **k: memories_learned)
+
+    def _fake_generate(*args, **kwargs):
+        seen['memories_learned'] = kwargs.get('memories_learned')
+        return {
             'id': 'sum-1',
             'headline': 'H',
             'day_emoji': 'X',
             'overview': 'You had 1 conversation today.',
-            'memories_learned': memories_learned,
-        },
-    )
+            'memories_learned': kwargs.get('memories_learned') or [],
+        }
+
+    monkeypatch.setattr(users_router, 'generate_comprehensive_daily_summary', _fake_generate)
     monkeypatch.setattr(users_router.daily_summaries_db, 'create_daily_summary', lambda uid, data: 'sum-1')
     monkeypatch.setattr(
         users_router, 'send_notification', lambda uid, title, body, data, tokens=None: sent.update(data=data, body=body)
@@ -301,6 +303,7 @@ def _drive_day_summary_endpoint(monkeypatch, memories_learned):
         uid='u1',
         x_app_platform=None,
     )
+    sent['generator_kwarg'] = seen.get('memories_learned')
     return sent
 
 
@@ -330,3 +333,56 @@ def test_day_summary_push_omits_the_block_when_nothing_was_learned(monkeypatch):
     sent = _drive_day_summary_endpoint(monkeypatch, [])
     assert 'content_blocks' not in sent['data']
     assert sent['data']['text'] == 'You had 1 conversation today.'
+
+
+def test_generator_receives_the_selection_from_the_endpoint(monkeypatch):
+    """The endpoint owns the read; the generator must not reach into memory itself."""
+    refs = [{'memory_id': 'm1', 'content': 'c', 'category': 'interesting', 'captured_at': None}]
+    sent = _drive_day_summary_endpoint(monkeypatch, refs)
+    assert sent['generator_kwarg'] == refs
+
+
+def test_generate_comprehensive_daily_summary_does_not_read_memories_itself():
+    """Regression: an in-generator memory read put a Firestore call behind every
+    caller and every existing test of the daily summary, and cost 0.77s CPU in
+    tests/unit/test_daily_summary_zero_coordinate_locations.py. The selection is
+    a parameter, so the LLM summary builder stays free of the memory stack."""
+    import inspect
+
+    from utils.llm import external_integrations
+
+    source = inspect.getsource(external_integrations)
+    assert 'memories_learned_for_summary' not in source
+    assert 'memory_service' not in source
+    signature = inspect.signature(external_integrations.generate_comprehensive_daily_summary)
+    assert signature.parameters['memories_learned'].default is None
+
+
+def test_generator_defaults_to_no_card_without_a_selection():
+    from utils.llm.external_integrations import _basic_daily_summary
+
+    assert _basic_daily_summary('2026-09-01', 0, 0.0, [], [])['memories_learned'] == []
+    assert _basic_daily_summary('2026-09-01', 0, 0.0, [], [], [{'memory_id': 'm1'}])['memories_learned'] == [
+        {'memory_id': 'm1'}
+    ]
+
+
+def test_read_failure_reports_a_fallback_rather_than_swallowing_it(monkeypatch):
+    """A missing card is a correctness change; silent ops is not allowed."""
+    import utils.memory.learned_today as learned_today
+
+    recorded = []
+    monkeypatch.setattr(learned_today, 'record_fallback', lambda **kwargs: recorded.append(kwargs))
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError('canonical memory unavailable')
+
+    assert (
+        learned_today.memories_learned_for_summary(
+            'u1', conversation_ids=['c1'], window_start=DAY_START, window_end=DAY_END, read_memories=_boom
+        )
+        == []
+    )
+    assert len(recorded) == 1
+    assert recorded[0]['component'] == 'daily_summary'
+    assert recorded[0]['outcome'] == 'degraded'

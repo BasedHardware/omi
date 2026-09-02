@@ -16,10 +16,16 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Callable, Iterable, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Iterable, List, Optional, Sequence
 
 from models.daily_summary_payload import LearnedMemoryRef
-from models.memories import MemoryDB
+from utils.observability.fallback import record_fallback
+
+if TYPE_CHECKING:  # `models.memories` drags in database._client and the Firestore
+    # protos; this module is only annotating with MemoryDB, and callers that import
+    # it (the users router, the scheduled summary job) must not pay a Firestore
+    # import — or, under a stubbed sys.modules test, a duplicate proto registration.
+    from models.memories import MemoryDB
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +38,7 @@ MEMORIES_LEARNED_LIMIT = 3
 # page is enough to cover a single day for any realistic capture rate.
 MEMORIES_LEARNED_SCAN_LIMIT = 200
 
-MemoryReader = Callable[..., List[MemoryDB]]
+MemoryReader = Callable[..., List["MemoryDB"]]
 
 
 def _aware(value: Optional[datetime]) -> Optional[datetime]:
@@ -43,7 +49,7 @@ def _aware(value: Optional[datetime]) -> Optional[datetime]:
     return value
 
 
-def _is_eligible(memory: MemoryDB) -> bool:
+def _is_eligible(memory: "MemoryDB") -> bool:
     """Exclude every state the review card must never show.
 
     `MemoryService.read` already drops tombstoned, superseded, hidden, archived
@@ -66,7 +72,7 @@ def _is_eligible(memory: MemoryDB) -> bool:
 
 
 def _from_day(
-    memory: MemoryDB, *, conversation_ids: frozenset[str], start: Optional[datetime], end: Optional[datetime]
+    memory: "MemoryDB", *, conversation_ids: frozenset[str], start: Optional[datetime], end: Optional[datetime]
 ) -> bool:
     """Attribute a memory to the day the summary was built from.
 
@@ -89,7 +95,7 @@ def _from_day(
     return window_start <= created_at <= window_end
 
 
-def _rank(memory: MemoryDB) -> tuple[float, float, float, str]:
+def _rank(memory: "MemoryDB") -> tuple[float, float, float, str]:
     """Highest capture_confidence, then veracity, then newest, then stable id."""
     created_at = _aware(memory.created_at)
     created_ts = created_at.timestamp() if created_at else float('-inf')
@@ -102,7 +108,7 @@ def _rank(memory: MemoryDB) -> tuple[float, float, float, str]:
 
 
 def select_memories_learned(
-    memories: Iterable[MemoryDB],
+    memories: Iterable["MemoryDB"],
     *,
     conversation_ids: Sequence[str],
     window_start: Optional[datetime] = None,
@@ -149,8 +155,18 @@ def memories_learned_for_summary(
 
         reader = MemoryService().read
     try:
-        page: List[MemoryDB] = reader(uid, limit=scan_limit, offset=0)
+        page: List["MemoryDB"] = reader(uid, limit=scan_limit, offset=0)
     except Exception as error:  # noqa: BLE001 - the summary must still ship
+        # Fail-open: the day still gets a summary, just no review card. That is a
+        # correctness change, so it is reported rather than swallowed silently.
+        record_fallback(
+            component='daily_summary',
+            from_mode='memories_learned',
+            to_mode='none',
+            reason='malformed_doc' if isinstance(error, (TypeError, ValueError)) else 'other',
+            outcome='degraded',
+            log=logger,
+        )
         logger.warning('memories_learned read failed for daily summary: %s', type(error).__name__)
         return []
     return select_memories_learned(

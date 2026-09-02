@@ -17,7 +17,6 @@ from utils.conversations.render import conversations_to_string
 from utils.llm.clients import get_llm, parser
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
-from utils.memory.learned_today import memories_learned_for_summary
 from utils.log_sanitizer import sanitize, sanitize_validation_error
 import logging
 
@@ -197,12 +196,19 @@ def generate_comprehensive_daily_summary(
     date_str: str,
     start_date_utc: Optional[datetime] = None,
     end_date_utc: Optional[datetime] = None,
+    memories_learned: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Generate a comprehensive daily summary with structured data for storage.
 
+    ``memories_learned`` is the already-selected review contract from
+    ``utils.memory.learned_today``. It is passed in rather than read here: this
+    module is the LLM summary builder, and making it reach into the memory stack
+    would put a Firestore read behind every caller and every test of it.
+
     Returns a dictionary matching the DailySummary model structure.
     """
+    learned_refs: List[Dict[str, Any]] = list(memories_learned or [])
     # Get user's timezone
     user_profile = users_db.get_user_profile(uid)
     user_tz_str = user_profile.get('time_zone', 'UTC')
@@ -275,20 +281,6 @@ def generate_comprehensive_daily_summary(
 
     # Build conversation ID mapping for the LLM
     convo_id_map = {i + 1: c.id for i, c in enumerate(non_discarded)}
-
-    # Deterministic "memories learned today" review contract. No model call:
-    # this is a bounded read of the canonical memory page filtered to the same
-    # conversation set the summary is being built from. It is computed before
-    # the LLM call so the fallback summary carries the same card.
-    memories_learned: List[Dict[str, Any]] = [
-        ref.model_dump(mode="json")
-        for ref in memories_learned_for_summary(
-            uid,
-            conversation_ids=[c.id for c in non_discarded],
-            window_start=start_date_utc,
-            window_end=end_date_utc,
-        )
-    ]
 
     prompt = f"""You are creating a daily summary for {user_name}. {memories_str}
 OUTPUT LANGUAGE: {output_language}. You MUST write every word of this summary in {output_language}, regardless of the language the conversations are in.
@@ -420,16 +412,16 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "unresolved_questions": unresolved_questions,
             "decisions_made": decisions_made,
             "knowledge_nuggets": knowledge_nuggets,
-            "memories_learned": memories_learned,
+            "memories_learned": learned_refs,
             "locations": locations,
         }
     except json.JSONDecodeError as e:
         logger.error("Failed to decode daily summary payload JSON: %s", sanitize(str(e)))
         return _basic_daily_summary(
-            date_str, total_conversations, total_duration_minutes, actual_action_items, locations, memories_learned
+            date_str, total_conversations, total_duration_minutes, actual_action_items, locations, learned_refs
         )
     except ValidationError as e:
         logger.error("Failed to validate daily summary payload: %s", sanitize_validation_error(cast(Any, e)))
         return _basic_daily_summary(
-            date_str, total_conversations, total_duration_minutes, actual_action_items, locations, memories_learned
+            date_str, total_conversations, total_duration_minutes, actual_action_items, locations, learned_refs
         )
