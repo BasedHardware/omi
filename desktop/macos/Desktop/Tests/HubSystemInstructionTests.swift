@@ -20,7 +20,9 @@ final class HubSystemInstructionTests: XCTestCase {
     // 13-second-old screenshot / an earlier answer without calling screenshot. Nothing in the
     // prompt said when to look. The frame is now attached to every turn and the instruction
     // must say so, mark earlier images stale, and keep screenshot for a fresh re-look only.
-    let instruction = RealtimeHubTools.systemInstruction(kernelContext: "ctx")
+    // The claim is stated only for a session that actually attaches the frame (Gemini).
+    let instruction = RealtimeHubTools.systemInstruction(
+      kernelContext: "ctx", turnScreenFrameAttached: true)
     XCTAssertTrue(instruction.contains("every turn arrives with an image of the user's screen"))
     XCTAssertTrue(instruction.contains("Images from earlier turns are stale"))
     XCTAssertTrue(instruction.contains("Call the screenshot tool only when no image arrived with this turn"))

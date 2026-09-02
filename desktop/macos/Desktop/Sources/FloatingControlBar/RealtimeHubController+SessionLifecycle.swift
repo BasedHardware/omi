@@ -410,7 +410,10 @@ extension RealtimeHubController {
       kernelContext: topLevelContext.rendered,
       kernelSemanticGuidance: topLevelContext.semanticGuidance,
       userLanguages: AssistantSettings.shared.voiceBaseLanguages,
-      onboardingDemoContext: RealtimeHubTools.activeOnboardingDemoContext())
+      onboardingDemoContext: RealtimeHubTools.activeOnboardingDemoContext(),
+      // Only Gemini receives the PTT-down frame as in-turn video (see
+      // `attachTurnScreenFrameIfNeeded`); no other session may be told an image always arrives.
+      turnScreenFrameAttached: provider == .gemini)
     let s = RealtimeHubSession(
       provider: provider,
       auth: auth,

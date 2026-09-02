@@ -162,6 +162,9 @@ class AnalyticsManager {
   /// Scoped observation of floating-bar query telemetry. Nil in production;
   /// tests install a capture at the same boundary as PostHog.
   private var floatingBarQueryTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  /// Test seam for `question_asked` / `question_answered`; the emitters live in
+  /// `Analytics/AnalyticsManager+Questions.swift`, so this is internal, not private.
+  var questionTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
 
   func setFloatingBarQueryTelemetryCaptureForTests(
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
@@ -826,9 +829,7 @@ class AnalyticsManager {
     // question (retries of a failed turn, busy no-op paths) so the one-time
     // prompt trigger counts each logical question exactly once.
     guard countsAsQuestion else { return }
-    Task { @MainActor in
-      RatingPromptManager.shared.recordQuestionAsked()
-    }
+    questionAsked(surface: .chatWindow, source: source, messageLength: messageLength, attemptID: nil)
   }
 
   func desktopRatingSubmitted(rating: Int, revision: Int? = nil) {
@@ -952,6 +953,7 @@ class AnalyticsManager {
   func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
     let payload = event.analyticsPayload
     PostHogManager.shared.track(payload.eventName, properties: payload.properties)
+    questionAnswered(forChatEvent: event)
     if case .failed(_, _, let errorClass, _, _, _) = event {
       DesktopDiagnosticsManager.shared.recordChatFailure(errorClass: errorClass.rawValue)
     }
@@ -1579,7 +1581,14 @@ class AnalyticsManager {
   }
 
   /// Track when an AI query is sent from the floating bar
-  func floatingBarQuerySent(messageLength: Int, hasScreenshot: Bool, source: FloatingBarQuerySource) {
+  ///
+  /// `attemptID` is the voice turn id when the query came from push-to-talk,
+  /// so `question_asked` joins the coordinator's terminal record. Every call
+  /// here is one accepted question; the voice paths only reach it once the
+  /// transcript (or the realtime commit) exists.
+  func floatingBarQuerySent(
+    messageLength: Int, hasScreenshot: Bool, source: FloatingBarQuerySource, attemptID: String? = nil
+  ) {
     let props: [String: Any] = [
       "message_length": messageLength,
       "has_screenshot": hasScreenshot,
@@ -1587,6 +1596,9 @@ class AnalyticsManager {
     ]
     floatingBarQueryTelemetryCaptureForTests?("floating_bar_query_sent", props)
     PostHogManager.shared.track("floating_bar_query_sent", properties: props)
+    questionAsked(
+      surface: QuestionSurface(source), source: source.rawValue, messageLength: messageLength,
+      attemptID: attemptID)
   }
 
   /// Track when push-to-talk starts listening

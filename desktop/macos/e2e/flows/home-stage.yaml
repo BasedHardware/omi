@@ -8,6 +8,15 @@ description: >-
   asserts the shell before it asserts a mode.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DayZeroChips.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailySummaryCard.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailySummaryCoordinator.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailySummaryPresentation.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/AnalyticsManager+DailySummary.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeDailySummarySection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeDailySummaryStore.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+DailySummaries.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/HomeAskBarControls.swift
@@ -113,6 +122,33 @@ steps:
       result.detail.error: { exists: true }
 
   - id: S9
+    name: A prefilled chat request lands in the composer unsent
+    # The first-real-app card and the daily-summary follow-up both enter through this one seam
+    # (`openMainAppChat(prefilledDraft:)`). The draft must be in the main composer and nothing sent.
+    bridge.action:
+      name: open_chat_prefilled
+      params:
+        query: "Summarize what's on my screen"
+    expect:
+      ok: true
+
+  - id: S10
+    name: The draft is the composer text
+    bridge.action:
+      name: chat_drafts_snapshot
+    expect:
+      result.detail.main: "Summarize what's on my screen"
+
+  - id: S11
+    name: Daily summary store answers shape-only
+    # Day 0 and quiet days legitimately have no summary; the action must answer either way.
+    bridge.action:
+      name: daily_summary_snapshot
+    expect:
+      ok: true
+      result.detail.hasSummary: { exists: true }
+
+  - id: S12
     name: Logs clean
     log.expect:
       absent:
