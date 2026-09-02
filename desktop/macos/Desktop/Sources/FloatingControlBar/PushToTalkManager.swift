@@ -19,34 +19,63 @@ struct PTTSilentMicRecoveryPolicy {
   static let deadMicPeakThreshold = 5
   static let minDeadTurnSeconds: TimeInterval = 0.25
   static let consecutiveDeadTurnThreshold = 2
+  /// The first dead turn of a session rebuilds on its own. Waiting for a second
+  /// one assumes the user will press again, and on a fresh install they mostly
+  /// do not: the first press is the one that fails, it fails silently as
+  /// "Hold longer to record", and the recovery that exists for exactly this
+  /// never runs. Once a rebuild has been issued, the ordinary two-turn threshold
+  /// applies again so a genuinely broken mic cannot spin.
+  static let firstRecoveryDeadTurnThreshold = 1
 
   private(set) var consecutiveDeadMicTurns = 0
   private var awaitingRecoveryOutcome = false
+  /// Set once this policy has issued a capture rebuild. Gates the lower
+  /// first-of-session threshold above.
+  private(set) var hasRequestedRecovery = false
 
-  mutating func recordDiscardedTurn(totalSec: TimeInterval, peak: Int) -> DiscardedTurnDecision {
+  /// - Parameters:
+  ///   - holdSec: wall time the user held the key. Judgeability is measured on
+  ///     the press, not on delivered audio: a capture that never became
+  ///     operational reports zero seconds, which read as "too short to judge"
+  ///     and made the dead-mic evidence for the worst failure class invisible.
+  ///   - totalSec: audio the capture actually delivered.
+  mutating func recordDiscardedTurn(
+    holdSec: TimeInterval,
+    totalSec: TimeInterval,
+    peak: Int
+  ) -> DiscardedTurnDecision {
     let recoveryOutcome: RecoveryOutcome?
     let shouldRebuildCapture: Bool
+    let judgeableSeconds = Swift.max(holdSec, totalSec)
 
     if peak > Self.deadMicPeakThreshold {
-      // Audible input proves the mic is alive, whatever else went wrong with the turn.
+      // Audible input proves the mic is alive, so a pending rebuild succeeded.
+      // It does not clear a dead-turn streak: a turn that was audible and still
+      // discarded is not evidence that capture is healthy for a whole turn, and
+      // clearing here is what let the observed fresh-install sequence (dead,
+      // audible, audible, dead) never reach the rebuild threshold. Only a turn
+      // that actually committed proves that, and that goes through
+      // `recordSuccessfulTurn`.
       recoveryOutcome = resolveRecoveryOutcome(.succeeded)
-      consecutiveDeadMicTurns = 0
       shouldRebuildCapture = false
-    } else if totalSec >= Self.minDeadTurnSeconds {
+    } else if judgeableSeconds >= Self.minDeadTurnSeconds {
       recoveryOutcome = resolveRecoveryOutcome(.failed)
       consecutiveDeadMicTurns += 1
-      shouldRebuildCapture = consecutiveDeadMicTurns >= Self.consecutiveDeadTurnThreshold
+      let threshold =
+        hasRequestedRecovery ? Self.consecutiveDeadTurnThreshold : Self.firstRecoveryDeadTurnThreshold
+      shouldRebuildCapture = consecutiveDeadMicTurns >= threshold
       if shouldRebuildCapture {
         // Arm the outcome before issuing the side effect. This prevents a third
         // consecutive turn from asking for a second rebuild while the first awaits
         // its next judgeable turn.
         consecutiveDeadMicTurns = 0
         awaitingRecoveryOutcome = true
+        hasRequestedRecovery = true
       }
     } else {
-      // A turn too short to judge carries no evidence either way — an accidental
-      // tap, or a release that beat CoreAudio's capture start and delivered no
-      // frames. It must not erase a dead-mic streak or resolve a pending rebuild.
+      // A press too short to judge carries no evidence either way — an accidental
+      // tap that released before CoreAudio could deliver a frame. It must not
+      // erase a dead-mic streak or resolve a pending rebuild.
       recoveryOutcome = nil
       shouldRebuildCapture = false
     }
@@ -71,6 +100,7 @@ struct PTTSilentMicRecoveryPolicy {
   mutating func armCaptureRebuildOutcome() {
     consecutiveDeadMicTurns = 0
     awaitingRecoveryOutcome = true
+    hasRequestedRecovery = true
   }
 
   private mutating func resolveRecoveryOutcome(_ outcome: RecoveryOutcome) -> RecoveryOutcome? {
@@ -762,9 +792,13 @@ class PushToTalkManager: ObservableObject {
   /// immediate follow-up turn likely. Cancellations, owner changes, and every
   /// failure fully release the microphone: an explicitly ended or unhealthy
   /// session must never leave it open.
+  ///
+  /// `captureNotReady` is in the keep list precisely because it is the retry:
+  /// the capture that missed the press is running by the time the turn ends, and
+  /// parking it is what makes the "hold again" the hint asks for actually work.
   static func terminalReasonKeepsWarmCapture(_ reason: VoiceTurnTerminalReason) -> Bool {
     switch reason {
-    case .success, .tooShort, .silentRejected, .interruptedByBargeIn:
+    case .success, .tooShort, .silentRejected, .interruptedByBargeIn, .captureNotReady:
       return true
     default:
       return false
@@ -1181,7 +1215,9 @@ class PushToTalkManager: ObservableObject {
       if !Self.hubTurnHasSpeech(pcm16k: turnAudio) {
         let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
         let dev = audioCaptureService?.currentDeviceDescription ?? "?"
-        let recoveryDecision = silentMicRecoveryPolicy.recordDiscardedTurn(totalSec: totalSec, peak: peak)
+        let resolution = resolveDiscardedTurn(totalSec: totalSec)
+        let recoveryDecision = silentMicRecoveryPolicy.recordDiscardedTurn(
+          holdSec: pttLifecycle.attemptElapsedSeconds ?? totalSec, totalSec: totalSec, peak: peak)
         recordSilentMicRecoveryOutcome(recoveryDecision.recoveryOutcome)
         DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
           source: "hub",
@@ -1203,13 +1239,14 @@ class PushToTalkManager: ObservableObject {
           pttLifecycle.recoveryTriggered(action: .captureRebuild)
         }
         pttLifecycle.terminate(
-          disposition: totalSec < Self.minTurnAudioSeconds ? .tooShort : .silentRejected,
+          disposition: resolution.disposition,
           source: "hub",
           peak: peak,
           rms: rms,
           turnAudioSeconds: totalSec,
           voicedAudioSeconds: nil,
-          judgeable: totalSec >= Self.minTurnAudioSeconds)
+          judgeable: resolution.judgeable,
+          captureStartedLate: resolution.captureStartedLate)
         log(
           "PushToTalkManager: discarding hub turn — audio \(String(format: "%.2f", totalSec))s "
             + "peak=\(peak)/32767 rms=\(rms) device=[\(dev)] "
@@ -1225,9 +1262,12 @@ class PushToTalkManager: ObservableObject {
         // Too short to have captured anything (fast tap / capture not ready) — hint
         // the user to hold longer instead of clearing silently. A longer hub turn
         // that simply had no speech keeps the quiet reset.
-        if totalSec < Self.minTurnAudioSeconds {
+        switch resolution.judgement {
+        case .shortTap:
           finishTooShortPTTTurnWithHint(reason: "hub, \(String(format: "%.2f", totalSec))s")
-        } else {
+        case .captureStartedLate:
+          finishCaptureNotReadyPTTTurn(reason: "hub, \(String(format: "%.2f", totalSec))s")
+        case .audioJudgeable:
           voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .silentRejected))
         }
         return
@@ -1283,10 +1323,12 @@ class PushToTalkManager: ObservableObject {
       let (totalSec, voicedSec) = Self.voicedAudioSeconds(pcm16k: turnAudio)
       if totalSec < Self.minTurnAudioSeconds || voicedSec < Self.minVoicedSeconds {
         let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
+        let resolution = resolveDiscardedTurn(totalSec: totalSec)
         // A dead mic (peak≈0 for a real hold) leaves omni/batch users stuck on
         // repeated silent turns with no recovery. Mirror the hub path: rebuild the
         // CoreAudio capture after consecutive dead-mic turns.
-        let recoveryDecision = silentMicRecoveryPolicy.recordDiscardedTurn(totalSec: totalSec, peak: peak)
+        let recoveryDecision = silentMicRecoveryPolicy.recordDiscardedTurn(
+          holdSec: pttLifecycle.attemptElapsedSeconds ?? totalSec, totalSec: totalSec, peak: peak)
         recordSilentMicRecoveryOutcome(recoveryDecision.recoveryOutcome)
         DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
           source: isOmniSTT ? "omni_stt" : "batch_stt",
@@ -1301,13 +1343,14 @@ class PushToTalkManager: ObservableObject {
           recoveryAction: recoveryDecision.shouldRebuildCapture ? "capture_rebuild" : "none",
           recoveryResult: recoveryDecision.shouldRebuildCapture ? "attempted" : "not_attempted")
         pttLifecycle.terminate(
-          disposition: totalSec < Self.minTurnAudioSeconds ? .tooShort : .silentRejected,
+          disposition: resolution.disposition,
           source: isOmniSTT ? "omni_stt" : "batch_stt",
           peak: peak,
           rms: rms,
           turnAudioSeconds: totalSec,
           voicedAudioSeconds: voicedSec,
-          judgeable: totalSec >= Self.minTurnAudioSeconds)
+          judgeable: resolution.judgeable,
+          captureStartedLate: resolution.captureStartedLate)
         log(
           "PushToTalkManager: discarding silent turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s) — not transcribing"
         )
@@ -1319,9 +1362,14 @@ class PushToTalkManager: ObservableObject {
         // A too-short turn means the release beat capture (or the user tapped
         // instead of holding). Give visible feedback instead of a silent clear;
         // longer holds that were merely quiet keep the quiet reset.
-        if totalSec < Self.minTurnAudioSeconds {
-          finishTooShortPTTTurnWithHint(reason: "\(isOmniSTT ? "omni" : "batch"), \(String(format: "%.2f", totalSec))s")
-        } else {
+        switch resolution.judgement {
+        case .shortTap:
+          finishTooShortPTTTurnWithHint(
+            reason: "\(isOmniSTT ? "omni" : "batch"), \(String(format: "%.2f", totalSec))s")
+        case .captureStartedLate:
+          finishCaptureNotReadyPTTTurn(
+            reason: "\(isOmniSTT ? "omni" : "batch"), \(String(format: "%.2f", totalSec))s")
+        case .audioJudgeable:
           stopListening()
         }
         return
@@ -1455,6 +1503,29 @@ class PushToTalkManager: ObservableObject {
     activeTracer = nil
     guard let turnID = currentVoiceTurnID else { return }
     voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .tooShort))
+  }
+
+  /// A hold long enough to speak into whose capture only became operational near
+  /// the end of it. Telling this user to hold longer is wrong — they held for
+  /// nearly a second — so say the microphone was not ready, and make the retry
+  /// real by warming a capture behind the message.
+  private func finishCaptureNotReadyPTTTurn(reason: String) {
+    log("PushToTalkManager: capture was not ready for this press (\(reason)) — warming for the retry")
+    activeTracer = nil
+    if let turnID = currentVoiceTurnID {
+      voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .captureNotReady))
+    }
+    // After the reducer's terminal effect has run, so this either adopts the
+    // capture the turn just parked or opens one the rebuild released.
+    schedulePTTCaptureWarmup(trigger: .captureNotReady)
+  }
+
+  private func resolveDiscardedTurn(totalSec: Double) -> PTTDiscardedTurnResolution {
+    PTTDiscardedTurnResolution(
+      PTTTurnDiscardJudgement.judge(
+        holdSeconds: pttLifecycle.attemptElapsedSeconds,
+        deliveredAudioSeconds: totalSec,
+        minTurnAudioSeconds: Self.minTurnAudioSeconds))
   }
 
   /// Append a mic chunk to the per-turn buffer under the lock, capped at
@@ -1875,10 +1946,12 @@ class PushToTalkManager: ObservableObject {
     if !Self.hubTurnHasSpeech(pcm16k: turnAudio) {
       let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
       let dev = audioCaptureService?.currentDeviceDescription ?? "?"
+      let resolution = resolveDiscardedTurn(totalSec: totalSec)
       // Mirror the primary hub path: repeated dead-mic turns must trip capture
       // recovery here too, otherwise users whose turns land on the buffered
       // warm-wait path get recovery_action=none forever (issue #9081).
-      let recoveryDecision = silentMicRecoveryPolicy.recordDiscardedTurn(totalSec: totalSec, peak: peak)
+      let recoveryDecision = silentMicRecoveryPolicy.recordDiscardedTurn(
+        holdSec: pttLifecycle.attemptElapsedSeconds ?? totalSec, totalSec: totalSec, peak: peak)
       recordSilentMicRecoveryOutcome(recoveryDecision.recoveryOutcome)
       DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
         source: "buffered_hub",
@@ -1893,13 +1966,14 @@ class PushToTalkManager: ObservableObject {
         recoveryAction: recoveryDecision.shouldRebuildCapture ? "capture_rebuild" : "none",
         recoveryResult: recoveryDecision.shouldRebuildCapture ? "attempted" : "not_attempted")
       pttLifecycle.terminate(
-        disposition: totalSec < Self.minTurnAudioSeconds ? .tooShort : .silentRejected,
+        disposition: resolution.disposition,
         source: "buffered_hub",
         peak: peak,
         rms: rms,
         turnAudioSeconds: totalSec,
         voicedAudioSeconds: nil,
-        judgeable: totalSec >= Self.minTurnAudioSeconds)
+        judgeable: resolution.judgeable,
+        captureStartedLate: resolution.captureStartedLate)
       log(
         "PushToTalkManager: discarding buffered hub turn — audio \(String(format: "%.2f", totalSec))s "
           + "peak=\(peak)/32767 rms=\(rms) device=[\(dev)] — not committing")
@@ -1911,11 +1985,10 @@ class PushToTalkManager: ObservableObject {
       }
       AnalyticsManager.shared.floatingBarPTTEnded(
         mode: finalizedMode, committed: false, transcriptLength: nil)
-      if let turnID = currentVoiceTurnID {
-        voiceTurnCoordinator.publish(
-          .finish(
-            turnID: turnID,
-            reason: totalSec < Self.minTurnAudioSeconds ? .tooShort : .silentRejected))
+      if resolution.captureStartedLate {
+        finishCaptureNotReadyPTTTurn(reason: "buffered hub, \(String(format: "%.2f", totalSec))s")
+      } else if let turnID = currentVoiceTurnID {
+        voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: resolution.terminalReason))
       }
       return
     }
@@ -1958,9 +2031,11 @@ class PushToTalkManager: ObservableObject {
     let (totalSec, voicedSec) = Self.voicedAudioSeconds(pcm16k: audio)
     guard totalSec >= Self.minTurnAudioSeconds, voicedSec >= Self.minVoicedSeconds else {
       let (peak, rms) = Self.audioEnergy(pcm16k: audio)
+      let resolution = resolveDiscardedTurn(totalSec: totalSec)
       // Same dead-mic recovery as the primary omni/batch path — the warm-wait
       // fallback was previously the one silent-turn exit with no recovery (#9081).
-      let recoveryDecision = silentMicRecoveryPolicy.recordDiscardedTurn(totalSec: totalSec, peak: peak)
+      let recoveryDecision = silentMicRecoveryPolicy.recordDiscardedTurn(
+        holdSec: pttLifecycle.attemptElapsedSeconds ?? totalSec, totalSec: totalSec, peak: peak)
       recordSilentMicRecoveryOutcome(recoveryDecision.recoveryOutcome)
       DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
         source: "warm_wait_fallback",
@@ -1975,13 +2050,14 @@ class PushToTalkManager: ObservableObject {
         recoveryAction: recoveryDecision.shouldRebuildCapture ? "capture_rebuild" : "none",
         recoveryResult: recoveryDecision.shouldRebuildCapture ? "attempted" : "not_attempted")
       pttLifecycle.terminate(
-        disposition: totalSec < Self.minTurnAudioSeconds ? .tooShort : .silentRejected,
+        disposition: resolution.disposition,
         source: "warm_wait_fallback",
         peak: peak,
         rms: rms,
         turnAudioSeconds: totalSec,
         voicedAudioSeconds: voicedSec,
-        judgeable: totalSec >= Self.minTurnAudioSeconds)
+        judgeable: resolution.judgeable,
+        captureStartedLate: resolution.captureStartedLate)
       log(
         "PushToTalkManager: discarding warm-wait fallback turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s)"
       )
@@ -1990,11 +2066,11 @@ class PushToTalkManager: ObservableObject {
       if recoveryDecision.shouldRebuildCapture {
         requestCoreAudioCaptureRecovery(reason: "repeated dead-mic PTT turns", restartPTT: false, batchMode: true)
       }
-      if let turnID = currentVoiceTurnID {
-        voiceTurnCoordinator.publish(
-          .finish(
-            turnID: turnID,
-            reason: totalSec < Self.minTurnAudioSeconds ? .tooShort : .silentRejected))
+      if resolution.captureStartedLate {
+        finishCaptureNotReadyPTTTurn(
+          reason: "warm-wait fallback, \(String(format: "%.2f", totalSec))s")
+      } else if let turnID = currentVoiceTurnID {
+        voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: resolution.terminalReason))
       }
       return
     }
@@ -2107,6 +2183,190 @@ class PushToTalkManager: ObservableObject {
     return parked.service
   }
 
+  /// The per-frame routing every PTT capture uses, built against `lease` so the
+  /// closures installed on a capture at open time keep working after a later turn
+  /// adopts it out of the warm park (`MicCaptureLease.renew`). Extracted so a
+  /// prewarmed capture is byte-for-byte the same capture a turn would have opened
+  /// — a second, subtly different frame path is exactly how a warm capture would
+  /// start leaking frames into the wrong turn.
+  private func micAudioChunkHandler(lease: MicCaptureLease) -> AudioCaptureService.AudioChunkHandler {
+    { [weak self] audioData in
+      // Snapshot before scheduling so a frame emitted during the previous
+      // turn or the parked interval keeps that authority even if a warm
+      // adoption renews the lease before this Task runs.
+      guard let leased = lease.snapshotIfActive() else { return }
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        guard self.micCaptureGeneration == leased.generation,
+          self.voiceTurnCoordinator.activeTurnID == leased.turnID,
+          self.shouldKeepMicCaptureAlive
+        else { return }
+        let batchMode = leased.batchMode
+        let generation = leased.generation
+        let turnID = leased.turnID
+        self.pttLifecycle.ingestAudioChunk(audioData)
+        if self.isHubMode {
+          // Lifecycle admission and provider commit are serialized on the
+          // main actor. A chunk queued behind finalization observes the
+          // closed capture token and cannot leak into the next turn.
+          RealtimeHubController.shared.feedAudio(audioData, turnID: turnID)
+          self.appendBatchAudioBounded(audioData, turn: generation)
+          return
+        }
+        if self.isOmniSTT {
+          if let svc = self.realtimeOmniService {
+            svc.sendAudio(self.resampleForOmni(audioData))
+          } else {
+            self.omniPreconnectBuffer.append(audioData)
+          }
+          self.appendBatchAudioBounded(audioData, turn: generation)
+        } else if batchMode {
+          self.appendBatchAudioBounded(audioData, turn: generation)
+        } else {
+          self.transcriptionService?.sendAudio(audioData)
+        }
+      }
+    }
+  }
+
+  private func micAudioLevelHandler(lease: MicCaptureLease) -> AudioCaptureService.AudioLevelHandler {
+    { [weak self] level in
+      guard let leased = lease.snapshotIfActive() else { return }
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        guard self.micCaptureGeneration == leased.generation,
+          self.voiceTurnCoordinator.activeTurnID == leased.turnID,
+          self.shouldKeepMicCaptureAlive
+        else { return }
+        // Feed the floating-bar mic waveform (VoiceWaveformBars). Throttled to ~5 Hz
+        // inside the monitor; used only for visualization.
+        AudioLevelMonitor.shared.updateMicrophoneLevel(level)
+      }
+    }
+  }
+
+  /// Installs the watchdog and route-change observers a PTT capture needs. Shared
+  /// with the prewarm path for the same reason as the frame handlers above.
+  private func configureMicCaptureObservers(_ capture: AudioCaptureService, lease: MicCaptureLease) {
+    // Silent-mic watchdog: Bluetooth inputs can return zeros during A2DP/HFP conflicts,
+    // and stale CoreAudio routes can do the same even when the selected device is built-in.
+    capture.resetSilentMicWatchdog()
+    capture.detectSilentMicOnAnyTransport = true
+    capture.onSilentMicDetected = { [weak self] detection in
+      // Snapshot before scheduling: a warm adoption renewing the lease must not
+      // re-authorize an event emitted under the previous turn's authority.
+      guard let leased = lease.snapshotIfActive() else { return }
+      Task { @MainActor in
+        guard let self else { return }
+        guard self.micCaptureGeneration == leased.generation,
+          self.voiceTurnCoordinator.activeTurnID == leased.turnID
+        else { return }
+        self.handleSilentMicDetection(detection, batchMode: leased.batchMode)
+      }
+    }
+    capture.onInputRouteChanged = { [weak self] in
+      guard let leased = lease.snapshotIfActive() else { return }
+      Task { @MainActor in
+        guard let self else { return }
+        guard self.micCaptureGeneration == leased.generation,
+          self.voiceTurnCoordinator.activeTurnID == leased.turnID
+        else { return }
+        self.pttLifecycle.noteRouteChanged()
+      }
+    }
+  }
+
+  /// Set while a prewarm start is in flight, so two triggers arriving together
+  /// (onboarding completion and the card that follows it) open one capture.
+  private var warmCaptureStartInFlight = false
+
+  /// Ask for a warm capture on the next main-actor hop. Used from paths that are
+  /// still inside a turn's teardown, where opening the device now would race the
+  /// terminal cleanup that is about to release it.
+  func schedulePTTCaptureWarmup(trigger: PTTWarmCaptureAdmission.Trigger) {
+    Task { @MainActor [weak self] in
+      self?.prewarmMicCapture(trigger: trigger)
+    }
+  }
+
+  /// Open a microphone capture *before* the user's first press and park it in the
+  /// existing keep-alive, so the press adopts a running IOProc instead of paying
+  /// CoreAudio's start latency inside the hold.
+  ///
+  /// This is the 0→1 fix: on a fresh install the first hold after onboarding is
+  /// the one that gets `capture_start_outcome=requested` and never `accepted`,
+  /// and it is reported back to the user as "Hold longer to record". There is no
+  /// second mechanism here — it opens exactly the capture `startMicCapture` would
+  /// have opened and hands it to `parkMicCapture`, so the adoption path, the
+  /// keep-alive expiry, and the device-contention rules are the ones already in
+  /// production.
+  ///
+  /// INV-VOICE-1: no turn events are published and no lifecycle authority is
+  /// taken. The lease is created parked, so every frame the device delivers
+  /// before a real turn adopts it is dropped inside `snapshotIfActive()`.
+  func prewarmMicCapture(trigger: PTTWarmCaptureAdmission.Trigger) {
+    hasMicPermission = AudioCaptureService.checkPermission()
+    let admission = PTTWarmCaptureAdmission.Input(
+      trigger: trigger,
+      pttEnabled: ShortcutSettings.shared.pttEnabled,
+      micPermissionGranted: hasMicPermission,
+      onboardingComplete: UserDefaults.standard.bool(forKey: .hasCompletedOnboarding),
+      isSignedIn: RuntimeOwnerIdentity.currentOwnerId() != nil,
+      hasActiveTurn: voiceTurnCoordinator.activeTurnID != nil,
+      hasCaptureAlready: parkedMicCapture != nil || audioCaptureService != nil
+        || micCaptureStartInFlight || warmCaptureStartInFlight,
+      isFirstRunWindow: UserDefaults.standard.string(forKey: .firstRealAppCardState)
+        .flatMap(FirstRealAppCardState.init(rawValue:)) == .pending)
+    guard PTTWarmCaptureAdmission.admits(admission) else { return }
+
+    warmCaptureStartInFlight = true
+    let overrideDeviceID = preferredPTTInputOverrideDeviceID()
+    let capture = overrideDeviceID.map(AudioCaptureService.init(overrideDeviceID:)) ?? AudioCaptureService()
+    // A lease that starts parked: the capture is running, nothing may consume it.
+    // `batchMode` and `turnID` are placeholders — the adopting turn overwrites
+    // both through `renew` before a single frame is admitted.
+    let lease = MicCaptureLease(
+      generation: micCaptureGeneration, batchMode: false, turnID: VoiceTurnID())
+    lease.setParked(true)
+    configureMicCaptureObservers(capture, lease: lease)
+    let onAudioChunk = micAudioChunkHandler(lease: lease)
+    let onAudioLevel = micAudioLevelHandler(lease: lease)
+
+    Task { @MainActor [weak self] in
+      defer { self?.warmCaptureStartInFlight = false }
+      do {
+        try await capture.startCapture(onAudioChunk: onAudioChunk, onAudioLevel: onAudioLevel)
+        guard let self else {
+          capture.stopCapture()
+          return
+        }
+        // A real turn (or another warm capture) claimed the device while the HAL
+        // was starting. Two IOProcs on one input is the hazard the whole parked
+        // mechanism exists to avoid — drop this one rather than park beside it.
+        guard self.voiceTurnCoordinator.activeTurnID == nil, self.audioCaptureService == nil,
+          self.parkedMicCapture == nil, !self.micCaptureStartInFlight
+        else {
+          capture.stopCapture()
+          log("PushToTalkManager: warm capture (\(trigger.rawValue)) superseded before parking — stopped")
+          return
+        }
+        self.lastNotedInputRouteClass = PTTAttemptLifecycleRecorder.InputRouteClass.from(
+          deviceDescription: capture.currentDeviceDescription,
+          isBluetooth: capture.isCurrentDeviceBluetoothTransport)
+        self.parkMicCapture(capture, lease: lease, overrideID: overrideDeviceID)
+        log("PushToTalkManager: warm capture parked ahead of the first press (\(trigger.rawValue))")
+      } catch {
+        capture.stopCapture()
+        // Deliberately silent to the user and to remote telemetry: nobody asked
+        // for this capture, and the press that follows still runs its own start
+        // with its own error handling — and emits its own lifecycle snapshot, so
+        // a warm-up that never works remains visible as the `capture_start_outcome`
+        // of real attempts rather than needing an event of its own.
+        logError("PushToTalkManager: warm capture failed (\(trigger.rawValue))", error: error)
+      }
+    }
+  }
+
   private func startMicCapture(
     batchMode: Bool = false,
     overrideDeviceID: AudioDeviceID? = nil,
@@ -2167,32 +2427,7 @@ class PushToTalkManager: ObservableObject {
     activeMicOverrideID = overrideDeviceID
     audioCaptureService = capture
 
-    // Silent-mic watchdog: Bluetooth inputs can return zeros during A2DP/HFP conflicts,
-    // and stale CoreAudio routes can do the same even when the selected device is built-in.
-    capture.resetSilentMicWatchdog()
-    capture.detectSilentMicOnAnyTransport = true
-    capture.onSilentMicDetected = { [weak self] detection in
-      // Snapshot before scheduling: a warm adoption renewing the lease must not
-      // re-authorize an event emitted under the previous turn's authority.
-      guard let leased = lease.snapshotIfActive() else { return }
-      Task { @MainActor in
-        guard let self else { return }
-        guard self.micCaptureGeneration == leased.generation,
-          self.voiceTurnCoordinator.activeTurnID == leased.turnID
-        else { return }
-        self.handleSilentMicDetection(detection, batchMode: leased.batchMode)
-      }
-    }
-    capture.onInputRouteChanged = { [weak self] in
-      guard let leased = lease.snapshotIfActive() else { return }
-      Task { @MainActor in
-        guard let self else { return }
-        guard self.micCaptureGeneration == leased.generation,
-          self.voiceTurnCoordinator.activeTurnID == leased.turnID
-        else { return }
-        self.pttLifecycle.noteRouteChanged()
-      }
-    }
+    configureMicCaptureObservers(capture, lease: lease)
 
     Task { @MainActor [weak self] in
       guard let self else { return }
@@ -2214,56 +2449,8 @@ class PushToTalkManager: ObservableObject {
       }
       do {
         try await capture.startCapture(
-          onAudioChunk: { [weak self] audioData in
-            // Snapshot before scheduling so a frame emitted during the previous
-            // turn or the parked interval keeps that authority even if a warm
-            // adoption renews the lease before this Task runs.
-            guard let leased = lease.snapshotIfActive() else { return }
-            Task { @MainActor [weak self] in
-              guard let self else { return }
-              guard self.micCaptureGeneration == leased.generation,
-                self.voiceTurnCoordinator.activeTurnID == leased.turnID,
-                self.shouldKeepMicCaptureAlive
-              else { return }
-              let batchMode = leased.batchMode
-              let generation = leased.generation
-              let turnID = leased.turnID
-              self.pttLifecycle.ingestAudioChunk(audioData)
-              if self.isHubMode {
-                // Lifecycle admission and provider commit are serialized on the
-                // main actor. A chunk queued behind finalization observes the
-                // closed capture token and cannot leak into the next turn.
-                RealtimeHubController.shared.feedAudio(audioData, turnID: turnID)
-                self.appendBatchAudioBounded(audioData, turn: generation)
-                return
-              }
-              if self.isOmniSTT {
-                if let svc = self.realtimeOmniService {
-                  svc.sendAudio(self.resampleForOmni(audioData))
-                } else {
-                  self.omniPreconnectBuffer.append(audioData)
-                }
-                self.appendBatchAudioBounded(audioData, turn: generation)
-              } else if batchMode {
-                self.appendBatchAudioBounded(audioData, turn: generation)
-              } else {
-                self.transcriptionService?.sendAudio(audioData)
-              }
-            }
-          },
-          onAudioLevel: { [weak self] level in
-            guard let leased = lease.snapshotIfActive() else { return }
-            Task { @MainActor [weak self] in
-              guard let self else { return }
-              guard self.micCaptureGeneration == leased.generation,
-                self.voiceTurnCoordinator.activeTurnID == leased.turnID,
-                self.shouldKeepMicCaptureAlive
-              else { return }
-              // Feed the floating-bar mic waveform (VoiceWaveformBars). Throttled to ~5 Hz
-              // inside the monitor; used only for visualization.
-              AudioLevelMonitor.shared.updateMicrophoneLevel(level)
-            }
-          }
+          onAudioChunk: self.micAudioChunkHandler(lease: lease),
+          onAudioLevel: self.micAudioLevelHandler(lease: lease)
         )
         let isCurrentGeneration = self.micCaptureGeneration == generation
         guard isCurrentGeneration, self.shouldKeepMicCaptureAlive else {

@@ -351,6 +351,15 @@ final class PTTAttemptLifecycleRecorder {
     }
   }
 
+  /// Wall time since the press, in seconds — the length of the hold, not of the
+  /// audio the capture managed to deliver inside it. `nil` before `beginAttempt`.
+  /// Read by the discard paths so capture-start latency is charged to capture
+  /// rather than to the user's finger.
+  var attemptElapsedSeconds: Double? {
+    guard let attemptStartedAt else { return nil }
+    return max(0, now().timeIntervalSince(attemptStartedAt))
+  }
+
   /// A recovery was requested for this attempt. Mints a bounded correlation id
   /// that the *next judgeable* attempt resolves.
   ///
@@ -379,7 +388,8 @@ final class PTTAttemptLifecycleRecorder {
     rms: Int?,
     turnAudioSeconds: Double?,
     voicedAudioSeconds: Double?,
-    judgeable: Bool
+    judgeable: Bool,
+    captureStartedLate: Bool = false
   ) -> Snapshot {
     // Derived here, never supplied: a caller that passes its own near-zero verdict
     // can contradict the peak/rms it reported in the same call. Unknown energy
@@ -418,6 +428,7 @@ final class PTTAttemptLifecycleRecorder {
       hadFirstAudioCallback: firstAudioCallbackAt != nil,
       hadFirstUsableFrame: firstUsableFrameAt != nil,
       judgeable: judgeable,
+      captureStartedLate: captureStartedLate,
       resolvedRecoveryOutcome: resolvedOutcome)
 
     let snapshot = Snapshot(
@@ -463,6 +474,7 @@ final class PTTAttemptLifecycleRecorder {
     hadFirstAudioCallback: Bool,
     hadFirstUsableFrame: Bool,
     judgeable: Bool,
+    captureStartedLate: Bool = false,
     resolvedRecoveryOutcome: RecoveryOutcomeOfNextTurn
   ) -> FailureClass {
     if resolvedRecoveryOutcome == .recovered { return .recoveryOutcomeRecovered }
@@ -471,9 +483,14 @@ final class PTTAttemptLifecycleRecorder {
 
     if disposition == .cancelled { return .cancelled }
 
-    // (1) Capture never became operational: start failed, or it was requested but
-    // never delivered a callback before the turn ended (startup race).
-    if captureStartOutcome == .failed || !hadFirstAudioCallback {
+    // (1) Capture never became operational for this press: the start failed, it
+    // was requested but never delivered a callback before the turn ended
+    // (startup race), or it came up so late in the hold that it delivered less
+    // audio than the commit gate needs. The last case used to land in
+    // `too_short_audible`, which reads as a user who tapped — it is the same
+    // capture defect as the other two and belongs in the same class so one query
+    // sizes the whole first-press gap.
+    if captureStartOutcome == .failed || !hadFirstAudioCallback || captureStartedLate {
       return .captureNeverOperational
     }
 

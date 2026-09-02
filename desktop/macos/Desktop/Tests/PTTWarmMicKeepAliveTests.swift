@@ -32,6 +32,76 @@ final class PTTWarmMicKeepAliveTests: XCTestCase {
       source.contains("private func stopAudioTranscription(discardBufferedAudio: Bool = false, parkWarm: Bool = true)"))
   }
 
+  /// The measured regression: onboarding completion starts ambient
+  /// transcription, `startMicCaptureIfNeeded` releases the parked PTT capture so
+  /// two IOProcs cannot overlap on one device, and nothing ever put one back. The
+  /// release is correct; leaving the microphone cold behind it is not.
+  func testAmbientTranscriptionReArmsTheWarmCaptureAfterDisplacingIt() throws {
+    let sourceURL = sourcesRoot()
+      .appendingPathComponent("AppState/AppState+Transcription.swift")
+    // omi-test-quality: source-inspection -- static contract: ambient capture re-arms PTT behind itself
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("PushToTalkManager.shared.releaseParkedMicCapture()"))
+    XCTAssertTrue(
+      source.contains(
+        "PushToTalkManager.shared.schedulePTTCaptureWarmup(trigger: .ambientCaptureStarted)"),
+      "releasing the parked PTT capture must be followed by re-arming one")
+  }
+
+  /// Onboarding completion and the first-real-app card both ask for a warm
+  /// capture. Neither may release one: the card is shown seconds after ambient
+  /// transcription opened the device, and a release there is exactly what left
+  /// the first press cold.
+  func testOnboardingCompletionAndTheCardWarmRatherThanRelease() throws {
+    let onboardingURL = sourcesRoot()
+      .appendingPathComponent("Onboarding/SecondBrain/SBOnboardingModel.swift")
+    let cardURL = sourcesRoot()
+      .appendingPathComponent("ProactiveAssistants/FirstRealApp/FirstRealAppCardCoordinator.swift")
+    // omi-test-quality: source-inspection -- static contract: onboarding completion warms PTT capture
+    let onboarding = try String(contentsOf: onboardingURL, encoding: .utf8)
+    // omi-test-quality: source-inspection -- static contract: the card warms PTT capture when shown
+    let card = try String(contentsOf: cardURL, encoding: .utf8)
+
+    XCTAssertTrue(
+      onboarding.contains(
+        "PushToTalkManager.shared.prewarmMicCapture(trigger: .onboardingCompleted)"))
+    XCTAssertFalse(onboarding.contains("releaseParkedMicCapture"))
+
+    XCTAssertTrue(card.contains("PushToTalkManager.shared.prewarmMicCapture(trigger: .firstRealAppCard)"))
+    XCTAssertTrue(card.contains("warmCapture()"))
+    XCTAssertFalse(card.contains("releaseParkedMicCapture"))
+  }
+
+  /// The warm capture is the existing parked mechanism, not a second one: it
+  /// hands its capture to `parkMicCapture` and publishes no turn events
+  /// (INV-VOICE-1).
+  func testWarmCaptureReusesTheParkedMechanismAndOwnsNoTurn() throws {
+    let source = try pushToTalkManagerSource()
+
+    XCTAssertTrue(source.contains("func prewarmMicCapture(trigger: PTTWarmCaptureAdmission.Trigger)"))
+    XCTAssertTrue(source.contains("self.parkMicCapture(capture, lease: lease, overrideID: overrideDeviceID)"))
+    XCTAssertTrue(source.contains("lease.setParked(true)"))
+    guard let warmup = source.range(of: "func prewarmMicCapture(") else {
+      return XCTFail("prewarmMicCapture is gone — this contract needs rewriting, not deleting")
+    }
+    let body = String(source[warmup.lowerBound...].prefix(4000))
+    XCTAssertFalse(
+      body.contains("voiceTurnCoordinator.publish"),
+      "a warm capture must not publish turn events (INV-VOICE-1)")
+  }
+
+  /// A turn that ends because capture was not ready keeps its capture parked —
+  /// that parked capture is the retry the hint promises.
+  func testCaptureNotReadyKeepsTheWarmCaptureForItsRetry() throws {
+    let source = try pushToTalkManagerSource()
+
+    XCTAssertTrue(
+      source.contains(
+        "case .success, .tooShort, .silentRejected, .interruptedByBargeIn, .captureNotReady:"))
+    XCTAssertTrue(source.contains("schedulePTTCaptureWarmup(trigger: .captureNotReady)"))
+  }
+
   func testPTTContentionIgnoresManagersOwnParkedCapture() throws {
     let source = try inputDeviceRoutingSource()
 

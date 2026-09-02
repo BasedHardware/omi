@@ -40,9 +40,29 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
     // hub, omni/batch, and the empty-buffer backstop all route to the hint.
     let hintCalls = source.components(separatedBy: "finishTooShortPTTTurnWithHint(reason:").count - 1
     XCTAssertGreaterThanOrEqual(hintCalls, 3)
-    // Only when the turn was too short — reusing the existing threshold.
-    XCTAssertTrue(source.contains("if totalSec < Self.minTurnAudioSeconds {"))
+    // Only when the press itself was short. The gate is measured on delivered
+    // audio, so a hold whose capture came up late also falls under it — that turn
+    // is `.captureStartedLate` and gets its own hint, never "Hold longer".
+    XCTAssertTrue(source.contains("case .shortTap:"))
+    XCTAssertTrue(source.contains("case .captureStartedLate:"))
+    XCTAssertTrue(source.contains("resolveDiscardedTurn(totalSec: totalSec)"))
     XCTAssertTrue(source.contains("reason: \"hub"))
+  }
+
+  /// The press that this whole path exists for: a hold long enough to speak into
+  /// whose capture only became operational at the end of it must not be reported
+  /// to the user as a short tap.
+  func testLateCaptureTurnGetsItsOwnHintRatherThanHoldLonger() {
+    let reducer = VoiceTurnReducer()
+    let turnID = VoiceTurnID()
+    let started = reducer.reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+
+    let finished = reducer.reduce(started, .finish(turnID: turnID, reason: .captureNotReady))
+
+    XCTAssertEqual(finished.model.turn?.phase, .terminal(.captureNotReady))
+    XCTAssertEqual(
+      finished.model.turn?.projection.hint, "Microphone wasn't ready — retrying, hold again")
+    XCTAssertTrue(finished.model.turn?.deadlines.contains(.hintVisibility) == true)
   }
 
   func testHintUsesPTTHintTextAndKeepsBarVoiceSized() throws {
