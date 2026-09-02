@@ -247,6 +247,7 @@ clients_mod.llm_mini = mock_llm_mini
 clients_mod.llm_medium = mock_llm_medium
 clients_mod.llm_medium_experiment = mock_llm_medium_experiment
 clients_mod.parser = mock_parser
+clients_mod.num_tokens_from_string = lambda value: len(value)
 
 
 def _get_llm_stub(name, **_kwargs):
