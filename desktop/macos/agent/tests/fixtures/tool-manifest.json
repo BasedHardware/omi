@@ -4610,12 +4610,12 @@
       "title": "Get Action Items",
       "summary": "Retrieve the user's tasks with optional completion and due-date filters.",
       "bullets": [
-        "Use for completed tasks, date ranges, or the full task list.",
-        "For voice, prefer get_tasks for plain overdue/due-today questions."
+        "Use for completed tasks or an explicit date range.",
+        "For voice, prefer get_tasks for any plain question about the open list."
       ]
     },
     "voice": {
-      "realtimeDescription": "Read the user's tasks / to-dos from the backend, with optional filters. Use for COMPLETED tasks ('what did I finish'), a DATE RANGE ('what's due next week'), or the FULL list ('all my tasks') — for plain 'what's due today / overdue', prefer get_tasks. Fast synchronous read. Speak a short summary of what it returns."
+      "realtimeDescription": "Read the user's tasks / to-dos from the backend, with optional filters. Use for COMPLETED tasks ('what did I finish') or a DATE RANGE ('what's due next week') — for any plain question about the open list, prefer get_tasks. Fast synchronous read. Speak a short summary of what it returns."
     }
   },
   {
@@ -5247,14 +5247,14 @@
     ],
     "capabilityDoc": {
       "title": "Get Tasks",
-      "summary": "Read the user's overdue and due-today tasks locally.",
+      "summary": "Read the user's open tasks locally: overdue, due today, and undated.",
       "bullets": [
         "Use for plain voice questions like what are my tasks, what's due today, or what's on my list.",
-        "Prefer get_action_items for completed tasks, date ranges, or the full list."
+        "Prefer get_action_items for completed tasks or an explicit date range."
       ]
     },
     "voice": {
-      "realtimeDescription": "Read the user's tasks (overdue + due today) locally and get them back as text to speak. Fast synchronous read — use this for 'what are my tasks', 'what's due today', 'what's on my list'. Reading tasks is always a direct call, never background work."
+      "realtimeDescription": "Read the user's open tasks locally and get them back as text to speak: everything overdue, everything due today, and everything on the list with no due date. This is the same list the Tasks page shows, so an empty result means the user genuinely has no open tasks — never say they have none without calling this first. Fast synchronous read — use it for 'what are my tasks', 'what's due today', 'what's on my list', 'what should I work on'. Reading tasks is always a direct call, never background work."
     }
   },
   {

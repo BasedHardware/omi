@@ -565,8 +565,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Retrieve the user's tasks with optional completion and due-date filters.",
       bullets: [
-      "Use for completed tasks, date ranges, or the full task list.",
-      "For voice, prefer get_tasks for plain overdue/due-today questions."
+      "Use for completed tasks or an explicit date range.",
+      "For voice, prefer get_tasks for any plain question about the open list."
     ]
     ),
     Capability(
@@ -690,10 +690,10 @@ enum GeneratedToolCapabilities {
       title: "Get Tasks",
       latency: .fastLocal,
       surfaces: Set([.realtimeHub]),
-      summary: "Read the user's overdue and due-today tasks locally.",
+      summary: "Read the user's open tasks locally: overdue, due today, and undated.",
       bullets: [
       "Use for plain voice questions like what are my tasks, what's due today, or what's on my list.",
-      "Prefer get_action_items for completed tasks, date ranges, or the full list."
+      "Prefer get_action_items for completed tasks or an explicit date range."
     ]
     ),
     Capability(
