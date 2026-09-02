@@ -1676,7 +1676,7 @@ actor AgentBridge {
 
     let usesManagedCloud = session.profile.credentialScope == .managedCloud
     if usesManagedCloud {
-      if let cached = currentQuota(for: authorization), !cached.allowed {
+      if let cached = currentQuota(for: authorization), !cached.allowed, cached.isOveragePlan != true {
         QueryTracerContext.current?.mark("quota_check", metadata: ["result": "exceeded_cached"])
         throw BridgeError.quotaExceeded(
           plan: cached.plan,
