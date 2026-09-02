@@ -6542,6 +6542,11 @@
             "title": "Allowed",
             "type": "boolean"
           },
+          "is_overage_plan": {
+            "default": false,
+            "title": "Is Overage Plan",
+            "type": "boolean"
+          },
           "limit": {
             "anyOf": [
               {

@@ -92,6 +92,7 @@ from utils.subscription import (
     get_paid_plan_definitions,
     get_plan_display_name,
     get_plan_limits,
+    plan_uses_overage,
     get_plan_features,
     get_monthly_usage_for_subscription,
     is_trial_paywalled,
@@ -1452,6 +1453,7 @@ def get_user_chat_usage_quota(
             percent=0.0,
             allowed=True,
             reset_at=None,
+            is_overage_plan=False,
         )
 
     # This is the desktop-only quota display (see docstring), so it must read the
@@ -1478,6 +1480,7 @@ def get_user_chat_usage_quota(
         percent=percent,
         allowed=snapshot['allowed'],
         reset_at=snapshot['reset_at'],
+        is_overage_plan=plan_uses_overage(plan),
     )
 
 
