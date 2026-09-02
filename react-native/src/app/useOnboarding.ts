@@ -70,7 +70,15 @@ export function useOnboarding(
     if (!result.signedOut) {
       throw new Error('Could not clear this app session.');
     }
-    const hasSession = await auth.hasCloudSession();
+    // After the keychain session is gone the desktop gate must fall back to
+    // Welcome even if the confirmation probe itself fails, so a cleared
+    // session can never leave a signed-out Mac pinned in the product shell.
+    let hasSession = false;
+    try {
+      hasSession = await auth.hasCloudSession();
+    } catch {
+      hasSession = false;
+    }
     if (macDesktop && !hasSession) {
       setOnboardingRequired(true);
     }

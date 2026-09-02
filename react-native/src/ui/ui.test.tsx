@@ -428,10 +428,12 @@ describe('signed-out Settings and first-run', () => {
     expect(onboarding).toContain('Welcome to Omi');
     expect(gate).toContain('signOutAndRefresh');
     expect(gate).toMatch(
-      /const hasSession = await auth\.hasCloudSession\(\);[^]*setOnboardingRequired\(true\)/,
+      /const result = await auth\.signOut\(\);[^]*setOnboardingRequired\(true\)/,
     );
+    // A failed confirmation probe must not strand a signed-out session in
+    // the product shell: the gate falls back to Welcome either way.
     expect(gate).toMatch(
-      /const result = await auth\.signOut\(\);[^]*const hasSession = await auth\.hasCloudSession\(\)/,
+      /try \{[^]*hasSession = await auth\.hasCloudSession\(\);[^]*\} catch \{[^]*hasSession = false;/,
     );
   });
 });
