@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create or update a retained memory Cloud Run Job Scheduler trigger.
+"""Create or update an allowed retained Cloud Run Job Scheduler trigger.
 
 This is intentionally separate from the legacy read-only maintenance
 validator.  The deployment workflow checks out an admitted main SHA before
@@ -52,7 +52,7 @@ def scheduler_http_args(
     cloud_run_job = _required_identity(cloud_run_job, field="cloud_run_job")
     service_account = _required_identity(service_account, field="service_account")
     if EXPECTED_TARGETS.get(scheduler_job) != cloud_run_job:
-        raise ValueError("memory scheduler identity does not match a retained contract")
+        raise ValueError("scheduler identity does not match a retained contract for Cloud Run Jobs")
     return [
         "gcloud",
         "scheduler",
@@ -154,9 +154,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             service_account=args.service_account,
         )
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
-        print(f"memory scheduler provisioning failed: {exc}")
+        print(f"retained job scheduler provisioning failed: {exc}")
         return 1
-    print(f"memory scheduler provisioning: {action}")
+    print(f"retained job scheduler provisioning: {action}")
     return 0
 
 

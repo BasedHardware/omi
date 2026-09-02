@@ -17,8 +17,16 @@ def _load_job():
     return module
 
 
+# Executing the job module pulls the whole drain dependency graph (firebase_admin and
+# utils.memory.*), which costs ~1.5s of CPU on a cold interpreter and starts gRPC's
+# background threads. Loading it at import time keeps that out of every phase the
+# fast-unit duration guard measures; as a module-scoped fixture the cost was charged to
+# whichever test happened to request it first.
+JOB = _load_job()
+
+
 def test_entrypoint_executes_independent_drain(monkeypatch):
-    job = _load_job()
+    job = JOB
     called = []
 
     async def run():
@@ -34,7 +42,7 @@ def test_entrypoint_executes_independent_drain(monkeypatch):
 
 
 def test_entrypoint_fails_when_a_page_reports_errors(monkeypatch):
-    job = _load_job()
+    job = JOB
 
     async def run():
         return SimpleNamespace(errors=["uid=redacted:migration:RuntimeError"])
@@ -59,7 +67,13 @@ def test_admitted_deploy_lane_provisions_an_independent_job_and_scheduler(workfl
     assert "knowledge_ledger_drain_job_env_vars" in workflow
     assert "knowledge-ledger-drain-hourly" in workflow
     assert '--cloud-run-job "$LEDGER_DRAIN_SERVICE"' in workflow
+    assert 'gcloud run jobs add-iam-policy-binding "$LEDGER_DRAIN_SERVICE"' in workflow
+    assert '--member="serviceAccount:${SCHEDULER_SERVICE_ACCOUNT}"' in workflow
+    assert '--role="roles/run.invoker"' in workflow
     assert workflow.index("Deploy independent ledger drain to Cloud Run") < workflow.index(
+        "Authorize ledger drain Scheduler invocations"
+    )
+    assert workflow.index("Authorize ledger drain Scheduler invocations") < workflow.index(
         "Provision hourly Scheduler trigger from admitted source"
     )
 

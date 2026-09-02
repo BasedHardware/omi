@@ -260,6 +260,15 @@ jobs:
           env_vars: ${{ steps.runtime-env.outputs.knowledge_ledger_drain_job_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.knowledge_ledger_drain_job_secrets }}
 
+      - name: Authorize ledger drain Scheduler invocations
+        run: |
+          gcloud run jobs add-iam-policy-binding "$LEDGER_DRAIN_SERVICE" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="$REGION" \
+            --member="serviceAccount:${SCHEDULER_SERVICE_ACCOUNT}" \
+            --role="roles/run.invoker" \
+            --quiet
+
       - name: Provision hourly Scheduler trigger from admitted source
         run: |
           python3 backend/scripts/provision_daily_memory_sweep_scheduler.py \

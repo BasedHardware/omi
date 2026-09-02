@@ -17,7 +17,7 @@ from typing import Any, cast
 
 from google.cloud import firestore
 
-from database._client import db as default_db_client
+from database._client import get_firestore_client
 from models.memory_apply import WriterMode
 from utils.executors import db_executor, run_blocking
 from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout
@@ -156,7 +156,9 @@ def bounded_ledger_drain_inventory(
                 continue
             payload = snapshot.to_dict() if hasattr(snapshot, "to_dict") else None
             uid = payload.get("uid") if isinstance(payload, dict) else None
-            writer_mode = payload.get("writer_mode") if isinstance(payload, dict) else None
+            writer_mode = (
+                payload.get("writer_mode", WriterMode.compatibility.value) if isinstance(payload, dict) else None
+            )
             if not isinstance(uid, str) or uid != parts[1] or not uid.strip() or "/" in uid:
                 raise LedgerDrainInventoryUnavailable("ledger drain apply-control row malformed")
             try:
@@ -203,7 +205,9 @@ async def run_knowledge_ledger_drain(
 ) -> LedgerDrainSummary:
     """Drain and publish one independently inventoried migration page."""
 
-    client = db_client if db_client is not None else default_db_client
+    # Resolved per call rather than bound at import, and dispatched off the event loop:
+    # building the Firestore client is blocking work like every other db call below.
+    client = db_client if db_client is not None else await run_blocking(db_executor, get_firestore_client)
     page = await run_blocking(db_executor, inventory_provider, client, limit=inventory_limit)
     if not isinstance(page, LedgerDrainInventoryPage):
         raise LedgerDrainInventoryUnavailable("ledger drain inventory page malformed")
@@ -278,7 +282,8 @@ async def run_knowledge_ledger_drain(
             continue
         summary.cutover_users += 1
 
-    await run_blocking(db_executor, commit_ledger_drain_inventory, client, page)
+    if not summary.errors:
+        await run_blocking(db_executor, commit_ledger_drain_inventory, client, page)
     logger.info(
         "knowledge_ledger_drain: scanned=%d inventoried=%d attempted=%d blocked=%d revoked=%d "
         "remaining=%d cutover=%d migrated_rows=%d errors=%d",
