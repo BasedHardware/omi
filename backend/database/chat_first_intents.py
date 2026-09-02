@@ -55,6 +55,20 @@ logger = logging.getLogger(__name__)
 MATERIALIZATION_REJECTION_BUDGET = 3
 UNACKNOWLEDGED_FETCH_BUDGET = 20
 STALLED_READY_AGE = timedelta(hours=24)
+# A capture receipt announces one conversation that just finished processing.
+# It is only ever delivered while the rich Chat transcript is foregrounded, and
+# until now nothing retired one that was never delivered -- so an account that
+# was not looking at Chat accrued one ready intent per finalized conversation,
+# and the next foreground poll handed the kernel a whole batch of them at once.
+# The kernel stamps every row it writes with its own clock, so that backlog
+# lands as a run of conversation cards sharing one timestamp, days after the
+# conversations they announce.  Two bounds keep a receipt a live notice: an
+# older receipt has been superseded by a newer one, and a receipt past the
+# delivery window has no reader left.  Neither loses anything, because the
+# conversation itself is in the conversation list either way.
+CAPTURE_RECEIPT_DELIVERY_WINDOW = STALLED_READY_AGE
+STALE_CAPTURE_DEAD_LETTER_REASON = 'stale_capture_receipt'
+SUPERSEDED_CAPTURE_DEAD_LETTER_REASON = 'superseded_capture_receipt'
 PERMANENT_REJECTION_CODES = frozenset({'invalid_intent', 'identity_conflict'})
 _SYNTHETIC_RECONCILIATION_RECEIPT_PREFIX = 'cfi_reconciled_'
 
@@ -664,10 +678,21 @@ def _message_has_intent_identity(uid: str, intent_id: str, *, firestore_client: 
     return isinstance(metadata, dict) and metadata.get('chatFirstIntentId') == intent_id
 
 
+def _is_capture_receipt(intent: ProactiveIntent) -> bool:
+    """The plain "your conversation is ready" receipt, not a meeting-notes intent.
+
+    A desktop meeting carries a ``conversationLink`` under the same source and
+    keeps its own delivery contract; only the bare ``captureLink`` receipt is
+    the per-conversation notice that collapses.
+    """
+
+    return intent.source == 'capture_arrival' and all(block.type == 'captureLink' for block in intent.blocks)
+
+
 def _fetch_priority(intent: ProactiveIntent) -> int:
     if intent.source == 'daily_opener' or any(block.type == 'conversationLink' for block in intent.blocks):
         return 0
-    if intent.source == 'capture_arrival' and all(block.type == 'captureLink' for block in intent.blocks):
+    if _is_capture_receipt(intent):
         return 2
     return 1
 
@@ -825,6 +850,54 @@ def _requeue_transient_dead_letter(
         raise ChatFirstMalformedDocument('chat-first dead letter is malformed') from error
 
 
+def _retire_capture_receipt(
+    uid: str,
+    intent_id: str,
+    *,
+    account_generation: int,
+    reason: str,
+    now: datetime,
+    firestore_client: Any,
+) -> bool:
+    """Terminalize one undelivered capture receipt.
+
+    Re-reads inside the transaction and refuses anything that is no longer a
+    ready capture receipt, so a row a concurrent poll already advanced into
+    ``pending_kernel_receipt`` is never retired from under the kernel that is
+    about to acknowledge it.
+    """
+
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=firestore_client)
+    transaction = firestore_client.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction: Any) -> bool:
+        snapshot = intent_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            return False
+        try:
+            intent = _intent_from_snapshot(snapshot)
+        except ChatFirstMalformedDocument:
+            # The malformed sweep in this same fetch owns that row.
+            return False
+        if (
+            intent.account_generation != account_generation
+            or intent.delivery_state != 'ready'
+            or not _is_capture_receipt(intent)
+        ):
+            return False
+        delivery_attempts.move_to_dead_letters(
+            write_transaction,
+            intent_ref_value=intent_ref,
+            dead_letter_ref_value=_dead_letter_ref(uid, intent_id, firestore_client=firestore_client),
+            intent=intent.model_copy(update={'delivery_state': 'dead_letter', 'dead_letter_reason': reason}),
+            terminal_at=now,
+        )
+        return True
+
+    return apply(transaction)
+
+
 def fetch_ready_intent_batch(
     uid: str,
     *,
@@ -858,6 +931,7 @@ def fetch_ready_intent_batch(
     query = collection.where(filter=FieldFilter('delivery_state', 'in', ['ready', 'pending_kernel_receipt']))
     candidates: list[ProactiveIntent] = []
     malformed_intent_ids: list[str] = []
+    capture_receipts: list[ProactiveIntent] = []
     for snapshot in query.stream():
         try:
             intent = _intent_from_snapshot(snapshot)
@@ -872,11 +946,52 @@ def fetch_ready_intent_batch(
         # legacy-compatible intents behind them.
         if exclude_block_types and any(block.type in exclude_block_types for block in intent.blocks):
             continue
+        # A receipt this device explicitly deferred keeps its own contract and
+        # is re-offered below rather than collapsed against its siblings.
+        if (
+            intent.delivery_state == 'ready'
+            and _is_capture_receipt(intent)
+            and not (deferred_intent_ids and intent.intent_id in deferred_intent_ids)
+        ):
+            capture_receipts.append(intent)
+            continue
         candidates.append(intent)
+
+    # Keep at most the newest live receipt; retire the rest. Removing them here
+    # is what stops the backlog replay -- the bounded writes further down only
+    # stop the same rows being re-scanned on every later poll.
+    capture_receipts.sort(key=lambda intent: (intent.created_at, intent.intent_id))
+    retiring_captures: list[tuple[ProactiveIntent, str]] = [
+        (intent, SUPERSEDED_CAPTURE_DEAD_LETTER_REASON) for intent in capture_receipts[:-1]
+    ]
+    if capture_receipts:
+        newest = capture_receipts[-1]
+        if fetched_at - newest.created_at > CAPTURE_RECEIPT_DELIVERY_WINDOW:
+            retiring_captures.append((newest, STALE_CAPTURE_DEAD_LETTER_REASON))
+        else:
+            candidates.append(newest)
     candidates.sort(key=lambda intent: (_fetch_priority(intent), intent.created_at, intent.intent_id))
 
     ready: list[ProactiveIntent] = []
     candidate_scan_limit = FETCH_CANDIDATE_SCAN_MULTIPLIER * limit
+    # Bounded per poll so a long backlog can never make one fetch linear in its
+    # size. Whatever is left over is already excluded from this response, so it
+    # costs nothing to retire it on a later poll instead.
+    for intent, reason in retiring_captures[:candidate_scan_limit]:
+        try:
+            retired = _retire_capture_receipt(
+                uid,
+                intent.intent_id,
+                account_generation=account_generation,
+                reason=reason,
+                now=fetched_at,
+                firestore_client=client,
+            )
+        except Exception:
+            # One unretirable row never blocks an independent ready intent.
+            continue
+        if retired:
+            lifecycle_events.append(IntentLifecycleEvent('retired', intent.source, reason))
     hydrated_attempts: dict[str, ProactiveIntent] = {}
     stall_age_candidates: list[tuple[datetime, ProactiveIntent]] = []
     oldest_candidates = sorted(candidates, key=lambda intent: (intent.created_at, intent.intent_id))
