@@ -25,6 +25,11 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
   // refresh outcome, so a failed first load followed by a retry stays truthful.
   const homeReadsLoadedRef = useRef(false);
   const [readsPhase, setReadsPhase] = useState<ReadsPhase>('initial-loading');
+  // Monotonic refresh sequence. Every gate transition and every new refresh
+  // bumps it, so a refresh that started under a previous session (or before a
+  // newer refresh) can never write rows or phase into the session that
+  // follows — including the merge source that "saved data" phases read from.
+  const refreshSeqRef = useRef(0);
 
   // Cloud reads only run for a ready session. Signed-out and probing Macs
   // never hit /v1/conversations|memories|tasks, so their 401/unconfigured
@@ -48,6 +53,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
         setReadsPhase('unavailable');
         return;
       }
+      const seq = ++refreshSeqRef.current;
       setReadsPhase(
         initial && readOutcomesRef.current === null
           ? 'initial-loading'
@@ -55,6 +61,11 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       );
       try {
         const outcomes = await loadDesktopReads(backend);
+        // A newer refresh or a gate transition retired this one: its rows
+        // belong to a session that is no longer mounted.
+        if (seq !== refreshSeqRef.current) {
+          return;
+        }
         const previous = readOutcomesRef.current;
         const hadSavedRows =
           previous !== null &&
@@ -105,6 +116,9 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
             : 'ready',
         );
       } catch {
+        if (seq !== refreshSeqRef.current) {
+          return;
+        }
         setReadsPhase(
           readOutcomesRef.current === null
             ? 'unavailable'
@@ -119,7 +133,10 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     if (!enabled) {
       // Leaving the ready session drops every saved row and phase so the
       // next session starts at a truthful initial-loading, never a stale
-      // unavailable banner.
+      // unavailable banner. Bumping the sequence also retires any refresh
+      // still in flight from the session that just left, so its late rows
+      // cannot seed the next session's "saved data" merge source.
+      refreshSeqRef.current += 1;
       readOutcomesRef.current = null;
       homeReadsLoadedRef.current = false;
       setReadOutcomes(null);
