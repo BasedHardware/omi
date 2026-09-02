@@ -409,7 +409,6 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertFalse(provider.isConnected)
   }
 
-
   func testDisconnectAndUnpairEmitDeviceDisconnectedOnce() async {
     let defaults = makeDefaults()
     defer { removeDefaults(defaults) }
