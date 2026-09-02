@@ -20,6 +20,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
+import 'package:omi/pages/chat/widgets/content_blocks/chat_content_block_list.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -284,8 +285,26 @@ Widget buildMessageWidget(
   bool showThinkingAfterText = false,
   Future<ServerConversation?> Function(String id)? fetchConversation,
 }) {
+  final contentBlocks = ChatContentBlockList.hasRenderableBlocks(message)
+      ? ChatContentBlockList(
+          message: message,
+          sendMessage: sendMessage,
+          fetchConversation: fetchConversation,
+        )
+      : null;
+  // A message whose text is only the fallback synthesized from its blocks has
+  // nothing to say that the components do not already show, so the components
+  // replace the body instead of repeating it.
+  final blocksReplaceBody = contentBlocks != null &&
+      message.memories.isEmpty &&
+      message.type != MessageType.daySummary &&
+      !displayOptions &&
+      message.textIsStructuredFallback;
+
   final Widget messageWidget;
-  if (message.memories.isNotEmpty) {
+  if (blocksReplaceBody) {
+    messageWidget = contentBlocks;
+  } else if (message.memories.isNotEmpty) {
     messageWidget = MemoriesMessageWidget(
       showTypingIndicator: showTypingIndicator,
       messageMemories: message.memories,
@@ -324,17 +343,24 @@ Widget buildMessageWidget(
   }
 
   final evidence = visibleSupplementalEvidence(message);
-  if (evidence == null) return messageWidget;
+  final appendBlocks = contentBlocks != null && !blocksReplaceBody;
+  if (evidence == null && !appendBlocks) return messageWidget;
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisSize: MainAxisSize.min,
     children: [
       messageWidget,
-      const SizedBox(height: 8),
-      // The released mobile surface has no trusted evidence navigator yet.
-      // Keep cards non-actionable until one is supplied; arbitrary URI fields
-      // can never become an external action.
-      ChatEvidenceReferenceList(envelope: evidence),
+      if (appendBlocks) ...[
+        const SizedBox(height: 8),
+        contentBlocks,
+      ],
+      if (evidence != null) ...[
+        const SizedBox(height: 8),
+        // The released mobile surface has no trusted evidence navigator yet.
+        // Keep cards non-actionable until one is supplied; arbitrary URI fields
+        // can never become an external action.
+        ChatEvidenceReferenceList(envelope: evidence),
+      ],
     ],
   );
 }
