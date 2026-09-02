@@ -92,6 +92,11 @@ struct ModifierOnlyPTTActivationGate {
   enum Action: Equatable {
     case scheduleStart
     case cancelPendingStart
+    /// The modifier was released before the activation delay elapsed and no other
+    /// key was pressed with it: a deliberate quick tap. No turn was started (an
+    /// accidental brush of the modifier must stay inert), but the tap is real
+    /// input and is offered to the double-tap detector.
+    case cancelPendingStartAsQuickTap
     case releaseStartedTurn
     case none
   }
@@ -108,7 +113,7 @@ struct ModifierOnlyPTTActivationGate {
 
     if hasPendingStart {
       hasPendingStart = false
-      return .cancelPendingStart
+      return .cancelPendingStartAsQuickTap
     }
     guard hasStartedTurn else { return .none }
     hasStartedTurn = false
@@ -245,6 +250,8 @@ class PushToTalkManager: ObservableObject {
   // Double-tap detection
   private var lastOptionDownTime: TimeInterval = 0
   private var lastOptionUpTime: TimeInterval = 0
+  /// Uptime of the last modifier-only quick tap that did not start a turn.
+  private var lastModifierQuickTapTime: TimeInterval = 0
   private let doubleTapThreshold: TimeInterval = 0.4
   private let tapToLockMaxHoldDuration: TimeInterval = 0.22
 
@@ -513,6 +520,9 @@ class PushToTalkManager: ObservableObject {
       scheduleModifierOnlyShortcutStart()
     case .cancelPendingStart:
       cancelPendingModifierOnlyShortcutStart()
+    case .cancelPendingStartAsQuickTap:
+      cancelPendingModifierOnlyShortcutStart()
+      handleModifierOnlyQuickTap()
     case .releaseStartedTurn:
       handleShortcutUp()
     case .none:
@@ -531,6 +541,33 @@ class PushToTalkManager: ObservableObject {
     DispatchQueue.main.asyncAfter(
       deadline: .now() + Self.modifierOnlyShortcutActivationDelay,
       execute: workItem)
+  }
+
+  /// A modifier-only shortcut released inside `modifierOnlyShortcutActivationDelay`
+  /// never starts a turn — that delay is what keeps an accidental brush of the
+  /// modifier (or the modifier held as part of another shortcut) from recording.
+  /// A *pair* of such taps is unambiguous intent, so it drives locked mode, and a
+  /// tap while already locked sends, matching "Tap again to send".
+  private func handleModifierOnlyQuickTap() {
+    guard ShortcutSettings.shared.doubleTapForLock else { return }
+    let now = ProcessInfo.processInfo.systemUptime
+    if phase == .lockedRecording {
+      lastModifierQuickTapTime = 0
+      finalize()
+      return
+    }
+    guard (now - lastModifierQuickTapTime) < doubleTapThreshold else {
+      // First tap: stay completely inert. Nothing records, nothing is shown.
+      lastModifierQuickTapTime = now
+      return
+    }
+    lastModifierQuickTapTime = 0
+    if !FloatingControlBarManager.shared.isVisible {
+      FloatingControlBarManager.shared.show()
+    }
+    guard FloatingControlBarManager.shared.isVisible else { return }
+    log("PushToTalkManager: modifier-only double tap — entering locked listening")
+    enterLockedListening()
   }
 
   private func cancelPendingModifierOnlyShortcutStart() {
