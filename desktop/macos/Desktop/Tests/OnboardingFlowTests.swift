@@ -340,6 +340,8 @@ final class OnboardingFlowTests: XCTestCase {
         secondBrainSource.contains("SBInkButton(title: \"\(title)\", isDefaultAction: true)"),
         "the second-brain \(title) action must accept Return")
     }
+    // Promise, language, files, screen-demo (Open the doors / Continue, mutually exclusive),
+    // agents, context, referral: nine sites, never two visible at once.
     XCTAssertEqual(
       secondBrainSource.components(separatedBy: "isDefaultAction: true").count - 1,
       6,

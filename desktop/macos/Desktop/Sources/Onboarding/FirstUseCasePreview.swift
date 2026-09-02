@@ -50,11 +50,11 @@ struct FirstUseCasePreview: View {
           }
         }
         Spacer(minLength: OmiSpacing.sm)
-        Text(useCase.siteName.lowercased())
-          .font(.system(size: 10, weight: .medium, design: .rounded))
-          .foregroundColor(Ink.secondary)
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, 3)
+        Text(useCase.siteName)
+          .font(.system(size: 15, weight: .semibold, design: .rounded))
+          .foregroundColor(Ink.primary)
+          .padding(.horizontal, OmiSpacing.lg)
+          .padding(.vertical, 5)
           .background(Capsule().fill(block))
         Spacer(minLength: OmiSpacing.sm)
         Color.clear.frame(width: 34, height: 8)

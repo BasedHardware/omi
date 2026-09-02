@@ -16256,6 +16256,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "dead_letter_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dead Letter Reason"
+          },
           "delivered_at": {
             "anyOf": [
               {
@@ -16278,12 +16289,59 @@
             "title": "Delivery State",
             "type": "string"
           },
+          "fetch_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Fetch Count",
+            "type": "integer"
+          },
           "intent_id": {
             "maxLength": 128,
             "minLength": 1,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Intent Id",
             "type": "string"
+          },
+          "last_fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fetched At"
+          },
+          "last_rejection_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Rejection At"
+          },
+          "last_rejection_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Rejection Code"
+          },
+          "materialization_attempts": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Materialization Attempts",
+            "type": "integer"
           },
           "materialization_receipt_id": {
             "anyOf": [
@@ -16497,6 +16555,236 @@
         "title": "LocationContextConsentUpdate",
         "type": "object"
       },
+      "MaterializableProactiveIntent": {
+        "additionalProperties": false,
+        "description": "Wire-safe intent state; terminal dead letters never leave the store.",
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "blocks": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "captureLink": "#/components/schemas/CaptureLinkSpec",
+                  "conversationLink": "#/components/schemas/ConversationLinkSpec",
+                  "goalLink": "#/components/schemas/GoalLinkSpec",
+                  "memoryLink": "#/components/schemas/MemoryLinkSpec",
+                  "questionCard": "#/components/schemas/QuestionCardSpec",
+                  "taskCard": "#/components/schemas/TaskCardSpec"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/QuestionCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/TaskCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/GoalLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/CaptureLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/ConversationLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/MemoryLinkSpec"
+                }
+              ]
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "cold_start_sequence_terminal_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal Receipt Id"
+          },
+          "cold_start_sequence_terminal_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "completed",
+                  "abandoned"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal State"
+          },
+          "continuity_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Continuity Key",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dead_letter_reason": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[a-z0-9_:.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dead Letter Reason"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "delivery_state": {
+            "default": "ready",
+            "enum": [
+              "ready",
+              "pending_kernel_receipt",
+              "delivered"
+            ],
+            "title": "Delivery State",
+            "type": "string"
+          },
+          "fetch_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Fetch Count",
+            "type": "integer"
+          },
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "last_fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fetched At"
+          },
+          "last_rejection_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Rejection At"
+          },
+          "last_rejection_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z0-9_]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Rejection Code"
+          },
+          "materialization_attempts": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Materialization Attempts",
+            "type": "integer"
+          },
+          "materialization_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materialization Receipt Id"
+          },
+          "source": {
+            "enum": [
+              "daily_opener",
+              "capture_arrival",
+              "deferral_reraise",
+              "agent_judgment",
+              "cold_start_rich",
+              "cold_start_sparse"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatFirstSubject"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "intent_id",
+          "continuity_key",
+          "account_generation",
+          "source",
+          "blocks",
+          "created_at"
+        ],
+        "title": "MaterializableProactiveIntent",
+        "type": "object"
+      },
       "MaterializePromptsRequest": {
         "additionalProperties": false,
         "properties": {
@@ -16512,6 +16800,14 @@
             "minimum": 0.0,
             "title": "Control Generation",
             "type": "integer"
+          },
+          "deferrals": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationDeferral"
+            },
+            "maxItems": 16,
+            "title": "Deferrals",
+            "type": "array"
           },
           "initial_page_loaded": {
             "default": false,
@@ -16531,6 +16827,14 @@
             },
             "maxItems": 16,
             "title": "Receipts",
+            "type": "array"
+          },
+          "rejections": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationRejection"
+            },
+            "maxItems": 16,
+            "title": "Rejections",
             "type": "array"
           },
           "source_surface": {
@@ -16557,9 +16861,23 @@
         "properties": {
           "intents": {
             "items": {
-              "$ref": "#/components/schemas/ProactiveIntent"
+              "$ref": "#/components/schemas/MaterializableProactiveIntent"
             },
             "title": "Intents",
+            "type": "array"
+          },
+          "receipt_outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationReceiptOutcome"
+            },
+            "title": "Receipt Outcomes",
+            "type": "array"
+          },
+          "rejection_outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationRejectionOutcome"
+            },
+            "title": "Rejection Outcomes",
             "type": "array"
           }
         },
@@ -19956,115 +20274,16 @@
         "title": "PrivateCloudSyncResponse",
         "type": "object"
       },
-      "ProactiveIntent": {
+      "ProactiveMaterializationDeferral": {
         "additionalProperties": false,
-        "description": "A server-side instruction, not a Chat transcript row.\n\nThe local desktop kernel is the sole writer of the visible assistant turn.\nThis record remains deliverable until that kernel has committed and\nacknowledged its stable ``intent_id``; cold-start intents make that\nexplicit as ``pending_kernel_receipt``.",
+        "description": "A fetched intent the kernel intentionally left behind a transcript tail.",
         "properties": {
-          "account_generation": {
-            "minimum": 0.0,
-            "title": "Account Generation",
-            "type": "integer"
-          },
-          "blocks": {
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "captureLink": "#/components/schemas/CaptureLinkSpec",
-                  "conversationLink": "#/components/schemas/ConversationLinkSpec",
-                  "goalLink": "#/components/schemas/GoalLinkSpec",
-                  "memoryLink": "#/components/schemas/MemoryLinkSpec",
-                  "questionCard": "#/components/schemas/QuestionCardSpec",
-                  "taskCard": "#/components/schemas/TaskCardSpec"
-                },
-                "propertyName": "type"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/QuestionCardSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/TaskCardSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/GoalLinkSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/CaptureLinkSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/ConversationLinkSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/MemoryLinkSpec"
-                }
-              ]
-            },
-            "maxItems": 8,
-            "minItems": 1,
-            "title": "Blocks",
-            "type": "array"
-          },
-          "cold_start_sequence_terminal_receipt_id": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "minLength": 1,
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cold Start Sequence Terminal Receipt Id"
-          },
-          "cold_start_sequence_terminal_state": {
-            "anyOf": [
-              {
-                "enum": [
-                  "completed",
-                  "abandoned"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cold Start Sequence Terminal State"
-          },
-          "continuity_key": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-            "title": "Continuity Key",
-            "type": "string"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "delivered_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Delivered At"
-          },
-          "delivery_state": {
-            "default": "ready",
+          "code": {
             "enum": [
-              "ready",
-              "pending_kernel_receipt",
-              "delivered"
+              "tail_question",
+              "streaming_tail"
             ],
-            "title": "Delivery State",
+            "title": "Code",
             "type": "string"
           },
           "intent_id": {
@@ -20073,53 +20292,13 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Intent Id",
             "type": "string"
-          },
-          "materialization_receipt_id": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "minLength": 1,
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Materialization Receipt Id"
-          },
-          "source": {
-            "enum": [
-              "daily_opener",
-              "capture_arrival",
-              "deferral_reraise",
-              "agent_judgment",
-              "cold_start_rich",
-              "cold_start_sparse"
-            ],
-            "title": "Source",
-            "type": "string"
-          },
-          "subject": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ChatFirstSubject"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "required": [
           "intent_id",
-          "continuity_key",
-          "account_generation",
-          "source",
-          "blocks",
-          "created_at"
+          "code"
         ],
-        "title": "ProactiveIntent",
+        "title": "ProactiveMaterializationDeferral",
         "type": "object"
       },
       "ProactiveMaterializationReceipt": {
@@ -20146,6 +20325,102 @@
           "receipt_id"
         ],
         "title": "ProactiveMaterializationReceipt",
+        "type": "object"
+      },
+      "ProactiveMaterializationReceiptOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "acknowledged",
+              "already_terminal",
+              "missing",
+              "conflict",
+              "generation_mismatch"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "outcome"
+        ],
+        "title": "ProactiveMaterializationReceiptOutcome",
+        "type": "object"
+      },
+      "ProactiveMaterializationRejection": {
+        "additionalProperties": false,
+        "description": "Content-free typed rejection emitted by the local kernel.",
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9_]+$",
+            "title": "Code",
+            "type": "string"
+          },
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "required": [
+          "intent_id",
+          "code"
+        ],
+        "title": "ProactiveMaterializationRejection",
+        "type": "object"
+      },
+      "ProactiveMaterializationRejectionOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "recorded",
+              "absorbed",
+              "generation_mismatch",
+              "malformed",
+              "missing"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "outcome"
+        ],
+        "title": "ProactiveMaterializationRejectionOutcome",
         "type": "object"
       },
       "ProactiveNotification": {
