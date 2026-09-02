@@ -37,6 +37,10 @@ class MintRequest(BaseModel):
 class UsageReport(BaseModel):
     provider: StrictStr
     model: StrictStr = ""
+    # A stable client turn id makes the quota question idempotent (a retried
+    # report counts once). Absent on older clients, whose reports keep the
+    # historical non-idempotent increment.
+    turn_id: StrictStr = ""
     input_text_tokens: StrictInt = 0
     input_audio_tokens: StrictInt = 0
     input_cached_tokens: StrictInt = 0
@@ -142,7 +146,9 @@ async def _persist_session(uid: str, token: str, provider: str, model: str, expi
 
 @router.post("/v2/realtime/session")
 async def mint_session(request: MintRequest, uid: str = Depends(get_current_user_uid)) -> JSONResponse:
-    await run_blocking(db_executor, enforce_desktop_chat_quota, uid, "desktop")
+    # The hub only ever mints Omi's own provider token, so a user's BYOK key
+    # (Anthropic, for desktop chat) must not exempt them from the cap here.
+    await run_blocking(db_executor, enforce_desktop_chat_quota, uid, "desktop", byok_exempt=False)
     if request.provider == "openai":
         key = os.getenv("OPENAI_API_KEY", "").strip()
         if not key:
@@ -191,6 +197,9 @@ async def mint_session(request: MintRequest, uid: str = Depends(get_current_user
     return _error(400, "bad_provider", 'provider must be "openai" or "gemini"')
 
 
+REALTIME_HUB_TURN_QUOTA_SOURCE = 'desktop_realtime_turn'
+
+
 def _record_usage(
     uid: str,
     report: UsageReport,
@@ -200,6 +209,38 @@ def _record_usage(
     total_tokens: int,
     cost: float,
 ) -> None:
+    client = get_customer_firestore_client()
+    if report.turn_id:
+        # One question per client turn, exactly once: the same idempotent
+        # writer text chat uses, keyed on the client's turn id, with the token
+        # cost in the SAME transaction. A retried report finds the event and
+        # records nothing; a failed write records nothing of either.
+        def telemetry(plan_key: str, day: str) -> dict[str, Any]:
+            return llm_usage_db.usage_bucket_update(
+                uid,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_tokens=cached_tokens,
+                cache_write_tokens=0,
+                total_tokens=total_tokens,
+                cost_usd=cost,
+                bucket='desktop_chat',
+                account='desktop_chat_realtime',
+                cost_status='complete',
+                quota_questions=0,
+                plan_key=plan_key,
+                today=day,
+            )
+
+        llm_usage_db.record_chat_quota_question(
+            uid,
+            f'realtime_hub:{report.turn_id}',
+            REALTIME_HUB_TURN_QUOTA_SOURCE,
+            platform='desktop',
+            firestore_client=client,
+            usage_update_for=telemetry,
+        )
+        return
     llm_usage_db.record_llm_usage_bucket(
         uid,
         input_tokens=input_tokens,
@@ -212,7 +253,7 @@ def _record_usage(
         account='desktop_chat_realtime',
         cost_status='complete',
         quota_questions=1,
-        firestore_client=get_customer_firestore_client(),
+        firestore_client=client,
     )
 
 
@@ -232,7 +273,7 @@ def _usage_cost(report: UsageReport) -> float:
 
 @router.post("/v2/realtime/usage", status_code=204)
 async def report_usage(report: UsageReport, uid: str = Depends(get_current_user_uid)) -> Response:
-    await run_blocking(db_executor, enforce_desktop_chat_quota, uid, "desktop")
+    await run_blocking(db_executor, enforce_desktop_chat_quota, uid, "desktop", byok_exempt=False)
     input_tokens = max(report.input_text_tokens, 0) + max(report.input_audio_tokens, 0)
     output_tokens = max(report.output_text_tokens, 0) + max(report.output_audio_tokens, 0)
     cached_tokens = max(report.input_cached_tokens, 0)

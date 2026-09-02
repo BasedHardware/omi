@@ -158,11 +158,27 @@ _SETUP_MARKERS = (b'"setup"', b'"session"')
 # ceiling that exists only to bound a hostile upstream.
 _MAX_PARSED_FRAME_BYTES = 8 * 1024 * 1024
 _MAX_MODEL_CHARS = 128
-_MAX_OPEN_RESPONSES = 64
+# Open response identities are retained through the same bound as completed
+# ones. The relay ends any session that has started this many responses
+# (MAX_RESPONSES_PER_SESSION below) and makes it reconnect with a fresh
+# observer, so no session — whatever its plan or how many month resets it
+# spans — ever reaches the identity-less overflow tally. The tally remains
+# only as a defensive floor for a caller that does not enforce that limit.
+_MAX_OPEN_RESPONSES = 1024
+# Exported for the relay: the per-session response limit that keeps identity
+# exact. One below the identity capacity, so the response that trips the limit
+# — observed, counted for admission, then refused — still has its identity.
+MAX_RESPONSES_PER_SESSION = _MAX_OPEN_RESPONSES - 1
 # A provider response id is a short token; anything longer is not one and is
 # replaced by an anonymous key so hostile frames cannot park bytes in memory
 # or in the ledger.
 _MAX_RESPONSE_ID_CHARS = 256
+# Terminal ids remembered so a replayed `response.done` is not a second row
+# or a second start. Sized past the largest hard-capped question allowance
+# (1,000) plus grace, so identity stays exact for every response a session
+# on a hard-capped plan can be admitted for; beyond `_MAX_OPEN_RESPONSES`
+# concurrently open responses the overflow count is a tally, not identities.
+_MAX_COMPLETED_IDS = 1024
 # A flush at session end emits at most this many cancelled rows; the rest are
 # counted, not built, so a flood of open responses cannot turn teardown into
 # unbounded work. Sixteen concurrent responses is already far past any client.
@@ -419,8 +435,15 @@ class RealtimeRelayObserver:
         self.turns = 0
         # Open responses a flush could not afford to emit (see _MAX_FLUSH_ROWS).
         self.dropped_at_flush = 0
+        # Provider responses that have STARTED — OpenAI `response.created` (or
+        # a `response.done` never announced), Gemini's first activity after a
+        # boundary. Quota admission is enforced on this, on the frame that
+        # opens the response, so a client that disconnects before the terminal
+        # frame has already been counted for the work the provider began.
+        self.starts = 0
         # OpenAI: responses opened by `response.created` and not yet closed.
         self._openai_open: dict[str, None] = {}
+        self._openai_completed: dict[str, None] = {}
         self._openai_anonymous = 0
         # Responses opened past the tracking cap: still attempts, still
         # flushed as cancelled, just without their ids.
@@ -531,19 +554,42 @@ class RealtimeRelayObserver:
         response = _mapping(payload.get('response'))
         response_id = _bounded_response_id(response.get('id'))
         if event_type == 'response.created':
+            # A start is one per response identity: a replayed `created` for
+            # an id already open (or already finished) is not a new response.
+            if response_id is not None and (response_id in self._openai_open or response_id in self._openai_completed):
+                return ()
             if len(self._openai_open) < _MAX_OPEN_RESPONSES:
                 self._openai_open[response_id or self._anonymous_key()] = None
             else:
                 self._openai_overflow += 1
+            self.starts += 1
             return ()
         if event_type != 'response.done':
             return ()
+        if response_id is not None and response_id in self._openai_completed:
+            return ()  # a replayed terminal frame: already a row, already counted
         if response_id is not None and response_id in self._openai_open:
             self._openai_open.pop(response_id)
+        elif response_id is None and self._openai_open:
+            # An anonymous terminal closes an anonymous open response, if any.
+            anonymous = next((key for key in self._openai_open if key.startswith('anonymous:')), None)
+            if anonymous is not None:
+                self._openai_open.pop(anonymous)
+            elif self._openai_overflow:
+                self._openai_overflow -= 1
+            else:
+                self.starts += 1
         elif self._openai_overflow:
+            # One of the responses opened past the tracking cap is finishing.
             self._openai_overflow -= 1
-        elif self._openai_open:
-            self._openai_open.pop(next(iter(self._openai_open)))
+        else:
+            # A response whose identity was never announced still started —
+            # even while other responses are open, which it does not close.
+            self.starts += 1
+        if response_id is not None:
+            self._openai_completed[response_id] = None
+            if len(self._openai_completed) > _MAX_COMPLETED_IDS:
+                self._openai_completed.pop(next(iter(self._openai_completed)))
         outcome, error_class = _openai_outcome(response)
         turn = RealtimeTurnUsage(
             provider=OPENAI_REALTIME_PROVIDER,
@@ -588,14 +634,19 @@ class RealtimeRelayObserver:
                 self._gemini_completed = _gemini_add(self._gemini_completed, delta)
             else:
                 self._gemini_pending = _gemini_add(self._gemini_pending, delta)
-                self._gemini_in_flight = True
+                # A usage block that adds nothing is not evidence of a response.
+                if delta.has_tokens:
+                    self._mark_gemini_in_flight()
         if has_output:
-            self._gemini_in_flight = True
+            self._mark_gemini_in_flight()
         if interrupted:
-            self._gemini_in_flight = True
+            self._mark_gemini_in_flight()
             self._gemini_interrupted = True
         if turn_complete:
             base = self._gemini_pending or RealtimeTurnUsage(provider=GEMINI_LIVE_PROVIDER)
+            if not self._gemini_in_flight and base.has_tokens:
+                # Usage arrived only with the boundary: the response still happened.
+                self.starts += 1
             if self._gemini_interrupted:
                 base = replace(base, outcome=OUTCOME_CANCELLED, error_class=ERROR_INTERRUPTED)
             self._gemini_completed = base
@@ -603,6 +654,11 @@ class RealtimeRelayObserver:
             self._gemini_in_flight = False
             self._gemini_interrupted = False
         return tuple(emitted)
+
+    def _mark_gemini_in_flight(self) -> None:
+        if not self._gemini_in_flight:
+            self._gemini_in_flight = True
+            self.starts += 1
 
     def _take_completed(self) -> RealtimeTurnUsage | None:
         if self._gemini_completed is None:

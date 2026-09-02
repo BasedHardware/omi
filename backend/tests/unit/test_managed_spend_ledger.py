@@ -620,7 +620,17 @@ async def _run_relay(
     monkeypatch.setattr(
         omni_relay.users_db, 'is_byok_active', lambda _uid: byok if byok_enrolled is None else byok_enrolled
     )
-    monkeypatch.setattr(omni_relay, 'get_chat_quota_snapshot', lambda *_a: {'plan': PlanType.basic, 'allowed': True})
+    monkeypatch.setattr(
+        omni_relay, 'get_chat_quota_snapshot', lambda *_a, **_k: {'plan': PlanType.basic, 'allowed': True}
+    )
+    monkeypatch.setattr(omni_relay, 'get_customer_firestore_client', lambda: object())
+    # S15's quota machinery is a different seam (test_realtime_quota_counter.py); keep it inert here.
+    monkeypatch.setattr(omni_relay, '_relay_responses_this_month', lambda _uid: 0)
+    monkeypatch.setattr(
+        omni_relay,
+        '_count_relay_response',
+        lambda _uid: (0, {'plan': PlanType.basic, 'allowed': True, 'unit': 'questions', 'used': 0.0, 'limit': 30.0}),
+    )
     monkeypatch.setattr(omni_relay, '_upstream', lambda _provider, _model: (('wss://upstream.invalid', {}), None))
     monkeypatch.setattr(omni_relay.websockets, 'connect', lambda *_a, **_k: _FakeConnect(upstream))
     socket = _client_socket(provider, model=model, client_frames=client_frames, drained=drained)
@@ -691,7 +701,8 @@ async def test_each_relay_turn_is_its_own_ordinal_and_byok_is_not_omi_cost(monke
         provider='openai',
         model='gpt-realtime-2',
         client_frames=[],
-        upstream_frames=[_OPENAI_DONE, _OPENAI_DONE],
+        # Two distinct responses: a replayed terminal frame for the same id is deliberately one row.
+        upstream_frames=[_OPENAI_DONE, _OPENAI_DONE.replace('resp_1', 'resp_2')],
         byok=True,
     )
     await ledger.drain_pending_writes()

@@ -36,7 +36,7 @@ async def test_openai_mint_returns_ephemeral_token_and_persists_no_secret(monkey
 
     monkeypatch.setattr(desktop_realtime, "_persist_session", persist)
 
-    async def run(_executor, function, *_args):
+    async def run(_executor, function, *_args, **_kwargs):
         assert function is desktop_realtime.enforce_desktop_chat_quota
         return False
 
@@ -60,7 +60,7 @@ async def test_mint_classifies_provider_quota_error(monkeypatch):
         ),
     )
 
-    async def run(_executor, function, *_args):
+    async def run(_executor, function, *_args, **_kwargs):
         assert function is desktop_realtime.enforce_desktop_chat_quota
         return False
 
@@ -84,7 +84,7 @@ async def test_mint_classifies_provider_quota_error(monkeypatch):
 async def test_usage_clamps_negative_tokens_and_records_realtime_breakdown(monkeypatch):
     calls = []
 
-    async def run(_executor, function, *args):
+    async def run(_executor, function, *args, **_kwargs):
         if function is desktop_realtime.enforce_desktop_chat_quota:
             return False
         calls.append((function, args))
@@ -134,7 +134,7 @@ def test_realtime_writer_marks_full_provider_cost_complete(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_usage_with_no_positive_tokens_skips_firestore(monkeypatch):
-    async def fail(_executor, function, *_args):
+    async def fail(_executor, function, *_args, **_kwargs):
         if function is desktop_realtime.enforce_desktop_chat_quota:
             return False
         raise AssertionError("usage write should not run")
@@ -152,7 +152,7 @@ async def test_usage_with_no_positive_tokens_skips_firestore(monkeypatch):
 async def test_mint_blocks_quota_before_provider_token_request(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "platform-key")
 
-    async def run(_executor, function, *_args):
+    async def run(_executor, function, *_args, **_kwargs):
         assert function is desktop_realtime.enforce_desktop_chat_quota
         raise HTTPException(status_code=402, detail={"error": "quota_exceeded"})
 
@@ -170,7 +170,7 @@ async def test_mint_blocks_quota_before_provider_token_request(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_usage_blocks_quota_before_recording(monkeypatch):
-    async def run(_executor, function, *_args):
+    async def run(_executor, function, *_args, **_kwargs):
         assert function is desktop_realtime.enforce_desktop_chat_quota
         raise HTTPException(status_code=402, detail={"error": "quota_exceeded"})
 
