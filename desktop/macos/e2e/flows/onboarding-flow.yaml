@@ -21,6 +21,7 @@ covers:
   - desktop/macos/Desktop/Sources/Onboarding/Scenario/OnboardingScenarioPages.swift
   - desktop/macos/Desktop/Sources/Onboarding/Scenario/OnboardingScenarioSeams.swift
   - desktop/macos/Desktop/Sources/Onboarding/Scenario/OnboardingScenarioWrites.swift
+  - desktop/macos/Desktop/Sources/Onboarding/Scenario/OnboardingNoteReceiver.swift
   - desktop/macos/Desktop/Sources/Onboarding/Scenario/OnboardingDemoNote.swift
   - desktop/macos/Desktop/Sources/Onboarding/Scenario/AnalyticsManager+OnboardingBeats.swift
   - desktop/macos/Desktop/Sources/MainWindow/OnboardingOpenerView.swift
