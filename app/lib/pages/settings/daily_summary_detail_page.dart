@@ -18,6 +18,7 @@ import 'package:omi/utils/daily_summary_journey.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/share_links.dart';
+import 'package:omi/utils/share_sheet.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
@@ -111,7 +112,9 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       }
       PlatformManager.instance.analytics.dailySummaryShared(summaryId: widget.summaryId, date: summary.date);
       final url = recapShareUrl(widget.summaryId);
-      await SharePlus.instance.share(ShareParams(uri: Uri.parse(url), subject: summary.headline));
+      await SharePlus.instance.share(
+        ShareParams(uri: Uri.parse(url), subject: summary.headline, sharePositionOrigin: shareSheetOrigin()),
+      );
     } finally {
       if (mounted) setState(() => _isSharing = false);
     }

@@ -61,6 +61,30 @@ final class ChatMessageRatingPersistenceTests: XCTestCase {
     XCTAssertTrue(queue.isEmpty)
   }
 
+  func testQueuedVoiceRatingKeepsItsSurfaceThroughSync() {
+    // A floating-bar thumb on an unsynced reply waits in the queue; when it
+    // drains after sync it must still identify as a voice rating — silently
+    // defaulting to text at flush time corrupts the text/voice ratio split.
+    var queue = ChatMessageRatingQueue()
+    queue.enqueue(messageId: "m1", rating: 1, surface: "voice")
+
+    let unsynced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: false)
+    XCTAssertTrue(queue.drain(using: [unsynced]).isEmpty)
+
+    let synced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: true)
+    let ready = queue.drain(using: [synced])
+    XCTAssertEqual(ready.count, 1)
+    XCTAssertEqual(ready.first?.surface, "voice")
+    XCTAssertEqual(ready.first?.rating, 1)
+  }
+
+  func testQueueDefaultsToTextSurface() {
+    var queue = ChatMessageRatingQueue()
+    queue.enqueue(messageId: "m1", rating: -1)
+    let synced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: true)
+    XCTAssertEqual(queue.drain(using: [synced]).first?.surface, "text")
+  }
+
   func testQueueDrainsClearedRatingAfterSync() {
     var queue = ChatMessageRatingQueue()
     queue.enqueue(messageId: "m1", rating: 1)

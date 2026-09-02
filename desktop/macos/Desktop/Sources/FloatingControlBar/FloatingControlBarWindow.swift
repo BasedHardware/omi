@@ -3106,7 +3106,7 @@ class FloatingControlBarManager {
     barWindow.onRate = { [weak chatProvider] messageId, rating in
       guard let provider = chatProvider else { return }
       Task { @MainActor in
-        await provider.rateMessage(messageId, rating: rating)
+        await provider.rateMessage(messageId, rating: rating, surface: "voice")
       }
     }
 
