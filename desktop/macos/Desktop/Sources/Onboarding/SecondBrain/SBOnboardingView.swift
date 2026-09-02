@@ -470,16 +470,9 @@ struct SBOnboardingView: View {
         }
         .buttonStyle(InkButtonStyle(kind: .primary))
         // The escape, with the consequence spelled out — never gate a step on something macOS cannot
-        // grant from a dialog. `secondary`, because on glass there is no fainter rung to hide it in,
-        // and an escape nobody can read is an escape nobody takes.
-        Button {
-          onContinue()
-        } label: {
-          Text("Later — \(name) stays off until you reopen")
-            .inkStyle(InkType.statusLabel, color: Ink.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        .buttonStyle(.plain)
+        // grant from a dialog. Same object as every other escape on this card: `skipLink`, so the way
+        // past a permission always looks the same and never outranks the way through it.
+        skipLink("Later — \(name) stays off until you reopen", action: onContinue)
       } else if action == .proceed {
         Button {
           onContinue()
@@ -507,20 +500,52 @@ struct SBOnboardingView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(InkButtonStyle(kind: action == .recheck ? .secondary : .primary))
-        // The escape is a *control*, not a caption. As a bare `.plain` run of `statusLabel` this was
-        // an 11 pt grey line sitting 10 pt under a full-width filled pill — the shape of a footnote,
-        // on the one screen where the user most needs to know they are not trapped. `screenDemoWidget`
-        // already learned this ("it used to be a tiny, easily-missed text link") and shipped the
-        // secondary capsule; every skip in this flow is that same object now.
-        Button {
-          onContinue()
-        } label: {
-          Text("Skip for now").frame(maxWidth: .infinity)
-        }
-        .buttonStyle(InkButtonStyle(kind: .secondary))
+        // The escape is a **link, not a capsule**. Two full-width pills stacked read as a choice
+        // between equals, and this choice is not between equals: every permission on this card is
+        // something Omi cannot work without, and the skip is the exit, not the alternative. The
+        // capsule this replaces was itself a correction of a bare `.plain` caption that people
+        // missed — so the link keeps what that correction was actually buying: an underline and a
+        // pointing-hand cursor, so it still reads as pressable, and `skipLinkMinHeight` of target so
+        // it is still comfortably hittable. Faint but unmistakable, which is the whole ask.
+        skipLink("Skip for now", action: onContinue)
       }
     }
     .frame(maxWidth: 380, alignment: .leading)
+  }
+
+  /// A hit target no smaller than this, whatever the type is set at. `statusLabel` is 12 pt, and 12 pt
+  /// of glyph is not a control — the padding is what keeps the de-emphasis a *visual* one rather than
+  /// a usability tax on the person who genuinely wants out.
+  private static let skipLinkMinHeight: CGFloat = 28
+
+  /// The one way past a permission step.
+  ///
+  /// Deliberately the quietest actionable thing on the card: `statusLabel` in `Ink.secondary` — never
+  /// `Ink.tertiary`, which measures under AA on glass and is banned on first-run surfaces — underlined
+  /// so it still reads as pressable rather than as a caption, and centred under the primary action so
+  /// it is where the eye already is. It never becomes a capsule: a capsule beside a capsule is a fork
+  /// in the road, and this is a side door.
+  private func skipLink(_ title: String, action: @escaping () -> Void) -> some View {
+    HStack {
+      Spacer(minLength: 0)
+      Button(action: action) {
+        Text(title)
+          .inkStyle(InkType.statusLabel, color: Ink.secondary)
+          .underline()
+          .fixedSize(horizontal: false, vertical: true)
+          .multilineTextAlignment(.center)
+          .padding(.horizontal, 12)
+          .frame(minHeight: Self.skipLinkMinHeight)
+          // The label is the hit test, and a run of 12 pt type is a thin one. Without this the
+          // padding above is decoration: SwiftUI hit-tests what `.plain` actually renders.
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .onHover { inside in
+        if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+      }
+      Spacer(minLength: 0)
+    }
   }
 
   @ViewBuilder private var filesWidget: some View {

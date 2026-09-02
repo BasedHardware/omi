@@ -254,7 +254,83 @@ final class OnboardingGlassChromeTests: XCTestCase {
     }
   }
 
+  /// **The permission escape is a link, not a second capsule.**
+  ///
+  /// Two full-width pills stacked — "Allow Screen Recording" over "Skip for now" — is the shape of a
+  /// choice between equals, and on a permission card it is not one: the skip is the exit, not the
+  /// alternative. This asserts the rank rather than the pixels, by reading `permStepWidget`'s own body:
+  /// every branch's way-past must be the shared `skipLink`, and no branch may spend a capsule on it.
+  ///
+  /// Scoped to that one function on purpose. `InkButtonStyle(kind: .secondary)` is correct elsewhere in
+  /// this file (a retry, a re-check, the screen-demo skip, which is not a permission), so a file-wide
+  /// ban would be a rule about the wrong thing.
+  func testStaticCheckerPermissionEscapesAreLinksRatherThanASecondCapsule() throws {
+    let body = try code(Self.liveOnboardingSource)
+    let widget = try XCTUnwrap(
+      permStepWidgetBody(in: body),
+      "permStepWidget no longer parses; this checker is reading the wrong function")
+
+    XCTAssertTrue(
+      widget.contains("skipLink(\"Skip for now\", action: onContinue)"),
+      "the way past a permission must be the shared skip link")
+    XCTAssertTrue(
+      widget.contains("skipLink(\"Later —"),
+      "the reopen branch's escape must be that same object, not a bespoke run of caption type")
+    // The ask branch's own control is `InkButtonStyle(kind: action == .recheck ? .secondary : .primary)`
+    // — a different string, and a legitimate one. It is the *unconditional* secondary capsule that
+    // could only be the escape.
+    XCTAssertFalse(
+      widget.contains("InkButtonStyle(kind: .secondary)"),
+      """
+      permStepWidget spends a secondary capsule on something. The only thing on this card that is not \
+      the Allow action is the escape, and a capsule under the Allow pill reads as the equal-ranked \
+      other half of a choice rather than as the side door it is.
+      """)
+    XCTAssertEqual(
+      widget.components(separatedBy: "skipLink(").count - 1, 2,
+      "exactly two escapes — the reopen branch's and the ask branch's; a new one must join skipLink")
+  }
+
+  /// The de-emphasis is visual only. A 12 pt run of type is a 12 pt hit target unless something says
+  /// otherwise, and an escape people cannot land on is worse than a loud one.
+  func testStaticCheckerTheSkipLinkStaysAComfortableTarget() throws {
+    let body = try code(Self.liveOnboardingSource)
+    XCTAssertTrue(
+      body.contains("skipLinkMinHeight: CGFloat = 28"),
+      "the skip link must reserve a real target height, not just set small type")
+    XCTAssertTrue(
+      body.contains(".frame(minHeight: Self.skipLinkMinHeight)")
+        && body.contains(".contentShape(Rectangle())"),
+      "the reserved height must be hit-tested; a .plain button hit-tests only what it renders")
+    XCTAssertTrue(
+      body.contains(".underline()"),
+      "without the underline the link is a caption, which is the failure the capsule was fixing")
+    XCTAssertTrue(
+      body.contains("NSCursor.pointingHand.push()"),
+      "the pointer must change over the skip link so it still reads as pressable")
+  }
+
   // MARK: - Helpers
+
+  /// `permStepWidget`'s body, brace-matched from its signature. Slicing by function is what keeps the
+  /// checker above a rule about the permission card rather than about the whole file.
+  private func permStepWidgetBody(in source: String) -> String? {
+    guard let start = source.range(of: "private func permStepWidget("),
+      let open = source.range(of: "{", range: start.upperBound..<source.endIndex)
+    else { return nil }
+    var depth = 0
+    var index = open.lowerBound
+    while index < source.endIndex {
+      let character = source[index]
+      if character == "{" { depth += 1 }
+      if character == "}" {
+        depth -= 1
+        if depth == 0 { return String(source[open.upperBound..<index]) }
+      }
+      index = source.index(after: index)
+    }
+    return nil
+  }
 
   /// Source with `//` comments stripped.
   ///
