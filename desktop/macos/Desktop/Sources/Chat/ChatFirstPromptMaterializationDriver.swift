@@ -38,6 +38,54 @@ enum ChatFirstMaterializationWire {
   static func rejectionMessage(_ message: String) -> String {
     String(message.prefix(300))
   }
+
+  static func encodedRequest(
+    ownerID: String,
+    controlGeneration: Int,
+    windowForeground: Bool,
+    receipts: ChatFirstPromptReceiptBatch
+  ) throws -> Data {
+    try JSONEncoder().encode(
+      request(
+        ownerID: ownerID,
+        controlGeneration: controlGeneration,
+        windowForeground: windowForeground,
+        receipts: receipts))
+  }
+
+  fileprivate static func request(
+    ownerID: String,
+    controlGeneration: Int,
+    windowForeground: Bool,
+    receipts: ChatFirstPromptReceiptBatch
+  ) -> ChatFirstMaterializePromptsRequest {
+    ChatFirstMaterializePromptsRequest(
+      controlGeneration: controlGeneration,
+      ownerFence: ownerID,
+      windowForeground: windowForeground,
+      receipts: receipts.materializationReceipts.map {
+        ChatFirstMaterializePromptsRequest.Receipt(intentID: $0.intentID, receiptID: $0.receiptID)
+      },
+      coldStartSequenceTerminalReceipts: receipts.coldStartSequenceTerminalReceipts.map {
+        ChatFirstMaterializePromptsRequest.ColdStartSequenceTerminalReceipt(
+          sequenceID: $0.sequenceID,
+          receiptID: $0.receiptID,
+          terminalState: $0.terminalState)
+      },
+      rejections: receipts.materializationRejections.isEmpty
+        ? nil
+        : receipts.materializationRejections.map {
+          ChatFirstMaterializePromptsRequest.Rejection(
+            intentID: $0.intentID,
+            code: $0.code,
+            message: $0.message.map(rejectionMessage))
+        },
+      deferrals: receipts.materializationDeferrals.isEmpty
+        ? nil
+        : receipts.materializationDeferrals.map {
+          ChatFirstMaterializePromptsRequest.Deferral(intentID: $0.intentID, code: $0.code)
+        })
+  }
 }
 
 /// A terminal receipt is derived only from the local main-Chat journal after
@@ -159,24 +207,31 @@ enum ChatFirstPromptMaterializationRunner {
     driver: any ChatFirstPromptMaterializationDriving,
     context: ChatFirstMaterializationContext,
     windowForeground: Bool,
-    isCurrent: @escaping @MainActor () -> Bool
+    isCurrent: @escaping @MainActor () -> Bool,
+    onFailure: (@MainActor (Error, ChatFirstPromptReceiptBatch) -> Void)? = nil
   ) async throws {
-    guard isCurrent() else { return }
-    let pendingReceipts = try await driver.pendingReceipts()
-    guard isCurrent() else { return }
-    let response = try await driver.fetchPrompts(
-      ownerID: context.ownerID,
-      controlGeneration: context.controlGeneration,
-      windowForeground: windowForeground,
-      receipts: pendingReceipts
-    )
-    guard isCurrent() else { return }
-    if !pendingReceipts.isEmpty {
-      try await driver.acknowledge(pendingReceipts)
+    var pendingReceipts = ChatFirstPromptReceiptBatch.empty
+    do {
       guard isCurrent() else { return }
+      pendingReceipts = try await driver.pendingReceipts()
+      guard isCurrent() else { return }
+      let response = try await driver.fetchPrompts(
+        ownerID: context.ownerID,
+        controlGeneration: context.controlGeneration,
+        windowForeground: windowForeground,
+        receipts: pendingReceipts
+      )
+      guard isCurrent() else { return }
+      if !pendingReceipts.isEmpty {
+        try await driver.acknowledge(pendingReceipts)
+        guard isCurrent() else { return }
+      }
+      guard response.intents.allSatisfy({ $0.accountGeneration == context.controlGeneration }) else { return }
+      try await driver.materialize(response.intents)
+    } catch {
+      onFailure?(error, pendingReceipts)
+      throw error
     }
-    guard response.intents.allSatisfy({ $0.accountGeneration == context.controlGeneration }) else { return }
-    try await driver.materialize(response.intents)
   }
 }
 
@@ -236,7 +291,7 @@ final class APIChatFirstPromptMaterializationDriver: ChatFirstPromptMaterializat
   }
 }
 
-struct ChatFirstMaterializePromptsRequest: Encodable {
+private struct ChatFirstMaterializePromptsRequest: Encodable {
   struct Receipt: Encodable {
     let intentID: String
     let receiptID: String
@@ -317,34 +372,11 @@ extension APIClient {
     else {
       throw APIError.invalidResponse
     }
-    let body = ChatFirstMaterializePromptsRequest(
+    let body = ChatFirstMaterializationWire.request(
+      ownerID: ownerID,
       controlGeneration: controlGeneration,
-      ownerFence: ownerID,
       windowForeground: windowForeground,
-      receipts: receipts.materializationReceipts.map {
-        ChatFirstMaterializePromptsRequest.Receipt(intentID: $0.intentID, receiptID: $0.receiptID)
-      },
-      coldStartSequenceTerminalReceipts: receipts.coldStartSequenceTerminalReceipts.map {
-        ChatFirstMaterializePromptsRequest.ColdStartSequenceTerminalReceipt(
-          sequenceID: $0.sequenceID,
-          receiptID: $0.receiptID,
-          terminalState: $0.terminalState
-        )
-      },
-      rejections: receipts.materializationRejections.isEmpty
-        ? nil
-        : receipts.materializationRejections.map {
-          ChatFirstMaterializePromptsRequest.Rejection(
-            intentID: $0.intentID,
-            code: $0.code,
-            message: $0.message.map(ChatFirstMaterializationWire.rejectionMessage)
-          )
-        },
-      deferrals: receipts.materializationDeferrals.isEmpty
-        ? nil
-        : receipts.materializationDeferrals.map {
-          ChatFirstMaterializePromptsRequest.Deferral(intentID: $0.intentID, code: $0.code)
-        }
+      receipts: receipts
     )
     do {
       return try await post(
