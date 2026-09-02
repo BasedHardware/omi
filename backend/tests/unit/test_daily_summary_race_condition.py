@@ -28,6 +28,11 @@ def _module(name: str, **attributes: Any) -> ModuleType:
     return module
 
 
+class _DaySummaryWebhookResult:
+    def __init__(self, outcome: str):
+        self.outcome = outcome
+
+
 class _PytzFixedTimezone(tzinfo):
     def __init__(self, offset: timedelta, name: str):
         self._offset = offset
@@ -167,7 +172,11 @@ def notification_harness() -> Iterator[SimpleNamespace]:
         'utils.conversations.factory': conversation_factory,
         'utils.llm.external_integrations': external_integrations,
         'utils.notifications': notifications,
-        'utils.webhooks': _module('utils.webhooks', day_summary_webhook=MagicMock()),
+        'utils.webhooks': _module(
+            'utils.webhooks',
+            DaySummaryWebhookResult=_DaySummaryWebhookResult,
+            day_summary_webhook=MagicMock(),
+        ),
         'utils.executors': executors,
     }
 
