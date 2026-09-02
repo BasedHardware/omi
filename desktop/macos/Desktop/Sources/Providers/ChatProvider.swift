@@ -5870,7 +5870,8 @@ class ChatProvider: ObservableObject {
       AssistantSettings.shared.audioRecordingMode == .always ? .always : .meetingsOnly
     let baseStarters = HomeSuggestionComposer.compose(
       personalized: HomeSuggestionsStore.shared.personalizedQuestions,
-      onboarding: PostOnboardingPromptSuggestions.suggestions())
+      onboarding: PostOnboardingPromptSuggestions.suggestions(),
+      dayZero: .live())
 
     onboardingOpener = OnboardingOpenerComposer.compose(
       name: name, mode: mode, meetings: [], now: Date(), baseStarters: baseStarters)

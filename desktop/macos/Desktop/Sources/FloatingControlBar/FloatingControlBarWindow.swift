@@ -4439,6 +4439,11 @@ class FloatingControlBarManager {
       // have nothing to resolve.
       MeetingSummaryShareActions.openSummary(conversationID: conversationID)
       return
+    case .askOmiPrefilled(let prompt):
+      // The one "ask this" entry that leaves the send to the user: the composer
+      // opens focused with the question in it, unsent.
+      FirstRealAppCardCoordinator.shared.handleCardTapped(prompt: prompt)
+      return
     case nil:
       break
     }
@@ -5114,7 +5119,8 @@ class FloatingControlBarManager {
     AnalyticsManager.shared.floatingBarQuerySent(
       messageLength: message.count,
       hasScreenshot: screenshotData != nil,
-      source: .visibleQuery(fromVoice: queryFromVoice)
+      source: .visibleQuery(fromVoice: queryFromVoice),
+      attemptID: voiceTurnID?.description
     )
 
     let shouldPlayVoice = ShortcutSettings.shared.shouldSpeakFloatingBarResponse(
@@ -5368,7 +5374,8 @@ class FloatingControlBarManager {
     AnalyticsManager.shared.floatingBarQuerySent(
       messageLength: message.count,
       hasScreenshot: screenshotData != nil,
-      source: .pttVoiceOnly
+      source: .pttVoiceOnly,
+      attemptID: voiceTurnID.description
     )
 
     // Speaking shortly after a notch card is usually a follow-up about it. Tapping the

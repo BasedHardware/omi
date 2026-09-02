@@ -989,8 +989,12 @@ extension RealtimeHubController {
       case .emptyAnswer: reason = "empty_answer"
       case .accepted: reason = "evidence_state_changed"
       }
-      if case .awaitingReport = screenGroundingState {
-        rejectScreenEvidence(screenEvidence?.descriptor, reason: reason)
+      if case .awaitingReport(let receipt) = screenGroundingState {
+        // The receipt's frozen descriptor — not the controller's turn-scoped `screenEvidence`,
+        // which a follow-up locked-session turn may have already cleared — is what proves an
+        // image was captured. Passing nil here would misroute a stale or contradictory report
+        // (a failure about evidence that WAS captured) into the recoverable exit.
+        rejectScreenEvidence(receipt.descriptor, reason: reason)
       } else {
         // A report that races ahead of the screenshot result is rejected to the provider but
         // never cached or redeemed. The original screenshot call may still complete normally.
