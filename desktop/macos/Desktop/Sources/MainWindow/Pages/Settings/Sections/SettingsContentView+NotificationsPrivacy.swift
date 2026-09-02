@@ -44,9 +44,11 @@ extension SettingsContentView {
               settingId: "notifications.snooze"
             ) {
               Menu {
-                Button("For 1 hour") { applyNotificationSnooze(60 * 60) }
-                Button("For 4 hours") { applyNotificationSnooze(4 * 60 * 60) }
-                Button("For 8 hours") { applyNotificationSnooze(8 * 60 * 60) }
+                // Driven by the same constant the snooze tests assert against, so the menu
+                // and the service cannot drift apart the way three literals here would.
+                ForEach(NotificationService.snoozeDurations, id: \.label) { duration in
+                  Button(duration.label) { applyNotificationSnooze(duration.seconds) }
+                }
                 Button("Until tomorrow") {
                   NotificationService.snoozeNotificationsUntilTomorrow()
                   notificationsSnoozedUntil = NotificationService.currentSnoozeExpiry()
