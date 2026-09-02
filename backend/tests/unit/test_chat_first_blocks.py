@@ -65,7 +65,11 @@ def test_materialization_v1_suppresses_conversation_links_while_v2_returns_them(
         }
     )
     response = MaterializePromptsResponse(intents=[intent])
-    monkeypatch.setattr(chat_first_router, '_materialize_prompts', lambda request, uid: response)
+    monkeypatch.setattr(
+        chat_first_router,
+        '_materialize_prompts',
+        lambda request, uid, *, exclude_block_types=None: response,
+    )
     request = MaterializePromptsRequest(
         source_surface='main_chat',
         control_generation=7,

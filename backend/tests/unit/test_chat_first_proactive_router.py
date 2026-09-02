@@ -19,8 +19,8 @@ from models.task_intelligence import TaskWorkflowControl
 import routers.chat_first as chat_first_router
 
 
-def _batch(intents):
-    return chat_first_router.chat_first_intents_db.ReadyIntentBatch(intents, (), None)
+def _batch(intents, *, stalled_source=None):
+    return chat_first_router.chat_first_intents_db.ReadyIntentBatch(intents, (), stalled_source)
 
 
 def _empty_release_batch(*args, **kwargs):
@@ -338,6 +338,93 @@ def test_one_invalid_receipt_never_fails_the_materialization_batch(monkeypatch):
         {'intent_id': 'intent-terminal', 'outcome': 'missing'},
         {'intent_id': 'intent-good', 'outcome': 'acknowledged'},
     ]
+
+
+@pytest.mark.parametrize(
+    ('outcome', 'failure'),
+    [
+        ('acknowledged', None),
+        ('conflict', chat_first_router.chat_first_intents_db.ChatFirstIntentConflictError('conflict')),
+        ('missing', chat_first_router.chat_first_intents_db.ProactiveIntentNotReady('missing')),
+        (
+            'generation_mismatch',
+            chat_first_router.chat_first_intents_db.ChatFirstIntentDocumentGenerationMismatch('stale'),
+        ),
+    ],
+)
+def test_kernel_receipt_metric_labels_each_outcome_and_warns_only_for_conflicts(monkeypatch, outcome, failure):
+    _enable_chat_first(monkeypatch)
+    intent = ProactiveIntent(
+        intent_id='intent-receipt-observability',
+        continuity_key='receipt-observability',
+        account_generation=7,
+        source='capture_arrival',
+        subject=ChatFirstSubject(kind='capture', id='receipt-observability'),
+        blocks=[_question()],
+        created_at=datetime(2026, 7, 15, tzinfo=timezone.utc),
+        delivery_state='delivered',
+        materialization_receipt_id='receipt-observability',
+        delivered_at=datetime(2026, 7, 15, tzinfo=timezone.utc),
+    )
+    events = []
+    warnings = []
+
+    def acknowledge(*args, **kwargs):
+        if failure is not None:
+            raise failure
+        return intent
+
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'acknowledge_materialization', acknowledge)
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', _empty_release_batch)
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db, 'fetch_ready_intent_batch', lambda *args, **kwargs: _batch([])
+    )
+    monkeypatch.setattr(
+        chat_first_router,
+        'CHAT_FIRST_PROACTIVE_TOTAL',
+        SimpleNamespace(labels=lambda **kwargs: SimpleNamespace(inc=lambda: events.append(kwargs))),
+    )
+    monkeypatch.setattr(chat_first_router.logger, 'warning', lambda *args, **kwargs: warnings.append(args))
+
+    response = _client().post(
+        '/v2/chat/materialize-prompts',
+        json=_request(receipts=[{'intent_id': intent.intent_id, 'receipt_id': 'receipt-observability'}]),
+    )
+
+    assert response.status_code == 200
+    assert {'event': 'kernel_receipt', 'source': 'materialization', 'reason': outcome} in events
+    assert bool(warnings) is (outcome in {'conflict', 'generation_mismatch'})
+    if warnings:
+        assert warnings[0][2:] == (intent.intent_id, 'receipt-observability')
+
+
+@pytest.mark.parametrize(('stalled_source', 'expected'), [(None, False), ('capture_arrival', True)])
+def test_stalled_batch_metric_is_emitted_only_when_source_is_set(monkeypatch, stalled_source, expected):
+    _enable_chat_first(monkeypatch)
+    events = []
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', _empty_release_batch)
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db,
+        'fetch_ready_intent_batch',
+        lambda *args, **kwargs: _batch([], stalled_source=stalled_source),
+    )
+    monkeypatch.setattr(
+        chat_first_router,
+        'CHAT_FIRST_PROACTIVE_TOTAL',
+        SimpleNamespace(labels=lambda **kwargs: SimpleNamespace(inc=lambda: events.append(kwargs))),
+    )
+
+    response = _client().post('/v2/chat/materialize-prompts', json=_request())
+
+    assert response.status_code == 200
+    stalled = [event for event in events if event['event'] == 'stalled']
+    assert bool(stalled) is expected
+    if expected:
+        assert stalled == [{'event': 'stalled', 'source': 'capture_arrival', 'reason': 'ready_older_than_24h'}]
 
 
 def test_one_stale_cold_start_terminal_receipt_never_fails_the_materialization_batch(monkeypatch):

@@ -4,7 +4,6 @@ The local kernel owns its journal. This route validates capability and
 canonical references only; it never creates, updates, or syncs a chat row.
 """
 
-import inspect
 from typing import Annotated, Any
 
 from datetime import datetime, timezone
@@ -287,12 +286,7 @@ def materialize_prompts_v1(
 ) -> LegacyMaterializePromptsResponse:
     """Preserve the released block union; new receipt types remain pending for v2 clients."""
 
-    # Keep the narrow unit-test seam backwards-compatible with older callers
-    # that monkeypatch this helper with its original two-argument signature.
-    if 'exclude_block_types' in inspect.signature(_materialize_prompts).parameters:
-        response = _materialize_prompts(request, uid, exclude_block_types={'conversationLink'})
-    else:
-        response = _materialize_prompts(request, uid)
+    response = _materialize_prompts(request, uid, exclude_block_types={'conversationLink'})
     compatible = [
         LegacyProactiveIntent.model_validate(intent.model_dump())
         for intent in response.intents
@@ -458,7 +452,14 @@ def _materialize_prompts(
             logger.exception('materialization receipt processing failed')
             outcome = 'conflict'
         receipt_outcomes.append(ProactiveMaterializationReceiptOutcome(intent_id=receipt.intent_id, outcome=outcome))
-        CHAT_FIRST_PROACTIVE_TOTAL.labels(event='kernel_receipt', source='materialization', reason='none').inc()
+        CHAT_FIRST_PROACTIVE_TOTAL.labels(event='kernel_receipt', source='materialization', reason=outcome).inc()
+        if outcome in {'conflict', 'generation_mismatch'}:
+            logger.warning(
+                'materialization receipt outcome=%s intent_id=%s receipt_id=%s',
+                outcome,
+                receipt.intent_id,
+                receipt.receipt_id,
+            )
 
     # The kernel can only emit this after it durably terminalizes the scripted
     # sequence in its canonical journal. This is an acknowledgement on the
@@ -527,7 +528,7 @@ def _materialize_prompts(
     return MaterializePromptsResponse(
         intents=[
             MaterializableProactiveIntent.model_validate(
-                intent.model_dump(exclude={'first_deferred_at', 'last_deferral_at'})
+                intent.model_dump(exclude={'first_deferred_at', 'last_deferral_at', 'requeue_count'})
             )
             for intent in batch.intents
         ],

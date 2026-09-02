@@ -236,7 +236,7 @@ final class APIChatFirstPromptMaterializationDriver: ChatFirstPromptMaterializat
   }
 }
 
-private struct ChatFirstMaterializePromptsRequest: Encodable {
+struct ChatFirstMaterializePromptsRequest: Encodable {
   struct Receipt: Encodable {
     let intentID: String
     let receiptID: String
@@ -286,8 +286,8 @@ private struct ChatFirstMaterializePromptsRequest: Encodable {
   let initialPageLoaded: Bool = true
   let receipts: [Receipt]
   let coldStartSequenceTerminalReceipts: [ColdStartSequenceTerminalReceipt]
-  let rejections: [Rejection]
-  let deferrals: [Deferral]
+  let rejections: [Rejection]?
+  let deferrals: [Deferral]?
 
   enum CodingKeys: String, CodingKey {
     case sourceSurface = "source_surface"
@@ -331,16 +331,20 @@ extension APIClient {
           terminalState: $0.terminalState
         )
       },
-      rejections: receipts.materializationRejections.map {
-        ChatFirstMaterializePromptsRequest.Rejection(
-          intentID: $0.intentID,
-          code: $0.code,
-          message: $0.message.map(ChatFirstMaterializationWire.rejectionMessage)
-        )
-      },
-      deferrals: receipts.materializationDeferrals.map {
-        ChatFirstMaterializePromptsRequest.Deferral(intentID: $0.intentID, code: $0.code)
-      }
+      rejections: receipts.materializationRejections.isEmpty
+        ? nil
+        : receipts.materializationRejections.map {
+          ChatFirstMaterializePromptsRequest.Rejection(
+            intentID: $0.intentID,
+            code: $0.code,
+            message: $0.message.map(ChatFirstMaterializationWire.rejectionMessage)
+          )
+        },
+      deferrals: receipts.materializationDeferrals.isEmpty
+        ? nil
+        : receipts.materializationDeferrals.map {
+          ChatFirstMaterializePromptsRequest.Deferral(intentID: $0.intentID, code: $0.code)
+        }
     )
     do {
       return try await post(

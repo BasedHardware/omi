@@ -3,6 +3,23 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
+  func testEmptyMaterializationBatchOmitsNewOutcomeKeysForOldBackends() throws {
+    let request = ChatFirstMaterializePromptsRequest(
+      controlGeneration: 7,
+      ownerFence: "owner",
+      windowForeground: true,
+      receipts: [],
+      coldStartSequenceTerminalReceipts: [],
+      rejections: nil,
+      deferrals: nil
+    )
+
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+
+    XCTAssertNil(object["rejections"])
+    XCTAssertNil(object["deferrals"])
+  }
+
   func testKernelMaterializationRejectionsDecodeWithTypedIdentityAndReason() {
     let decoded = AgentRuntimeProcess.chatFirstRejections(
       from: [

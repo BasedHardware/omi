@@ -166,6 +166,7 @@ class ProactiveIntent(_StrictModel):
     first_deferred_at: datetime | None = None
     last_deferral_at: datetime | None = None
     dead_letter_reason: str | None = Field(default=None, min_length=1, max_length=128, pattern=r'^[a-z0-9_:.-]+$')
+    requeue_count: int = Field(default=0, ge=0, le=1)
     # This is a terminal local-journal receipt on the same sparse cold-start
     # intent, never an operator-owned completion switch. It is the bounded
     # server projection needed to stop suppressing agent-tier turns once the
@@ -215,6 +216,7 @@ class MaterializableProactiveIntent(_StrictModel):
     delivered_at: datetime | None = None
     materialization_receipt_id: StableId | None = None
     materialization_attempts: int = Field(default=0, ge=0)
+    requeue_count: int = Field(default=0, ge=0, le=1, exclude=True)
     last_rejection_code: str | None = Field(default=None, min_length=1, max_length=64, pattern=r'^[a-z0-9_]+$')
     last_rejection_at: datetime | None = None
     fetch_count: int = Field(default=0, ge=0)
