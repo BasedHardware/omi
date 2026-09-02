@@ -4,9 +4,9 @@ import XCTest
 
 final class SuggestionTaskNudgeLedgerTests: XCTestCase {
 
-  func testFreshnessWindowIsTwoDaysThroughEndOfToday() {
+  func testFreshnessWindowIsTwoDaysThroughEndOfToday() throws {
     let calendar = Calendar(identifier: .gregorian)
-    let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 2, hour: 15))!
+    let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 9, day: 2, hour: 15)))
     XCTAssertTrue(
       SuggestionTaskNudgePolicy.isDueFresh(
         calendar.date(byAdding: .day, value: -1, to: now), now: now, calendar: calendar))

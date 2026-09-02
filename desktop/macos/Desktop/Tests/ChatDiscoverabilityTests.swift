@@ -123,10 +123,10 @@ final class ChatDiscoverabilityTests: XCTestCase {
     }
   }
 
-  func testEveryBoldToolNameInDesktopPromptIsACapability() {
+  func testEveryBoldToolNameInDesktopPromptIsACapability() throws {
     let prompt = ChatPrompts.desktopChat
     let capabilities = Set(GeneratedToolCapabilities.capabilities(for: .desktopChat).map(\.toolName))
-    let pattern = try! NSRegularExpression(pattern: #"\*\*([a-z][a-z0-9_]*)\*\*"#)
+    let pattern = try NSRegularExpression(pattern: #"\*\*([a-z][a-z0-9_]*)\*\*"#)
     let ns = prompt as NSString
     let matches = pattern.matches(in: prompt, range: NSRange(location: 0, length: ns.length))
     XCTAssertFalse(matches.isEmpty)
