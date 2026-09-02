@@ -5,12 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/dialog.dart';
+import 'package:omi/widgets/device_widget.dart';
 
 class SpeechProfileWidget extends StatefulWidget {
   final VoidCallback goNext;
@@ -26,6 +29,10 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
   late AnimationController _questionAnimationController;
   late Animation<double> _questionFadeAnimation;
   SpeechProfileProvider? _speechProvider;
+  // Guards the pre-flight availability check itself, which runs before
+  // provider.isInitialising ever becomes true — without this, a rapid double
+  // tap during that network round-trip could start two concurrent sessions.
+  bool _isCheckingAvailability = false;
 
   @override
   void initState() {
@@ -42,7 +49,19 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _speechProvider ??= context.read<SpeechProfileProvider>();
+    // This now reads the shared app-root SpeechProfileProvider (see main.dart)
+    // rather than a fresh instance built just for onboarding, so a stale
+    // question/transcript/completed-profile from an earlier Settings-triggered
+    // recording (e.g. a prior account in the same app session) must be reset
+    // before this step is shown, not just on the Settings page's own entry.
+    if (_speechProvider == null) {
+      _speechProvider = context.read<SpeechProfileProvider>();
+      // Only reset a leftover Settings session. A remount mid-Get-Started
+      // used to call close() here and bounce back to the quiet-place intro.
+      if (!_speechProvider!.startedRecording && !_speechProvider!.isInitialising && !_speechProvider!.isInitialised) {
+        _speechProvider!.close();
+      }
+    }
   }
 
   @override
@@ -125,26 +144,21 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                 _questionAnimationController
                   ..reset()
                   ..forward();
+              } else if (info == 'SKIP_UNAVAILABLE') {
+                AppSnackbar.showSnackbarError(context.l10n.reconnecting);
               }
             },
             showError: (error) {
               if (error == 'SOCKET_INIT_FAILED') {
-                // Retrying "Get Started" would just re-attempt the same
-                // connection and fail the same way, leaving onboarding stuck
-                // with no way out — offer the same "Skip for now" escape as
-                // STT_UNAVAILABLE below instead of a dead-end "OK".
                 showDialog(
                   context: context,
                   builder: (c) => getDialog(
                     context,
-                    () {
-                      provider.close();
-                      widget.onSkip();
-                    },
+                    () => Navigator.pop(context),
                     () {},
                     context.l10n.connectionError,
                     context.l10n.connectionErrorDesc,
-                    okButtonText: context.l10n.skipForNow,
+                    okButtonText: context.l10n.ok,
                     singleButton: true,
                   ),
                   barrierDismissible: false,
@@ -261,6 +275,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                     context,
                     () {
                       provider.close();
+                      Navigator.pop(context);
                       widget.onSkip();
                     },
                     () {},
@@ -275,7 +290,45 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
             },
             child: Column(
               children: [
-                Expanded(child: Container()),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          if (provider.startedRecording && !provider.profileCompleted && !provider.uploadingProfile)
+                            // Mic feedback: a plain white glow behind the device graphic
+                            // that grows brighter/larger with mic level, matching the
+                            // Settings speech-profile redo page.
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              width: 180 + provider.micLevel * 140,
+                              height: 180 + provider.micLevel * 140,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.white.withValues(alpha: 0.12 + provider.micLevel * 0.35),
+                                    blurRadius: 50 + provider.micLevel * 60,
+                                    spreadRadius: 8 + provider.micLevel * 36,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          DeviceAnimationWidget(
+                            animatedBackground: true,
+                            deviceType: provider.device?.type,
+                            deviceName: provider.device?.name,
+                            modelNumber: provider.device?.modelNumber,
+                            isConnected: provider.device != null,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
                 Container(
                   width: double.infinity,
                   padding: EdgeInsets.fromLTRB(32, 0, 32, MediaQuery.of(context).padding.bottom + 8),
@@ -290,22 +343,23 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                       children: [
                         const SizedBox(height: 32),
 
-                        // Title
-                        Text(
-                          provider.startedRecording && !provider.profileCompleted
-                              ? 'Answer with your voice:'
-                              : 'Please find a quiet place',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            height: 1.2,
-                            fontFamily: 'Manrope',
+                        // Title — hidden once the profile is complete or
+                        // uploading, matching the Settings redo page (which has
+                        // no title in those states, only the All-Done/loading UI).
+                        if (!provider.profileCompleted && !provider.uploadingProfile) ...[
+                          Text(
+                            provider.startedRecording ? 'Answer with your voice:' : 'Please find a quiet place',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              height: 1.2,
+                              fontFamily: 'Manrope',
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                          textAlign: TextAlign.center,
-                        ),
-
-                        const SizedBox(height: 16),
+                          const SizedBox(height: 16),
+                        ],
 
                         // Content area changes based on state
                         if (!provider.startedRecording) ...[
@@ -324,18 +378,47 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                           const SizedBox(height: 32),
 
                           // Get Started button
-                          provider.isInitialising
+                          (provider.isInitialising || _isCheckingAvailability)
                               ? const CircularProgressIndicator(color: Colors.white)
                               : SizedBox(
                                   width: double.infinity,
                                   height: 56,
                                   child: ElevatedButton(
                                     onPressed: () async {
+                                      if (_isCheckingAvailability) return;
+                                      setState(() => _isCheckingAvailability = true);
+
+                                      // Pre-flight: don't enter the recording UI at all if
+                                      // the streaming primary is known down — otherwise the
+                                      // socket connects and audio uploads, but no
+                                      // question/progress ever arrives.
+                                      final available = await isSttAvailable();
+                                      if (mounted) setState(() => _isCheckingAvailability = false);
+                                      if (!available) {
+                                        if (!context.mounted) return;
+                                        await showDialog(
+                                          context: context,
+                                          builder: (c) => getDialog(
+                                            context,
+                                            () => Navigator.pop(context),
+                                            () {},
+                                            context.l10n.connectionError,
+                                            context.l10n.connectionErrorDesc,
+                                            okButtonText: context.l10n.ok,
+                                            singleButton: true,
+                                          ),
+                                          barrierDismissible: false,
+                                        );
+                                        return;
+                                      }
+
+                                      if (!context.mounted) return;
                                       await stopAllRecording();
 
                                       // Initialize speech profile with phone mic as input source
                                       bool success = await provider.initialise(
                                         usePhoneMic: true,
+                                        isOnboardingFlow: true,
                                         processConversationCallback: () {
                                           Provider.of<CaptureProvider>(
                                             context,
@@ -374,6 +457,17 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                     ),
                                   ),
                                 ),
+                          // Only relevant while actually recording with the phone mic —
+                          // matches the Settings speech-profile page's disclaimer.
+                          if (provider.device == null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 16),
+                              child: Text(
+                                context.l10n.noDeviceConnectedUseMic,
+                                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
                         ] else if (provider.profileCompleted) ...[
                           // All Done state
                           const SizedBox(height: 16),
@@ -423,43 +517,49 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                           const SizedBox(height: 16),
                         ] else ...[
                           // Recording state - transcript + question + progress
-                          ShaderMask(
-                            shaderCallback: (bounds) {
-                              if (provider.text.split(' ').length < 10) {
-                                return const LinearGradient(colors: [Colors.white, Colors.white]).createShader(bounds);
-                              }
-                              return const LinearGradient(
-                                colors: [Colors.transparent, Colors.white],
-                                stops: [0.0, 0.5],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                              ).createShader(bounds);
-                            },
-                            blendMode: BlendMode.dstIn,
-                            child: SizedBox(
-                              height: 80,
-                              child: ListView(
-                                controller: _scrollController,
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                children: [
-                                  Text(
-                                    provider.text,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.6),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w400,
-                                      height: 1.5,
-                                      fontFamily: 'Manrope',
+                          // Transcript styling matches the Settings speech-profile page
+                          // exactly (fontSize 20, full-white, taller viewport), hidden
+                          // entirely until the first words arrive.
+                          if (provider.text.isNotEmpty) ...[
+                            ShaderMask(
+                              shaderCallback: (bounds) {
+                                if (provider.text.split(' ').length < 10) {
+                                  return const LinearGradient(
+                                    colors: [Colors.white, Colors.white],
+                                  ).createShader(bounds);
+                                }
+                                return const LinearGradient(
+                                  colors: [Colors.transparent, Colors.white],
+                                  stops: [0.0, 0.5],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ).createShader(bounds);
+                              },
+                              blendMode: BlendMode.dstIn,
+                              child: SizedBox(
+                                height: 130,
+                                child: ListView(
+                                  controller: _scrollController,
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  children: [
+                                    Text(
+                                      provider.text,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w400,
+                                        height: 1.5,
+                                        fontFamily: 'Manrope',
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-
-                          const SizedBox(height: 8),
+                            const SizedBox(height: 8),
+                          ],
 
                           // Current question
                           FadeTransition(
@@ -482,32 +582,39 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                           // Progress bar
                           SizedBox(
                             width: double.infinity,
-                            child: ProgressBarWithPercentage(progressValue: provider.questionProgress),
+                            child: ProgressBarWithPercentage(
+                              progressValue: provider.questionProgress,
+                              showPercentageAsPlainText: true,
+                            ),
                           ),
 
                           const SizedBox(height: 8),
 
-                          Text(
-                            context.l10n.keepGoing,
-                            style: TextStyle(
-                              color: Colors.grey.shade400,
-                              fontSize: 14,
-                              height: 1.3,
-                              fontFamily: 'Manrope',
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-
-                          TextButton(
+                          OutlinedButton(
                             onPressed: () {
                               provider.close();
                               widget.onSkip();
                             },
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Colors.white),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                            ),
                             child: Text(
                               context.l10n.skipForNow,
-                              style: const TextStyle(color: Colors.grey, fontSize: 14, fontFamily: 'Manrope'),
+                              style: const TextStyle(color: Colors.white, fontSize: 14, fontFamily: 'Manrope'),
                             ),
                           ),
+
+                          if (provider.device == null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                context.l10n.noDeviceConnectedUseMic,
+                                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
                         ],
                       ],
                     ),

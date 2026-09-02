@@ -1708,7 +1708,7 @@
     "@maybeLater": {
         "description": "Button text to defer action"
     },
-    "speechProfileIntro": "Omi needs to learn your goals and your voice. You'll be able to modify it later.",
+    "speechProfileIntro": "Let's set up your speech profile. You can always change it later",
     "@speechProfileIntro": {
         "description": "Introduction text for speech profile setup"
     },
@@ -1799,10 +1799,6 @@
     "openSettings": "Open Settings",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "What is your name?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "What's your name?",
     "@whatsYourName": {
@@ -9586,7 +9582,7 @@
     "coworker": "Coworker",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "Audio file is not available for playback",
     "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing.",
     "connectionGuide": "Connection Guide",
@@ -11796,5 +11792,31 @@
     },
     "@couldNotLoadKnowledgeGraph": {
         "description": "Short user-facing error when the knowledge graph request is non-200; must not include the response body"
+    },
+    "shortConversationsCount": "{count, plural, =1{{count} short conversation} other{{count} short conversations}}",
+    "@shortConversationsCount": {
+        "description": "Collapsed group of the day’s short conversations on the home timeline",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "speechProfileOwnerTitle": "{name}'s Speech Profile",
+    "@speechProfileOwnerTitle": {
+        "description": "Title shown on the speech profile page when the user already has a speech profile set up",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "play": "Play",
+    "@play": {
+        "description": "Label for the play/listen button on the speech profile page"
+    },
+    "redo": "Redo",
+    "@redo": {
+        "description": "Label for the redo/re-record button on the speech profile page"
     }
 }

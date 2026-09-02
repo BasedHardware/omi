@@ -7,6 +7,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/mobile_app.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/providers/speech_profile_provider.dart';
 
 class _SignedOutAuthenticationProvider extends AuthenticationProvider {
   _SignedOutAuthenticationProvider() : super(initializeListeners: false);
@@ -23,10 +24,15 @@ void main() {
   testWidgets('signed-out users land on the splash page of the onboarding wrapper', (tester) async {
     final authProvider = _SignedOutAuthenticationProvider();
     addTearDown(authProvider.dispose);
+    final speechProfileProvider = SpeechProfileProvider();
+    addTearDown(speechProfileProvider.dispose);
 
     await tester.pumpWidget(
-      ChangeNotifierProvider<AuthenticationProvider>.value(
-        value: authProvider,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthenticationProvider>.value(value: authProvider),
+          ChangeNotifierProvider<SpeechProfileProvider>.value(value: speechProfileProvider),
+        ],
         child: const MaterialApp(
           localizationsDelegates: [
             AppLocalizations.delegate,

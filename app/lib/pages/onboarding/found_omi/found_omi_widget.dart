@@ -26,7 +26,10 @@ class FoundOmiWidget extends StatefulWidget {
 class _FoundOmiWidgetState extends State<FoundOmiWidget> {
   String? _selectedSource;
   final TextEditingController _otherController = TextEditingController();
+  final FocusNode _otherFocusNode = FocusNode();
 
+  // 12 sources fill a 4×3 capsule grid. "Other" is the last cell; tapping
+  // it keeps the chip selected and opens a text field under the grid.
   List<_SourceOption> _getSources(BuildContext context) {
     return [
       _SourceOption(context.l10n.tiktok, FontAwesomeIcons.tiktok),
@@ -44,24 +47,76 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
     ];
   }
 
+  bool get _isOtherSelected => _selectedSource == context.l10n.otherSource;
+
   bool get _canContinue {
     if (_selectedSource == null) return false;
-    if (_selectedSource == context.l10n.otherSource) {
-      return _otherController.text.trim().isNotEmpty;
-    }
+    if (_isOtherSelected) return _otherController.text.trim().isNotEmpty;
     return true;
+  }
+
+  void _selectFixed(String label) {
+    setState(() {
+      _selectedSource = _selectedSource == label ? null : label;
+      _otherController.clear();
+    });
+  }
+
+  void _selectOther() {
+    setState(() => _selectedSource = context.l10n.otherSource);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _otherFocusNode.requestFocus());
+  }
+
+  void _deselectOther() {
+    _otherFocusNode.unfocus();
+    setState(() {
+      _selectedSource = null;
+      _otherController.clear();
+    });
   }
 
   @override
   void dispose() {
     _otherController.dispose();
+    _otherFocusNode.dispose();
     super.dispose();
+  }
+
+  Widget _sourceGrid(BuildContext context) {
+    final options = _getSources(context);
+    const columns = 4;
+    const gap = 8.0;
+    final otherLabel = context.l10n.otherSource;
+
+    return Column(
+      children: [
+        for (var row = 0; row < 3; row++) ...[
+          if (row > 0) const SizedBox(height: gap),
+          Row(
+            children: [
+              for (var col = 0; col < columns; col++) ...[
+                if (col > 0) const SizedBox(width: gap),
+                Expanded(child: _chipFor(options[row * columns + col], otherLabel)),
+              ],
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _chipFor(_SourceOption source, String otherLabel) {
+    final isOther = source.label == otherLabel;
+    return _SourceChip(
+      label: source.label,
+      icon: source.icon,
+      selected: _selectedSource == source.label,
+      onTap: isOther ? _selectOther : () => _selectFixed(source.label),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final sources = _getSources(context);
-
     return Column(
       children: [
         // Background area - takes remaining space for background image
@@ -92,76 +147,25 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  height: 250,
-                  child: ListView.separated(
-                    padding: EdgeInsets.zero,
-                    itemCount: sources.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final source = sources[index];
-                      final isSelected = _selectedSource == source.label;
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedSource = isSelected ? null : source.label;
-                            if (_selectedSource != context.l10n.otherSource) {
-                              _otherController.clear();
-                            }
-                          });
-                        },
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                          decoration: BoxDecoration(
-                            color: isSelected ? Colors.white : Colors.grey[900],
-                            borderRadius: BorderRadius.circular(40),
-                            border: Border.all(color: isSelected ? Colors.white : Colors.grey[700]!, width: 1),
+                const SizedBox(height: 20),
+                _sourceGrid(context),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 260),
+                  curve: Curves.easeInOut,
+                  alignment: Alignment.center,
+                  child: _isOtherSelected
+                      ? Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: _OtherField(
+                            controller: _otherController,
+                            focusNode: _otherFocusNode,
+                            onChanged: (_) => setState(() {}),
+                            onClose: _deselectOther,
                           ),
-                          child: Row(
-                            children: [
-                              FaIcon(source.icon, size: 18, color: isSelected ? Colors.black : Colors.white),
-                              const SizedBox(width: 14),
-                              Text(
-                                source.label,
-                                style: TextStyle(
-                                  color: isSelected ? Colors.black : Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: 'Manrope',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                        )
+                      : const SizedBox.shrink(),
                 ),
-                if (_selectedSource == context.l10n.otherSource) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey[900],
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey[700]!, width: 1),
-                    ),
-                    child: TextField(
-                      controller: _otherController,
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Manrope'),
-                      textAlign: TextAlign.center,
-                      decoration: InputDecoration(
-                        hintText: context.l10n.pleaseSpecify,
-                        hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16, fontFamily: 'Manrope'),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
                   height: 56,
@@ -169,9 +173,7 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
                     onPressed: _canContinue
                         ? () {
                             FocusManager.instance.primaryFocus?.unfocus();
-                            final source = _selectedSource == context.l10n.otherSource
-                                ? _otherController.text.trim()
-                                : _selectedSource!;
+                            final source = _isOtherSelected ? _otherController.text.trim() : _selectedSource!;
                             SharedPreferencesUtil().foundOmiSource = source;
                             updateUserOnboardingState(acquisitionSource: source);
                             PlatformManager.instance.analytics.onboardingUserAcquisitionSource(source);
@@ -192,11 +194,119 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 8),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Equal-width capsule in the 4×3 source grid. Text scales down to fit so
+/// longer labels (LinkedIn, App Store) don't overflow a column.
+class _SourceChip extends StatelessWidget {
+  final String label;
+  final FaIconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _SourceChip({required this.label, required this.icon, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          color: selected ? Colors.white : Colors.grey[900],
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: selected ? Colors.white : Colors.grey[700]!, width: 1),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            FaIcon(icon, size: 13, color: selected ? Colors.black : Colors.white),
+            const SizedBox(width: 5),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: selected ? Colors.black : Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    fontFamily: 'Manrope',
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// What the "Other" chip turns into once tapped — a full-width capsule with
+/// an inline text field, so specifying a source doesn't need a second box
+/// appearing elsewhere on the page. Tapping the close icon collapses it back
+/// into a plain chip.
+class _OtherField extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClose;
+
+  const _OtherField({
+    required this.controller,
+    required this.focusNode,
+    required this.onChanged,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.only(left: 20, right: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: Colors.grey[700]!, width: 1),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              style: const TextStyle(color: Colors.white, fontSize: 15, fontFamily: 'Manrope'),
+              decoration: InputDecoration(
+                hintText: context.l10n.pleaseSpecify,
+                hintStyle: TextStyle(color: Colors.grey[500], fontSize: 15, fontFamily: 'Manrope'),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              onChanged: onChanged,
+            ),
+          ),
+          GestureDetector(
+            onTap: onClose,
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Icon(Icons.close, size: 18, color: Colors.grey[500]),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

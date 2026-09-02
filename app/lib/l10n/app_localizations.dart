@@ -109,7 +109,8 @@ import 'app_localizations_zh.dart';
 /// be consistent with the languages listed in the AppLocalizations.supportedLocales
 /// property.
 abstract class AppLocalizations {
-  AppLocalizations(String locale) : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+  AppLocalizations(String locale)
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -117,7 +118,8 @@ abstract class AppLocalizations {
     return Localizations.of<AppLocalizations>(context, AppLocalizations)!;
   }
 
-  static const LocalizationsDelegate<AppLocalizations> delegate = _AppLocalizationsDelegate();
+  static const LocalizationsDelegate<AppLocalizations> delegate =
+      _AppLocalizationsDelegate();
 
   /// A list of this localizations delegate along with the default localizations
   /// delegates.
@@ -129,12 +131,13 @@ abstract class AppLocalizations {
   /// Additional delegates can be added by appending to this list in
   /// MaterialApp. This list does not have to be used at all if a custom list
   /// of delegates is preferred or required.
-  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates = <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
+      <LocalizationsDelegate<dynamic>>[
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -186,7 +189,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// Message shown after an expired authenticated session returns the user to sign-in
@@ -3504,7 +3507,7 @@ abstract class AppLocalizations {
   /// Introduction text for speech profile setup
   ///
   /// In en, this message translates to:
-  /// **'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.'**
+  /// **'Let\'s set up your speech profile. You can always change it later'**
   String get speechProfileIntro;
 
   /// Button text to begin a process
@@ -3638,12 +3641,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open Settings'**
   String get openSettings;
-
-  /// Question asking if user wants to change their display name
-  ///
-  /// In en, this message translates to:
-  /// **'What is your name?'**
-  String get wantDifferentName;
 
   /// Question asking for user's name
   ///
@@ -8941,7 +8938,10 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{accessDescription} and is {triggerDescription}.'**
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription);
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  );
 
   /// Sentence starting with 'Is' for trigger description
   ///
@@ -14664,7 +14664,7 @@ abstract class AppLocalizations {
   /// No description provided for @googleSearch.
   ///
   /// In en, this message translates to:
-  /// **'Google Search'**
+  /// **'Google'**
   String get googleSearch;
 
   /// No description provided for @audioPlaybackUnavailable.
@@ -18542,9 +18542,34 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t load knowledge graph'**
   String get couldNotLoadKnowledgeGraph;
+
+  /// Collapsed group of the day’s short conversations on the home timeline
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{{count} short conversation} other{{count} short conversations}}'**
+  String shortConversationsCount(int count);
+
+  /// Title shown on the speech profile page when the user already has a speech profile set up
+  ///
+  /// In en, this message translates to:
+  /// **'{name}\'s Speech Profile'**
+  String speechProfileOwnerTitle(String name);
+
+  /// Label for the play/listen button on the speech profile page
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get play;
+
+  /// Label for the redo/re-record button on the speech profile page
+  ///
+  /// In en, this message translates to:
+  /// **'Redo'**
+  String get redo;
 }
 
-class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
+class _AppLocalizationsDelegate
+    extends LocalizationsDelegate<AppLocalizations> {
   const _AppLocalizationsDelegate();
 
   @override
@@ -18554,56 +18579,56 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 
   @override
   bool isSupported(Locale locale) => <String>[
-        'ar',
-        'be',
-        'bg',
-        'bn',
-        'bs',
-        'ca',
-        'cs',
-        'da',
-        'de',
-        'el',
-        'en',
-        'es',
-        'et',
-        'fa',
-        'fi',
-        'fr',
-        'he',
-        'hi',
-        'hr',
-        'hu',
-        'id',
-        'it',
-        'ja',
-        'kn',
-        'ko',
-        'lt',
-        'lv',
-        'mk',
-        'mr',
-        'ms',
-        'nl',
-        'no',
-        'pl',
-        'pt',
-        'ro',
-        'ru',
-        'sk',
-        'sl',
-        'sr',
-        'sv',
-        'ta',
-        'te',
-        'th',
-        'tl',
-        'tr',
-        'uk',
-        'ur',
-        'vi',
-        'zh'
-      ].contains(locale.languageCode);
+    'ar',
+    'be',
+    'bg',
+    'bn',
+    'bs',
+    'ca',
+    'cs',
+    'da',
+    'de',
+    'el',
+    'en',
+    'es',
+    'et',
+    'fa',
+    'fi',
+    'fr',
+    'he',
+    'hi',
+    'hr',
+    'hu',
+    'id',
+    'it',
+    'ja',
+    'kn',
+    'ko',
+    'lt',
+    'lv',
+    'mk',
+    'mr',
+    'ms',
+    'nl',
+    'no',
+    'pl',
+    'pt',
+    'ro',
+    'ru',
+    'sk',
+    'sl',
+    'sr',
+    'sv',
+    'ta',
+    'te',
+    'th',
+    'tl',
+    'tr',
+    'uk',
+    'ur',
+    'vi',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -18712,8 +18737,10 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }

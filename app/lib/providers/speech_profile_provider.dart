@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:opus_dart/opus_dart.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/speech_profile.dart';
@@ -77,15 +79,99 @@ class SpeechProfileProvider extends ChangeNotifier
 
   // Onboarding state (questions from server)
   bool usePhoneMic = false;
+  // True only for the real onboarding flow (see wrapper.dart), which claims
+  // onboarding provenance server-side. Every other caller (Settings' "redo
+  // speech profile") sends speech_profile_redo=enabled instead so an already-
+  // onboarded account still gets the question flow — see
+  // routers/listen/runtime.py's _bootstrap for why that distinction exists.
+  bool _isOnboardingFlow = false;
   String currentQuestion = '';
   int currentQuestionIndex = 0;
   int totalQuestions = 0;
 
   double get questionProgress => totalQuestions == 0 ? 0.0 : (currentQuestionIndex / totalQuestions).clamp(0.0, 1.0);
 
+  /// Live mic input level in [0.0, 1.0], computed straight from the outgoing
+  /// PCM16 audio so the recording UI can give the user visible confirmation
+  /// their voice is actually being picked up — no native amplitude API
+  /// dependency, and it reflects the real audio being sent in production.
+  double micLevel = 0.0;
+  DateTime? _lastMicLevelNotify;
+  // Separate from audioStorage.opusDecoder: that one decodes the full
+  // recording once at finalize() time, this one decodes the same live frames
+  // independently (Opus packets decode independently of each other) purely
+  // for the meter, so neither interferes with the other.
+  SimpleOpusDecoder? _micLevelOpusDecoder;
+
+  void _updateMicLevel(Uint8List bytes) {
+    final sampleCount = bytes.length ~/ 2;
+    if (sampleCount == 0) return;
+
+    final byteData = ByteData.sublistView(bytes);
+    final samples = List<int>.generate(sampleCount, (i) => byteData.getInt16(i * 2, Endian.little));
+    _updateMicLevelFromSamples(samples);
+  }
+
+  void _updateMicLevelFromSamples(List<int> samples) {
+    if (samples.isEmpty) return;
+
+    double sumSquares = 0;
+    for (final sample in samples) {
+      sumSquares += sample * sample;
+    }
+    final rms = sqrt(sumSquares / samples.length);
+    // 16-bit PCM full-scale is 32768; normal speech rarely gets close to
+    // that, so scale against a much lower reference to keep the meter
+    // visibly responsive to a normal speaking voice, even a quiet one.
+    final normalized = (rms / 1200).clamp(0.0, 1.0);
+    // Exponential smoothing so the bars don't flicker chunk to chunk, weighted
+    // toward the new sample so the meter still reacts quickly.
+    micLevel = micLevel * 0.5 + normalized * 0.5;
+
+    // Mic bytes arrive many times a second; throttle notifyListeners so this
+    // doesn't rebuild the whole page on every ~10ms audio chunk.
+    final now = DateTime.now();
+    if (_lastMicLevelNotify == null || now.difference(_lastMicLevelNotify!) > const Duration(milliseconds: 80)) {
+      _lastMicLevelNotify = now;
+      notifyListeners();
+    }
+  }
+
+  /// Feeds the mic-level meter from a connected device's audio frame
+  /// (post header-stripping). Omi devices default to Opus, which has to be
+  /// decoded before an amplitude can be computed at all — pcm16 needs no
+  /// decode. Other, rarer device codecs (pcm8/mulaw/aac/lc3) aren't decoded
+  /// live for this meter; the glow just stays at its idle level for those.
+  void _updateMicLevelFromDeviceFrame(List<int> frame) {
+    if (frame.isEmpty) return;
+    switch (audioStorage.codec) {
+      case BleAudioCodec.pcm16:
+        _updateMicLevel(Uint8List.fromList(frame));
+        break;
+      case BleAudioCodec.opus:
+      case BleAudioCodec.opusFS320:
+        try {
+          _micLevelOpusDecoder ??= SimpleOpusDecoder(sampleRate: 16000, channels: 1);
+          final decoded = _micLevelOpusDecoder!.decode(input: Uint8List.fromList(frame));
+          _updateMicLevelFromSamples(decoded);
+        } catch (e) {
+          // A dropped/out-of-order BLE packet can produce an undecodable
+          // frame; that's fine for a meter-only concern — just skip it.
+          Logger.debug('Speech profile: mic-level opus decode skipped: $e');
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
   void skipCurrentQuestion() {
     if (_socket?.state == SocketServiceState.connected) {
       _socket?.sendText('{"type": "skip_question"}');
+    } else {
+      // Previously a silent no-op while the socket was mid-reconnect (see
+      // _scheduleReconnect), so tapping Skip looked like it did nothing.
+      notifyInfo('SKIP_UNAVAILABLE');
     }
   }
 
@@ -121,11 +207,13 @@ class SpeechProfileProvider extends ChangeNotifier
     Function? finalizedCallback,
     Function? processConversationCallback,
     bool usePhoneMic = false,
+    bool isOnboardingFlow = false,
   }) async {
     _finalizedCallback = finalizedCallback;
     _processConversationCallback = processConversationCallback;
     setInitialising(true);
     this.usePhoneMic = usePhoneMic;
+    _isOnboardingFlow = isOnboardingFlow;
 
     try {
       if (usePhoneMic) {
@@ -186,7 +274,13 @@ class SpeechProfileProvider extends ChangeNotifier
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     int rate = sampleRate ?? (codec.isOpusSupported() ? 16000 : 8000);
 
-    _socket = await openSpeechProfileSocket(codec: codec, sampleRate: rate, language: language, force: force);
+    _socket = await openSpeechProfileSocket(
+      codec: codec,
+      sampleRate: rate,
+      language: language,
+      force: force,
+      speechProfileRedo: !_isOnboardingFlow,
+    );
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }
@@ -203,11 +297,13 @@ class SpeechProfileProvider extends ChangeNotifier
     required int sampleRate,
     required String language,
     required bool force,
+    bool speechProfileRedo = false,
   }) {
     return ServiceManager.instance().socket.speechProfile(
           codec: codec,
           sampleRate: sampleRate,
           language: language,
+          speechProfileRedo: speechProfileRedo,
           force: force,
         );
   }
@@ -234,6 +330,8 @@ class SpeechProfileProvider extends ChangeNotifier
 
           // Store audio frames for speech profile upload
           audioStorage.frames.add(bytes.toList());
+
+          _updateMicLevel(bytes);
 
           // Send to transcription socket
           if (_socket?.state == SocketServiceState.connected) {
@@ -394,6 +492,9 @@ class SpeechProfileProvider extends ChangeNotifier
         }
 
         final trimmedValue = paddingLeft > 0 ? value.sublist(paddingLeft) : value;
+
+        _updateMicLevelFromDeviceFrame(trimmedValue);
+
         if (_socket?.state == SocketServiceState.connected) {
           _socket?.send(trimmedValue);
         }
@@ -471,6 +572,10 @@ class SpeechProfileProvider extends ChangeNotifier
     uploadingProfile = false;
     profileCompleted = false;
     usePhoneMic = false;
+    _isOnboardingFlow = false;
+    micLevel = 0.0;
+    isInitialised = false;
+    _sttUnavailableCloseCount = 0;
     _processConversationCallback = null;
 
     await _socket?.stop(reason: 'closing');

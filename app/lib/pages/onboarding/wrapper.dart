@@ -26,7 +26,6 @@ import 'package:omi/widgets/onboarding_page_transition.dart';
 import 'package:omi/widgets/onboarding_progress_bar.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/auth_service.dart';
@@ -36,10 +35,36 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/omi_logo_spinner.dart';
 
+/// Speech-profile onboarding is a clean black screen — no spinning-dots
+/// backdrop on the quiet-place intro or the voice questions. Keep this in
+/// lockstep with [_OnboardingWrapperState.kSpeechProfilePage].
+@visibleForTesting
+const int kOnboardingSpeechProfilePageIndex = 9;
+
+/// Pages that share the spinning-dots backdrop. Speech profile is
+/// intentionally absent so Get Started cannot bring the dots back.
+@visibleForTesting
+const Set<int> kOnboardingSpinnerBackdropPages = {
+  3, // name
+  4, // found omi
+  5, // permissions
+  6, // user-review placeholder
+  10, // knowledge graph
+};
+
+@visibleForTesting
+bool onboardingHidesSpinnerBackdrop(int pageIndex) => pageIndex == kOnboardingSpeechProfilePageIndex;
+
 class OnboardingWrapper extends StatefulWidget {
-  const OnboardingWrapper({super.key, this.forceAuthPage = false});
+  const OnboardingWrapper({super.key, this.forceAuthPage = false, this.forceStartAtSplash = false});
 
   final bool forceAuthPage;
+
+  // Debug-only: skips the sign-in/onboarding-progress auto-routing below so
+  // a fresh instance always lands on the splash page, even if Firebase still
+  // has a signed-in session from earlier testing. Used by the debug "restart
+  // onboarding" button, which would otherwise remount straight past splash.
+  final bool forceStartAtSplash;
 
   @override
   State<OnboardingWrapper> createState() => _OnboardingWrapperState();
@@ -58,7 +83,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kUserReviewPage = 6; // "Loving Omi?" screen
   static const int kWelcomePage = 7;
   static const int kFindDevicesPage = 8;
-  static const int kSpeechProfilePage = 9; // Speech profile with questions (requires device)
+  static const int kSpeechProfilePage =
+      kOnboardingSpeechProfilePageIndex; // Speech profile with questions (requires device)
   static const int kKnowledgeGraphPage = 10; // Memory graph preview
   static const int kCompletePage = 11; // "You're all set" completion screen
 
@@ -71,17 +97,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   bool get _showsDeviceBackdrop =>
       _controller!.index == kSplashPage || _controller!.index == kAuthPage || _controller!.index == kAiConsentPage;
 
-  // Pages that share the spinning-dots backdrop — persistent (see build())
-  // so it doesn't restart when moving between them.
-  static const List<int> kSpinnerBackdropPages = [
-    kNamePage,
-    kFoundOmiPage,
-    kPermissionsPage,
-    kUserReviewPage,
-    kSpeechProfilePage,
-    kKnowledgeGraphPage,
-  ];
-  bool get _showsSpinnerBackdrop => kSpinnerBackdropPages.contains(_controller!.index);
+  // Persistent spinning-dots backdrop (see build()) so it doesn't restart
+  // when moving between the pages in [kOnboardingSpinnerBackdropPages].
+  bool get _showsSpinnerBackdrop => kOnboardingSpinnerBackdropPages.contains(_controller!.index);
 
   // The spinner only starts fading in once the device backdrop has fully
   // faded out — sequential, not simultaneous — so this lags _showsSpinnerBackdrop
@@ -97,14 +115,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   late final AnimationController _deviceGlowController;
   late final Animation<double> _deviceGlowAnimation;
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
-  SpeechProfileProvider? _speechProfileProvider;
   Future<void>? _knowledgeGraphPrebuildFuture;
+
+  // Speech profile keeps a clean black screen — no spinner on the quiet-place
+  // intro or the voice questions. Hold the page invisible until the spinner
+  // from permissions has finished fading out.
+  bool get _hidesSpinnerForSpeechProfile => onboardingHidesSpinnerBackdrop(_controller!.index);
 
   @override
   void initState() {
-    if (!widget.forceAuthPage) {
-      _speechProfileProvider = SpeechProfileProvider();
-    }
     _controller = TabController(
       length: 12,
       vsync: this,
@@ -138,6 +157,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     _deviceGlowAnimation = CurvedAnimation(parent: _deviceGlowController, curve: Curves.easeIn);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (widget.forceStartAtSplash) return;
+
       // Let's not update permissions here because of Apple's review process
       // if (mounted) {
       //   context.read<OnboardingProvider>().updatePermissions();
@@ -179,7 +200,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   void dispose() {
     _controller?.dispose();
     _deviceGlowController.dispose();
-    _speechProfileProvider?.dispose();
     _spinnerRevealTimer?.cancel();
     super.dispose();
   }
@@ -259,7 +279,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // sees the consent screen before any AI processing begins.
           if (!SharedPreferencesUtil().aiConsentGiven) {
             _controller!.animateTo(kAiConsentPage);
-          } else if (SharedPreferencesUtil().onboardingCompleted) {
+          } else if (!widget.forceStartAtSplash && SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {
             _controller!.animateTo(kNamePage);
@@ -273,8 +293,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           PlatformManager.instance.analytics.onboardingStepCompleted('AI Consent');
           // If the server says this user already completed onboarding, jump
           // straight to home — their first-time onboarding ran in a previous
-          // session and we don't want to re-run it.
-          if (SharedPreferencesUtil().onboardingCompleted) {
+          // session and we don't want to re-run it. Debug restart
+          // (forceStartAtSplash) bypasses this so the whole flow can be
+          // walked end to end for testing.
+          if (!widget.forceStartAtSplash && SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {
             _controller!.animateTo(kNamePage);
@@ -293,9 +315,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
               );
           _goNext(); // Go to Found Omi page
           IntercomManager.instance.updateUser(
-            FirebaseAuth.instance.currentUser!.email,
-            FirebaseAuth.instance.currentUser!.displayName,
-            FirebaseAuth.instance.currentUser!.uid,
+            FirebaseAuth.instance.currentUser?.email,
+            FirebaseAuth.instance.currentUser?.displayName,
+            FirebaseAuth.instance.currentUser?.uid,
           );
           PlatformManager.instance.analytics.onboardingStepCompleted('Name');
         },
@@ -321,18 +343,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       Container(), // FindDevicesPage placeholder
       widget.forceAuthPage
           ? const SizedBox.shrink()
-          : ChangeNotifierProvider.value(
-              value: _speechProfileProvider!,
-              child: SpeechProfileWidget(
-                goNext: () {
-                  PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile');
-                  _controller!.animateTo(kKnowledgeGraphPage);
-                },
-                onSkip: () {
-                  PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile Skipped');
-                  _controller!.animateTo(kKnowledgeGraphPage);
-                },
-              ),
+          : SpeechProfileWidget(
+              goNext: () {
+                PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile');
+                _controller!.animateTo(kKnowledgeGraphPage);
+              },
+              onSkip: () {
+                PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile Skipped');
+                _controller!.animateTo(kKnowledgeGraphPage);
+              },
             ),
       OnboardingKnowledgeGraphStep(
         onContinue: () {
@@ -378,14 +397,21 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             ),
             IgnorePointer(
               child: AnimatedOpacity(
-                opacity: _spinnerVisible ? 1 : 0,
+                opacity: _spinnerVisible && !_hidesSpinnerForSpeechProfile ? 1 : 0,
                 duration: _backdropFadeDuration,
                 curve: Curves.easeInOut,
-                child: OmiLogoSpinner(burstTrigger: _controller!.index),
+                child: OmiLogoSpinner(
+                  burstTrigger: _controller!.index,
+                  visible: _spinnerVisible && !_hidesSpinnerForSpeechProfile,
+                ),
               ),
             ),
             OnboardingPageTransition(
               pageKey: _controller!.index,
+              // Speech profile needs the spinner backdrop gone first (see
+              // _hidesSpinnerForSpeechProfile) — hold this page invisible until
+              // that fade-out finishes instead of cross-fading over it.
+              entryDelay: _hidesSpinnerForSpeechProfile ? _backdropFadeDuration : Duration.zero,
               child: _controller!.index == kSplashPage || _controller!.index == kAuthPage
                   ? pages[_controller!.index]
                   : _controller!.index == kAiConsentPage ||

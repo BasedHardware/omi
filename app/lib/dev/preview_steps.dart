@@ -520,7 +520,7 @@ class _PreviewFoundUsStepState extends State<PreviewFoundUsStep> {
     ('YouTube', FontAwesomeIcons.youtube),
     ('Instagram', FontAwesomeIcons.instagram),
     ('Friend / word of mouth', FontAwesomeIcons.userGroup),
-    ('Google Search', FontAwesomeIcons.google),
+    ('Google', FontAwesomeIcons.google),
   ];
 
   @override

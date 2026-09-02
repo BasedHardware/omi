@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -13,7 +12,16 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class MobileApp extends StatefulWidget {
-  const MobileApp({super.key});
+  const MobileApp({super.key, this.forceOnboardingRestart = false});
+
+  // Debug-only: makes this instance show the onboarding flow from splash
+  // regardless of sign-in / consent / completion state. Set by the debug
+  // "restart onboarding" overlay in main.dart, which pushes a fresh
+  // MobileApp — a full restart is required because completing onboarding
+  // for real replaces every route (this one included) via
+  // pushAndRemoveUntil, so there's no existing MobileApp instance left to
+  // signal otherwise.
+  final bool forceOnboardingRestart;
 
   @override
   State<MobileApp> createState() => _MobileAppState();
@@ -21,9 +29,6 @@ class MobileApp extends StatefulWidget {
 
 class _MobileAppState extends State<MobileApp> {
   int _lastPresentedSessionExpiration = 0;
-  // Bumped by the debug restart button to force a fresh OnboardingWrapper
-  // (new key => new State => TabController resets to the splash page).
-  int _onboardingRestartCount = 0;
 
   void _presentSessionExpiration(int generation) {
     if (generation <= _lastPresentedSessionExpiration) return;
@@ -38,15 +43,17 @@ class _MobileAppState extends State<MobileApp> {
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
-        if (authProvider.requiresReauthentication) {
+        Widget content;
+        if (widget.forceOnboardingRestart) {
+          content = const OnboardingWrapper(forceStartAtSplash: true);
+        } else if (authProvider.requiresReauthentication) {
           _presentSessionExpiration(authProvider.sessionExpirationGeneration);
-          return const OnboardingWrapper(forceAuthPage: true);
-        }
-        if (authProvider.isSignedIn()) {
+          content = const OnboardingWrapper(forceAuthPage: true);
+        } else if (authProvider.isSignedIn()) {
           // Cutover gate sits above onboarding and home so completed-onboarding
           // navigator replacements cannot bypass enforcement, and product
           // widgets are not constructed while blocked.
-          return AccountCutoverBlockingGate(
+          content = AccountCutoverBlockingGate(
             productBuilder: (context) {
               // Returning users who haven't yet given consent under the new
               // model must see the consent screen before any AI processing
@@ -66,34 +73,10 @@ class _MobileAppState extends State<MobileApp> {
             },
           );
         } else {
-          return Stack(
-            children: [
-              OnboardingWrapper(key: ValueKey(_onboardingRestartCount)),
-              // Debug-only: restarts the whole onboarding flow from the
-              // splash. Compiled out of release builds via kDebugMode.
-              if (kDebugMode)
-                Positioned(
-                  left: 16,
-                  bottom: 16,
-                  child: SafeArea(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _onboardingRestartCount++),
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.15),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
-                        ),
-                        child: const Icon(Icons.replay, size: 16, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          );
+          content = const OnboardingWrapper();
         }
+
+        return content;
       },
     );
   }
