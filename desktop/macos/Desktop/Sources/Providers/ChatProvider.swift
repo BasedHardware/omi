@@ -1162,6 +1162,9 @@ class ChatProvider: ObservableObject {
   /// makes `ChatQueryResultAuthority` reject the dead turn's late result.
   private(set) var sendGeneration: Int = 0
   private var sendLockOwnership = ChatSendLockOwnership()
+  /// Whether this process owns a live main-chat send. Read by the journal projection so it can tell
+  /// a turn that is streaming right now from one a previous process left non-terminal.
+  var hasActiveSendLock: Bool { sendLockOwnership.isHeld }
   private var realtimeChatLaneInvocationGate = RealtimeChatLaneInvocationGate()
 
   /// Whether a new turn can start right now. The bridge holds one message

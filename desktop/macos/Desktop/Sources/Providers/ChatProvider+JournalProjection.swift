@@ -88,6 +88,24 @@ extension ChatProvider {
     if updatedMessages.map(\.id) != orderBeforeCanonicalSort {
       divergences.insert(.ordering)
     }
+    let orphaned = Self.terminalizeTurnsLeftStreamingByAPreviousProcess(
+      &updatedMessages,
+      hasActiveSendLock: hasActiveSendLock,
+      hasActiveVoiceTurn: VoiceTurnCoordinator.shared.activeTurnID != nil,
+      now: Date())
+    if !orphaned.isEmpty {
+      log("ChatProvider: terminalized \(orphaned.count) turn(s) left streaming by a previous process")
+      let repairSurface = expected
+      if let repairOwnerID = runtimeOwnerId {
+        Task { @MainActor [weak self] in
+          guard let self else { return }
+          _ = await self.kernelTurnProjection.repairNonterminalTurns(
+            surface: repairSurface,
+            turnIDs: orphaned,
+            ownerID: repairOwnerID)
+        }
+      }
+    }
     messages = updatedMessages
     flushPendingMessageRatings()
     Task { await bindKindOnlyCitationsIfNeeded() }

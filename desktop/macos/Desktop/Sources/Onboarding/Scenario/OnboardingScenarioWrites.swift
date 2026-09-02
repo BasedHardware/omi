@@ -55,7 +55,7 @@ enum OnboardingScenarioWrites {
     chatProvider: ChatProvider,
     ownerID: String
   ) async {
-    _ = await chatProvider.recordJournalExchange(
+    let recorded = await chatProvider.recordJournalExchange(
       surface: chatProvider.mainChatSurfaceReference(),
       ownerID: ownerID,
       continuityKey: "onboarding-task-\(taskID)",
@@ -64,5 +64,6 @@ enum OnboardingScenarioWrites {
       origin: "onboarding_scenario",
       contentBlocks: [.taskCard(id: "onboarding-task-\(taskID)", taskId: taskID)]
     )
+    log("Onboarding scenario: task card journaled=\(recorded.assistant != nil)")
   }
 }

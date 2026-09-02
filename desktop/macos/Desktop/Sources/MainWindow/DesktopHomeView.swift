@@ -45,6 +45,21 @@ struct DesktopHomeView: View {
   /// The Chat-first shell owns typed navigation at the root, never through legacy
   /// sidebar indices. It persists only route/collapse state, not enrollment.
   @StateObject private var chatFirstNavigation = ChatFirstShellNavigation()
+  /// Rich blocks (the check-off task card, goal links) used to render only in the sampled Chat-first
+  /// shell; the legacy shell kept them inert. A task Omi created is a task wherever the chat is, so
+  /// the legacy shell gets the same rendering context. Its prompt-materialization coordinator has no
+  /// driver bound here, so that Chat-first behaviour stays off.
+  @StateObject private var legacyPromptMaterializationCoordinator = ChatFirstPromptMaterializationCoordinator()
+
+  private var legacyRichBlockContext: ChatFirstRichBlockContext {
+    ChatFirstRichBlockContext(
+      navigation: chatFirstNavigation,
+      tasksStore: viewModelContainer.tasksStore,
+      chatProvider: viewModelContainer.chatProvider,
+      canonicalGoalsStore: viewModelContainer.canonicalGoalsStore,
+      promptMaterializationCoordinator: legacyPromptMaterializationCoordinator
+    )
+  }
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
   @ObservedObject private var updatePolicyManager = DesktopUpdatePolicyManager.shared
@@ -1429,6 +1444,7 @@ struct DesktopHomeView: View {
             selectedIndex: selectedIndex,
             appState: appState,
             viewModelContainer: viewModelContainer,
+            chatFirstRichBlockContext: legacyRichBlockContext,
             memoryDestinationRawValue: $memoryDestinationRawValue,
             selectedSettingsSection: $selectedSettingsSection,
             highlightedSettingId: $highlightedSettingId,
@@ -1530,6 +1546,8 @@ private struct PageContentView: View {
   let selectedIndex: Int
   let appState: AppState
   let viewModelContainer: ViewModelContainer
+  /// Rendering capability for journaled rich blocks (task cards, goal links) in the home chat.
+  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
   @Binding var memoryDestinationRawValue: Int
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
@@ -1563,6 +1581,7 @@ private struct PageContentView: View {
           chatProvider: viewModelContainer.chatProvider,
           memoriesViewModel: viewModelContainer.memoriesViewModel,
           taskChatCoordinator: viewModelContainer.taskChatCoordinator,
+          chatFirstRichBlockContext: chatFirstRichBlockContext,
           selectedIndex: $selectedTabIndex)
       case SidebarNavItem.conversations.rawValue,
         SidebarNavItem.memories.rawValue,
@@ -1607,6 +1626,7 @@ private struct PageContentView: View {
           chatProvider: viewModelContainer.chatProvider,
           memoriesViewModel: viewModelContainer.memoriesViewModel,
           taskChatCoordinator: viewModelContainer.taskChatCoordinator,
+          chatFirstRichBlockContext: chatFirstRichBlockContext,
           selectedIndex: $selectedTabIndex)
       }
     }

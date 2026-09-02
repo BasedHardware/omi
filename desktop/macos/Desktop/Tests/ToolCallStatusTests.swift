@@ -8,6 +8,37 @@ final class ToolCallStatusTests: XCTestCase {
 
   // MARK: - isInFlight contract
 
+  @MainActor
+  func testAReplayTerminalizesOnlyStreamingTurnsAbandonedByAPreviousProcess() {
+    let now = Date(timeIntervalSince1970: 1_788_230_400)
+    var messages = [
+      ChatMessage(
+        id: "old", text: "That demo order is scheduled to arrive on Saturday,", createdAt: now.addingTimeInterval(-600),
+        sender: .ai, isStreaming: true),
+      ChatMessage(id: "fresh", text: "Thinking", createdAt: now.addingTimeInterval(-5), sender: .ai, isStreaming: true),
+      ChatMessage(
+        id: "user", text: "When does it arrive?", createdAt: now.addingTimeInterval(-601), sender: .user,
+        isStreaming: true),
+    ]
+    let terminalized = ChatProvider.terminalizeTurnsLeftStreamingByAPreviousProcess(
+      &messages, hasActiveSendLock: false, hasActiveVoiceTurn: false, now: now)
+    XCTAssertEqual(terminalized, ["old"], "only an old AI turn nobody here owns is abandoned")
+    XCTAssertFalse(messages[0].isStreaming)
+    XCTAssertTrue(messages[1].isStreaming, "a turn seconds old may still be streaming from a live answer")
+
+    var owned = [
+      ChatMessage(id: "old", text: "…", createdAt: now.addingTimeInterval(-600), sender: .ai, isStreaming: true)
+    ]
+    XCTAssertTrue(
+      ChatProvider.terminalizeTurnsLeftStreamingByAPreviousProcess(
+        &owned, hasActiveSendLock: true, hasActiveVoiceTurn: false, now: now
+      ).isEmpty, "a live send owns every streaming turn")
+    XCTAssertTrue(
+      ChatProvider.terminalizeTurnsLeftStreamingByAPreviousProcess(
+        &owned, hasActiveSendLock: false, hasActiveVoiceTurn: true, now: now
+      ).isEmpty, "a live voice turn owns every streaming turn")
+  }
+
   func testIsInFlightTrueForRunningSlowStalled() {
     XCTAssertTrue(ToolCallStatus.running.isInFlight)
     XCTAssertTrue(ToolCallStatus.slow.isInFlight)
