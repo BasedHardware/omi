@@ -8,12 +8,25 @@ extension ChatProvider {
   ///   - surface: which response surface was rated — "text" (main-window
   ///     chat) or "voice" (floating-bar responses). Telemetry-only dimension.
   func rateMessage(_ messageId: String, rating: Int?, surface: String = "text") async {
-    switch queueMessageRating(messageId, rating: rating, surface: surface) {
+    let resolvedSurface = Self.ratingSurface(
+      for: messages.first(where: { $0.id == messageId }), requested: surface)
+    switch queueMessageRating(messageId, rating: rating, surface: resolvedSurface) {
     case .persistNow:
-      await persistMessageRating(messageId, rating: rating, surface: surface)
+      await persistMessageRating(messageId, rating: rating, surface: resolvedSurface)
     case .waitForSync, .localOnly, nil:
       break
     }
+  }
+
+  /// Thumbs on proactive-notification messages (focus/insight/task/memory
+  /// cards in the transcript) rate the notification, not a general Omi
+  /// answer — tag them "notification" so response-quality % excludes them,
+  /// whichever surface the caller rated from.
+  static func ratingSurface(for message: ChatMessage?, requested: String) -> String {
+    guard let message, ChatContinuityInvariants.isProactiveNotification(message) else {
+      return requested
+    }
+    return "notification"
   }
 
   /// Apply the rating locally and decide whether a backend PATCH can run yet.
