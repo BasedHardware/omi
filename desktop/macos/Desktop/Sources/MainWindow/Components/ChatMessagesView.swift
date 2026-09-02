@@ -391,6 +391,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// switch this to `.freeScrolling` — only physical user input (wheel/trackpad,
   /// mouse, or keyboard scroll-navigation).
   @State private var scrollMode: ChatScrollMode = .followingBottom
+  /// Whether the daily summary card is currently allowed above the thread.
+  /// See `admitDailySummaryIfFollowing` (INV-CHAT-2).
+  @State private var dailySummaryAdmitted = false
+  @ObservedObject private var dailySummaryStore: HomeDailySummaryStore = ChatDailySummaryCoordinator.shared.store
   /// Throttle token for scrollToBottom — prevents the streaming + scroll
   /// detection feedback loop from saturating the main thread.
   @State private var scrollThrottleWorkItem: DispatchWorkItem?
@@ -564,7 +568,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         loadMoreButton
         // Chrome, above the thread — not a message. It renders once, at the top, whether or not
         // the transcript has rows, and it records no turn (INV-CHAT-1).
-        if showsDailySummary {
+        if showsDailySummary, dailySummaryAdmitted {
           ChatDailySummaryCard()
         }
         messageContent
@@ -624,6 +628,16 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       guard wasLoading, !isLoading, !messages.isEmpty else { return }
       handleInitialRestore(proxy: proxy)
     }
+    // MARK: - Daily summary admission (INV-CHAT-2)
+    // The summary is chrome above the thread and arrives asynchronously. Content
+    // inserted above the viewport shifts everything below it, so it is admitted
+    // only while the transcript follows the live edge (then re-followed), and a
+    // reader who has scrolled away meets it on their next return to the bottom.
+    .modifier(
+      DailySummaryAdmissionObserver(
+        summaryID: dailySummaryStore.latest?.id, scrollMode: scrollMode,
+        admit: { admitDailySummaryIfFollowing(proxy: proxy) })
+    )
     // MARK: - React to streaming text changes
     .onChange(of: messages.last?.text) { _, _ in
       handleLiveContentChange(proxy: proxy)
@@ -759,6 +773,23 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         hasActivityBelow = true
       }
     }
+  }
+
+  /// Admit the daily summary card above the thread only when doing so cannot
+  /// move the reader: the transcript is following the live edge (so the
+  /// re-follow below lands it back at the bottom) or is empty. Once admitted it
+  /// stays; a summary that disappears (owner change) withdraws it.
+  private func admitDailySummaryIfFollowing(proxy: ScrollViewProxy) {
+    guard showsDailySummary else { return }
+    guard dailySummaryStore.latest != nil else {
+      dailySummaryAdmitted = false
+      return
+    }
+    guard !dailySummaryAdmitted else { return }
+    guard scrollMode == .followingBottom || messages.isEmpty else { return }
+    dailySummaryAdmitted = true
+    guard !messages.isEmpty, !isLoadingInitial else { return }
+    handleLiveContentChange(proxy: proxy)
   }
 
   private func handleLiveContentChange(proxy: ScrollViewProxy) {
@@ -1186,4 +1217,19 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 /// from the escaping work items that retry across layout turns.
 private final class RestoreOnce: @unchecked Sendable {
   var applied = false
+}
+
+/// The three observations that admit the daily summary card, folded into one
+/// modifier so the transcript's already-long modifier chain stays type-checkable.
+private struct DailySummaryAdmissionObserver: ViewModifier {
+  let summaryID: String?
+  let scrollMode: ChatScrollMode
+  let admit: () -> Void
+
+  func body(content: Content) -> some View {
+    content
+      .onAppear(perform: admit)
+      .onChange(of: summaryID) { _, _ in admit() }
+      .onChange(of: scrollMode) { _, _ in admit() }
+  }
 }
