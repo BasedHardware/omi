@@ -37,7 +37,10 @@ struct DesktopHomeView: View {
   @StateObject private var viewModelContainer = ViewModelContainer()
   /// The Chat-first shell owns typed navigation at the root, never through legacy
   /// sidebar indices. It persists only route/collapse state, not enrollment.
-  @StateObject private var chatFirstNavigation = ChatFirstShellNavigation()
+  /// The one navigation owner, shared with the auxiliary Chat surfaces (task
+  /// panel, floating/notch) so a content block tapped there routes *this* shell
+  /// rather than a second instance nothing renders.
+  @ObservedObject private var chatFirstNavigation = ChatFirstShellNavigation.shared
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
   @ObservedObject private var updatePolicyManager = DesktopUpdatePolicyManager.shared
