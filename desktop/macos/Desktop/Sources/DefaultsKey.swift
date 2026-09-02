@@ -50,6 +50,12 @@ enum DefaultsKey: String {
   /// budgets in `IntegrationNudgePolicy` are what keep that from being noise.
   case integrationNudgesEnabled = "integrationNudgesEnabled"
   case aiChatWorkingDirectory = "aiChatWorkingDirectory"
+  /// Presence-only marker: the user turned Launch at Login OFF in Settings.
+  /// Absent means "never explicitly declined" — the default-on migration
+  /// (`OmiApp.migrateLaunchAtLoginDefault`) may enable it; present means the
+  /// user's choice wins and no migration ever re-enables it. Re-enabling from
+  /// Settings removes the marker. Never written `false`.
+  case launchAtLoginUserDeclined = "launchAtLoginUserDeclined"
   case hasCompletedOnboarding = "hasCompletedOnboarding"
   case onboardingStep = "onboardingStep"
   case onboardingFurthestStep = "onboardingFurthestStep"
