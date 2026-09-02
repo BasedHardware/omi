@@ -500,46 +500,6 @@ struct ChatSuggestedTaskRow: View {
   }
 }
 
-/// **When chat prose may host AppKit's selection overlay.**
-///
-/// `.textSelection(.enabled)` costs one AppKit `SelectionOverlay` per `Text`.
-/// A *streaming* row rewrites its body on every flush, so those overlays turn
-/// into a font/intrinsic-size/layout loop — the measured 400-segment, 2-second
-/// hang that made `OmiMarkdown` disable selection outright. A *settled* row is
-/// rewritten only by journal replay, so it can carry selection safely, and the
-/// reader can finally drag a date or a name out of an answer.
-enum ChatTextSelectionPolicy {
-  static func isSelectable(isStreaming: Bool) -> Bool { !isStreaming }
-}
-
-private struct ChatTextSelectableKey: EnvironmentKey {
-  static let defaultValue = false
-}
-
-extension EnvironmentValues {
-  /// Opt-in switch read by `OmiMarkdown`. The default keeps every host that has
-  /// not reasoned about the cost above selection-free.
-  var chatTextSelectable: Bool {
-    get { self[ChatTextSelectableKey.self] }
-    set { self[ChatTextSelectableKey.self] = newValue }
-  }
-}
-
-/// `.textSelection` takes two different concrete types, so the choice cannot be
-/// a ternary. One modifier keeps the branch in a single place.
-struct OmiChatTextSelectability: ViewModifier {
-  let isEnabled: Bool
-
-  @ViewBuilder
-  func body(content: Content) -> some View {
-    if isEnabled {
-      content.textSelection(.enabled)
-    } else {
-      content.textSelection(.disabled)
-    }
-  }
-}
-
 /// **How a turn that stopped mid-sentence tells the reader it was cut off.**
 ///
 /// A voice barge-in persists whatever the assistant had said so far with a

@@ -94,6 +94,7 @@ struct ChatBubble: View {
   @State private var showCopied = false
   @State private var showRatingFeedback = false
   @State private var showInfoPopover = false
+  @State private var showSelectableText = false
 
   /// Automation seam: the bridge's `main_chat_open_response_context` posts this
   /// with a message id so harnesses can open the Response Context popover for a
@@ -270,11 +271,7 @@ struct ChatBubble: View {
     }
     .contentShape(Rectangle())
     .onHover { updateMetadataHover(.row, hovering: $0) }
-    // A settled row may be selected with the cursor; a streaming one may not.
-    .environment(
-      \.chatTextSelectable,
-      ChatTextSelectionPolicy.isSelectable(isStreaming: message.isStreaming)
-    )
+    .overlay(alignment: .bottomLeading) { selectableTextAnchor }
     // Copy without hunting for the hover strip — and the only copy affordance a
     // user turn has ever had.
     .contextMenu { messageContextMenu }
@@ -302,7 +299,22 @@ struct ChatBubble: View {
   private var messageContextMenu: some View {
     if !copyPayload.isEmpty {
       Button("Copy Message") { copyMessageToPasteboard() }
+      // The live transcript can never be selectable (FC-selection-overlay-layout-loop);
+      // this opens the same words on a surface that is not the transcript.
+      Button("Select Text\u{2026}") { showSelectableText = true }
     }
+  }
+
+  /// One anchor for the reading surface, shared by the context menu and the
+  /// hover strip, so the popover is never mounted twice on the same row.
+  @ViewBuilder
+  private var selectableTextAnchor: some View {
+    Color.clear
+      .frame(width: 1, height: 1)
+      .accessibilityHidden(true)
+      .popover(isPresented: $showSelectableText, arrowEdge: .bottom) {
+        ChatSelectableTextPopover(text: copyPayload) { showSelectableText = false }
+      }
   }
 
   @ViewBuilder
@@ -581,7 +593,7 @@ struct ChatBubble: View {
     let isVisible =
       metadataRevealOverrideForTesting
       ?? (metadataHoverState.keepsMetadataVisible || isMetadataControlFocused || showRatingFeedback
-        || showCopied || showInfoPopover)
+        || showCopied || showInfoPopover || showSelectableText)
     // **One cluster under the message.** Controls far left and timestamp far right
     // of one line is how two halves of a row end up reading as page furniture.
     HStack(alignment: .center, spacing: OmiSpacing.sm) {
@@ -590,6 +602,9 @@ struct ChatBubble: View {
       }
       if includeCopyButton {
         copyButton
+      }
+      if includeCopyButton {
+        selectTextButton
       }
       if includeCopyButton, message.metadata != nil {
         infoButton
@@ -707,6 +722,26 @@ struct ChatBubble: View {
     // ⌘C would take the shortcut away from selected prose and the composer.
     .modifier(ChatCopyKeyboardShortcut(isActive: isMetadataControlFocused))
     .help("Copy message")
+  }
+
+  /// Opens the message on `ChatSelectableTextPopover`. The transcript itself
+  /// stays selection-free; this is the "separate non-live reading surface" the
+  /// selection boundary names as the remedy.
+  @ViewBuilder
+  private var selectTextButton: some View {
+    Button(action: { showSelectableText = true }) {
+      Image(systemName: "character.cursor.ibeam")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(showSelectableText ? Ink.primary : Ink.secondary)
+        .frame(
+          width: ChatBubbleMetadataControlMetrics.targetSize,
+          height: ChatBubbleMetadataControlMetrics.targetSize
+        )
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .focused($isMetadataControlFocused)
+    .help("Select text")
   }
 
   /// Response Context popover — observed turn evidence (tools, screenshot,

@@ -196,10 +196,6 @@ struct AIResponseView: View {
         switch group {
         case .text(_, let text):
           OmiMarkdown(text: text, sender: .ai, citations: message.inlineCitationReferences)
-            .environment(
-              \.chatTextSelectable,
-              ChatTextSelectionPolicy.isSelectable(isStreaming: message.isStreaming)
-            )
             .environment(\.colorScheme, .dark)
             .frame(maxWidth: .infinity, alignment: .leading)
         case .commentary(_, let text):
@@ -262,10 +258,6 @@ struct AIResponseView: View {
       }
     } else if !message.text.isEmpty {
       OmiMarkdown(text: message.text, sender: .ai, citations: message.inlineCitationReferences)
-        .environment(
-          \.chatTextSelectable,
-          ChatTextSelectionPolicy.isSelectable(isStreaming: message.isStreaming)
-        )
         .environment(\.colorScheme, .dark)
         .frame(maxWidth: .infinity, alignment: .leading)
     }

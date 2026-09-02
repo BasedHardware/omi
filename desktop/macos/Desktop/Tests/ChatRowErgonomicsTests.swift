@@ -4,18 +4,37 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// Selection is the difference between a transcript you can read and one you can
-/// use: before this, a date or a name in an answer could only be retyped.
-final class ChatTextSelectionPolicyTests: XCTestCase {
-  func testASettledRowIsSelectable() {
-    XCTAssertTrue(ChatTextSelectionPolicy.isSelectable(isStreaming: false))
+/// The transcript can never host native selection (FC-selection-overlay-layout-loop:
+/// PR #10834 reopened it in Omi Beta 0.12.146). The remedy the boundary names is a
+/// separate non-live reading surface, and this is it — one AppKit text view over
+/// one message, mounted only when the reader asks for it.
+@MainActor
+final class ChatSelectableTextSurfaceTests: XCTestCase {
+  private func textView(for text: String) throws -> NSTextView {
+    let scrollView = OmiSelectableTextView.makeScrollView(text: text)
+    return try XCTUnwrap(scrollView.documentView as? NSTextView)
   }
 
-  /// The measured hang this gate exists for: a streaming row rewrites its body
-  /// every flush, and one AppKit selection overlay per `Text` turns that into a
-  /// non-converging layout loop.
-  func testAStreamingRowIsNotSelectable() {
-    XCTAssertFalse(ChatTextSelectionPolicy.isSelectable(isStreaming: true))
+  func testTheReadingSurfaceIsSelectableButNotEditable() throws {
+    let view = try textView(for: "They arrive on Saturday.")
+    XCTAssertTrue(view.isSelectable, "selecting is the entire point of this surface")
+    XCTAssertFalse(view.isEditable, "a transcript row is not a document the reader may rewrite")
+  }
+
+  func testTheReadingSurfaceCarriesTheMessageItWasOpenedFor() throws {
+    XCTAssertEqual(try textView(for: "Booking confirmed.").string, "Booking confirmed.")
+  }
+
+  /// It is one AppKit view, so a rebuild replaces a string rather than
+  /// installing another selection overlay.
+  func testUpdatingTheSurfaceReplacesTheTextInPlace() throws {
+    let scrollView = OmiSelectableTextView.makeScrollView(text: "first")
+    let first = try XCTUnwrap(scrollView.documentView as? NSTextView)
+
+    OmiSelectableTextView.apply(text: "second", to: scrollView)
+
+    XCTAssertIdentical(scrollView.documentView as? NSTextView, first)
+    XCTAssertEqual(first.string, "second")
   }
 }
 

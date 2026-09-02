@@ -13,14 +13,19 @@ import OmiTheme
 /// - Thematic breaks render as a quiet, branded section divider rather than
 ///   leaking their Markdown source (`---`) into a response.
 ///
-/// Native SwiftUI text selection is **opt-in per host**, through
-/// `\.chatTextSelectable`. A row that is still streaming rewrites its body on
-/// every flush, and AppKit-backed selection overlays turn those updates into a
-/// non-converging font/intrinsic-size/layout loop — so the default is off and
-/// `ChatTextSelectionPolicy` is what lets a settled row through.
+/// Live chat Markdown deliberately disables native SwiftUI text selection, and
+/// **there is no opt-in** — not per host, not for settled rows. PR #10834 tried
+/// exactly that and reopened FC-selection-overlay-layout-loop in Omi Beta
+/// 0.12.146: every sampled main-thread stack sat in `SelectionOverlay`,
+/// `setFont`, intrinsic-size invalidation and AttributeGraph while memory grew
+/// without bound. Settled rows are not safe either — they still participate in
+/// transcript loading, scrolling, window resizing and parent-state updates.
+/// `.github/scripts/check_chat_selection_boundary.py` enforces this.
 ///
-/// Chat bubbles retain whole-message copy actions, while code blocks and tables
-/// keep their focused copy controls.
+/// Chat bubbles retain whole-message copy actions, code blocks and tables keep
+/// their focused copy controls, and a reader who needs to drag a date out of an
+/// answer opens `ChatSelectableTextPopover` — a separate, non-live surface that
+/// never mounts inside the transcript.
 struct OmiMarkdown: View {
   enum Style: Equatable {
     case assistant
@@ -33,7 +38,6 @@ struct OmiMarkdown: View {
   let citations: [ChatCitationReference]
   let onOpenCitation: ((ChatCitationReference) -> Void)?
   @Environment(\.fontScale) private var fontScale
-  @Environment(\.chatTextSelectable) private var chatTextSelectable
 
   init(
     text: String,
@@ -76,7 +80,7 @@ struct OmiMarkdown: View {
           onOpenCitation: onOpenCitation)
       }
     }
-    .modifier(OmiChatTextSelectability(isEnabled: chatTextSelectable))
+    .textSelection(.disabled)
   }
 
   static func containsGFMTable(_ content: String) -> Bool {
@@ -1445,7 +1449,6 @@ private struct OmiMarkdownTableView: View {
   let fontScale: CGFloat
   let citations: [ChatCitationReference]
   let onOpenCitation: ((ChatCitationReference) -> Void)?
-  @Environment(\.chatTextSelectable) private var chatTextSelectable
 
   private var allRows: [[String]] {
     [table.header] + table.rows
@@ -1485,10 +1488,10 @@ private struct OmiMarkdownTableView: View {
         .stroke(borderColor, lineWidth: 1)
     )
     .fixedSize(horizontal: false, vertical: true)
-    // A live (streaming) transcript does not create one AppKit SelectionOverlay
-    // per cell; a settled row opts in through `\.chatTextSelectable` so a value
-    // can be dragged out of a table the same way it can out of a sentence.
-    .modifier(OmiChatTextSelectability(isEnabled: chatTextSelectable))
+    // Tables do not create one AppKit SelectionOverlay per cell inside the
+    // live transcript. Copy remains available only on fenced code blocks, and
+    // "Select Text" opens the whole answer on a non-live surface.
+    .textSelection(.disabled)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("omi-markdown-table")
   }

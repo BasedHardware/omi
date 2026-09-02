@@ -2156,10 +2156,6 @@ private struct AgentMainChatView: View {
           case .text(_, let text):
             if !text.isEmpty {
               OmiMarkdown(text: text, sender: .ai, citations: message.inlineCitationReferences)
-                .environment(
-                  \.chatTextSelectable,
-                  ChatTextSelectionPolicy.isSelectable(isStreaming: message.isStreaming)
-                )
                 .environment(\.colorScheme, .dark)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -2220,10 +2216,6 @@ private struct AgentMainChatView: View {
       let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
       if !trimmed.isEmpty {
         OmiMarkdown(text: trimmed, sender: .ai, citations: message.inlineCitationReferences)
-          .environment(
-            \.chatTextSelectable,
-            ChatTextSelectionPolicy.isSelectable(isStreaming: message.isStreaming)
-          )
           .environment(\.fontScale, 0.88)
           .fixedSize(horizontal: false, vertical: true)
           .frame(maxWidth: .infinity, alignment: .leading)
