@@ -8,7 +8,7 @@ extension ChatProvider {
   ///   - surface: which response surface was rated — "text" (main-window
   ///     chat) or "voice" (floating-bar responses). Telemetry-only dimension.
   func rateMessage(_ messageId: String, rating: Int?, surface: String = "text") async {
-    switch queueMessageRating(messageId, rating: rating) {
+    switch queueMessageRating(messageId, rating: rating, surface: surface) {
     case .persistNow:
       await persistMessageRating(messageId, rating: rating, surface: surface)
     case .waitForSync, .localOnly, nil:
@@ -18,7 +18,9 @@ extension ChatProvider {
 
   /// Apply the rating locally and decide whether a backend PATCH can run yet.
   @discardableResult
-  func queueMessageRating(_ messageId: String, rating: Int?) -> ChatMessageRatingPersistence? {
+  func queueMessageRating(
+    _ messageId: String, rating: Int?, surface: String = "text"
+  ) -> ChatMessageRatingPersistence? {
     guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return nil }
     messages[index].rating = rating
     let decision = ChatMessageRatingPersistence.of(messages[index])
@@ -26,7 +28,7 @@ extension ChatProvider {
     case .persistNow:
       pendingMessageRatings.cancel(messageId: messageId)
     case .waitForSync:
-      pendingMessageRatings.enqueue(messageId: messageId, rating: rating)
+      pendingMessageRatings.enqueue(messageId: messageId, rating: rating, surface: surface)
     case .localOnly:
       pendingMessageRatings.cancel(messageId: messageId)
     }
@@ -44,7 +46,7 @@ extension ChatProvider {
     for item in ready {
       Task { [weak self] in
         await self?.persistMessageRating(
-          item.messageId, rating: item.rating, expectedOwner: ownerAtFlush)
+          item.messageId, rating: item.rating, surface: item.surface, expectedOwner: ownerAtFlush)
       }
     }
   }

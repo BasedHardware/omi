@@ -11,7 +11,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 const fetchMock = vi.fn();
-const posthogResultsMock = vi.hoisted(() => vi.fn(async () => []));
+const posthogResultsMock = vi.hoisted(() => vi.fn(async (): Promise<any[]> => []));
 vi.mock("@/lib/posthog", () => ({
   cachedPosthogFetch: (...args: unknown[]) => fetchMock(...args),
   posthogResults: posthogResultsMock,
