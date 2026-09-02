@@ -87,6 +87,12 @@ async function renderApp() {
   return renderer!;
 }
 
+async function flushAsyncQueue() {
+  for (let index = 0; index < 10; index += 1) {
+    await Promise.resolve();
+  }
+}
+
 test('an unsettled probe paints an empty window with no product IA', async () => {
   mockAuth.hasCompletedOnboarding.mockReturnValue(new Promise(() => undefined));
   mockAuth.hasCloudSession.mockReturnValue(new Promise(() => undefined));
@@ -195,6 +201,159 @@ test('Welcome and the session probe keep the cloud network idle', async () => {
   // phase for the session that signs in next.
   expect(labelsOf(renderer)).toContain('First-run onboarding');
   expect(mockBackend.request).not.toHaveBeenCalled();
+});
+
+test('a send still in flight when the session dies never seeds the next session', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValueOnce(true).mockResolvedValue(false);
+  mockAuth.signIn.mockResolvedValue({signedIn: true});
+
+  let nextSession = false;
+  let resolveAdmission:
+    | ((value: {id: string; status: number; body: string | null}) => void)
+    | undefined;
+  const readResolvers: Array<
+    (value: {id: string; status: number; body: string | null}) => void
+  > = [];
+  mockBackend.request.mockImplementation((value: {id: string}) => {
+    if (value.id === 'chat-history') {
+      return Promise.resolve(
+        nextSession
+          ? {id: value.id, status: 501, body: null}
+          : {
+              id: value.id,
+              status: 200,
+              body: JSON.stringify({
+                messages: [],
+                page: {olderCursor: null, hasOlder: false},
+              }),
+            },
+      );
+    }
+    if (value.id.startsWith('admit-')) {
+      return new Promise(resolve => {
+        resolveAdmission = resolve;
+      });
+    }
+    if (value.id.startsWith('desktop-')) {
+      return new Promise(resolve => {
+        readResolvers.push(resolve);
+      });
+    }
+    return Promise.resolve({id: value.id, status: 501, body: null});
+  });
+  mockBackend.generationEvents.mockImplementation(async () => ({
+    id: 'gen-1',
+    status: 200,
+    body: `data: ${JSON.stringify({
+      kind: 'done',
+      message: {
+        id: 'dead-session-reply',
+        text: 'PRIVATE REPLY FROM THE DEAD SESSION',
+        sender: 'ai',
+        createdAt: 2,
+        generationOutcome: 'completed',
+      },
+    })}\n\n`,
+  }));
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  expect(labelsOf(renderer)).toContain('Omi desktop chrome');
+  expect(readResolvers.length).toBe(3);
+
+  // A send starts while the session is still ready.
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('PRIVATE IN-FLIGHT MESSAGE');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain('PRIVATE IN-FLIGHT MESSAGE');
+  expect(resolveAdmission).toBeDefined();
+
+  // The session dies mid-send: every read comes back 401 and the probe
+  // confirms the keychain session is gone, so the gate falls to Welcome.
+  await act(async () => {
+    for (const resolve of readResolvers.splice(0)) {
+      resolve({
+        id: 'reads',
+        status: 401,
+        body: JSON.stringify({
+          error: {
+            code: 'unauthorized',
+            retryable: false,
+            action: 'reauthenticate',
+          },
+        }),
+      });
+    }
+    await flushAsyncQueue();
+  });
+  expect(labelsOf(renderer)).toContain('First-run onboarding');
+  expect(textOf(renderer)).not.toContain('PRIVATE IN-FLIGHT MESSAGE');
+
+  // The dead session's send settles only now: its canonical human and
+  // assistant messages must not seed the transcript of any later session.
+  await act(async () => {
+    resolveAdmission!({
+      id: 'admission',
+      status: 200,
+      body: JSON.stringify({
+        message: {
+          id: 'dead-session-human',
+          text: 'PRIVATE IN-FLIGHT MESSAGE',
+          sender: 'human',
+          createdAt: 1,
+          generationOutcome: null,
+        },
+        generation: {id: 'gen-1'},
+      }),
+    });
+    await flushAsyncQueue();
+  });
+  expect(labelsOf(renderer)).toContain('First-run onboarding');
+
+  // The next account signs in and its history load fails: nothing from the
+  // previous account may render in its shell.
+  nextSession = true;
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Sign in')
+      .props.onPress();
+    await flushAsyncQueue();
+  });
+  expect(labelsOf(renderer)).toContain('Omi desktop chrome');
+  expect(textOf(renderer)).not.toContain('PRIVATE IN-FLIGHT MESSAGE');
+  expect(textOf(renderer)).not.toContain('PRIVATE REPLY FROM THE DEAD SESSION');
+
+  // The retired send did not brick the composer: a fresh message still
+  // starts a new admission.
+  const omnibarAgain = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibarAgain.props.onChangeText('fresh account message');
+  });
+  await act(async () => {
+    omnibarAgain.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(
+    mockBackend.request.mock.calls.filter(([value]: [{id: string}]) =>
+      value.id.startsWith('admit-'),
+    ),
+  ).toHaveLength(2);
 });
 
 test('a mid-run 401 leaves the product shell once the session is gone', async () => {
