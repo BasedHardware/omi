@@ -27,11 +27,11 @@ def _drive(monkeypatch, overview):
         lambda *a, **k: {'overview': overview, 'headline': 'H', 'day_emoji': 'X'},
     )
     monkeypatch.setattr(notif.daily_summaries_db, 'create_daily_summary', lambda *a, **k: 'sid')
-    monkeypatch.setattr(notif.postprocess_executor, 'submit', lambda *a, **k: None)
-    monkeypatch.setattr(notif, 'day_summary_webhook', lambda *a, **k: None)
     monkeypatch.setattr(notif, 'send_notification', lambda *a, **k: sent.append(a))
 
-    notif._send_summary_notification(('u1', ['tok1']))
+    result = notif._send_summary_notification(('u1', ['tok1']))
+    assert result.outcome == 'delivered'
+    assert result.webhook is not None
     assert sent, 'send_notification was not called'
     return sent[0][2]  # summary_body is the 3rd positional arg
 

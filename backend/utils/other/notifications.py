@@ -1,8 +1,9 @@
 # async-blockers: no-import-scope
 # async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
 import asyncio
+from dataclasses import dataclass
 from datetime import datetime, time, timedelta
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Literal, Tuple
 
 from utils.executors import db_executor, postprocess_executor, run_blocking
 
@@ -20,6 +21,62 @@ import database.daily_summaries as daily_summaries_db
 import logging
 
 logger = logging.getLogger(__name__)
+
+DailySummaryOutcome = Literal[
+    "delivered",
+    "skipped_lock",
+    "skipped_existing",
+    "skipped_no_conversations",
+    "skipped_no_unlocked_conversations",
+    "skipped_no_speech",
+]
+
+
+@dataclass(frozen=True)
+class DailySummaryWebhookPayload:
+    uid: str
+    summary: str
+    summary_json: Dict[str, Any]
+
+
+@dataclass(frozen=True)
+class DailySummaryUserResult:
+    outcome: DailySummaryOutcome
+    webhook: DailySummaryWebhookPayload | None = None
+
+
+@dataclass
+class DailySummaryRunSummary:
+    selected: int = 0
+    delivered: int = 0
+    skipped: int = 0
+    failed: int = 0
+    webhook_completed: int = 0
+    webhook_failed: int = 0
+    query_failures: int = 0
+
+    def add(self, other: "DailySummaryRunSummary") -> None:
+        self.selected += other.selected
+        self.delivered += other.delivered
+        self.skipped += other.skipped
+        self.failed += other.failed
+        self.webhook_completed += other.webhook_completed
+        self.webhook_failed += other.webhook_failed
+        self.query_failures += other.query_failures
+
+
+def _log_daily_summary_run(summary: DailySummaryRunSummary) -> None:
+    logger.info(
+        "daily_summary_run selected=%d delivered=%d skipped=%d failed=%d "
+        "webhook_completed=%d webhook_failed=%d query_failures=%d",
+        summary.selected,
+        summary.delivered,
+        summary.skipped,
+        summary.failed,
+        summary.webhook_completed,
+        summary.webhook_failed,
+        summary.query_failures,
+    )
 
 
 def should_run_job() -> bool:
@@ -39,28 +96,36 @@ async def start_cron_job() -> None:
     await send_daily_summary_notification()
 
 
-async def send_daily_summary_notification() -> None:
+async def send_daily_summary_notification() -> DailySummaryRunSummary:
     """
     Send daily summary notifications to users based on their local hour preference.
 
     Groups timezones by their current local hour, then for each hour group,
     queries users in those timezones who have that hour preference.
     """
+    summary = DailySummaryRunSummary()
     try:
-        # Group timezones by their current local hour
         timezones_by_hour = _get_timezones_grouped_by_hour()
+    except Exception as exc:
+        summary.query_failures += 1
+        logger.error("daily_summary_timezone_inventory_failed error=%s", type(exc).__name__)
+        _log_daily_summary_run(summary)
+        return summary
 
-        for target_hour, timezones in timezones_by_hour.items():
-            # Get users in those timezones who want notifications at this hour
+    for target_hour, timezones in timezones_by_hour.items():
+        try:
             users = await _get_users_for_daily_summary(timezones, target_hour)
+        except Exception as exc:
+            summary.query_failures += 1
+            logger.error("daily_summary_user_inventory_failed local_hour=%d error=%s", target_hour, type(exc).__name__)
+            continue
 
-            if users:
-                logger.info(f"Sending daily summary to {len(users)} users at local hour {target_hour}")
-                await _send_bulk_summary_notification(users)
+        if users:
+            logger.info("Sending daily summary to %d users at local hour %d", len(users), target_hour)
+            summary.add(await _send_bulk_summary_notification(users))
 
-    except Exception as e:
-        logger.error(f"Error sending daily summary: {e}")
-        return None
+    _log_daily_summary_run(summary)
+    return summary
 
 
 async def _get_users_for_daily_summary(timezones: List[str], target_hour: int) -> List[Tuple[str, List[str], Any]]:
@@ -86,7 +151,7 @@ def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
     return timezones_by_hour
 
 
-def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
+def _send_summary_notification(user_data: Tuple[Any, ...]) -> DailySummaryUserResult:
     uid = user_data[0]
     user_tz_name = user_data[2] if len(user_data) > 2 else None
 
@@ -144,7 +209,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     # Atomically acquire lock BEFORE expensive LLM work to prevent race condition
     assert date_str is not None  # set by timezone branch or UTC fallback above
     if not try_acquire_daily_summary_lock(uid, date_str):
-        return
+        return DailySummaryUserResult("skipped_lock")
 
     # Durable idempotency guard (#4608): the Redis lock above is best-effort (2h TTL, evictable, lost on
     # failover), and create_daily_summary writes a fresh-uuid doc with no by-date check, so a later cron
@@ -156,24 +221,24 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
             f"Daily summary already exists for uid={uid} date={date_str} "
             f"id={existing_summary.get('id')}; skipping duplicate generation"
         )
-        return
+        return DailySummaryUserResult("skipped_existing")
 
     conversations_data = conversations_db.get_conversations(
         uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
     )
     if not conversations_data or len(conversations_data) == 0:
-        return
+        return DailySummaryUserResult("skipped_no_conversations")
 
     conversations = [
         deserialize_conversation(convo_data) for convo_data in conversations_data if not convo_data.get('is_locked')
     ]
     if not conversations:
-        return
+        return DailySummaryUserResult("skipped_no_unlocked_conversations")
 
     # Skip recap if no conversation captured any speech.
     if not any(c.transcript_segments for c in conversations if not c.discarded):
         logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with transcript content')
-        return
+        return DailySummaryUserResult("skipped_no_speech")
 
     summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
 
@@ -196,26 +261,53 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         navigate_to=f"/daily-summary/{summary_id}",
     )
 
-    # Also send webhook with the full summary data (day_summary_webhook is async, so wrap in asyncio.run).
-    # ``summary`` is the legacy str(...) form, kept for backward compatibility; ``summary_json``
-    # carries the same payload as a real JSON object for receivers to migrate to.
-    postprocess_executor.submit(asyncio.run, day_summary_webhook(uid, str(summary_data), summary_data))
-
     tokens = user_data[1] if len(user_data) > 1 else None
     send_notification(
         uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
     )
+    return DailySummaryUserResult(
+        "delivered",
+        webhook=DailySummaryWebhookPayload(uid=uid, summary=str(summary_data), summary_json=summary_data),
+    )
 
 
-async def _send_bulk_summary_notification(users: List[Tuple[Any, ...]]) -> None:
+async def _send_bulk_summary_notification(users: List[Tuple[Any, ...]]) -> DailySummaryRunSummary:
     _BATCH_SIZE = 8
+    summary = DailySummaryRunSummary(selected=len(users))
     for i in range(0, len(users), _BATCH_SIZE):
         batch = users[i : i + _BATCH_SIZE]
         tasks = [run_blocking(postprocess_executor, _send_summary_notification, user_tokens) for user_tokens in batch]
         results = await asyncio.gather(*tasks, return_exceptions=True)
+        webhook_payloads: List[DailySummaryWebhookPayload] = []
         for j, result in enumerate(results):
             if isinstance(result, Exception):
-                logger.error(f"Daily summary failed for user batch[{i + j}]: {result}")
+                summary.failed += 1
+                logger.error("Daily summary failed for user batch[%d]: %s", i + j, type(result).__name__)
+            elif not isinstance(result, DailySummaryUserResult):
+                summary.failed += 1
+                logger.error("Daily summary returned an invalid result for user batch[%d]", i + j)
+            elif result.outcome == "delivered":
+                summary.delivered += 1
+                if result.webhook is not None:
+                    webhook_payloads.append(result.webhook)
+            else:
+                summary.skipped += 1
+
+        if webhook_payloads:
+            webhook_results = await asyncio.gather(
+                *[
+                    day_summary_webhook(payload.uid, payload.summary, payload.summary_json)
+                    for payload in webhook_payloads
+                ],
+                return_exceptions=True,
+            )
+            for result in webhook_results:
+                if isinstance(result, Exception):
+                    summary.webhook_failed += 1
+                    logger.error("Daily summary webhook failed before job completion: %s", type(result).__name__)
+                else:
+                    summary.webhook_completed += 1
+    return summary
 
 
 async def send_daily_notification() -> None:

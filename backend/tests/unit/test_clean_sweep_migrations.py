@@ -360,10 +360,11 @@ class TestNotificationsExecutorMigration:
         src = _read_source('utils/other/notifications.py')
         assert 'critical_executor' not in src
 
-    def test_async_webhook_wrapped_in_asyncio_run(self):
-        """day_summary_webhook is async; must be wrapped in asyncio.run for executor."""
+    def test_async_webhook_is_not_orphaned_in_executor(self):
+        """The cron loop owns and awaits day_summary_webhook before process exit."""
         src = _read_source('utils/other/notifications.py')
-        assert 'asyncio.run' in src
+        assert 'asyncio.run' not in src
+        assert 'postprocess_executor.submit(asyncio.run, day_summary_webhook(' not in src
 
 
 class TestStorageExecutorMigration:

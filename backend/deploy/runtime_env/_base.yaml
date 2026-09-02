@@ -591,6 +591,9 @@ environment_shared:
       notifications-job:
         flags:
           --task-timeout: 3600s
+          --max-retries: '0'
+          --tasks: '1'
+          --parallelism: '1'
         secrets:
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN

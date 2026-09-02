@@ -1,6 +1,7 @@
 import json
 import re
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 import pytz
@@ -14,13 +15,51 @@ from models.structured import Structured
 from models.structured_extraction import StructuredExtraction
 from models.other import Person
 from utils.conversations.render import conversations_to_string
-from utils.llm.clients import get_llm, parser
+from utils.llm.clients import get_llm, num_tokens_from_string, parser
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
 from utils.log_sanitizer import sanitize, sanitize_validation_error
 import logging
 
 logger = logging.getLogger(__name__)
+
+DAILY_SUMMARY_HISTORY_TOKEN_BUDGET = 120_000
+_DAILY_SUMMARY_TRUNCATION_MARKER = "\n[Remaining conversation summaries omitted to stay within the model context.]"
+
+
+def _bound_daily_summary_history(
+    history: str,
+    *,
+    max_tokens: int = DAILY_SUMMARY_HISTORY_TOKEN_BUDGET,
+    token_counter: Callable[[str], int] | None = None,
+) -> tuple[str, int, int]:
+    """Return a deterministic prefix that fits the daily-summary input budget.
+
+    The LLM route owns its output reserve, so this cap applies only to rendered
+    conversation history. Binary search avoids assumptions about characters per
+    token and keeps the numbered prefix aligned with ``convo_id_map``.
+    """
+
+    if max_tokens <= 0:
+        raise ValueError("max_tokens must be positive")
+    token_counter = token_counter or num_tokens_from_string
+    original_tokens = token_counter(history)
+    if original_tokens <= max_tokens:
+        return history, original_tokens, original_tokens
+
+    marker_tokens = token_counter(_DAILY_SUMMARY_TRUNCATION_MARKER)
+    content_budget = max(0, max_tokens - marker_tokens)
+    low = 0
+    high = len(history)
+    while low < high:
+        midpoint = (low + high + 1) // 2
+        if token_counter(history[:midpoint]) <= content_budget:
+            low = midpoint
+        else:
+            high = midpoint - 1
+    bounded = history[:low].rstrip() + _DAILY_SUMMARY_TRUNCATION_MARKER
+    retained_tokens = token_counter(bounded)
+    return bounded, original_tokens, retained_tokens
 
 
 def _content_str(response: Any) -> str:
@@ -223,6 +262,14 @@ def generate_comprehensive_daily_summary(
         people = [Person(**p) for p in people_data]
 
     conversation_history = conversations_to_string(conversations, people=people)
+    conversation_history, history_tokens, retained_history_tokens = _bound_daily_summary_history(conversation_history)
+    if retained_history_tokens < history_tokens:
+        logger.warning(
+            "daily_summary_history_truncated original_tokens=%d retained_tokens=%d budget=%d",
+            history_tokens,
+            retained_history_tokens,
+            DAILY_SUMMARY_HISTORY_TOKEN_BUDGET,
+        )
 
     # Calculate stats - exclude discarded conversations
     non_discarded = [c for c in conversations if not c.discarded]

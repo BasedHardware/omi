@@ -115,7 +115,7 @@ def test_daily_summary_user_read_runs_off_loop_and_preserves_empty_result() -> N
                 entered,
                 release,
             )
-            assert result is None
+            assert result == notifications.DailySummaryRunSummary()
             assert calls == [(['UTC'], 8)]
 
         asyncio.run(exercise())
@@ -159,4 +159,83 @@ def test_daily_summary_db_failure_remains_fail_soft() -> None:
 
         notification_db.get_users_for_daily_summary = fail_read
 
-        assert asyncio.run(notifications.send_daily_summary_notification()) is None
+        result = asyncio.run(notifications.send_daily_summary_notification())
+        assert result.query_failures == 1
+        assert result.selected == 0
+        assert result.failed == 0
+
+
+def test_bulk_summary_waits_for_owned_webhook_before_returning() -> None:
+    with _loaded_other_notifications() as (notifications, _notification_db):
+
+        async def exercise() -> None:
+            webhook_started = asyncio.Event()
+            release_webhook = asyncio.Event()
+
+            async def fake_run_blocking(_executor: Any, _func: Any, user: tuple[Any, ...]):
+                return notifications.DailySummaryUserResult(
+                    'delivered',
+                    notifications.DailySummaryWebhookPayload(
+                        uid=user[0], summary='legacy-summary', summary_json={'headline': 'Done'}
+                    ),
+                )
+
+            async def blocking_webhook(_uid: str, _summary: str, _summary_json: dict[str, Any]) -> None:
+                webhook_started.set()
+                await release_webhook.wait()
+
+            notifications.run_blocking = fake_run_blocking
+            notifications.day_summary_webhook = blocking_webhook
+
+            task = asyncio.create_task(notifications._send_bulk_summary_notification([('uid-1', [], 'UTC')]))
+            await asyncio.wait_for(webhook_started.wait(), timeout=1)
+            assert not task.done(), 'the batch returned before its webhook completed'
+
+            release_webhook.set()
+            result = await asyncio.wait_for(task, timeout=1)
+            assert result.selected == 1
+            assert result.delivered == 1
+            assert result.webhook_completed == 1
+            assert result.webhook_failed == 0
+
+        asyncio.run(exercise())
+
+
+def test_bulk_summary_reports_delivered_skipped_and_failed_users() -> None:
+    with _loaded_other_notifications() as (notifications, _notification_db):
+
+        async def exercise() -> None:
+            webhook_calls: list[str] = []
+
+            async def fake_run_blocking(_executor: Any, _func: Any, user: tuple[Any, ...]):
+                if user[0] == 'uid-failed':
+                    raise RuntimeError('model unavailable')
+                if user[0] == 'uid-skipped':
+                    return notifications.DailySummaryUserResult('skipped_existing')
+                return notifications.DailySummaryUserResult(
+                    'delivered',
+                    notifications.DailySummaryWebhookPayload(
+                        uid=user[0], summary='legacy-summary', summary_json={'headline': 'Done'}
+                    ),
+                )
+
+            async def record_webhook(uid: str, _summary: str, _summary_json: dict[str, Any]) -> None:
+                webhook_calls.append(uid)
+
+            notifications.run_blocking = fake_run_blocking
+            notifications.day_summary_webhook = record_webhook
+
+            result = await notifications._send_bulk_summary_notification(
+                [('uid-delivered', [], 'UTC'), ('uid-skipped', [], 'UTC'), ('uid-failed', [], 'UTC')]
+            )
+
+            assert result == notifications.DailySummaryRunSummary(
+                selected=3,
+                delivered=1,
+                skipped=1,
+                failed=1,
+                webhook_completed=1,
+            )
+            assert webhook_calls == ['uid-delivered']
+
+        asyncio.run(exercise())

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-scheduled-batch-outlives-execution-contract",
+  "violated_contract": "A scheduled batch worker's deployed cadence, task deadline, and owned asynchronous work must match its code-level lifecycle. A per-minute scheduler for an hourly job created overlapping executions, a shorter live task deadline cut off tail users, fire-and-forget webhooks outlived the Cloud Run process, and unbounded conversation history could exceed the model context for one heavy user.",
+  "canonical_prevention": "The notifications deployment now owns and verifies one exact hourly UTC Scheduler target, pins a one-task 3600-second no-retry Cloud Run execution, bounds daily-summary conversation history before model invocation, awaits all webhook work before batch completion, and emits explicit delivered, skipped, failed, webhook, and query accounting.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_provision_notifications_scheduler.py",
+    "backend/tests/unit/test_other_notifications_async_boundaries.py",
+    "backend/tests/unit/test_daily_summary_zero_coordinate_locations.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/workflows/gcp_notifications_job.yml",
+    "backend/modal/job.py",
+    "backend/utils/other/notifications.py",
+    "backend/utils/llm/external_integrations.py"
+  ],
+  "status": "open"
+}

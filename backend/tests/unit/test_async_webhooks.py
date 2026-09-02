@@ -417,9 +417,9 @@ class TestSendSummaryNotificationWiresSummaryJson:
         with open(path, encoding='utf-8') as f:
             src = f.read()
 
-        assert 'day_summary_webhook(uid, str(summary_data), summary_data)' in src, (
-            "_send_summary_notification must pass summary_data (dict) as the summary_json arg of day_summary_webhook "
-            "so receivers get a real JSON object alongside the legacy repr string."
+        assert 'DailySummaryWebhookPayload(uid=uid, summary=str(summary_data), summary_json=summary_data)' in src, (
+            "_send_summary_notification must retain summary_data as the summary_json value in the awaited webhook "
+            "payload so receivers get a real JSON object alongside the legacy repr string."
         )
 
 

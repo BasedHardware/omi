@@ -517,21 +517,20 @@ class TestExecutorConfiguration:
 
 
 class TestNotificationWebhookWiring:
-    """Verify async webhook is correctly wired through storage_executor."""
+    """Verify daily-summary webhooks remain owned by the cron event loop."""
 
-    def test_send_summary_calls_storage_executor_with_asyncio_run(self):
-        """_send_summary_notification must submit asyncio.run(day_summary_webhook(...)) to storage_executor."""
+    def test_send_summary_does_not_fire_and_forget_webhook(self):
+        """The Cloud Run job must await webhooks instead of orphaning executor work."""
         import os
-        import sys
-        from unittest.mock import MagicMock, patch
 
         # Read source to verify pattern without triggering Firestore imports
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         with open(os.path.join(backend_dir, 'utils', 'other', 'notifications.py'), encoding='utf-8') as f:
             src = f.read()
 
-        # Verify the exact wiring pattern (postprocess_executor, not storage_executor, #7387)
-        assert 'postprocess_executor.submit(asyncio.run, day_summary_webhook(' in src
+        assert 'postprocess_executor.submit(asyncio.run, day_summary_webhook(' not in src
+        assert 'await asyncio.gather(' in src
+        assert 'day_summary_webhook(payload.uid, payload.summary, payload.summary_json)' in src
         assert 'critical_executor' not in src
         assert 'storage_executor' not in src
 

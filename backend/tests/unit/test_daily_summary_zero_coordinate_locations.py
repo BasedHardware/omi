@@ -110,6 +110,7 @@ def _configure(ext):
     ext.action_items_db.get_action_items = MagicMock(return_value=[])
     ext.get_prompt_memories = MagicMock(return_value=("TestUser", ""))
     ext.conversations_to_string = MagicMock(return_value="history")
+    ext.num_tokens_from_string = lambda value: len(value)
     # Non-JSON LLM output -> JSONDecodeError -> _basic_daily_summary(..., locations)
     mock_llm = MagicMock()
     mock_llm.invoke.return_value.content = "not json at all"
@@ -143,3 +144,29 @@ def test_conversation_without_geolocation_is_excluded(ext):
     result = ext.generate_comprehensive_daily_summary("uid", convos, "2026-06-29")
 
     assert result["locations"] == []
+
+
+def test_daily_summary_history_under_budget_is_unchanged(ext):
+    history = "short history"
+
+    bounded, original_tokens, retained_tokens = ext._bound_daily_summary_history(
+        history, max_tokens=100, token_counter=len
+    )
+
+    assert bounded == history
+    assert original_tokens == len(history)
+    assert retained_tokens == len(history)
+
+
+def test_daily_summary_history_is_bounded_deterministically(ext):
+    history = "0123456789" * 40
+
+    first = ext._bound_daily_summary_history(history, max_tokens=120, token_counter=len)
+    second = ext._bound_daily_summary_history(history, max_tokens=120, token_counter=len)
+
+    assert first == second
+    bounded, original_tokens, retained_tokens = first
+    assert original_tokens == len(history)
+    assert retained_tokens == len(bounded) <= 120
+    assert bounded.endswith(ext._DAILY_SUMMARY_TRUNCATION_MARKER)
+    assert history.startswith(bounded[: -len(ext._DAILY_SUMMARY_TRUNCATION_MARKER)])
