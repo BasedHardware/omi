@@ -9919,13 +9919,8 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$countটি সংক্ষিপ্ত কথোপকথন',
-      one: '$countটি সংক্ষিপ্ত কথোপকথন',
-    );
-    return '$_temp0';
-  }
+  String get transcriptionNoAudio => 'ট্রান্সক্রিপশন অডিও গ্রহণ করছে না';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

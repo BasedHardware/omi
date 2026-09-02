@@ -9857,12 +9857,8 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'การสนทนาสั้น $count รายการ',
-    );
-    return '$_temp0';
-  }
+  String get transcriptionNoAudio => 'การถอดเสียงไม่ได้รับเสียง';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

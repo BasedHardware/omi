@@ -164,6 +164,10 @@ final class SBOnboardingModel: ObservableObject {
   /// that state, leave PTT unarmed and offer an explicit retry or skip instead
   /// of presenting a shortcut which cannot answer.
   @Published var screenDemoPTTUnavailable = false
+  /// The three-doors demo page was opened for the current visit to the screen-demo step.
+  @Published var threeDoorsOpened = false
+  var openDoorsObserver: NSObjectProtocol?
+  var doorsCompletedObserver: NSObjectProtocol?
   var voiceCancellable: AnyCancellable?
   var voiceTimeout: Task<Void, Never>?
   var screenDemoSetupTask: Task<Void, Never>?

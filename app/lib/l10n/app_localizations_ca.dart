@@ -9971,13 +9971,8 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count converses curtes',
-      one: '$count conversa curta',
-    );
-    return '$_temp0';
-  }
+  String get transcriptionNoAudio => 'La transcripció no rep àudio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

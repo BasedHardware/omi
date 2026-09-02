@@ -45,13 +45,24 @@ enum RealtimeHubTools {
       + "was misheard; interpret it as \(primary). "
   }
 
+  /// The onboarding demo note while the three-doors step is active, else nil (logged once per session build).
+  @MainActor static func activeOnboardingDemoContext() -> String? {
+    guard let note = ThreeDoorsDemoPage.activeModelNote, !note.isEmpty else { return nil }
+    log("RealtimeHub: onboarding demo note included in voice instructions (\(note.count) chars)")
+    return note
+  }
+
   static func systemInstruction(
     kernelContext: String = "",
     kernelSemanticGuidance: String = "",
-    userLanguages: [String] = []
+    userLanguages: [String] = [],
+    onboardingDemoContext: String? = nil
   ) -> String {
     let canonicalContext = kernelContext.trimmingCharacters(in: .whitespacesAndNewlines)
     let semanticGuidance = kernelSemanticGuidance.trimmingCharacters(in: .whitespacesAndNewlines)
+    let demoNote = onboardingDemoContext?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let demoBlock =
+      demoNote.isEmpty ? "" : "\n## Onboarding demo (authoritative for questions about the doors)\n\(demoNote)\n"
 
     return """
       You are Omi, a fast spoken-voice assistant on the user's Mac. You hear the user's \
@@ -59,7 +70,7 @@ enum RealtimeHubTools {
       \(userLanguagesLine(userLanguages))Reply in the same language the user is speaking.
 
       \(canonicalContext)
-
+      \(demoBlock)
       \(semanticGuidance)
 
       \(DesktopCapabilityRegistry.realtimeSelfModelPrompt)
@@ -264,10 +275,14 @@ enum RealtimeHubTools {
     """
   }
 
-  static func escalationUserPrompt(query: String, toolContext: String) -> String {
+  static func escalationUserPrompt(query: String, toolContext: String, screenContext: String? = nil) -> String {
+    var prompt = query
+    if let screen = screenContext?.trimmingCharacters(in: .whitespacesAndNewlines), !screen.isEmpty {
+      prompt += "\n\nWhat the user's screen showed when they asked (this turn's screenshot):\n" + screen
+    }
     let trimmedToolContext = toolContext.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedToolContext.isEmpty else { return query }
-    return query + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
+    guard !trimmedToolContext.isEmpty else { return prompt }
+    return prompt + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
   }
 
   /// Host-authored public-only request sent to the managed web-search lane.

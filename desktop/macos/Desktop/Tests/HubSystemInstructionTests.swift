@@ -3,6 +3,28 @@ import XCTest
 @testable import Omi_Computer
 
 final class HubSystemInstructionTests: XCTestCase {
+  func testEscalationPromptCarriesThisTurnsScreenContext() {
+    // Regression (Beta 0.12.256): think_deeper was called with only "What is the answer to this
+    // riddle?" and no screen info, so the chat lane answered the previous door. The escalation
+    // prompt must carry what this turn's screenshot showed.
+    let prompt = RealtimeHubTools.escalationUserPrompt(
+      query: "What is the answer to this riddle?", toolContext: "",
+      screenContext: "Door 2 of 3: Which planet has a day longer than its year?")
+    XCTAssertTrue(prompt.contains("this turn's screenshot"))
+    XCTAssertTrue(prompt.contains("Door 2 of 3"))
+    XCTAssertEqual(RealtimeHubTools.escalationUserPrompt(query: "q", toolContext: ""), "q")
+  }
+
+  func testOnboardingDemoNoteIsIncludedWhenPresentAndAbsentOtherwise() {
+    let with = RealtimeHubTools.systemInstruction(
+      kernelContext: "ctx", onboardingDemoContext: "Door 3 asks for the last word of the first riddle (answer: inside)."
+    )
+    XCTAssertTrue(with.contains("## Onboarding demo"))
+    XCTAssertTrue(with.contains("(answer: inside)"))
+    let without = RealtimeHubTools.systemInstruction(kernelContext: "ctx")
+    XCTAssertFalse(without.contains("## Onboarding demo"))
+  }
+
   func testHigherModelAuthorsAShortSpeakableAnswerForFaithfulRealtimeDelivery() {
     let instruction = RealtimeHubTools.escalationSystemPrompt()
 

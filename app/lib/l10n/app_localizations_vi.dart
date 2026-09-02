@@ -9909,12 +9909,8 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count cuộc trò chuyện ngắn',
-    );
-    return '$_temp0';
-  }
+  String get transcriptionNoAudio => 'Bản ghi âm không nhận được âm thanh';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

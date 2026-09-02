@@ -9941,13 +9941,8 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count korte gesprekken',
-      one: '$count kort gesprek',
-    );
-    return '$_temp0';
-  }
+  String get transcriptionNoAudio => 'Transcriptie ontvangt geen audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

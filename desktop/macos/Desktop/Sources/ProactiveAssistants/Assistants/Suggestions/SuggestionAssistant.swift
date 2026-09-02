@@ -24,10 +24,16 @@ actor SuggestionAssistant: ProactiveAssistant {
       // on `!ContextBucketsFeature.isEnabled`, betting the context director would replace
       // live suggestions — it delivered almost nothing, and with the flag at 100% of all
       // users focus nudges went silent fleet-wide with no error logged (Aug 13–14 2026).
-      // If the director is ever meant to replace this assistant again, that must be an
-      // explicit, evidenced change — never a side effect of a rollout flag.
+      //
+      // The JIT ambient lane *is* the explicit, evidenced replacement (owner decision
+      // 2026-09-01): it emits `focus_nudge` under the same Focus badge and Settings toggle,
+      // and `JITProactivityLaneState` is set only from the backend's own admission verdict
+      // per context visit — so an unknown or disabled rollout keeps this assistant live.
+      // The migration is judged by delivered-per-kind-per-day on the dogfood account, not
+      // by the flag flipping.
       await MainActor.run {
         SuggestionAssistantSettings.shared.isEnabled
+          && !JITProactivityLaneState.isActive(ownerID: RuntimeOwnerIdentity.currentOwnerId())
       }
     }
   }

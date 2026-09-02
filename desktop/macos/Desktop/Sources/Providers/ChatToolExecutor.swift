@@ -1755,6 +1755,14 @@ class ChatToolExecutor {
         if count >= limit { break }
       }
 
+      var matchedByText = false
+      if lines.isEmpty {
+        let fallback = await Self.screenTextFallback(
+          query: query, appFilter: appFilter, startDate: startDate, endDate: endDate, limit: limit)
+        guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+        (lines, sources, count, matchedByText) = (fallback.lines, fallback.sources, fallback.count, fallback.count > 0)
+      }
+
       if lines.isEmpty {
         return await emptySemanticSearchMessage(
           query: query,
@@ -1763,14 +1771,14 @@ class ChatToolExecutor {
           expectedOwnerID: expectedOwnerID)
       }
 
-      lines.insert("Found \(count) screenshot(s) matching \"\(query)\":", at: 0)
+      let matchNote = matchedByText ? " (exact text match; newest frames may not be embedded yet)" : ""
+      lines.insert("Found \(count) screenshot(s) matching \"\(query)\"\(matchNote):", at: 0)
 
       log("Tool semantic_search returned \(count) results")
       let references = await ChatCitationProvenanceRegistry.shared.register(
         sources, runID: runID, attemptID: attemptID)
       return ChatCitationProvenanceRegistry.annotatedToolResult(
         lines.joined(separator: "\n"), references: references)
-
     } catch {
       logError("Tool semantic_search failed", error: error)
       return "Failed to search: \(error.localizedDescription). "
@@ -1929,7 +1937,6 @@ class ChatToolExecutor {
       lines.insert("Found \(count) task(s) matching \"\(query)\":", at: 0)
       log("Tool search_tasks returned \(count) results")
       return lines.joined(separator: "\n")
-
     } catch {
       logError("Tool search_tasks failed", error: error)
       return "Error: \(error.localizedDescription)"
@@ -3295,7 +3302,6 @@ class ChatToolExecutor {
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
         return await annotated(resp)
-
       case "create_action_item":
         guard let desc = args["description"] as? String, !desc.isEmpty else {
           return "Error: description is required"
@@ -3324,7 +3330,6 @@ class ChatToolExecutor {
             })
         else { return authorizedOwnerChangedResult() }
         return resp.isError ? backendFailureEnvelope(resp) : resp.resultText
-
       case "update_action_item":
         guard let itemId = resolveActionItemID(args) else {
           return "Error: action_item_id is required"
@@ -3354,7 +3359,6 @@ class ChatToolExecutor {
             })
         else { return authorizedOwnerChangedResult() }
         return resp.isError ? backendFailureEnvelope(resp) : resp.resultText
-
       case "create_calendar_event":
         guard let rawTitle = args["title"] as? String else {
           return "Error: title is required"
@@ -3384,7 +3388,6 @@ class ChatToolExecutor {
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
         return resp.isError ? backendFailureEnvelope(resp) : resp.resultText
-
       default:
         return "Unknown backend tool: \(toolCall.name)"
       }
@@ -3470,7 +3473,6 @@ class ChatToolExecutor {
             appName: nil,
             url: nil)
         }
-
       case "get_memories":
         // The v3 list has no date-range filter. Refuse a potentially different result set rather
         // than attach plausible-but-wrong memories when the legacy tool call was date-scoped.
@@ -3491,7 +3493,6 @@ class ChatToolExecutor {
             appName: $0.sourceApp,
             url: nil)
         }
-
       case "get_action_items":
         let response = try await api.getActionItems(
           limit: limit,
@@ -3515,7 +3516,6 @@ class ChatToolExecutor {
             appName: nil,
             url: nil)
         }
-
       default:
         return []
       }

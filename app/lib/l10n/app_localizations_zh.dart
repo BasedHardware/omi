@@ -9726,12 +9726,8 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 段简短对话',
-    );
-    return '$_temp0';
-  }
+  String get transcriptionNoAudio => '转录未接收到音频';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

@@ -998,6 +998,8 @@ export interface ContextSnapshotProjection {
     status: string;
     origin: string;
     createdAtMs: number;
+    /** Text of what the user's screen showed when this turn was asked (historical). */
+    screenContext?: string;
   }>;
   sourceOutcomes: ContextSourceOutcomeProjection[];
   activeRuns: Array<{
