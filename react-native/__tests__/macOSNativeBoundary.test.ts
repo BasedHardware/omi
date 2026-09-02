@@ -410,7 +410,7 @@ test('clears the leftover loopback tab and returns the user to the app', () => {
   );
 });
 
-test("mints a Firebase session from custom_token instead of storing Google's id_token", () => {
+test("mints a Firebase session from custom_token and never stores Google's id_token", () => {
   const auth = readNativeSource('OmiAuthModule.mm');
   const finishStart = auth.indexOf(
     '- (void)finishWithTokenResponse:(NSDictionary *)tokenResponse',
@@ -427,19 +427,16 @@ test("mints a Firebase session from custom_token instead of storing Google's id_
     'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken',
   );
   expect(auth).toContain('@"returnSecureToken" : @YES');
-  // custom_token is handled before Google's id_token, which /v1/auth/token
-  // always returns alongside it.
-  expect(finish.indexOf('custom_token')).toBeGreaterThan(-1);
-  expect(finish.indexOf('custom_token')).toBeLessThan(
-    finish.indexOf('id_token'),
-  );
-  expect(finish).toContain('customToken.length > 0');
+  // custom_token is the only usable credential: a response without it fails
+  // sign-in instead of storing Google's id_token as a dead Omi Bearer.
+  expect(finish).toContain('customToken.length == 0');
+  expect(finish).toContain('Omi cloud did not return a usable session');
   expect(finish).toContain(
     '[self finishWithFirebaseCustomToken:customToken attempt:attempt resolve:resolve reject:reject]',
   );
-  expect(finish).toMatch(
-    /if \(idToken\.length == 0 \|\| refreshToken\.length == 0\)/,
-  );
+  expect(finish).not.toContain('tokenResponse[@"id_token"]');
+  expect(finish).not.toContain('tokenResponse[@"refresh_token"]');
+  expect(finish).not.toContain('OmiAuthStoreSession');
   // First-run cannot fetch /v1/config/api-keys (401 without a session), and a
   // Firebase custom token is not a Bearer credential for that endpoint.
   expect(finish).not.toContain('Bearer %@');
