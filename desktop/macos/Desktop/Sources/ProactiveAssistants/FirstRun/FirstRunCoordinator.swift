@@ -59,10 +59,11 @@ struct FirstRunState: Codable, Equatable, Sendable {
   var reminderDismissals = 0
   var dwell: FirstRunDwell?
   var instructionChipDays: [String: Int] = [:]
-  /// The step whose guide chip the user closed with ✕. The chip stays down for that step: the
-  /// five-second presentation heartbeat used to put it straight back, which made ✕ a snooze nobody
-  /// asked for. It returns on the next step, the next launch, or a snooze ending.
+  /// The step whose guide chip the user closed with ✕. The chip stays down for that step and
+  /// returns on the next step, the next launch, or a snooze ending. ✕ used to end the whole first
+  /// run on the spot; one close is "not now", and only a second close is "not this".
   var guideSuppressedStep: FirstRunStep?
+  var guideDismissals = 0
   var log: [FirstRunLogEntry] = []
 
   static let inactive = FirstRunState()
@@ -402,7 +403,12 @@ enum FirstRunReducer {
 
     case .notificationDismissed(let assistantID):
       if assistantID == "first_run_guide", state.step.isActive {
-        state.guideSuppressedStep = state.step
+        state.guideDismissals += 1
+        if state.guideDismissals >= 2 {
+          dismiss()
+        } else {
+          state.guideSuppressedStep = state.step
+        }
         break
       }
       guard assistantID == "first_run_card", state.step == .backToWork, state.reminderPresented else { break }
@@ -1100,6 +1106,7 @@ final class FirstRunCoordinator {
     boundOwnerID = nil
     didCountLaunch = false
     didResume = false
+    syncHubNote()
     FloatingControlBarManager.shared.dismissNotifications(assistantID: "first_run_guide", kind: .replaced)
     FloatingControlBarManager.shared.dismissNotifications(assistantID: "first_run_card", kind: .replaced)
   }

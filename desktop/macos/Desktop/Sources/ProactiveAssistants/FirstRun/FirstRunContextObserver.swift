@@ -146,11 +146,9 @@ final class FirstRunContextObserver {
         let assistantID = notification.userInfo?["assistant_id"] as? String
         Task { @MainActor in
           guard let assistantID else { return }
-          if assistantID == "first_run_guide" {
-            FirstRunCoordinator.shared.dismissByUser()
-          } else {
-            FirstRunCoordinator.shared.notificationDismissed(assistantID: assistantID)
-          }
+          // The reducer decides what a ✕ means: for the guide chip, "not this step" the first time
+          // and "not this first run" the second; for a card, the reminder-dismissal rule.
+          FirstRunCoordinator.shared.notificationDismissed(assistantID: assistantID)
         }
       })
   }

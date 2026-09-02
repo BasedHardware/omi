@@ -85,27 +85,35 @@ extension SBOnboardingModel {
         maximumPolls: granted ? 40 : 6,
         useTimedFallback: !granted,
         undetectableAfterPolls: 6,
-        poll: {
-          let info = await WindowMonitor.getActiveWindowInfoAsync()
-          return OnboardingScenarioWindowObservation(
-            title: info.windowTitle,
-            bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
-        },
-        wait: { try? await Task.sleep(nanoseconds: 500_000_000) }
+        poll: self.scenarioWindowObservation,
+        wait: self.scenarioDetectionWait
       )
       guard !Task.isCancelled, self.step == .see, self.seePhase == .waitingForPage else { return }
-      if result == .timedFallback {
+      // The card beat is canned, so it goes ahead whatever detection said; what detection said is
+      // still recorded truthfully. A timeout with Screen Recording on is a real signal (a browser
+      // that never came up, a title we cannot read), not a page becoming frontmost.
+      let journalLine: String
+      switch result {
+      case .matched:
+        journalLine = "Order page became frontmost"
+      case .timedFallback:
         DesktopDiagnosticsManager.shared.recordFallback(
           area: "onboarding_detection",
           from: "window_title",
           to: "timed_advance",
           reason: "title_unavailable",
           outcome: .degraded)
+        journalLine = "Order page detection used the timed fallback"
+      case .timedOut:
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "onboarding_detection",
+          from: "window_title",
+          to: "timed_advance",
+          reason: "title_never_matched",
+          outcome: .degraded)
+        journalLine = "Order page was not seen within 20 s; continuing to the card"
       }
-      OnboardingScenarioJournal().append(
-        who: "system",
-        text: result == .timedFallback ? "Order page detection used the timed fallback" : "Order page became frontmost"
-      )
+      OnboardingScenarioJournal().append(who: "system", text: journalLine)
       self.advance(
         userAnswer: nil,
         to: .card,
@@ -123,11 +131,29 @@ extension SBOnboardingModel {
   /// are still looking for it is the lesson taught backwards.
   static let scenarioCardTimeout: UInt64 = 90_000_000_000
 
+  /// Retries while a meeting or another card holds the notch: twelve × 5 s, one minute, then the
+  /// beat gives up on the card and brings the user back with an explanation.
+  static let scenarioCardBlockedRetryLimit = 12
+
   func presentScenarioCard() {
     guard step == .card, cardPhase == .waitingForAction, !scenarioCardPresented else { return }
     let manager = FloatingControlBarManager.shared
+    // The notch window is ordinarily created by the signed-in Home start-up, which runs after
+    // onboarding, and by the talk beat, which comes after this one. Without this the card beat's
+    // one card is dropped ("window is not set up") while the page says a card is on its way.
+    // `setup` is idempotent, so the later callers are unaffected.
+    manager.setup(appState: appState, chatProvider: chatProvider)
     let hasAnotherCard = manager.currentNotificationAssistantID.map { $0 != "onboarding_scenario" } ?? false
     guard appState.meetingDetector?.isMeetingActive != true, !hasAnotherCard else {
+      scenarioCardBlockedRetries += 1
+      guard scenarioCardBlockedRetries <= Self.scenarioCardBlockedRetryLimit else {
+        OnboardingScenarioJournal().append(who: "system", text: "The scripted card stayed blocked; skipped it")
+        scenarioReturnToOmi()
+        showScenarioNotificationsPrompt(
+          userAnswer: nil,
+          preface: "The notch was busy, so that card never got its turn; the next one will.")
+        return
+      }
       scenarioCardTimeoutTask?.cancel()
       scenarioCardTimeoutTask = Task { [weak self] in
         try? await Task.sleep(nanoseconds: 5_000_000_000)
@@ -332,13 +358,8 @@ extension SBOnboardingModel {
         requireBrowser: true,
         maximumPolls: Self.composeDetectionMaximumPolls,
         useTimedFallback: false,
-        poll: {
-          let info = await WindowMonitor.getActiveWindowInfoAsync()
-          return OnboardingScenarioWindowObservation(
-            title: info.windowTitle,
-            bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
-        },
-        wait: { try? await Task.sleep(nanoseconds: 500_000_000) }
+        poll: self.scenarioWindowObservation,
+        wait: self.scenarioDetectionWait
       )
       guard !Task.isCancelled, self.step == .write, self.writePhase == .waitingForSend else { return }
       guard case .matched(let title) = result,

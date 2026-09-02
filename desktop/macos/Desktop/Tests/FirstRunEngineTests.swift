@@ -165,6 +165,12 @@ final class FirstRunEngineTests: XCTestCase {
     _ = apply(&relaunched, .notificationDismissed(assistantID: "first_run_guide"), offset: 1)
     effects = apply(&relaunched, .launch, offset: 600)
     XCTAssertTrue(effects.contains(.showInstruction), "a new launch is a new chance to show the step")
+
+    // Two closes is the answer "not this": the first run ends, with its analytics.
+    effects = apply(&relaunched, .notificationDismissed(assistantID: "first_run_guide"), offset: 601)
+    XCTAssertEqual(relaunched.step, .dismissed)
+    XCTAssertTrue(effects.contains(.hideGuide))
+    XCTAssertTrue(effects.contains(.clearPending))
   }
 
   func testReducerHonorsExplicitDismissal() {

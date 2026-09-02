@@ -151,10 +151,15 @@ final class SBOnboardingPermissionFlowTests: XCTestCase {
     }
 
     XCTAssertTrue(accepted)
+    // The see beat resumes on itself, one phase on: the grant is answered by the relaunch, but the
+    // trip to the browser is still the user's click. Persisting the card beat instead would fire a
+    // card about a page nobody opened.
     XCTAssertEqual(
-      persistedWhenRestartFired, SBOnboardingModel.Step.card.rawValue,
-      "the next step must already be persisted when the process is handed over, "
+      persistedWhenRestartFired, SBOnboardingModel.Step.see.rawValue,
+      "the resume position must already be persisted when the process is handed over, "
         + "or the relaunched app resumes on this row and re-offers the reopen forever")
+    XCTAssertEqual(model.seePhase, .openPage)
+    UserDefaults.standard.removeObject(forKey: SBOnboardingModel.seePhaseKey)
   }
 
   func testRelaunchIsNotAcceptedWhenTheGrantAlreadyApplies() {

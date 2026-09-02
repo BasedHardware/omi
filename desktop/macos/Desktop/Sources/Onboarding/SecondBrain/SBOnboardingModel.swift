@@ -127,7 +127,24 @@ final class SBOnboardingModel: ObservableObject {
   /// page in the default browser and summons the shell the way the menu bar does; tests observe.
   var scenarioPageOpener: (URL) -> Bool = { NSWorkspace.shared.open($0) }
   var scenarioPageLocator: OnboardingScenarioPageLocator = .bundled
-  var scenarioReturnToOmi: () -> Void = { AppDelegate.summonWindowTarget()?.openMainAppWindow() }
+  var scenarioReturnToOmi: () -> Void = {
+    // A watch that outlives the session must not summon the sign-in screen over whatever the
+    // user moved on to. The view's disappearance cancels the watches; this is the second fence.
+    guard AuthState.shared.isSignedIn else { return }
+    AppDelegate.summonWindowTarget()?.openMainAppWindow()
+  }
+  /// The frontmost-window probe and the poll interval behind both hand-off watches. Production
+  /// reads the real window and sleeps 500 ms; tests hand in titles and skip the sleep.
+  var scenarioWindowObservation: () async -> OnboardingScenarioWindowObservation = {
+    let info = await WindowMonitor.getActiveWindowInfoAsync()
+    return OnboardingScenarioWindowObservation(
+      title: info.windowTitle,
+      bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+  }
+  var scenarioDetectionWait: () async -> Void = { try? await Task.sleep(nanoseconds: 500_000_000) }
+  /// Blocked-card retries so far (a meeting, or another card on the notch). Bounded, because a
+  /// page that says "a card is on its way" must not be allowed to lie for longer than a minute.
+  var scenarioCardBlockedRetries = 0
   @Published var scenarioTaskChips: [String] = []
   /// The task the note implies; written only on "Looks right".
   var scenarioProposedTaskTitle: String?
@@ -593,6 +610,12 @@ final class SBOnboardingModel: ObservableObject {
     teardownStep(step)
     cancelPermissionPollForCurrentStep()
     rehydrateDrafts()
+    if previous == .see {
+      // Back from the card lands on the offer, not on a re-armed watch: the page is usually still
+      // open, and a watch would match it at once and push the user straight back to the card.
+      seePhase = .openPage
+      persistScenarioProgress()
+    }
     step = previous
     beatStartedAt = Date()
     beatExitRecorded = false
@@ -621,6 +644,7 @@ final class SBOnboardingModel: ObservableObject {
     switch step {
     case .card:
       scenarioCardPresented = false
+      scenarioCardBlockedRetries = 0
     case .talk:
       disarmShortcutSummon()
       teardownVoiceDemo()
@@ -801,6 +825,13 @@ final class SBOnboardingModel: ObservableObject {
     if setEnabled(enabled) {
       report(enabled)
     }
+  }
+
+  /// The view is going away for a reason other than finishing: sign-out, an account switch, a
+  /// recovery screen. Every watch this model armed (a five-minute poll for Send, a 90 s card
+  /// timeout) would otherwise keep a reference and could summon Omi over whatever came next.
+  func teardownForDisappearance() {
+    teardownAll()
   }
 
   /// Cancel every live task/monitor this model owns. Safe to call repeatedly.

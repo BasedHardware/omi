@@ -290,6 +290,78 @@ final class OnboardingScenarioTests: XCTestCase {
   }
 
   @MainActor
+  func testSendSeenInTheBrowserWritesTheNoteAndBringsOmiBackExactlyOnce() async throws {
+    let opened = OpenedBox()
+    let returned = ReturnedBox()
+    let model = scenarioModel(opened: opened, returned: returned)
+    model.step = .write
+    model.writePhase = .intro
+    let sentTitle =
+      "\(OnboardingScenarioTitleTransport.sentToken) · \(model.scenarioPageNonce) · "
+      + "Hey%20Sam%20%E2%80%94%20lamp%20is%20great"
+    let polls = PollBox()
+    model.scenarioWindowObservation = {
+      polls.count += 1
+      // Two polls of the compose page, then the Sent title from a browser.
+      let title = polls.count < 3 ? "Omi Welcome · Note to Sam" : sentTitle
+      return OnboardingScenarioWindowObservation(title: title, bundleID: "com.google.Chrome")
+    }
+    model.scenarioDetectionWait = {}
+
+    model.openComposePage()
+    let detection = try XCTUnwrap(model.scenarioDetectionTask)
+    await detection.value
+
+    XCTAssertEqual(model.writePhase, .review)
+    XCTAssertEqual(model.scenarioWriteNote, "Hey Sam — lamp is great")
+    XCTAssertEqual(returned.count, 1, "Send seen is the one moment the write beat summons Omi")
+    XCTAssertEqual(polls.count, 3)
+    XCTAssertFalse(model.scenarioWriteDetectionTimedOut)
+  }
+
+  @MainActor
+  func testSendNeverSeenLeavesTheEscapesAndNeverSummonsOmi() async throws {
+    let opened = OpenedBox()
+    let returned = ReturnedBox()
+    let model = scenarioModel(opened: opened, returned: returned)
+    model.step = .write
+    model.writePhase = .intro
+    model.scenarioWindowObservation = {
+      OnboardingScenarioWindowObservation(title: "Omi Welcome · Note to Sam", bundleID: "com.google.Chrome")
+    }
+    model.scenarioDetectionWait = {}
+
+    model.openComposePage()
+    let detection = try XCTUnwrap(model.scenarioDetectionTask)
+    await detection.value
+
+    XCTAssertEqual(model.writePhase, .waitingForSend)
+    XCTAssertTrue(model.scenarioWriteDetectionTimedOut)
+    XCTAssertEqual(returned.count, 0)
+  }
+
+  @MainActor
+  func testScreenRecordingRelaunchResumesOnTheOfferNotTheCard() {
+    let opened = OpenedBox()
+    let returned = ReturnedBox()
+    let model = scenarioModel(opened: opened, returned: returned)
+    model.step = .see
+    model.seePhase = .permission
+    var restarted = false
+
+    XCTAssertTrue(model.acceptPermissionRelaunch("screen_recording", needsRelaunch: true) { restarted = true })
+
+    XCTAssertTrue(restarted)
+    XCTAssertEqual(
+      UserDefaults.standard.integer(forKey: SBOnboardingModel.resumeStepKey), SBOnboardingModel.Step.see.rawValue,
+      "the relaunch must come back to the see beat, not skip to a card about a page nobody opened")
+    XCTAssertEqual(model.seePhase, .openPage)
+    XCTAssertEqual(UserDefaults.standard.string(forKey: SBOnboardingModel.seePhaseKey), "openPage")
+    UserDefaults.standard.removeObject(forKey: SBOnboardingModel.resumeStepKey)
+    UserDefaults.standard.removeObject(forKey: SBOnboardingModel.seePhaseKey)
+  }
+
+  @MainActor
   func testSkipFromTheWriteOfferLeavesWithoutOpeningAnything() {
     let opened = OpenedBox()
     let returned = ReturnedBox()
@@ -310,5 +382,9 @@ private final class OpenedBox: @unchecked Sendable {
 }
 
 private final class ReturnedBox: @unchecked Sendable {
+  var count = 0
+}
+
+private final class PollBox: @unchecked Sendable {
   var count = 0
 }

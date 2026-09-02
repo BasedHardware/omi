@@ -68,7 +68,10 @@ struct SBOnboardingView: View {
     // menu (restored only via the advance/skip/complete buttons). If the view is
     // removed by any other path (e.g. auth flips to signed-out), restore them here
     // so hotkeys/menu aren't left disabled until relaunch. Idempotent when unarmed.
-    .onDisappear { model.disarmShortcutSummon() }
+    .onDisappear {
+      model.disarmShortcutSummon()
+      model.teardownForDisappearance()
+    }
   }
 
   private func panel(in panelSize: CGSize) -> some View {
