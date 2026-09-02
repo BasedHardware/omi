@@ -155,10 +155,10 @@ final class ChatQuotaBannerTests: XCTestCase {
   // MARK: - Dismissal store
 
   @MainActor
-  func testStoreDropsDismissalsFromAnEarlierCycle() {
+  func testStoreDropsDismissalsFromAnEarlierCycle() throws {
     // Only the current cycle can still be consulted, so the persisted set must
     // not accumulate an entry per threshold per month for the life of the user.
-    let defaults = try! XCTUnwrap(UserDefaults(suiteName: "chat-quota-store-\(UUID().uuidString)"))
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: "chat-quota-store-\(UUID().uuidString)"))
     let store = ChatQuotaBannerDismissals(defaults: defaults)
 
     store.dismiss(threshold: 75, cycleID: "1000-500")
@@ -170,9 +170,9 @@ final class ChatQuotaBannerTests: XCTestCase {
   }
 
   @MainActor
-  func testStorePersistsAcrossRelaunch() {
+  func testStorePersistsAcrossRelaunch() throws {
     let suite = "chat-quota-store-\(UUID().uuidString)"
-    let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
     ChatQuotaBannerDismissals(defaults: defaults)
       .dismiss(threshold: 90, cycleID: "1000-500")
 
