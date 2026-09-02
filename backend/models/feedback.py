@@ -33,6 +33,12 @@ class FeedbackSurface(str, Enum):
     conversation_summary = 'conversation_summary'
     """The summary Omi writes for a recorded conversation."""
 
+    chat_notification = 'chat_notification'
+    """A proactive notification card (focus/insight/task/memory) in the chat
+    transcript. Kept apart from `chat_text` because rating one of these judges
+    the notification, not an answer Omi gave — the same distinction #12626 drew
+    for the response-quality ratio."""
+
     memory = 'memory'
     """A single extracted memory, kept or discarded in the memories list."""
 

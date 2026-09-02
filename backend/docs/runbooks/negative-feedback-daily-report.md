@@ -68,11 +68,17 @@ Constants: `FOLLOW_UP_WINDOW_SECONDS`, `MAX_PRECEDING_TURNS`,
 | `chat_text` (mobile) | `POST /v1/users/analytics/chat_message`, `PATCH /v2/messages/{id}/rating` | Yes |
 | `chat_text` (macOS main window) | `PATCH /v2/desktop/messages/{id}/rating` | Yes — picker shipped with this change |
 | `chat_voice` (macOS floating bar) | same, `surface=voice` | **No** — the hover overlay has no room for the chip row; needs its own design pass |
+| `chat_notification` (proactive cards) | same, `surface=notification` | **No** — the picker is only on answer bubbles |
 | `conversation_summary` | `POST /v1/users/analytics/memory_summary` | No — that endpoint takes a score only |
 | `memory` | `POST /v3/memories/{id}/review` | No — keep/discard is binary |
 
 A thumbs-down with no reason is counted as **`not_captured`**, never as "no
 reason given". Those are different facts and the report keeps them apart.
+
+`chat_notification` is split out for the same reason PR #12626 excluded these
+from the response-quality ratio: rating a proactive focus/insight/task card
+judges the notification, not an answer Omi gave. Reading them as chat failures
+would blame the wrong system.
 
 ## Scheduling
 

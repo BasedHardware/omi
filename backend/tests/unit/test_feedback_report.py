@@ -387,3 +387,20 @@ def test_distinct_messages_stay_distinct_entries(fake_db):
     _record(fake_db, target_id='rated2')
 
     assert generate_report(date.today()).total_negative == 2
+
+
+def test_notification_ratings_are_a_separate_surface(fake_db):
+    """The macOS client resolves surface='notification' for proactive cards
+    (#12626). The rating endpoint must accept that value — rejecting it would
+    422 the PATCH and revert the user's thumbs-down — and the report must count
+    it apart from answers Omi actually gave."""
+    from datetime import date
+
+    from jobs.feedback_daily_report import generate_report
+
+    _seed_messages(fake_db, [_message('rated', 'ai', 0)])
+    _record(fake_db, surface=FeedbackSurface.chat_notification, platform='desktop')
+
+    report = generate_report(date.today())
+
+    assert report.counts_by_surface == {'chat_notification': 1}

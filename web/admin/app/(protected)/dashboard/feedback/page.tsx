@@ -75,6 +75,7 @@ type HydratedContext = {
 const SURFACE_LABELS: Record<string, string> = {
   chat_text: "Chat",
   chat_voice: "Voice",
+  chat_notification: "Notification card",
   conversation_summary: "Summary",
   memory: "Memory",
 };

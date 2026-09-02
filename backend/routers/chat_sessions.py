@@ -71,6 +71,16 @@ class SaveMessageRequest(BaseModel):
     journal_revision: int | None = Field(None, ge=1, le=9_007_199_254_740_991)
 
 
+# Client `surface` values -> ledger surfaces. The client resolves 'notification'
+# for proactive cards (ChatProvider.ratingSurface); rejecting it here would 422
+# the PATCH and revert the user's thumbs-down instead of recording it.
+_LEDGER_SURFACES = {
+    'text': FeedbackSurface.chat_text,
+    'voice': FeedbackSurface.chat_voice,
+    'notification': FeedbackSurface.chat_notification,
+}
+
+
 class RateMessageRequest(BaseModel):
     rating: int | None = Field(None, ge=-1, le=1)
     app_version: str | None = None
@@ -80,7 +90,7 @@ class RateMessageRequest(BaseModel):
     # a rating with no reason records as "not captured", never as "no reason".
     reason: FeedbackReason | None = None
     comment: str | None = Field(None, max_length=MAX_COMMENT_LENGTH)
-    surface: str = Field('text', pattern=r'^(text|voice)$')
+    surface: str = Field('text', pattern=r'^(text|voice|notification)$')
 
 
 class InitialMessageRequest(BaseModel):
@@ -282,7 +292,7 @@ def rate_message(
         uid,
         message_id,
         value,
-        surface=(FeedbackSurface.chat_voice if request.surface == 'voice' else FeedbackSurface.chat_text),
+        surface=_LEDGER_SURFACES.get(request.surface, FeedbackSurface.chat_text),
         reason=request.reason.value if request.reason else None,
         comment=request.comment,
         platform='desktop',
