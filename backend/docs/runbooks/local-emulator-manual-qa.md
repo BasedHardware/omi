@@ -35,6 +35,8 @@ Non-secret keys in `backend/.env.local-dev` are **ignored** — see `make dev-st
 | `bob` | `bob@local.omi.invalid` | `bob-local-password-030` |
 | `local_default_user` | `local_default_user@local.omi.invalid` | `local_default_user-local-password-030` |
 
+Mobile `dev` flavor (`local_dev` profile): **long-press** Sign in with Apple or Google to sign in as Alice. A tap still tries real OAuth (which 500s locally). Desktop still uses `make desktop-run-local DESKTOP_USER=alice`.
+
 ### Useful commands
 
 ```bash

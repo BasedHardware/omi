@@ -143,6 +143,13 @@ data requires the explicit `beta` profile (see [Mobile beta](https://github.com/
     ```bash
     flutter run --flavor dev
     ```
+
+    On the sign-in screen, **long-press** Sign in with Apple or Sign in with Google.
+    That signs into the Firebase Auth emulator as the seeded harness user
+    (`alice@local.omi.invalid`) and starts onboarding from the beginning (Alice's
+    previous completed-onboarding flag is not reused). A tap still tries real
+    Google/Apple OAuth, which 500s on the local harness.
+    Seed users if long-press fails: `make seed-memory-scenario SCENARIO=happy_path`.
   </Step>
 </Steps>
 

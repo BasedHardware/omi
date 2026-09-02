@@ -12,6 +12,7 @@ import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth/local_emulator_auth.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -193,6 +194,28 @@ class AuthenticationProvider extends BaseProvider {
       }
       setLoadingState(false);
     }
+  }
+
+  Future<void> onLocalEmulatorSignIn(Function() onSignIn) async {
+    if (!localEmulatorSignInEnabled(Env.profile)) return;
+    if (loading) return;
+    setLoadingState(true);
+    try {
+      final credential = await AuthService.instance.signInWithLocalEmulatorUser();
+      if (credential != null && _hasFirebaseUser) {
+        await _signIn(onSignIn, credential: credential, authProvider: 'password');
+      } else {
+        AppSnackbar.showSnackbarError(
+          'Local emulator sign-in failed. Seed users with: make seed-memory-scenario SCENARIO=happy_path',
+        );
+      }
+    } catch (e) {
+      Logger.debug('Local emulator sign in error: $e');
+      AppSnackbar.showSnackbarError(
+        globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
+      );
+    }
+    setLoadingState(false);
   }
 
   Future<String?> _getIdToken() async {

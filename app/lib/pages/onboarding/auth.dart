@@ -7,7 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/services/auth/local_emulator_auth.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class AuthComponent extends StatefulWidget {
@@ -20,6 +22,11 @@ class AuthComponent extends StatefulWidget {
 }
 
 class _AuthComponentState extends State<AuthComponent> {
+  void _onLocalEmulatorSignIn(AuthenticationProvider provider) {
+    HapticFeedback.mediumImpact();
+    provider.onLocalEmulatorSignIn(widget.onSignIn);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
@@ -75,10 +82,13 @@ class _AuthComponentState extends State<AuthComponent> {
                         width: double.infinity,
                         height: 56,
                         child: ElevatedButton(
+                          key: const Key('appleSignIn'),
                           onPressed: () {
                             HapticFeedback.mediumImpact();
                             provider.onAppleSignIn(widget.onSignIn);
                           },
+                          onLongPress:
+                              localEmulatorSignInEnabled(Env.profile) ? () => _onLocalEmulatorSignIn(provider) : null,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: Colors.black,
@@ -109,10 +119,13 @@ class _AuthComponentState extends State<AuthComponent> {
                       width: double.infinity,
                       height: 56,
                       child: ElevatedButton(
+                        key: const Key('googleSignIn'),
                         onPressed: () {
                           HapticFeedback.mediumImpact();
                           provider.onGoogleSignIn(widget.onSignIn);
                         },
+                        onLongPress:
+                            localEmulatorSignInEnabled(Env.profile) ? () => _onLocalEmulatorSignIn(provider) : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.black,
