@@ -222,6 +222,7 @@ extension SBOnboardingModel {
             return
           }
           self.scenarioTaskChips.append(title)
+          self.appendReceipt(.task(title))
           OnboardingScenarioJournal().append(who: "system", text: "Created task: \(title)")
           self.presentReminderConfirmationCard()
         } else {
@@ -235,6 +236,35 @@ extension SBOnboardingModel {
     // The tap was on Omi's own card, so the user's attention is already here. Coming back to the
     // thread is the promise the card beat made ("Answer it, and I'll bring you back").
     scenarioReturnToOmi()
+  }
+
+  /// The confirmation where the user is looking when they press Send: a card at the top of the
+  /// browser, a beat before the window comes back. Same shape as the card beat's "✓ Reminder set".
+  private func presentNoteKeptCard(_ effects: OnboardingScenarioNoteEffects) {
+    guard
+      let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
+    else { return }
+    let title: String
+    let message: String
+    if let taskTitle = effects.taskTitle {
+      title = "✓ Task: \(taskTitle)"
+      message = effects.personMemory == nil ? "Kept from your note." : "And a memory about Sam."
+    } else if effects.memories.isEmpty {
+      return
+    } else {
+      title = "✓ Kept from your note"
+      message = "A memory about Sam."
+    }
+    NotificationService.shared.sendNotification(
+      ownerID: ownerID,
+      title: title,
+      message: message,
+      assistantId: "onboarding_scenario",
+      respectFrequency: false,
+      isPersistent: false,
+      authorizationSnapshot: authorization
+    )
   }
 
   private func presentReminderConfirmationCard() {
@@ -494,6 +524,8 @@ extension SBOnboardingModel {
       effects.taskTitle == nil
         ? "Got it. Here's what I kept."
         : "Got it. You promised Sam a link, so that's a task. The rest I'll remember.")
+    if let taskTitle = effects.taskTitle { appendReceipt(.task(taskTitle)) }
+    presentNoteKeptCard(effects)
     Task { [weak self] in
       guard let self, let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
         let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
@@ -513,6 +545,7 @@ extension SBOnboardingModel {
           self.scenarioWriteReceipts.insert(receipt)
           self.persistScenarioProgress()
           self.scenarioMemoryChips.append(memory)
+          self.appendReceipt(.memory(memory))
           OnboardingScenarioJournal().append(who: "system", text: "Created memory: \(memory)")
         }
       }

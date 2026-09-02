@@ -11,6 +11,16 @@ import Foundation
 enum OnboardingDemoNote {
   @MainActor static var active: String?
 
+  static func firstRunStep(instruction: String, hint: String) -> String {
+    """
+    First-run guidance in progress. Omi is guiding the user through their first real task from the \
+    notch, and the current step is: "\(instruction)" (\(hint)). If the user asks what to do next, \
+    what they are supposed to do, or what this is, tell them that step in one short sentence and \
+    that Omi will speak up when it notices they have done it. Do not create tasks, reminders, or \
+    memories from this note.
+    """
+  }
+
   static func firstRunReminder(project: String) -> String {
     """
     First-run guidance in progress: the user is dictating something Omi should bring up the next \

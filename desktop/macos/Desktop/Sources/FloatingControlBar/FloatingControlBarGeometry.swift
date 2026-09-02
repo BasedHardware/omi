@@ -332,6 +332,21 @@ enum FloatingControlBarGeometry {
 
   /// Closed-conversation chrome size. A mounted notification card wins over
   /// listening/thinking island sizes (or the union if listening is larger).
+  /// The surface push-to-talk resizes to. A mounted card owns the surface: listening must not
+  /// squeeze the card down to the bare island (it did, and the card's text rewrapped under a
+  /// waveform), and releasing must not collapse past the card either. `mountedSurfaceSize` is the
+  /// card's surface already unioned with the listening size.
+  static func pushToTalkSurfaceSize(
+    hasMountedNotification: Bool,
+    expanded: Bool,
+    mountedSurfaceSize: NSSize,
+    activeSize: NSSize,
+    collapsedSize: NSSize
+  ) -> NSSize {
+    if hasMountedNotification { return mountedSurfaceSize }
+    return expanded ? activeSize : collapsedSize
+  }
+
   static func collapsedSurfaceSize(
     hasMountedNotification: Bool,
     isVoiceListening: Bool,

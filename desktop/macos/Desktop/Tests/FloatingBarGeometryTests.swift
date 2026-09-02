@@ -186,6 +186,33 @@ final class FloatingBarGeometryTests: XCTestCase {
     }
   }
 
+  func testPushToTalkNeverShrinksAMountedCard() {
+    let card = NSSize(width: 420, height: 132)
+    let active = NSSize(width: 268, height: 38)
+    let collapsed = NSSize(width: 214, height: 38)
+
+    XCTAssertEqual(
+      FloatingControlBarGeometry.pushToTalkSurfaceSize(
+        hasMountedNotification: true, expanded: true,
+        mountedSurfaceSize: card, activeSize: active, collapsedSize: collapsed),
+      card, "listening with a card up keeps the card's surface")
+    XCTAssertEqual(
+      FloatingControlBarGeometry.pushToTalkSurfaceSize(
+        hasMountedNotification: true, expanded: false,
+        mountedSurfaceSize: card, activeSize: active, collapsedSize: collapsed),
+      card, "releasing with a card up does not collapse past the card")
+    XCTAssertEqual(
+      FloatingControlBarGeometry.pushToTalkSurfaceSize(
+        hasMountedNotification: false, expanded: true,
+        mountedSurfaceSize: card, activeSize: active, collapsedSize: collapsed),
+      active)
+    XCTAssertEqual(
+      FloatingControlBarGeometry.pushToTalkSurfaceSize(
+        hasMountedNotification: false, expanded: false,
+        mountedSurfaceSize: card, activeSize: active, collapsedSize: collapsed),
+      collapsed)
+  }
+
   func testNotchIslandExpansionRecentersShiftedPanelOnDisplay() {
     let shiftedFrame = NSRect(x: 606, y: 876, width: 268, height: 58)
     let expandedFrame = FloatingControlBarGeometry.topAnchoredFrame(

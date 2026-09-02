@@ -2159,7 +2159,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       if state.showingAIConversation {
         return
       }
-      let targetSize = expanded ? notchSize(active: true) : notchCollapsedSize
+      let targetSize = FloatingControlBarGeometry.pushToTalkSurfaceSize(
+        hasMountedNotification: state.currentNotification != nil,
+        expanded: expanded,
+        mountedSurfaceSize: collapsedChromeSurfaceSize(usesNotchIsland: true),
+        activeSize: notchSize(active: true),
+        collapsedSize: notchCollapsedSize)
       resizeSurfaceTransition(
         .pushToTalk(expanded: expanded),
         toSurfaceSize: targetSize,

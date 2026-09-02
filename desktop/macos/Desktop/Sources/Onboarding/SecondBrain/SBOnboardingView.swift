@@ -207,7 +207,18 @@ struct SBOnboardingView: View {
   }
 
   @ViewBuilder private func messageRow(_ msg: SBOnboardingModel.Msg) -> some View {
-    if msg.isOmi { omiRow(msg.text) } else { meRow(msg.text) }
+    if msg.isOmi {
+      VStack(alignment: .leading, spacing: 8) {
+        omiRow(msg.text)
+        ForEach(msg.receipts) { receipt in
+          scenarioWriteRow(symbol: receipt.symbol, label: receipt.label, text: receipt.text)
+            .padding(.leading, 26)
+            .frame(maxWidth: 406, alignment: .leading)
+        }
+      }
+    } else {
+      meRow(msg.text)
+    }
   }
 
   /// Omi's turn. `prose` is the one role that carries paragraphs, and it is the reading rung — this
@@ -320,9 +331,6 @@ struct SBOnboardingView: View {
   /// the notifications ask as the first thing Omi has written on the user's behalf.
   @ViewBuilder private var cardWidget: some View {
     VStack(alignment: .leading, spacing: 10) {
-      ForEach(model.scenarioTaskChips, id: \.self) { task in
-        scenarioWriteRow(symbol: "checkmark.circle", label: "TASK", text: task)
-      }
       if model.cardPhase == .notifications {
         permStepWidget("notifications", "Notifications", "so I can reach you when I'm not in front") {
           model.answerNotifications()
@@ -413,12 +421,6 @@ struct SBOnboardingView: View {
       case .review where model.scenarioWriteUnreadable:
         SBInkButton(title: "Continue", isDefaultAction: true) { model.confirmScenarioWrites() }
       case .review:
-        ForEach(model.scenarioMemoryChips, id: \.self) { memory in
-          scenarioWriteRow(symbol: "sparkles", label: "MEMORY", text: memory)
-        }
-        ForEach(model.scenarioTaskChips, id: \.self) { task in
-          scenarioWriteRow(symbol: "checkmark.circle", label: "TASK", text: task)
-        }
         if model.scenarioWritesPending {
           HStack(spacing: 8) {
             ProgressView().controlSize(.small)

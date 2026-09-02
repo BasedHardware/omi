@@ -512,6 +512,10 @@ final class FirstRunCoordinator {
   private var didResume = false
   private var effectObserverForTests: ((FirstRunReducerEffect) -> Void)?
   private var stateObserverForTests: ((FirstRunState) -> Void)?
+  /// The first run's own eyes. The proactive monitoring loop also posts context switches, but it
+  /// only runs with screen analysis on, which a fresh install (and every named dev bundle) may not
+  /// have. A guide that says "open something" has to notice when they do, whatever else is on.
+  private var contextProbe: FirstRunFrontmostProbe?
 
   init(
     defaults: UserDefaults = .standard,
@@ -665,7 +669,22 @@ final class FirstRunCoordinator {
       }
       stateObserverForTests?(state)
     }
-    if executesEffects { syncHubNote() }
+    if executesEffects {
+      syncHubNote()
+      syncContextProbe()
+    }
+  }
+
+  private func syncContextProbe() {
+    if state.step.isActive {
+      guard contextProbe == nil else { return }
+      let probe = FirstRunFrontmostProbe()
+      probe.start()
+      contextProbe = probe
+    } else {
+      contextProbe?.stop()
+      contextProbe = nil
+    }
   }
 
   /// While the guide is asking for a spoken reminder, the voice hub hears the same sentence the
@@ -683,9 +702,34 @@ final class FirstRunCoordinator {
     if state.step == .setReminder, let project = state.projectContext?.normalizedTitle {
       OnboardingDemoNote.active = OnboardingDemoNote.firstRunReminder(project: project)
       ownsHubNote = true
+    } else if state.step.isActive, let (title, hint) = Self.instructionCopy(for: state.step) {
+      // "What am I supposed to do next?" is the first thing a new user asks the voice hub. The hub
+      // has to know the guide's answer, or it answers as a stranger.
+      OnboardingDemoNote.active = OnboardingDemoNote.firstRunStep(instruction: title, hint: hint)
+      ownsHubNote = true
     } else if ownsHubNote {
       OnboardingDemoNote.active = nil
       ownsHubNote = false
+    }
+  }
+
+  static func instructionCopy(for step: FirstRunStep) -> (String, String)? {
+    switch step {
+    case .openWork:
+      return ("Open something you're working on", "A doc, a repo, a deck. Anything real.")
+    case .setReminder:
+      return (
+        "Hold \(talkChordLabel()) and tell me what to bring up next time you're here",
+        "Like: remind me to ping Priya about pricing"
+      )
+    case .drift:
+      return ("Now go scroll something", "News, Reddit, whatever you'd drift to. I'll be watching.")
+    case .backToWork:
+      return ("Head back to what you were working on", "I have something for you there.")
+    case .summary:
+      return ("One moment", "I'm writing up what we did.")
+    case .inactive, .done, .dismissed:
+      return nil
     }
   }
 
@@ -744,18 +788,8 @@ final class FirstRunCoordinator {
   private func showCurrentInstruction() {
     let copy: (String, String)?
     switch state.step {
-    case .openWork:
-      copy = ("Open something you're working on", "A doc, a repo, a deck. Anything real.")
-    case .setReminder:
-      copy = (
-        "Hold \(Self.talkChordLabel()) and tell me what to bring up next time you're here",
-        "Like: remind me to ping Priya about pricing"
-      )
-    case .drift:
-      copy = (
-        "Now go scroll something",
-        "News, Reddit, whatever you'd drift to. I'll be watching."
-      )
+    case .openWork, .setReminder, .drift:
+      copy = Self.instructionCopy(for: state.step)
     default:
       copy = nil
     }

@@ -83,10 +83,32 @@ final class SBOnboardingModel: ObservableObject {
     "Social media", "YouTube", "Friend", "Search engine", "AI chat", "Podcast", "Colleague", "Product Hunt", "Other",
   ]
 
+  /// Something Omi wrote on the user's behalf, shown under the line that announced it and kept in
+  /// the thread for the rest of the flow, so what Omi did is never a widget that vanishes.
+  struct Receipt: Identifiable, Equatable {
+    let id = UUID()
+    let symbol: String
+    let label: String
+    let text: String
+
+    static func task(_ text: String) -> Receipt { Receipt(symbol: "checkmark.circle", label: "TASK", text: text) }
+    static func memory(_ text: String) -> Receipt { Receipt(symbol: "sparkles", label: "MEMORY", text: text) }
+  }
+
   struct Msg: Identifiable {
     let id = UUID()
     let isOmi: Bool
     var text: String
+    var receipts: [Receipt] = []
+  }
+
+  /// Attach a receipt to the most recent Omi line, or open a new one when the user spoke last.
+  func appendReceipt(_ receipt: Receipt) {
+    if let index = thread.indices.last(where: { thread[$0].isOmi }), index == thread.indices.last {
+      thread[index].receipts.append(receipt)
+    } else {
+      thread.append(Msg(isOmi: true, text: "Kept:", receipts: [receipt]))
+    }
   }
 
   enum PermState: Equatable { case ask, waiting, on }
