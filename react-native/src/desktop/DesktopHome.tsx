@@ -123,13 +123,31 @@ export function DesktopHome({
       );
     });
   }, [normalized, reads]);
-  const tasks =
-    outcomes?.tasks.status === 'success' ? outcomes.tasks.value.items : [];
-  const visibleTasks = tasks.filter(
+  const tasksOutcome = outcomes?.tasks ?? null;
+  const visibleTasks = (
+    tasksOutcome?.status === 'success' ? tasksOutcome.value.items : []
+  ).filter(
     item =>
       normalized === '' ||
       item.searchableText.toLocaleLowerCase().includes(normalized),
   );
+  // Only a successful empty read may claim emptiness. An unsettled or failed
+  // read stays truthful instead of inventing "no tasks yet".
+  const tasksEmptyCopy =
+    tasksOutcome === null
+      ? 'Tasks load with your day.'
+      : tasksOutcome.status === 'error'
+      ? tasksOutcome.error
+      : 'No tasks yet';
+  const conversationsOutcome = outcomes?.conversations ?? null;
+  const conversationsEmptyCopy =
+    conversationsOutcome === null
+      ? 'Conversations will show here when your day is loaded.'
+      : conversationsOutcome.status === 'error'
+      ? conversationsOutcome.error
+      : query !== ''
+      ? 'Nothing captured matches this search.'
+      : 'Nothing captured yet.';
   return (
     <View style={styles.home}>
       <SessionBanner onRefresh={onRefresh} readsPhase={readsPhase} />
@@ -150,7 +168,7 @@ export function DesktopHome({
               </ShippingListInsert>
             ))
           ) : (
-            <EmptyCopy>No tasks yet</EmptyCopy>
+            <EmptyCopy>{tasksEmptyCopy}</EmptyCopy>
           )}
         </View>
         <View
@@ -166,13 +184,7 @@ export function DesktopHome({
               </ShippingListInsert>
             ))
           ) : (
-            <EmptyCopy>
-              {readsPhase === 'ready'
-                ? query !== ''
-                  ? 'Nothing captured matches this search.'
-                  : 'Conversations will show here when your day is loaded.'
-                : 'Conversations will show here when your day is loaded.'}
-            </EmptyCopy>
+            <EmptyCopy>{conversationsEmptyCopy}</EmptyCopy>
           )}
         </View>
         <View accessibilityLabel="Home rewind" style={styles.section}>
