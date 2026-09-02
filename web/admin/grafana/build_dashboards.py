@@ -474,8 +474,9 @@ def build_platform_board(base, scope: str) -> dict:
         # The stat tile is already platform-neutral ("Activation"); board
         # context makes the All board's "macOS only" marker redundant here.
         panel_by_title(dash, "Activation")["description"] = (
-            "Firestore: % of signups with a conversation within 7 days — the aha "
-            "moment. Biggest controllable lever — first-5-minutes work."
+            "% of first-seen macOS users who asked 2+ chat questions within their "
+            "first 48 hours (PostHog; matured signups only). The aha moment — "
+            "biggest controllable lever, first-5-minutes work."
         )
         chart = panel_by_title(dash, "Activation (signup → activated, macOS)")
         chart["title"] = "Activation (signup → activated)" + (
@@ -504,6 +505,16 @@ def build_platform_board(base, scope: str) -> dict:
             "All and macOS boards use."
         )
         set_stat_query(rate, viral_mobile, "summary", "activationRate", "Activation")
+        # Mobile daily activation: viral-metrics' daily telemetry series (its
+        # own definition, Memory Created <=7d) — honest, not the macOS 2q/48h.
+        daily_chart = panel_by_title(dash, "Activation rate — daily")
+        daily_chart["description"] = (
+            "PostHog telemetry: daily % of first-seen mobile users with a Memory "
+            "Created within 7 days (not the macOS 2-questions/48h definition)."
+        )
+        dtarget = daily_chart["targets"][0]
+        dtarget["url"] = add_query_param(f"{PROXY}{viral_mobile}", "_tzdates", "date")
+        dtarget["root_selector"] = "activationDaily"
         chart = panel_by_title(dash, "Activation (signup → activated, macOS)")
         chart["title"] = "Activation (signup → activated)  ·  ${d_act}"
         target = chart["targets"][0]

@@ -405,7 +405,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "macOS only (Firestore): % of signups with a conversation within 7 days \u2014 the aha moment. Biggest controllable lever \u2014 first-5-minutes work.",
+      "description": "% of first-seen macOS users (macOS only) who asked 2+ chat questions within their first 48 hours (PostHog; matured signups only). The aha moment \u2014 first-5-minutes work.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -5704,6 +5704,93 @@
       ],
       "timeFrom": "60d",
       "title": "Omi Desktop rating \u2014 daily",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "Daily activation rate: % of that day's first-seen macOS users who asked 2+ questions within 48h. Only matured days (older than 48h) appear.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#22c55e"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "unit": "percent",
+          "min": 0,
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 993
+      },
+      "id": 996,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "timeseries",
+          "url": "http://127.0.0.1:8899/api/omi/stats/activation?days=60&_tzdates=date",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "daily",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "time",
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
+            },
+            {
+              "selector": "rate",
+              "text": "Activation rate",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "timeFrom": "60d",
+      "title": "Activation rate \u2014 daily",
       "type": "timeseries"
     },
     {
