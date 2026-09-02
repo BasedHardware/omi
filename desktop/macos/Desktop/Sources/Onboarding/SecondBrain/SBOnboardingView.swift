@@ -370,8 +370,7 @@ struct SBOnboardingView: View {
 
   /// The write beat: the note is offered, opened on a click, and then this side only has to say
   /// where to look, wait for Send, and show what Omi kept. The escapes are on screen the whole time
-  /// the user is away, not only after a timeout; "Fix something" is honest about being a correction
-  /// path rather than a magic button.
+  /// the user is away, not only after a timeout.
   @ViewBuilder private var writeScenarioWidget: some View {
     VStack(alignment: .leading, spacing: 10) {
       switch model.writePhase {
@@ -432,12 +431,8 @@ struct SBOnboardingView: View {
               .inkStyle(InkType.statusLabel, color: Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }
-          HStack(spacing: 8) {
-            SBInkButton(title: "Looks right", isDefaultAction: true) { model.confirmScenarioWrites() }
-            Button("Fix something") { model.requestScenarioWriteFix() }
-              .buttonStyle(InkButtonStyle(kind: .secondary))
-          }
-          .padding(.top, 4)
+          SBInkButton(title: "Looks right", isDefaultAction: true) { model.confirmScenarioWrites() }
+            .padding(.top, 4)
         }
       }
     }

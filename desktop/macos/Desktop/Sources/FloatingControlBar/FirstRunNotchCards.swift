@@ -93,15 +93,8 @@ struct FirstRunGuideChipView: View {
   var body: some View {
     HStack(alignment: .top, spacing: OmiSpacing.md) {
       VStack(alignment: .leading, spacing: 3) {
-        HStack(spacing: OmiSpacing.xxs) {
-          Circle()
-            .fill(Color.white.opacity(0.85))
-            .frame(width: 5, height: 5)
-          Text("OMI · NEXT STEP")
-            .scaledFont(size: OmiType.micro, weight: .semibold)
-            .foregroundColor(.white.opacity(0.5))
-            .tracking(0.8)
-        }
+        // No eyebrow. The chip is Omi speaking; a label above it is a second voice saying "this
+        // is Omi speaking".
         Text(notification.title)
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(.white)
@@ -232,6 +225,42 @@ struct FirstRunActionCardView: View {
     }
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("first-run-card")
+  }
+}
+
+/// A receipt at the notch: one bold line for what Omi did, one quiet line for the rest. No icon
+/// tile, no eyebrow, no buttons; it is read in a glance from another app and then it goes.
+struct FirstRunReceiptCardView: View {
+  let notification: FloatingBarNotification
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 3) {
+      Text(notification.title)
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
+        .foregroundColor(.white)
+        .lineLimit(2)
+        .multilineTextAlignment(.leading)
+        .fixedSize(horizontal: false, vertical: true)
+      if !notification.message.isEmpty {
+        Text(notification.message)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(.white.opacity(0.62))
+          .lineLimit(2)
+          .multilineTextAlignment(.leading)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.vertical, OmiSpacing.md)
+    .padding(.trailing, 28)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .overlay(alignment: .topTrailing) {
+      FirstRunDismissButton {
+        FloatingControlBarManager.shared.dismissCurrentNotification()
+      }
+    }
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("first-run-receipt")
   }
 }
 

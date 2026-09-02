@@ -587,8 +587,9 @@ struct FloatingControlBarView: View {
         buttons: FirstRunCardButton.buttons(for: descriptor),
         symbol: FirstRunCardButton.symbol(for: descriptor))
     } else if FirstRunNotchCardIdentity.isFirstRunCard(notification) {
-      // Buttonless first-run cards (the "that's the loop" acknowledgement) keep the same chrome.
-      FirstRunActionCardView(notification: notification, buttons: [], symbol: "checkmark.circle")
+      // Buttonless first-run cards are receipts ("✓ Task: …", "✓ Reminder set", "✓ That's the
+      // loop"): one bold line, one quiet line, nothing else competing for the notch.
+      FirstRunReceiptCardView(notification: notification)
     } else if notification.assistantId == "suggestion" {
       suggestionCard(notification)
     } else if notification.assistantId == IntegrationNudgeCoordinator.assistantID,

@@ -4543,14 +4543,18 @@ class FloatingControlBarManager {
     // visible while disabled (e.g. a notification flushed right as an AI
     // conversation closes), so any presentation with the bar disabled
     // must arm the re-hide; dismissNotificationAndAdvanceQueue owns the reset.
-    if !window.isVisible || !isEnabled {
+    let wasHidden = !window.isVisible
+    if wasHidden || !isEnabled {
       notificationWasTemporarilyShown = true
-      if !window.isVisible {
+      if wasHidden {
         window.orderFrontRegardless()
       }
     }
 
-    window.showNotification(notification)
+    // A window ordered front in the same pass must take the card's size at once: an animated
+    // resize from a frame nobody saw can settle short and present the card in a collapsed island
+    // (observed: a 508 pt card rendered inside a 284 pt notch).
+    window.showNotification(notification, animated: !wasHidden)
     let callbacks = notificationPresentationCallbacks.removeValue(forKey: notification.id)
     callbacks?.onPresented()
     if let suggestionIdentity = notification.suggestionTelemetryIdentity {

@@ -329,7 +329,9 @@ final class OnboardingScenarioTests: XCTestCase {
       model.thread.last?.isOmi == true && model.thread.last?.text.contains("kept") == true,
       "the window comes back with Omi already explaining what it kept")
     XCTAssertFalse(model.scenarioWriteUnreadable)
-    XCTAssertEqual(returned.chipsDown, 1)
+    XCTAssertEqual(
+      returned.chipsDown, 0,
+      "the kept card replaces the guide chip in place; no separate retraction races the new card's size")
 
     // A second delivery is inert.
     model.receiveScenarioNote("again")

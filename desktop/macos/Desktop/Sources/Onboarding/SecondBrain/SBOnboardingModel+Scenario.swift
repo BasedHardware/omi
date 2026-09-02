@@ -249,12 +249,12 @@ extension SBOnboardingModel {
     let message: String
     if let taskTitle = effects.taskTitle {
       title = "✓ Task: \(taskTitle)"
-      message = effects.personMemory == nil ? "Kept from your note." : "And a memory about Sam."
+      message = effects.personMemory == nil ? "" : "And a memory about Sam."
     } else if effects.memories.isEmpty {
       return
     } else {
-      title = "✓ Kept from your note"
-      message = "A memory about Sam."
+      title = "✓ Remembered"
+      message = "What you told Sam."
     }
     NotificationService.shared.sendNotification(
       ownerID: ownerID,
@@ -479,8 +479,12 @@ extension SBOnboardingModel {
     scenarioDetectionTask?.cancel()
     OnboardingScenarioJournal().append(who: "system", text: "Received the sent local note")
     stopScenarioNoteReceiver()
-    dismissWriteGuideChip()
+    // The kept card presented by `applyScenarioNote` replaces the guide chip in place; a separate
+    // retraction first left the new card fighting the chip's collapse for the island's size.
     applyScenarioNote(note)
+    if FloatingControlBarManager.shared.currentNotificationAssistantID == FirstRunNotchCardIdentity.scenarioGuide {
+      dismissWriteGuideChip()
+    }
     scenarioReturnToOmi()
   }
 
@@ -554,7 +558,9 @@ extension SBOnboardingModel {
 
   /// "Looks right" is the explicit gesture that turns the note's commitment into a task
   /// (INV-TASK-2: capture proposes; only a user gesture writes a task). The memories were written on
-  /// detection because they are the user's own words; the task waits for this tap.
+  /// detection because they are the user's own words; the task waits for this tap. There is no
+  /// second button: "Fix something" did nothing but skip the task, and a control that does nothing
+  /// visible is a lie. Anything kept here can be edited in Tasks and Memories like everything else.
   func confirmScenarioWrites() {
     guard step == .write, writePhase == .review else { return }
     if let taskTitle = scenarioProposedTaskTitle, !scenarioWriteReceipts.contains("task:\(taskTitle)"),
@@ -585,12 +591,6 @@ extension SBOnboardingModel {
     // The chip comes down in `teardownStep(.write)`, which every exit from the beat runs.
     OnboardingScenarioJournal().append(who: "user", text: "Skip for now")
     advance(userAnswer: "Skip for now", to: .ready, skipped: true, detection: "timeout")
-  }
-
-  func requestScenarioWriteFix() {
-    guard step == .write, writePhase == .review else { return }
-    OnboardingScenarioJournal().append(who: "user", text: "fix_requested")
-    advance(userAnswer: "Fix something", to: .ready, detection: "title_match")
   }
 
   private func appendScenarioOmiLine(_ text: String) {
