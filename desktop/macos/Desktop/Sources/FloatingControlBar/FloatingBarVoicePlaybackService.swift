@@ -1120,6 +1120,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
           .citation:
           return nil
+        // The chip is a control, not narration. Speaking it would turn a
+        // tappable next step into an answer that ends by asking out loud.
+        case .followUp:
+          return nil
         case .toolCall, .thinking:
           return nil
         }

@@ -5297,8 +5297,13 @@ class FloatingControlBarManager {
       // No error and no provider-backed answer content (text/blocks/resources).
       // Never call setLocalAnswerOverride when an answerMessageId is already
       // bound — that would clear the provider answer (including block-only).
+      // Honest, and deliberately not an invitation. The measured behaviour is
+      // that nobody takes a "want me to try again?" tail — they re-send the same
+      // question themselves — so the copy states what happened and stops. A
+      // failed turn never carries a follow-up chip either: the chip is appended
+      // only on the provider's accepted-answer path.
       barWindow.state.setLocalAnswerOverride(
-        ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
+        ChatMessage(text: "Omi couldn't get an answer for that one.", sender: .ai)
       )
     }
 
