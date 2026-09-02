@@ -386,6 +386,8 @@ function relayResultIdentity(
       runId: invocation.runId,
       attemptId: invocation.attemptId,
       toolName: invocation.canonicalToolName,
+      surfaceKind: invocation.surfaceKind,
+      purpose: invocation.originatingUserText,
     };
   }
   // Capability rejection occurs before a kernel-owned invocation exists. It
@@ -412,6 +414,13 @@ function finalizeRelayResult(
     outcome,
     kernel: runtimeKernel,
     artifactRoot: agentArtifactsDir(),
+    onDegraded: (record) => {
+      // Projecting a large-but-successful result down to its model budget is
+      // the intended path here, not an error. logErr keeps the write pipe-safe
+      // (a destroyed stderr during shutdown must not throw) and off the
+      // error-level stream.
+      logErr(`fallback area=tool_result_projection outcome=degraded ${JSON.stringify(record)}`);
+    },
   });
 }
 
@@ -538,6 +547,21 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
       writeFinalizedRelayToolResult(pending.client, pending.callId, result);
     } catch (error) {
       logErr(`Rejected authorized tool execution result invocation=${msg.invocationId}: ${error}`);
+      pendingToolCalls.delete(key);
+      clearTimeout(pending.timeout);
+      const failure = finalizeRelayResult(
+        pending.callId,
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: "tool_result_finalization_failed",
+            message: "The authorized tool result could not be finalized.",
+          },
+        }),
+        pending.invocation,
+        "failed",
+      );
+      writeFinalizedRelayToolResult(pending.client, pending.callId, failure);
     }
     return;
   }
@@ -582,6 +606,32 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
       });
     } catch (error) {
       logErr(`Rejected external authorized tool result invocation=${msg.invocationId}: ${error}`);
+      pendingExternalToolCalls.delete(key);
+      clearTimeout(external.timeout);
+      const failure = finalizeRelayResult(
+        external.request.requestId,
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: "tool_result_finalization_failed",
+            message: "The authorized tool result could not be finalized.",
+          },
+        }),
+        external.invocation,
+        "failed",
+      );
+      send({
+        type: "external_surface_tool_result",
+        requestId: external.request.requestId,
+        clientId: external.request.clientId,
+        ownerId: external.invocation.ownerId,
+        sessionId: external.invocation.sessionId,
+        runId: external.invocation.runId,
+        attemptId: external.invocation.attemptId,
+        invocationId: external.invocation.invocationId,
+        ok: true,
+        result: failure,
+      });
     }
     return;
   }
@@ -983,6 +1033,8 @@ function startOmiToolsRelay(): Promise<string> {
                           runId: authorized.runId,
                           attemptId: authorized.attemptId,
                           toolName: authorized.canonicalToolName,
+                          surfaceKind: authorized.surfaceKind,
+                          purpose: authorized.originatingUserText,
                         },
                         getOwnerId: establishedOwnerId,
                         executionLease,
@@ -2327,6 +2379,8 @@ async function main(): Promise<void> {
                     runId: authorized.runId,
                     attemptId: authorized.attemptId,
                     toolName: authorized.canonicalToolName,
+                    surfaceKind: authorized.surfaceKind,
+                    purpose: authorized.originatingUserText,
                   },
                   getOwnerId: establishedOwnerId,
                   executionLease,
