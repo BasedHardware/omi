@@ -546,6 +546,76 @@ test('chrome keeps a sliding nav pill, structured home cards, and a field omniba
   expect(allKitSource).not.toMatch(/composer:\s*\{/);
 });
 
+test('failed reads on Library and Tasks never claim an empty product', () => {
+  const errorOutcomes = {
+    conversations: {
+      status: 'error' as const,
+      error: 'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.',
+    },
+    memories: {
+      status: 'error' as const,
+      error: 'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.',
+    },
+    tasks: {
+      status: 'error' as const,
+      error: 'Omi cloud needs a signed-in session.',
+    },
+  };
+  const renderer = renderDesktop({
+    outcomes: errorOutcomes,
+    reads: [],
+    readsPhase: 'unavailable',
+  });
+  let tree = renderedText(renderer);
+  expect(tree).toContain('Omi cloud needs a signed-in session.');
+  expect(tree).not.toContain('No tasks yet');
+  expect(tree).not.toContain('Nothing captured yet.');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Conversations')
+      .props.onPress();
+  });
+  tree = renderedText(renderer);
+  expect(tree).toContain(
+    'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.',
+  );
+  expect(tree).not.toContain('Nothing captured in this window yet.');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress();
+  });
+  tree = renderedText(renderer);
+  expect(tree).toContain('Omi cloud needs a signed-in session.');
+  expect(tree).not.toContain('No tasks yet');
+});
+
+test('a successful empty read is the only path to the empty claims', async () => {
+  const emptyOutcomes = {
+    conversations: {
+      status: 'success' as const,
+      value: {items: [], page: {windowStatus: 'complete' as const, complete: true, hasMore: false, nextCursor: null, completenessStatus: 'complete' as const, reasons: []}},
+    },
+    memories: {
+      status: 'success' as const,
+      value: {items: [], page: {windowStatus: 'complete' as const, complete: true, hasMore: false, nextCursor: null, completenessStatus: 'complete' as const, reasons: []}},
+    },
+    tasks: {
+      status: 'success' as const,
+      value: {items: [], page: {windowStatus: 'complete' as const, complete: true, hasMore: false, nextCursor: null, completenessStatus: 'complete' as const, reasons: []}},
+    },
+  };
+  const renderer = renderDesktop({
+    outcomes: emptyOutcomes,
+    reads: [],
+    readsPhase: 'ready',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Nothing captured yet.');
+  expect(tree).toContain('No tasks yet');
+  expect(tree).not.toContain('Conversations will show here when your day is loaded.');
+});
+
 test('Apps is a wrapped gallery of tiles', async () => {
   const pages = kitSources['DesktopPages.tsx'];
   expect(pages).toMatch(/appGrid:\s*\{[^}]*flexWrap:\s*'wrap'/);

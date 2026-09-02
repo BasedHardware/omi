@@ -19,10 +19,17 @@ export function LibraryPage({
 }: {
   outcomes: DesktopReadOutcomes | null;
 }) {
+  const outcome = outcomes?.conversations ?? null;
   const conversations =
-    outcomes?.conversations.status === 'success'
-      ? outcomes.conversations.value.items
-      : [];
+    outcome?.status === 'success' ? outcome.value.items : [];
+  // A failed or unsettled read must never claim "nothing captured": only a
+  // successful empty page is an empty library.
+  const emptyCopy =
+    outcome === null
+      ? 'Loading conversations…'
+      : outcome.status === 'error'
+      ? outcome.error
+      : 'Nothing captured in this window yet.';
   return (
     <View style={styles.page}>
       <ScrollView
@@ -35,7 +42,7 @@ export function LibraryPage({
             </ShippingListInsert>
           ))
         ) : (
-          <EmptyCopy>Nothing captured in this window yet.</EmptyCopy>
+          <EmptyCopy>{emptyCopy}</EmptyCopy>
         )}
       </ScrollView>
     </View>
@@ -43,8 +50,14 @@ export function LibraryPage({
 }
 
 export function TasksPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
-  const tasks =
-    outcomes?.tasks.status === 'success' ? outcomes.tasks.value.items : [];
+  const outcome = outcomes?.tasks ?? null;
+  const tasks = outcome?.status === 'success' ? outcome.value.items : [];
+  const emptyCopy =
+    outcome === null
+      ? 'Loading tasks…'
+      : outcome.status === 'error'
+      ? outcome.error
+      : 'No tasks yet';
   return (
     <View style={styles.page}>
       <ScrollView
@@ -57,7 +70,7 @@ export function TasksPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
             </ShippingListInsert>
           ))
         ) : (
-          <EmptyCopy>No tasks yet</EmptyCopy>
+          <EmptyCopy>{emptyCopy}</EmptyCopy>
         )}
       </ScrollView>
     </View>
