@@ -802,6 +802,7 @@ final class DesktopAutomationActionRegistry {
     // The five cursor-free Home-stage drivers, together because they share a failure mode:
     // see DesktopAutomationHomeStageActions.swift.
     registerHomeStageActions()
+    registerFirstUsePopupActions()
     register(
       name: "refresh_all_data",
       summary: "Refresh conversations, chat, tasks, and memories (same as Cmd+R)"

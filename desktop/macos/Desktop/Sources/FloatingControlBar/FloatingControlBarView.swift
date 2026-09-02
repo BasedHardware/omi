@@ -95,7 +95,6 @@ struct FloatingControlBarView: View {
   @State private var notchSwitcherProgress: CGFloat = 0
   /// Last reported text-editor height so inputViewHeight can be recomputed
   /// when the pill list changes while the input is open. (Cubic P2.)
-  @State private var lastInputEditorHeight: CGFloat = 0
   private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)
   private var isChatChromePinned: Bool {
     NotchChromeLayout.isChatPinned(
@@ -998,8 +997,11 @@ struct FloatingControlBarView: View {
         }
         .zIndex(1)
       } else {
+        // `.mainInput` has no composer: the notch never takes typed text. The surface still exists
+        // for the agent-pills header; the body under it is empty.
         mainConversationContainer {
-          aiInputView
+          Color.clear
+            .frame(height: 0)
             .id("input")
         }
         .zIndex(1)
@@ -1631,68 +1633,6 @@ struct FloatingControlBarView: View {
       interjectBarHovering: state.interjectBarHovering,
       interjectPTTHoldActive: state.interjectReplyingToTitle != nil
     )
-  }
-
-  private var aiInputView: some View {
-    AskAIInputView(
-      userInput: Binding(
-        get: { state.aiInputText },
-        set: { state.aiInputText = $0 }
-      ),
-      canClearVisibleConversation: false,
-      onSend: { message in
-        (window as? FloatingControlBarWindow)?
-          .beginVisibleMainQuery(message, fromVoice: false, animated: true)
-        onSendQuery(message)
-      },
-      onClearVisibleConversation: onClearVisibleConversation,
-      onEscape: onEscape,
-      onHeightChange: { [self] height in
-        lastInputEditorHeight = height
-        recomputeUnifiedInputHeight()
-      }
-    )
-    .onChange(of: agentPills.pills.count) {
-      // The agent-pills header budget depends on whether pills exist, so
-      // recompute the input height when the pill list changes while the
-      // input/chat view is open. Without this the budget goes stale and
-      // causes clipping or extra empty space. (Cubic P2.)
-      recomputeUnifiedInputHeight()
-    }
-    .transition(
-      .asymmetric(
-        insertion: .move(edge: .top).combined(with: .opacity),
-        removal: .move(edge: .top).combined(with: .opacity)
-      ))
-  }
-
-  /// Recompute inputViewHeight from the last known editor height and the
-  /// current agent-pills presence. Called on editor height change and on
-  /// pill-list change so the shared expanded surface budget never goes stale.
-  private func recomputeUnifiedInputHeight() {
-    // Guard against stale zero editor height: the editor has not reported
-    // its size yet (or was just re-created after a surface switch), so
-    // recomputing now would shrink the window and clip input/send
-    // controls. Fall back to the minimum content height so the panel
-    // keeps a usable size until a real height arrives. (Cubic P2.)
-    let height =
-      lastInputEditorHeight > 0
-      ? lastInputEditorHeight
-      : FloatingControlBarWindow.notchInputPanelMinimumContentHeight
-    let topBand =
-      (state.usesNotchIsland || state.showingAIConversation)
-      ? notchChromeHeight
-      : FloatingControlBarWindow.pillSurfaceTopPadding
-    let statusBanner =
-      showingPTTStatusBanner
-      ? FloatingControlBarWindow.pttStatusBannerBudget
-      : 0
-    let baseHeight = topBand + statusBanner + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
-    let headerBudget =
-      !agentPills.pills.isEmpty
-      ? FloatingControlBarWindow.notchChatHeaderVerticalBudget
-      : 0
-    state.inputViewHeight = baseHeight + headerBudget
   }
 
   private var floatingChatProvider: ChatProvider? {
