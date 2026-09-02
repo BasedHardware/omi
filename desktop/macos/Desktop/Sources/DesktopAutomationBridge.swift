@@ -799,8 +799,7 @@ final class DesktopAutomationActionRegistry {
         "activated": activate ? "true" : "false",
       ]
     }
-    // The five cursor-free Home-stage drivers, together because they share a failure mode:
-    // see DesktopAutomationHomeStageActions.swift.
+    // Cursor-free Home-stage and first-use-popup drivers: see their own files for the shared failure mode.
     registerHomeStageActions()
     registerFirstUsePopupActions()
     register(
