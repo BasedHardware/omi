@@ -179,7 +179,8 @@ static BOOL OmiCloudSessionNeedsRefresh(NSDictionary *session) {
       expiryTime.doubleValue <= NSDate.date.timeIntervalSince1970 + 60;
 }
 
-static BOOL OmiCloudRefreshFailureIsDefinitive(NSDictionary *json) {
+static BOOL OmiCloudRefreshFailureIsDefinitive(NSInteger status, NSDictionary *json) {
+  if (status == 401 || status == 403) return YES;
   NSDictionary *error = [json[@"error"] isKindOfClass:NSDictionary.class] ? json[@"error"] : nil;
   NSString *message = [error[@"message"] isKindOfClass:NSString.class] ? error[@"message"] : nil;
   NSSet<NSString *> *failures = [NSSet setWithArray:@[
@@ -223,7 +224,7 @@ static void OmiRefreshOwnKeychainCloudSession(
       NSDictionary *json = data == nil ? nil
           : [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
       if (error != nil || status < 200 || status >= 300 || ![json isKindOfClass:NSDictionary.class]) {
-        if (OmiCloudRefreshFailureIsDefinitive(json)) OmiClearOwnKeychainCloudSession();
+        if (OmiCloudRefreshFailureIsDefinitive(status, json)) OmiClearOwnKeychainCloudSession();
         completion(error ?: [NSError errorWithDomain:@"OmiBackend" code:status userInfo:nil]);
         return;
       }
@@ -252,26 +253,11 @@ static void OmiRefreshOwnKeychainCloudSession(
   };
   NSString *firebaseApiKey = [session[@"firebaseApiKey"] isKindOfClass:NSString.class]
       ? session[@"firebaseApiKey"] : nil;
-  if (firebaseApiKey.length > 0) {
-    refreshWithKey(firebaseApiKey);
-    return;
-  }
-  NSMutableURLRequest *configuration = [NSMutableURLRequest requestWithURL:
-      [NSURL URLWithString:@"https://api.omi.me/v1/config/api-keys"]];
-  [[networkSession dataTaskWithRequest:configuration
-                     completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-    NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class]
-        ? ((NSHTTPURLResponse *)response).statusCode : 0;
-    NSDictionary *json = data == nil ? nil
-        : [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-    NSString *key = [json[@"firebase_api_key"] isKindOfClass:NSString.class]
-        ? json[@"firebase_api_key"] : json[@"firebaseApiKey"];
-    if (error != nil || status < 200 || status >= 300 || key.length == 0) {
-      completion(error ?: [NSError errorWithDomain:@"OmiBackend" code:status userInfo:nil]);
-      return;
-    }
-    refreshWithKey(key);
-  }] resume];
+  // Imported shipping sessions carry no firebaseApiKey, and
+  // /v1/config/api-keys 401s without a session, so refresh with the same
+  // public Web API key sign-in uses. The refreshed session persists it.
+  if (firebaseApiKey.length == 0) firebaseApiKey = OmiAuthResolvedFirebaseApiKey();
+  refreshWithKey(firebaseApiKey);
 }
 
 static OmiBackendPolicy *OmiResolvedBackendPolicy(NSDictionary<NSString *, NSString *> *environment) {
