@@ -123,7 +123,9 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertEqual(saved, SBPostOnboardingGuidance.suggestions(for: model.postOnboardingSetup))
     XCTAssertFalse(saved.isEmpty, "The dashboard popup and banner are gated on this being non-empty")
     XCTAssertTrue(saved.contains(DayZeroChips.summarizeScreen))
-    XCTAssertTrue(saved.contains("What's on my calendar today?"))
+    // No calendar chip: the scenario onboarding has no connector step, so nothing is "connected"
+    // when it ends, and the guidance only offers what was actually set up.
+    XCTAssertFalse(saved.contains(DayZeroChips.calendarToday))
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldShowPopup)
     XCTAssertFalse(PostOnboardingPromptSuggestions.isDismissed)
   }
