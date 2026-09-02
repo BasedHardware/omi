@@ -1,10 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/home/page.dart';
-import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/providers/auth_provider.dart';
@@ -21,6 +21,9 @@ class MobileApp extends StatefulWidget {
 
 class _MobileAppState extends State<MobileApp> {
   int _lastPresentedSessionExpiration = 0;
+  // Bumped by the debug restart button to force a fresh OnboardingWrapper
+  // (new key => new State => TabController resets to the splash page).
+  int _onboardingRestartCount = 0;
 
   void _presentSessionExpiration(int generation) {
     if (generation <= _lastPresentedSessionExpiration) return;
@@ -63,7 +66,33 @@ class _MobileAppState extends State<MobileApp> {
             },
           );
         } else {
-          return const DeviceSelectionPage();
+          return Stack(
+            children: [
+              OnboardingWrapper(key: ValueKey(_onboardingRestartCount)),
+              // Debug-only: restarts the whole onboarding flow from the
+              // splash. Compiled out of release builds via kDebugMode.
+              if (kDebugMode)
+                Positioned(
+                  left: 16,
+                  bottom: 16,
+                  child: SafeArea(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _onboardingRestartCount++),
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(alpha: 0.15),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
+                        ),
+                        child: const Icon(Icons.replay, size: 16, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
         }
       },
     );

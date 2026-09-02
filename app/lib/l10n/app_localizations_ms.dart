@@ -1801,6 +1801,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get getStarted => 'Mulakan';
 
   @override
+  String get onboardingSplashTagline => 'Otak kedua anda.';
+
+  @override
   String get allDone => 'Semua selesai!';
 
   @override

@@ -1800,6 +1800,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get getStarted => 'ప్రారంభించండి';
 
   @override
+  String get onboardingSplashTagline => 'మీ రెండవ మెదడు.';
+
+  @override
   String get allDone => 'అంతా చేయబడింది!';
 
   @override

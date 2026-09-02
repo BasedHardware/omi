@@ -1788,6 +1788,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get getStarted => 'Kom i gang';
 
   @override
+  String get onboardingSplashTagline => 'Din anden hjerne.';
+
+  @override
   String get allDone => 'Helt færdig';
 
   @override

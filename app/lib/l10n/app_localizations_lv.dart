@@ -1798,6 +1798,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get getStarted => 'Sākt';
 
   @override
+  String get onboardingSplashTagline => 'Tavas otrās smadzenes.';
+
+  @override
   String get allDone => 'Viss padarīts!';
 
   @override

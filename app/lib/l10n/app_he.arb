@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "התחל",
+    "onboardingSplashTagline": "המוח השני שלך.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },

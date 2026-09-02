@@ -1783,6 +1783,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get getStarted => 'התחל';
 
   @override
+  String get onboardingSplashTagline => 'המוח השני שלך.';
+
+  @override
   String get allDone => 'הכל בסדר!';
 
   @override

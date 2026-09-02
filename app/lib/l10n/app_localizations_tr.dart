@@ -1800,6 +1800,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get getStarted => 'Başlayın';
 
   @override
+  String get onboardingSplashTagline => 'İkinci beynin.';
+
+  @override
   String get allDone => 'Hepsi tamam!';
 
   @override

@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "Počni",
+    "onboardingSplashTagline": "Tvoj drugi mozak.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },

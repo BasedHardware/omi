@@ -1781,6 +1781,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get getStarted => 'ابدأ';
 
   @override
+  String get onboardingSplashTagline => 'دماغك الثاني.';
+
+  @override
   String get allDone => 'تم كل شيء!';
 
   @override

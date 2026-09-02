@@ -1808,6 +1808,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get getStarted => 'Ξεκινήστε';
 
   @override
+  String get onboardingSplashTagline => 'Ο δεύτερος εγκέφαλός σου.';
+
+  @override
   String get allDone => 'Όλα έτοιμα!';
 
   @override

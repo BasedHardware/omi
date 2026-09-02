@@ -989,6 +989,7 @@
     "getOmiUnlimitedFree": "Gaukite Omi Unlimited nemokamai, prisidėdami savo duomenimis prie AI modelių mokymo.",
     "getPaidThroughStripe": "Gaukite mokėjimus už programų pardavimus per Stripe",
     "getStarted": "Pradėti",
+    "onboardingSplashTagline": "Tavo antrosios smegenys.",
     "goBack": "Grįžti atgal",
     "goal": "TIKSLAS",
     "goalTitle": "Tikslo pavadinimas",

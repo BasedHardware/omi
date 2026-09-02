@@ -1802,6 +1802,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get getStarted => 'Начать';
 
   @override
+  String get onboardingSplashTagline => 'Ваш второй мозг.';
+
+  @override
   String get allDone => 'Всё готово!';
 
   @override

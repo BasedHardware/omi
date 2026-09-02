@@ -1797,6 +1797,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get getStarted => 'Počni';
 
   @override
+  String get onboardingSplashTagline => 'Tvoj drugi mozak.';
+
+  @override
   String get allDone => 'Sve gotovo!';
 
   @override

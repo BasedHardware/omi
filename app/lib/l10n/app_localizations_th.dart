@@ -1786,6 +1786,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get getStarted => 'เริ่มต้น';
 
   @override
+  String get onboardingSplashTagline => 'สมองที่สองของคุณ.';
+
+  @override
   String get allDone => 'เสร็จแล้ว!';
 
   @override

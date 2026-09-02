@@ -1802,6 +1802,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get getStarted => 'Inizia';
 
   @override
+  String get onboardingSplashTagline => 'Il tuo secondo cervello.';
+
+  @override
   String get allDone => 'Tutto fatto!';
 
   @override

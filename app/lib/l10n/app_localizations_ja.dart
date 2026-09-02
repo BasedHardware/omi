@@ -1765,6 +1765,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get getStarted => '始める';
 
   @override
+  String get onboardingSplashTagline => 'あなたの第二の脳.';
+
+  @override
   String get allDone => '完了しました！';
 
   @override

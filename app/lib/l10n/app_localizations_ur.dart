@@ -1795,6 +1795,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get getStarted => 'شروع کریں';
 
   @override
+  String get onboardingSplashTagline => 'آپ کا دوسرا دماغ.';
+
+  @override
   String get allDone => 'ہو گیا!';
 
   @override

@@ -106,7 +106,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
                             TextSpan(text: 'Just use Omi in the background for '),
                             TextSpan(
                               text: '2\u00A0days',
-                              style: TextStyle(color: Color(0xFF9B59B6)),
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                             ),
                             TextSpan(text: ' and you\'ll start getting useful feedback after!'),
                           ],

@@ -3513,6 +3513,12 @@ abstract class AppLocalizations {
   /// **'Get Started'**
   String get getStarted;
 
+  /// Tagline on the onboarding splash screen, under the Omi wordmark
+  ///
+  /// In en, this message translates to:
+  /// **'your second brain.'**
+  String get onboardingSplashTagline;
+
   /// Success message after completing a task
   ///
   /// In en, this message translates to:

@@ -1800,6 +1800,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get getStarted => 'Bắt đầu';
 
   @override
+  String get onboardingSplashTagline => 'Bộ não thứ hai của bạn.';
+
+  @override
   String get allDone => 'Hoàn tất!';
 
   @override

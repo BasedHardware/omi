@@ -1794,6 +1794,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get getStarted => 'Aloita';
 
   @override
+  String get onboardingSplashTagline => 'Toinen aivosi.';
+
+  @override
   String get allDone => 'Kaikki valmista!';
 
   @override

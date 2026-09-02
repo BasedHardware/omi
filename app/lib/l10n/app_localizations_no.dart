@@ -1795,6 +1795,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get getStarted => 'Kom i gang';
 
   @override
+  String get onboardingSplashTagline => 'Din andre hjerne.';
+
+  @override
   String get allDone => 'Alt ferdig!';
 
   @override

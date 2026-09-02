@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "শুরু করুন",
+    "onboardingSplashTagline": "আপনার দ্বিতীয় মস্তিষ্ক.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },

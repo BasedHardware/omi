@@ -1796,6 +1796,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get getStarted => 'شروع کنید';
 
   @override
+  String get onboardingSplashTagline => 'مغز دوم شما.';
+
+  @override
   String get allDone => 'همه کار تمام شد!';
 
   @override

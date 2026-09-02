@@ -1801,6 +1801,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get getStarted => 'Почни';
 
   @override
+  String get onboardingSplashTagline => 'Твојот втор мозок.';
+
+  @override
   String get allDone => 'Сè завршено!';
 
   @override

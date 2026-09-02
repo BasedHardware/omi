@@ -52,6 +52,8 @@ class ServiceManager {
     return _instance!;
   }
 
+  static bool get isInitiated => _instance != null;
+
   IMicRecorderService get mic => _mic;
 
   /// The recorder for conversation capture: native on iOS and Android,

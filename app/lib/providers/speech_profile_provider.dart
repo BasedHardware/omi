@@ -485,7 +485,12 @@ class SpeechProfileProvider extends ChangeNotifier
     _reconnectTimer?.cancel();
     _finalizedCallback = null;
     _socket?.unsubscribe(this);
-    ServiceManager.instance().device.unsubscribe(this);
+    // dispose() must never throw — a provider constructed but never fully
+    // wired to the service layer (e.g. torn down before the app finished
+    // initializing) shouldn't crash on cleanup.
+    if (ServiceManager.isInitiated) {
+      ServiceManager.instance().device.unsubscribe(this);
+    }
 
     super.dispose();
   }

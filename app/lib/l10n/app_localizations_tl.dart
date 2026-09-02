@@ -1804,6 +1804,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get getStarted => 'Magsimula';
 
   @override
+  String get onboardingSplashTagline => 'Ang iyong pangalawang utak.';
+
+  @override
   String get allDone => 'Tapos na!';
 
   @override

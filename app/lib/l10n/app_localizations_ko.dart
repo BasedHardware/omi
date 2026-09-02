@@ -1765,6 +1765,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get getStarted => '시작하기';
 
   @override
+  String get onboardingSplashTagline => '당신의 두 번째 뇌.';
+
+  @override
   String get allDone => '모두 완료!';
 
   @override

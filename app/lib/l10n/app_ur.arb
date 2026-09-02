@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "شروع کریں",
+    "onboardingSplashTagline": "آپ کا دوسرا دماغ.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },

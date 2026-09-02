@@ -1794,6 +1794,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get getStarted => 'Pradėti';
 
   @override
+  String get onboardingSplashTagline => 'Tavo antrosios smegenys.';
+
+  @override
   String get allDone => 'Viskas atlikta!';
 
   @override

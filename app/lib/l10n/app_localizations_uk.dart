@@ -1797,6 +1797,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get getStarted => 'Почати';
 
   @override
+  String get onboardingSplashTagline => 'Твій другий мозок.';
+
+  @override
   String get allDone => 'Все готово!';
 
   @override

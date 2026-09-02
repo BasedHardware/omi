@@ -1794,6 +1794,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get getStarted => 'Alusta';
 
   @override
+  String get onboardingSplashTagline => 'Sinu teine aju.';
+
+  @override
   String get allDone => 'Kõik tehtud!';
 
   @override

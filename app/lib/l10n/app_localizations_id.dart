@@ -1800,6 +1800,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get getStarted => 'Mulai';
 
   @override
+  String get onboardingSplashTagline => 'Otak kedua Anda.';
+
+  @override
   String get allDone => 'Semua selesai!';
 
   @override

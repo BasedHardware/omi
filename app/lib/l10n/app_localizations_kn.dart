@@ -1798,6 +1798,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get getStarted => 'ಪ್ರಾರಂಭ ಮಾಡಿ';
 
   @override
+  String get onboardingSplashTagline => 'ನಿಮ್ಮ ಎರಡನೇ ಮೆದುಳು.';
+
+  @override
   String get allDone => 'ಎಲ್ಲಾ ಪೂರ್ಣ!';
 
   @override

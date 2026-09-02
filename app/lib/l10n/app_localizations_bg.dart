@@ -1799,6 +1799,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get getStarted => 'Започнете';
 
   @override
+  String get onboardingSplashTagline => 'Твоят втори мозък.';
+
+  @override
   String get allDone => 'Готово!';
 
   @override

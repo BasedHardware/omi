@@ -1794,6 +1794,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get getStarted => 'শুরু করুন';
 
   @override
+  String get onboardingSplashTagline => 'আপনার দ্বিতীয় মস্তিষ্ক.';
+
+  @override
   String get allDone => 'সবকিছু সম্পন্ন!';
 
   @override

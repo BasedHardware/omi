@@ -1797,6 +1797,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get getStarted => 'Kom igång';
 
   @override
+  String get onboardingSplashTagline => 'Din andra hjärna.';
+
+  @override
   String get allDone => 'Allt klart!';
 
   @override

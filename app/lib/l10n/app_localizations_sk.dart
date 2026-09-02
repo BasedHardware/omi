@@ -1799,6 +1799,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get getStarted => 'Začať';
 
   @override
+  String get onboardingSplashTagline => 'Tvoj druhý mozog.';
+
+  @override
   String get allDone => 'Všetko hotové!';
 
   @override

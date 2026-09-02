@@ -1806,6 +1806,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get getStarted => 'Kezdés';
 
   @override
+  String get onboardingSplashTagline => 'A második agyad.';
+
+  @override
   String get allDone => 'Kész!';
 
   @override

@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "தொடங்குங்கள்",
+    "onboardingSplashTagline": "உங்கள் இரண்டாவது மூளை.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },

@@ -1795,6 +1795,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get getStarted => 'Početak';
 
   @override
+  String get onboardingSplashTagline => 'Tvoj drugi mozak.';
+
+  @override
   String get allDone => 'Sve je gotovo!';
 
   @override

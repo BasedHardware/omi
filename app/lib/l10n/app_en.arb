@@ -1716,6 +1716,10 @@
     "@getStarted": {
         "description": "Button text to begin a process"
     },
+    "onboardingSplashTagline": "your second brain.",
+    "@onboardingSplashTagline": {
+        "description": "Tagline on the onboarding splash screen, under the Omi wordmark"
+    },
     "allDone": "All done!",
     "@allDone": {
         "description": "Success message after completing a task"

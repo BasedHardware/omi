@@ -1796,6 +1796,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get getStarted => 'सुरुवात करा';
 
   @override
+  String get onboardingSplashTagline => 'तुमचा दुसरा मेंदू.';
+
+  @override
   String get allDone => 'सर्व पूर्ण!';
 
   @override

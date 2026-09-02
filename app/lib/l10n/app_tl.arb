@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "Magsimula",
+    "onboardingSplashTagline": "Ang iyong pangalawang utak.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },

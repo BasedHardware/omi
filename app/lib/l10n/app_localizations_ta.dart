@@ -1805,6 +1805,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get getStarted => 'தொடங்குங்கள்';
 
   @override
+  String get onboardingSplashTagline => 'உங்கள் இரண்டாவது மூளை.';
+
+  @override
   String get allDone => 'அனைத்தும் முடிந்துவிட்டது!';
 
   @override

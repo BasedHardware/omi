@@ -1804,6 +1804,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get getStarted => 'Începe';
 
   @override
+  String get onboardingSplashTagline => 'Al doilea tău creier.';
+
+  @override
   String get allDone => 'Totul e gata!';
 
   @override

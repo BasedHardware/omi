@@ -1799,6 +1799,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get getStarted => 'Aan de slag';
 
   @override
+  String get onboardingSplashTagline => 'Jouw tweede brein.';
+
+  @override
   String get allDone => 'Helemaal klaar!';
 
   @override
