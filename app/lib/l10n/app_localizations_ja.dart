@@ -9749,4 +9749,34 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'タスク';
+
+  @override
+  String get chatBlockGoal => '目標';
+
+  @override
+  String get chatBlockConversation => '会話';
+
+  @override
+  String get chatBlockMemory => 'メモリー';
+
+  @override
+  String get chatBlockQuestion => '質問';
+
+  @override
+  String get chatBlockOpenInGoals => '目標で開く';
+
+  @override
+  String get chatBlockOpenConversation => '会話を開く';
+
+  @override
+  String get chatBlockOpenInMemories => 'メモリーで開く';
+
+  @override
+  String get chatBlockUnavailable => '現在は利用できません';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'おすすめの次のステップ';
 }

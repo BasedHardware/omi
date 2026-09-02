@@ -9955,4 +9955,34 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Задача';
+
+  @override
+  String get chatBlockGoal => 'Цель';
+
+  @override
+  String get chatBlockConversation => 'Разговор';
+
+  @override
+  String get chatBlockMemory => 'Воспоминание';
+
+  @override
+  String get chatBlockQuestion => 'Вопрос';
+
+  @override
+  String get chatBlockOpenInGoals => 'Открыть в «Целях»';
+
+  @override
+  String get chatBlockOpenConversation => 'Открыть разговор';
+
+  @override
+  String get chatBlockOpenInMemories => 'Открыть в «Воспоминаниях»';
+
+  @override
+  String get chatBlockUnavailable => 'Больше недоступно';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Рекомендуемые следующие шаги';
 }

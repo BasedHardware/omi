@@ -9919,4 +9919,34 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Tehtävä';
+
+  @override
+  String get chatBlockGoal => 'Tavoite';
+
+  @override
+  String get chatBlockConversation => 'Keskustelu';
+
+  @override
+  String get chatBlockMemory => 'Muisto';
+
+  @override
+  String get chatBlockQuestion => 'Kysymys';
+
+  @override
+  String get chatBlockOpenInGoals => 'Avaa Tavoitteissa';
+
+  @override
+  String get chatBlockOpenConversation => 'Avaa keskustelu';
+
+  @override
+  String get chatBlockOpenInMemories => 'Avaa Muistoissa';
+
+  @override
+  String get chatBlockUnavailable => 'Ei ole enää saatavilla';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Suositellut seuraavat vaiheet';
 }

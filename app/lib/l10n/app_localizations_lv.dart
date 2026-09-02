@@ -9942,4 +9942,34 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Uzdevums';
+
+  @override
+  String get chatBlockGoal => 'Mērķis';
+
+  @override
+  String get chatBlockConversation => 'Saruna';
+
+  @override
+  String get chatBlockMemory => 'Atmiņa';
+
+  @override
+  String get chatBlockQuestion => 'Jautājums';
+
+  @override
+  String get chatBlockOpenInGoals => 'Atvērt sadaļā “Mērķi”';
+
+  @override
+  String get chatBlockOpenConversation => 'Atvērt sarunu';
+
+  @override
+  String get chatBlockOpenInMemories => 'Atvērt sadaļā “Atmiņas”';
+
+  @override
+  String get chatBlockUnavailable => 'Vairs nav pieejams';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Ieteicamie nākamie soļi';
 }

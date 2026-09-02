@@ -10009,4 +10009,34 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Gawain';
+
+  @override
+  String get chatBlockGoal => 'Layunin';
+
+  @override
+  String get chatBlockConversation => 'Pag-uusap';
+
+  @override
+  String get chatBlockMemory => 'Alaala';
+
+  @override
+  String get chatBlockQuestion => 'Tanong';
+
+  @override
+  String get chatBlockOpenInGoals => 'Buksan sa Mga Layunin';
+
+  @override
+  String get chatBlockOpenConversation => 'Buksan ang pag-uusap';
+
+  @override
+  String get chatBlockOpenInMemories => 'Buksan sa Mga Alaala';
+
+  @override
+  String get chatBlockUnavailable => 'Hindi na available';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Mga inirerekomendang susunod na hakbang';
 }

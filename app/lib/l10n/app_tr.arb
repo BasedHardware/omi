@@ -3269,5 +3269,15 @@
     "pendantRecordingSyncBlocked": "Pendant hâlâ kayıt yapıyor, bu yüzden depolanan ses aktarılamıyor. Kaydı durdurmak için Pendant'ın düğmesine basın, ardından yeniden senkronize edin.",
     "pendantFullSyncBlocked": "Pendant'ın depolama alanı dolu ve hâlâ kayıt modunda olduğu için kayıtlı ses aktarılamıyor. Kaydı durdurmak için Pendant'ın düğmesine basın, ardından yeniden senkronize edin.",
     "conversationsNotCapturedCount": "Kaydedilmedi ({count})",
-    "transcriptionNoAudio": "Transkripsiyon ses almıyor"
+    "transcriptionNoAudio": "Transkripsiyon ses almıyor",
+    "chatBlockTask": "Görev",
+    "chatBlockGoal": "Hedef",
+    "chatBlockConversation": "Konuşma",
+    "chatBlockMemory": "Anı",
+    "chatBlockQuestion": "Soru",
+    "chatBlockOpenInGoals": "Hedefler’de aç",
+    "chatBlockOpenConversation": "Konuşmayı aç",
+    "chatBlockOpenInMemories": "Anılar’da aç",
+    "chatBlockUnavailable": "Artık kullanılamıyor",
+    "chatBlockRecommendedNextSteps": "Önerilen sonraki adımlar"
 }

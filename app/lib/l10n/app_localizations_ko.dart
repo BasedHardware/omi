@@ -9752,4 +9752,34 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => '작업';
+
+  @override
+  String get chatBlockGoal => '목표';
+
+  @override
+  String get chatBlockConversation => '대화';
+
+  @override
+  String get chatBlockMemory => '메모리';
+
+  @override
+  String get chatBlockQuestion => '질문';
+
+  @override
+  String get chatBlockOpenInGoals => '목표에서 열기';
+
+  @override
+  String get chatBlockOpenConversation => '대화 열기';
+
+  @override
+  String get chatBlockOpenInMemories => '메모리에서 열기';
+
+  @override
+  String get chatBlockUnavailable => '더 이상 사용할 수 없음';
+
+  @override
+  String get chatBlockRecommendedNextSteps => '권장 다음 단계';
 }

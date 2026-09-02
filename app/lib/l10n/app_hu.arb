@@ -3330,5 +3330,15 @@
     "pendantRecordingSyncBlocked": "A Pendant még mindig felvételt készít, ezért a tárolt hang nem vihető át. Nyomd meg a Pendant gombját a felvétel leállításához, majd szinkronizálj újra.",
     "pendantFullSyncBlocked": "A Pendant tárhelye megtelt, és még mindig felvételi módban van, ezért a tárolt hang nem vihető át. Nyomja meg a Pendant gombját a felvétel leállításához, majd szinkronizáljon újra.",
     "conversationsNotCapturedCount": "Nincs rögzítve ({count})",
-    "transcriptionNoAudio": "Az átírás nem kap hangot"
+    "transcriptionNoAudio": "Az átírás nem kap hangot",
+    "chatBlockTask": "Feladat",
+    "chatBlockGoal": "Cél",
+    "chatBlockConversation": "Beszélgetés",
+    "chatBlockMemory": "Emlék",
+    "chatBlockQuestion": "Kérdés",
+    "chatBlockOpenInGoals": "Megnyitás a Célokban",
+    "chatBlockOpenConversation": "Beszélgetés megnyitása",
+    "chatBlockOpenInMemories": "Megnyitás az Emlékekben",
+    "chatBlockUnavailable": "Már nem érhető el",
+    "chatBlockRecommendedNextSteps": "Javasolt következő lépések"
 }

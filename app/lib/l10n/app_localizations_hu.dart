@@ -9959,4 +9959,34 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Feladat';
+
+  @override
+  String get chatBlockGoal => 'Cél';
+
+  @override
+  String get chatBlockConversation => 'Beszélgetés';
+
+  @override
+  String get chatBlockMemory => 'Emlék';
+
+  @override
+  String get chatBlockQuestion => 'Kérdés';
+
+  @override
+  String get chatBlockOpenInGoals => 'Megnyitás a Célokban';
+
+  @override
+  String get chatBlockOpenConversation => 'Beszélgetés megnyitása';
+
+  @override
+  String get chatBlockOpenInMemories => 'Megnyitás az Emlékekben';
+
+  @override
+  String get chatBlockUnavailable => 'Már nem érhető el';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Javasolt következő lépések';
 }
