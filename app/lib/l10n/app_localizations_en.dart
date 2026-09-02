@@ -1860,7 +1860,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get openSettings => 'Open Settings';
 
   @override
-  String get wantDifferentName => 'Want to go by something else?';
+  String get wantDifferentName => 'What is your name?';
 
   @override
   String get whatsYourName => 'What\'s your name?';

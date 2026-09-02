@@ -1800,7 +1800,7 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "wantDifferentName": "Want to go by something else?",
+    "wantDifferentName": "What is your name?",
     "@wantDifferentName": {
         "description": "Question asking if user wants to change their display name"
     },

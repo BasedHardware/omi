@@ -3642,7 +3642,7 @@ abstract class AppLocalizations {
   /// Question asking if user wants to change their display name
   ///
   /// In en, this message translates to:
-  /// **'Want to go by something else?'**
+  /// **'What is your name?'**
   String get wantDifferentName;
 
   /// Question asking for user's name
