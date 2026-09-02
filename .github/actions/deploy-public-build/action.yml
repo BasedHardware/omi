@@ -137,6 +137,7 @@ runs:
         revision_suffix="${short_sha}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
         service='${{ steps.contract.outputs.service }}'
         {
+          echo "sha=${GITHUB_SHA}"
           echo "short_sha=${short_sha}"
           echo "revision_suffix=${revision_suffix}"
           echo "revision=${service}-${revision_suffix}"
@@ -156,7 +157,9 @@ runs:
         push: true
         platforms: ${{ steps.contract.outputs.platforms }}
         tags: ${{ steps.candidate.outputs.image }}
-        build-args: ${{ steps.public-build.outputs.build_args }}
+        build-args: |
+          ${{ steps.public-build.outputs.build_args }}
+          NEXT_PUBLIC_OMI_BUILD_SHA=${{ steps.candidate.outputs.sha }}
 
     - name: Deploy candidate revision
       uses: google-github-actions/deploy-cloudrun@v3
@@ -197,3 +200,4 @@ runs:
         region: ${{ steps.contract.outputs.region }}
         revision: ${{ steps.candidate.outputs.revision }}
         tag: ${{ steps.candidate.outputs.tag }}
+        sha: ${{ steps.candidate.outputs.sha }}

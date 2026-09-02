@@ -341,7 +341,9 @@
           "--target",
           "frontend",
           "--base-url",
-          "{base_url}"
+          "{base_url}",
+          "--expect-sha",
+          "{sha}"
         ],
         "marker": "frontend:ready",
         "public_urls": {
