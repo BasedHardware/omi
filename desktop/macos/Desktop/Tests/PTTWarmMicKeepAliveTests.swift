@@ -91,6 +91,39 @@ final class PTTWarmMicKeepAliveTests: XCTestCase {
       "a warm capture must not publish turn events (INV-VOICE-1)")
   }
 
+  /// A warm capture whose CoreAudio start has not resolved yet holds the same
+  /// device as a parked one. Every caller that gives up the parked capture — a
+  /// turn starting, terminal cleanup, an owner transition, ambient transcription
+  /// taking the device — must get the in-flight one too, or two HAL starts race
+  /// on one input.
+  func testAnInFlightWarmCaptureIsReleasedByTheParkedCaptureHandshake() throws {
+    let source = try pushToTalkManagerSource()
+
+    XCTAssertTrue(source.contains("var warmCaptureInFlight: AudioCaptureService?"))
+    XCTAssertTrue(source.contains("return releaseInFlightWarmCapture()"))
+    XCTAssertTrue(
+      source.contains("guard self.warmCaptureInFlight === capture else {"),
+      "the warm start's completion must defer to whoever released it")
+    XCTAssertTrue(
+      source.contains("guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,"),
+      "a capture opened for the previous owner must not park under the next one")
+  }
+
+  /// The hold is latched at release, at the one shared finalization entry, before
+  /// the realtime-hub branch can park the turn for a second or more.
+  func testTheHoldIsLatchedAtReleaseBeforeTheHubWarmBranch() throws {
+    let source = try pushToTalkManagerSource()
+
+    guard let release = source.range(of: "pttLifecycle.noteRelease()"),
+      let hubWait = source.range(of: "finalizing while realtime hub warms")
+    else {
+      return XCTFail("the release latch or the hub-warm branch moved")
+    }
+    XCTAssertLessThan(
+      release.lowerBound, hubWait.lowerBound,
+      "noteRelease must run before finalization can park the turn on the hub warm wait")
+  }
+
   /// A turn that ends because capture was not ready keeps its capture parked —
   /// that parked capture is the retry the hint promises.
   func testCaptureNotReadyKeepsTheWarmCaptureForItsRetry() throws {

@@ -254,6 +254,7 @@ final class PTTAttemptLifecycleRecorder {
   // Per-attempt accumulation state. Reset on every `beginAttempt`.
   private var attemptId: String = "0"
   private var attemptStartedAt: Date?
+  private var releasedAt: Date?
   private var captureStartOutcome: CaptureStartOutcome = .notRequested
   private var captureStartStatusClass: CaptureStartStatusClass = .none
   private var firstAudioCallbackAt: Date?
@@ -284,6 +285,7 @@ final class PTTAttemptLifecycleRecorder {
     attemptSequence &+= 1
     attemptId = String(attemptSequence)
     attemptStartedAt = now()
+    releasedAt = nil
     captureStartOutcome = .notRequested
     captureStartStatusClass = .none
     firstAudioCallbackAt = nil
@@ -351,13 +353,27 @@ final class PTTAttemptLifecycleRecorder {
     }
   }
 
-  /// Wall time since the press, in seconds — the length of the hold, not of the
-  /// audio the capture managed to deliver inside it. `nil` before `beginAttempt`.
-  /// Read by the discard paths so capture-start latency is charged to capture
-  /// rather than to the user's finger.
-  var attemptElapsedSeconds: Double? {
+  /// The user let go. Latched, because finalization is not always prompt: a turn
+  /// that arrives while the realtime hub is still warming holds its buffered
+  /// audio and is judged a second or more later, on the hub warm deadline or on
+  /// the connection landing. Measuring the hold as "now minus the press" there
+  /// would count that wait as part of the user's press and turn every accidental
+  /// tap on a cold hub into a capture failure.
+  ///
+  /// Idempotent: the first call wins, so a re-entered finalization cannot extend
+  /// a hold that already ended.
+  func noteRelease() {
+    guard attemptStartedAt != nil, releasedAt == nil else { return }
+    releasedAt = now()
+  }
+
+  /// How long the user actually held the key, in seconds — not how much audio the
+  /// capture managed to deliver inside it. `nil` before `beginAttempt`. Read by
+  /// the discard paths so capture-start latency is charged to capture rather than
+  /// to the user's finger.
+  var holdSeconds: Double? {
     guard let attemptStartedAt else { return nil }
-    return max(0, now().timeIntervalSince(attemptStartedAt))
+    return max(0, (releasedAt ?? now()).timeIntervalSince(attemptStartedAt))
   }
 
   /// A recovery was requested for this attempt. Mints a bounded correlation id

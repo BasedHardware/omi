@@ -122,7 +122,7 @@ final class PTTSilentMicRecoveryPolicyTests: XCTestCase {
     XCTAssertEqual(policy.consecutiveDeadMicTurns, 1)
   }
 
-  func testAudibleTurnAfterCaptureRebuildRecordsSuccess() {
+  func testAudibleTurnAfterCaptureRebuildRecordsSuccessAndRearmsPolicy() {
     var policy = policyAwaitingRecoveryOutcome()
 
     XCTAssertEqual(
@@ -132,6 +132,11 @@ final class PTTSilentMicRecoveryPolicyTests: XCTestCase {
         peak: PTTSilentMicRecoveryPolicy.deadMicPeakThreshold + 1
       ).recoveryOutcome,
       .succeeded)
+    // The rebuild is spent, so the ordinary two-turn threshold governs from here.
+    XCTAssertFalse(
+      policy.recordDiscardedTurn(holdSec: 1.0, totalSec: 1.0, peak: 0).shouldRebuildCapture)
+    XCTAssertTrue(
+      policy.recordDiscardedTurn(holdSec: 1.0, totalSec: 1.0, peak: 0).shouldRebuildCapture)
   }
 
   func testNearZeroTurnAfterCaptureRebuildRecordsFailureWithoutSpinning() {
@@ -145,8 +150,11 @@ final class PTTSilentMicRecoveryPolicyTests: XCTestCase {
   }
 
   func testCaptureRebuildResetsCounterWithoutArmingOutcome() {
-    var policy = PTTSilentMicRecoveryPolicy()
+    var policy = armedRecoveryPolicy()
 
+    XCTAssertFalse(
+      policy.recordDiscardedTurn(holdSec: 1.0, totalSec: 1.0, peak: 0).shouldRebuildCapture)
+    XCTAssertEqual(policy.consecutiveDeadMicTurns, 1)
     policy.recordCaptureRebuild()
 
     XCTAssertEqual(policy.consecutiveDeadMicTurns, 0)

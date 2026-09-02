@@ -1,3 +1,4 @@
+import CoreAudio
 import VoiceTurnDomain
 import XCTest
 
@@ -95,23 +96,65 @@ final class PTTCaptureReadinessPolicyTests: XCTestCase {
       .audioJudgeable)
   }
 
+  // MARK: - The hold clock
+
+  /// The clock must measure the press, not the wait behind it. A cold realtime
+  /// hub holds a turn's buffered audio and judges it a second later, on the warm
+  /// deadline — which is exactly the fresh-install path, so measuring "now minus
+  /// the press" there would turn every accidental tap into a capture failure and
+  /// corrupt the metric this fix is judged by.
+  func testHoldIsMeasuredToReleaseNotToFinalization() {
+    let clock = MutableClock()
+    let recorder = PTTAttemptLifecycleRecorder()
+    recorder.now = { [clock] in clock.date }
+    recorder.beginAttempt(mode: "hold", hubActive: true, micPermissionGranted: true)
+
+    clock.advance(0.2)
+    recorder.noteRelease()
+    // The hub warm deadline fires a second after the press.
+    clock.advance(0.8)
+
+    XCTAssertEqual(recorder.holdSeconds ?? 0, 0.2, accuracy: 0.001)
+    XCTAssertEqual(
+      PTTTurnDiscardJudgement.judge(
+        holdSeconds: recorder.holdSeconds, deliveredAudioSeconds: 0.15, minTurnAudioSeconds: 0.35),
+      .shortTap,
+      "a 200 ms tap judged on the hub warm deadline must stay a tap")
+  }
+
+  /// First call wins: a re-entered finalization must not extend a hold that has
+  /// already ended.
+  func testReleaseIsLatchedOnce() {
+    let clock = MutableClock()
+    let recorder = PTTAttemptLifecycleRecorder()
+    recorder.now = { [clock] in clock.date }
+    recorder.beginAttempt(mode: "hold", hubActive: true, micPermissionGranted: true)
+
+    clock.advance(0.2)
+    recorder.noteRelease()
+    clock.advance(5.0)
+    recorder.noteRelease()
+
+    XCTAssertEqual(recorder.holdSeconds ?? 0, 0.2, accuracy: 0.001)
+  }
+
   // MARK: - Warm capture admission
 
   func testWarmCaptureIsAdmittedAfterTheCardIsShown() {
-    XCTAssertTrue(PTTWarmCaptureAdmission.admits(admissible(trigger: .firstRealAppCard)))
+    XCTAssertTrue(PTTWarmCaptureAdmission.admits(admissible()))
   }
 
   /// A prewarm must never be what raises the system microphone prompt: the user
   /// has to see that prompt attached to something they did.
   func testWarmCaptureNeverRequestsMicrophonePermission() {
-    var input = admissible(trigger: .firstRealAppCard)
+    var input = admissible()
     input.micPermissionGranted = false
 
     XCTAssertFalse(PTTWarmCaptureAdmission.admits(input))
   }
 
   func testWarmCaptureIsRefusedWhileATurnOwnsTheDevice() {
-    var input = admissible(trigger: .onboardingCompleted)
+    var input = admissible()
     input.hasActiveTurn = true
 
     XCTAssertFalse(PTTWarmCaptureAdmission.admits(input))
@@ -120,66 +163,107 @@ final class PTTCaptureReadinessPolicyTests: XCTestCase {
   /// Two IOProcs on one input is the hazard the parked-warm mechanism exists to
   /// avoid; a second warm capture beside an existing one would recreate it.
   func testWarmCaptureIsRefusedWhenACaptureAlreadyExists() {
-    var input = admissible(trigger: .ambientCaptureStarted)
+    var input = admissible()
     input.hasCaptureAlready = true
 
     XCTAssertFalse(PTTWarmCaptureAdmission.admits(input))
   }
 
   func testWarmCaptureIsRefusedWhenPushToTalkIsOff() {
-    var input = admissible(trigger: .launch)
+    var input = admissible()
     input.pttEnabled = false
 
     XCTAssertFalse(PTTWarmCaptureAdmission.admits(input))
   }
 
   func testWarmCaptureIsRefusedBeforeOnboardingCompletesOrWhileSignedOut() {
-    var unonboarded = admissible(trigger: .firstRealAppCard)
+    var unonboarded = admissible()
     unonboarded.onboardingComplete = false
     XCTAssertFalse(PTTWarmCaptureAdmission.admits(unonboarded))
 
-    var signedOut = admissible(trigger: .firstRealAppCard)
+    var signedOut = admissible()
     signedOut.isSignedIn = false
     XCTAssertFalse(PTTWarmCaptureAdmission.admits(signedOut))
   }
 
-  /// Launch is the only trigger with no user action behind it. Outside the
-  /// first-run window it must not light the microphone indicator on every launch
-  /// for the life of the install.
-  func testLaunchWarmupIsConfinedToTheFirstRunWindow() {
-    XCTAssertTrue(PTTWarmCaptureAdmission.admits(admissible(trigger: .launch)))
+  /// Nothing the user did is behind a warm-up, so it refuses any route it cannot
+  /// prove is safe to hold open.
+  func testWarmCaptureIsRefusedOnAnUnsafeRoute() {
+    var input = admissible()
+    input.routeIsSafeToWarmUnattended = false
 
-    var settledInstall = admissible(trigger: .launch)
-    settledInstall.isFirstRunWindow = false
-    XCTAssertFalse(PTTWarmCaptureAdmission.admits(settledInstall))
+    XCTAssertFalse(PTTWarmCaptureAdmission.admits(input))
   }
 
-  /// Every other trigger follows something the user just did, so it is not
-  /// confined that way.
-  func testUserFollowingTriggersAreNotConfinedToTheFirstRunWindow() {
-    for trigger in [
-      PTTWarmCaptureAdmission.Trigger.onboardingCompleted, .firstRealAppCard,
-      .ambientCaptureStarted, .captureNotReady,
-    ] {
-      var input = admissible(trigger: trigger)
-      input.isFirstRunWindow = false
-      XCTAssertTrue(
-        PTTWarmCaptureAdmission.admits(input),
-        "\(trigger.rawValue) must warm outside the first-run window")
-    }
+  // MARK: - Which device a warm capture may open
+
+  /// Routing has not answered yet. Falling back to the system default here is how
+  /// an unattended warm-up opens the AirPods microphone and drops the user's
+  /// audio to HFP for the whole keep-alive window.
+  func testAnUnresolvedRouteRefusesRatherThanTakingTheSystemDefault() {
+    XCTAssertEqual(snapshot(defaultInputResolved: false).unattendedWarmCaptureRoute, .refused)
   }
 
-  private func admissible(
-    trigger: PTTWarmCaptureAdmission.Trigger
-  ) -> PTTWarmCaptureAdmission.Input {
+  /// The microphone picker exists for external and Bluetooth inputs. Opening the
+  /// device somebody deliberately chose, unattended, is not a latency
+  /// optimization anyone asked for.
+  func testAnExplicitMicrophoneChoiceIsNeverWarmedUnattended() {
+    XCTAssertEqual(
+      snapshot(selectedUID: "ray-ban-meta", selectedDeviceID: 77).unattendedWarmCaptureRoute,
+      .refused)
+  }
+
+  /// Opening a Bluetooth input flips the headset out of A2DP into HFP.
+  func testABluetoothDefaultInputIsNeverWarmedUnattended() {
+    XCTAssertEqual(
+      snapshot(defaultInputIsBluetooth: true).unattendedWarmCaptureRoute, .refused)
+  }
+
+  /// Bluetooth *output* already routes push-to-talk to the built-in microphone;
+  /// the warm capture takes the same safe device rather than refusing.
+  func testBluetoothOutputWarmsTheBuiltInMicrophone() {
+    XCTAssertEqual(
+      snapshot(outputIsBluetooth: true, builtInDeviceID: 42, defaultInputIsBluetooth: true)
+        .unattendedWarmCaptureRoute,
+      .device(42))
+  }
+
+  func testAResolvedNonBluetoothDefaultInputIsWarmed() {
+    XCTAssertEqual(snapshot().unattendedWarmCaptureRoute, .device(nil))
+  }
+
+  private func snapshot(
+    selectedUID: String = "",
+    selectedDeviceID: AudioDeviceID? = nil,
+    outputIsBluetooth: Bool = false,
+    builtInDeviceID: AudioDeviceID? = nil,
+    defaultInputResolved: Bool = true,
+    defaultInputIsBluetooth: Bool = false
+  ) -> PTTInputDeviceRouting.Snapshot {
+    PTTInputDeviceRouting.Snapshot(
+      selectedUID: selectedUID,
+      selectedDeviceID: selectedDeviceID,
+      outputIsBluetooth: outputIsBluetooth,
+      builtInDeviceID: builtInDeviceID,
+      defaultInputDeviceID: defaultInputResolved ? 1 : nil,
+      defaultInputIsBluetooth: defaultInputIsBluetooth,
+      contentionResolved: false)
+  }
+
+  /// Injects time so the hold clock is deterministic.
+  private final class MutableClock {
+    var date = Date()
+    func advance(_ seconds: Double) { date.addTimeInterval(seconds) }
+  }
+
+  private func admissible() -> PTTWarmCaptureAdmission.Input {
     PTTWarmCaptureAdmission.Input(
-      trigger: trigger,
       pttEnabled: true,
       micPermissionGranted: true,
       onboardingComplete: true,
       isSignedIn: true,
+      routeIsSafeToWarmUnattended: true,
       hasActiveTurn: false,
-      hasCaptureAlready: false,
-      isFirstRunWindow: true)
+      hasCaptureAlready: false)
   }
 }

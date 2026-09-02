@@ -555,13 +555,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // line above — it installs its own observers and decides eligibility itself.
     FirstRealAppCardCoordinator.shared.start()
 
-    // Have a microphone capture parked before the first press of the session.
-    // The keep-alive expiry (120s) bounds it, and the admission rules refuse
-    // unless push-to-talk is on, the user is signed in and onboarded, and the
-    // microphone is already authorized — a warm-up must never be what raises a
-    // TCC prompt.
-    Task { @MainActor in PushToTalkManager.shared.prewarmMicCapture(trigger: .launch) }
-
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
       AnalyticsManager.shared.identify()

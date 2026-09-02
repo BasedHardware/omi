@@ -446,10 +446,13 @@ import XCTest
       clock.advance(milliseconds: 900)
       recorder.ingestAudioChunk(Self.audiblePCM(sampleCount: 160))
       clock.advance(milliseconds: 50)
+      recorder.noteRelease()
+      // Finalization can land well after the release; the hold must not grow.
+      clock.advance(milliseconds: 1000)
 
       let resolution = PTTDiscardedTurnResolution(
         PTTTurnDiscardJudgement.judge(
-          holdSeconds: recorder.attemptElapsedSeconds,
+          holdSeconds: recorder.holdSeconds,
           deliveredAudioSeconds: 0.01,
           minTurnAudioSeconds: 0.35))
       let snap = recorder.terminate(
@@ -469,15 +472,15 @@ import XCTest
 
     /// The press clock is the hold, not the audio the capture managed to deliver
     /// inside it — the whole point of not charging capture latency to the user.
-    func testAttemptElapsedSecondsMeasuresTheHold() {
+    func testHoldSecondsMeasuresTheHold() {
       let clock = MutableTestClock()
       let recorder = makeRecorder(clock: clock)
-      XCTAssertNil(recorder.attemptElapsedSeconds)
+      XCTAssertNil(recorder.holdSeconds)
 
       begin(recorder)
       clock.advance(milliseconds: 947)
 
-      XCTAssertEqual(recorder.attemptElapsedSeconds ?? 0, 0.947, accuracy: 0.001)
+      XCTAssertEqual(recorder.holdSeconds ?? 0, 0.947, accuracy: 0.001)
     }
 
     private func terminate(

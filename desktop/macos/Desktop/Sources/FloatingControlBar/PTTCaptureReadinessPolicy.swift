@@ -15,8 +15,6 @@ enum PTTWarmCaptureAdmission {
   /// Why a warm capture was requested. Recorded in the log line so a warm mic
   /// in the wild can be traced to the moment that asked for it.
   enum Trigger: String {
-    /// App launch, once the bar is armed and onboarding is already behind us.
-    case launch
     /// Onboarding just completed. The first-real-app card follows within
     /// seconds, and ambient transcription has just displaced any parked capture.
     case onboardingCompleted
@@ -32,7 +30,6 @@ enum PTTWarmCaptureAdmission {
   }
 
   struct Input: Equatable {
-    var trigger: Trigger
     var pttEnabled: Bool
     /// TCC microphone authorization, already granted. A prewarm must never be
     /// what triggers the system prompt: the user has to see that prompt
@@ -40,32 +37,30 @@ enum PTTWarmCaptureAdmission {
     var micPermissionGranted: Bool
     var onboardingComplete: Bool
     var isSignedIn: Bool
+    /// The input-routing snapshot has landed *and* proves the device this would
+    /// open is safe to hold open unattended — see
+    /// `PTTInputDeviceRouting.Snapshot.unattendedWarmCaptureRoute`. A warm-up
+    /// that runs before routing resolves opens the raw system default input,
+    /// which on a Mac with AirPods connected is the headset microphone: the
+    /// A2DP→HFP flap would collapse the user's audio for the whole keep-alive
+    /// window, with nothing they did behind it.
+    var routeIsSafeToWarmUnattended: Bool
     /// A turn is live. Its own capture owns the device.
     var hasActiveTurn: Bool
     /// A warm capture is already parked, running, or starting. Opening another
     /// would leave two IOProcs on one device — the exact hazard the parked-warm
     /// mechanism exists to avoid.
     var hasCaptureAlready: Bool
-    /// This install has not yet delivered its one first-real-app card, i.e. the
-    /// user is still inside the 0→1 window this whole fix is about.
-    var isFirstRunWindow: Bool
   }
 
   static func admits(_ input: Input) -> Bool {
-    guard input.pttEnabled,
-      input.micPermissionGranted,
-      input.onboardingComplete,
-      input.isSignedIn,
-      !input.hasActiveTurn,
-      !input.hasCaptureAlready
-    else { return false }
-    // Every other trigger follows something the user just did — finishing
-    // onboarding, being shown a card that asks them to hold ⌥, a press that was
-    // lost. `.launch` follows nothing, so it is restricted to the first-run
-    // window rather than lighting the system microphone indicator on every
-    // launch, forever, for an install that is well past its first press.
-    if input.trigger == .launch { return input.isFirstRunWindow }
-    return true
+    input.pttEnabled
+      && input.micPermissionGranted
+      && input.onboardingComplete
+      && input.isSignedIn
+      && input.routeIsSafeToWarmUnattended
+      && !input.hasActiveTurn
+      && !input.hasCaptureAlready
   }
 }
 
