@@ -36,7 +36,13 @@ final class ChatDailySummaryCoordinator: ObservableObject {
     ownerID: @escaping () -> String? = { RuntimeOwnerIdentity.captureAuthorizationSnapshot()?.ownerID },
     cardSink: CardSink? = nil
   ) {
-    self.store = store ?? HomeDailySummaryStore()
+    self.store =
+      store
+      ?? HomeDailySummaryStore(
+        settingsHour: {
+          (try? await APIClient.shared.getDailySummarySettings())?.hour ?? 22
+        }
+      )
     self.defaults = defaults
     self.ownerID = ownerID
     self.cardSink = cardSink ?? Self.defaultCardSink

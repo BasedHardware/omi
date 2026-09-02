@@ -26,6 +26,140 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# How far the hourly tick walks back to fill a missed day. A missed tick (deploy,
+# swallowed per-chunk Firestore exception) used to mean that day was never summarized.
+_DAILY_SUMMARY_BACKFILL_DAYS = 7
+# One user's ten-day hole must not stall the batch: stop after this many *new*
+# generations per tick (the current day is separate and always attempted).
+_DAILY_SUMMARY_BACKFILL_GENERATE_CAP = 3
+
+
+def local_day_bounds_utc(display_date, tz_name: Optional[str]):
+    """Midnight-to-midnight of ``display_date`` in the user's timezone, as UTC datetimes.
+
+    Same conversion the cron uses. An unusable timezone name falls back to UTC.
+    """
+    if tz_name:
+        try:
+            user_tz = pytz.timezone(tz_name)
+            start_of_day = user_tz.localize(datetime.combine(display_date, time.min))
+            end_of_day = user_tz.localize(datetime.combine(display_date, time.max))
+            return start_of_day.astimezone(pytz.utc), end_of_day.astimezone(pytz.utc)
+        except Exception as e:
+            logger.error(e)
+    start_date_utc = datetime.combine(display_date, time.min).replace(tzinfo=pytz.utc)
+    end_date_utc = datetime.combine(display_date, time.max).replace(tzinfo=pytz.utc)
+    return start_date_utc, end_date_utc
+
+
+def _display_date_for_now(tz_name: Optional[str]):
+    """Calendar day the cron summarizes at this instant (noon split, then UTC fallback)."""
+    if tz_name:
+        try:
+            user_tz = pytz.timezone(tz_name)
+            now_in_user_tz = datetime.now(user_tz)
+            if now_in_user_tz.hour < 12:
+                return now_in_user_tz.date() - timedelta(days=1)
+            return now_in_user_tz.date()
+        except Exception as e:
+            logger.error(e)
+    now_utc = datetime.now(pytz.utc)
+    if now_utc.hour < 12:
+        return now_utc.date() - timedelta(days=1)
+    return now_utc.date()
+
+
+# Why one day's generation declined. The tick needs this to decide whether walking back is
+# worth anything: another worker already owns this user (``locked``), or the owner recorded
+# nothing at all (``no_conversations``), and in both cases the backfill would only spend
+# queries on holes it cannot fill.
+_DECLINE_LOCKED = 'locked'
+_DECLINE_NO_CONVERSATIONS = 'no_conversations'
+
+
+def generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc) -> Optional[dict]:
+    """Generate one day's summary, or return the one already stored.
+
+    Guard order is the existing contract and must not be reordered:
+
+    1. best-effort Redis lock
+    2. durable by-date idempotency (existing record → return it, no LLM)
+    3. conversations exist in the window and are not ``is_locked``
+    4. at least one non-discarded conversation has ``transcript_segments``
+    5. LLM generate → persist
+
+    Returns the stored record (or the pre-existing one), or ``None`` when a guard declined.
+    """
+    record, _created, _declined = _generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc)
+    return record
+
+
+def _generate_and_store_daily_summary(
+    uid, date_str, start_date_utc, end_date_utc
+) -> Tuple[Optional[dict], bool, Optional[str]]:
+    """Like ``generate_and_store_daily_summary``, plus whether this call persisted a new record
+    and, when it declined, which guard declined it.
+
+    **Nothing happens before the lock.** A tick that loses the lock must not read conversations:
+    another worker is already doing exactly that work, and probing anyway doubles the read load
+    on precisely the contended user.
+    """
+    if not try_acquire_daily_summary_lock(uid, date_str):
+        return None, False, _DECLINE_LOCKED
+
+    # Durable idempotency guard (#4608): the Redis lock above is best-effort (2h TTL, evictable, lost on
+    # failover), and create_daily_summary writes a fresh-uuid doc with no by-date check, so a later cron
+    # tick can persist a SECOND summary for the same date. If one already exists, skip before spending
+    # any LLM tokens. The regenerate flow stays in-place via update_daily_summary.
+    existing_summary = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
+    if existing_summary:
+        logger.info(
+            f"Daily summary already exists for uid={uid} date={date_str} "
+            f"id={existing_summary.get('id')}; skipping duplicate generation"
+        )
+        return existing_summary, False, None
+
+    conversations_data = conversations_db.get_conversations(
+        uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
+    )
+    if not conversations_data or len(conversations_data) == 0:
+        return None, False, _DECLINE_NO_CONVERSATIONS
+
+    conversations = [
+        deserialize_conversation(convo_data) for convo_data in conversations_data if not convo_data.get('is_locked')
+    ]
+    if not conversations:
+        return None, False, _DECLINE_NO_CONVERSATIONS
+
+    # Skip recap if no conversation captured any speech.
+    if not any(c.transcript_segments for c in conversations if not c.discarded):
+        logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with transcript content')
+        return None, False, None
+
+    # Bound the generator's input (#12530). Keep the most recent conversations
+    # that fit, drop the rest loudly, and always keep at least one so a recap is
+    # still attempted.
+    bounded = summary_budget.select_conversations_within_budget(conversations, DAILY_SUMMARY_MAX_HISTORY_CHARS)
+    if bounded.truncated:
+        logger.warning(
+            'daily_summary_input_truncated uid=%s date=%s kept=%d dropped=%d rendered_chars=%d',
+            uid,
+            date_str,
+            len(bounded.conversations),
+            bounded.dropped,
+            bounded.rendered_chars,
+        )
+        _record_daily_summary_fallback(
+            from_mode='full_day', to_mode='truncated_day', reason='quota', outcome='degraded'
+        )
+    conversations = bounded.conversations
+
+    summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
+    summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
+    # The stored id rides on the returned record so the delivery step can build the
+    # `/daily-summary/{id}` deep link without a second read.
+    return {**summary_data, 'id': summary_id}, True, None
+
 
 def _env_float(name: str, default: float) -> float:
     try:
@@ -331,132 +465,9 @@ def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
     return timezones_by_hour
 
 
-def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
-    uid = user_data[0]
-    user_tz_name = user_data[2] if len(user_data) > 2 else None
-
-    # NOTE: The daily recap is a cross-platform feature delivered by a
-    # server-initiated cron that does not know the originating platform.
-    # It must NOT be gated on the desktop trial paywall: passing a hardcoded
-    # 'macos' to is_trial_paywalled() made the gate trip for any trial-expired
-    # user, suppressing their recap on mobile/web too (#9357). The desktop
-    # trial only gates desktop features, not the recap the mobile app renders.
-
-    # Calculate local day boundaries for conversation fetching
-    # date_str is set based on current hour:
-    #   - Before 12 PM (noon): use previous day's date
-    #   - 12 PM or after: use current day's date
-    start_date_utc = None
-    end_date_utc = None
-    date_str = None
-    if user_tz_name:
-        try:
-            user_tz = pytz.timezone(user_tz_name)
-            now_in_user_tz = datetime.now(user_tz)
-
-            # Determine which calendar day to summarize
-            if now_in_user_tz.hour < 12:
-                # Before noon: summarize previous day
-                display_date = now_in_user_tz.date() - timedelta(days=1)
-            else:
-                # Noon or after: summarize current day
-                display_date = now_in_user_tz.date()
-
-            # Use local day boundaries (midnight-to-midnight) converted to UTC
-            start_of_day = user_tz.localize(datetime.combine(display_date, time.min))
-            end_of_day = user_tz.localize(datetime.combine(display_date, time.max))
-            start_date_utc = start_of_day.astimezone(pytz.utc)
-            end_date_utc = end_of_day.astimezone(pytz.utc)
-            date_str = display_date.strftime('%Y-%m-%d')
-        except Exception as e:
-            logger.error(e)
-
-    # Fallback to UTC if timezone not available
-    if not start_date_utc or not end_date_utc:
-        now_utc = datetime.now(pytz.utc)
-
-        # Determine which calendar day to summarize
-        if now_utc.hour < 12:
-            display_date = now_utc.date() - timedelta(days=1)
-        else:
-            display_date = now_utc.date()
-
-        # Use UTC day boundaries
-        start_date_utc = datetime.combine(display_date, time.min).replace(tzinfo=pytz.utc)
-        end_date_utc = datetime.combine(display_date, time.max).replace(tzinfo=pytz.utc)
-        date_str = display_date.strftime('%Y-%m-%d')
-
-    # Atomically acquire lock BEFORE expensive LLM work to prevent race condition
-    assert date_str is not None  # set by timezone branch or UTC fallback above
-    if not try_acquire_daily_summary_lock(uid, date_str):
-        return
-
-    # Durable idempotency guard (#4608): the Redis lock above is best-effort (2h TTL, evictable, lost on
-    # failover), and create_daily_summary writes a fresh-uuid doc with no by-date check, so a later cron
-    # tick can persist a SECOND summary for the same date. If one already exists, skip before spending
-    # any LLM tokens or resending the notification. The regenerate flow stays in-place via update_daily_summary.
-    existing_summary = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
-    if existing_summary:
-        logger.info(
-            f"Daily summary already exists for uid={uid} date={date_str} "
-            f"id={existing_summary.get('id')}; skipping duplicate generation"
-        )
-        return
-
-    conversations_data = conversations_db.get_conversations(
-        uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
-    )
-    if not conversations_data or len(conversations_data) == 0:
-        return
-
-    conversations = [
-        deserialize_conversation(convo_data) for convo_data in conversations_data if not convo_data.get('is_locked')
-    ]
-    if not conversations:
-        return
-
-    # Skip recap if no conversation captured any speech.
-    if not any(c.transcript_segments for c in conversations if not c.discarded):
-        logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with transcript content')
-        return
-
-    # Bound the generator's input (#12530). The summary prompt renders the user's
-    # whole day; one account's exceptional day overflowed the model context
-    # window (~290k tokens against a 272k limit) and returned a provider 400
-    # every single day. Keep the most recent conversations that fit, drop the
-    # rest loudly, and always keep at least one so a recap is still attempted.
-    bounded = summary_budget.select_conversations_within_budget(conversations, DAILY_SUMMARY_MAX_HISTORY_CHARS)
-    if bounded.truncated:
-        logger.warning(
-            'daily_summary_input_truncated uid=%s date=%s kept=%d dropped=%d rendered_chars=%d',
-            uid,
-            date_str,
-            len(bounded.conversations),
-            bounded.dropped,
-            bounded.rendered_chars,
-        )
-        _record_daily_summary_fallback(
-            from_mode='full_day', to_mode='truncated_day', reason='quota', outcome='degraded'
-        )
-    conversations = bounded.conversations
-    # The review card is built from what the generator returns, so the scheduled
-    # path — the only path real users receive — has to make the same selection
-    # the /v1/users/daily-summary-settings/test path makes. Omitting it left
-    # ``memories_learned`` at its None default, which made the block below
-    # unconditionally None: the card was dead in production as shipped.
-    summary_data = generate_comprehensive_daily_summary(
-        uid,
-        conversations,
-        date_str,
-        start_date_utc,
-        end_date_utc,
-        memories_learned=memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
-    )
-
-    # Store in database
-    summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
-
-    # Create notification with deep link to summary page
+def _deliver_current_day_summary(uid, date_str: str, summary_data: dict, tokens) -> None:
+    """Push + webhook for a newly generated *current* day. Backfilled days never call this."""
+    summary_id = summary_data.get('id')
     daily_summary_title = f"{summary_data.get('day_emoji', '📅')} {summary_data.get('headline', 'Your Daily Summary')}"
     summary_body = str(summary_data.get('overview') or 'Tap to see your daily summary')
 
@@ -489,10 +500,65 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     # carries the same payload as a real JSON object for receivers to migrate to.
     postprocess_executor.submit(asyncio.run, day_summary_webhook(uid, str(summary_data), summary_data))
 
-    tokens = user_data[1] if len(user_data) > 1 else None
+    if not tokens:
+        logger.info(f"Skipping daily summary push for uid={uid}: no FCM tokens")
+        return
+
     send_notification(
         uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
     )
+
+
+def _backfill_recent_daily_summaries(uid, display_date, tz_name: Optional[str]) -> None:
+    """Fill holes behind the current day, without sending a notification for any of them."""
+    generated = 0
+    for offset in range(1, _DAILY_SUMMARY_BACKFILL_DAYS + 1):
+        if generated >= _DAILY_SUMMARY_BACKFILL_GENERATE_CAP:
+            logger.info(
+                f"Daily summary backfill cap reached for uid={uid} "
+                f"(generated={generated}, window={_DAILY_SUMMARY_BACKFILL_DAYS}d)"
+            )
+            return
+        past_date = display_date - timedelta(days=offset)
+        date_str = past_date.strftime('%Y-%m-%d')
+        start_date_utc, end_date_utc = local_day_bounds_utc(past_date, tz_name)
+        _record, created, _declined = _generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc)
+        if created:
+            generated += 1
+
+
+def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
+    uid = user_data[0]
+    user_tz_name = user_data[2] if len(user_data) > 2 else None
+
+    # NOTE: The daily recap is a cross-platform feature delivered by a
+    # server-initiated cron that does not know the originating platform.
+    # It must NOT be gated on the desktop trial paywall: passing a hardcoded
+    # 'macos' to is_trial_paywalled() made the gate trip for any trial-expired
+    # user, suppressing their recap on mobile/web too (#9357). The desktop
+    # trial only gates desktop features, not the recap the mobile app renders.
+
+    display_date = _display_date_for_now(user_tz_name)
+    start_date_utc, end_date_utc = local_day_bounds_utc(display_date, user_tz_name)
+    date_str = display_date.strftime('%Y-%m-%d')
+
+    summary_data, created, declined = _generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc)
+    if created and summary_data:
+        tokens = user_data[1] if len(user_data) > 1 else None
+        _deliver_current_day_summary(uid, date_str, summary_data, tokens)
+
+    # Backfill only for owners who are actually still recording. Dropping the FCM-token filter in
+    # get_users_for_daily_summary widened this fan-out to every user in the timezone, and an
+    # unconditional 7-day walk would spend 7 lock writes + 7 by-date reads + 7 conversation queries
+    # per dormant account per day chasing holes it can never fill.
+    #
+    # The reason comes from the attempt above rather than from a second query: re-reading
+    # conversations here would undo the "lose the lock, do no work" guarantee that keeps a
+    # contended user from being read twice.
+    if declined in (_DECLINE_LOCKED, _DECLINE_NO_CONVERSATIONS):
+        return
+
+    _backfill_recent_daily_summaries(uid, display_date, user_tz_name)
 
 
 async def _send_bulk_summary_notification(
@@ -503,16 +569,8 @@ async def _send_bulk_summary_notification(
     target_hour: Optional[int] = None,
     cursor_key: Optional[str] = None,
 ) -> bool:
-    """Send one hour group's summaries. Returns True if the whole group was served.
-
-    Isolation is per user, not per batch: a provider error, a context overflow,
-    or a wedged call is recorded against that uid and the remaining users in the
-    same batch still complete. A user who exceeds the per-user budget is
-    abandoned (a worker thread cannot be cancelled) rather than allowed to hold
-    the batch barrier for the rest of the run.
-    """
+    """Send one hour group's summaries while preserving the job's budget and checkpoint."""
     counters = stats if stats is not None else DailySummaryJobStats()
-
     for i in range(0, len(users), _BATCH_SIZE):
         if deadline is not None and monotonic() >= deadline:
             counters.skipped_for_budget += len(users) - i

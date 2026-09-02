@@ -394,6 +394,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Whether the daily summary card is currently allowed above the thread.
   /// See `admitDailySummaryIfFollowing` (INV-CHAT-2).
   @State private var dailySummaryAdmitted = false
+  /// Measured height of the pinned recap bar, used to inset the transcript so it is occluded
+  /// by nothing.
+  @State private var dailySummaryBarHeight: CGFloat = 0
   @ObservedObject private var dailySummaryStore: HomeDailySummaryStore = ChatDailySummaryCoordinator.shared.store
   /// Throttle token for scrollToBottom — prevents the streaming + scroll
   /// detection feedback loop from saturating the main thread.
@@ -468,6 +471,31 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // trailing strip; stacking the disc underneath it ate the click.
       ZStack {
         scrollContent(proxy: proxy)
+      }
+      // Pinned as an overlay rather than as the first row of the document. That is deliberate
+      // for INV-CHAT-2: an in-document card changed the scroll document's height whenever it
+      // appeared or expanded, which is exactly the geometry mutation the invariant forbids
+      // during reader-owned movement. An overlay has no document height at all.
+      //
+      // The transcript is inset by the bar's measured height so rows are never *hidden* behind
+      // it — an overlay that occludes the top of the thread trades one unreachable card for one
+      // unreadable message.
+      .overlay(alignment: .top) {
+        if showsDailySummary, dailySummaryAdmitted {
+          ChatDailySummaryCard(pinsToViewport: true)
+            .padding(.leading, leadingContentPadding)
+            .padding(.trailing, trailingContentInset)
+            .padding(.top, OmiSpacing.xs)
+            .background(
+              GeometryReader { proxy in
+                Color.clear.preference(
+                  key: ChatDailySummaryBarHeightKey.self, value: proxy.size.height)
+              }
+            )
+        }
+      }
+      .onPreferenceChange(ChatDailySummaryBarHeightKey.self) { height in
+        dailySummaryBarHeight = height
       }
       .overlay(alignment: .trailing) {
         if enablesPromptTimeline {
@@ -566,11 +594,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // important optimization here.
       VStack(spacing: OmiSpacing.lg) {
         loadMoreButton
-        // Chrome, above the thread — not a message. It renders once, at the top, whether or not
-        // the transcript has rows, and it records no turn (INV-CHAT-1).
-        if showsDailySummary, dailySummaryAdmitted {
-          ChatDailySummaryCard()
-        }
         messageContent
       }
       // **The transcript owns the assistant mark's gutter, not its host.** The
@@ -583,6 +606,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       .padding(.leading, leadingContentPadding)
       .padding(.trailing, trailingContentInset)
       .padding(.vertical, verticalContentPadding)
+      .padding(.top, showsDailySummary && dailySummaryAdmitted ? dailySummaryBarHeight : 0)
       .frame(maxWidth: .infinity)
       .coordinateSpace(name: ChatTranscriptSpace.content)
       // Do not enable text selection on the whole stack. SelectionOverlay on every
@@ -1231,5 +1255,13 @@ private struct DailySummaryAdmissionObserver: ViewModifier {
       .onAppear(perform: admit)
       .onChange(of: summaryID) { _, _ in admit() }
       .onChange(of: scrollMode) { _, _ in admit() }
+  }
+}
+
+/// Height of the pinned daily-recap bar, reported up so the transcript can inset by exactly it.
+private struct ChatDailySummaryBarHeightKey: PreferenceKey {
+  static let defaultValue: CGFloat = 0
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+    value = max(value, nextValue())
   }
 }

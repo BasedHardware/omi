@@ -89,6 +89,7 @@ final class HomeDailySummaryTests: XCTestCase {
     await store.refreshIfNeeded()
     XCTAssertEqual(box.calls, 1)
     XCTAssertEqual(store.latest?.id, "a")
+    XCTAssertEqual(store.byDate["2026-09-01"]?.id, "a")
 
     box.clock = box.clock.addingTimeInterval(HomeDailySummaryStore.refreshInterval + 1)
     await store.refreshIfNeeded()
@@ -112,5 +113,90 @@ final class HomeDailySummaryTests: XCTestCase {
     await store.refresh()
     XCTAssertEqual(store.latest?.id, "a")
     XCTAssertNotNil(store.lastError)
+  }
+
+  @MainActor
+  func testStoreFetchesAFourteenDayWindow() async {
+    let box = Box()
+    let store = HomeDailySummaryStore(
+      ownerFence: { { true } },
+      fetch: { limit in
+        box.calls = limit
+        return []
+      },
+      now: Date.init)
+    await store.refresh()
+    XCTAssertEqual(box.calls, HomeDailySummaryStore.fetchLimit)
+  }
+
+  @MainActor
+  /// Two records for one date is the #4608 duplicate-write bug, and the endpoint serves
+  /// **newest-first**. So the lookup must resolve to the newer of the two, and — the reason this
+  /// test exists at all — must not trap the way `Dictionary(uniqueKeysWithValues:)` would.
+  func testByDateLookupResolvesDuplicateDatesToTheNewestAndDoesNotTrap() async {
+    let store = HomeDailySummaryStore(
+      ownerFence: { { true } },
+      fetch: { _ in
+        [
+          DailySummaryRecord(id: "newer", date: "2026-09-01", headline: "new", overview: "o"),
+          DailySummaryRecord(id: "older", date: "2026-09-01", headline: "old", overview: "o"),
+        ]
+      },
+      now: Date.init)
+    await store.refresh()
+    XCTAssertEqual(store.latest?.id, "newer")
+    XCTAssertEqual(store.byDate["2026-09-01"]?.id, "newer")
+  }
+
+  @MainActor
+  /// The production `settingsHour` default reads the user's chosen hour; the store must publish
+  /// whatever it resolves rather than a constant, or the timeline's empty-state gate lies for
+  /// everyone who is not on the 22:00 default.
+  func testSummaryHourComesFromSettingsNotAConstant() async {
+    let store = HomeDailySummaryStore(
+      ownerFence: { { true } },
+      fetch: { _ in [DailySummaryRecord(id: "a", date: "2026-09-01", headline: "h", overview: "o")] },
+      settingsHour: { 8 },
+      now: Date.init)
+    await store.refresh()
+    XCTAssertEqual(store.summaryHour, 8)
+  }
+
+  @MainActor
+  func testMalformedAndNilDatesAreDroppedFromLookupButStillCountForLatest() async {
+    let store = HomeDailySummaryStore(
+      ownerFence: { { true } },
+      fetch: { _ in
+        [
+          DailySummaryRecord(id: "nil-date", date: nil, headline: "h", overview: "o"),
+          DailySummaryRecord(id: "bad-date", date: "not-a-date", headline: "h", overview: "o"),
+          DailySummaryRecord(id: "ok", date: "2026-09-01", headline: "h", overview: "o"),
+        ]
+      },
+      now: Date.init)
+    await store.refresh()
+    XCTAssertEqual(store.latest?.id, "nil-date")
+    XCTAssertNil(store.byDate["not-a-date"])
+    XCTAssertEqual(store.byDate.count, 1)
+    XCTAssertEqual(store.byDate["2026-09-01"]?.id, "ok")
+  }
+
+  @MainActor
+  func testOwnerChangeClearsTheByDateLookup() async {
+    let store = HomeDailySummaryStore(
+      ownerFence: { { true } },
+      fetch: { _ in
+        [DailySummaryRecord(id: "a", date: "2026-09-01", headline: "h", overview: "o")]
+      },
+      now: Date.init)
+    await store.refresh()
+    XCTAssertEqual(store.byDate["2026-09-01"]?.id, "a")
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+    for _ in 0..<50 where !store.byDate.isEmpty {
+      await Task.yield()
+    }
+    XCTAssertTrue(store.byDate.isEmpty)
+    XCTAssertNil(store.latest)
   }
 }

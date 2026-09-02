@@ -14,6 +14,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStore.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStream.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineRowViews.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineDayRecapRow.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHourRail.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineScreenIndex.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHydration.swift
