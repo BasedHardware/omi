@@ -547,6 +547,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // coordinator re-scopes its history on `runtimeOwnerDidChange`.
     IntegrationNudgeCoordinator.shared.start()
 
+    // Once per fresh install, after onboarding, the first real app the user
+    // opens gets the tap-to-ask card. Started here for the same reason as the
+    // line above — it installs its own observers and decides eligibility itself.
+    FirstRealAppCardCoordinator.shared.start()
+
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
       AnalyticsManager.shared.identify()

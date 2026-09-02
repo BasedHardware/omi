@@ -584,6 +584,10 @@ struct FloatingControlBarView: View {
       let entry = IntegrationNudgeCatalog.entry(telemetryID: telemetryID)
     {
       IntegrationNudgeCard(notification: notification, entry: entry, triggerID: triggerID)
+    } else if notification.assistantId == FirstRealAppCardCoordinator.assistantID,
+      case .askOmiPrefilled(let prompt)? = notification.action
+    {
+      FirstRealAppCard(notification: notification, prompt: prompt)
     } else {
       notificationView(notification)
     }
