@@ -122,8 +122,8 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     let saved = PostOnboardingPromptSuggestions.suggestions()
     XCTAssertEqual(saved, SBPostOnboardingGuidance.suggestions(for: model.postOnboardingSetup))
     XCTAssertFalse(saved.isEmpty, "The dashboard popup and banner are gated on this being non-empty")
-    XCTAssertTrue(saved.contains("What's on my screen right now?"))
-    XCTAssertTrue(saved.contains("What did I commit to this week?"))
+    XCTAssertTrue(saved.contains(DayZeroChips.summarizeScreen))
+    XCTAssertTrue(saved.contains("What's on my calendar today?"))
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldShowPopup)
     XCTAssertFalse(PostOnboardingPromptSuggestions.isDismissed)
   }
@@ -149,7 +149,7 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     let saved = PostOnboardingPromptSuggestions.suggestions()
     XCTAssertEqual(
       saved,
-      [HomeSuggestionComposer.universalFirstQuestion, SBPostOnboardingGuidance.universalFallback],
+      [HomeSuggestionComposer.universalFirstQuestion, SBPostOnboardingGuidance.teachMeDraft],
       "A user who skipped everything still needs a next step, and it must not name a skipped connector")
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldShowPopup)
   }

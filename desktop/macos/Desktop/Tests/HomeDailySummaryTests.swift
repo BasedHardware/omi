@@ -79,6 +79,7 @@ final class HomeDailySummaryTests: XCTestCase {
   func testStoreRefreshIfNeededFetchesOnceWithinTheInterval() async {
     let box = Box()
     let store = HomeDailySummaryStore(
+      ownerFence: { { true } },
       fetch: { _ in
         box.calls += 1
         return [DailySummaryRecord(id: "a", date: "2026-09-01", headline: "h", overview: "o")]
@@ -99,6 +100,7 @@ final class HomeDailySummaryTests: XCTestCase {
     struct Boom: Error {}
     let box = Box()
     let store = HomeDailySummaryStore(
+      ownerFence: { { true } },
       fetch: { _ in
         if box.shouldFail { throw Boom() }
         return [DailySummaryRecord(id: "a", date: "2026-09-01", headline: "h", overview: "o")]

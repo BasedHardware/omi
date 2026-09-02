@@ -969,6 +969,10 @@ extension SettingsContentView {
             isOn: Binding(
               get: { launchAtLoginManager.isEnabled },
               set: { newValue in
+                // Record the user's explicit choice before touching the system
+                // so a failed unregister still counts as "declined" and the
+                // default-on migration never overrides it.
+                LaunchAtLoginPreference.recordUserChoice(enabled: newValue)
                 if launchAtLoginManager.setEnabled(newValue) {
                   AnalyticsManager.shared.launchAtLoginChanged(enabled: newValue, source: "user")
                 }

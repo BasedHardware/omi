@@ -7,6 +7,7 @@ description: >
   notch card, runs the real push-to-talk demo, and writes a memory + task from the note the user sends.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationFirstUsePopupActions.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFlow.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingAnswerWriteGate.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingPromptSuggestions.swift
