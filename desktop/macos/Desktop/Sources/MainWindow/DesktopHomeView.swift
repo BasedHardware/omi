@@ -703,7 +703,7 @@ struct DesktopHomeView: View {
     // waiting for it. Settings → About is where getting help from a person
     // actually lives (the Community / Join Discord card), so the name now lands
     // on a destination that exists.
-    if ChatFirstRoute.isHelpAutomationTarget(target) {
+    if ChatFirstRoute.isHelpAutomationTarget(target), settingsSectionRaw == nil {
       selectedSettingsSection = .about
     }
     if let route = ChatFirstRoute.automationVisibilityDestination(named: target) {
