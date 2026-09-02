@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional
 
 from database._client import db
 from database.firestore_index_registry import NEGATIVE_FEEDBACK_EVENTS_QUERY
+from database.read_boundary import parse_snapshot_or_none, parse_snapshots
 from models.feedback import (
     FeedbackEvent,
     FeedbackReport,
@@ -120,13 +121,7 @@ def record_feedback_event(
 
 def get_feedback_event(event_id: str) -> Optional[FeedbackEvent]:
     doc = db.collection(FEEDBACK_EVENTS_COLLECTION).document(event_id).get()
-    if not doc.exists:
-        return None
-    try:
-        return FeedbackEvent(**(doc.to_dict() or {}))
-    except Exception as e:
-        logger.error(f'Malformed feedback event {event_id}: {e}')
-        return None
+    return parse_snapshot_or_none(FeedbackEvent, doc)
 
 
 def list_negative_events(
@@ -150,14 +145,8 @@ def list_negative_events(
     )
     query = query.order_by('created_at').limit(limit)
 
-    events: List[FeedbackEvent] = []
-    for doc in query.stream():
-        try:
-            events.append(FeedbackEvent(**(doc.to_dict() or {})))
-        except Exception as e:
-            # One malformed row must not cost the whole report.
-            logger.error(f'Skipping malformed feedback event {doc.id}: {e}')
-    return events
+    # Fail-open: one malformed row must not cost the whole report.
+    return parse_snapshots(FeedbackEvent, query.stream())
 
 
 def save_report(report: FeedbackReport) -> None:
@@ -167,13 +156,7 @@ def save_report(report: FeedbackReport) -> None:
 
 def get_report(date: str) -> Optional[FeedbackReport]:
     doc = db.collection(FEEDBACK_REPORTS_COLLECTION).document(date).get()
-    if not doc.exists:
-        return None
-    try:
-        return FeedbackReport(**(doc.to_dict() or {}))
-    except Exception as e:
-        logger.error(f'Malformed feedback report {date}: {e}')
-        return None
+    return parse_snapshot_or_none(FeedbackReport, doc)
 
 
 def list_report_dates(limit: int = 30) -> List[str]:
