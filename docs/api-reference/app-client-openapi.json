@@ -22056,6 +22056,25 @@
         "title": "ShareTasksRequest",
         "type": "object"
       },
+      "SharedActionItem": {
+        "description": "Public share projection of an action item.",
+        "properties": {
+          "completed": {
+            "default": false,
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "SharedActionItem",
+        "type": "object"
+      },
       "SharedActionItemPreview": {
         "properties": {
           "description": {
@@ -22105,6 +22124,31 @@
           "count"
         ],
         "title": "SharedActionItemsResponse",
+        "type": "object"
+      },
+      "SharedAppResult": {
+        "properties": {
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "app_id",
+          "content"
+        ],
+        "title": "SharedAppResult",
         "type": "object"
       },
       "SharedAssistantSettings": {
@@ -22218,126 +22262,19 @@
         "type": "object"
       },
       "SharedConversationResponse": {
-        "additionalProperties": true,
+        "description": "Public unauthenticated shared-conversation payload. Only declared fields are returned.",
         "properties": {
-          "app_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "App Id"
-          },
           "apps_results": {
-            "default": [],
             "items": {
-              "$ref": "#/components/schemas/AppResult"
+              "$ref": "#/components/schemas/SharedAppResult"
             },
             "title": "Apps Results",
             "type": "array"
-          },
-          "audio_files": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/AudioFile"
-            },
-            "title": "Audio Files",
-            "type": "array"
-          },
-          "calendar_event": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/CalendarEventLink"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "call_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Twilio call SID for phone call conversations",
-            "title": "Call Id"
-          },
-          "client_device_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Device Id"
-          },
-          "client_platform": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Platform"
-          },
-          "conversation_audio": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ConversationAudio"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
-          },
-          "data_protection_level": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data Protection Level"
-          },
-          "deferred": {
-            "default": false,
-            "title": "Deferred",
-            "type": "boolean"
-          },
-          "discarded": {
-            "default": false,
-            "title": "Discarded",
-            "type": "boolean"
-          },
-          "external_data": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "External Data"
           },
           "finished_at": {
             "anyOf": [
@@ -22351,41 +22288,9 @@
             ],
             "title": "Finished At"
           },
-          "folder_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "ID of the folder this conversation belongs to",
-            "title": "Folder Id"
-          },
-          "geolocation": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Geolocation"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "id": {
             "title": "Id",
             "type": "string"
-          },
-          "imported": {
-            "default": false,
-            "title": "Imported",
-            "type": "boolean"
-          },
-          "is_locked": {
-            "default": false,
-            "title": "Is Locked",
-            "type": "boolean"
           },
           "language": {
             "anyOf": [
@@ -22398,99 +22303,19 @@
             ],
             "title": "Language"
           },
-          "meeting_dedup_speech_s": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Meeting Dedup Speech S"
-          },
-          "meeting_duration_s": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Meeting Duration S"
-          },
-          "meeting_treatment_eligible": {
-            "default": false,
-            "title": "Meeting Treatment Eligible",
-            "type": "boolean"
-          },
-          "meeting_treatment_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Meeting Treatment Reason"
-          },
           "people": {
-            "default": [],
             "items": {
-              "$ref": "#/components/schemas/Person"
+              "$ref": "#/components/schemas/SharedPerson"
             },
             "title": "People",
             "type": "array"
           },
-          "photos": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/ConversationPhoto"
-            },
-            "title": "Photos",
-            "type": "array"
-          },
           "plugins_results": {
-            "default": [],
             "items": {
-              "$ref": "#/components/schemas/PluginResult"
+              "$ref": "#/components/schemas/SharedPluginResult"
             },
             "title": "Plugins Results",
             "type": "array"
-          },
-          "private_cloud_sync_enabled": {
-            "default": false,
-            "title": "Private Cloud Sync Enabled",
-            "type": "boolean"
-          },
-          "processing_conversation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Processing Conversation Id"
-          },
-          "processing_memory_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Processing Memory Id"
-          },
-          "screenshot_sharing_enabled": {
-            "default": true,
-            "title": "Screenshot Sharing Enabled",
-            "type": "boolean"
           },
           "source": {
             "anyOf": [
@@ -22502,11 +22327,6 @@
               }
             ],
             "default": "omi"
-          },
-          "starred": {
-            "default": false,
-            "title": "Starred",
-            "type": "boolean"
           },
           "started_at": {
             "anyOf": [
@@ -22532,52 +22352,14 @@
             "default": "completed"
           },
           "structured": {
-            "$ref": "#/components/schemas/Structured"
-          },
-          "suggested_summarization_apps": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Suggested Summarization Apps",
-            "type": "array"
+            "$ref": "#/components/schemas/SharedStructured"
           },
           "transcript_segments": {
-            "default": [],
             "items": {
-              "$ref": "#/components/schemas/TranscriptSegment"
+              "$ref": "#/components/schemas/SharedTranscriptSegment"
             },
             "title": "Transcript Segments",
             "type": "array"
-          },
-          "transcript_segments_compressed": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": false,
-            "title": "Transcript Segments Compressed"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          },
-          "uses_custom_stt": {
-            "default": false,
-            "title": "Uses Custom Stt",
-            "type": "boolean"
           },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
@@ -22592,6 +22374,199 @@
           "structured"
         ],
         "title": "SharedConversationResponse",
+        "type": "object"
+      },
+      "SharedEvent": {
+        "description": "Public share projection of a structured event.",
+        "properties": {
+          "created": {
+            "default": false,
+            "title": "Created",
+            "type": "boolean"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "duration": {
+            "default": 30,
+            "title": "Duration",
+            "type": "integer"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "start"
+        ],
+        "title": "SharedEvent",
+        "type": "object"
+      },
+      "SharedPerson": {
+        "description": "Speaker-label projection for a shared conversation.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "SharedPerson",
+        "type": "object"
+      },
+      "SharedPluginResult": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "plugin_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Id"
+          }
+        },
+        "required": [
+          "plugin_id",
+          "content"
+        ],
+        "title": "SharedPluginResult",
+        "type": "object"
+      },
+      "SharedStructured": {
+        "description": "Public share projection of conversation structure.",
+        "properties": {
+          "action_items": {
+            "items": {
+              "$ref": "#/components/schemas/SharedActionItem"
+            },
+            "title": "Action Items",
+            "type": "array"
+          },
+          "category": {
+            "$ref": "#/components/schemas/CategoryEnum",
+            "default": "other"
+          },
+          "emoji": {
+            "default": "🧠",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/SharedEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "overview": {
+            "default": "",
+            "title": "Overview",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "SharedStructured",
+        "type": "object"
+      },
+      "SharedTranscriptSegment": {
+        "description": "Public share projection of a transcript turn.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "number"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "is_user": {
+            "title": "Is User",
+            "type": "boolean"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "SPEAKER_00",
+            "title": "Speaker"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "start": {
+            "title": "Start",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "is_user",
+          "start",
+          "end"
+        ],
+        "title": "SharedTranscriptSegment",
         "type": "object"
       },
       "ShortlistEligibility": {
