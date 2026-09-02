@@ -77,6 +77,9 @@ environment_shared:
         CONVERSATION_NOTES_V2_ENABLED:
           value: 'false'
           category: rollout
+        LLM_GATEWAY_ACCOUNTING_ENABLED:
+          value: 'true'
+          category: rollout
         MEETING_RECEIPT_RECONCILER_ENABLED:
           value: 'false'
           category: rollout
@@ -194,6 +197,11 @@ environment_shared:
       PROMETHEUS_SIDECAR_PORT:
         value: '9090'
         category: telemetry
+      # Direct-provider surfaces (desktop_proxy, omni_relay) write their
+      # attempts to the gateway's llm_gateway_attempts ledger under this switch.
+      LLM_GATEWAY_ACCOUNTING_ENABLED:
+        value: 'true'
+        category: rollout
     secrets:
       METRICS_SECRET:
         secret: METRICS_SECRET
@@ -319,6 +327,9 @@ environment_shared:
           # flags on only one of them makes regenerate disagree with live capture.
           CONVERSATION_NOTES_V2_ENABLED:
             value: 'false'
+            category: rollout
+          LLM_GATEWAY_ACCOUNTING_ENABLED:
+            value: 'true'
             category: rollout
           MEETING_RECEIPT_RECONCILER_ENABLED:
             value: 'false'
