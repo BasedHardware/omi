@@ -22,6 +22,9 @@ inputs:
   tag:
     description: Cloud Run tag that must resolve to the exact candidate revision.
     required: true
+  sha:
+    description: Full candidate commit SHA baked into the image; asserted when the target's acceptance command declares {sha}.
+    required: true
 runs:
   using: composite
   steps:
@@ -65,7 +68,8 @@ runs:
           --tag="${{ inputs.tag }}")"
         python3 .github/scripts/smoke_public_build_browser.py \
           --target "${{ inputs.target }}" \
-          --base-url "$candidate_url"
+          --base-url "$candidate_url" \
+          --expect-sha "${{ inputs.sha }}"
 
     - name: Verify candidate is still latest
       shell: bash
@@ -109,7 +113,8 @@ runs:
         # The balancer can lag the traffic change by a few seconds; retry before judging.
         until python3 .github/scripts/smoke_public_build_browser.py \
           --target "${{ inputs.target }}" \
-          --base-url "$public_url"; do
+          --base-url "$public_url" \
+          --expect-sha "${{ inputs.sha }}"; do
           attempt=$((attempt + 1))
           if (( attempt >= 6 )); then
             echo "promoted candidate ${{ inputs.revision }} failed browser acceptance at ${public_url}" >&2

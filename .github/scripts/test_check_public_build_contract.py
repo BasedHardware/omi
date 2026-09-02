@@ -1076,6 +1076,84 @@ jobs:
             "unspecified browser smoke failure",
         )
 
+    def test_acceptance_command_renders_sha_placeholder(self) -> None:
+        command = (
+            "python3",
+            ".github/scripts/smoke_public_build_browser.py",
+            "--target",
+            "frontend",
+            "--base-url",
+            "{base_url}",
+            "--expect-sha",
+            "{sha}",
+        )
+        self.assertEqual(
+            STATIC.render_acceptance_command(
+                command,
+                base_url="https://h.omi.me",
+                sha="deadbeefcafebabe",
+            ),
+            (
+                "python3",
+                ".github/scripts/smoke_public_build_browser.py",
+                "--target",
+                "frontend",
+                "--base-url",
+                "https://h.omi.me",
+                "--expect-sha",
+                "deadbeefcafebabe",
+            ),
+        )
+        without_sha = command[:-2]
+        self.assertEqual(
+            STATIC.render_acceptance_command(without_sha, base_url="https://h.omi.me", sha="ignored"),
+            without_sha[:5] + ("https://h.omi.me",),
+        )
+
+    def test_acceptance_document_matches_marker_and_sha(self) -> None:
+        document = (
+            '<span data-omi-public-build-canary="frontend:ready" ' 'data-omi-public-build-sha="abc123" hidden></span>'
+        )
+        self.assertTrue(SMOKE.acceptance_document_matches(document, marker="frontend:ready"))
+        self.assertTrue(SMOKE.acceptance_document_matches(document, marker="frontend:ready", expect_sha="abc123"))
+        self.assertFalse(SMOKE.acceptance_document_matches(document, marker="frontend:ready", expect_sha="other"))
+        self.assertFalse(
+            SMOKE.acceptance_document_matches(
+                '<span data-omi-public-build-canary="frontend:pending" data-omi-public-build-sha="abc123">',
+                marker="frontend:ready",
+                expect_sha="abc123",
+            )
+        )
+
+    def test_browser_smoke_rejects_a_mismatched_sha_and_accepts_a_matching_one(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["candidate_acceptance"]["command"].extend(["--expect-sha", "{sha}"])
+        self.write_json("config/public-build-contract.json", contract)
+        original = SMOKE.render_candidate
+        SMOKE.render_candidate = (
+            lambda **_kwargs: '<span data-omi-public-build-canary="fake:ready" data-omi-public-build-sha="aaaa" />'
+        )
+        try:
+            with self.assertRaises(SMOKE.BrowserSmokeError) as caught:
+                SMOKE.smoke(
+                    target="fake",
+                    base_url="https://candidate.example",
+                    contract_path=self.root / "config/public-build-contract.json",
+                    environment={"OMI_BROWSER_BIN": "fake-browser"},
+                    expect_sha="bbbb",
+                )
+            self.assertEqual(str(caught.exception), "client public-build sha did not match")
+            SMOKE.smoke(
+                target="fake",
+                base_url="https://candidate.example",
+                contract_path=self.root / "config/public-build-contract.json",
+                environment={"OMI_BROWSER_BIN": "fake-browser"},
+                expect_sha="aaaa",
+            )
+        finally:
+            SMOKE.render_candidate = original
+        self.assertIn("client public-build sha did not match", SMOKE.SAFE_BROWSER_SMOKE_REASONS)
+
 
 class AcceptanceRouteFixture(unittest.TestCase):
     """Restricted ingress hides the tagged candidate URL; the route must say so."""
@@ -1143,6 +1221,19 @@ class AcceptanceRouteFixture(unittest.TestCase):
         target = STATIC.load_contract(STATIC.DEFAULT_CONTRACT).targets["frontend"]
         self.assertIn("--ingress=internal-and-cloud-load-balancing", target.deployment.flags)
         self.assertEqual(target.candidate_acceptance.public_urls.get("prod"), "https://h.omi.me")
+
+    def test_shipped_frontend_contract_declares_expect_sha(self) -> None:
+        target = STATIC.load_contract(STATIC.DEFAULT_CONTRACT).targets["frontend"]
+        self.assertIn("--expect-sha", target.candidate_acceptance.command)
+        self.assertIn("{sha}", target.candidate_acceptance.command)
+        self.assertEqual(
+            STATIC.render_acceptance_command(
+                target.candidate_acceptance.command,
+                base_url="https://h.omi.me",
+                sha="0123456789abcdef0123456789abcdef01234567",
+            )[-2:],
+            ("--expect-sha", "0123456789abcdef0123456789abcdef01234567"),
+        )
 
 
 if __name__ == "__main__":
