@@ -209,7 +209,7 @@ def _extract_firmware_response(device: DeviceModel, release: Dict) -> Dict:
 
     ota_steps = kv.get('ota_update_steps', [])
     is_legacy_dfu_str = kv.get('is_legacy_secure_dfu', 'True')
-    is_legacy_dfu = str(is_legacy_dfu_str).lower() == 'true'
+    is_legacy_dfu = str(is_legacy_dfu_str).strip().lower() != 'false'
 
     return {
         "version": kv.get("release_firmware_version"),
