@@ -54,7 +54,7 @@ import {OmiMark, bundledAssetSource} from '../ui/OmiMark';
 import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
 import {AppNav} from '../ui/AppNav';
 import {Composer} from '../ui/Composer';
-import {DesktopApp} from '../desktop/DesktopApp';
+import {DesktopApp, DesktopSessionProbe} from '../desktop/DesktopApp';
 import {
   MobileAppSurface,
   type MobileProjectionStatus,
@@ -554,6 +554,23 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   );
 
   if (macDesktop) {
+    // Desktop session gate. A Mac that is not fully in — probe unsettled,
+    // no cloud session, or first-run onboarding incomplete — never mounts
+    // the product shell. The probe holds an empty window (traffic-light
+    // spacer only) and a signed-out Mac sees the same Welcome as every other
+    // surface, so no signed-in IA leaks before OmiAuth establishes a real
+    // session. DesktopApp enforces the same gate for direct mounts.
+    if (onboardingRequired !== false) {
+      return (
+        <PageShell macDesktop workspaceMaterial>
+          {onboardingRequired === true ? (
+            firstRunOnboarding
+          ) : (
+            <DesktopSessionProbe />
+          )}
+        </PageShell>
+      );
+    }
     return (
       <PageShell macDesktop workspaceMaterial>
         <DesktopApp

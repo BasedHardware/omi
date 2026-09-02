@@ -287,7 +287,7 @@ test('omnibar send uses the existing chat send path', () => {
   expect(onSend).toHaveBeenCalledTimes(2);
 });
 
-test('keeps signed-out users in the real desktop shell', () => {
+test('signed-out Mac sees only the Welcome, never product chrome', () => {
   const onSignIn = jest.fn();
   const renderer = renderDesktop({
     onSignIn,
@@ -297,15 +297,27 @@ test('keeps signed-out users in the real desktop shell', () => {
     session: 'signed-out',
   });
   const tree = renderedText(renderer);
+  expect(tree).toContain('Welcome to Omi');
+  expect(tree).toContain('Sign in');
+  expect(tree).toContain('Sign in to access your conversations and memories.');
+  // No nav pills, no omnibar, no Home currents, no Settings.
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
-  ).toContain("Search what you've seen and heard…");
-  expect(tree).toContain('Home');
-  expect(tree).toContain('Sign in');
-  expect(tree).toContain('Sign in to load conversations and memories.');
+  ).not.toContain("Search what you've seen and heard…");
+  for (const nav of ['Home', 'Conversations', 'Tasks', 'Apps']) {
+    expect(
+      renderer.root.findAll(node => node.props.accessibilityLabel === nav),
+    ).toHaveLength(0);
+  }
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Settings'),
+  ).toHaveLength(0);
+  expect(tree).not.toContain('No tasks yet');
+  expect(tree).not.toContain('Conversations will show here');
+  expect(tree).not.toContain('Screen history');
+  expect(tree).not.toContain('Sign in to load conversations and memories.');
+  expect(tree).not.toContain('Restoring your session…');
   expect(tree).not.toContain('Saved data unavailable');
-  expect(tree).not.toContain('Sign in to Omi cloud');
-  expect(tree).not.toContain('Welcome to Omi');
   expect(tree).not.toContain('Omi disconnected');
   expect(tree).not.toContain('Devices');
   act(() => {
@@ -316,7 +328,7 @@ test('keeps signed-out users in the real desktop shell', () => {
   expect(onSignIn).toHaveBeenCalled();
 });
 
-test('holds the desktop shell while the session probe is running', () => {
+test('the session probe holds an empty window with no product copy', () => {
   const renderer = renderDesktop({
     outcomes: null,
     reads: [],
@@ -324,13 +336,34 @@ test('holds the desktop shell while the session probe is running', () => {
     session: 'probing',
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Home');
-  expect(tree).toContain('Restoring your session…');
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
-  ).toContain("Search what you've seen and heard…");
-  expect(tree).not.toContain('Saved data unavailable');
+  ).not.toContain("Search what you've seen and heard…");
+  for (const nav of ['Home', 'Conversations', 'Tasks', 'Apps', 'Settings']) {
+    expect(
+      renderer.root.findAll(node => node.props.accessibilityLabel === nav),
+    ).toHaveLength(0);
+  }
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home currents',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home tasks',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'First-run onboarding',
+    ),
+  ).toHaveLength(0);
+  expect(tree).not.toContain('Restoring your session…');
   expect(tree).not.toContain('Welcome to Omi');
+  expect(tree).not.toContain('Sign in');
+  expect(tree).not.toContain('Saved data unavailable');
+  expect(renderer.root.findAllByType(Text)).toHaveLength(0);
 });
 
 test('keeps an unavailable read as an inline shell state', () => {
@@ -350,7 +383,7 @@ test('keeps an unavailable read as an inline shell state', () => {
   expect(tree).not.toContain('Offline · showing what is available on this Mac');
 });
 
-test('signed-out first paint does not show a chat transport error', () => {
+test('signed-out first paint shows no chat transport error and no shell', () => {
   const renderer = renderDesktop({
     chatError: 'Chat is temporarily unavailable.',
     outcomes: null,
@@ -359,7 +392,7 @@ test('signed-out first paint does not show a chat transport error', () => {
     session: 'signed-out',
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Sign in to load conversations and memories.');
+  expect(tree).toContain('Welcome to Omi');
   expect(tree).not.toContain('Chat is temporarily unavailable.');
   expect(
     renderer.root
