@@ -446,6 +446,44 @@ test("mints a Firebase session from custom_token instead of storing Google's id_
   expect(finish).not.toContain('/v1/config/api-keys');
 });
 
+test('refreshes shipping sessions with the public Firebase key, never api-keys', () => {
+  const auth = readNativeSource('OmiAuthModule.mm');
+  const backend = readNativeSource('OmiBackendModule.mm');
+
+  for (const source of [auth, backend]) {
+    // No unauthenticated GET /v1/config/api-keys anywhere: it 401s without a
+    // session and imported shipping sessions never carry firebaseApiKey.
+    expect(source).not.toContain(
+      'https://api.omi.me/v1/config/api-keys',
+    );
+    expect(source).toContain('OmiAuthResolvedFirebaseApiKey()');
+  }
+  const resolveStored = auth.slice(
+    auth.indexOf('- (void)resolveStoredToken:'),
+    auth.indexOf('- (BOOL)isSignInAttemptCurrent:'),
+  );
+  expect(resolveStored).toMatch(
+    /if \(firebaseApiKey\.length == 0\) firebaseApiKey = OmiAuthResolvedFirebaseApiKey\(\);/,
+  );
+  expect(resolveStored).not.toContain('performRequest');
+  const backendRefresh = backend.slice(
+    backend.indexOf('static void OmiRefreshOwnKeychainCloudSession('),
+    backend.indexOf('static OmiBackendPolicy *OmiResolvedBackendPolicy'),
+  );
+  expect(backendRefresh).toMatch(
+    /if \(firebaseApiKey\.length == 0\) firebaseApiKey = OmiAuthResolvedFirebaseApiKey\(\);/,
+  );
+  // The refreshed session persists the key so later refreshes skip the
+  // fallback, and an HTTP 401/403 refresh clears the dead session just like
+  // the auth module.
+  expect(backendRefresh).toContain('updated[@"firebaseApiKey"] = firebaseApiKey;');
+  expect(backend).toContain(
+    'static BOOL OmiCloudRefreshFailureIsDefinitive(NSInteger status, NSDictionary *json)',
+  );
+  expect(backend).toContain('if (status == 401 || status == 403) return YES;');
+  expect(backend).toContain('OmiCloudRefreshFailureIsDefinitive(status, json)');
+});
+
 test('fences overlapping native macOS sign-in attempts', () => {
   const auth = readNativeSource('OmiAuthModule.mm');
 

@@ -22,11 +22,10 @@ static NSString *const OmiAuthFirebaseApiKey = @"AIzaSyA88gHcmiAxjN_aE23tHRWXOgF
 
 static BOOL OmiAuthIgnoreEnvironmentCloudTokens = NO;
 
-static NSString *OmiAuthResolvedFirebaseApiKey(void) {
+NSString *OmiAuthResolvedFirebaseApiKey(void) {
   NSString *environment = NSProcessInfo.processInfo.environment[@"FIREBASE_API_KEY"];
   return environment.length > 0 ? environment : OmiAuthFirebaseApiKey;
 }
-
 BOOL OmiAuthEnvironmentCloudTokensIgnored(void) {
   @synchronized (OmiAuthKeychainService) {
     return OmiAuthIgnoreEnvironmentCloudTokens;
@@ -480,21 +479,12 @@ RCT_EXPORT_MODULE(OmiAuth)
   }
   NSString *firebaseApiKey = [session[@"firebaseApiKey"] isKindOfClass:NSString.class]
       ? session[@"firebaseApiKey"] : nil;
-  if (firebaseApiKey.length > 0) {
-    [self refreshStoredSession:session firebaseApiKey:firebaseApiKey completion:completion];
-    return;
-  }
-  NSMutableURLRequest *configuration = [NSMutableURLRequest requestWithURL:
-      [NSURL URLWithString:@"https://api.omi.me/v1/config/api-keys"]];
-  [self performRequest:configuration completion:^(NSDictionary *keys, NSError *keysError) {
-    NSString *key = [keys[@"firebase_api_key"] isKindOfClass:NSString.class]
-        ? keys[@"firebase_api_key"] : keys[@"firebaseApiKey"];
-    if (keysError != nil || key.length == 0) {
-      completion(nil, keysError ?: [NSError errorWithDomain:@"OmiAuth" code:0 userInfo:nil]);
-      return;
-    }
-    [self refreshStoredSession:session firebaseApiKey:key completion:completion];
-  }];
+  // Imported shipping sessions carry no firebaseApiKey, and
+  // /v1/config/api-keys 401s without a session. Refresh with the same public
+  // Web API key sign-in uses; refreshStoredSession persists it onto the
+  // stored session so later refreshes never need this fallback.
+  if (firebaseApiKey.length == 0) firebaseApiKey = OmiAuthResolvedFirebaseApiKey();
+  [self refreshStoredSession:session firebaseApiKey:firebaseApiKey completion:completion];
 }
 
 - (BOOL)isSignInAttemptCurrent:(NSUInteger)attempt {
