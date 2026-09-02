@@ -1028,6 +1028,24 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
     ),
 )
 
+CHAT_FIRST_TRANSIENT_DEAD_LETTER_REPAIR_QUERY = FirestoreQuerySpec(
+    identifier='chat_first_transient_dead_letter_repair',
+    collection_group='chat_first_proactive_intents',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('account_generation', '==', 'account_generation'),
+        FirestoreQueryFilter('requeue_count', '==', 'requeue_count'),
+        FirestoreQueryFilter('dead_letter_reason', 'in', 'dead_letter_reasons'),
+    ),
+    index_fields=(
+        _asc('account_generation'),
+        _asc('requeue_count'),
+        _asc('dead_letter_reason'),
+        _asc('last_fetched_at'),
+        _asc('__name__'),
+    ),
+)
+
 CURRENT_CHAT_SESSION_QUERY = FirestoreQuerySpec(
     identifier='chat_sessions_current_by_app',
     collection_group='chat_sessions',
@@ -1277,6 +1295,7 @@ QUERY_SPECS = (
     ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
+    CHAT_FIRST_TRANSIENT_DEAD_LETTER_REPAIR_QUERY,
     CURRENT_CHAT_SESSION_QUERY,
     CURRENT_CHAT_SESSION_ORDERED_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,

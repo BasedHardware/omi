@@ -169,8 +169,14 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
           self?.isCurrentMaterialization(generation) ?? false
         },
         onFailure: { [weak self] error, batch in
+          let failure: String
+          if case APIError.httpError(let statusCode, _) = error {
+            failure = "status=\(statusCode)"
+          } else {
+            failure = "error_type=\(String(describing: type(of: error)))"
+          }
           self?.logger(
-            "Chat-first prompt materialization deferred: error=\(error.localizedDescription) "
+            "Chat-first prompt materialization deferred: \(failure) "
               + "receipts=\(batch.materializationReceipts.count) "
               + "rejections=\(batch.materializationRejections.count) "
               + "deferrals=\(batch.materializationDeferrals.count)")
