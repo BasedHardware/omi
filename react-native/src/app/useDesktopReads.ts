@@ -16,7 +16,7 @@ export type ReadsPhase =
   | 'saved-but-refresh-failed'
   | 'unavailable';
 
-export function useDesktopReads() {
+export function useDesktopReads({enabled}: {enabled: boolean}) {
   const [readOutcomes, setReadOutcomes] = useState<DesktopReadOutcomes | null>(
     null,
   );
@@ -26,89 +26,108 @@ export function useDesktopReads() {
   const homeReadsLoadedRef = useRef(false);
   const [readsPhase, setReadsPhase] = useState<ReadsPhase>('initial-loading');
 
-  const refreshReads = useCallback(async (initial: boolean) => {
-    const backend = omiBackend;
-    if (backend === undefined || backend === null) {
-      const unavailable = {
-        status: 'error',
-        error: desktopBackendConfigurationCopy,
-      } as const;
-      setReadOutcomes({
-        conversations: unavailable,
-        memories: unavailable,
-        tasks: unavailable,
-      });
-      setReadsPhase('unavailable');
-      return;
-    }
-    setReadsPhase(
-      initial && readOutcomesRef.current === null
-        ? 'initial-loading'
-        : 'refreshing',
-    );
-    try {
-      const outcomes = await loadDesktopReads(backend);
-      const previous = readOutcomesRef.current;
-      const hadSavedRows =
-        previous !== null &&
-        [previous.conversations, previous.memories].some(
+  // Cloud reads only run for a ready session. Signed-out and probing Macs
+  // never hit /v1/conversations|memories|tasks, so their 401/unconfigured
+  // failures cannot poison readsPhase for the session that signs in next.
+  const refreshReads = useCallback(
+    async (initial: boolean) => {
+      if (!enabled) {
+        return;
+      }
+      const backend = omiBackend;
+      if (backend === undefined || backend === null) {
+        const unavailable = {
+          status: 'error',
+          error: desktopBackendConfigurationCopy,
+        } as const;
+        setReadOutcomes({
+          conversations: unavailable,
+          memories: unavailable,
+          tasks: unavailable,
+        });
+        setReadsPhase('unavailable');
+        return;
+      }
+      setReadsPhase(
+        initial && readOutcomesRef.current === null
+          ? 'initial-loading'
+          : 'refreshing',
+      );
+      try {
+        const outcomes = await loadDesktopReads(backend);
+        const previous = readOutcomesRef.current;
+        const hadSavedRows =
+          previous !== null &&
+          [previous.conversations, previous.memories].some(
+            outcome =>
+              outcome.status === 'success' && outcome.value.items.length > 0,
+          );
+        const homeOutcomes = [outcomes.conversations, outcomes.memories];
+        const failed = homeOutcomes.some(outcome => outcome.status === 'error');
+        setReadOutcomes(current => {
+          let next: DesktopReadOutcomes;
+          if (current === null) {
+            next = outcomes;
+          } else {
+            next = {
+              conversations:
+                outcomes.conversations.status === 'success'
+                  ? outcomes.conversations
+                  : current.conversations,
+              memories:
+                outcomes.memories.status === 'success'
+                  ? outcomes.memories
+                  : current.memories,
+              tasks:
+                outcomes.tasks.status === 'success'
+                  ? outcomes.tasks
+                  : current.tasks,
+            };
+          }
+          readOutcomesRef.current = next;
+          if (
+            next.conversations.status === 'success' ||
+            next.memories.status === 'success'
+          ) {
+            homeReadsLoadedRef.current = true;
+          }
+          return next;
+        });
+        const hasSavedRows = homeOutcomes.some(
           outcome =>
             outcome.status === 'success' && outcome.value.items.length > 0,
         );
-      const homeOutcomes = [outcomes.conversations, outcomes.memories];
-      const failed = homeOutcomes.some(outcome => outcome.status === 'error');
-      setReadOutcomes(current => {
-        let next: DesktopReadOutcomes;
-        if (current === null) {
-          next = outcomes;
-        } else {
-          next = {
-            conversations:
-              outcomes.conversations.status === 'success'
-                ? outcomes.conversations
-                : current.conversations,
-            memories:
-              outcomes.memories.status === 'success'
-                ? outcomes.memories
-                : current.memories,
-            tasks:
-              outcomes.tasks.status === 'success'
-                ? outcomes.tasks
-                : current.tasks,
-          };
-        }
-        readOutcomesRef.current = next;
-        if (
-          next.conversations.status === 'success' ||
-          next.memories.status === 'success'
-        ) {
-          homeReadsLoadedRef.current = true;
-        }
-        return next;
-      });
-      const hasSavedRows = homeOutcomes.some(
-        outcome =>
-          outcome.status === 'success' && outcome.value.items.length > 0,
-      );
-      setReadsPhase(
-        failed
-          ? hasSavedRows || hadSavedRows
-            ? 'saved-but-refresh-failed'
-            : 'unavailable'
-          : 'ready',
-      );
-    } catch {
-      setReadsPhase(
-        readOutcomesRef.current === null
-          ? 'unavailable'
-          : 'saved-but-refresh-failed',
-      );
-    }
-  }, []);
+        setReadsPhase(
+          failed
+            ? hasSavedRows || hadSavedRows
+              ? 'saved-but-refresh-failed'
+              : 'unavailable'
+            : 'ready',
+        );
+      } catch {
+        setReadsPhase(
+          readOutcomesRef.current === null
+            ? 'unavailable'
+            : 'saved-but-refresh-failed',
+        );
+      }
+    },
+    [enabled],
+  );
 
   useEffect(() => {
+    if (!enabled) {
+      // Leaving the ready session drops every saved row and phase so the
+      // next session starts at a truthful initial-loading, never a stale
+      // unavailable banner.
+      readOutcomesRef.current = null;
+      homeReadsLoadedRef.current = false;
+      setReadOutcomes(null);
+      setReadsPhase('initial-loading');
+      return;
+    }
     refreshReads(true).catch(() => undefined);
-  }, [refreshReads]);
+  }, [enabled, refreshReads]);
 
   const reads = useMemo(() => {
     if (readOutcomes === null) {

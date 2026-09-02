@@ -150,7 +150,7 @@ test('a rejected sign-in stays on Welcome and stops the busy flag', async () => 
   expect(hook.latest().signingIn).toBe(false);
 });
 
-test('sign-out returns the desktop to Welcome', async () => {
+test('sign-out returns the desktop to Welcome without firing cloud reads', async () => {
   mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
   mockAuth.hasCloudSession.mockResolvedValueOnce(true).mockResolvedValue(false);
   mockAuth.signOut.mockResolvedValue({signedOut: true});
@@ -165,5 +165,59 @@ test('sign-out returns the desktop to Welcome', async () => {
 
   expect(mockAuth.signOut).toHaveBeenCalledTimes(1);
   expect(hook.latest().onboardingRequired).toBe(true);
-  expect(refreshReads).toHaveBeenCalledWith(false);
+  // A signed-out Mac must not hit the cloud; a late refresh could otherwise
+  // overwrite the next session's fresh load.
+  expect(refreshReads).not.toHaveBeenCalled();
+});
+
+test('revalidateSession falls back to Welcome once the keychain session is gone', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValueOnce(true).mockResolvedValue(false);
+  const refreshReads = jest.fn(async () => undefined);
+
+  const hook = await renderOnboarding(true, refreshReads);
+  expect(hook.latest().onboardingRequired).toBe(false);
+
+  // The native refresh cleared the keychain mid-run; a chat/read 401 triggers
+  // a re-probe and the gate must leave the product shell.
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().revalidateSession();
+  });
+  expect(hook.latest().onboardingRequired).toBe(true);
+});
+
+test('revalidateSession keeps a live session in the shell', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  const refreshReads = jest.fn(async () => undefined);
+
+  const hook = await renderOnboarding(true, refreshReads);
+  expect(hook.latest().onboardingRequired).toBe(false);
+
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().revalidateSession();
+  });
+  expect(hook.latest().onboardingRequired).toBe(false);
+});
+
+test('a Mac without the native auth module stays on Welcome instead of faking ready', async () => {
+  jest.resetModules();
+  jest.doMock('../src/omiNative', () => ({omiAuth: null}));
+  const {useOnboarding: missingAuthHook} = require('../src/app/useOnboarding');
+
+  let latest: ReturnType<typeof missingAuthHook> | null = null;
+  await ReactTestRenderer.act(async () => {
+    ReactTestRenderer.create(
+      <Harness
+        macDesktop={true}
+        onState={state => {
+          latest = state;
+        }}
+        refreshReads={async () => undefined}
+      />,
+    );
+  });
+  expect(latest!.onboardingRequired).toBe(true);
+  jest.dontMock('../src/omiNative');
 });

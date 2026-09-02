@@ -13,8 +13,16 @@ export function useOnboarding(
   useEffect(() => {
     let active = true;
     const auth = omiAuth;
-    if (!macDesktop || auth === undefined || auth === null) {
+    if (!macDesktop) {
       setOnboardingRequired(false);
+      return () => {
+        active = false;
+      };
+    }
+    if (auth === undefined || auth === null) {
+      // A Mac without the native OmiAuth module can never establish a real
+      // cloud session. It must stay on Welcome — never a faked ready shell.
+      setOnboardingRequired(true);
       return () => {
         active = false;
       };
@@ -82,12 +90,34 @@ export function useOnboarding(
     if (macDesktop && !hasSession) {
       setOnboardingRequired(true);
     }
-    await refreshReads(false);
-  }, [macDesktop, refreshReads]);
+    // No refreshReads here: a signed-out Mac must not fire cloud reads, and
+    // a late response must not overwrite the next session's fresh load.
+  }, [macDesktop]);
+
+  // A ready session can die mid-run (native refresh cleared the keychain on a
+  // definitive failure). Chat/read 401s and unconfigured credentials call
+  // this; if the keychain session is really gone the gate falls back to the
+  // same Welcome as sign-out instead of keeping signed-in chrome up.
+  const revalidateSession = useCallback(async () => {
+    const auth = omiAuth;
+    if (!macDesktop || auth === undefined || auth === null) {
+      return;
+    }
+    let hasSession = false;
+    try {
+      hasSession = await auth.hasCloudSession();
+    } catch {
+      hasSession = false;
+    }
+    if (!hasSession) {
+      setOnboardingRequired(true);
+    }
+  }, [macDesktop]);
 
   return {
     completeFirstRun,
     onboardingRequired,
+    revalidateSession,
     signInAndRefresh,
     signOutAndRefresh,
     signingIn,

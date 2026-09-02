@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   Animated,
   Easing,
@@ -20,6 +20,7 @@ import {
   ChatBackendError,
   chatErrorCopy,
   chatHistoryErrorCopy,
+  chatSessionLost,
   createLocalChatMessage,
   loadNewestChatHistory,
   loadOlderChatHistory,
@@ -29,7 +30,11 @@ import {
   type ChatMessage,
 } from '../chatClient';
 import {omiBackend} from '../omiNative';
-import {desktopRecoveryCopy} from '../desktopReadClient';
+import {
+  desktopBackendConfigurationCopy,
+  desktopBackendUnauthorizedCopy,
+  desktopRecoveryCopy,
+} from '../desktopReadClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
 import {styles} from '../ui/styles';
 import {OutcomeStatus} from '../ui/ReadStatus';
@@ -105,20 +110,36 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     resolveInitialRoute(initialRoute),
   );
   const [homeChatOpen, setHomeChatOpen] = useState(false);
+  // useOnboarding owns the desktop session gate and needs a reads refresh;
+  // useDesktopReads must stay idle until that gate is ready. A latest-ref
+  // trampoline breaks the cycle without firing reads before the session.
+  const refreshReadsRef = useRef<(initial: boolean) => Promise<void>>(
+    async () => undefined,
+  );
+  const refreshReadsViaRef = useCallback(
+    (initial: boolean) => refreshReadsRef.current(initial),
+    [],
+  );
+  const {
+    completeFirstRun,
+    onboardingRequired,
+    revalidateSession,
+    signInAndRefresh,
+    signOutAndRefresh,
+    signingIn,
+  } = useOnboarding(macDesktop, refreshReadsViaRef);
   const {
     allHomeReadsUnavailable,
     readOutcomes,
     reads,
     readsPhase,
     refreshReads,
-  } = useDesktopReads();
-  const {
-    completeFirstRun,
-    onboardingRequired,
-    signInAndRefresh,
-    signOutAndRefresh,
-    signingIn,
-  } = useOnboarding(macDesktop, refreshReads);
+  } = useDesktopReads({
+    enabled: !macDesktop || onboardingRequired === false,
+  });
+  useEffect(() => {
+    refreshReadsRef.current = refreshReads;
+  }, [refreshReads]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchArmed, setSearchArmed] = useState(false);
@@ -139,7 +160,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       return () => undefined;
     }
     if (macDesktop && onboardingRequired !== false) {
+      // Leaving a ready session drops the previous session's transcript,
+      // cursors, and message bookkeeping so nothing leaks across accounts or
+      // flashes on the next sign-in.
       setChatError(null);
+      setMessages([]);
+      setOlderChatCursor(null);
+      setHasOlderChat(false);
+      stableChatMessageIds.clear();
+      animatedChatMessageIds.clear();
       return () => {
         active = false;
       };
@@ -159,12 +188,24 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       .catch(error => {
         if (active && (!macDesktop || onboardingRequired === false)) {
           setChatError(chatHistoryErrorCopy(error));
+          // A 401/unconfigured history load can mean the cloud session died;
+          // re-probe it instead of keeping a ready shell on dead credentials.
+          if (macDesktop && chatSessionLost(error)) {
+            revalidateSession().catch(() => undefined);
+          }
         }
       });
     return () => {
       active = false;
     };
-  }, [chatEpoch, macDesktop, onboardingRequired, stableChatMessageIds]);
+  }, [
+    animatedChatMessageIds,
+    chatEpoch,
+    macDesktop,
+    onboardingRequired,
+    revalidateSession,
+    stableChatMessageIds,
+  ]);
 
   useEffect(() => {
     if (route === 'Home') {
@@ -228,6 +269,28 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     });
     return () => subscription.remove();
   }, []);
+
+  // A dead cloud session must not keep the product shell up: when every
+  // credential-bearing read comes back unauthorized or unconfigured, re-probe
+  // the native session and fall back to Welcome if it is really gone.
+  useEffect(() => {
+    if (!macDesktop || onboardingRequired !== false || readOutcomes === null) {
+      return;
+    }
+    const sessionLost = [
+      readOutcomes.conversations,
+      readOutcomes.memories,
+      readOutcomes.tasks,
+    ].some(
+      outcome =>
+        outcome.status === 'error' &&
+        (outcome.error === desktopBackendUnauthorizedCopy ||
+          outcome.error === desktopBackendConfigurationCopy),
+    );
+    if (sessionLost) {
+      revalidateSession().catch(() => undefined);
+    }
+  }, [macDesktop, onboardingRequired, readOutcomes, revalidateSession]);
 
   useEffect(() => {
     if (homeSearchFocusNonce === 0) {
@@ -357,6 +420,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       });
     } catch (error) {
       setChatError(chatErrorCopy(error));
+      if (macDesktop && chatSessionLost(error)) {
+        revalidateSession().catch(() => undefined);
+      }
     } finally {
       setActiveGenerationId(null);
       setChatBusy(false);

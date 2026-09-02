@@ -550,11 +550,13 @@ test('failed reads on Library and Tasks never claim an empty product', () => {
   const errorOutcomes = {
     conversations: {
       status: 'error' as const,
-      error: 'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.',
+      error:
+        'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.',
     },
     memories: {
       status: 'error' as const,
-      error: 'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.',
+      error:
+        'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.',
     },
     tasks: {
       status: 'error' as const,
@@ -594,15 +596,45 @@ test('a successful empty read is the only path to the empty claims', async () =>
   const emptyOutcomes = {
     conversations: {
       status: 'success' as const,
-      value: {items: [], page: {windowStatus: 'complete' as const, complete: true, hasMore: false, nextCursor: null, completenessStatus: 'complete' as const, reasons: []}},
+      value: {
+        items: [],
+        page: {
+          windowStatus: 'complete' as const,
+          complete: true,
+          hasMore: false,
+          nextCursor: null,
+          completenessStatus: 'complete' as const,
+          reasons: [],
+        },
+      },
     },
     memories: {
       status: 'success' as const,
-      value: {items: [], page: {windowStatus: 'complete' as const, complete: true, hasMore: false, nextCursor: null, completenessStatus: 'complete' as const, reasons: []}},
+      value: {
+        items: [],
+        page: {
+          windowStatus: 'complete' as const,
+          complete: true,
+          hasMore: false,
+          nextCursor: null,
+          completenessStatus: 'complete' as const,
+          reasons: [],
+        },
+      },
     },
     tasks: {
       status: 'success' as const,
-      value: {items: [], page: {windowStatus: 'complete' as const, complete: true, hasMore: false, nextCursor: null, completenessStatus: 'complete' as const, reasons: []}},
+      value: {
+        items: [],
+        page: {
+          windowStatus: 'complete' as const,
+          complete: true,
+          hasMore: false,
+          nextCursor: null,
+          completenessStatus: 'complete' as const,
+          reasons: [],
+        },
+      },
     },
   };
   const renderer = renderDesktop({
@@ -613,7 +645,9 @@ test('a successful empty read is the only path to the empty claims', async () =>
   const tree = renderedText(renderer);
   expect(tree).toContain('Nothing captured yet.');
   expect(tree).toContain('No tasks yet');
-  expect(tree).not.toContain('Conversations will show here when your day is loaded.');
+  expect(tree).not.toContain(
+    'Conversations will show here when your day is loaded.',
+  );
 });
 
 test('Apps is a wrapped gallery of tiles', async () => {
