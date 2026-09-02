@@ -255,7 +255,11 @@ final class ChatFirstRichBlockTests: XCTestCase {
     XCTAssertEqual(summary, "After")
   }
 
-  func testRichRendererSelectionRequiresExplicitChatFirstContext() {
+  /// Every Chat surface renders every rich block. This used to assert the
+  /// opposite — that a caller without an explicit context got nothing — which is
+  /// how a turn whose only content was a task card read as an empty assistant
+  /// reply in the task panel and in the notch.
+  func testEveryRichBlockSurvivesGroupingOnEveryChatSurface() {
     let blocks: [ChatContentBlock] = [
       .questionCard(
         id: "question", questionId: "question-1", text: "Question", subjectKind: "goal", subjectId: "goal-1",
@@ -264,45 +268,15 @@ final class ChatFirstRichBlockTests: XCTestCase {
       .taskCard(id: "task", taskId: "task-1"),
       .goalLink(id: "goal", goalId: "goal-1", summary: "Goal"),
       .captureLink(id: "capture", conversationId: "capture-1", momentTimestampMs: nil, summary: "Capture"),
+      .conversationLink(
+        id: "conversation", conversationId: "conversation-1", summary: "Conversation",
+        recommendedActionItems: []),
       .memoryLink(id: "memory", memoryId: "memory-1", summary: "Memory"),
     ]
 
-    XCTAssertTrue(
-      ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false).isEmpty,
-      "legacy, floating, task, and onboarding call sites must keep rich blocks inert"
-    )
-
-    let enabled = ContentBlockGroup.visibleChatGroups(
-      blocks,
-      isStreaming: false,
-      richBlockRenderingEnabled: true
-    )
-    XCTAssertEqual(enabled.count, 5)
-    XCTAssertTrue(
-      enabled.contains {
-        if case .questionCard = $0 { return true }
-        return false
-      })
-    XCTAssertTrue(
-      enabled.contains {
-        if case .taskCard = $0 { return true }
-        return false
-      })
-    XCTAssertTrue(
-      enabled.contains {
-        if case .goalLink = $0 { return true }
-        return false
-      })
-    XCTAssertTrue(
-      enabled.contains {
-        if case .captureLink = $0 { return true }
-        return false
-      })
-    XCTAssertTrue(
-      enabled.contains {
-        if case .memoryLink = $0 { return true }
-        return false
-      })
+    let groups = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false)
+    XCTAssertEqual(groups.count, 6)
+    XCTAssertEqual(groups.map(\.id), blocks.map(\.id), "order is the transcript's, not the renderer's")
   }
 
   func testTaskAcknowledgementRequiresReconciledCompletedRecord() {

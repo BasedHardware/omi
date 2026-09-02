@@ -1,7 +1,7 @@
 version: 2
 name: chat-first-capability-isolation
 tier: manual
-description: "Manual local/offline capability-off assertion. Run it once for each isolated fixture case in the two-launch matrix below."
+description: "Manual local/offline capability-off assertion: the one shell still mounts and its content blocks still render, non-actionable. Run it once for each isolated fixture case in the two-launch matrix below."
 app: non-prod
 # A harness invocation owns one automation port, hence one named app. It cannot
 # switch apps mid-run; prepare, launch, and run this *single-case* assertion
@@ -31,11 +31,13 @@ app: non-prod
 covers:
   # Each case below drives this root's real sampled-control failure/disabled path.
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
-  - desktop/macos/Desktop/Sources/MainWindow/DesktopShellPresentationPolicy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstRoute.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstShell.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/Blocks/ChatFirstContentBlockViews.swift
   - desktop/macos/Desktop/Sources/Chat/ChatFirstCapabilityProjection.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
-  # S1 traverses the legacy half of the exact-route visibility wait; the
-  # enabled-control flow covers the Chat-first half without fabricating state.
+  # S1 traverses the exact-route visibility wait on a capability-off bundle: the
+  # shell mounts identically, so the wait must succeed on the same shellVariant.
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge+ChatFirst.swift
 preconditions:
   - automation_bridge_ready
@@ -45,15 +47,21 @@ preconditions:
   - its_fresh_named_non_production_bundle_launched_on_the_matching_port
 
 steps:
+  # Capability-off is no longer a different shell. It is the same shell with the
+  # kernel features dormant: cards still render, task check-off still works
+  # (it binds TasksStore, not the projection), links still navigate, and only the
+  # question card's options go dim. The old assertion here — `shellVariant: legacy`
+  # — described a shell that no longer exists.
   - id: S1
-    name: Navigate the prepared capability-off bundle to its legacy chat surface (Home)
+    name: Navigate the prepared capability-off bundle to the one chat surface
     bridge.navigate:
       target: chat
       activateApp: false
     wait:
-      state.shellVariant: legacy
+      state.shellVariant: chat_first
 
   - id: S2
-    name: Assert the sampled server capability remained off and the legacy Chat shell stayed usable
+    name: Assert the sampled server capability stayed off while the one shell stayed mounted and usable
     state.expect:
-      state.shellVariant: legacy
+      state.shellVariant: chat_first
+      state.visibleChatFirstRoute: chat

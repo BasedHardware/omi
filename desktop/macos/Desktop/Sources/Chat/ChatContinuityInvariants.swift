@@ -35,7 +35,9 @@ enum ProactiveNotificationKind: String, Equatable, CaseIterable {
     case "insight": return .insight
     case "task_candidate": return .task
     case "resurface": return .resurface
-    default: return .general
+    // An unrecognised director decision is a system notice, not an
+    // uncategorised observation: `.general` is decode-only.
+    default: return .functional
     }
   }
 

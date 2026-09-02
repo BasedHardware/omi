@@ -494,10 +494,12 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// so the destination this call selects is actually on screen. Already-key is
   /// the common case and stays a no-op.
   private func presentMainWindowIfNeeded() {
-    guard let window = NSApp.mainWindow, window.isKeyWindow, window.isVisible else {
-      AppDelegate.summonWindowTarget()?.openMainAppWindow()
-      return
-    }
+    // `NSApp` is an implicitly unwrapped optional and is genuinely nil in a unit
+    // test host, so it is read through an explicit optional rather than touched.
+    let application: NSApplication? = NSApp
+    guard let application else { return }
+    if let window = application.mainWindow, window.isKeyWindow, window.isVisible { return }
+    AppDelegate.summonWindowTarget()?.openMainAppWindow()
   }
 
   private func persistNavigation() {

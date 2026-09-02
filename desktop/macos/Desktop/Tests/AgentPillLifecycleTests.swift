@@ -843,7 +843,8 @@ import XCTest
         ownerID: "owner",
         title: "Replacement notification",
         message: "Must remain visible",
-        assistantId: "test"),
+        assistantId: "test",
+        kind: .functional),
       animated: false)
     scheduler.fire()
 

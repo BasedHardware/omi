@@ -7,8 +7,6 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/ShellClickThrough.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/Sound/OmiUISound.swift
-  - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
-  - desktop/macos/Desktop/Sources/MainWindow/LegacySidebarSurface.swift
   - desktop/macos/Desktop/Sources/MainWindow/SidebarNavItem.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/PageGlassLane.swift
@@ -135,19 +133,17 @@ steps:
         - Home
 
   - id: S9
-    name: Verify the legacy Home and Settings sidebars
+    name: Verify the Settings section list keeps its own ground
     do: >-
-      In Settings > Advanced, enable Use old Home design and return to Home. Verify the left
-      sidebar is a visibly frosted lane and shows Conversations as a separate destination from
-      Memories, then click Conversations. Open Settings from the gear, verify its left section list
-      keeps the same grounded lane instead of showing the desktop directly underneath it, and click
-      General followed by Account & Plan. Each click must change the destination inside Omi rather
-      than reaching the app behind its transparent top-level window.
+      Open Settings from the gear and verify its left section list is a grounded lane rather than
+      showing the desktop directly underneath it, then click General followed by Account & Plan.
+      Each click must change the destination inside Omi rather than reaching the app behind its
+      transparent top-level window. (The "Use old Home design" preference and the frosted legacy
+      navigation sidebar this step used to enable were deleted with the second shell, #12598.)
     expect:
       text_visible:
         - Settings
         - Account & Plan
-        - Conversations
 
   - id: S10
     name: Verify the window has no chrome and is still closable, minimisable and movable

@@ -55,6 +55,18 @@ struct QueryAnswerThread: View {
         onRetry: { Task { await chatProvider.retryLoad() } },
         localSendToken: chatProvider.localSendToken,
         onCancelTurn: { chatProvider.stopAgent(owner: .mainChat) },
+        // A spawned-agent card in the main transcript opens the agent through the
+        // one resolver the notch uses; this used to be wired only on the deleted
+        // Dashboard chat, so Home's agent cards had no way in.
+        onOpenAgent: { agentID, completion in
+          FloatingControlBarManager.shared.openAgentChatFromTimeline(
+            agentID: agentID, completion: completion)
+        },
+        onOpenAgentRef: { ref, completion in
+          FloatingControlBarManager.shared.openAgentChatFromTimeline(
+            ref: ref, completion: completion)
+        },
+
         // **Not zero.** The assistant's identity mark is drawn in an overlay offset
         // `ChatOmiMarkPlacement.markGutter` to the left of the message column, so a transcript with
         // no leading inset draws it outside the panel and clips it away — leaving omi's replies as
@@ -65,12 +77,12 @@ struct QueryAnswerThread: View {
         // `ChatMessagesView` keeps its rows eagerly mounted on purpose — a lazy
         // stack re-estimates off-screen rich-Markdown heights and hands AppKit
         // the wrong anchor mid-gesture — so how many rows are mounted is the
-        // whole cost. It picks the compact window automatically for a caller
-        // that passes a chat-first block context; the ordinary QueryShellHome
-        // path has none, so it used to mount the 500-row default into a panel
-        // 460 pt tall: 910 ms and 607 native views for 400 messages, against
-        // 114 ms and 84 for the same transcript compact. `Show older messages`
-        // is already the way back to the rest of it.
+        // whole cost. The 500-row default in a panel 460 pt tall cost 910 ms and
+        // 607 native views for 400 messages, against 114 ms and 84 for the same
+        // transcript compact. `Show older messages` is already the way back to
+        // the rest of it. Passed explicitly: every host now carries a block
+        // context, so deriving the window from "has a context" would have
+        // silently shrunk the task panel's too.
         chatFirstRichBlockContext: chatFirstRichBlockContext,
         transcriptWindowPolicy: .compactHome,
         verticalContentPadding: OmiSpacing.sm,

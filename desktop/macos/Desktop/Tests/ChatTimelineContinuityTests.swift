@@ -1531,29 +1531,28 @@ final class ChatTimelineContinuityTests: XCTestCase {
 
     // Home is the only main-window chat surface now, so the assertions the
     // standalone chat page used to carry move onto it rather than retiring.
-    let dashboard = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Pages/DashboardPage.swift"),
+    // `QueryAnswerThread` is that surface (`DashboardPage` and its inline chat
+    // are gone), and it now binds the provider directly — the goal-citation
+    // rewrite that used to sit between them belonged to the deleted shell.
+    let answerThread = try String(
+      contentsOf: root.appendingPathComponent("Sources/MainWindow/QueryShell/QueryAnswerThread.swift"),
       encoding: .utf8)
     XCTAssertGreaterThanOrEqual(
-      dashboard.components(separatedBy: "messages: chatProvider.messages,").count - 1,
-      2,
+      answerThread.components(separatedBy: "messages: chatProvider.messages,").count - 1,
+      1,
       "Home chat surfaces must bind the shared ChatProvider timeline"
     )
     XCTAssertFalse(
-      dashboard.contains("transcriptMessages"),
+      answerThread.contains("transcriptMessages"),
       "Home chat must not filter notch/PTT turns out of history"
     )
     XCTAssertTrue(
-      dashboard.contains("openAgentChatFromTimeline(agentID: agentID, completion: completion)"),
+      answerThread.contains("openAgentChatFromTimeline(\n            agentID: agentID, completion: completion)"),
       "Home chat must open spawned-agent links from the timeline with open result feedback"
     )
     XCTAssertTrue(
-      dashboard.contains("openAgentChatFromTimeline(ref: ref, completion: completion)"),
+      answerThread.contains("openAgentChatFromTimeline(\n            ref: ref, completion: completion)"),
       "Home chat must open structured agent refs with open result feedback"
-    )
-    XCTAssertFalse(
-      dashboard.contains("transcriptMessages"),
-      "Home chat must not filter notch/PTT turns out of history"
     )
 
     let floatingState = try String(

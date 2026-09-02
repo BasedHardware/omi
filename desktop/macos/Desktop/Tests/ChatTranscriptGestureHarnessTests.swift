@@ -867,6 +867,7 @@ struct HarnessChatHost: View {
           onRate: { _, _ in },
           localSendToken: model.localSendToken,
           horizontalContentPadding: 0,
+          chatFirstRichBlockContext: ChatSurfaceTestContext.make(),
           transcriptWindowPolicy: model.transcriptWindowPolicy,
           welcomeContent: { EmptyView() }
         )

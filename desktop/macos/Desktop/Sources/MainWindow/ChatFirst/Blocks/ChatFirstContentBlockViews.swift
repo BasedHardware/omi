@@ -7,6 +7,35 @@ import SwiftUI
 /// Choices are controls only while the kernel-backed parent is the completed
 /// tail of Main Chat. The runtime remains authoritative at selection time;
 /// this view's gate simply avoids presenting obsolete choices as actionable.
+/// Whether a question card's options are pressable, dimmed, or gone.
+///
+/// Three different situations used to collapse into one boolean, and the losing
+/// two both rendered as "no options at all": a question already answered (right),
+/// a question whose turn is no longer the tail (right), and a question on an
+/// account whose capability has not resolved (wrong — that reader saw a question
+/// with no visible answers and no explanation).
+enum ChatFirstQuestionCardOptionsPolicy: Equatable {
+  case hidden
+  case enabled
+  case disabled
+
+  static func presentation(
+    isActionable: Bool,
+    isCapabilityAvailable: Bool,
+    hasSelection: Bool,
+    hasOptions: Bool
+  ) -> Self {
+    guard hasOptions, !hasSelection else { return .hidden }
+    if isActionable { return .enabled }
+    // Capability-off is the only reason to show unpressable options: the
+    // question is live, we simply cannot answer it yet.
+    return isCapabilityAvailable ? .hidden : .disabled
+  }
+
+  var isVisible: Bool { self != .hidden }
+  var isPressable: Bool { self == .enabled }
+}
+
 struct QuestionCardView: View {
   private struct Option: Identifiable {
     let id: String
@@ -56,7 +85,13 @@ struct QuestionCardView: View {
       // Capability-off is the one case that shows the chips *without* making
       // them pressable: the question is real and its answers are the only thing
       // that explains it, so they are dimmed rather than deleted.
-      if selectedOptionID == nil, !validOptions.isEmpty, isActionable || !isCapabilityAvailable {
+      let optionsPresentation = ChatFirstQuestionCardOptionsPolicy.presentation(
+        isActionable: isActionable,
+        isCapabilityAvailable: isCapabilityAvailable,
+        hasSelection: selectedOptionID != nil,
+        hasOptions: !validOptions.isEmpty
+      )
+      if optionsPresentation.isVisible {
         FlowLayout(spacing: OmiSpacing.sm) {
           ForEach(validOptions) { option in
             Button {
@@ -70,14 +105,14 @@ struct QuestionCardView: View {
                 .glassChip()
             }
             .buttonStyle(.plain)
-            .disabled(!isActionable)
-            .opacity(isActionable ? 1 : 0.45)
+            .disabled(!optionsPresentation.isPressable)
+            .opacity(optionsPresentation.isPressable ? 1 : 0.45)
             .accessibilityLabel("Send suggestion: \(option.label)")
             .accessibilityIdentifier("chat-first-question-\(questionID)-option-\(option.id)")
           }
         }
 
-        if !isActionable {
+        if !optionsPresentation.isPressable {
           Text("Answering is unavailable right now")
             .scaledFont(size: OmiType.caption)
             .foregroundStyle(Ink.secondary)

@@ -28,6 +28,8 @@ covers:
   # save_knowledge_graph discovery_text resolves through backend KG extract SSOT.
   - desktop/macos/Desktop/Sources/Services/KnowledgeGraphToolSupport.swift
   - desktop/macos/Desktop/Sources/Providers/ChatFirstBlockToolExecutor.swift
+  # The one renderer every Chat surface hands a grouped rich block to.
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/Blocks/ChatFirstRichBlockGroupView.swift
   - desktop/macos/Desktop/Sources/Chat/ChatFirstBlockValidation.swift
   # S14-S22 prove a capture is staged as a typed, removable composer reference,
   # persists on the accepted user turn after the composer clears, and reopens
