@@ -106,6 +106,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   );
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatEpoch, setChatEpoch] = useState(0);
+  // Monotonic chat session epoch. Each run of the chat-history effect (a gate
+  // transition or a backend plane switch) bumps it, so a send or older-page
+  // load that started under a retired session can never write transcript
+  // state into the session that follows.
+  const chatSessionEpochRef = useRef(0);
   const [route, setRoute] = useState<Route>(() =>
     resolveInitialRoute(initialRoute),
   );
@@ -159,14 +164,20 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     if (backend === undefined || backend === null) {
       return () => undefined;
     }
+    chatSessionEpochRef.current += 1;
     if (macDesktop && onboardingRequired !== false) {
       // Leaving a ready session drops the previous session's transcript,
       // cursors, and message bookkeeping so nothing leaks across accounts or
-      // flashes on the next sign-in.
+      // flashes on the next sign-in. Busy flags reset too: send() refuses to
+      // start while chatBusy, so a send that never settled must not brick the
+      // next session's composer.
       setChatError(null);
       setMessages([]);
       setOlderChatCursor(null);
       setHasOlderChat(false);
+      setChatBusy(false);
+      setLoadingOlderChat(false);
+      setActiveGenerationId(null);
       stableChatMessageIds.clear();
       animatedChatMessageIds.clear();
       return () => {
@@ -378,6 +389,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     if (backend === undefined || backend === null || text === '' || chatBusy) {
       return;
     }
+    const session = chatSessionEpochRef.current;
     setChatBusy(true);
     setChatError(null);
     shouldFollowChat.current = true;
@@ -394,6 +406,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         },
         localMessage,
       );
+      // A gate transition (sign-out, dead session, plane switch) retired the
+      // session this send belonged to: its canonical messages belong to the
+      // previous account and must not seed the next session's transcript.
+      if (chatSessionEpochRef.current !== session) {
+        return;
+      }
       setMessages(current => {
         const echoIndex = current.findIndex(
           message => message.id === localMessage.id,
@@ -419,11 +437,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         ];
       });
     } catch (error) {
-      setChatError(chatErrorCopy(error));
-      if (macDesktop && chatSessionLost(error)) {
-        revalidateSession().catch(() => undefined);
+      if (chatSessionEpochRef.current === session) {
+        setChatError(chatErrorCopy(error));
+        if (macDesktop && chatSessionLost(error)) {
+          revalidateSession().catch(() => undefined);
+        }
       }
     } finally {
+      // Busy flags always release, even when the send's session was retired:
+      // a stuck chatBusy would brick the next session's composer.
       setActiveGenerationId(null);
       setChatBusy(false);
     }
@@ -440,15 +462,22 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     ) {
       return;
     }
+    const session = chatSessionEpochRef.current;
     setLoadingOlderChat(true);
     setChatError(null);
     try {
       const page = await loadOlderChatHistory(backend, cursor);
+      if (chatSessionEpochRef.current !== session) {
+        return;
+      }
       page.messages.forEach(message => stableChatMessageIds.add(message.id));
       setMessages(current => mergeOlderChatHistory(current, page.messages));
       setOlderChatCursor(page.olderCursor);
       setHasOlderChat(page.hasOlder);
     } catch (error) {
+      if (chatSessionEpochRef.current !== session) {
+        return;
+      }
       if (
         error instanceof ChatBackendError &&
         error.status === 410 &&
@@ -456,6 +485,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       ) {
         try {
           const page = await loadNewestChatHistory(backend);
+          if (chatSessionEpochRef.current !== session) {
+            return;
+          }
           page.messages.forEach(message =>
             stableChatMessageIds.add(message.id),
           );
@@ -470,7 +502,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           return;
         } catch {}
       }
-      setChatError('Older messages could not be loaded.');
+      if (chatSessionEpochRef.current === session) {
+        setChatError('Older messages could not be loaded.');
+      }
     } finally {
       setLoadingOlderChat(false);
     }
@@ -482,10 +516,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     if (backend === undefined || backend === null || generationId === null) {
       return;
     }
+    const session = chatSessionEpochRef.current;
     try {
       await cancelChatGeneration(backend, generationId);
     } catch {
-      setChatError('Could not stop the response.');
+      if (chatSessionEpochRef.current === session) {
+        setChatError('Could not stop the response.');
+      }
     }
   };
 
