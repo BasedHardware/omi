@@ -569,40 +569,18 @@ RCT_EXPORT_MODULE(OmiAuth)
                           reject:(RCTPromiseRejectBlock)reject {
   if (![self isSignInAttemptCurrent:attempt]) return;
   // /v1/auth/token with use_custom_token=true returns Google's id_token AND a
-  // Firebase custom_token. Storing the Google JWT never produces a refreshable
-  // Omi session, so mint Firebase tokens from custom_token first.
+  // Firebase custom_token. Only the custom_token mints a refreshable Omi
+  // session; a bare Google JWT is not an Omi Bearer credential, so a response
+  // without custom_token fails sign-in instead of storing a dead session.
   NSString *customToken = [tokenResponse[@"custom_token"] isKindOfClass:NSString.class]
       ? tokenResponse[@"custom_token"] : tokenResponse[@"customToken"];
-  if (customToken.length > 0) {
-    [self finishWithFirebaseCustomToken:customToken attempt:attempt resolve:resolve reject:reject];
-    return;
-  }
-  NSString *idToken = [tokenResponse[@"id_token"] isKindOfClass:NSString.class]
-      ? tokenResponse[@"id_token"] : tokenResponse[@"idToken"];
-  NSString *refreshToken = [tokenResponse[@"refresh_token"] isKindOfClass:NSString.class]
-      ? tokenResponse[@"refresh_token"] : tokenResponse[@"refreshToken"];
-  if (idToken.length == 0 || refreshToken.length == 0) {
+  if (customToken.length == 0) {
     [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNAUTHORIZED"
                       message:@"Omi cloud did not return a usable session" error:nil
                       resolve:resolve reject:reject];
     return;
   }
-  NSNumber *expiresIn = [tokenResponse[@"expires_in"] respondsToSelector:@selector(doubleValue)]
-      ? @([tokenResponse[@"expires_in"] doubleValue]) : @3600;
-  NSString *localId = [tokenResponse[@"local_id"] isKindOfClass:NSString.class]
-      ? tokenResponse[@"local_id"] : tokenResponse[@"localId"];
-  NSString *firebaseApiKey = [tokenResponse[@"firebase_api_key"] isKindOfClass:NSString.class]
-      ? tokenResponse[@"firebase_api_key"] : tokenResponse[@"firebaseApiKey"];
-  if (firebaseApiKey.length == 0) firebaseApiKey = OmiAuthResolvedFirebaseApiKey();
-  if (![self isSignInAttemptCurrent:attempt] ||
-      !OmiAuthStoreSession(idToken, refreshToken, expiresIn, localId, firebaseApiKey)) {
-    [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNCONFIGURED"
-                      message:@"Could not store the Omi cloud session" error:nil
-                      resolve:resolve reject:reject];
-    return;
-  }
-  [self finishSignInAttempt:attempt value:@{@"signedIn" : @YES} code:nil message:nil error:nil
-                    resolve:resolve reject:reject];
+  [self finishWithFirebaseCustomToken:customToken attempt:attempt resolve:resolve reject:reject];
 }
 
 - (void)completeSignInWithCallback:(NSURL *)callbackURL
