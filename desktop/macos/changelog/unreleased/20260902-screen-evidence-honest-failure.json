@@ -1,3 +1,0 @@
-{
-  "change": "When Omi can't see your screen during a voice question, it now explains why — Screen Recording isn't granted, was granted after Omi launched and needs a reopen, or the screen just wasn't available — instead of flatly saying it couldn't verify the current screen."
-}
