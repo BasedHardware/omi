@@ -11,7 +11,9 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 const fetchMock = vi.fn();
-const posthogResultsMock = vi.hoisted(() => vi.fn(async (): Promise<any[]> => []));
+const posthogResultsMock = vi.hoisted(() =>
+  vi.fn(async (): Promise<any[]> => [])
+);
 vi.mock("@/lib/posthog", () => ({
   cachedPosthogFetch: (...args: unknown[]) => fetchMock(...args),
   posthogResults: posthogResultsMock,
@@ -105,31 +107,31 @@ describe("crash-rate date keys", () => {
 });
 
 describe("message-ratings ratio", () => {
-  beforeEach(() => {
-    fetchMock.mockReset();
-    posthogResultsMock.mockReset();
-    process.env.POSTHOG_PERSONAL_API_KEY = "k";
-    process.env.POSTHOG_PROJECT_ID = "1";
-  });
-
-  it("reports null, not 0, on a day with no ratings at all", async () => {
-    posthogResultsMock.mockResolvedValue([
-      ["2026-08-01", "legacy", 0, 0],
-      ["2026-08-02", "legacy", 0, 4],
-      ["2026-08-03", "legacy", 3, 1],
+  it("distinguishes a real all-downvote 0 from an unmeasurable day", async () => {
+    const { aggregateRatedMessages } = await import(
+      "@/app/api/omi/stats/message-ratings/route"
+    );
+    const { data, daily } = aggregateRatedMessages([
+      {
+        createdAt: "2026-08-02T12:00:00.000Z",
+        rating: -1,
+        messageSource: "desktop_chat",
+        continuityKey: null,
+      },
+      {
+        createdAt: "2026-08-03T12:00:00.000Z",
+        rating: 1,
+        messageSource: "desktop_chat",
+        continuityKey: null,
+      },
     ]);
 
-    const { GET } = await import("@/app/api/omi/stats/message-ratings/route");
-    const url = "https://admin.omi.me/api/omi/stats/message-ratings?days=7";
-    const res = await GET({
-      url,
-      nextUrl: new URL(url),
-    } as never);
-    const body = await res.json();
-
-    // No ratings -> unmeasurable. All-downvotes -> a real 0. These must differ.
-    expect(body.data[0].ratio).toBeNull();
-    expect(body.data[1].ratio).toBe(0);
-    expect(body.data[2].ratio).toBe(75);
+    // All-downvotes -> a real 0. A day with no ratings at all produces no
+    // point (absence), never a fake 0. These must differ.
+    expect(data.find((p) => p.date === "2026-08-02")!.ratio).toBe(0);
+    expect(data.find((p) => p.date === "2026-08-03")!.ratio).toBe(100);
+    expect(daily.find((p) => p.date === "2026-08-01")).toBeUndefined();
+    // Lanes with no observations stay null, not 0.
+    expect(daily.find((p) => p.date === "2026-08-03")!.voice).toBeNull();
   });
 });
