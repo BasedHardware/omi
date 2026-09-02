@@ -131,10 +131,12 @@ final class SBOnboardingPermissionFlowTests: XCTestCase {
       "advancing on a grant this process cannot use walks the user into a dead screen demo")
 
     model.autoAdvanceIfCurrent("screen_recording", needsRelaunch: false)
-    XCTAssertNotNil(
+    XCTAssertEqual(
+      model.seePhase, .openPage,
+      "a usable grant answers the permission and lands on the offer to open the page")
+    XCTAssertNil(
       model.scenarioDetectionTask,
-      "a usable grant still answers the step, which starts the scenario's window-title detection")
-    model.scenarioDetectionTask?.cancel()
+      "nothing leaves Omi, and nothing is watched for, until the user's own click opens the page")
     model.streamTask?.cancel()
   }
 

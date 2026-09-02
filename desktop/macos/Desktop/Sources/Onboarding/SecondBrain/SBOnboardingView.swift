@@ -237,17 +237,16 @@ struct SBOnboardingView: View {
     switch model.step {
     case .hello: nameWidget
     case .see:
-      permStepWidget("screen_recording", "Screen Recording", "so I can see what you're looking at") {
-        model.answerScreen()
+      switch model.seePhase {
+      case .permission:
+        permStepWidget("screen_recording", "Screen Recording", "so I can see what you're looking at") {
+          model.answerScreen()
+        }
+      case .openPage, .waitingForPage:
+        openOrderPageWidget
       }
     case .card:
-      if model.cardPhase == .notifications {
-        permStepWidget("notifications", "Notifications", "reach you away from the notch") {
-          model.answerNotifications()
-        }
-      } else {
-        cardWaitingWidget
-      }
+      cardWidget
     case .talk:
       switch model.talkPhase {
       case .microphone:
@@ -264,32 +263,73 @@ struct SBOnboardingView: View {
     }
   }
 
-  /// The card beat's widget points at the real surface instead of reproducing it: the whole beat is
-  /// about learning where cards live. Once "Remind me" lands, the task it created shows here as the
-  /// first thing Omi has written on the user's behalf.
-  private var cardWaitingWidget: some View {
+  /// The hand-off out of Omi is a button, never a side effect of the sentence above it. The page
+  /// opens on this click, and the thread has already said what to do there and that Omi will bring
+  /// the user back; `waitingForPage` is the few seconds between the click and the card beat.
+  @ViewBuilder private var openOrderPageWidget: some View {
     VStack(alignment: .leading, spacing: 10) {
-      HStack(alignment: .top, spacing: 12) {
-        Image(systemName: "arrow.up")
-          .inkStyle(InkType.rowCopy, color: Ink.primary)
-          .frame(width: 18)
-        VStack(alignment: .leading, spacing: 3) {
-          Text("Look up. The card is at the top of your screen.")
-            .inkStyle(InkType.rowCopy, color: Ink.primary)
-            .fixedSize(horizontal: false, vertical: true)
-          Text("Cards show at the notch and get out of the way. This one offers a reminder.")
-            .inkStyle(InkType.statusLabel, color: Ink.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+      handoffRow(
+        symbol: "safari",
+        title: "A demo order page, in your browser.",
+        detail: "Norrland Goods, one desk lamp. Opens in your default browser; nothing on it is real."
+      )
+      if model.seePhase == .openPage {
+        SBInkButton(title: "Open the order page", isDefaultAction: true) { model.openOrderPage() }
+      } else {
+        HStack(spacing: 8) {
+          ProgressView().controlSize(.small)
+          Text("Opening… look up once it's there.").inkStyle(InkType.statusLabel, color: Ink.secondary)
         }
-        Spacer(minLength: 0)
+        Button {
+          model.openOrderPage()
+        } label: {
+          Text("Open it again").frame(maxWidth: .infinity)
+        }
+        .buttonStyle(InkButtonStyle(kind: .secondary))
       }
-      .padding(.horizontal, 14).padding(.vertical, 12)
-      .glassCard(cornerRadius: PageGlass.rowRadius)
+    }
+    .frame(maxWidth: 380, alignment: .leading)
+  }
 
+  /// One row that says where the user is about to go and what to do there. Same glass row as the
+  /// receipts, because a hand-off and a receipt are the two ends of the same trip.
+  private func handoffRow(symbol: String, title: String, detail: String) -> some View {
+    HStack(alignment: .top, spacing: 12) {
+      Image(systemName: symbol)
+        .inkStyle(InkType.rowCopy, color: Ink.primary)
+        .frame(width: 18)
+      VStack(alignment: .leading, spacing: 3) {
+        Text(title)
+          .inkStyle(InkType.rowCopy, color: Ink.primary)
+          .fixedSize(horizontal: false, vertical: true)
+        Text(detail)
+          .inkStyle(InkType.statusLabel, color: Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(.horizontal, 14).padding(.vertical, 12)
+    .glassCard(cornerRadius: PageGlass.rowRadius)
+  }
+
+  /// The card beat's widget points at the real surface instead of reproducing it: the whole beat is
+  /// about learning where cards live. Once "Remind me" lands, the task it created stays here through
+  /// the notifications ask as the first thing Omi has written on the user's behalf.
+  @ViewBuilder private var cardWidget: some View {
+    VStack(alignment: .leading, spacing: 10) {
       ForEach(model.scenarioTaskChips, id: \.self) { task in
         scenarioWriteRow(symbol: "checkmark.circle", label: "TASK", text: task)
       }
-      if model.scenarioTaskChips.isEmpty {
+      if model.cardPhase == .notifications {
+        permStepWidget("notifications", "Notifications", "reach you away from the notch") {
+          model.answerNotifications()
+        }
+      } else {
+        handoffRow(
+          symbol: "arrow.up",
+          title: "Look up. The card is at the top of your screen.",
+          detail: "It offers a reminder. Pick either answer; I'll bring you back here."
+        )
         HStack(spacing: 8) {
           ProgressView().controlSize(.small)
           Text("Waiting for you to answer the card…").inkStyle(InkType.statusLabel, color: Ink.secondary)
@@ -317,51 +357,55 @@ struct SBOnboardingView: View {
     .glassCard(cornerRadius: PageGlass.rowRadius)
   }
 
-  /// The write beat: the note is in the browser, so this side only has to say where to look, wait
-  /// for Send, and then show what Omi kept. "Fix something" is honest about being a correction path
-  /// rather than a magic button.
+  /// The write beat: the note is offered, opened on a click, and then this side only has to say
+  /// where to look, wait for Send, and show what Omi kept. The escapes are on screen the whole time
+  /// the user is away, not only after a timeout; "Fix something" is honest about being a correction
+  /// path rather than a magic button.
   @ViewBuilder private var writeScenarioWidget: some View {
     VStack(alignment: .leading, spacing: 10) {
       switch model.writePhase {
-      case .waitingForSend:
-        HStack(alignment: .top, spacing: 12) {
-          Image(systemName: "envelope")
-            .inkStyle(InkType.rowCopy, color: Ink.primary)
-            .frame(width: 18)
-          VStack(alignment: .leading, spacing: 3) {
-            Text("Your note to Sam is open in your browser.")
-              .inkStyle(InkType.rowCopy, color: Ink.primary)
-              .fixedSize(horizontal: false, vertical: true)
-            Text("Say what you'd actually say, then press Send. It's a demo mailbox; nothing leaves your Mac.")
-              .inkStyle(InkType.statusLabel, color: Ink.secondary)
-              .fixedSize(horizontal: false, vertical: true)
-          }
-          Spacer(minLength: 0)
+      case .intro:
+        handoffRow(
+          symbol: "envelope",
+          title: "A note to Sam, already drafted.",
+          detail: "Edit it however you like, then press Send. Demo mailbox; nothing leaves your Mac."
+        )
+        SBInkButton(title: "Open the note", isDefaultAction: true) { model.openComposePage() }
+        Button {
+          model.skipWriteBeat()
+        } label: {
+          Text("Skip for now").frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 14).padding(.vertical, 12)
-        .glassCard(cornerRadius: PageGlass.rowRadius)
-
+        .buttonStyle(InkButtonStyle(kind: .secondary))
+      case .waitingForSend:
+        handoffRow(
+          symbol: "envelope",
+          title: "The note is open in your browser.",
+          detail: "Press Send when it reads right. I'll bring you back here."
+        )
         if model.scenarioWriteDetectionTimedOut {
-          Text("I didn't see the note go out. Open it again, or skip this one.")
+          Text("I haven't seen the note go out yet. Open it again, or skip this one.")
             .inkStyle(InkType.statusLabel, color: Ink.secondary)
             .fixedSize(horizontal: false, vertical: true)
+        } else {
+          HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text("Waiting for Send…").inkStyle(InkType.statusLabel, color: Ink.secondary)
+          }
+        }
+        HStack(spacing: 8) {
           Button {
             model.retryWriteDetection()
           } label: {
-            Text("Open the note again").frame(maxWidth: .infinity)
+            Text("Open it again").frame(maxWidth: .infinity)
           }
-          .buttonStyle(InkButtonStyle(kind: .primary))
+          .buttonStyle(InkButtonStyle(kind: .secondary))
           Button {
             model.skipWriteBeat()
           } label: {
             Text("Skip for now").frame(maxWidth: .infinity)
           }
           .buttonStyle(InkButtonStyle(kind: .secondary))
-        } else {
-          HStack(spacing: 8) {
-            ProgressView().controlSize(.small)
-            Text("Waiting for Send…").inkStyle(InkType.statusLabel, color: Ink.secondary)
-          }
         }
       case .review:
         ForEach(model.scenarioMemoryChips, id: \.self) { memory in
@@ -632,16 +676,13 @@ struct SBOnboardingView: View {
     VStack(alignment: .leading, spacing: 12) {
       if model.screenDemoPTTReady {
         VStack(alignment: .leading, spacing: 8) {
-          Text("Three doors. Three riddles. They open in your browser.")
-            .inkStyle(InkType.rowCopy, color: Ink.primary)
-            .fixedSize(horizontal: false, vertical: true)
           HStack(spacing: 5) {
-            Text("Get stuck, then hold").inkStyle(InkType.rowCopy, color: Ink.primary)
+            Text("Hold").inkStyle(InkType.rowCopy, color: Ink.primary)
             ForEach(model.voiceChordTokens, id: \.self) { tok in keycap(tok) }
-            Text("and ask, out loud.").inkStyle(InkType.rowCopy, color: Ink.primary)
+            Text("and ask about the order, out loud.").inkStyle(InkType.rowCopy, color: Ink.primary)
           }
           Text(
-            "Try “When does this arrive?” I can see the order page, and I answer at the top of your screen, in \(model.selectedResponseLanguageName)."
+            "Try “When does this arrive?” I still have the order page in mind, and I answer at the top of your screen, in \(model.selectedResponseLanguageName)."
           )
           .inkStyle(InkType.statusLabel, color: Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)

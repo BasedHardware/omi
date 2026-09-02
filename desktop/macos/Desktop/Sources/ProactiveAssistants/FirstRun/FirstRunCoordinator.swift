@@ -59,6 +59,10 @@ struct FirstRunState: Codable, Equatable, Sendable {
   var reminderDismissals = 0
   var dwell: FirstRunDwell?
   var instructionChipDays: [String: Int] = [:]
+  /// The step whose guide chip the user closed with ✕. The chip stays down for that step: the
+  /// five-second presentation heartbeat used to put it straight back, which made ✕ a snooze nobody
+  /// asked for. It returns on the next step, the next launch, or a snooze ending.
+  var guideSuppressedStep: FirstRunStep?
   var log: [FirstRunLogEntry] = []
 
   static let inactive = FirstRunState()
@@ -166,6 +170,7 @@ enum FirstRunReducer {
       {
         dismiss()
       } else {
+        state.guideSuppressedStep = nil
         effects.append(.showInstruction)
       }
 
@@ -293,6 +298,7 @@ enum FirstRunReducer {
       state.transitionPending = false
       state.pendingEffect = nil
       state.stepStartedAt = now
+      state.guideSuppressedStep = nil
       switch expected {
       case .openWork:
         state.step = .setReminder
@@ -366,7 +372,9 @@ enum FirstRunReducer {
       guard state.step.isActive, !state.transitionPending else { break }
       if now.timeIntervalSince(state.startedAt ?? now) >= abandonmentInterval {
         dismiss()
-      } else if state.step == .openWork || state.step == .setReminder || state.step == .drift {
+      } else if state.step == .openWork || state.step == .setReminder || state.step == .drift,
+        state.guideSuppressedStep != state.step
+      {
         effects.append(.showInstruction)
       }
 
@@ -389,9 +397,14 @@ enum FirstRunReducer {
       guard state.step == .drift, case .focusSnooze = state.pendingEffect else { break }
       state.pendingEffect = nil
       state.stepStartedAt = now
+      state.guideSuppressedStep = nil
       effects.append(.showInstruction)
 
     case .notificationDismissed(let assistantID):
+      if assistantID == "first_run_guide", state.step.isActive {
+        state.guideSuppressedStep = state.step
+        break
+      }
       guard assistantID == "first_run_card", state.step == .backToWork, state.reminderPresented else { break }
       state.reminderDismissals += 1
       state.reminderPresented = false
@@ -645,6 +658,28 @@ final class FirstRunCoordinator {
         effectObserverForTests?(effect)
       }
       stateObserverForTests?(state)
+    }
+    if executesEffects { syncHubNote() }
+  }
+
+  /// While the guide is asking for a spoken reminder, the voice hub hears the same sentence the
+  /// reducer does. Without this it answers as a general assistant, and can write its own task for
+  /// "remind me to ping Priya" on top of the one the first run records. The note tells it whose
+  /// turn it is. Owned here so it never clobbers the onboarding talk beat's note, which is torn
+  /// down before the first run can start.
+  private var ownsHubNote: Bool {
+    get { Self.hubNoteOwned }
+    set { Self.hubNoteOwned = newValue }
+  }
+  private static var hubNoteOwned = false
+
+  private func syncHubNote() {
+    if state.step == .setReminder, let project = state.projectContext?.normalizedTitle {
+      OnboardingDemoNote.active = OnboardingDemoNote.firstRunReminder(project: project)
+      ownsHubNote = true
+    } else if ownsHubNote {
+      OnboardingDemoNote.active = nil
+      ownsHubNote = false
     }
   }
 

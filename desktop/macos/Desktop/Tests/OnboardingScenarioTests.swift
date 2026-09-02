@@ -181,4 +181,134 @@ final class OnboardingScenarioTests: XCTestCase {
       wait: {})
     XCTAssertEqual(nonBrowser, .timedOut)
   }
+
+  // MARK: - Hand-offs out of Omi and back
+
+  @MainActor
+  private func scenarioModel(opened: OpenedBox, returned: ReturnedBox) -> SBOnboardingModel {
+    let model = SBOnboardingModel(appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    let buildDirectory = Bundle(for: OnboardingScenarioTests.self).bundleURL.deletingLastPathComponent()
+    let siblingBundles =
+      (try? FileManager.default.contentsOfDirectory(at: buildDirectory, includingPropertiesForKeys: nil)) ?? []
+    model.scenarioPageLocator = OnboardingScenarioPageLocator(
+      roots: siblingBundles.filter { $0.pathExtension == "bundle" })
+    model.scenarioPageDirectory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-scenario-tests-\(UUID().uuidString)", isDirectory: true)
+    model.scenarioPageOpener = { url in
+      opened.urls.append(url)
+      return true
+    }
+    model.scenarioReturnToOmi = { returned.count += 1 }
+    return model
+  }
+
+  @MainActor
+  func testScreenRecordingAnswerNeverOpensTheBrowser() {
+    let opened = OpenedBox()
+    let returned = ReturnedBox()
+    let model = scenarioModel(opened: opened, returned: returned)
+    model.step = .see
+    model.seePhase = .permission
+    model.scrState = .on
+
+    model.answerSeePermission()
+
+    XCTAssertEqual(model.seePhase, .openPage, "the permission answer ends at the offer, not in the browser")
+    XCTAssertTrue(opened.urls.isEmpty, "nothing may leave Omi on a permission answer")
+    XCTAssertEqual(model.step, .see)
+    XCTAssertEqual(model.thread.last?.isOmi, true)
+    XCTAssertTrue(model.thread.last?.text.contains("bring you back") == true)
+    XCTAssertEqual(
+      model.permissionKey(for: .see), nil,
+      "once answered, a late Screen Recording grant must not re-answer the beat")
+  }
+
+  @MainActor
+  func testOpenOrderPageIsTheOnlyThingThatOpensTheBrowser() {
+    let opened = OpenedBox()
+    let returned = ReturnedBox()
+    let model = scenarioModel(opened: opened, returned: returned)
+    model.step = .see
+    model.seePhase = .openPage
+
+    model.openOrderPage()
+
+    XCTAssertEqual(opened.urls.map(\.lastPathComponent), ["order.html"])
+    XCTAssertEqual(model.seePhase, .waitingForPage)
+    XCTAssertEqual(model.thread.last?.text, "Open the order page")
+    XCTAssertNotNil(model.scenarioDetectionTask, "the click starts the watch for the page")
+    model.scenarioDetectionTask?.cancel()
+
+    // A retry from the waiting phase opens again without a second user bubble.
+    model.openOrderPage()
+    XCTAssertEqual(opened.urls.count, 2)
+    XCTAssertEqual(model.thread.filter { $0.text == "Open the order page" }.count, 1)
+    model.scenarioDetectionTask?.cancel()
+  }
+
+  @MainActor
+  func testCardAnswerBringsOmiBackAndKeepsTheReceiptThroughTheNotificationsAsk() {
+    let opened = OpenedBox()
+    let returned = ReturnedBox()
+    let model = scenarioModel(opened: opened, returned: returned)
+    model.step = .card
+    model.cardPhase = .waitingForAction
+
+    model.handleScenarioCardAction("onboarding_not_now")
+
+    XCTAssertEqual(returned.count, 1, "answering Omi's own card is the moment Omi comes back")
+    XCTAssertEqual(model.cardPhase, .notifications)
+    XCTAssertTrue(model.thread.contains { !$0.isOmi && $0.text == "Not now" })
+    XCTAssertTrue(model.thread.last?.text.contains("notifications") == true)
+    XCTAssertTrue(opened.urls.isEmpty)
+
+    // A second answer is inert: the card is gone and the ask is already on screen.
+    model.handleScenarioCardAction("onboarding_remind_me")
+    XCTAssertEqual(returned.count, 1)
+  }
+
+  @MainActor
+  func testWriteBeatWaitsForTheClickAndReturnsAfterSend() {
+    let opened = OpenedBox()
+    let returned = ReturnedBox()
+    let model = scenarioModel(opened: opened, returned: returned)
+    model.step = .write
+    model.writePhase = .intro
+
+    XCTAssertTrue(opened.urls.isEmpty, "the write beat's message opens nothing")
+    model.openComposePage()
+    XCTAssertEqual(opened.urls.map(\.lastPathComponent), ["compose.html"])
+    XCTAssertEqual(model.writePhase, .waitingForSend)
+    XCTAssertEqual(model.thread.last?.text, "Open the note")
+    model.scenarioDetectionTask?.cancel()
+
+    // Skip is available from the offer and from the wait, never from the review.
+    model.writePhase = .review
+    model.skipWriteBeat()
+    XCTAssertEqual(model.step, .write)
+    XCTAssertEqual(returned.count, 0, "nothing summons Omi until Send is seen")
+  }
+
+  @MainActor
+  func testSkipFromTheWriteOfferLeavesWithoutOpeningAnything() {
+    let opened = OpenedBox()
+    let returned = ReturnedBox()
+    let model = scenarioModel(opened: opened, returned: returned)
+    model.step = .write
+    model.writePhase = .intro
+
+    model.skipWriteBeat()
+
+    XCTAssertEqual(model.step, .ready)
+    XCTAssertTrue(opened.urls.isEmpty)
+    model.streamTask?.cancel()
+  }
+}
+
+private final class OpenedBox: @unchecked Sendable {
+  var urls: [URL] = []
+}
+
+private final class ReturnedBox: @unchecked Sendable {
+  var count = 0
 }

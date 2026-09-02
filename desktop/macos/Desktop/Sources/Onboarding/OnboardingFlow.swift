@@ -273,6 +273,7 @@ enum OnboardingFlow {
     "sbOnboardingResumeStep",
     "sbOnboardingResumeStepSchema",
     "sbOnboardingShortcutsCompleted",
+    SBOnboardingModel.seePhaseKey,
     SBOnboardingModel.cardPhaseKey,
     SBOnboardingModel.talkPhaseKey,
     SBOnboardingModel.writePhaseKey,

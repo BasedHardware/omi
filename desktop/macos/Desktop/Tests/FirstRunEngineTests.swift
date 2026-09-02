@@ -140,6 +140,33 @@ final class FirstRunEngineTests: XCTestCase {
     XCTAssertEqual(focus.pendingEffect, .focusSnooze(deadline: start.addingTimeInterval(300)))
   }
 
+  func testClosingTheGuideChipKeepsItDownForThatStepOnly() {
+    var state = FirstRunState.inactive
+    let project = context(app: "Xcode", bundle: "com.apple.dt.Xcode", title: "Pricing Engine")
+    _ = apply(&state, .start, offset: 0)
+
+    _ = apply(&state, .notificationDismissed(assistantID: "first_run_guide"), offset: 1)
+    XCTAssertEqual(state.step, .openWork, "closing the chip is not abandoning the first run")
+    var effects = apply(&state, .presentationOpportunity, offset: 6)
+    XCTAssertFalse(effects.contains(.showInstruction), "the heartbeat must not put a closed chip back")
+    effects = apply(&state, .presentationOpportunity, offset: 11)
+    XCTAssertFalse(effects.contains(.showInstruction))
+
+    _ = apply(&state, .context(project), offset: 12)
+    _ = apply(&state, .dwellElapsed(project), offset: 21)
+    effects = apply(&state, .advance(expected: .openWork), offset: 24)
+    XCTAssertEqual(state.step, .setReminder)
+    XCTAssertTrue(effects.contains(.showInstruction), "the next step gets its own chip")
+    effects = apply(&state, .presentationOpportunity, offset: 29)
+    XCTAssertTrue(effects.contains(.showInstruction))
+
+    var relaunched = FirstRunState.inactive
+    _ = apply(&relaunched, .start, offset: 0)
+    _ = apply(&relaunched, .notificationDismissed(assistantID: "first_run_guide"), offset: 1)
+    effects = apply(&relaunched, .launch, offset: 600)
+    XCTAssertTrue(effects.contains(.showInstruction), "a new launch is a new chance to show the step")
+  }
+
   func testReducerHonorsExplicitDismissal() {
     var state = FirstRunState.inactive
     _ = apply(&state, .start, offset: 0)

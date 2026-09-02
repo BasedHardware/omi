@@ -30,24 +30,53 @@ extension SBOnboardingModel {
     )
   }
 
-  func answerSee() {
+  /// The Screen Recording answer ends the permission phase and nothing else. Leaving Omi is the
+  /// user's own click on "Open the order page", so the browser never appears over a sentence they
+  /// were still reading, and the thread says what will happen there before it happens.
+  func answerSeePermission() {
+    guard step == .see, seePhase == .permission else { return }
     let granted = scrState == .on
-    let defaults = UserDefaults.standard
-    if !defaults.bool(forKey: OnboardingScenarioDefaults.pageAOpenedKey) {
-      do {
-        _ = try OnboardingScenarioPageRenderer.writeAndOpen(
-          fileName: "order.html",
-          context: scenarioPageContext,
-          directory: scenarioPageDirectory
-        )
-        defaults.set(true, forKey: OnboardingScenarioDefaults.pageAOpenedKey)
-        OnboardingScenarioJournal().append(who: "system", text: "Opened the local order page")
-      } catch {
-        log("Scenario onboarding could not open order page: \(error.localizedDescription)")
-        OnboardingScenarioJournal().append(who: "system", text: "The local order page could not be opened")
-      }
-    }
+    let answer = granted ? "Allowed" : "Skip for now"
+    thread.append(Msg(isOmi: false, text: answer))
+    OnboardingScenarioJournal().append(who: "user", text: answer)
+    seePhase = .openPage
+    persistScenarioProgress()
+    appendScenarioOmiLine(
+      "When you open it, watch the top of your screen: a card will show up there. Answer it, and I'll bring you back here."
+    )
+  }
 
+  /// The click that leaves Omi. Also the retry when the browser never came up.
+  func openOrderPage() {
+    guard step == .see, seePhase == .openPage || seePhase == .waitingForPage else { return }
+    if seePhase == .openPage {
+      thread.append(Msg(isOmi: false, text: "Open the order page"))
+      OnboardingScenarioJournal().append(who: "user", text: "Open the order page")
+    }
+    do {
+      _ = try OnboardingScenarioPageRenderer.writeAndOpen(
+        fileName: "order.html",
+        context: scenarioPageContext,
+        directory: scenarioPageDirectory,
+        locator: scenarioPageLocator,
+        open: scenarioPageOpener
+      )
+      OnboardingScenarioJournal().append(who: "system", text: "Opened the local order page")
+    } catch {
+      log("Scenario onboarding could not open order page: \(error.localizedDescription)")
+      OnboardingScenarioJournal().append(who: "system", text: "The local order page could not be opened")
+    }
+    seePhase = .waitingForPage
+    persistScenarioProgress()
+    startOrderPageDetection()
+  }
+
+  /// Watch for the page to become frontmost, then move to the card beat and fire the card at once.
+  /// The card must not wait for the card beat's sentence to finish streaming into a window the
+  /// browser is now covering; the page's own cue says "watch the top of your screen", so the top of
+  /// the screen has to answer within a poll, not a paragraph.
+  func startOrderPageDetection() {
+    let granted = scrState == .on
     scenarioDetectionTask?.cancel()
     scenarioDetectionTask = Task { [weak self] in
       guard let self else { return }
@@ -64,7 +93,7 @@ extension SBOnboardingModel {
         },
         wait: { try? await Task.sleep(nanoseconds: 500_000_000) }
       )
-      guard !Task.isCancelled, self.step == .see else { return }
+      guard !Task.isCancelled, self.step == .see, self.seePhase == .waitingForPage else { return }
       if result == .timedFallback {
         DesktopDiagnosticsManager.shared.recordFallback(
           area: "onboarding_detection",
@@ -78,18 +107,24 @@ extension SBOnboardingModel {
         text: result == .timedFallback ? "Order page detection used the timed fallback" : "Order page became frontmost"
       )
       self.advance(
-        userAnswer: granted ? "Allowed" : "Skip for now",
+        userAnswer: nil,
         to: .card,
         skipped: !granted,
         permission: "screen_recording",
         granted: granted,
         detection: result.analyticsValue
       )
+      self.presentScenarioCard()
     }
   }
 
+  /// How long the scripted card waits at the notch. Long, because the user is reading a page in
+  /// another app and the card is the only piece of Omi they can see; a card that leaves while they
+  /// are still looking for it is the lesson taught backwards.
+  static let scenarioCardTimeout: UInt64 = 90_000_000_000
+
   func presentScenarioCard() {
-    guard step == .card, cardPhase == .waitingForAction else { return }
+    guard step == .card, cardPhase == .waitingForAction, !scenarioCardPresented else { return }
     let manager = FloatingControlBarManager.shared
     let hasAnotherCard = manager.currentNotificationAssistantID.map { $0 != "onboarding_scenario" } ?? false
     guard appState.meetingDetector?.isMeetingActive != true, !hasAnotherCard else {
@@ -106,9 +141,11 @@ extension SBOnboardingModel {
       let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
       let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
     else {
-      showScenarioNotificationsPrompt(actionText: "Card unavailable")
+      showScenarioNotificationsPrompt(
+        userAnswer: nil, preface: "I couldn't show the card just now; the next one will land.")
       return
     }
+    scenarioCardPresented = true
     NotificationService.shared.sendNotification(
       ownerID: ownerID,
       title: "Aurora desk lamp",
@@ -124,10 +161,16 @@ extension SBOnboardingModel {
     OnboardingScenarioJournal().append(who: "system", text: "Presented the scripted notch card")
     scenarioCardTimeoutTask?.cancel()
     scenarioCardTimeoutTask = Task { [weak self] in
-      try? await Task.sleep(nanoseconds: 25_000_000_000)
+      try? await Task.sleep(nanoseconds: Self.scenarioCardTimeout)
       guard let self, !Task.isCancelled, self.step == .card, self.cardPhase == .waitingForAction else { return }
       FloatingControlBarManager.shared.dismissNotifications(assistantID: "onboarding_scenario", kind: .timeout)
-      self.showScenarioNotificationsPrompt(actionText: "Card timed out")
+      OnboardingScenarioJournal().append(who: "system", text: "The scripted card timed out")
+      // The user is still somewhere else. Bring them back with the thread explaining what happened,
+      // rather than advancing silently in a window they cannot see.
+      self.scenarioReturnToOmi()
+      self.showScenarioNotificationsPrompt(
+        userAnswer: nil,
+        preface: "That one got out of the way on its own; cards do that. There'll be more.")
     }
   }
 
@@ -140,7 +183,6 @@ extension SBOnboardingModel {
     if action == "onboarding_remind_me" {
       let title = "Return the desk lamp if it's not right"
       let dueDate = scenarioDates.atNineAM(scenarioDates.returnDate)
-      OnboardingScenarioJournal().append(who: "user", text: "Remind me")
       Task { [weak self] in
         guard let self, let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
           let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
@@ -159,10 +201,13 @@ extension SBOnboardingModel {
           OnboardingScenarioJournal().append(who: "system", text: "The reminder task could not be saved")
         }
       }
-      showScenarioNotificationsPrompt(actionText: nil)
+      showScenarioNotificationsPrompt(userAnswer: "Remind me", preface: nil)
     } else {
-      showScenarioNotificationsPrompt(actionText: "Not now")
+      showScenarioNotificationsPrompt(userAnswer: "Not now", preface: nil)
     }
+    // The tap was on Omi's own card, so the user's attention is already here. Coming back to the
+    // thread is the promise the card beat made ("Answer it, and I'll bring you back").
+    scenarioReturnToOmi()
   }
 
   private func presentReminderConfirmationCard() {
@@ -185,17 +230,17 @@ extension SBOnboardingModel {
     )
   }
 
-  private func showScenarioNotificationsPrompt(actionText: String?) {
+  private func showScenarioNotificationsPrompt(userAnswer: String?, preface: String?) {
     guard step == .card, cardPhase == .waitingForAction else { return }
-    if let actionText {
-      thread.append(Msg(isOmi: false, text: actionText))
-      OnboardingScenarioJournal().append(who: "user", text: actionText)
+    if let userAnswer {
+      thread.append(Msg(isOmi: false, text: userAnswer))
+      OnboardingScenarioJournal().append(who: "user", text: userAnswer)
     }
     cardPhase = .notifications
     persistScenarioProgress()
-    appendScenarioOmiLine(
+    let ask =
       "To reach you when I'm not in front, I'll ask for notifications. The notch works without it; the lock screen doesn't."
-    )
+    appendScenarioOmiLine(preface.map { "\($0) \(ask)" } ?? ask)
     precheckPerm("notifications")
   }
 
@@ -244,13 +289,21 @@ extension SBOnboardingModel {
     )
   }
 
-  func openComposePageAndWaitForSend() {
-    guard step == .write, writePhase == .waitingForSend else { return }
+  /// The click that leaves Omi for the note. Also the retry when the browser never came up.
+  func openComposePage() {
+    guard step == .write, writePhase == .intro || writePhase == .waitingForSend else { return }
+    if writePhase == .intro {
+      thread.append(Msg(isOmi: false, text: "Open the note"))
+      OnboardingScenarioJournal().append(who: "user", text: "Open the note")
+    }
+    scenarioWriteDetectionTimedOut = false
     do {
       _ = try OnboardingScenarioPageRenderer.writeAndOpen(
         fileName: "compose.html",
         context: scenarioPageContext,
-        directory: scenarioPageDirectory
+        directory: scenarioPageDirectory,
+        locator: scenarioPageLocator,
+        open: scenarioPageOpener
       )
       OnboardingScenarioJournal().append(who: "system", text: "Opened the local note to Sam")
     } catch {
@@ -258,6 +311,18 @@ extension SBOnboardingModel {
       scenarioWriteDetectionTimedOut = true
       return
     }
+    writePhase = .waitingForSend
+    persistScenarioProgress()
+    startComposeDetection()
+  }
+
+  /// Five minutes of polling: a note takes as long as the user wants it to, and the escape hatches
+  /// ("Open it again", "Skip for now") are on screen the whole time, so the timeout only changes a
+  /// caption. When Send lands, Omi comes back on its own; the page says so.
+  static let composeDetectionMaximumPolls = 600
+
+  func startComposeDetection() {
+    guard step == .write, writePhase == .waitingForSend else { return }
     scenarioDetectionTask?.cancel()
     scenarioDetectionTask = Task { [weak self] in
       guard let self else { return }
@@ -265,7 +330,7 @@ extension SBOnboardingModel {
         token: OnboardingScenarioTitleTransport.sentToken,
         nonce: self.scenarioPageNonce,
         requireBrowser: true,
-        maximumPolls: 120,
+        maximumPolls: Self.composeDetectionMaximumPolls,
         useTimedFallback: false,
         poll: {
           let info = await WindowMonitor.getActiveWindowInfoAsync()
@@ -275,7 +340,7 @@ extension SBOnboardingModel {
         },
         wait: { try? await Task.sleep(nanoseconds: 500_000_000) }
       )
-      guard !Task.isCancelled, self.step == .write else { return }
+      guard !Task.isCancelled, self.step == .write, self.writePhase == .waitingForSend else { return }
       guard case .matched(let title) = result,
         let note = OnboardingScenarioTitleTransport.note(from: title, nonce: self.scenarioPageNonce)
       else {
@@ -284,12 +349,12 @@ extension SBOnboardingModel {
       }
       OnboardingScenarioJournal().append(who: "system", text: "Detected the sent local note")
       self.applyScenarioNote(note)
+      self.scenarioReturnToOmi()
     }
   }
 
   func retryWriteDetection() {
-    scenarioWriteDetectionTimedOut = false
-    openComposePageAndWaitForSend()
+    openComposePage()
   }
 
   func applyScenarioNote(_ note: String) {
@@ -357,7 +422,7 @@ extension SBOnboardingModel {
   /// The escape when the browser hand-off never comes back (no default browser, a closed tab).
   /// Never gate a beat on something the app cannot observe.
   func skipWriteBeat() {
-    guard step == .write, writePhase == .waitingForSend else { return }
+    guard step == .write, writePhase != .review else { return }
     scenarioDetectionTask?.cancel()
     OnboardingScenarioJournal().append(who: "user", text: "Skip for now")
     advance(userAnswer: "Skip for now", to: .ready, skipped: true, detection: "timeout")

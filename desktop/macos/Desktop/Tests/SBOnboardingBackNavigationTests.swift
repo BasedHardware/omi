@@ -256,7 +256,8 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     // The beat phases persist alongside the resume step; a phase left behind by another test
     // would otherwise resume this model mid-beat.
     let phaseKeys = [
-      SBOnboardingModel.cardPhaseKey, SBOnboardingModel.talkPhaseKey, SBOnboardingModel.writePhaseKey,
+      SBOnboardingModel.seePhaseKey, SBOnboardingModel.cardPhaseKey, SBOnboardingModel.talkPhaseKey,
+      SBOnboardingModel.writePhaseKey,
       SBOnboardingModel.writeReceiptsKey,
     ]
     let prevPhases = phaseKeys.map { UserDefaults.standard.object(forKey: $0) }

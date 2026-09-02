@@ -320,7 +320,7 @@ extension SBOnboardingModel {
   }
 
   func answerMic() { answerTalkMicrophone() }
-  func answerScreen() { answerSee() }
+  func answerScreen() { answerSeePermission() }
   func answerNotifications() { answerCardNotifications() }
 
   /// Advance past a permission step automatically once its grant lands — but only
@@ -339,7 +339,7 @@ extension SBOnboardingModel {
     // instead (`SBPermissionRelaunchGate`).
     guard !needsRelaunch else { return }
     switch step {
-    case .see where key == "screen_recording": answerSee()
+    case .see where key == "screen_recording" && seePhase == .permission: answerSeePermission()
     case .card where key == "notifications" && cardPhase == .notifications: answerCardNotifications()
     case .talk where key == "microphone" && talkPhase == .microphone: answerTalkMicrophone()
     case .hello, .see, .card, .talk, .write, .ready: break
@@ -349,7 +349,7 @@ extension SBOnboardingModel {
   /// The permission key a step gates on, or nil for non-permission steps.
   func permissionKey(for step: Step) -> String? {
     switch step {
-    case .see: return "screen_recording"
+    case .see: return seePhase == .permission ? "screen_recording" : nil
     case .card: return cardPhase == .notifications ? "notifications" : nil
     case .talk: return talkPhase == .microphone ? "microphone" : nil
     case .hello, .write, .ready: return nil

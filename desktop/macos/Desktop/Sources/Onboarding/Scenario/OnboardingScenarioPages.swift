@@ -93,8 +93,12 @@ enum OnboardingScenarioPageRenderer {
     }
   }
 
-  static func render(fileName: String, context: OnboardingScenarioPageContext) throws -> String {
-    guard let source = OnboardingScenarioPageLocator.bundled.url(for: fileName) else {
+  static func render(
+    fileName: String,
+    context: OnboardingScenarioPageContext,
+    locator: OnboardingScenarioPageLocator = .bundled
+  ) throws -> String {
+    guard let source = locator.url(for: fileName) else {
       throw CocoaError(.fileNoSuchFile)
     }
     return render(template: try String(contentsOf: source, encoding: .utf8), context: context)
@@ -104,9 +108,10 @@ enum OnboardingScenarioPageRenderer {
     fileName: String,
     context: OnboardingScenarioPageContext,
     directory: URL,
+    locator: OnboardingScenarioPageLocator = .bundled,
     open: (URL) -> Bool = NSWorkspace.shared.open
   ) throws -> URL {
-    let rendered = try render(fileName: fileName, context: context)
+    let rendered = try render(fileName: fileName, context: context, locator: locator)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let destination = directory.appendingPathComponent(fileName)
     try rendered.write(to: destination, atomically: true, encoding: .utf8)

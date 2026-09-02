@@ -5,8 +5,20 @@ import Foundation
 /// OCR'd, or embedded (capture starts at this beat). Both the typed-chat kernel context and the
 /// voice system instruction read `active`. Mirrors the bundled order page exactly; update both
 /// together.
+///
+/// The first-run guide uses the same slot for its one spoken step (`firstRunReminder`), so the
+/// two never overlap: the talk beat clears its note before onboarding can end.
 enum OnboardingDemoNote {
   @MainActor static var active: String?
+
+  static func firstRunReminder(project: String) -> String {
+    """
+    First-run guidance in progress: the user is dictating something Omi should bring up the next \
+    time they open "\(project)". Omi's first-run guide records that reminder itself. Acknowledge in \
+    one short sentence what you will bring up and when; do not create a task, reminder, memory, or \
+    calendar event, and do not ask a follow-up question.
+    """
+  }
 
   static func orderPage(_ context: OnboardingScenarioPageContext) -> String {
     """

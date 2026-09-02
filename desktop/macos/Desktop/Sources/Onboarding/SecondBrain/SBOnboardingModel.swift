@@ -15,6 +15,9 @@ struct SBOnboardingWidgetShape: Equatable {
   var screenDemoUnavailable: Bool
   var screenDemoDone: Bool
   var shortcutRegistrationError: String? = nil
+  var seePhase: SBOnboardingModel.SeePhase = .permission
+  var writePhase: SBOnboardingModel.WritePhase = .intro
+  var writeDetectionTimedOut = false
 }
 
 /// Drives the Second Brain scenario onboarding: a deterministic chat with Omi
@@ -48,6 +51,15 @@ final class SBOnboardingModel: ObservableObject {
     static let promise = Step.hello
   }
 
+  /// The see beat is two moments, not one: the permission answer, then the user's own click that
+  /// opens the browser. Folding them together is how the page used to pop up over the sentence
+  /// that announced it.
+  enum SeePhase: String, Codable, Equatable {
+    case permission
+    case openPage
+    case waitingForPage
+  }
+
   enum CardPhase: String, Codable, Equatable {
     case waitingForAction
     case notifications
@@ -60,6 +72,8 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   enum WritePhase: String, Codable, Equatable {
+    /// The note is described and offered; nothing has left Omi yet.
+    case intro
     case waitingForSend
     case review
   }
@@ -102,9 +116,18 @@ final class SBOnboardingModel: ObservableObject {
   @Published var nameDraft = ""
   @Published var roleDraft = ""
   @Published var role: String?
+  @Published var seePhase: SeePhase = .permission
   @Published var cardPhase: CardPhase = .waitingForAction
   @Published var talkPhase: TalkPhase = .microphone
-  @Published var writePhase: WritePhase = .waitingForSend
+  @Published var writePhase: WritePhase = .intro
+  /// The scripted card is fired once per visit to the card beat, whichever of page detection or the
+  /// beat's message finishes first.
+  var scenarioCardPresented = false
+  /// Seams for the two moments the scenario leaves Omi and comes back. Production opens the rendered
+  /// page in the default browser and summons the shell the way the menu bar does; tests observe.
+  var scenarioPageOpener: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+  var scenarioPageLocator: OnboardingScenarioPageLocator = .bundled
+  var scenarioReturnToOmi: () -> Void = { AppDelegate.summonWindowTarget()?.openMainAppWindow() }
   @Published var scenarioTaskChips: [String] = []
   /// The task the note implies; written only on "Looks right".
   var scenarioProposedTaskTitle: String?
@@ -182,7 +205,7 @@ final class SBOnboardingModel: ObservableObject {
   var scenarioCardTimeoutTask: Task<Void, Never>?
   let scenarioDates = OnboardingScenarioDates.make()
   let scenarioPageNonce = UUID().uuidString.lowercased()
-  let scenarioPageDirectory = FileManager.default.temporaryDirectory
+  var scenarioPageDirectory = FileManager.default.temporaryDirectory
     .appendingPathComponent("omi-onboarding-\(UUID().uuidString)", isDirectory: true)
   var beatStartedAt = Date()
   var beatExitRecorded = false
@@ -263,15 +286,19 @@ final class SBOnboardingModel: ObservableObject {
         + "so I can help before you ask. Rather than explain it, let's do one real thing together. "
         + "About four minutes. What should I call you?"
     case .see:
-      return "I'm going to open a page in your browser. To see it the way you do, I need Screen Recording."
+      return
+        "First, what I notice. I'll show you a demo order page in your browser. "
+        + "To see it the way you do, I need Screen Recording."
     case .card:
       return
-        "That's a card. When I spot something on screen worth a heads-up, I show one here, at the notch, "
-        + "and then get out of the way. Try Remind me."
+        "That's a card, up at the notch. When I spot something on screen worth a heads-up, I show one there "
+        + "and then get out of the way. Answer it, and I'll bring you back here."
     case .talk:
-      return "Now ask me about it. I need the microphone."
+      return "Now ask me about that order, out loud. I need the microphone."
     case .write:
-      return "Last one. Tell a friend about it. I opened a note to Sam; say whatever you'd actually say, then send it."
+      return
+        "Last one. Tell a friend about it. I've drafted a note to Sam in a demo mailbox: "
+        + "say whatever you'd actually say, then press Send. Nothing leaves your Mac, and I'll bring you back."
     case .ready:
       return
         "That's the whole idea: I watch, I speak up, I remember. Now let's do it with your real work. "
@@ -296,7 +323,10 @@ final class SBOnboardingModel: ObservableObject {
       screenDemoReady: screenDemoPTTReady,
       screenDemoUnavailable: screenDemoPTTUnavailable,
       screenDemoDone: screenDemoDone,
-      shortcutRegistrationError: shortcutRegistrationError
+      shortcutRegistrationError: shortcutRegistrationError,
+      seePhase: seePhase,
+      writePhase: writePhase,
+      writeDetectionTimedOut: scenarioWriteDetectionTimedOut
     )
   }
 
@@ -328,6 +358,7 @@ final class SBOnboardingModel: ObservableObject {
 
   /// Persisted when the talk chord is completed.
   static let shortcutsCompletedKey = "sbOnboardingShortcutsCompleted"
+  nonisolated static let seePhaseKey = "sbOnboardingSeePhase"
   nonisolated static let cardPhaseKey = "sbOnboardingCardPhase"
   nonisolated static let talkPhaseKey = "sbOnboardingTalkPhase"
   nonisolated static let writePhaseKey = "sbOnboardingWritePhase"
@@ -415,6 +446,7 @@ final class SBOnboardingModel: ObservableObject {
 
   func persistScenarioProgress() {
     let defaults = UserDefaults.standard
+    defaults.set(seePhase.rawValue, forKey: Self.seePhaseKey)
     defaults.set(cardPhase.rawValue, forKey: Self.cardPhaseKey)
     defaults.set(talkPhase.rawValue, forKey: Self.talkPhaseKey)
     defaults.set(writePhase.rawValue, forKey: Self.writePhaseKey)
@@ -423,6 +455,7 @@ final class SBOnboardingModel: ObservableObject {
 
   private func restoreScenarioProgress() {
     let defaults = UserDefaults.standard
+    if let raw = defaults.string(forKey: Self.seePhaseKey), let value = SeePhase(rawValue: raw) { seePhase = value }
     if let raw = defaults.string(forKey: Self.cardPhaseKey), let value = CardPhase(rawValue: raw) { cardPhase = value }
     if let raw = defaults.string(forKey: Self.talkPhaseKey), let value = TalkPhase(rawValue: raw) { talkPhase = value }
     if let raw = defaults.string(forKey: Self.writePhaseKey), let value = WritePhase(rawValue: raw) {
@@ -499,7 +532,14 @@ final class SBOnboardingModel: ObservableObject {
   /// appears — used to kick off per-step live work (screen capture, demo setup).
   private func onStepShown(_ step: Step) {
     switch step {
-    case .see: precheckPerm("screen_recording")
+    case .see:
+      switch seePhase {
+      case .permission: precheckPerm("screen_recording")
+      case .openPage: break
+      // A relaunch mid-hand-off: the page may still be open, so watch for it without opening a
+      // second copy over the user.
+      case .waitingForPage: startOrderPageDetection()
+      }
     case .card:
       if cardPhase == .notifications { precheckPerm("notifications") } else { presentScenarioCard() }
     case .talk:
@@ -509,7 +549,9 @@ final class SBOnboardingModel: ObservableObject {
       case .demo: startScreenDemo()
       }
     case .write:
-      if writePhase == .waitingForSend { openComposePageAndWaitForSend() }
+      // Never opened from here: the browser appears on the user's click, not on a streamed sentence.
+      // After a relaunch mid-hand-off, only the watch for Send resumes.
+      if writePhase == .waitingForSend { startComposeDetection() }
     case .hello, .ready: break
     }
   }
@@ -577,10 +619,12 @@ final class SBOnboardingModel: ObservableObject {
     scenarioCardTimeoutTask?.cancel()
     scenarioCardTimeoutTask = nil
     switch step {
+    case .card:
+      scenarioCardPresented = false
     case .talk:
       disarmShortcutSummon()
       teardownVoiceDemo()
-    case .hello, .see, .card, .write, .ready: break
+    case .hello, .see, .write, .ready: break
     }
   }
 
