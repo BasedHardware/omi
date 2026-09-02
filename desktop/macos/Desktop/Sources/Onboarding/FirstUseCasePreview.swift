@@ -1,3 +1,4 @@
+import AppKit
 import OmiTheme
 import SwiftUI
 
@@ -65,15 +66,28 @@ struct FirstUseCasePreview: View {
       Rectangle().fill(Ink.separator).frame(height: 1)
 
       Group {
-        switch useCase.id {
-        case FirstUseCase.game.id: minecraftPage
-        case FirstUseCase.design.id: figmaPage
-        case FirstUseCase.post.id: composePage
-        default: shopPage
+        if let shot = Self.screenshot(for: useCase) {
+          // A real capture of the site, so the preview is the thing itself rather than a sketch.
+          GeometryReader { proxy in
+            Image(nsImage: shot)
+              .resizable()
+              .aspectRatio(contentMode: .fill)
+              .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+              .clipped()
+          }
+        } else {
+          Group {
+            switch useCase.id {
+            case FirstUseCase.game.id: minecraftPage
+            case FirstUseCase.design.id: figmaPage
+            case FirstUseCase.post.id: composePage
+            default: shopPage
+            }
+          }
+          .padding(OmiSpacing.md)
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .padding(OmiSpacing.md)
     }
     .background(
       RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -110,6 +124,26 @@ struct FirstUseCasePreview: View {
     .shadow(color: Color.black.opacity(0.25), radius: 12, y: 4)
     .id(useCase.id)
     .transition(.opacity.combined(with: .move(edge: .bottom)))
+  }
+
+  // MARK: - Site screenshots
+
+  /// `Resources/first_use_<id>.jpg`: a real capture of the site. `game` is "Minecraft Beta 1.8.1
+  /// Gameplay Screenshot" by Xbox México, Wikimedia Commons, CC BY 3.0 (cropped); `design` is Omi's own
+  /// Figma file; `post` is the founder's public X profile; `shop` is a public amazon.com product
+  /// page. The drawn sketches below remain the fallback for a case without a capture.
+  static func screenshot(for useCase: FirstUseCase) -> NSImage? {
+    let name = "first_use_\(useCase.id).jpg"
+    // SwiftPM's resource bundle keeps the files at its root on this app's layout, while `Bundle`
+    // resolves `url(forResource:)` against Contents/Resources; check both like the sound locator.
+    let bundle = Bundle.resourceBundle
+    var candidates: [URL] = [bundle.bundleURL.appendingPathComponent(name)]
+    if let resourceURL = bundle.resourceURL { candidates.append(resourceURL.appendingPathComponent(name)) }
+    if let url = bundle.url(forResource: "first_use_\(useCase.id)", withExtension: "jpg") { candidates.append(url) }
+    for url in candidates where FileManager.default.fileExists(atPath: url.path) {
+      if let image = NSImage(contentsOf: url) { return image }
+    }
+    return nil
   }
 
   // MARK: - Page sketches
