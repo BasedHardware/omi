@@ -21,6 +21,7 @@ from utils.memory.memory_service import (
     fetch_memory_dict,
 )
 from utils.observability.fallback import record_fallback
+from utils.feedback import record_memory_feedback
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.import_write_guard import (
     import_write_block_mode,
@@ -864,6 +865,10 @@ def review_memory(
     service = MemoryService(db_client=getattr(db_client_module, 'db', None))
     _validate_mutable_memory(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
     service.review(uid, memory_id, value)
+    # Discarding a memory is this surface's thumbs-down. `user_review` on the
+    # memory is a mutable flag with no timestamp, so the ledger row is what
+    # gives the verdict a time and lands it in the daily report.
+    record_memory_feedback(uid, memory_id, value)
     return {'status': 'ok'}
 
 

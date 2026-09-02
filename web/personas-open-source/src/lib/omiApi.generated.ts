@@ -1990,6 +1990,8 @@ export interface FeedbackCreate {
   subject_kind: FeedbackSubjectKind;
 }
 
+export type FeedbackReason = "too_verbose" | "incorrect_or_hallucination" | "not_helpful_or_irrelevant" | "didnt_follow_instructions" | "other";
+
 export interface FeedbackRecord {
   action: TaskIntelligenceFeedbackAction;
   attribution_chain_id: string;
@@ -3341,7 +3343,9 @@ export interface QuestionOption {
 }
 
 export interface RateMessageRequest {
+  comment?: string | null;
   rating?: number | null;
+  reason?: FeedbackReason | null;
 }
 
 export interface RebuildResponse {
@@ -4988,6 +4992,7 @@ export interface OmiApiSchemas {
   "FairUseUsagePctResponse": FairUseUsagePctResponse;
   "FcmTokenResponse": FcmTokenResponse;
   "FeedbackCreate": FeedbackCreate;
+  "FeedbackReason": FeedbackReason;
   "FeedbackRecord": FeedbackRecord;
   "FeedbackSubjectKind": FeedbackSubjectKind;
   "FileChat": FileChat;

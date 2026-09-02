@@ -55,6 +55,7 @@ from database.users import (
 from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
+from utils.feedback import record_chat_message_feedback, record_conversation_summary_feedback
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
@@ -772,6 +773,7 @@ def set_memory_summary_rating(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     set_conversation_summary_rating_score(uid, memory_id, value)
+    record_conversation_summary_feedback(uid, memory_id, value)
     return {'status': 'ok'}
 
 
@@ -809,6 +811,9 @@ def set_chat_message_analytics(
     """
     # Always store feedback in Firestore analytics collection
     set_chat_message_rating_score(uid, message_id, value, reason)
+
+    # Unified feedback ledger — the daily thumbs-down report reads from here.
+    record_chat_message_feedback(uid, message_id, value, reason=reason, platform='mobile')
 
     # Also update the rating directly on the message document for persistence
     rating_value = None if value == 0 else value

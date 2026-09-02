@@ -575,8 +575,8 @@ struct DashboardPage: View {
         isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing,
         app: selectedApp,
         onLoadMore: { await chatProvider.loadMoreMessages() },
-        onRate: { messageId, rating in
-          Task { await chatProvider.rateMessage(messageId, rating: rating) }
+        onRate: { messageId, rating, reason in
+          Task { await chatProvider.rateMessage(messageId, rating: rating, reason: reason) }
         },
         onCitationTap: { citation in
           handleCitationTap(citation)
@@ -1051,8 +1051,8 @@ struct DashboardPage: View {
         isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing,
         app: selectedApp,
         onLoadMore: { await chatProvider.loadMoreMessages() },
-        onRate: { messageId, rating in
-          Task { await chatProvider.rateMessage(messageId, rating: rating) }
+        onRate: { messageId, rating, reason in
+          Task { await chatProvider.rateMessage(messageId, rating: rating, reason: reason) }
         },
         onCitationTap: { citation in
           handleCitationTap(citation)

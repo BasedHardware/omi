@@ -138,6 +138,16 @@ def _jit_module():
 
 
 def _validate_message_conversation(value: dict):
+    # models/chat.py imports models.feedback for the rating enum. The fixture
+    # installs `models` as an empty package, so load the real (dependency-free)
+    # feedback module first or that import cannot resolve.
+    if "models.feedback" not in sys.modules:
+        feedback_spec = importlib.util.spec_from_file_location("models.feedback", BACKEND_DIR / "models/feedback.py")
+        assert feedback_spec is not None and feedback_spec.loader is not None
+        feedback_module = importlib.util.module_from_spec(feedback_spec)
+        sys.modules["models.feedback"] = feedback_module
+        feedback_spec.loader.exec_module(feedback_module)
+
     module_name = "_jit_message_conversation_contract"
     spec = importlib.util.spec_from_file_location(module_name, BACKEND_DIR / "models/chat.py")
     assert spec is not None and spec.loader is not None
