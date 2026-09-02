@@ -152,9 +152,18 @@ struct QueryShellHome: View {
             headerAccessory: { headerAccessory },
             footer: {
               if mode == .answer {
+                // Measured as one unit: `composerHeight` is what the panel
+                // reserves for its footer, so a banner outside that
+                // measurement would push the composer down by its own height.
                 VStack(spacing: OmiSpacing.sm) {
                   ChatQuotaBannerView.Slot()
                   composerBar(draft: draft)
+                }
+                .background {
+                  GeometryReader { footer in
+                    Color.clear.preference(
+                      key: QueryComposerHeightKey.self, value: footer.size.height)
+                  }
                 }
               }
             }
@@ -284,11 +293,6 @@ struct QueryShellHome: View {
       references: chatProvider.pendingComposerReferences,
       onReferenceRemoved: { chatProvider.removeComposerReference(id: $0) }
     )
-    .background {
-      GeometryReader { composer in
-        Color.clear.preference(key: QueryComposerHeightKey.self, value: composer.size.height)
-      }
-    }
   }
 
   /// The seam value the panel and its body are handed, **assembled rather than stored**: the text

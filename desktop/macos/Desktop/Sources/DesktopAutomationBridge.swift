@@ -876,10 +876,17 @@ final class DesktopAutomationActionRegistry {
     ) { _ in
       await MainActor.run {
         let limiter = FloatingBarUsageLimiter.shared
+        let banner = ChatQuotaBanner.current(
+          quota: limiter.serverQuota,
+          optimisticDelta: limiter.optimisticDelta,
+          dismissed: ChatQuotaBannerDismissals.shared.dismissed)
         return [
           "is_limit_reached": limiter.isLimitReached ? "true" : "false",
           "remaining_queries": "\(limiter.remainingQueries)",
           "limit_description": limiter.limitDescription,
+          "banner_threshold": banner.map { "\($0.threshold)" } ?? "none",
+          "banner_title": banner?.title ?? "",
+          "banner_message": banner?.message ?? "",
         ]
       }
     }
