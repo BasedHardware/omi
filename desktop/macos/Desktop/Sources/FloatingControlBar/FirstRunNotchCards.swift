@@ -10,9 +10,12 @@ enum FirstRunNotchCardIdentity {
   static let card = "first_run_card"
   /// Cards the canned onboarding scenario fires (the order-confirmation reminder).
   static let scenario = "onboarding_scenario"
+  /// The scenario's own guidance chip: the one line of instruction that stays at the notch while
+  /// the user is in the browser writing the note, where no other part of Omi is visible.
+  static let scenarioGuide = "onboarding_guide"
 
   static func isGuide(_ notification: FloatingBarNotification) -> Bool {
-    notification.assistantId == guide
+    notification.assistantId == guide || notification.assistantId == scenarioGuide
   }
 
   static func isFirstRunCard(_ notification: FloatingBarNotification) -> Bool {

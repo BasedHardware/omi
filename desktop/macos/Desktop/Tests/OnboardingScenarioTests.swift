@@ -85,6 +85,11 @@ final class OnboardingScenarioTests: XCTestCase {
     XCTAssertEqual(intact.taskTitle, "Send Sam the lamp link")
     XCTAssertEqual(intact.personMemory, OnboardingScenarioNotePlanner.personMemory)
 
+    // A rewrite that keeps the promise keeps the task; a rewrite that drops it gets no task, honestly.
+    let rewritten = OnboardingScenarioNotePlanner.effects(
+      note: "sam!! lamp arrived, will shoot you the LINK tmrw", prefilledNote: prefilled)
+    XCTAssertEqual(rewritten.taskTitle, "Send Sam the lamp link")
+    XCTAssertEqual(rewritten.personMemory, OnboardingScenarioNotePlanner.personMemory)
     let edited = OnboardingScenarioNotePlanner.effects(note: "Changed note", prefilledNote: prefilled)
     XCTAssertEqual(edited.memories, ["Note to Sam: Changed note"])
     XCTAssertNil(edited.taskTitle)
@@ -199,6 +204,7 @@ final class OnboardingScenarioTests: XCTestCase {
       return true
     }
     model.scenarioReturnToOmi = { returned.count += 1 }
+    model.scenarioWriteGuideChip = { present in if present { returned.chips += 1 } else { returned.chipsDown += 1 } }
     return model
   }
 
@@ -315,6 +321,10 @@ final class OnboardingScenarioTests: XCTestCase {
     XCTAssertEqual(model.writePhase, .review)
     XCTAssertEqual(model.scenarioWriteNote, "Hey Sam — lamp is great")
     XCTAssertEqual(returned.count, 1, "Send seen is the one moment the write beat summons Omi")
+    XCTAssertTrue(model.thread.contains { !$0.isOmi && $0.text == "Sent" })
+    XCTAssertTrue(
+      model.thread.last?.isOmi == true && model.thread.last?.text.contains("kept") == true,
+      "the window comes back with Omi already explaining what it kept")
     XCTAssertEqual(polls.count, 3)
     XCTAssertFalse(model.scenarioWriteDetectionTimedOut)
   }
@@ -338,6 +348,11 @@ final class OnboardingScenarioTests: XCTestCase {
     XCTAssertEqual(model.writePhase, .waitingForSend)
     XCTAssertTrue(model.scenarioWriteDetectionTimedOut)
     XCTAssertEqual(returned.count, 0)
+    XCTAssertEqual(returned.chips, 1, "the notch chip goes up with the page")
+    XCTAssertEqual(returned.chipsDown, 0, "and stays until Send, Skip, or Back")
+    model.skipWriteBeat()
+    XCTAssertEqual(returned.chipsDown, 1)
+    model.streamTask?.cancel()
   }
 
   @MainActor
@@ -383,6 +398,8 @@ private final class OpenedBox: @unchecked Sendable {
 
 private final class ReturnedBox: @unchecked Sendable {
   var count = 0
+  var chips = 0
+  var chipsDown = 0
 }
 
 private final class PollBox: @unchecked Sendable {

@@ -371,7 +371,8 @@ struct SBOnboardingView: View {
         handoffRow(
           symbol: "envelope",
           title: "A note to Sam, already drafted.",
-          detail: "Edit it however you like, then press Send. Demo mailbox; nothing leaves your Mac."
+          detail:
+            "Send it as it is, or make it yours, then press Send. Demo mailbox; nothing leaves your Mac, and I'll bring you back."
         )
         SBInkButton(title: "Open the note", isDefaultAction: true) { model.openComposePage() }
         Button {
@@ -384,7 +385,7 @@ struct SBOnboardingView: View {
         handoffRow(
           symbol: "envelope",
           title: "The note is open in your browser.",
-          detail: "Press Send when it reads right. I'll bring you back here."
+          detail: "Send it as it is, or in your words. I'm reading along, and I'll bring you back here."
         )
         if model.scenarioWriteDetectionTimedOut {
           Text("I haven't seen the note go out yet. Open it again, or skip this one.")

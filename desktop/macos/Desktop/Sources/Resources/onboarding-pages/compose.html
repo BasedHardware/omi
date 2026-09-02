@@ -13,6 +13,10 @@
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--paper); color: var(--ink); line-height: 1.5; }
     main { max-width: 760px; margin: 56px auto 40px; background: white; border-radius: 20px; box-shadow: 0 18px 60px rgba(23,25,28,.08); overflow: hidden; }
+    .omi { max-width: 760px; margin: 28px auto -36px; display: flex; gap: 12px; align-items: flex-start; padding: 14px 18px; border-radius: 14px; background: #17191c; color: #f4f5f7; font-size: 14px; line-height: 1.45; box-shadow: 0 10px 30px rgba(23,25,28,.18); }
+    .omi .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #fff; margin-top: 6px; box-shadow: 0 0 0 4px rgba(255,255,255,.12); }
+    .omi b { color: #fff; }
+    .omi small { display: block; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.55); margin-bottom: 3px; }
     header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--line); }
     header b { font-size: 15px; }
     header span { font-size: 12px; color: var(--ink-3); }
@@ -33,6 +37,14 @@
   </style>
 </head>
 <body>
+  <div class="omi" role="note">
+    <span class="dot" aria-hidden="true"></span>
+    <div>
+      <small>Omi is reading along</small>
+      This note to Sam is drafted for you. <b>Send it as it is, or say it your way</b>, then press Send.
+      Whatever you promise Sam becomes a task; what you tell him about becomes a memory. Omi brings you back after.
+    </div>
+  </div>
   <main>
     <header><b>New message</b><span>Demo mailbox · nothing leaves your Mac</span></header>
     <form id="compose">
@@ -41,13 +53,13 @@
       <textarea id="note" aria-label="Message">Hey Sam — got the lamp we talked about. Arrives {{deliveryWeekday}}. I'll send you the link by {{deliveryWeekday}} so you can grab one before the sale ends {{saleEndWeekday}}.</textarea>
       <div class="bar">
         <button type="submit">Send</button>
-        <span class="hint">Say what you'd actually say. Omi keeps only what matters.</span>
+        <span class="hint">Drafted for you. Send as it is, or edit first.</span>
       </div>
     </form>
     <div id="sent">
       <div class="check">✓</div>
       <h2>Sent</h2>
-      <p>Omi read what you wrote and is bringing you back. If it doesn't, click <b>Omi</b> in your Dock.</p>
+      <p>Omi read it and is bringing you back to show what it kept. If it doesn't, click <b>Omi</b> in your Dock.</p>
     </div>
   </main>
   <script>

@@ -82,7 +82,7 @@ steps:
 
   - id: S7
     name: Write — the note to Sam
-    do: "Omi describes the drafted note and offers 'Open the note' and 'Skip for now'; nothing opens until the click. Press 'Open the note', then Send in the browser (edit the text first if you like). Omi's window comes back on its own with MEMORY and TASK rows from the note, then 'Looks right' / 'Fix something'. 'Open it again' and 'Skip for now' stay on screen the whole time the browser is up."
+    do: "Omi says it remembers what you write, that the note to Sam is drafted, and what it will keep (a promise becomes a task, what you tell Sam becomes a memory); it offers 'Open the note' and 'Skip for now'. Nothing opens until the click. On the click the page opens with an 'Omi is reading along' banner at the top saying the same, and a persistent guide chip sits at the notch ('Send the note to Sam, as it is or in your words'). Press Send (edit first if you like; a rewrite that still mentions the link keeps the task). Omi's window comes back on its own with 'Sent' in the thread, an Omi line about what it kept, MEMORY and TASK rows, then 'Looks right' / 'Fix something'. The chip retracts on Send, Skip, or Back. 'Open it again' and 'Skip for now' stay on screen the whole time the browser is up."
     expect:
       text_visible:
         - "Looks right"

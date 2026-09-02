@@ -189,6 +189,13 @@ struct OnboardingScenarioNoteEffects: Equatable {
   static let none = OnboardingScenarioNoteEffects(memories: [], taskTitle: nil, personMemory: nil)
 }
 
+/// What Omi keeps from the note, decided without a model call.
+///
+/// The beat's lesson is "a promise becomes a task, what you tell Sam becomes a memory", and the user
+/// is invited to edit the draft. Keying the effects on the draft being byte-identical taught the
+/// lesson only to people who did not touch it. The promise is recognised by its subject (the link)
+/// and the fact about Sam by its subject (the lamp, the sale), so a rewritten note still shows
+/// both, and a note that drops the promise honestly shows no task.
 enum OnboardingScenarioNotePlanner {
   static let taskTitle = "Send Sam the lamp link"
   static let personMemory = "Sam Ortega is considering the Aurora desk lamp before the sale ends"
@@ -197,13 +204,13 @@ enum OnboardingScenarioNotePlanner {
     let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return .none }
     let memory = "Note to Sam: \(note)"
-    guard note == prefilledNote else {
-      return OnboardingScenarioNoteEffects(memories: [memory], taskTitle: nil, personMemory: nil)
-    }
+    let lower = trimmed.lowercased()
+    let keepsPromise = note == prefilledNote || lower.contains("link")
+    let mentionsLamp = note == prefilledNote || lower.contains("lamp") || lower.contains("sale")
     return OnboardingScenarioNoteEffects(
-      memories: [memory, personMemory],
-      taskTitle: taskTitle,
-      personMemory: personMemory
+      memories: mentionsLamp ? [memory, personMemory] : [memory],
+      taskTitle: keepsPromise ? taskTitle : nil,
+      personMemory: mentionsLamp ? personMemory : nil
     )
   }
 }

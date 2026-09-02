@@ -42,7 +42,8 @@ extension SBOnboardingModel {
     seePhase = .openPage
     persistScenarioProgress()
     appendScenarioOmiLine(
-      "When you open it, watch the top of your screen: a card will show up there. Answer it, and I'll bring you back here."
+      "Say you just bought a desk lamp. When you open the confirmation page, watch the top of your screen: "
+        + "a card will show up there. Answer it, and I'll bring you back here."
     )
   }
 
@@ -339,7 +340,37 @@ extension SBOnboardingModel {
     }
     writePhase = .waitingForSend
     persistScenarioProgress()
+    scenarioWriteGuideChip(true)
     startComposeDetection()
+  }
+
+  func dismissWriteGuideChip() {
+    scenarioWriteGuideChip(false)
+  }
+
+  /// The one piece of Omi the user can see from the browser. It says what to do and promises the
+  /// return; the page's own banner says what Omi will keep. Persistent until Send, Skip, or Back.
+  func presentWriteGuideChipOnNotch() {
+    let manager = FloatingControlBarManager.shared
+    manager.setup(appState: appState, chatProvider: chatProvider)
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
+    else { return }
+    manager.dismissNotifications(assistantID: FirstRunNotchCardIdentity.scenarioGuide, kind: .replaced)
+    NotificationService.shared.sendNotification(
+      ownerID: ownerID,
+      title: "Send the note to Sam, as it is or in your words",
+      message: "I'm reading along. Press Send and I'll bring you back.",
+      assistantId: FirstRunNotchCardIdentity.scenarioGuide,
+      respectFrequency: false,
+      isPersistent: true,
+      authorizationSnapshot: authorization
+    )
+  }
+
+  func dismissWriteGuideChipOnNotch() {
+    FloatingControlBarManager.shared.dismissNotifications(
+      assistantID: FirstRunNotchCardIdentity.scenarioGuide, kind: .replaced)
   }
 
   /// Five minutes of polling: a note takes as long as the user wants it to, and the escape hatches
@@ -369,6 +400,7 @@ extension SBOnboardingModel {
         return
       }
       OnboardingScenarioJournal().append(who: "system", text: "Detected the sent local note")
+      self.dismissWriteGuideChip()
       self.applyScenarioNote(note)
       self.scenarioReturnToOmi()
     }
@@ -390,6 +422,12 @@ extension SBOnboardingModel {
     persistScenarioProgress()
     scenarioWritesPending = true
     OnboardingScenarioJournal().append(who: "user", text: note)
+    thread.append(Msg(isOmi: false, text: "Sent"))
+    OnboardingScenarioJournal().append(who: "user", text: "Sent")
+    appendScenarioOmiLine(
+      effects.taskTitle == nil
+        ? "Got it. Here's what I kept from that note."
+        : "Got it. You made Sam a promise in there, so that's a task now; the rest I'll remember.")
     Task { [weak self] in
       guard let self, let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
         let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
@@ -445,6 +483,7 @@ extension SBOnboardingModel {
   func skipWriteBeat() {
     guard step == .write, writePhase != .review else { return }
     scenarioDetectionTask?.cancel()
+    // The chip comes down in `teardownStep(.write)`, which every exit from the beat runs.
     OnboardingScenarioJournal().append(who: "user", text: "Skip for now")
     advance(userAnswer: "Skip for now", to: .ready, skipped: true, detection: "timeout")
   }

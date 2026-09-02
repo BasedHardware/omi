@@ -127,6 +127,12 @@ final class SBOnboardingModel: ObservableObject {
   /// page in the default browser and summons the shell the way the menu bar does; tests observe.
   var scenarioPageOpener: (URL) -> Bool = { NSWorkspace.shared.open($0) }
   var scenarioPageLocator: OnboardingScenarioPageLocator = .bundled
+  /// The notch guidance chip for the write beat: `true` presents, `false` retracts. Production
+  /// talks to the floating bar (which creates the notch window on first use); tests observe.
+  lazy var scenarioWriteGuideChip: (Bool) -> Void = { [weak self] present in
+    guard let self else { return }
+    if present { self.presentWriteGuideChipOnNotch() } else { self.dismissWriteGuideChipOnNotch() }
+  }
   var scenarioReturnToOmi: () -> Void = {
     // A watch that outlives the session must not summon the sign-in screen over whatever the
     // user moved on to. The view's disappearance cancels the watches; this is the second fence.
@@ -314,8 +320,9 @@ final class SBOnboardingModel: ObservableObject {
       return "Now ask me about that order, out loud. I need the microphone."
     case .write:
       return
-        "Last one. Tell a friend about it. I've drafted a note to Sam in a demo mailbox: "
-        + "say whatever you'd actually say, then press Send. Nothing leaves your Mac, and I'll bring you back."
+        "Last one: I remember what you write, too. Tell your friend Sam about the lamp. "
+        + "I've drafted the note in a demo mailbox; send it as it is, or say it your way. "
+        + "Watch what I keep from it: a promise becomes a task, and what you tell Sam becomes a memory."
     case .ready:
       return
         "That's the whole idea: I watch, I speak up, I remember. Now let's do it with your real work. "
@@ -648,7 +655,9 @@ final class SBOnboardingModel: ObservableObject {
     case .talk:
       disarmShortcutSummon()
       teardownVoiceDemo()
-    case .hello, .see, .write, .ready: break
+    case .write:
+      dismissWriteGuideChip()
+    case .hello, .see, .ready: break
     }
   }
 
