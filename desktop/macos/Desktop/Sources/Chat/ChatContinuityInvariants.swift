@@ -1,7 +1,20 @@
 import Foundation
 
 enum ProactiveNotificationKind: String, Equatable, CaseIterable {
+  /// **Decode-only.** Historical rows were journaled under a bare
+  /// `notification:<uuid>` key, which reads back as this. No producer may pass
+  /// it: `showNotification` requires an explicit kind, and a card with no
+  /// category of its own is `.functional`, not "Notification".
   case general
+  /// A system notice that is not a proactive observation — screen-recording
+  /// reset, a support reply, an onboarding test ping. It is ungated by the five
+  /// category toggles, exactly as `.general` was.
+  case functional
+  /// Trial/plan messaging. Never journaled: it is product copy about billing,
+  /// not something Omi observed.
+  case trial
+  /// First-run permission help. Never journaled, for the same reason.
+  case onboarding
   case suggestion
   case insight
   case task
@@ -35,7 +48,20 @@ enum ProactiveNotificationKind: String, Equatable, CaseIterable {
     case "goals": return .goal
     case "meeting-notes": return .meetingNotes
     case "integration_connect": return .integration
-    default: return .general
+    case "trial": return .trial
+    case "onboarding": return .onboarding
+    default: return .functional
+    }
+  }
+
+  /// Kinds whose cards are presentation only and must never enter the chat
+  /// journal. See `FloatingControlBarManager.persistNotificationMessageIfNeeded`.
+  var isJournaled: Bool {
+    switch self {
+    case .trial, .onboarding: return false
+    case .general, .functional, .suggestion, .insight, .task, .memory, .goal, .meetingNotes,
+      .resurface, .integration:
+      return true
     }
   }
 }
@@ -58,6 +84,8 @@ enum ChatContinuityInvariants {
   }
 
   static func proactiveNotificationContinuityKey(id: UUID, kind: ProactiveNotificationKind) -> String {
+    // `.general` is decode-only and unreachable from a producer, so this branch
+    // exists to keep the historical bare key round-tripping, never to mint one.
     guard kind != .general else { return proactiveNotificationContinuityKey(id: id) }
     return "\(proactiveNotificationContinuityKeyPrefix)\(kind.rawValue):\(id.uuidString)"
   }

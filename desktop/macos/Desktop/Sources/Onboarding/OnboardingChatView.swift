@@ -1224,7 +1224,8 @@ struct OnboardingChatView: View {
           title: "Need help with \(permLabel)?",
           message: helpMessage,
           assistantId: "onboarding",
-          sound: .none
+          sound: .none,
+          kind: .onboarding
         )
       }
     }

@@ -271,8 +271,17 @@ struct ProactiveNotificationBadge: Equatable {
       (label, systemImage) = ("Memory", "brain.head.profile")
     case .integration:
       (label, systemImage) = ("Integration", "sparkles.rectangle.stack")
+    case .functional:
+      (label, systemImage) = ("Omi", "bell")
     case .general:
+      // Decode-only: rows journaled before proactive kinds were part of the
+      // continuity key. No producer can reach it (`showNotification` requires a
+      // kind), so this arm is history, not a category.
       (label, systemImage) = ("Notification", "bell")
+    case .trial, .onboarding:
+      // Never journaled, so never rendered as a transcript row. Kept exhaustive
+      // so a future decision to journal them has to state its badge here.
+      (label, systemImage) = ("Omi", "bell")
     }
   }
 }
