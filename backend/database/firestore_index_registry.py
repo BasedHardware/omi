@@ -962,6 +962,17 @@ ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('completed'), _asc('__name__')),
 )
 
+ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY = FirestoreQuerySpec(
+    identifier='action_items_canonical_completion_count',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('completed', 'in', 'canonical_values'),),
+    # Firestore's automatic single-field index serves this aggregation; keeping
+    # the query in the registry makes the production shape auditable without
+    # adding a redundant composite manifest entry.
+    index_fields=(_asc('completed'),),
+)
+
 ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY = FirestoreQuerySpec(
     identifier='action_items_completed_due_range',
     collection_group='action_items',
@@ -1251,6 +1262,7 @@ DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY = FirestoreQuerySpec(
 )
 
 QUERY_SPECS = (
+    ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
     ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
     ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
     ACTION_ITEMS_CREATED_RANGE_QUERY,
