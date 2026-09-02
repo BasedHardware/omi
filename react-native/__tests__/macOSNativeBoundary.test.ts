@@ -195,7 +195,8 @@ test('owns an in-app PKCE sign-in session and stores its cloud token locally', (
   expect(auth).toContain('RCT_EXPORT_MODULE(OmiAuth)');
   expect(auth).toContain('RCT_REMAP_METHOD(signIn');
   expect(auth).toContain('RCT_REMAP_METHOD(hasCloudSession');
-  expect(auth).toContain('ASWebAuthenticationSession');
+  expect(auth).toContain('NSWorkspace.sharedWorkspace');
+  expect(auth).toContain('openURL:authorize.URL');
   expect(auth).toContain('listen');
   expect(auth).toContain('accept');
   expect(auth).toContain('/v1/auth/authorize');
@@ -358,25 +359,30 @@ test('validates loopback callbacks before success and keeps listening past probe
   expect(auth).toContain('OmiAuthAcceptCallback(listener, port, 180, state)');
 });
 
-test('does not reject sign-in when ASWebAuth cancels while loopback waits', () => {
+test('opens the system browser and waits on loopback instead of an auth sheet', () => {
   const auth = readNativeSource('OmiAuthModule.mm');
-  const sessionStart = auth.indexOf(
-    'initWithURL:authorize.URL callbackURLScheme:@"http"',
-  );
-  expect(sessionStart).toBeGreaterThan(-1);
-  const handler = auth.slice(
-    sessionStart,
-    auth.indexOf(
-      'self.authenticationSession.presentationContextProvider',
-      sessionStart,
-    ),
+  const signInStart = auth.indexOf('RCT_REMAP_METHOD(signIn');
+  expect(signInStart).toBeGreaterThan(-1);
+  const signIn = auth.slice(
+    signInStart,
+    auth.indexOf('RCT_REMAP_METHOD(signOut', signInStart),
   );
 
-  expect(handler).toContain('completeSignInWithCallback:callbackURL');
-  expect(handler).not.toContain('completeSignInWithCallback:nil');
-  expect(handler).toMatch(/if \(callbackURL == nil\) \{\s*return;/);
-  expect(auth).toContain(
-    '[self completeSignInWithCallback:callbackURL\n                                   state:state',
+  expect(signIn).toContain(
+    '[NSWorkspace.sharedWorkspace openURL:authorize.URL]',
+  );
+  expect(signIn).toContain('OmiAuthAcceptCallback(listener, port, 180, state)');
+  expect(signIn.indexOf('OmiAuthAcceptCallback')).toBeLessThan(
+    signIn.indexOf('openURL:authorize.URL'),
+  );
+  expect(signIn).toContain('http://127.0.0.1:%u/callback');
+  expect(signIn).not.toContain('callbackURLScheme:@"http"');
+  expect(signIn).not.toContain('prefersEphemeralWebBrowserSession');
+  expect(signIn).not.toContain('ASWebAuthenticationSession alloc');
+  // Opening the browser is not itself a sign-in failure; only a failed open
+  // (or a later loopback timeout) rejects.
+  expect(signIn).toMatch(
+    /if \(!\[NSWorkspace\.sharedWorkspace openURL:authorize\.URL\]\) \{[^]*completeSignInWithCallback:nil/,
   );
 });
 
@@ -392,16 +398,52 @@ test('clears the leftover loopback tab and returns the user to the app', () => {
   expect(auth).toContain("location.replace('about:blank')");
   expect(auth).toContain('window.close()');
   expect(auth).toContain('Content-Length');
-  expect(auth).toContain('prefersEphemeralWebBrowserSession = YES');
+  expect(auth).toContain('openURL:authorize.URL');
+  expect(auth).not.toContain('prefersEphemeralWebBrowserSession = YES');
   expect(auth).not.toContain('prefersEphemeralWebBrowserSession = NO');
-  expect(auth).not.toContain('openURL:authorize.URL');
   expect(auth).not.toContain('hsl(');
   expect(auth).toContain('bringOmiToFront');
   expect(auth).toContain('[NSApp activate];');
   expect(auth).toContain('makeKeyAndOrderFront');
   expect(auth).toMatch(
-    /finishSignInAttempt:[^]*\[self\.authenticationSession cancel\];[^]*OmiAuthSetEnvironmentCloudTokensIgnored\(NO\);[^]*resolve\(value\);[^]*\[self bringOmiToFront\];/,
+    /finishSignInAttempt:[^]*\[self closeLoopback\];[^]*OmiAuthSetEnvironmentCloudTokensIgnored\(NO\);[^]*resolve\(value\);[^]*\[self bringOmiToFront\];/,
   );
+});
+
+test("mints a Firebase session from custom_token instead of storing Google's id_token", () => {
+  const auth = readNativeSource('OmiAuthModule.mm');
+  const finishStart = auth.indexOf(
+    '- (void)finishWithTokenResponse:(NSDictionary *)tokenResponse',
+  );
+  expect(finishStart).toBeGreaterThan(-1);
+  const finish = auth.slice(
+    finishStart,
+    auth.indexOf('- (void)completeSignInWithCallback:', finishStart),
+  );
+
+  expect(auth).toContain('finishWithFirebaseCustomToken');
+  expect(auth).toContain('OmiAuthResolvedFirebaseApiKey');
+  expect(auth).toContain(
+    'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken',
+  );
+  expect(auth).toContain('@"returnSecureToken" : @YES');
+  // custom_token is handled before Google's id_token, which /v1/auth/token
+  // always returns alongside it.
+  expect(finish.indexOf('custom_token')).toBeGreaterThan(-1);
+  expect(finish.indexOf('custom_token')).toBeLessThan(
+    finish.indexOf('id_token'),
+  );
+  expect(finish).toContain('customToken.length > 0');
+  expect(finish).toContain(
+    '[self finishWithFirebaseCustomToken:customToken attempt:attempt resolve:resolve reject:reject]',
+  );
+  expect(finish).toMatch(
+    /if \(idToken\.length == 0 \|\| refreshToken\.length == 0\)/,
+  );
+  // First-run cannot fetch /v1/config/api-keys (401 without a session), and a
+  // Firebase custom token is not a Bearer credential for that endpoint.
+  expect(finish).not.toContain('Bearer %@');
+  expect(finish).not.toContain('/v1/config/api-keys');
 });
 
 test('fences overlapping native macOS sign-in attempts', () => {
@@ -412,7 +454,7 @@ test('fences overlapping native macOS sign-in attempts', () => {
     '@property(nonatomic, copy) RCTPromiseRejectBlock pendingSignInReject;',
   );
   expect(auth).toMatch(
-    /self\.signInAttempt \+= 1;[^]*\[self\.authenticationSession cancel\];[^]*\[self closeLoopback\];[^]*previousReject\(@"OMI_AUTH_UNAUTHORIZED"/,
+    /self\.signInAttempt \+= 1;[^]*\[self closeLoopback\];[^]*previousReject\(@"OMI_AUTH_UNAUTHORIZED"/,
   );
   expect(auth).toMatch(/if \(attempt != self\.signInAttempt\) return;/);
 });
