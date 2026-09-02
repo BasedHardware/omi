@@ -267,4 +267,14 @@ final class ChatDailySummaryTests: XCTestCase {
     XCTAssertNil(MainChatNavigationRequestStore.shared.consumeDraft())
     XCTAssertTrue(MainChatNavigationRequestStore.shared.consume())
   }
+
+  func testFollowUpNamesTheDayForOlderSummaries() {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "America/Los_Angeles") ?? .current
+    let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 2, hour: 9)) ?? Date()
+    let question = ChatDailySummaryPresentation.followUpQuestion(
+      for: "2026-08-23", now: now, calendar: calendar, locale: Locale(identifier: "en_US"))
+    XCTAssertEqual(question, "What did I do on Sun, Aug 23?")
+  }
+
 }

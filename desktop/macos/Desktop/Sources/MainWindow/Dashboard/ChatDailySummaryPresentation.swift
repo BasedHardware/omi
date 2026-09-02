@@ -54,11 +54,16 @@ enum ChatDailySummaryPresentation {
 
   /// The follow-up the chip prefills. It names the day the summary is about, because "What did I do
   /// today?" against yesterday's summary would be a different question than the card just answered.
-  static func followUpQuestion(for date: String?, now: Date, calendar: Calendar = .current) -> String {
-    guard let day = day(from: date, calendar: calendar),
-      calendar.isDate(day, inSameDayAs: now)
-    else { return "What did I do yesterday?" }
-    return "What did I do today?"
+  static func followUpQuestion(
+    for date: String?, now: Date, calendar: Calendar = .current, locale: Locale = .current
+  ) -> String {
+    switch dateLabel(for: date, now: now, calendar: calendar, locale: locale) {
+    case "Today": return "What did I do today?"
+    case nil, "Yesterday": return "What did I do yesterday?"
+    // A summary from further back names its day, so the chip asks about the day the card shows
+    // rather than about a yesterday the summary is not about.
+    case .some(let label): return "What did I do on \(label)?"
+    }
   }
 
   /// Longest overview that still reads as a banner rather than a wall of text.

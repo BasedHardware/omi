@@ -8,6 +8,7 @@ description: >-
   asserts the shell before it asserts a mode.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DayZeroChips.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailySummaryCard.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailySummaryCoordinator.swift
