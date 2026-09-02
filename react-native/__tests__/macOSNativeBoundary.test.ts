@@ -450,9 +450,7 @@ test('refreshes shipping sessions with the public Firebase key, never api-keys',
   for (const source of [auth, backend]) {
     // No unauthenticated GET /v1/config/api-keys anywhere: it 401s without a
     // session and imported shipping sessions never carry firebaseApiKey.
-    expect(source).not.toContain(
-      'https://api.omi.me/v1/config/api-keys',
-    );
+    expect(source).not.toContain('https://api.omi.me/v1/config/api-keys');
     expect(source).toContain('OmiAuthResolvedFirebaseApiKey()');
   }
   const resolveStored = auth.slice(
@@ -473,7 +471,9 @@ test('refreshes shipping sessions with the public Firebase key, never api-keys',
   // The refreshed session persists the key so later refreshes skip the
   // fallback, and an HTTP 401/403 refresh clears the dead session just like
   // the auth module.
-  expect(backendRefresh).toContain('updated[@"firebaseApiKey"] = firebaseApiKey;');
+  expect(backendRefresh).toContain(
+    'updated[@"firebaseApiKey"] = firebaseApiKey;',
+  );
   expect(backend).toContain(
     'static BOOL OmiCloudRefreshFailureIsDefinitive(NSInteger status, NSDictionary *json)',
   );
