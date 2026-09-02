@@ -25,7 +25,7 @@ enum ChatMessageDeduplicator {
     var seen: [String: String] = [:]  // sender+full-text fingerprint → first message ID
     var dupes = Set<String>()
     for msg in messages {
-      guard msg.text.count > 200 else { continue }  // only dedup long messages
+      guard msg.text.count > 200 else { continue }  // replay dedup: long messages only
       let fingerprint = "\(msg.sender)\u{1}\(msg.text)"
       if seen[fingerprint] != nil {
         dupes.insert(msg.id)
@@ -33,7 +33,59 @@ enum ChatMessageDeduplicator {
         seen[fingerprint] = msg.id
       }
     }
+    return dupes.union(adjacentDuplicateIDs(in: messages))
+  }
+
+  /// Below this an answer is too small to read as a stutter worth a chip.
+  static let shortDuplicateMinimumLength = 40
+  /// Two rows further apart than this are two occasions, not one repeated one.
+  static let adjacentDuplicateWindow: TimeInterval = 600
+
+  /// A short answer repeated back-to-back is the other way the transcript
+  /// stutters, and the 200-character floor above never caught it: each press of
+  /// push-to-talk mints a distinct `voice:<uuid>` turn, so three tries at the
+  /// same question are three legitimate journal rows saying the same ~90
+  /// characters. Journal identity is not the place to fix that — this is a
+  /// display collapse, and it stays behind the expandable "Duplicate message"
+  /// chip so nothing is ever hidden outright.
+  ///
+  /// Adjacency and time proximity are what keep it honest: the same sentence
+  /// said again tomorrow, or with another exchange in between, is a real answer
+  /// to a real question and must not collapse.
+  static func adjacentDuplicateIDs(in messages: [ChatMessage]) -> Set<String> {
+    var dupes = Set<String>()
+    for index in messages.indices.dropFirst() {
+      let previous = messages[index - 1]
+      let current = messages[index]
+      guard previous.sender == current.sender else { continue }
+      guard
+        abs(current.createdAt.timeIntervalSince(previous.createdAt)) <= adjacentDuplicateWindow
+      else { continue }
+
+      let earlier = normalizedBody(previous)
+      let later = normalizedBody(current)
+
+      if earlier == later {
+        // The floor is on the answer itself: a repeated "Done." is not a stutter.
+        guard earlier.count >= shortDuplicateMinimumLength else { continue }
+        dupes.insert(current.id)
+      } else if previous.journalStatus == .failed, !earlier.isEmpty, later.hasPrefix(earlier),
+        later.count >= shortDuplicateMinimumLength
+      {
+        // A barge-in fragment and the answer it was cut out of. The *fragment*
+        // is short by definition, so the floor applies to the whole answer.
+        dupes.insert(previous.id)
+      } else if current.journalStatus == .failed, !later.isEmpty, earlier.hasPrefix(later),
+        earlier.count >= shortDuplicateMinimumLength
+      {
+        dupes.insert(current.id)
+      }
+    }
     return dupes
+  }
+
+  private static func normalizedBody(_ message: ChatMessage) -> String {
+    message.text.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }
 
@@ -142,6 +194,13 @@ enum ChatTranscriptLayout {
   /// `topAdjustment`, so the stack has one spacing and the exceptions are named.
   static let regularRowSpacing: CGFloat = OmiSpacing.lg
   static let consecutiveUserRowSpacing: CGFloat = OmiSpacing.sm
+  /// **The gap after a row that reserves its own metadata band.** That band is
+  /// 28 pt of real, empty layout under the last line, so adding a full
+  /// inter-exchange gap on top of it charged the reader twice for the same
+  /// separation — roughly 100 device pixels of nothing between two one-line
+  /// answers. The band *is* the gap; this is only the hairline that keeps the
+  /// controls off the next row.
+  static let afterMetadataBandRowSpacing: CGFloat = OmiSpacing.xxs
   /// A reply and the question that caused it are one exchange, not two events.
   /// `md` rather than `sm`: the user bubble's own bottom padding already hugs
   /// the text, so `sm` left the next assistant line sitting on the bubble.
@@ -149,10 +208,11 @@ enum ChatTranscriptLayout {
 
   /// The gap *before* `current`, given the row above it.
   ///
-  /// An assistant row above always takes the full gap: it closes an exchange, and
-  /// it is also the row whose hover-revealed metadata band draws into the space
-  /// below it, so that space has to exist.
+  /// A row that reserves a metadata band has already paid for the separation in
+  /// its own height, so it takes the hairline. Everything else follows the
+  /// exchange ladder.
   static func spacing(from previous: ChatMessage, to current: ChatMessage) -> CGFloat {
+    if ChatBubbleMetadataBand.of(previous) != .hidden { return afterMetadataBandRowSpacing }
     guard previous.sender == .user else { return regularRowSpacing }
     return current.sender == .user ? consecutiveUserRowSpacing : replySpacing
   }

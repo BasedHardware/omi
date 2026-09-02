@@ -73,28 +73,40 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     }
 
     XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 0, in: messages), 0)
-    // assistant → user starts a new exchange and takes the full gap.
-    XCTAssertEqual(gap(1), ChatTranscriptLayout.regularRowSpacing)
+    // assistant → user: the assistant row already reserves its own 28 pt band,
+    // which is the separation. Adding the exchange gap on top charged twice.
+    XCTAssertEqual(gap(1), ChatTranscriptLayout.afterMetadataBandRowSpacing)
     XCTAssertEqual(gap(2), ChatTranscriptLayout.consecutiveUserRowSpacing)
     // user → assistant is one exchange, so it is the tight gap.
     XCTAssertEqual(gap(3), ChatTranscriptLayout.replySpacing)
-    XCTAssertEqual(gap(4), ChatTranscriptLayout.regularRowSpacing)
+    XCTAssertEqual(gap(4), ChatTranscriptLayout.afterMetadataBandRowSpacing)
 
     XCTAssertLessThan(
       ChatTranscriptLayout.replySpacing, ChatTranscriptLayout.regularRowSpacing,
       "a reply must bind to its question more tightly than to the next exchange")
+    XCTAssertLessThan(
+      ChatTranscriptLayout.replySpacing,
+      ChatBubbleMetadataControlMetrics.bandHeight
+        + ChatTranscriptLayout.afterMetadataBandRowSpacing,
+      "the exchange boundary is still the widest gap once the band is counted")
   }
 
-  /// The gap after an assistant row is also the room its hover-revealed metadata
-  /// band draws into — that band is zero-height at rest, so the space has to come
-  /// from somewhere, and it comes from here.
-  func testTheGapAfterAnAssistantRowStaysWideEnoughForItsHoverBand() {
-    let messages = [
-      ChatMessage(id: "a0", text: "Answer", sender: .ai),
-      ChatMessage(id: "a1", text: "Also this", sender: .ai),
-    ]
+  /// The band is real, reserved height under the row, so the *stack* must not
+  /// also pay for it — that double charge is what left two one-line answers
+  /// roughly 100 device pixels apart.
+  func testTheGapAfterARowThatReservesItsBandIsNotChargedTwice() {
+    let banded = ChatMessage(id: "a0", text: "Answer", sender: .ai)
+    let next = ChatMessage(id: "a1", text: "Also this", sender: .ai)
+    XCTAssertNotEqual(ChatBubbleMetadataBand.of(banded), .hidden)
     XCTAssertEqual(
-      ChatTranscriptLayout.spacing(from: messages[0], to: messages[1]),
+      ChatTranscriptLayout.spacing(from: banded, to: next),
+      ChatTranscriptLayout.afterMetadataBandRowSpacing)
+
+    // A row with no band of its own still takes the ordinary exchange gap.
+    let streaming = ChatMessage(id: "a2", text: "Thinking", sender: .ai, isStreaming: true)
+    XCTAssertEqual(ChatBubbleMetadataBand.of(streaming), .hidden)
+    XCTAssertEqual(
+      ChatTranscriptLayout.spacing(from: streaming, to: next),
       ChatTranscriptLayout.regularRowSpacing)
   }
 
