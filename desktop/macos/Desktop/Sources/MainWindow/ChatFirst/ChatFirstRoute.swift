@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -82,12 +83,24 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     let normalized = target.lowercased().replacingOccurrences(of: "-", with: "_")
     switch normalized {
     case "dashboard", "home": return .chat
+    // `help` used to name a "Help from Founder" page no shell mounted. Getting
+    // help from a person lives in Settings → About (the Community card), so the
+    // legacy name resolves to the destination that actually exists.
+    case "help": return .more(.settings)
     case "rewind": return .more(.rewind)
     case "apps", "integrations": return .more(.apps)
     case "permissions": return .more(.permissions)
     case "settings": return .more(.settings)
     default: return nil
     }
+  }
+}
+
+extension ChatFirstRoute {
+  /// True for the automation names that mean "get help from a person". The root
+  /// pre-selects the About section for these before routing to Settings.
+  static func isHelpAutomationTarget(_ target: String) -> Bool {
+    target.lowercased().replacingOccurrences(of: "-", with: "_") == "help"
   }
 }
 
@@ -188,6 +201,11 @@ private struct ChatFirstPersistedNavigation: Codable, Equatable {
 @MainActor
 final class ChatFirstShellNavigation: ObservableObject {
   static let storageKey = "chatFirstShell.windowNavigation.v1"
+
+  /// The one navigation owner. The main window binds it, and the auxiliary Chat
+  /// surfaces (task panel, floating/notch) bind the same instance so a content
+  /// block tapped anywhere routes the single shell rather than a private copy.
+  static let shared = ChatFirstShellNavigation()
 
   @Published private(set) var route: ChatFirstRoute
   /// The destination currently mounted by SwiftUI. This is deliberately
@@ -313,6 +331,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// navigation; no legacy page can receive a pending focus.
   func open(focus: ChatFirstPendingFocus, destination: ChatFirstRoute) {
     guard destination.isPrimaryDestination else { return }
+    presentMainWindowIfNeeded()
     pendingConversation = nil
     invalidateLinkResolutions()
     route = destination
@@ -338,6 +357,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   func open(conversation: ServerConversation, destination: ChatFirstRoute) {
     guard destination.isPrimaryDestination else { return }
     guard !conversation.id.isEmpty else { return }
+    presentMainWindowIfNeeded()
     invalidateLinkResolutions()
     route = destination
     visibleRoute = nil
@@ -469,6 +489,17 @@ final class ChatFirstShellNavigation: ObservableObject {
     }
   }
 
+  /// A typed deep link can originate from a surface that is not the main window
+  /// (a content block in the notch or the task panel). Bring the window forward
+  /// so the destination this call selects is actually on screen. Already-key is
+  /// the common case and stays a no-op.
+  private func presentMainWindowIfNeeded() {
+    guard let window = NSApp.mainWindow, window.isKeyWindow, window.isVisible else {
+      AppDelegate.summonWindowTarget()?.openMainAppWindow()
+      return
+    }
+  }
+
   private func persistNavigation() {
     let persisted = ChatFirstPersistedNavigation(route: route, isSidebarCollapsed: isSidebarCollapsed)
     defaults.set(try? JSONEncoder().encode(persisted), forKey: Self.storageKey)
@@ -502,30 +533,14 @@ final class ChatFirstShellNavigation: ObservableObject {
 
 }
 
-/// An immutable per-root sampling result. A failed, missing, stale, or
-/// owner-mismatched control response resolves to legacy. Once resolved for an
-/// owner it never live-swaps; owner replacement fails closed for this launch.
-enum ChatFirstShellVariant: Equatable {
-  case unresolved
-  case legacy
-  case chatFirst(ChatFirstCapabilityProjection)
-
-  var projection: ChatFirstCapabilityProjection? {
-    guard case .chatFirst(let projection) = self else { return nil }
-    return projection
-  }
-
-  var stableName: String {
-    switch self {
-    case .unresolved: return "loading"
-    case .legacy: return "legacy"
-    case .chatFirst: return "chat_first"
-    }
-  }
-}
-
-struct ChatFirstShellCapabilitySample: Equatable {
-  private(set) var variant: ChatFirstShellVariant = .unresolved
+/// An immutable per-root sampling result for the server-owned chat-first
+/// capability. It never selects a shell — there is exactly one — and only says
+/// whether the capability-gated kernel features may engage this launch. A
+/// failed, missing, stale, or owner-mismatched control response resolves to
+/// capability-off; content blocks still render either way.
+struct ChatFirstCapabilitySample: Equatable {
+  private(set) var isResolved = false
+  private(set) var projection: ChatFirstCapabilityProjection?
   private(set) var sampledOwnerID: String?
 
   mutating func resolve(
@@ -533,29 +548,30 @@ struct ChatFirstShellCapabilitySample: Equatable {
     requestedOwnerID: String?,
     ownerIsStillCurrent: Bool
   ) {
-    guard case .unresolved = variant else { return }
+    guard !isResolved else { return }
+    isResolved = true
     guard let ownerID = requestedOwnerID, !ownerID.isEmpty, ownerIsStillCurrent else {
-      variant = .legacy
+      projection = nil
       return
     }
     sampledOwnerID = ownerID
-    if let control, let projection = ChatFirstCapabilityProjection(control: control) {
-      variant = .chatFirst(projection)
-    } else {
-      variant = .legacy
+    guard let control else {
+      projection = nil
+      return
     }
+    projection = ChatFirstCapabilityProjection(control: control)
   }
 
   mutating func ownerDidChange(to ownerID: String?) {
     guard let sampledOwnerID else { return }
     guard sampledOwnerID == ownerID else {
-      variant = .legacy
+      projection = nil
       return
     }
   }
 
   mutating func failClosed() {
-    variant = .legacy
+    projection = nil
   }
 }
 

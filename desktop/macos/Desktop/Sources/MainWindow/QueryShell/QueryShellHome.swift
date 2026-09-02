@@ -17,9 +17,6 @@
 //  It paints **no background**. The window's ground is AppKit's (`ShellGlassGround`); the two panels
 //  here wear the app's glass through `inkGlassPanel` and nothing else does.
 //
-//  The legacy hub is still here, behind the `useLegacyHomeDesign` setting that already gated it, so
-//  the change is reversible by the person it happened to rather than by a rebuild.
-//
 //  **This is the app's only chat destination**, which makes it the only place the controls of the
 //  deleted standalone chat page can live (`6be26e85bc`; INV-NAV-1 forbids bringing that page back).
 //  So this file also hosts: the chat overflow menu (copy / clear / AI settings), the way back into
@@ -44,16 +41,10 @@ struct QueryShellHome: View {
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   @ObservedObject private var tasksStore = TasksStore.shared
   var taskChatCoordinator: TaskChatCoordinator? = nil
-  /// The Chat-first shell keeps the existing modern Home presentation even when the reversible legacy
-  /// preference is enabled. This is presentation-only; capability sampling and rich-block access
-  /// remain owned by `ChatFirstShell`.
-  var forceModernPresentation: Bool = false
-  /// Non-nil only for the sampled Chat-first main-chat surface. It enables the existing inline entity
-  /// controls without creating another provider or transcript.
-  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
-  @Binding var selectedIndex: Int
+  /// Typed navigation and the interactable content-block controls. Every Chat
+  /// surface has one; it creates no second provider or transcript.
+  let chatFirstRichBlockContext: ChatFirstRichBlockContext
 
-  @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
   @AppStorage(MemoryHubDestination.storageKey) private var memoryDestinationRawValue =
     MemoryHubDestination.memories.rawValue
 
@@ -97,26 +88,8 @@ struct QueryShellHome: View {
   /// since given away — which is precisely the case the `didBecomeActive` claim below exists for.
   @State private var caretClaims = 0
 
-  private var usesLegacyPresentation: Bool {
-    !HomeDesignPresentation.queryShellOwnsItsPanels(
-      useLegacyHomeDesign: useLegacyHomeDesign,
-      forceModernPresentation: forceModernPresentation)
-  }
-
   var body: some View {
-    if usesLegacyPresentation {
-      DashboardPage(
-        viewModel: viewModel,
-        homeStatusStore: homeStatusStore,
-        appState: appState,
-        appProvider: appProvider,
-        chatProvider: chatProvider,
-        memoriesViewModel: memoriesViewModel,
-        taskChatCoordinator: taskChatCoordinator,
-        selectedIndex: $selectedIndex)
-    } else {
-      querySurface
-    }
+    querySurface
   }
 
   private var querySurface: some View {
@@ -220,7 +193,6 @@ struct QueryShellHome: View {
     // search text, so an action that promises the conversation must clear it or its effect lands
     // hidden behind the results panel while the bridge reports success.
     .onReceive(NotificationCenter.default.publisher(for: .homeStageOpenChat)) { _ in
-      guard !usesLegacyPresentation else { return }
       searchText = HomeBridgeIntent.openChat.searchTextAfter(searchText)
       claimCaret()
     }
@@ -228,18 +200,17 @@ struct QueryShellHome: View {
     // The bridge action posts this and reports success, so an unobserved notification here would
     // be the "bridge answered ok and nothing happened" defect this file's actions exist to avoid.
     .onReceive(NotificationCenter.default.publisher(for: .homeStageClose)) { _ in
-      guard !usesLegacyPresentation else { return }
       searchText = HomeBridgeIntent.closePanel.searchTextAfter(searchText)
       claimCaret()
     }
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAsk)) { note in
-      guard !usesLegacyPresentation, let query = note.userInfo?["query"] as? String else { return }
+      guard let query = note.userInfo?["query"] as? String else { return }
       searchText = HomeBridgeIntent.ask.searchTextAfter(searchText)
       chatProvider.draftText = query
       ask()
     }
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAttach)) { note in
-      guard !usesLegacyPresentation, let path = note.userInfo?["path"] as? String else { return }
+      guard let path = note.userInfo?["path"] as? String else { return }
       searchText = HomeBridgeIntent.attach.searchTextAfter(searchText)
       stageAttachments([URL(fileURLWithPath: path)])
     }
@@ -466,28 +437,15 @@ struct QueryShellHome: View {
 
   /// Opens the exact conversation a spine row is about.
   ///
-  /// The row carries the whole record, so the typed deep link can hand it straight to the
-  /// Conversations host. The id-only path below stays for the shell that has no typed navigation
-  /// owner, where this page mounts the Conversations host itself.
+  /// The row carries the whole record, so the typed deep link hands it straight to the
+  /// Conversations host rather than re-resolving it by id.
   private func openConversationRecord(_ conversation: ServerConversation) {
-    if let context = chatFirstRichBlockContext {
-      context.navigation.open(conversation: conversation)
-      return
-    }
-    openConversation(conversation.id)
+    chatFirstRichBlockContext.navigation.open(conversation: conversation)
   }
 
-  /// Opens the exact memory a spine row is about, on the same terms the Brain Map's citations use:
-  /// leave this surface only once the memory actually resolved.
+  /// Opens the exact memory a spine row is about, on the same terms the Brain Map's citations use.
   private func openMemory(_ memory: SpineMemory) {
-    if let context = chatFirstRichBlockContext {
-      context.navigation.open(focus: .memory(id: memory.id))
-      return
-    }
-    Task {
-      await MemoryAtlasCitationOpen.open(
-        id: memory.id, in: memoriesViewModel, leave: { navigate(.memories) })
-    }
+    chatFirstRichBlockContext.navigation.open(focus: .memory(id: memory.id))
   }
 
   /// Opens the real Conversations page on the real conversation — never a copy of it here (INV-NAV-1).
@@ -505,68 +463,25 @@ struct QueryShellHome: View {
     navigate(.conversation)
   }
 
-  private func openMemories() {
-    navigate(.memories)
-  }
-
   /// Typed citation routing stays at the shell boundary. The inline renderer knows presentation;
   /// this root owns navigation and preserves exact entity identity where the destination supports it.
   private func openCitation(_ reference: ChatCitationReference) {
     guard reference.canOpen else { return }
-    if let context = chatFirstRichBlockContext {
-      switch reference.kind {
-      case .conversation:
-        let moment = reference.momentTimestampMs.map { TimeInterval($0) / 1_000 }
-        context.navigation.open(focus: .capture(id: reference.sourceID, momentTs: moment))
-      case .memory:
-        context.navigation.open(focus: .memory(id: reference.sourceID))
-      case .task:
-        context.navigation.open(focus: .task(id: reference.sourceID))
-      case .goal:
-        context.navigation.open(focus: .goal(id: reference.sourceID))
-      case .screenshot:
-        guard let id = RewindCitationFocusState.parseScreenshotID(reference.sourceID) else { return }
-        RewindCitationFocusState.shared.request(id)
-        context.navigation.selectMore(.rewind)
-      case .web:
-        if let url = reference.url { NSWorkspace.shared.open(url) }
-      case .unavailable:
-        break
-      }
-      return
-    }
-
+    let navigation = chatFirstRichBlockContext.navigation
     switch reference.kind {
     case .conversation:
-      openConversation(reference.sourceID)
+      let moment = reference.momentTimestampMs.map { TimeInterval($0) / 1_000 }
+      navigation.open(focus: .capture(id: reference.sourceID, momentTs: moment))
     case .memory:
-      Task { @MainActor in
-        guard await memoriesViewModel.openMemory(id: reference.sourceID) else { return }
-        openMemories()
-      }
+      navigation.open(focus: .memory(id: reference.sourceID))
     case .task:
-      // TasksPage has a typed, owner-bound handoff. Resolve the exact task before changing pages;
-      // selecting the Tasks tab alone would silently discard the citation's identity.
-      Task { @MainActor in
-        guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
-          let task = try? await APIClient.shared.getActionItem(
-            id: reference.sourceID,
-            expectedOwnerId: authorization.ownerID,
-            authorizationSnapshot: authorization),
-          RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
-        else { return }
-        guard !task.isRetired else { return }
-        TaskNavigationRequestStore.shared.request(task: task)
-        selectedIndex = SidebarNavItem.tasks.rawValue
-      }
+      navigation.open(focus: .task(id: reference.sourceID))
     case .goal:
-      // QueryAnswerThread marks this kind unavailable in the legacy shell before rendering. Keep
-      // the routing boundary fail-closed as defense in depth.
-      return
+      navigation.open(focus: .goal(id: reference.sourceID))
     case .screenshot:
       guard let id = RewindCitationFocusState.parseScreenshotID(reference.sourceID) else { return }
       RewindCitationFocusState.shared.request(id)
-      openRewind()
+      navigation.selectMore(.rewind)
     case .web:
       if let url = reference.url { NSWorkspace.shared.open(url) }
     case .unavailable:
@@ -589,10 +504,17 @@ struct QueryShellHome: View {
   /// `QueryShellRoute` rather than restating a rail index and a hub raw value at its own call site —
   /// which is how one of them ends up pointing somewhere the others do not.
   private func navigate(_ route: QueryShellRoute) {
-    if let hubView = route.memoryDestination {
+    let navigation = chatFirstRichBlockContext.navigation
+    OmiMotion.withGated(.easeOut(duration: 0.08)) {
+      guard let hubView = route.memoryDestination else {
+        navigation.selectLegacyDestination(route.navItem)
+        return
+      }
+      // Both halves of the hub state move together — the persisted view and the
+      // typed route that decides which host is mounted (see `ChatFirstShell`).
       memoryDestinationRawValue = hubView.rawValue
+      navigation.selectPrimary(MemoryHubSelectionPolicy.chatFirstRoute(for: hubView))
     }
-    OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = route.navItem.rawValue }
   }
 
   // MARK: - The corpus

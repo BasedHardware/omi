@@ -138,6 +138,10 @@ enum DesktopAutomationLaunchOptions {
 }
 
 struct DesktopAutomationSnapshot: Codable, Sendable {
+  /// The app has one shell. Flows and the navigation-visibility policy still read
+  /// `shellVariant`, so it is pinned here rather than removed from the contract.
+  static let singleShellVariant = "chat_first"
+
   var bridgeEnabled: Bool
   var bridgePort: UInt16
   var bundleIdentifier: String
@@ -146,14 +150,14 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var selectedTabIndex: Int?
   var selectedSettingsSection: String?
   var highlightedSettingId: String?
-  var usesLegacyHomeDesign: Bool
-  /// Home stage mode: `hub`, `chat`, or `connect`. Written only by `DashboardPage`, which is the only
-  /// view that renders the stage; nil whenever nothing on screen has one — which includes the whole
-  /// legacy shell, whose Home is the query surface. Never defaulted: see `HomeStageAutomationPolicy`.
+  /// Home stage mode: `hub`, `chat`, or `connect`. `DashboardPage` was the only view that ever
+  /// rendered that stage and it no longer exists, so this is now always nil. Kept in the snapshot
+  /// so an older flow reading it sees "no stage" rather than a missing key.
   var homeMode: String?
-  /// `loading`, `legacy`, or `chat_first`; never a local rollout preference.
+  /// Always `chat_first` on a mounted shell: the app has exactly one. Nil only before the shell has
+  /// reported state. Never a local preference.
   var shellVariant: String?
-  /// Stable typed route for the Chat-first shell. Nil for the legacy shell.
+  /// Stable typed route for the one shell.
   var chatFirstRoute: String?
   /// Set only by the mounted Chat-first destination after it has appeared. This
   /// keeps a successful navigation response equivalent to the target being
@@ -167,6 +171,7 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   /// never an analytics dimension or a persisted navigation value.
   var focusedEntityID: String?
   var isFocusedEntityAcknowledged: Bool
+  /// Retained for snapshot compatibility; the legacy sidebar shell is gone, so it is always false.
   var showsPrimarySidebar: Bool
   var isSidebarCollapsed: Bool
   var hasCompletedOnboarding: Bool
@@ -464,7 +469,6 @@ final class DesktopAutomationStateStore {
     selectedTabIndex: nil,
     selectedSettingsSection: nil,
     highlightedSettingId: nil,
-    usesLegacyHomeDesign: false,
     homeMode: nil,
     shellVariant: nil,
     chatFirstRoute: nil,
