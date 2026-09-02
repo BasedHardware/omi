@@ -11,6 +11,11 @@ export const dynamic = "force-dynamic";
 // `source` splits text (main-window chat) from voice (floating-bar
 // responses); events recorded before the dimension shipped count only toward
 // the combined "all" series.
+//
+// Thumbs on proactive-notification messages (focus/insight/task/memory) are
+// tagged source="notification" by the client and EXCLUDED from every series
+// here — they rate the notification, not a general Omi answer (Nik,
+// 2026-09-02). Pre-tag legacy events can't be classified and stay in "all".
 type RatioPoint = {
   date: string;
   all: number | null;
@@ -36,7 +41,7 @@ export async function computeMessageRatings(days: number) {
   const projectId = process.env.POSTHOG_PROJECT_ID;
   const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(
     /\/$/,
-    "",
+    ""
   );
   if (!apiKey || !projectId) {
     throw new Error("PostHog credentials not configured");
@@ -58,7 +63,7 @@ export async function computeMessageRatings(days: number) {
         AND timestamp >= now() - INTERVAL ${days} DAY
       GROUP BY day, src
       ORDER BY day
-    `,
+    `
   )) as any[];
 
   type Bucket = { up: Record<string, number>; down: Record<string, number> };
@@ -71,9 +76,14 @@ export async function computeMessageRatings(days: number) {
     byDay.set(key, bucket);
   }
 
-  const sum = (rec: Record<string, number>, keys?: string[]) =>
+  // "All" is an explicit allowlist so an unknown future source can never
+  // silently leak in. Legacy (pre-tag) events stay: they cannot be
+  // classified, and dropping them would blank the whole history until tagged
+  // builds roll out — the caveat lives in the panel descriptions.
+  const ALL_SOURCES = ["text", "voice", "legacy"];
+  const sum = (rec: Record<string, number>, keys: string[] = ALL_SOURCES) =>
     Object.entries(rec)
-      .filter(([k]) => !keys || keys.includes(k))
+      .filter(([k]) => keys.includes(k))
       .reduce((a, [, v]) => a + v, 0);
 
   const toPoint = (date: string, b: Bucket): RatioPoint => ({
@@ -122,14 +132,14 @@ export async function GET(request: NextRequest) {
   try {
     const days = Math.min(
       parseInt(request.nextUrl.searchParams.get("days") || "30", 10) || 30,
-      180,
+      180
     );
     return NextResponse.json(await computeMessageRatings(days));
   } catch (error: any) {
     console.error("Message ratings error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to fetch message ratings" },
-      { status: 502 },
+      { status: 502 }
     );
   }
 }
