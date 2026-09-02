@@ -968,6 +968,19 @@ class PushToTalkManager: ObservableObject {
   /// which must end the turn with a hint rather than hang. No-op unless a capture is
   /// active.
   @discardableResult
+  /// Mirrors one *quick tap* of a modifier-only shortcut: the release lands inside
+  /// `modifierOnlyShortcutActivationDelay`, so no turn starts. Two of these inside the
+  /// double-tap window must lock, which is what the physical key does and what no other
+  /// automation entry point can express (`ptt_stop` mirrors a long-hold release).
+  func quickTapPushToTalkForAutomation() -> [String: String] {
+    ensureAutomationBarConfigured()
+    handleModifierOnlyQuickTap()
+    return [
+      "state": VoiceTurnCoordinator.phaseLabel(phase ?? .idle),
+      "locked": phase == .lockedRecording ? "true" : "false",
+    ]
+  }
+
   func endPushToTalkForAutomation() -> [String: String] {
     let wasActive = voiceTurnCoordinator.activeTurn?.phase.isRecording == true
     if wasActive { finalize() }
