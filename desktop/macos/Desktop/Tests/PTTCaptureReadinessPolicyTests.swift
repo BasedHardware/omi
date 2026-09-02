@@ -139,6 +139,20 @@ final class PTTCaptureReadinessPolicyTests: XCTestCase {
       .shortTap)
   }
 
+  /// The automation bridge drives real push-to-talk turns with the microphone
+  /// deliberately bypassed, so nothing ever requests a capture start. Judging
+  /// those on their "hold" would make a synthetic turn's disposition — and the
+  /// `ptt-lifecycle` e2e flow's expectation — depend on how long the harness took
+  /// between two localhost HTTP calls.
+  func testATurnThatNeverRequestedACaptureHasNoLatencyToCharge() {
+    let recorder = PTTAttemptLifecycleRecorder()
+    recorder.beginAttempt(mode: "hold", hubActive: false, micPermissionGranted: false)
+    XCTAssertFalse(recorder.captureWasRequested)
+
+    recorder.captureStartRequested()
+    XCTAssertTrue(recorder.captureWasRequested)
+  }
+
   /// First call wins: a re-entered finalization must not extend a hold that has
   /// already ended.
   func testReleaseIsLatchedOnce() {

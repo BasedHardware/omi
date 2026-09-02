@@ -367,6 +367,13 @@ final class PTTAttemptLifecycleRecorder {
     releasedAt = now()
   }
 
+  /// Whether a capture start was ever asked for. A turn that never requested one
+  /// has no capture-start latency to charge, so it must not be judged as though
+  /// it did — the automation bridge drives real PTT turns with the microphone
+  /// deliberately bypassed, and their "hold" is however long the harness took
+  /// between two HTTP calls.
+  var captureWasRequested: Bool { captureStartOutcome != .notRequested }
+
   /// How long the user actually held the key, in seconds — not how much audio the
   /// capture managed to deliver inside it. `nil` before `beginAttempt`. Read by
   /// the discard paths so capture-start latency is charged to capture rather than

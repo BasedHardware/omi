@@ -869,9 +869,10 @@ class PushToTalkManager: ObservableObject {
     FloatingBarVoicePlaybackService.shared.stop()
     await captureBeingStopped?.waitForPhysicalStop()
     // A warm capture opened for the previous owner must not still be starting
-    // when the defaults/auth mutation becomes visible. Unbounded on purpose:
-    // this drain is INV-AUTH-1 fencing, not a latency optimization.
-    await drainInFlightWarmCapture(timeout: nil)
+    // when the defaults/auth mutation becomes visible. A longer bound than the
+    // press path — this is fencing, not latency — but still bounded: see
+    // `drainInFlightWarmCapture`.
+    await drainInFlightWarmCapture(timeout: Self.ownerTransitionWarmCaptureWaitSeconds)
     await RealtimeHubController.shared.quiesceForEffectiveOwnerTransition(
       previousOwnerID: previousOwnerID,
       cleanupCapability: cleanupCapability)
@@ -1241,7 +1242,7 @@ class PushToTalkManager: ObservableObject {
         let dev = audioCaptureService?.currentDeviceDescription ?? "?"
         let resolution = resolveDiscardedTurn(totalSec: totalSec)
         let recoveryDecision = silentMicRecoveryPolicy.recordDiscardedTurn(
-          holdSec: pttLifecycle.holdSeconds ?? totalSec, totalSec: totalSec, peak: peak)
+          holdSec: judgeableHoldSeconds ?? totalSec, totalSec: totalSec, peak: peak)
         recordSilentMicRecoveryOutcome(recoveryDecision.recoveryOutcome)
         DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
           source: "hub",
@@ -1352,7 +1353,7 @@ class PushToTalkManager: ObservableObject {
         // repeated silent turns with no recovery. Mirror the hub path: rebuild the
         // CoreAudio capture after consecutive dead-mic turns.
         let recoveryDecision = silentMicRecoveryPolicy.recordDiscardedTurn(
-          holdSec: pttLifecycle.holdSeconds ?? totalSec, totalSec: totalSec, peak: peak)
+          holdSec: judgeableHoldSeconds ?? totalSec, totalSec: totalSec, peak: peak)
         recordSilentMicRecoveryOutcome(recoveryDecision.recoveryOutcome)
         DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
           source: isOmniSTT ? "omni_stt" : "batch_stt",
@@ -1551,10 +1552,20 @@ class PushToTalkManager: ObservableObject {
     schedulePTTCaptureWarmup(trigger: .captureNotReady)
   }
 
+  /// The hold, but only when there was a capture start whose latency could have
+  /// eaten it. A turn that never requested one — the automation bridge drives
+  /// real PTT turns with the microphone deliberately bypassed — has no latency to
+  /// charge, and its "hold" is however long the harness took between two HTTP
+  /// calls. Judging that would make a synthetic turn's disposition depend on
+  /// localhost round-trip time.
+  private var judgeableHoldSeconds: Double? {
+    pttLifecycle.captureWasRequested ? pttLifecycle.holdSeconds : nil
+  }
+
   private func resolveDiscardedTurn(totalSec: Double) -> PTTDiscardedTurnResolution {
     PTTDiscardedTurnResolution(
       PTTTurnDiscardJudgement.judge(
-        holdSeconds: pttLifecycle.holdSeconds,
+        holdSeconds: judgeableHoldSeconds,
         deliveredAudioSeconds: totalSec,
         minTurnAudioSeconds: Self.minTurnAudioSeconds))
   }
@@ -1982,7 +1993,7 @@ class PushToTalkManager: ObservableObject {
       // recovery here too, otherwise users whose turns land on the buffered
       // warm-wait path get recovery_action=none forever (issue #9081).
       let recoveryDecision = silentMicRecoveryPolicy.recordDiscardedTurn(
-        holdSec: pttLifecycle.holdSeconds ?? totalSec, totalSec: totalSec, peak: peak)
+        holdSec: judgeableHoldSeconds ?? totalSec, totalSec: totalSec, peak: peak)
       recordSilentMicRecoveryOutcome(recoveryDecision.recoveryOutcome)
       DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
         source: "buffered_hub",
@@ -2066,7 +2077,7 @@ class PushToTalkManager: ObservableObject {
       // Same dead-mic recovery as the primary omni/batch path — the warm-wait
       // fallback was previously the one silent-turn exit with no recovery (#9081).
       let recoveryDecision = silentMicRecoveryPolicy.recordDiscardedTurn(
-        holdSec: pttLifecycle.holdSeconds ?? totalSec, totalSec: totalSec, peak: peak)
+        holdSec: judgeableHoldSeconds ?? totalSec, totalSec: totalSec, peak: peak)
       recordSilentMicRecoveryOutcome(recoveryDecision.recoveryOutcome)
       DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
         source: "warm_wait_fallback",
@@ -2331,6 +2342,16 @@ class PushToTalkManager: ObservableObject {
   /// exists to take latency *out* of the press must never be what holds one up.
   private static let displacedWarmCaptureWaitSeconds: TimeInterval = 0.5
 
+  /// The owner transition waits longer than a press: an account switch may stall
+  /// a little, but it must not stall indefinitely on a wedged CoreAudio start.
+  private static let ownerTransitionWarmCaptureWaitSeconds: TimeInterval = 3
+
+  /// A warm capture is either still starting or still tearing down. Both hold the
+  /// device, and the second state is the whole point of keeping the handle — a
+  /// press that only looked at `warmCapture` would sail past a teardown
+  /// `discardParkedMicCapture` had already started.
+  var hasWarmCaptureToDrain: Bool { warmCapture != nil || warmTeardown != nil }
+
   /// Give up a warm capture whose start has not resolved.
   ///
   /// Neither `stopCapture()` nor `waitForPhysicalStop()` is a boundary here.
@@ -2354,12 +2375,15 @@ class PushToTalkManager: ObservableObject {
 
   /// Release a warm capture and wait for its teardown.
   ///
-  /// `timeout: nil` waits as long as it takes, for callers where an incomplete
-  /// drain is a correctness failure rather than a latency one — the owner
-  /// transition, which must leave no previous-owner capture running. Everyone
-  /// else takes the bounded wait: a warm capture that outlives it is still
-  /// stopped by its own completion, so the only thing given up is the overlap
-  /// guarantee, in the case where waiting would have cost the user their press.
+  /// `timeout: nil` waits as long as it takes. Nothing uses it: even the owner
+  /// transition takes a bound, because the thing being protected is weaker than
+  /// the risk. A warm lease is created parked and is never renewed, so it cannot
+  /// admit a frame into any turn under any owner — the INV-AUTH-1 exposure is "an
+  /// IOProc is briefly open", not "the previous owner's audio reaches the next
+  /// one" — while an unbounded wait sits on a `startCapture` that has no timeout
+  /// at all and would freeze an account switch behind a wedged `coreaudiod`.
+  /// A warm capture that outlives any of these waits is still stopped by its own
+  /// completion; only the overlap guarantee is given up.
   ///
   /// Waits on the handle rather than `Task.value` under a bound because awaiting
   /// a non-throwing task ignores cancellation, so it cannot be given a deadline.
@@ -2371,10 +2395,16 @@ class PushToTalkManager: ObservableObject {
       return
     }
     let deadline = Date().addingTimeInterval(timeout)
-    while warmTeardown != nil, Date() < deadline {
+    // `Task.isCancelled` in the condition: a cancelled task's `Task.sleep` throws
+    // immediately, and `try?` would turn this into a hot main-actor loop until the
+    // wall-clock deadline. `reconcileCapture` can cancel the ambient caller.
+    while warmTeardown != nil, !Task.isCancelled, Date() < deadline {
       try? await Task.sleep(nanoseconds: 20_000_000)
     }
     if warmTeardown != nil {
+      // A start wedged in CoreAudio never clears this, which silently refuses
+      // every later warm-up for the life of the process. Benign — presses still
+      // open their own capture — but it must be visible in the log.
       log("PushToTalkManager: warm capture teardown outran its wait — opening the device anyway")
     }
   }
@@ -2564,7 +2594,7 @@ class PushToTalkManager: ObservableObject {
     // own completion is the only real boundary. See `releaseInFlightWarmCapture`.
     // Released synchronously so a warm start already in flight learns it is
     // superseded before this turn's own start is queued behind it.
-    let displacedWarmCapture = warmCaptureInFlight != nil
+    let displacedWarmCapture = hasWarmCaptureToDrain
     releaseInFlightWarmCapture()
 
     let capture = overrideDeviceID.map(AudioCaptureService.init(overrideDeviceID:)) ?? AudioCaptureService()

@@ -100,7 +100,6 @@ final class PTTWarmMicKeepAliveTests: XCTestCase {
   func testAnInFlightWarmCaptureIsTornDownByItsOwnCompletion() throws {
     let source = try pushToTalkManagerSource()
 
-    XCTAssertTrue(source.contains("func releaseInFlightWarmCapture() -> Task<Void, Never>?"))
     XCTAssertTrue(
       source.contains("guard let self, self.warmCapture?.service === capture else {"),
       "the warm start's completion must defer to whoever released it")
@@ -116,6 +115,9 @@ final class PTTWarmMicKeepAliveTests: XCTestCase {
     XCTAssertTrue(
       source.contains("if displacedWarmCapture { await self.drainInFlightWarmCapture() }"),
       "a turn starting must drain the warm teardown before opening the device")
+    XCTAssertTrue(
+      source.contains("let displacedWarmCapture = hasWarmCaptureToDrain"),
+      "a release that kept its handle still leaves a teardown for the press to wait on")
   }
 
   /// Releasing must not consume the teardown handle. Terminal cleanup and capture
@@ -131,11 +133,26 @@ final class PTTWarmMicKeepAliveTests: XCTestCase {
       source.contains("func releaseInFlightWarmCapture() -> Task<Void, Never>?"),
       "handing the only handle to one caller is what disarmed the other waits")
     XCTAssertTrue(
-      source.contains("await drainInFlightWarmCapture(timeout: nil)"),
+      source.contains("await drainInFlightWarmCapture(timeout: Self.ownerTransitionWarmCaptureWaitSeconds)"),
       "the owner transition must drain a previous owner's warm capture completely")
     XCTAssertTrue(
       source.contains("|| warmCapture != nil || warmTeardown != nil)"),
       "a second warm capture must not start while one is still tearing down")
+  }
+
+  /// A synthetic turn's disposition must not depend on harness timing: the
+  /// automation bridge bypasses the microphone entirely, so there is no
+  /// capture-start latency to charge to its "hold".
+  func testAnAutomationTurnIsNotJudgedOnItsHold() throws {
+    let source = try pushToTalkManagerSource()
+
+    XCTAssertTrue(source.contains("pttLifecycle.captureWasRequested ? pttLifecycle.holdSeconds : nil"))
+    XCTAssertFalse(
+      source.contains("holdSeconds: pttLifecycle.holdSeconds"),
+      "the discard judgement must read the gated hold, not the raw one")
+    XCTAssertFalse(
+      source.contains("holdSec: pttLifecycle.holdSeconds"),
+      "the dead-mic policy must read the gated hold, not the raw one")
   }
 
   /// The device the snapshot vetted and the device that actually opened are not
