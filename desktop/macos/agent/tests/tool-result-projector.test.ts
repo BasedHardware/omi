@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { toolManifestEntry } from "../src/runtime/omi-tool-manifest.js";
 import {
+  projectionIsComplete,
   projectToolResultPayload,
   toolResultBudgetBytes,
 } from "../src/runtime/tool-result-projector.js";
@@ -97,6 +98,42 @@ describe("manifest-owned tool result projection", () => {
       expect(shown + projected.omitted[section.name]).toBe(section.total);
     }
     expect(conversations.filter((item) => projected.text.includes(item.title)).length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("renders recap scalar fields and marks only actually excerpted items incomplete", () => {
+    const complete = projectToolResultPayload({
+      toolName: "get_daily_recap",
+      result: JSON.stringify({ sections: [
+        {
+          name: "apps",
+          total: 1,
+          items: [{ title: "Omi", minutes: 45.5, captures: 12, firstSeenAt: "09:00", lastSeenAt: "17:30" }],
+        },
+        {
+          name: "tasks",
+          total: 1,
+          items: [{ title: "Ship round five", completed: false, priority: "high" }],
+        },
+      ] }),
+      maxBytes: 6_656,
+    });
+    expect(complete.text).toContain("minutes=45.5");
+    expect(complete.text).toContain("captures=12");
+    expect(complete.text).toContain("priority=high");
+    expect(projectionIsComplete(complete)).toBe(true);
+
+    const excerpted = projectToolResultPayload({
+      toolName: "search_conversations",
+      result: JSON.stringify({ sections: [{
+        name: "conversations",
+        total: 1,
+        items: [{ title: "Kept title", summary: "Kept summary", content: "transcript ".repeat(500) }],
+      }] }),
+      maxBytes: 700,
+    });
+    expect(excerpted.text).toContain("title: Kept title");
+    expect(excerpted.text).toContain("content:");
+    expect(projectionIsComplete(excerpted)).toBe(false);
   });
 
   it("bounds transcript-bearing search items without dropping their titles", () => {

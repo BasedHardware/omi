@@ -107,6 +107,30 @@ describe("normal pending stdio tool-result boundary", () => {
     }
   });
 
+  it("normalizes an untruncated source whose complete byte measurement exceeds its payload", () => {
+    const source = JSON.stringify({
+      ok: true,
+      text: "complete",
+      toolResultEnvelope: {
+        version: 1,
+        status: "succeeded",
+        truncated: false,
+        originalBytes: 1_000,
+        projectedBytes: 1_000,
+        fullOutputRef: null,
+      },
+    });
+    let result = "";
+    expect(() => { result = finalize(source, "succeeded"); }).not.toThrow();
+    const payload = JSON.parse(result) as {
+      ok: boolean;
+      toolResultEnvelope: { truncated: boolean; originalBytes: number; projectedBytes: number };
+    };
+    expect(payload.ok).toBe(true);
+    expect(payload.toolResultEnvelope.truncated).toBe(false);
+    expect(payload.toolResultEnvelope.originalBytes).toBe(payload.toolResultEnvelope.projectedBytes);
+  });
+
   it("clamps an unbounded originating utterance without stranding projection", () => {
     const result = finalize(
       JSON.stringify({ ok: true, text: "x".repeat(MAX_RELAY_TOOL_RESULT_BYTES * 2) }),

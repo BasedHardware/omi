@@ -101,10 +101,15 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
   // only the consistent pair reaches makeToolResultEnvelope; otherwise the
   // normal projection path below establishes a fresh bounded measurement.
   if (!needsArtifact || payloadBytes < originalBytes) {
+    // An untruncated source envelope can carry a stale/larger byte count from
+    // a serialization layer we remove here. Completeness is authoritative, so
+    // normalize the pair to this payload instead of constructing an envelope
+    // whose byte delta falsely implies truncation.
+    const passthroughOriginalBytes = needsArtifact ? originalBytes : payloadBytes;
     const envelope = makeToolResultEnvelope({
       status,
       truncated: needsArtifact,
-      originalBytes,
+      originalBytes: passthroughOriginalBytes,
       projectedBytes: payloadBytes,
       fullOutputRef,
       provenance: provenance(input.identity),

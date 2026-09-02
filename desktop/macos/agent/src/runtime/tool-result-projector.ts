@@ -56,14 +56,18 @@ export function projectToolResultPayload(input: {
   const fairItemBytes = Math.min(1_024, Math.max(64, Math.floor(input.maxBytes / Math.max(1, populated * 3))));
   const shown = new Map(sections.map((section) => [section.name, 0]));
   const rendered = new Map<string, string[]>();
+  const renderedCompletely = new Map<string, boolean[]>();
 
   // Reserve useful content for every populated section before filling by priority.
   for (const section of sections) {
     if (section.items.length > 0) {
-      rendered.set(section.name, [renderItemExcerpt(section.items[0], fairItemBytes)]);
+      const first = renderItemExcerpt(section.items[0], fairItemBytes);
+      rendered.set(section.name, [first.text]);
+      renderedCompletely.set(section.name, [first.complete]);
       shown.set(section.name, 1);
     } else {
       rendered.set(section.name, []);
+      renderedCompletely.set(section.name, []);
     }
   }
 
@@ -77,7 +81,9 @@ export function projectToolResultPayload(input: {
     const current = rendered.get(longest.name)![0];
     const nextLimit = Buffer.byteLength(current, "utf8") - 16;
     if (nextLimit < 16) break;
-    rendered.get(longest.name)![0] = utf8Excerpt(renderItem(longest.items[0]), nextLimit);
+    const next = renderItemExcerpt(longest.items[0], nextLimit);
+    rendered.get(longest.name)![0] = next.text;
+    renderedCompletely.get(longest.name)![0] = next.complete;
     payload = renderProjection(sections, rendered, shown);
   }
 
@@ -94,20 +100,21 @@ export function projectToolResultPayload(input: {
   for (const section of sections) {
     for (let index = 1; index < section.items.length; index += 1) {
       const current = rendered.get(section.name)!;
-      current.push(renderItemExcerpt(section.items[index], fairItemBytes));
+      const next = renderItemExcerpt(section.items[index], fairItemBytes);
+      current.push(next.text);
+      renderedCompletely.get(section.name)!.push(next.complete);
       shown.set(section.name, current.length);
       const candidate = renderProjection(sections, rendered, shown);
       if (!fits(candidate, input.maxBytes)) {
         current.pop();
+        renderedCompletely.get(section.name)!.pop();
         shown.set(section.name, current.length);
         break;
       }
       payload = candidate;
     }
   }
-  const excerpted = sections.some((section) => section.items.some((item) => (
-    Buffer.byteLength(renderItem(item), "utf8") > fairItemBytes
-  )));
+  const excerpted = [...renderedCompletely.values()].some((items) => items.some((complete) => !complete));
   if (excerpted) incompleteProjections.add(payload);
   return payload;
 }
@@ -161,22 +168,43 @@ function extractSections(result: string, toolName: string): TypedSection[] {
   return [{ name: "text", total: 1, items: [result] }];
 }
 
-function renderItemExcerpt(value: unknown, maxBytes: number): string {
-  if (!isRecord(value)) return utf8Excerpt(renderItem(value), maxBytes);
+function renderItemExcerpt(value: unknown, maxBytes: number): { text: string; complete: boolean } {
+  if (!isRecord(value)) {
+    const full = renderItem(value);
+    const text = utf8Excerpt(full, maxBytes);
+    return { text, complete: text === full };
+  }
 
   // Swift encodes typed items with sorted keys, so byte-prefixing the JSON can
   // put a large `content` field before title/summary/source identity. Render
   // those semantic fields explicitly first and spend only the remaining bytes
   // on content. This is deliberately independent of object insertion order.
   const parts: string[] = [];
+  const fullParts: string[] = [];
   const append = (label: string, field: unknown, budget: number) => {
     if (typeof field !== "string" || field.length === 0) return;
-    parts.push(`${label}: ${utf8Excerpt(field.replace(/\s+/g, " ").trim(), budget)}`);
+    const normalized = field.replace(/\s+/g, " ").trim();
+    parts.push(`${label}: ${utf8Excerpt(normalized, budget)}`);
+    fullParts.push(`${label}: ${normalized}`);
   };
   append("title", value.title, Math.max(16, Math.floor(maxBytes * 0.28)));
   append("summary", value.summary, Math.max(16, Math.floor(maxBytes * 0.36)));
   append("citation", value.citationMarker, 48);
   append("sourceId", value.sourceId, 96);
+
+  // Content is the only separately budgeted excerpt. Every other item field
+  // remains in the identity segment so a typed recap cannot silently lose
+  // minutes/captures, task priority, focus status, memory category, or future
+  // scalar fields while claiming the item was rendered completely.
+  for (const [key, field] of Object.entries(value)) {
+    if (["title", "summary", "citationMarker", "sourceId", "content"].includes(key)) continue;
+    if (field === undefined) continue;
+    const renderedField = typeof field === "string"
+      ? field.replace(/\s+/g, " ").trim()
+      : renderItem(field);
+    parts.push(`${key}=${renderedField}`);
+    fullParts.push(`${key}=${renderedField}`);
+  }
 
   const identity = parts.join(" | ");
   const separator = identity.length > 0 ? " | " : "";
@@ -184,8 +212,12 @@ function renderItemExcerpt(value: unknown, maxBytes: number): string {
   if (typeof value.content === "string" && value.content.length > 0 && remaining > 0) {
     parts.push(`content: ${utf8Excerpt(value.content.replace(/\s+/g, " ").trim(), remaining)}`);
   }
-  if (parts.length > 0) return utf8Excerpt(parts.join(" | "), maxBytes);
-  return utf8Excerpt(renderItem(value), maxBytes);
+  if (typeof value.content === "string" && value.content.length > 0) {
+    fullParts.push(`content: ${value.content.replace(/\s+/g, " ").trim()}`);
+  }
+  const full = fullParts.length > 0 ? fullParts.join(" | ") : renderItem(value);
+  const text = parts.length > 0 ? utf8Excerpt(parts.join(" | "), maxBytes) : utf8Excerpt(full, maxBytes);
+  return { text, complete: text === full };
 }
 
 function renderItem(value: unknown): string {

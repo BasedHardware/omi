@@ -103,7 +103,6 @@ class ChatToolExecutor {
   }
 
   private struct DailyRecapReadResult: Sendable {
-    let renderedText: String
     let sources: [DailyRecapSource]
     let totals: [String: Int]
     let sections: [DailyRecapSection]
@@ -1568,8 +1567,6 @@ class ChatToolExecutor {
             LIMIT 20
             """)
 
-        // Format compact markdown
-        var out = "# \(dateLabel) Recap\n\n"
         var sources = [DailyRecapSource]()
         var typedSections = [
           DailyRecapSection(
@@ -1594,11 +1591,8 @@ class ChatToolExecutor {
           return " {{cite:\(sources.count)}}"
         }
 
-        out += "## Apps (\(apps.count) apps)\n"
         var appItems = [DailyRecapItem]()
-        if apps.isEmpty {
-          out += "No screen activity recorded.\n"
-        } else {
+        if !apps.isEmpty {
           for app in apps {
             let name = app["appName"] as? String ?? "Unknown"
             let minutes = app["minutes"] as? Double ?? 0
@@ -1610,7 +1604,6 @@ class ChatToolExecutor {
             let lastSeen =
               DesktopChatTimestampFormat.formatSQLCell(
                 column: "lastSeenAt", value: app["lastSeenAt"], timeZone: timeZone) ?? ""
-            let window = firstSeen.isEmpty && lastSeen.isEmpty ? "" : " \(firstSeen)–\(lastSeen)"
             appItems.append(
               DailyRecapItem(
                 title: name,
@@ -1618,24 +1611,17 @@ class ChatToolExecutor {
                 captures: screenshots,
                 firstSeenAt: firstSeen,
                 lastSeenAt: lastSeen))
-            out +=
-              "- **\(name)**: \(minutes) min (\(screenshots) captures,\(window))\n"
           }
-          if apps.count > 20 { out += "- ...and \(apps.count - 20) more apps\n" }
         }
         typedSections.append(DailyRecapSection(name: "apps", total: apps.count, items: appItems))
 
-        out += "\n## Conversations (\(convos.count))\n"
         var conversationItems = [DailyRecapItem]()
-        if convos.isEmpty {
-          out += "No conversations recorded.\n"
-        } else {
+        if !convos.isEmpty {
           for convo in convos {
             let title = convo["title"] as? String ?? "Untitled"
             let overview = convo["overview"] as? String ?? "No summary"
             let emoji = convo["emoji"] as? String ?? ""
             let durMin = convo["duration_min"] as? Double ?? 0
-            let dur = durMin > 0 ? " (\(durMin) min)" : ""
             let marker = note(
               kind: .conversation,
               sourceID: convo["backendId"] as? String,
@@ -1650,23 +1636,17 @@ class ChatToolExecutor {
                 sourceId: convo["backendId"] as? String ?? "",
                 citationMarker: marker.trimmingCharacters(in: .whitespaces),
                 createdAt: convo["startedAt"] as? String ?? ""))
-            out += "- \(emoji) **\(title)**\(dur): \(overview)\(marker)\n"
           }
         }
         typedSections.append(
           DailyRecapSection(name: "conversations", total: convos.count, items: conversationItems))
 
-        out += "\n## Tasks (\(tasks.count))\n"
         var taskItems = [DailyRecapItem]()
-        if tasks.isEmpty {
-          out += "No tasks created.\n"
-        } else {
+        if !tasks.isEmpty {
           for task in tasks {
             let desc = task["description"] as? String ?? ""
             let completed = (Self.rowInt(task["completed"]) ?? 0) == 1
             let priority = task["priority"] as? String ?? ""
-            let check = completed ? "[x]" : "[ ]"
-            let pri = priority.isEmpty ? "" : " (\(priority))"
             let marker = note(
               kind: .task,
               sourceID: task["backendId"] as? String,
@@ -1680,14 +1660,11 @@ class ChatToolExecutor {
                 createdAt: task["createdAt"] as? String ?? "",
                 completed: completed,
                 priority: priority))
-            out += "- \(check) \(desc)\(pri)\(marker)\n"
           }
         }
         typedSections.append(DailyRecapSection(name: "tasks", total: tasks.count, items: taskItems))
 
         // Focus sessions
-        let focused = focusSessions.filter { ($0["status"] as? String) == "focused" }
-        let distracted = focusSessions.filter { ($0["status"] as? String) == "distracted" }
         let focusItems = focusSessions.map { session in
           DailyRecapItem(
             title: session["appOrSite"] as? String ?? "",
@@ -1695,32 +1672,15 @@ class ChatToolExecutor {
             status: session["status"] as? String ?? "",
             durationSeconds: Self.rowInt(session["durationSeconds"]) ?? 0)
         }
-        if !focusSessions.isEmpty {
-          out += "\n## Focus (\(focused.count) focused, \(distracted.count) distracted)\n"
-          for session in focusSessions {
-            let status = session["status"] as? String ?? ""
-            let app = session["appOrSite"] as? String ?? ""
-            let desc = session["description"] as? String ?? ""
-            let dur = Self.rowInt(session["durationSeconds"]) ?? 0
-            let durStr = dur > 0 ? " (\(dur / 60)m)" : ""
-            let icon = status == "focused" ? "+" : "-"
-            out += "- \(icon) \(app)\(durStr): \(desc)\n"
-          }
-          if focusSessions.count > 10 {
-            out += "- ...and \(focusSessions.count - 10) more sessions\n"
-          }
-        }
         typedSections.append(
           DailyRecapSection(name: "focus", total: focusSessions.count, items: focusItems))
 
         // Memories
         var memoryItems = [DailyRecapItem]()
         if !memories.isEmpty {
-          out += "\n## Memories Learned (\(memories.count))\n"
           for memory in memories {
             let content = memory["content"] as? String ?? ""
             let category = memory["category"] as? String ?? ""
-            let catStr = category.isEmpty ? "" : " (\(category))"
             let marker = note(
               kind: .memory,
               sourceID: memory["backendId"] as? String,
@@ -1733,9 +1693,7 @@ class ChatToolExecutor {
                 sourceId: memory["backendId"] as? String ?? "",
                 citationMarker: marker.trimmingCharacters(in: .whitespaces),
                 category: category))
-            out += "- \(content)\(catStr)\(marker)\n"
           }
-          if memories.count > 10 { out += "- ...and \(memories.count - 10) more\n" }
         }
         typedSections.append(
           DailyRecapSection(name: "memories", total: memories.count, items: memoryItems))
@@ -1747,17 +1705,6 @@ class ChatToolExecutor {
             summary: observation["currentActivity"] as? String ?? "",
             context: observation["contextSummary"] as? String ?? "")
         }
-        if !observations.isEmpty {
-          out += "\n## Screen Context (\(observations.count) observations)\n"
-          for obs in observations {
-            let app = obs["appName"] as? String ?? ""
-            let activity = obs["currentActivity"] as? String ?? ""
-            out += "- \(app): \(activity)\n"
-          }
-          if observations.count > 10 {
-            out += "- ...and \(observations.count - 10) more observations\n"
-          }
-        }
         typedSections.append(
           DailyRecapSection(name: "observations", total: observations.count, items: observationItems))
 
@@ -1765,7 +1712,6 @@ class ChatToolExecutor {
           "Tool get_daily_recap: \(apps.count) apps, \(convos.count) convos, \(tasks.count) tasks, \(focusSessions.count) focus, \(memories.count) memories, \(observations.count) observations"
         )
         return DailyRecapReadResult(
-          renderedText: out,
           sources: sources,
           totals: [
             "summary": 1,

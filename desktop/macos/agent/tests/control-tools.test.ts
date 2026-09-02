@@ -1238,6 +1238,45 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("reports direct-control artifact persistence failure with the original byte count", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const sentinel = "DIRECT_PERSIST_FAILURE_SENTINEL".repeat(26_000);
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: sentinel }),
+    });
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({ prompt: "direct persistence failure", surfaceContextJson: sentinel }),
+      result.run.runId,
+    ]);
+    vi.spyOn(kernel, "persistArtifact").mockImplementation(() => {
+      throw new Error("deterministic direct-control persistence failure");
+    });
+
+    const raw = await handleAgentControlToolCall(
+      { ...ownerContext(kernel), trustedUserControl: true },
+      "get_agent_run",
+      { ownerId: "owner", runId: result.run.runId },
+    );
+    const failed = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(128 * 1024);
+    expect(failed).toMatchObject({
+      ok: false,
+      error: {
+        code: "tool_output_persist_failed",
+        originalBytes: expect.any(Number),
+      },
+      toolResultEnvelope: {
+        status: "failed",
+        truncated: false,
+        fullOutputRef: null,
+      },
+    });
+    expect(failed.error.originalBytes).toBeGreaterThan(128 * 1024);
+    store.close();
+  });
+
   it("envelopes unknown and invalid control-tool errors", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const unknown = parseToolResult(await rawHandleAgentControlToolCall(ownerContext(kernel), "not_a_real_tool", {}));
