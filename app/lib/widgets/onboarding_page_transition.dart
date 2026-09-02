@@ -2,6 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+/// Default onboarding step cross-fade. Incoming pages that must wait for the
+/// previous step to finish fading out (knowledge graph after speech profile)
+/// should use this as [OnboardingPageTransition.entryDelay].
+const Duration kOnboardingPageFadeDuration = Duration(milliseconds: 400);
+
 /// Wraps onboarding step content so each step slowly fades out and fades
 /// back in when the flow advances to a new page, instead of cutting
 /// abruptly between screens. Swap the `child`/`pageKey` (e.g. to the current
@@ -20,7 +25,7 @@ class OnboardingPageTransition extends StatelessWidget {
     super.key,
     required this.pageKey,
     required this.child,
-    this.duration = const Duration(milliseconds: 700),
+    this.duration = kOnboardingPageFadeDuration,
     this.entryDelay = Duration.zero,
   });
 

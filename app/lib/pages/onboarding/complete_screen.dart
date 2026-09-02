@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/omi_device_glow.dart';
+import 'package:omi/widgets/onboarding_page_transition.dart';
 
 class OnboardingCompleteScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -12,41 +14,34 @@ class OnboardingCompleteScreen extends StatefulWidget {
 }
 
 class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _fadeController;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _slideAnimation;
+  late final AnimationController _fadeController;
+  late final Animation<double> _fadeAnimation;
+  bool _exiting = false;
 
   @override
   void initState() {
     super.initState();
-
-    _fadeController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
-
-    _scaleAnimation = Tween<double>(
-      begin: 0.5,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.elasticOut));
-
-    _slideAnimation = Tween<double>(
-      begin: 50.0,
-      end: 0.0,
-    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
-
-    Future.delayed(const Duration(milliseconds: 200), () {
-      if (mounted) _fadeController.forward();
-    });
+    // Page transition owns the entrance fade. Start fully visible so we do
+    // not stack a second delayed fade on top of the incoming step.
+    _fadeController = AnimationController(
+      duration: kOnboardingPageFadeDuration,
+      vsync: this,
+      value: 1,
+    );
+    _fadeAnimation = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
   }
 
   @override
   void dispose() {
     _fadeController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleStartUsingOmi() async {
+    if (_exiting) return;
+    setState(() => _exiting = true);
+    await _fadeController.reverse();
+    if (mounted) widget.onComplete();
   }
 
   @override
@@ -56,98 +51,62 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
       width: double.infinity,
       height: double.infinity,
       child: SafeArea(
-        child: AnimatedBuilder(
-          animation: _fadeController,
-          builder: (context, child) {
-            return FadeTransition(
-              opacity: _fadeAnimation,
-              child: Transform.translate(
-                offset: Offset(0, _slideAnimation.value),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
-                  child: Column(
-                    children: [
-                      const Spacer(flex: 3),
-                      ScaleTransition(
-                        scale: _scaleAnimation,
-                        child: Container(
-                          width: 72,
-                          height: 72,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1A1A1A),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Icon(Icons.check_rounded, color: Colors.white, size: 36),
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      const Text(
-                        'You are all set!',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 30,
-                          fontWeight: FontWeight.bold,
-                          height: 1.2,
-                          fontFamily: 'Manrope',
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      RichText(
-                        textAlign: TextAlign.center,
-                        text: TextSpan(
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
-                            fontSize: 17,
-                            height: 1.5,
-                            fontFamily: 'Manrope',
-                          ),
-                          children: const [
-                            TextSpan(text: 'Just use Omi in the background for '),
-                            TextSpan(
-                              text: '2\u00A0days',
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                            ),
-                            TextSpan(text: ' and you\'ll start getting useful feedback after!'),
-                          ],
-                        ),
-                      ),
-                      const Spacer(flex: 3),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: widget.onComplete,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                            elevation: 0,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                context.l10n.startUsingOmi,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  fontFamily: 'Manrope',
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              const Icon(Icons.arrow_forward_rounded, size: 20),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                    ],
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Column(
+              children: [
+                const Spacer(flex: 2),
+                const SizedBox(
+                  width: 180,
+                  height: 180,
+                  child: OverflowBox(
+                    maxWidth: 460,
+                    maxHeight: 460,
+                    child: OmiDeviceGlow(imageSize: 180, glowIntensity: 1),
                   ),
                 ),
-              ),
-            );
-          },
+                const SizedBox(height: 28),
+                Text(
+                  context.l10n.youreAllSet,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    height: 1.2,
+                    fontFamily: 'Manrope',
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const Spacer(flex: 3),
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _exiting ? null : _handleStartUsingOmi,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      disabledBackgroundColor: Colors.white,
+                      disabledForegroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      context.l10n.startUsingOmi,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'Manrope',
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+              ],
+            ),
+          ),
         ),
       ),
     );

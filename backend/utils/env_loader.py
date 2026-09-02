@@ -141,11 +141,11 @@ def load_backend_env(base: Path | None = None) -> list[Path]:
     stage file defaults. Offline stage never loads provider credentials from disk.
 
     When ``OMI_HARNESS_INSTANCE`` is set, the local dev harness has already
-    injected a complete child environment — skip all disk loading.
+    injected a complete child environment — skip stage files. Personal
+    ``backend/.env`` still fills keys the harness did not set (override=False)
+    so a local-only secret such as ``MODULATE_API_KEY`` can live in a gitignored
+    file. Offline mode never loads provider credentials from disk.
     """
-
-    if os.environ.get("OMI_HARNESS_INSTANCE", "").strip():
-        return []
 
     root = backend_dir() if base is None else base
     loaded: list[Path] = []
@@ -153,6 +153,13 @@ def load_backend_env(base: Path | None = None) -> list[Path]:
 
     stage = resolve_stage_from_env()
     offline_stage = stage == EnvStage.OFFLINE.value
+
+    if os.environ.get("OMI_HARNESS_INSTANCE", "").strip():
+        personal = root / ".env"
+        if personal.is_file() and not offline_stage:
+            _apply_dotenv_file(personal, override=False)
+            loaded.append(personal)
+        return loaded
 
     if stage is not None:
         stage_path = stage_env_path(stage, root)

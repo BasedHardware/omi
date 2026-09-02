@@ -205,8 +205,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
       await stopDeviceRecording();
       bool success = await provider.initialise(
         finalizedCallback: restartDeviceRecording,
-        processConversationCallback: () {
-          Provider.of<CaptureProvider>(context, listen: false).forceProcessingCurrentConversation();
+        processConversationCallback: () async {
+          await Provider.of<CaptureProvider>(context, listen: false).forceProcessingCurrentConversation();
         },
         usePhoneMic: usePhoneMic,
       );

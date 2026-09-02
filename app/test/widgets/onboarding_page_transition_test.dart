@@ -24,6 +24,12 @@ class _DisposeProbeState extends State<_DisposeProbe> {
 }
 
 void main() {
+  test('default fade is short enough that consent-to-name does not linger', () {
+    const transition = OnboardingPageTransition(pageKey: 0, child: SizedBox());
+    expect(transition.duration, kOnboardingPageFadeDuration);
+    expect(kOnboardingPageFadeDuration, const Duration(milliseconds: 400));
+  });
+
   testWidgets('changing entryDelay on the same pageKey does not dispose the child', (tester) async {
     var disposes = 0;
 

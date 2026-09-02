@@ -221,6 +221,12 @@ class ForceDirectedSimulation3D {
 
 class MemoryGraphPage extends StatefulWidget {
   final bool embedded;
+
+  /// Onboarding-only 2D map: white circles, white labels, no 3D rotation.
+  /// The full-screen Memories graph stays on [GraphPainter3D].
+  final bool flat2d;
+  final bool pollWhileEmpty;
+  final Future<Map<String, dynamic>> Function()? loadFallbackGraph;
   final bool showAppBar;
   final bool showShareButton;
   final bool trackOpenEvent;
@@ -229,6 +235,9 @@ class MemoryGraphPage extends StatefulWidget {
   const MemoryGraphPage({
     super.key,
     this.embedded = false,
+    this.flat2d = false,
+    this.pollWhileEmpty = false,
+    this.loadFallbackGraph,
     this.showAppBar = true,
     this.showShareButton = true,
     this.trackOpenEvent = true,
@@ -258,6 +267,8 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
   bool _isLoading = true;
   String? _error;
+  Timer? _emptyPollTimer;
+  int _emptyPollAttempts = 0;
 
   final _repaintNotifier = ValueNotifier<int>(0);
 
@@ -274,6 +285,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
     _ticker = createTicker((elapsed) {
       if (simulation.tick()) {
+        _flattenIfNeeded();
         _repaintNotifier.value++;
       } else if (_ticker.isTicking) {
         _ticker.stop();
@@ -289,6 +301,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _emptyPollTimer?.cancel();
     _ticker.dispose();
     _repaintNotifier.dispose();
     super.dispose();
@@ -301,11 +314,50 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
   }
 
+  void _flattenIfNeeded() {
+    if (!widget.flat2d) return;
+    for (final node in simulation.nodes) {
+      node.position.z = 0;
+      node.velocity.z = 0;
+    }
+  }
+
   void _runLayoutSync() {
     for (int i = 0; i < 200 && !simulation.isStable; i++) {
       simulation.tick();
     }
+    _flattenIfNeeded();
     _repaintNotifier.value++;
+  }
+
+  bool _nodesHaveContent(List<dynamic> nodes) {
+    return nodes.any((node) {
+      if (node is! Map) return false;
+      final id = (node['id'] ?? '').toString();
+      return id.isNotEmpty && id != 'user-node';
+    });
+  }
+
+  Future<Map<String, dynamic>?> _fallbackGraphIfReady() async {
+    final loader = widget.loadFallbackGraph;
+    if (loader == null) return null;
+    try {
+      final fallback = await loader();
+      final nodes = fallback['nodes'] as List<dynamic>? ?? [];
+      if (_nodesHaveContent(nodes)) return fallback;
+    } catch (_) {}
+    return null;
+  }
+
+  void _scheduleEmptyPoll() {
+    _emptyPollTimer?.cancel();
+    _emptyPollAttempts++;
+    if (_emptyPollAttempts == 1) {
+      KnowledgeGraphApi.rebuildKnowledgeGraph().catchError((_) => <String, dynamic>{});
+    }
+    _emptyPollTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) _loadGraph(silent: true);
+    });
   }
 
   Future<void> _loadGraph({bool silent = false}) async {
@@ -317,7 +369,23 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     try {
-      final data = await KnowledgeGraphApi.getKnowledgeGraph();
+      Map<String, dynamic> data;
+      try {
+        data = await KnowledgeGraphApi.getKnowledgeGraph();
+      } catch (e) {
+        if (widget.pollWhileEmpty && _emptyPollAttempts < 20) {
+          final fallback = await _fallbackGraphIfReady();
+          if (fallback != null) {
+            data = fallback;
+          } else {
+            _scheduleEmptyPoll();
+            if (mounted) setState(() => _isLoading = true);
+            return;
+          }
+        } else {
+          rethrow;
+        }
+      }
       if (!mounted) return;
 
       final newNodes = data['nodes'] as List<dynamic>? ?? [];
@@ -329,8 +397,26 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         });
       }
 
-      if (_isSameGraph(newNodes, newEdges)) {
-        if (!silent) {
+      var waitingForOnboardingGraph = widget.pollWhileEmpty && !_nodesHaveContent(newNodes) && _emptyPollAttempts < 20;
+      if (waitingForOnboardingGraph) {
+        final fallback = await _fallbackGraphIfReady();
+        if (fallback != null && mounted) {
+          data = fallback;
+          waitingForOnboardingGraph = false;
+        }
+      }
+      if (waitingForOnboardingGraph) {
+        _scheduleEmptyPoll();
+        if (mounted) {
+          setState(() {
+            _isLoading = true;
+          });
+        }
+        return;
+      }
+
+      if (_isSameGraph(newNodes, newEdges) && simulation.nodes.isNotEmpty) {
+        if (mounted && _isLoading) {
           setState(() {
             _isLoading = false;
           });
@@ -340,17 +426,18 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
       _populateGraph(data);
       _runLayoutSync();
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = null;
+        });
+      }
     } catch (e) {
       Logger.debug('Knowledge graph load failed: $e');
       if (!mounted) return;
       if (!silent) {
         setState(() {
           _error = context.l10n.couldNotLoadKnowledgeGraph;
-        });
-      }
-    } finally {
-      if (mounted && !silent) {
-        setState(() {
           _isLoading = false;
         });
       }
@@ -370,6 +457,8 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     return true;
   }
 
+  String _graphId(Map data, String snake, String camel) => (data[snake] ?? data[camel] ?? '').toString();
+
   void _populateGraph(Map<String, dynamic> data) {
     simulation.nodes.clear();
     simulation.edges.clear();
@@ -383,7 +472,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     final knownUserLabels = <String>{'me', 'the user', userLabel.trim().toLowerCase()};
     bool isUserLikeNode(Map<dynamic, dynamic> nodeData) {
       final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
-      final nodeType = (nodeData['node_type'] as String? ?? '').trim().toLowerCase();
+      final nodeType = (nodeData['node_type'] ?? nodeData['nodeType'] ?? '').toString().trim().toLowerCase();
       return knownUserLabels.contains(label) || nodeType == 'user';
     }
 
@@ -415,15 +504,15 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       if (addedNodeIds.contains(nodeId)) continue;
 
       final isUser = nodeId == primaryUserId;
-      final label = isUser ? userLabel : (nodeData['label'] as String? ?? '');
-      final nodeType = nodeData['node_type'] ?? 'concept';
+      final label = isUser ? userLabel : ((nodeData['label'] as String?) ?? '');
+      final nodeType = (nodeData['node_type'] ?? nodeData['nodeType'] ?? 'concept').toString();
 
       final node = GraphNode3D(
         id: nodeId,
         label: label,
         nodeType: nodeType,
-        baseColor: isUser ? Colors.white : _colorForType(nodeType),
-        initialPosition: isUser ? v.Vector3.zero() : _randomPos3D(),
+        baseColor: widget.flat2d || isUser ? Colors.white : _colorForType(nodeType),
+        initialPosition: isUser ? v.Vector3.zero() : (widget.flat2d ? _randomPos2D() : _randomPos3D()),
         isFixed: isUser,
       );
 
@@ -459,15 +548,16 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       if (rawEdgeData is! Map) continue;
       final edgeData = rawEdgeData;
       final sourceId =
-          remappedIds[(edgeData['source_id'] ?? '').toString()] ?? (edgeData['source_id'] ?? '').toString();
+          remappedIds[_graphId(edgeData, 'source_id', 'sourceId')] ?? _graphId(edgeData, 'source_id', 'sourceId');
       final targetId =
-          remappedIds[(edgeData['target_id'] ?? '').toString()] ?? (edgeData['target_id'] ?? '').toString();
+          remappedIds[_graphId(edgeData, 'target_id', 'targetId')] ?? _graphId(edgeData, 'target_id', 'targetId');
       final label = (edgeData['label'] ?? '').toString();
       if (!addedNodeIds.contains(sourceId) || !addedNodeIds.contains(targetId)) continue;
       addUniqueEdge(sourceId, targetId, label);
     }
 
     simulation.wake();
+    _flattenIfNeeded();
     _repaintNotifier.value++;
   }
 
@@ -476,6 +566,14 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       (_rnd.nextDouble() - 0.5) * spread,
       (_rnd.nextDouble() - 0.5) * spread,
       (_rnd.nextDouble() - 0.5) * spread,
+    );
+  }
+
+  v.Vector3 _randomPos2D({double spread = 1000.0}) {
+    return v.Vector3(
+      (_rnd.nextDouble() - 0.5) * spread,
+      (_rnd.nextDouble() - 0.5) * spread,
+      0,
     );
   }
 
@@ -583,7 +681,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircularProgressIndicator(color: Colors.purpleAccent),
+            const CircularProgressIndicator(color: Colors.white),
             const SizedBox(height: 16),
             Text(context.l10n.loadingKnowledgeGraph, style: const TextStyle(color: Colors.white70)),
           ],
@@ -671,6 +769,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                       _zoom = _baseZoom * details.scale;
                       _zoom = _zoom.clamp(0.05, 5.0);
                     }
+                  } else if (widget.flat2d) {
+                    _panX += delta.dx;
+                    _panY += delta.dy;
                   } else {
                     _rotationY -= delta.dx * 0.005;
                     _rotationX += delta.dy * 0.005;
@@ -688,17 +789,25 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                   builder: (context, _, __) {
                     return CustomPaint(
                       size: Size.infinite,
-                      painter: GraphPainter3D(
-                        nodes: simulation.nodes,
-                        edges: simulation.edges,
-                        nodeMap: simulation.nodeMap,
-                        rotationX: _rotationX,
-                        rotationY: _rotationY,
-                        panX: _panX,
-                        panY: _panY,
-                        zoom: _zoom,
-                        highlightedNodeIds: _highlightedNodeIds,
-                      ),
+                      painter: widget.flat2d
+                          ? GraphPainter2D(
+                              nodes: simulation.nodes,
+                              edges: simulation.edges,
+                              panX: _panX,
+                              panY: _panY,
+                              zoom: _zoom,
+                            )
+                          : GraphPainter3D(
+                              nodes: simulation.nodes,
+                              edges: simulation.edges,
+                              nodeMap: simulation.nodeMap,
+                              rotationX: _rotationX,
+                              rotationY: _rotationY,
+                              panX: _panX,
+                              panY: _panY,
+                              zoom: _zoom,
+                              highlightedNodeIds: _highlightedNodeIds,
+                            ),
                     );
                   },
                 ),
@@ -710,7 +819,33 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     );
   }
 
+  void _handleTap2d(TapUpDetails details, Size size) {
+    String? hitNodeId;
+    double minDist = 28.0;
+    final scale = GraphPainter2D.layoutScale(size, simulation.nodes) * _zoom;
+    final origin = GraphPainter2D.layoutOrigin(size, simulation.nodes, scale);
+    for (final node in simulation.nodes) {
+      final pos = Offset(origin.dx + node.position.x * scale + _panX, origin.dy + node.position.y * scale + _panY);
+      final dist = (pos - details.localPosition).distance;
+      if (dist < minDist) {
+        minDist = dist;
+        hitNodeId = node.id;
+      }
+    }
+    if (hitNodeId == _selectedNodeId) hitNodeId = null;
+    setState(() {
+      _selectedNodeId = hitNodeId;
+      _highlightedNodeIds
+        ..clear()
+        ..addAll(hitNodeId == null ? const <String>{} : {hitNodeId});
+    });
+  }
+
   void _handleTap(TapUpDetails details, Size size) {
+    if (widget.flat2d) {
+      _handleTap2d(details, size);
+      return;
+    }
     // 1. CLEAR SELECTION if background tapped (default)
     String? hitNodeId;
 
@@ -818,6 +953,119 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     final dz = a.z - b.z;
     return dx * dx + dy * dy + dz * dz;
   }
+}
+
+/// Flat onboarding map: white circles, white labels, no 3D, no node colors.
+class GraphPainter2D extends CustomPainter {
+  final List<GraphNode3D> nodes;
+  final List<GraphEdge3D> edges;
+  final double panX;
+  final double panY;
+  final double zoom;
+
+  GraphPainter2D({
+    required this.nodes,
+    required this.edges,
+    required this.panX,
+    required this.panY,
+    required this.zoom,
+  });
+
+  static Offset layoutOrigin(Size size, List<GraphNode3D> nodes, [double? scale]) {
+    if (nodes.isEmpty) return Offset(size.width / 2, size.height / 2);
+    double minX = nodes.first.position.x;
+    double maxX = minX;
+    double minY = nodes.first.position.y;
+    double maxY = minY;
+    for (final node in nodes) {
+      minX = min(minX, node.position.x);
+      maxX = max(maxX, node.position.x);
+      minY = min(minY, node.position.y);
+      maxY = max(maxY, node.position.y);
+    }
+    final s = scale ?? layoutScale(size, nodes);
+    final cx = (minX + maxX) / 2;
+    final cy = (minY + maxY) / 2;
+    return Offset(size.width / 2 - cx * s, size.height / 2 - cy * s);
+  }
+
+  static double layoutScale(Size size, List<GraphNode3D> nodes) {
+    if (nodes.length < 2) return 0.22;
+    double minX = nodes.first.position.x;
+    double maxX = minX;
+    double minY = nodes.first.position.y;
+    double maxY = minY;
+    for (final node in nodes) {
+      minX = min(minX, node.position.x);
+      maxX = max(maxX, node.position.x);
+      minY = min(minY, node.position.y);
+      maxY = max(maxY, node.position.y);
+    }
+    final dx = max(maxX - minX, 80.0);
+    final dy = max(maxY - minY, 80.0);
+    final sx = (size.width - 72) / dx;
+    final sy = (size.height - 72) / dy;
+    return min(sx, sy).clamp(0.04, 0.6);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = Colors.black);
+    if (nodes.isEmpty) return;
+
+    final scale = layoutScale(size, nodes) * zoom;
+    final origin = layoutOrigin(size, nodes, scale);
+    final positions = <String, Offset>{};
+    for (final node in nodes) {
+      positions[node.id] =
+          Offset(origin.dx + node.position.x * scale + panX, origin.dy + node.position.y * scale + panY);
+    }
+
+    final edgePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.28)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    for (final edge in edges) {
+      final a = positions[edge.sourceId];
+      final b = positions[edge.targetId];
+      if (a == null || b == null) continue;
+      canvas.drawLine(a, b, edgePaint);
+    }
+
+    final nodePaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final nodeFill = Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.fill;
+
+    for (final node in nodes) {
+      final center = positions[node.id]!;
+      const radius = 16.0;
+      canvas.drawCircle(center, radius, nodeFill);
+      canvas.drawCircle(center, radius, nodePaint);
+
+      final label = TextPainter(
+        text: TextSpan(
+          text: node.label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            fontFamily: 'Manrope',
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 2,
+        ellipsis: '…',
+      )..layout(maxWidth: 96);
+      label.paint(canvas, center + Offset(-label.width / 2, radius + 6));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant GraphPainter2D oldDelegate) => true;
 }
 
 class GraphPainter3D extends CustomPainter {

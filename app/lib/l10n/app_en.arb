@@ -2873,7 +2873,7 @@
     "@serverProcessesAudio": {
         "description": "Step 3: Server processing"
     },
-    "youreAllSet": "You're all set!",
+    "youreAllSet": "You are all set",
     "@youreAllSet": {
         "description": "Completion message when onboarding is finished"
     },
@@ -2881,7 +2881,7 @@
     "@welcomeToOmiDescription": {
         "description": "Welcome message on completion screen"
     },
-    "startUsingOmi": "Start Using Omi",
+    "startUsingOmi": "Start using Omi",
     "@startUsingOmi": {
         "description": "Button to complete onboarding and start using the app"
     },
@@ -9748,7 +9748,7 @@
     "enterWifiNetworkName": "Enter WiFi network name",
     "enterWifiPassword": "Enter WiFi password",
     "appIconLabel": "App Icon",
-    "onboardingWhatIKnowAboutYouTitle": "Here is what I know about you",
+    "onboardingWhatIKnowAboutYouTitle": "Here is what I know about you.",
     "@onboardingWhatIKnowAboutYouTitle": {
         "description": "Title for onboarding step that previews the memory graph"
     },

@@ -122,14 +122,9 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
         // Background area - takes remaining space for background image
         Expanded(child: Container()),
 
-        // Bottom drawer card
         Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(32, 20, 32, 0),
-          decoration: const BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
-          ),
           child: SafeArea(
             top: false,
             child: Column(

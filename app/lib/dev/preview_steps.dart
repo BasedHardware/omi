@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/widgets/omi_device_glow.dart';
 
 const _kManrope = 'Manrope';
 
@@ -828,19 +829,21 @@ class _PreviewKnowledgeGraphStepState extends State<PreviewKnowledgeGraphStep> w
     return PreviewCenteredScaffold(
       child: Column(
         children: [
-          const SizedBox(height: 12),
-          const Text(
-            'Here is what I know about you',
-            style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold, fontFamily: _kManrope),
-            textAlign: TextAlign.center,
+          const SizedBox(height: 120),
+          const SizedBox(
+            width: double.infinity,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'Here is what I know about you.',
+                maxLines: 1,
+                softWrap: false,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: _kManrope),
+              ),
+            ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'This map updates as Omi learns from your conversations.',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 15),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 20),
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(24),
@@ -930,7 +933,6 @@ class _PreviewCompleteStepState extends State<PreviewCompleteStep> with SingleTi
 
   @override
   Widget build(BuildContext context) {
-    final scale = CurvedAnimation(parent: _controller, curve: Curves.elasticOut);
     return PreviewCenteredScaffold(
       child: AnimatedBuilder(
         animation: _controller,
@@ -939,19 +941,11 @@ class _PreviewCompleteStepState extends State<PreviewCompleteStep> with SingleTi
             opacity: _controller,
             child: Column(
               children: [
-                const Spacer(flex: 3),
-                ScaleTransition(
-                  scale: scale,
-                  child: Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(20)),
-                    child: const Icon(Icons.check_rounded, color: Colors.white, size: 36),
-                  ),
-                ),
-                const SizedBox(height: 32),
+                const Spacer(flex: 2),
+                const OmiDeviceGlow(imageSize: 180, glowIntensity: 1),
+                const SizedBox(height: 28),
                 const Text(
-                  'You are all set!',
+                  'You are all set',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 30,
@@ -960,17 +954,10 @@ class _PreviewCompleteStepState extends State<PreviewCompleteStep> with SingleTi
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  "Just use Omi in the background for 2 days and you'll start getting useful feedback after!",
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 17, height: 1.5),
-                  textAlign: TextAlign.center,
-                ),
                 const Spacer(flex: 3),
                 PreviewContinueButton(
-                  label: 'Start Using Omi',
+                  label: 'Start using Omi',
                   onPressed: widget.onComplete,
-                  trailingIcon: Icons.arrow_forward_rounded,
                 ),
                 const SizedBox(height: 16),
               ],

@@ -13,6 +13,11 @@ class LocalEmulatorAuthUser {
   static const password = 'alice-local-password-030';
 }
 
+/// How long Apple/Google must be held in `local_dev` before Alice signs in.
+/// Passed as [LongPressGestureRecognizer.duration] so Flutter's default
+/// ~500ms long-press cannot accept the arena.
+const Duration kLocalEmulatorSignInHoldDuration = Duration(seconds: 5);
+
 /// Google/Apple OAuth is not configured on the local harness. Email/password
 /// against the Auth emulator is the supported mobile local-dev path.
 bool localEmulatorSignInEnabled(AppEnvironmentProfile profile) => profile.usesFirebaseAuthEmulator;

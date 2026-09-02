@@ -71,7 +71,7 @@ class SpeechProfileProvider extends ChangeNotifier
   SpeechProfileProgressState progressState = SpeechProfileProgressState.keepSpeaking;
 
   Function? _finalizedCallback;
-  Function? _processConversationCallback;
+  Future<void> Function()? _processConversationCallback;
 
   /// only used during onboarding /////
   SpeechProfileLoadingState loadingState = SpeechProfileLoadingState.uploading;
@@ -205,7 +205,7 @@ class SpeechProfileProvider extends ChangeNotifier
 
   Future<bool> initialise({
     Function? finalizedCallback,
-    Function? processConversationCallback,
+    Future<void> Function()? processConversationCallback,
     bool usePhoneMic = false,
     bool isOnboardingFlow = false,
   }) async {
@@ -411,7 +411,7 @@ class SpeechProfileProvider extends ChangeNotifier
       // Trigger conversation processing before marking complete
       if (_processConversationCallback != null) {
         Logger.debug('Triggering conversation processing...');
-        _processConversationCallback!();
+        await _processConversationCallback!();
       }
 
       _reconnectTimer?.cancel();

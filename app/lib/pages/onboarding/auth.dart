@@ -38,14 +38,9 @@ class _AuthComponentState extends State<AuthComponent> {
               child: Container(), // Just takes up space for background image
             ),
 
-            // Bottom drawer card - wraps content
             Container(
               width: double.infinity,
               padding: EdgeInsets.fromLTRB(32, 26, 32, MediaQuery.of(context).padding.bottom + 8),
-              decoration: const BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
-              ),
               child: SafeArea(
                 top: false,
                 child: Column(
@@ -81,33 +76,17 @@ class _AuthComponentState extends State<AuthComponent> {
                       SizedBox(
                         width: double.infinity,
                         height: 56,
-                        child: ElevatedButton(
+                        child: _HoldForLocalEmulator(
                           key: const Key('appleSignIn'),
+                          enabled: localEmulatorSignInEnabled(Env.profile),
+                          onHoldComplete: () => _onLocalEmulatorSignIn(provider),
                           onPressed: () {
                             HapticFeedback.mediumImpact();
                             provider.onAppleSignIn(widget.onSignIn);
                           },
-                          onLongPress:
-                              localEmulatorSignInEnabled(Env.profile) ? () => _onLocalEmulatorSignIn(provider) : null,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const FaIcon(FontAwesomeIcons.apple, size: 24),
-                              const SizedBox(width: 8),
-                              Text(
-                                context.l10n.signInWithApple,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  fontFamily: 'Manrope',
-                                ),
-                              ),
-                            ],
+                          child: _AuthSignInButtonFace(
+                            icon: const FaIcon(FontAwesomeIcons.apple, size: 24, color: Colors.black),
+                            label: context.l10n.signInWithApple,
                           ),
                         ),
                       ),
@@ -118,29 +97,17 @@ class _AuthComponentState extends State<AuthComponent> {
                     SizedBox(
                       width: double.infinity,
                       height: 56,
-                      child: ElevatedButton(
+                      child: _HoldForLocalEmulator(
                         key: const Key('googleSignIn'),
+                        enabled: localEmulatorSignInEnabled(Env.profile),
+                        onHoldComplete: () => _onLocalEmulatorSignIn(provider),
                         onPressed: () {
                           HapticFeedback.mediumImpact();
                           provider.onGoogleSignIn(widget.onSignIn);
                         },
-                        onLongPress:
-                            localEmulatorSignInEnabled(Env.profile) ? () => _onLocalEmulatorSignIn(provider) : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const FaIcon(FontAwesomeIcons.google, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              context.l10n.signInWithGoogle,
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                            ),
-                          ],
+                        child: _AuthSignInButtonFace(
+                          icon: const FaIcon(FontAwesomeIcons.google, size: 20, color: Colors.black),
+                          label: context.l10n.signInWithGoogle,
                         ),
                       ),
                     ),
@@ -180,6 +147,86 @@ class _AuthComponentState extends State<AuthComponent> {
           ],
         );
       },
+    );
+  }
+}
+
+/// Static Apple/Google face — no InkWell, splash, overlay, or elevation.
+class _AuthSignInButtonFace extends StatelessWidget {
+  final Widget icon;
+  final String label;
+
+  const _AuthSignInButtonFace({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          icon,
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'Manrope',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Holds a pointer for [kLocalEmulatorSignInHoldDuration] before firing Alice.
+///
+/// Uses [LongPressGestureRecognizer] with that duration so Flutter's default
+/// ~500ms long-press cannot win the arena. A Material button splash used to
+/// look like the hold completed in ~2s; this child has no press animation.
+class _HoldForLocalEmulator extends StatelessWidget {
+  final bool enabled;
+  final VoidCallback onHoldComplete;
+  final VoidCallback onPressed;
+  final Widget child;
+
+  const _HoldForLocalEmulator({
+    super.key,
+    required this.enabled,
+    required this.onHoldComplete,
+    required this.onPressed,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return RawGestureDetector(
+      behavior: HitTestBehavior.opaque,
+      gestures: <Type, GestureRecognizerFactory>{
+        TapGestureRecognizer: GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+          () => TapGestureRecognizer(debugOwner: this),
+          (TapGestureRecognizer instance) {
+            instance.onTap = onPressed;
+          },
+        ),
+        if (enabled)
+          LongPressGestureRecognizer: GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+            () => LongPressGestureRecognizer(
+              debugOwner: this,
+              duration: kLocalEmulatorSignInHoldDuration,
+            ),
+            (LongPressGestureRecognizer instance) {
+              instance.onLongPress = onHoldComplete;
+            },
+          ),
+      },
+      child: child,
     );
   }
 }

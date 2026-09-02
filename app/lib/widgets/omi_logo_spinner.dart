@@ -56,7 +56,7 @@ class _OmiLogoSpinnerState extends State<OmiLogoSpinner> with TickerProviderStat
   @override
   void didUpdateWidget(covariant OmiLogoSpinner oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.burstTrigger != oldWidget.burstTrigger) {
+    if (widget.visible && widget.burstTrigger != oldWidget.burstTrigger) {
       _startBurst();
     }
     if (widget.visible != oldWidget.visible) {

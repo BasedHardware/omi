@@ -47,10 +47,6 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
           child: Container(
             width: double.infinity,
             padding: EdgeInsets.fromLTRB(32, 26, 32, mediaQuery.padding.bottom + 8),
-            decoration: const BoxDecoration(
-              color: Colors.black,
-              borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
-            ),
             child: SafeArea(
               top: false,
               child: Column(

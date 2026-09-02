@@ -44,14 +44,9 @@ class _NameWidgetState extends State<NameWidget> {
           child: Container(), // Just takes up space for background image
         ),
 
-        // Bottom drawer card - wraps content
         Container(
           width: double.infinity,
           padding: EdgeInsets.fromLTRB(32, 26, 32, MediaQuery.of(context).padding.bottom + 8),
-          decoration: const BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
-          ),
           child: SafeArea(
             top: false,
             child: Column(

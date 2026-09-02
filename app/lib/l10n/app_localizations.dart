@@ -4989,7 +4989,7 @@ abstract class AppLocalizations {
   /// Completion message when onboarding is finished
   ///
   /// In en, this message translates to:
-  /// **'You\'re all set!'**
+  /// **'You are all set'**
   String get youreAllSet;
 
   /// Welcome message on completion screen
@@ -5001,7 +5001,7 @@ abstract class AppLocalizations {
   /// Button to complete onboarding and start using the app
   ///
   /// In en, this message translates to:
-  /// **'Start Using Omi'**
+  /// **'Start using Omi'**
   String get startUsingOmi;
 
   /// Back button text
@@ -14976,7 +14976,7 @@ abstract class AppLocalizations {
   /// Title for onboarding step that previews the memory graph
   ///
   /// In en, this message translates to:
-  /// **'Here is what I know about you'**
+  /// **'Here is what I know about you.'**
   String get onboardingWhatIKnowAboutYouTitle;
 
   /// Description for onboarding memory graph preview step

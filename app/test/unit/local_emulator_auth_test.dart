@@ -6,6 +6,10 @@ import 'package:omi/env/environment_profile.dart';
 import 'package:omi/services/auth/local_emulator_auth.dart';
 
 void main() {
+  test('local emulator sign-in hold is 5 seconds, not Flutter default long-press', () {
+    expect(kLocalEmulatorSignInHoldDuration, const Duration(seconds: 5));
+  });
+
   test('local emulator sign-in is only enabled on the Auth-emulator profile', () {
     expect(localEmulatorSignInEnabled(AppEnvironmentProfile.localDev), isTrue);
     expect(localEmulatorSignInEnabled(AppEnvironmentProfile.localProd), isFalse);

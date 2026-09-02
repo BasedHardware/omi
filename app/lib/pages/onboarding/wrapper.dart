@@ -41,19 +41,38 @@ import 'package:omi/widgets/omi_logo_spinner.dart';
 @visibleForTesting
 const int kOnboardingSpeechProfilePageIndex = 9;
 
-/// Pages that share the spinning-dots backdrop. Speech profile is
-/// intentionally absent so Get Started cannot bring the dots back.
+@visibleForTesting
+const int kOnboardingKnowledgeGraphPageIndex = 10;
+
+@visibleForTesting
+const int kOnboardingCompletePageIndex = 11;
+
+/// Pages that share the spinning-dots backdrop. Speech profile, knowledge
+/// graph, and "you are all set" stay clean black — the 8-dot ring used to
+/// pop back in on the graph step and burst/blink on the way to complete.
 @visibleForTesting
 const Set<int> kOnboardingSpinnerBackdropPages = {
   3, // name
   4, // found omi
   5, // permissions
   6, // user-review placeholder
-  10, // knowledge graph
 };
 
 @visibleForTesting
 bool onboardingHidesSpinnerBackdrop(int pageIndex) => pageIndex == kOnboardingSpeechProfilePageIndex;
+
+/// Incoming-page hold before fade-in. Speech profile waits for the spinner
+/// to finish leaving; knowledge graph waits for speech profile to finish
+/// fading out; complete waits for the graph (and progress bar) to finish
+/// fading out so nothing flashes through "you are all set".
+@visibleForTesting
+Duration onboardingPageEntryDelay(int pageIndex, {Duration spinnerFade = const Duration(milliseconds: 1200)}) {
+  if (onboardingHidesSpinnerBackdrop(pageIndex)) return spinnerFade;
+  if (pageIndex == kOnboardingKnowledgeGraphPageIndex || pageIndex == kOnboardingCompletePageIndex) {
+    return kOnboardingPageFadeDuration;
+  }
+  return Duration.zero;
+}
 
 class OnboardingWrapper extends StatefulWidget {
   const OnboardingWrapper({super.key, this.forceAuthPage = false, this.forceStartAtSplash = false});
@@ -85,8 +104,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kFindDevicesPage = 8;
   static const int kSpeechProfilePage =
       kOnboardingSpeechProfilePageIndex; // Speech profile with questions (requires device)
-  static const int kKnowledgeGraphPage = 10; // Memory graph preview
-  static const int kCompletePage = 11; // "You're all set" completion screen
+  static const int kKnowledgeGraphPage = kOnboardingKnowledgeGraphPageIndex; // Memory graph preview
+  static const int kCompletePage = kOnboardingCompletePageIndex; // "You're all set" completion screen
 
   // Special index values used in comparisons
   static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
@@ -105,7 +124,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   // faded out — sequential, not simultaneous — so this lags _showsSpinnerBackdrop
   // by exactly the device's fade-out duration when turning on, and drops
   // immediately when turning off.
-  static const Duration _backdropFadeDuration = Duration(milliseconds: 2200);
+  static const Duration _backdropFadeDuration = Duration(milliseconds: 1200);
   bool _spinnerVisible = false;
   Timer? _spinnerRevealTimer;
 
@@ -134,7 +153,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       if (_controller!.previousIndex == kSplashPage && _controller!.index == kAuthPage) {
         _deviceGlowController.forward();
       }
-      if (_controller!.index == kSpeechProfilePage && _knowledgeGraphPrebuildFuture == null) {
+      // Rebuild after speech-profile answers exist — starting this on the
+      // speech-profile page used to bake an empty graph before the user spoke.
+      if (_controller!.index == kKnowledgeGraphPage && _knowledgeGraphPrebuildFuture == null) {
         _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError((_) {});
       }
       final showsSpinner = _showsSpinnerBackdrop;
@@ -243,15 +264,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   Future<void> _prebuildKnowledgeGraph() async {
-    try {
-      final current = await KnowledgeGraphApi.getKnowledgeGraph();
-      final nodes = current['nodes'] as List<dynamic>? ?? const [];
-      final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
-      if (hasGraph) return;
-    } catch (_) {
-      // Continue to rebuild below.
-    }
-
+    // Always rebuild on this step so the just-finished speech-profile
+    // conversation is included, not a stale empty graph from earlier.
     await KnowledgeGraphApi.rebuildKnowledgeGraph();
     await KnowledgeGraphApi.waitForGraphStability(
       timeout: const Duration(seconds: 25),
@@ -366,20 +380,25 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           updateUserOnboardingState(completed: true);
           PlatformManager.instance.analytics.onboardingCompleted();
           PaintingBinding.instance.imageCache.clear();
-          routeToPage(context, const HomePageWrapper(), replace: true);
+          if (!mounted) return;
+          // The complete screen has already faded to black. Push home
+          // with no route animation so it does not slide/flash over that fade.
+          Navigator.of(context).pushAndRemoveUntil(
+            PageRouteBuilder<void>(
+              pageBuilder: (context, animation, secondaryAnimation) => const HomePageWrapper(),
+              transitionDuration: Duration.zero,
+              reverseTransitionDuration: Duration.zero,
+            ),
+            (route) => false,
+          );
         },
       ),
     ];
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
-      // Debug-only: long-press any step to skip straight to the next one
-      // (useful when local dev builds can't complete real sign-in, or a
-      // step's Continue button is gated on a backend call that has nothing
-      // to talk to locally). Compiled out of release builds via kDebugMode.
-      onLongPress: kDebugMode ? _goNext : null,
       child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: Colors.black,
         body: Stack(
           children: [
             // Both backdrops stay mounted for the whole onboarding flow —
@@ -408,10 +427,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             ),
             OnboardingPageTransition(
               pageKey: _controller!.index,
-              // Speech profile needs the spinner backdrop gone first (see
-              // _hidesSpinnerForSpeechProfile) — hold this page invisible until
-              // that fade-out finishes instead of cross-fading over it.
-              entryDelay: _hidesSpinnerForSpeechProfile ? _backdropFadeDuration : Duration.zero,
+              entryDelay: onboardingPageEntryDelay(_controller!.index, spinnerFade: _backdropFadeDuration),
               child: _controller!.index == kSplashPage || _controller!.index == kAuthPage
                   ? pages[_controller!.index]
                   : _controller!.index == kAiConsentPage ||
@@ -484,13 +500,35 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             ),
             // Progress bar lives outside the page-transition subtree so it
             // persists across step changes instead of being torn down and
-            // re-animating from zero on every advance.
-            if (_controller!.index != kSplashPage && _controller!.index != kCompletePage)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(32, 90, 32, 0),
-                child: OnboardingProgressBar(
-                  currentStep: _controller!.index - 1,
-                  totalSteps: _controller!.length - 1,
+            // re-animating from zero on every advance. Stay mounted on the
+            // complete step at opacity 0 so it can fade out with the graph
+            // instead of popping off and flashing.
+            // Debug skip lives only on the progress bar so a hold on Apple/
+            // Google cannot win a 500ms long-press and skip auth without a
+            // token — that used to make speech-profile Get Started show a
+            // fake "connection error". Compiled out of release via kDebugMode.
+            if (_controller!.index != kSplashPage)
+              IgnorePointer(
+                ignoring: _controller!.index == kCompletePage,
+                child: AnimatedOpacity(
+                  opacity: _controller!.index == kCompletePage ? 0 : 1,
+                  duration: kOnboardingPageFadeDuration,
+                  curve: Curves.easeOut,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(32, 70, 32, 0),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onLongPress: kDebugMode ? _goNext : null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        child: OnboardingProgressBar(
+                          currentStep:
+                              (_controller!.index == kCompletePage ? kKnowledgeGraphPage : _controller!.index) - 1,
+                          totalSteps: _controller!.length - 1,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
           ],

@@ -5,10 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/http/api/speech_profile.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
+import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/services/auth/local_emulator_auth.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -76,6 +80,18 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
   }
 
   final ScrollController _scrollController = ScrollController();
+
+  /// Local-dev Get Started used to open the listen socket with no Bearer
+  /// token when debug-skip bypassed Apple/Google, which surfaces as the
+  /// generic connection-error dialog. Sign in as Alice first so the socket
+  /// is allowed to connect.
+  Future<bool> _ensureLocalDevAuth() async {
+    if (!localEmulatorSignInEnabled(Env.profile)) return true;
+    final auth = context.read<AuthenticationProvider>();
+    if (auth.isSignedIn()) return true;
+    await auth.onLocalEmulatorSignIn(() {});
+    return auth.isSignedIn();
+  }
 
   void scrollDown() async {
     if (!_scrollController.hasClients) return;
@@ -332,10 +348,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                 Container(
                   width: double.infinity,
                   padding: EdgeInsets.fromLTRB(32, 0, 32, MediaQuery.of(context).padding.bottom + 8),
-                  decoration: const BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
-                  ),
                   child: SafeArea(
                     top: false,
                     child: Column(
@@ -388,6 +400,12 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                       if (_isCheckingAvailability) return;
                                       setState(() => _isCheckingAvailability = true);
 
+                                      final signedIn = await _ensureLocalDevAuth();
+                                      if (!signedIn) {
+                                        if (mounted) setState(() => _isCheckingAvailability = false);
+                                        return;
+                                      }
+
                                       // Pre-flight: don't enter the recording UI at all if
                                       // the streaming primary is known down — otherwise the
                                       // socket connects and audio uploads, but no
@@ -419,11 +437,12 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                       bool success = await provider.initialise(
                                         usePhoneMic: true,
                                         isOnboardingFlow: true,
-                                        processConversationCallback: () {
-                                          Provider.of<CaptureProvider>(
+                                        processConversationCallback: () async {
+                                          await Provider.of<CaptureProvider>(
                                             context,
                                             listen: false,
                                           ).forceProcessingCurrentConversation();
+                                          await KnowledgeGraphApi.rebuildKnowledgeGraph();
                                         },
                                       );
 
