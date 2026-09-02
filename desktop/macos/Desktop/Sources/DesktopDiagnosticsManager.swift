@@ -22,6 +22,9 @@ enum DesktopHealthEventName: String {
   case realtimeProviderPolicyClose = "realtime_provider_policy_close"
   case realtimeProviderSessionError = "realtime_provider_session_error"
   case realtimeProviderCloseResolution = "realtime_provider_close_resolution"
+  /// Emitted at the exact moment a PTT turn speaks a deterministic local screen-verification
+  /// failure instead of a provider answer. This is the user-visible rate, directly queryable.
+  case screenEvidenceTerminal = "screen_evidence_terminal"
   case userVisibleIssue = "user_visible_issue"
   case betaDiagnosticTrail = "beta_diagnostic_trail"
   case fallbackTriggered = "fallback_triggered"
@@ -636,6 +639,13 @@ final class DesktopDiagnosticsManager {
       }
     }
     record(.fallbackTriggered, properties: properties, trackRemotely: true)
+  }
+
+  /// A deterministic screen-verification failure reached the user as spoken local text.
+  /// `properties` must carry bounded dimensions only (enum raw values, coarse buckets,
+  /// provider tag); the spoken string itself is never sent.
+  func recordScreenEvidenceTerminal(properties: [String: Any]) {
+    record(.screenEvidenceTerminal, properties: properties, trackRemotely: true)
   }
 
   /// Detects silent ownership disagreement without changing which state wins.

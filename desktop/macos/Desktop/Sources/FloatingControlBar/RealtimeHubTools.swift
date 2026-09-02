@@ -52,11 +52,54 @@ enum RealtimeHubTools {
     return note
   }
 
+  /// Only a Gemini session receives the PTT-down frame as in-turn video. Telling every session
+  /// that "every turn arrives with an image of the user's screen" made a provider that never
+  /// receives one answer current-screen questions from memory instead of calling the screenshot
+  /// tool, so the claim is stated only where it is true.
+  static func screenRule(turnFrameAttached: Bool) -> String {
+    let opening =
+      turnFrameAttached
+      ? """
+      every turn arrives with an image of the user's screen captured the instant \
+      they pressed the key. That image IS the current screen. Answer anything that could refer \
+      to it — "this", "that", "here", "it", "the page", "the answer", "the riddle", "the error", \
+      "what am I looking at" — directly from that image, before reaching for any other tool or \
+      for memory of earlier turns. Images from earlier turns are stale: the screen changes \
+      between turns, so never answer a current-screen question from an older image or an \
+      earlier answer. Call the screenshot tool only when no image arrived with this turn or \
+      the user says the screen changed since they pressed the key. When in doubt, look at \
+      this turn's image.
+      """
+      : """
+      no image of the user's screen arrives with a turn on this session. Anything that could \
+      refer to the screen — "this", "that", "here", "it", "the page", "the answer", "the \
+      riddle", "the error", "what am I looking at" — needs the screenshot tool first. Never \
+      answer a current-screen question from memory of an earlier turn or an earlier answer.
+      """
+    return """
+      Screen rule: \(opening) When the screenshot tool succeeds for a current-screen question, the \
+      attached image and, when present, its locally captured foreground-application context are \
+      the only current visual source of truth. The foreground-application context is trustworthy \
+      only for identifying the app active at capture time; it never replaces visual reasoning. \
+      Disregard conflicting kernel context, OCR, work summaries, and earlier screen descriptions. \
+      You MUST then call \
+      report_screen_observation with a concise grounding observation. That report is internal \
+      verification, not your user-facing reply. Once it succeeds, answer the user's original \
+      current-screen question naturally and conversationally from the attached image. Do not let \
+      the report replace the answer or fall back to a generic screen description when the user \
+      asked a specific question. Omi's own floating bar, chat bubble, or window may also be \
+      visible in the image: treat that as assistant chrome, not as the subject of the user's \
+      screen question, unless the user specifically asks about Omi. Answer about the user's \
+      visible work and intent, not the assistant UI.
+      """
+  }
+
   static func systemInstruction(
     kernelContext: String = "",
     kernelSemanticGuidance: String = "",
     userLanguages: [String] = [],
-    onboardingDemoContext: String? = nil
+    onboardingDemoContext: String? = nil,
+    turnScreenFrameAttached: Bool = false
   ) -> String {
     let canonicalContext = kernelContext.trimmingCharacters(in: .whitespacesAndNewlines)
     let semanticGuidance = kernelSemanticGuidance.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -97,28 +140,7 @@ enum RealtimeHubTools {
       are exceptions: call either one silently and immediately because the app speaks an instant \
       acknowledgement after the kernel accepts it. Do not repeat that acknowledgement when its \
       result arrives. You cannot see the user's data without calling a tool. \
-      Screen rule: every turn arrives with an image of the user's screen captured the instant \
-      they pressed the key. That image IS the current screen. Answer anything that could refer \
-      to it — "this", "that", "here", "it", "the page", "the answer", "the riddle", "the error", \
-      "what am I looking at" — directly from that image, before reaching for any other tool or \
-      for memory of earlier turns. Images from earlier turns are stale: the screen changes \
-      between turns, so never answer a current-screen question from an older image or an \
-      earlier answer. Call the screenshot tool only when no image arrived with this turn or \
-      the user says the screen changed since they pressed the key. When in doubt, look at \
-      this turn's image. When the screenshot tool succeeds for a current-screen question, the \
-      attached image and, when present, its locally captured foreground-application context are \
-      the only current visual source of truth. The foreground-application context is trustworthy \
-      only for identifying the app active at capture time; it never replaces visual reasoning. \
-      Disregard conflicting kernel context, OCR, work summaries, and earlier screen descriptions. \
-      You MUST then call \
-      report_screen_observation with a concise grounding observation. That report is internal \
-      verification, not your user-facing reply. Once it succeeds, answer the user's original \
-      current-screen question naturally and conversationally from the attached image. Do not let \
-      the report replace the answer or fall back to a generic screen description when the user \
-      asked a specific question. Omi's own floating bar, chat bubble, or window may also be \
-      visible in the image: treat that as assistant chrome, not as the subject of the user's \
-      screen question, unless the user specifically asks about Omi. Answer about the user's \
-      visible work and intent, not the assistant UI.
+      \(screenRule(turnFrameAttached: turnScreenFrameAttached))
 
       Keep latency low for simple requests. Never skip a tool call required by its declaration \
       just to answer faster.
@@ -134,6 +156,17 @@ enum RealtimeHubTools {
     captureFailure: RealtimeScreenEvidenceCaptureFailure? = nil
   ) -> String {
     guard capturedBytes != nil else {
+      if captureFailure == .screenRecordingNeedsRelaunch {
+        return jsonToolResult([
+          "ok": false,
+          "error": [
+            "code": "screen_recording_needs_relaunch",
+            "permission": "screen_recording",
+            "message":
+              "Screen Recording was granted after Omi launched, so this process still cannot see the screen. Tell the user Screen Recording was granted after Omi started and that they should quit Omi and open it again. Then answer what you can without the screen.",
+          ],
+        ])
+      }
       if captureFailure == .screenRecordingPermissionRequired {
         return jsonToolResult([
           "ok": false,
