@@ -602,8 +602,13 @@ class PushToTalkManager: ObservableObject {
     switch phase {
     case .idle, .awaitingResponse, .awaitingTools, .awaitingJournal, .playing, .terminal, .none:
       // Check for double-tap: if last Option-up was recent, enter locked mode
-      if ShortcutSettings.shared.doubleTapForLock && (now - lastOptionUpTime) < doubleTapThreshold {
+      // A first tap can arrive either as a completed turn (`lastOptionUpTime`) or, on a
+      // modifier-only key, as a quick tap that never started one. Either counts, so a
+      // double tap locks even when the two taps differ in speed.
+      let recentFirstTap = max(lastOptionUpTime, lastModifierQuickTapTime)
+      if ShortcutSettings.shared.doubleTapForLock && (now - recentFirstTap) < doubleTapThreshold {
         lastOptionUpTime = 0
+        lastModifierQuickTapTime = 0
         enterLockedListening()
       } else {
         lastOptionDownTime = now
@@ -636,6 +641,7 @@ class PushToTalkManager: ObservableObject {
 
       if ShortcutSettings.shared.doubleTapForLock && holdDuration < tapToLockMaxHoldDuration {
         lastOptionUpTime = now
+        lastModifierQuickTapTime = 0
         enterPendingLockDecision()
       } else {
         lastOptionUpTime = 0
