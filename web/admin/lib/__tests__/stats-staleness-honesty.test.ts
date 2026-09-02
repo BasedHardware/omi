@@ -6,12 +6,15 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
  * date key must be computed in the same timezone the upstream bucketed in.
  */
 
-vi.mock("@/lib/auth", () => ({ verifyAdmin: vi.fn(async () => ({ uid: "t" })) }));
+vi.mock("@/lib/auth", () => ({
+  verifyAdmin: vi.fn(async () => ({ uid: "t" })),
+}));
 
 const fetchMock = vi.fn();
+const posthogResultsMock = vi.hoisted(() => vi.fn(async (): Promise<any[]> => []));
 vi.mock("@/lib/posthog", () => ({
   cachedPosthogFetch: (...args: unknown[]) => fetchMock(...args),
-  posthogResults: vi.fn(async () => []),
+  posthogResults: posthogResultsMock,
   POSTHOG_SERVED_MAX_ROWS: 50_000,
 }));
 
@@ -104,21 +107,17 @@ describe("crash-rate date keys", () => {
 describe("message-ratings ratio", () => {
   beforeEach(() => {
     fetchMock.mockReset();
+    posthogResultsMock.mockReset();
     process.env.POSTHOG_PERSONAL_API_KEY = "k";
     process.env.POSTHOG_PROJECT_ID = "1";
   });
 
   it("reports null, not 0, on a day with no ratings at all", async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        results: [
-          ["2026-08-01", 0, 0],
-          ["2026-08-02", 0, 4],
-          ["2026-08-03", 3, 1],
-        ],
-      }),
-    });
+    posthogResultsMock.mockResolvedValue([
+      ["2026-08-01", "legacy", 0, 0],
+      ["2026-08-02", "legacy", 0, 4],
+      ["2026-08-03", "legacy", 3, 1],
+    ]);
 
     const { GET } = await import("@/app/api/omi/stats/message-ratings/route");
     const url = "https://admin.omi.me/api/omi/stats/message-ratings?days=7";
