@@ -73,6 +73,16 @@ extension ChatProvider {
         detail["last_assistant_follow_up_question"] = question
       }
     }
+    if let probe = streamingBuffer.tailProjectionProbe {
+      // The half of the follow-up split that only exists while the answer is streaming. The chip's
+      // question must never have been visible as prose, and the terminal answer overwrites the
+      // streamed text, so `last_assistant_text` above cannot tell. `delimiter_seen` is asserted
+      // alongside the leak count on purpose: without it a turn that produced no tail at all would
+      // report zero leaks and read as a pass.
+      detail["streaming_tail_projections"] = String(probe.projectionCount)
+      detail["streaming_tail_delimiter_seen"] = probe.delimiterSeen ? "true" : "false"
+      detail["streaming_tail_leaks"] = String(probe.leakCount)
+    }
     if let ownerId = runtimeOwnerId {
       detail["owner_id"] = ownerId
     }

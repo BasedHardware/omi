@@ -44,12 +44,16 @@ covers:
   # renders from and S10 drives `FollowUpChipTap`, the send its button performs.
   - desktop/macos/Desktop/Sources/Chat/FollowUpChip.swift
   - desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift
-  # Deliberately no entry for ChatStreamingBuffer, even though S6's tail streams
-  # through it. Its defect class is display-only — the authoritative terminal
-  # answer overwrites the streamed text — so every assertion available after
-  # `wait_main_chat_idle` passes whether or not the projection leaked the
-  # question mid-stream. Covering it needs an assertion *during* streaming,
-  # which no typed step can express today.
+  # The streaming buffer, S6-S8. Its defect class is display-only — the
+  # authoritative terminal answer overwrites the streamed text — so no assertion
+  # made *after* `wait_main_chat_idle` can see whether the question leaked into
+  # the prose a token at a time on the way there, and that is what c164760b6b
+  # fixed. The property is nonetheless a fact about the run rather than about the
+  # last frame: no projection the reader ever saw contained the withheld tail.
+  # `ChatStreamingTailProbe` records it as the buffer emits each projection, and
+  # S8 asserts it — with `streaming_tail_delimiter_seen`, so a turn that produced
+  # no tail cannot report zero leaks and pass.
+  - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
   - desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalEventHub.swift
@@ -157,12 +161,22 @@ steps:
       result.detail.idle: "true"
 
   - id: S8
-    name: The question left the prose and is on the chip instead
+    name: The question left the prose, on the chip and at every frame in between
     # Exact equality on the visible answer, deliberately, not `contains`: what
     # this step is for is the ABSENCE of the question from the prose. A split
     # that failed leaves the tail in the answer and says the same thing twice —
     # the defect two separate fixes on this branch were about — and only an
     # exact match catches it.
+    #
+    # The last three are the same property while the answer was still arriving.
+    # The terminal answer overwrites the streamed text, so `last_assistant_text`
+    # is silent about the leak c164760b6b fixed, where the projection was fed its
+    # own output and streamed the withheld question out a token at a time.
+    # `streaming_tail_leaks` counts projections whose visible content did not
+    # match what the tail rule would have shown; `..._delimiter_seen` is asserted
+    # with it because a turn that never carried a tail would otherwise report
+    # zero leaks and read as a pass, and `..._projections` proves the probe was
+    # fed at all rather than silently disarmed.
     bridge.action:
       name: main_chat_snapshot
       params:
@@ -170,6 +184,9 @@ steps:
     expect:
       result.detail.last_assistant_text: "Priya flagged the storage migration in the Tuesday review."
       result.detail.last_assistant_follow_up_question: "What did Priya say about the storage migration?"
+      result.detail.streaming_tail_projections: { min: 1 }
+      result.detail.streaming_tail_delimiter_seen: "true"
+      result.detail.streaming_tail_leaks: "0"
 
   - id: S9
     name: The chip is on screen under the answer
