@@ -390,9 +390,9 @@ async def test_pusher_flush_still_errors_on_a_real_storage_failure(raced_pusher_
     try:
         with caplog.at_level(logging.ERROR, logger='routers.pusher'):
             await pusher_mod._websocket_util_trigger(websocket, UID, SAMPLE_RATE)
-        assert [r for r in caplog.records if 'Error updating audio files' in r.getMessage()], (
-            'a genuine flush failure must still be logged at ERROR'
-        )
+        assert [
+            r for r in caplog.records if 'Error updating audio files' in r.getMessage()
+        ], 'a genuine flush failure must still be logged at ERROR'
     finally:
         mp.undo()
 

@@ -111,9 +111,7 @@ def _fresh_real_circuits(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def _terminate(provider: str, reason: str) -> _ClientSocket:
     websocket = _ClientSocket()
-    await terminate_live_stt_session(
-        websocket, _Session(), failure=_failure(provider), reason=reason, platform='ios'
-    )
+    await terminate_live_stt_session(websocket, _Session(), failure=_failure(provider), reason=reason, platform='ios')
     return websocket
 
 
