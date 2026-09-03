@@ -59,7 +59,6 @@ from database.firestore_index_registry import (
     DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY,
     DAILY_SWEEP_ONBOARDING_CONVERSATIONS_QUERY,
 )
-from database.durable_queue import ProcessOutcome
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import cleanup_expired_memory_deletion_receipts
 from models.memory_apply import MemoryControlState, WriterMode
@@ -73,7 +72,7 @@ from models.product_memory import (
     normalized_memory_content_key,
 )
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item
-from utils.memory.daily_memory_sweep_queue import drain_sweep_uids
+from utils.memory.daily_memory_sweep_queue import ProcessOutcome, drain_sweep_uids
 from utils.memory.knowledge_ledger import (
     LedgerProvenance,
     LedgerWrite,
