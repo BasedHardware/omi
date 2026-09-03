@@ -662,7 +662,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "think_deeper",
-    "description": "Take more time and use Omi's full answer capabilities before replying. ALWAYS call this tool before answering when the user says 'think carefully', 'think about this', 'go deep', 'reason it out', 'take your time', 'don't just guess', or 'what should I do', or otherwise asks for advice, tradeoffs, a multi-step plan, or reconsideration of a weak answer. A short, vague, or first-turn request still counts: call the tool with the question as given instead of answering or asking a clarifying question first. Also call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. If unsure whether deeper thought would improve the answer, call it. Skip only chit-chat, short confirmations, obvious stable facts, or a single fast realtime tool that fully answers the request. When current public facts and judgment are both needed, call web_search first and pass its result as context here. Call immediately without speaking a wait-line or answer first: the app acknowledges the delay as soon as the tool is accepted. Never describe internal model, tool, delegation, or routing choices, and never say the request is being sent elsewhere. When the result arrives, speak only its conclusion faithfully; do not add a delayed status line.",
+    "description": "Take more time and use Omi's full answer capabilities before replying. ALWAYS call this tool before answering when the user says 'think carefully', 'think about this', 'go deep', 'reason it out', 'take your time', 'don't just guess', or 'what should I do', or otherwise asks for advice, tradeoffs, a multi-step plan, or reconsideration of a weak answer. A short, vague, or first-turn request still counts: call the tool with the question as given instead of answering or asking a clarifying question first. Also call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. If unsure whether deeper thought would improve the answer, call it. Skip only chit-chat, short confirmations, obvious stable facts, or a single fast realtime tool that fully answers the request. When current public facts and judgment are both needed, call web_search first and pass its result as context here. Call immediately without speaking a wait-line or answer first: the app acknowledges the delay as soon as the tool is accepted. Never describe internal model, tool, delegation, or routing choices, and never say the request is being sent elsewhere. Set thinking='heavy' only when the user asks to think harder, think extra carefully, or take more time, or the question is genuinely hard; the default 'normal' already thinks at a high level. Screenshots you viewed this turn and other same-turn context are forwarded to the thinking agent automatically; still pass the useful facts as text in context. When the result arrives, speak only its conclusion faithfully; do not add a delayed status line.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -672,7 +672,15 @@ enum GeneratedRealtimeTools {
         },
         "context": {
           "type": "string",
-          "description": "Relevant context you already have that helps answer well — facts you fetched, what the user is referring to, or the previous answer they pushed back on. Include only what's relevant; omit if there's nothing useful."
+          "description": "Relevant context you already have that helps answer well — facts you fetched, what the user is referring to, or the previous answer they pushed back on. Include only what's relevant; omit if there's nothing useful. Screenshots you viewed this turn and other same-turn context are forwarded automatically; still write the useful facts here so the thinking agent knows what mattered."
+        },
+        "thinking": {
+          "type": "string",
+          "enum": [
+            "normal",
+            "heavy"
+          ],
+          "description": "normal (default) runs the thinking agent at high reasoning. Use heavy — extra-high reasoning that takes longer — when the user asks to think harder, think extra carefully, or take more time, or when the question is genuinely hard (intricate multi-step reasoning, dense tradeoffs, a hard puzzle or math)."
         }
       },
       "required": [
