@@ -27,6 +27,11 @@ from utils.memory.canonical_lineage import (
     collapse_canonical_lineages,
 )
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
+from utils.memory.belief_model import (
+    belief_model_enabled,
+    horizon_from_extraction,
+    subject_scope_from_extraction,
+)
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import (
     CanonicalApplyWrite,
@@ -1337,6 +1342,8 @@ def _canonical_extraction_apply_write(
         "ledger_schema_version",
         "kind",
         "subject_scope",
+        "half_life_days",
+        "belief_class",
         "slot",
         "body",
         "valid_from",
@@ -1348,6 +1355,26 @@ def _canonical_extraction_apply_write(
     ):
         if ledger_key in data and data[ledger_key] is not None:
             patch_payload[ledger_key] = data[ledger_key]
+    if belief_model_enabled():
+        if "valid_to" not in patch_payload and data.get("invalid_at") is not None:
+            patch_payload["valid_to"] = data["invalid_at"]
+        if "subject_scope" not in patch_payload:
+            attribution = data.get("subject_attribution")
+            attribution_value = getattr(attribution, "value", attribution)
+            patch_payload["subject_scope"] = subject_scope_from_extraction(
+                extracted_scope=data.get("subject_scope"),
+                attribution=str(attribution_value or ""),
+                about=data.get("about"),
+            )
+        if "belief_class" not in patch_payload:
+            resolved_class, resolved_half_life = horizon_from_extraction(
+                belief_class=data.get("belief_class"),
+                half_life_days_override=data.get("half_life_days"),
+                user_asserted=_user_asserted_from_payload(data),
+            )
+            patch_payload["belief_class"] = resolved_class
+            if resolved_half_life is not None:
+                patch_payload["half_life_days"] = resolved_half_life
     supersedes = [str(value).strip() for value in (data.get("supersedes") or []) if str(value).strip()]
     if supersedes:
         patch_payload["supersedes"] = sorted(set(supersedes))

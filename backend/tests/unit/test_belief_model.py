@@ -104,25 +104,19 @@ def test_bands():
     assert currency_band(0.0) is CurrencyBand.history
 
 
-def test_stored_half_life_wins_including_explicit_null():
+def test_stored_numeric_half_life_wins():
     assert (
         derive_half_life_days(
             stored_half_life_days=7,
-            half_life_field_present=True,
             user_asserted=True,
             belief_class="identity",
         )
         == 7
     )
-    assert (
-        derive_half_life_days(
-            stored_half_life_days=None,
-            half_life_field_present=True,
-            category="interesting",
-            tier="short_term",
-        )
-        is None
-    )
+
+
+def test_belief_class_identity_is_durable_without_stored_half_life():
+    assert derive_half_life_days(belief_class="identity") is None
 
 
 def test_legacy_user_asserted_does_not_decay():
@@ -166,14 +160,12 @@ def test_proactive_bar_requires_current_user_and_not_contradicted():
     current = belief_view(
         captured_at=NOW,
         now=NOW,
-        stored_half_life_days=None,
-        half_life_field_present=True,
+        belief_class="identity",
     )
     fading = belief_view(
         captured_at=CAPTURED,
         now=NOW,
         stored_half_life_days=30,
-        half_life_field_present=True,
     )
     assert passes_proactive_bar(current, subject_scope="primary_user") is True
     assert passes_proactive_bar(current, subject_scope="third_party") is False
@@ -200,3 +192,25 @@ def test_class_priors_match_the_ratified_table():
     assert HALF_LIFE_DAYS_BY_CLASS["episodic"] == 7
     assert HALF_LIFE_DAYS_BY_CLASS["meta_residue"] == 1
     assert HALF_LIFE_DAYS_BY_CLASS["meta_standing"] is None
+
+
+def test_subject_scope_never_defaults_unknown_to_the_user():
+    from utils.memory.belief_model import horizon_from_extraction, subject_scope_from_extraction
+
+    assert subject_scope_from_extraction(attribution="user") == "primary_user"
+    assert subject_scope_from_extraction(attribution="third_party") == "third_party"
+    assert subject_scope_from_extraction(about="the user") == "primary_user"
+    assert subject_scope_from_extraction(about="YouTube video") == "media_screen"
+    assert subject_scope_from_extraction(about="Sarah") == "third_party"
+    assert subject_scope_from_extraction() == "third_party"
+    assert subject_scope_from_extraction(extracted_scope="media_screen") == "media_screen"
+
+
+def test_horizon_from_extraction_honors_user_asserted_and_overrides():
+    from utils.memory.belief_model import horizon_from_extraction
+
+    assert horizon_from_extraction(belief_class="state", user_asserted=True) == ("state", None)
+    assert horizon_from_extraction(belief_class="identity") == ("identity", None)
+    assert horizon_from_extraction(belief_class="episodic") == ("episodic", 7.0)
+    assert horizon_from_extraction(belief_class="plan", half_life_days_override=7) == ("plan", 7)
+    assert horizon_from_extraction(belief_class="unknown") == ("state", 30.0)

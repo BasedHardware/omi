@@ -307,3 +307,117 @@ def test_write_canonical_extraction_memory_threads_explicit_triple_fields(monkey
     assert stored["subject_entity_id"] == USER_ENTITY_ID
     assert stored["predicate"] == "prefers"
     assert stored["arguments"] == {"thing": "dark mode"}
+
+
+def test_extraction_write_does_not_default_third_party_to_primary_user(monkeypatch_trusted_account, monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    uid = "uid-scope"
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    db = _FakeDb(_control_seed(uid))
+    payload = {
+        "id": "mem_third_party",
+        "uid": uid,
+        "content": "Sam is a teammate on the launch",
+        "conversation_id": "conv-scope",
+        "subject_attribution": "third_party",
+        "belief_class": "relationship",
+        "memory_tier": MemoryTier.short_term.value,
+        "created_at": now,
+        "updated_at": now,
+        "evidence": [
+            {
+                "evidence_id": "ev-scope",
+                "source_id": "conv-scope",
+                "source_type": "conversation",
+                "source_signal": "transcription",
+                "extractor_id": "test",
+                "extractor_version": "v1",
+                "artifact_ref": {},
+                "capture_confidence": 0.5,
+                "independence_group": "conv-scope",
+                "redaction_status": "active",
+                "created_at": now,
+            }
+        ],
+    }
+    write_canonical_extraction_memory(uid, payload, db_client=db)
+    stored = db.docs[f"users/{uid}/memory_items/mem_third_party"]
+    assert stored["subject_scope"] == "third_party"
+    assert stored["belief_class"] == "relationship"
+    assert stored.get("half_life_days") is None
+
+
+def test_extraction_write_stores_named_date_valid_to_from_invalid_at(monkeypatch_trusted_account, monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    uid = "uid-valid-to"
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    valid_to = datetime(2026, 12, 15, tzinfo=timezone.utc)
+    db = _FakeDb(_control_seed(uid))
+    payload = {
+        "id": "mem_named_date",
+        "uid": uid,
+        "content": "Ship the launch on Friday",
+        "conversation_id": "conv-valid-to",
+        "subject_attribution": "user",
+        "belief_class": "plan",
+        "invalid_at": valid_to,
+        "memory_tier": MemoryTier.short_term.value,
+        "created_at": now,
+        "updated_at": now,
+        "evidence": [
+            {
+                "evidence_id": "ev-valid-to",
+                "source_id": "conv-valid-to",
+                "source_type": "conversation",
+                "source_signal": "transcription",
+                "extractor_id": "test",
+                "extractor_version": "v1",
+                "artifact_ref": {},
+                "capture_confidence": 0.5,
+                "independence_group": "conv-valid-to",
+                "redaction_status": "active",
+                "created_at": now,
+            }
+        ],
+    }
+    write_canonical_extraction_memory(uid, payload, db_client=db)
+    stored = db.docs[f"users/{uid}/memory_items/mem_named_date"]
+    assert stored["subject_scope"] == "primary_user"
+    assert stored["belief_class"] == "plan"
+    assert stored["valid_to"] == valid_to
+
+
+def test_extraction_write_keeps_primary_user_default_when_flag_off(monkeypatch_trusted_account, monkeypatch):
+    monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED", raising=False)
+    uid = "uid-scope-off"
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    db = _FakeDb(_control_seed(uid))
+    payload = {
+        "id": "mem_flag_off",
+        "uid": uid,
+        "content": "Sam is a teammate on the launch",
+        "conversation_id": "conv-scope-off",
+        "subject_attribution": "third_party",
+        "memory_tier": MemoryTier.short_term.value,
+        "created_at": now,
+        "updated_at": now,
+        "evidence": [
+            {
+                "evidence_id": "ev-off",
+                "source_id": "conv-scope-off",
+                "source_type": "conversation",
+                "source_signal": "transcription",
+                "extractor_id": "test",
+                "extractor_version": "v1",
+                "artifact_ref": {},
+                "capture_confidence": 0.5,
+                "independence_group": "conv-scope-off",
+                "redaction_status": "active",
+                "created_at": now,
+            }
+        ],
+    }
+    write_canonical_extraction_memory(uid, payload, db_client=db)
+    stored = db.docs[f"users/{uid}/memory_items/mem_flag_off"]
+    assert stored["subject_scope"] == "primary_user"
+    assert stored.get("belief_class") is None

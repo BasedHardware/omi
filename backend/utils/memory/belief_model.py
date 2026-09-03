@@ -72,19 +72,17 @@ def resolve_last_evidenced_at(
 def derive_half_life_days(
     *,
     stored_half_life_days: Optional[float] = None,
-    half_life_field_present: bool = False,
     user_asserted: bool = False,
     belief_class: Optional[str] = None,
     kind: Optional[str] = None,
     category: Optional[str] = None,
     tier: Optional[str] = None,
 ) -> Optional[float]:
-    """Stored half-life wins. Explicit null (field present) means no decay.
-
-    Legacy rows omit the field; derive a prior from class/category/tier.
+    """Numeric stored half-life wins. ``belief_class`` supplies the class prior
+    (including null = no decay). Legacy rows have neither; derive from category/tier.
     """
-    if half_life_field_present:
-        if stored_half_life_days is not None and stored_half_life_days <= 0:
+    if stored_half_life_days is not None:
+        if stored_half_life_days <= 0:
             raise ValueError("half_life_days must be positive when set")
         return stored_half_life_days
     if user_asserted:
@@ -102,6 +100,59 @@ def derive_half_life_days(
     if tier == "short_term":
         return HALF_LIFE_DAYS_BY_CLASS["state"]
     return HALF_LIFE_DAYS_BY_CLASS["state"]
+
+
+USER_SUBJECT_SCOPES = frozenset({"primary_user"})
+KNOWN_SUBJECT_SCOPES = frozenset(
+    {
+        "primary_user",
+        "user_owned_project",
+        "user_relationship",
+        "third_party",
+        "media_screen",
+    }
+)
+_USER_ABOUT_LABELS = frozenset({"the user", "user", "primary user", "me"})
+
+
+def subject_scope_from_extraction(
+    *,
+    extracted_scope: Optional[str] = None,
+    attribution: Optional[str] = None,
+    about: Optional[str] = None,
+) -> str:
+    """Classify subject. Never invent primary_user from an empty/unknown label."""
+    scope = (extracted_scope or "").strip().lower()
+    if scope in KNOWN_SUBJECT_SCOPES:
+        return scope
+    if attribution == "user":
+        return "primary_user"
+    if attribution == "third_party":
+        return "third_party"
+    about_norm = " ".join((about or "").casefold().split())
+    if about_norm in _USER_ABOUT_LABELS:
+        return "primary_user"
+    media_tokens = ("youtube", "video", "movie", "screen", "article", "podcast", "tweet", "game")
+    if any(token in about_norm for token in media_tokens):
+        return "media_screen"
+    return "third_party"
+
+
+def horizon_from_extraction(
+    *,
+    belief_class: Optional[str],
+    half_life_days_override: Optional[float] = None,
+    user_asserted: bool = False,
+) -> tuple[Optional[str], Optional[float]]:
+    """Return (belief_class, half_life_days) for a new claim."""
+    if user_asserted:
+        return (belief_class or "identity", None)
+    resolved_class = belief_class if belief_class in HALF_LIFE_DAYS_BY_CLASS else "state"
+    if half_life_days_override is not None:
+        if half_life_days_override <= 0:
+            raise ValueError("half_life_days must be positive when set")
+        return resolved_class, half_life_days_override
+    return resolved_class, HALF_LIFE_DAYS_BY_CLASS[resolved_class]
 
 
 def compute_currency(
@@ -137,7 +188,6 @@ def belief_view(
     captured_at: datetime,
     now: datetime,
     stored_half_life_days: Optional[float] = None,
-    half_life_field_present: bool = False,
     last_corroborated_at: Optional[datetime] = None,
     stored_last_evidenced_at: Optional[datetime] = None,
     valid_to: Optional[datetime] = None,
@@ -154,7 +204,6 @@ def belief_view(
     )
     half_life = derive_half_life_days(
         stored_half_life_days=stored_half_life_days,
-        half_life_field_present=half_life_field_present,
         user_asserted=user_asserted,
         belief_class=belief_class,
         kind=kind,
@@ -177,7 +226,7 @@ def belief_view(
 
 
 def is_user_subject(subject_scope: Optional[str]) -> bool:
-    return subject_scope == "primary_user"
+    return subject_scope in USER_SUBJECT_SCOPES
 
 
 def is_contradicted(*, superseded_by: Optional[str] = None, confidence: Optional[float] = None) -> bool:

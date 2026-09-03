@@ -120,6 +120,10 @@ class Memory(BaseModel):
         description="Reasons this fact needs caution or review", default_factory=list
     )
     durability: Optional[str] = Field(description="Expected durability horizon for the fact", default=None)
+    subject_scope: Optional[str] = Field(default=None)
+    belief_class: Optional[str] = Field(default=None)
+    half_life_days: Optional[float] = Field(default=None)
+    valid_to: Optional[datetime] = Field(default=None)
 
     @field_validator('category', mode='before')
     @classmethod
@@ -614,6 +618,11 @@ class MemoryDB(Memory):
     trigger_condition: Dict[str, Any] = Field(default_factory=dict)
     intent_backed: bool = False
     write_reason: Optional[LedgerWriteReason] = None
+    half_life_days: Optional[float] = None
+    belief_class: Optional[str] = None
+    currency: Optional[float] = None
+    currency_band: Optional[str] = None
+    as_of: Optional[datetime] = None
 
     def __init__(self, **data: Any) -> None:
         super().__init__(**data)
@@ -710,6 +719,10 @@ class MemoryDB(Memory):
             uncertainty_reasons=confidence_fields['uncertainty_reasons'],
             durability=memory.durability,
             memory_tier=decide_initial_memory_tier(manually_added, memory.durability),
+            subject_scope=memory.subject_scope,
+            belief_class=memory.belief_class,
+            half_life_days=memory.half_life_days,
+            invalid_at=memory.valid_to,
         )
         memory_db.scoring = MemoryDB.calculate_score(memory_db)
         return memory_db

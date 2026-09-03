@@ -55,6 +55,7 @@ class MemorySubjectScope(str, Enum):
     user_owned_project = "user_owned_project"
     user_relationship = "user_relationship"
     third_party = "third_party"
+    media_screen = "media_screen"
 
 
 class LedgerWriteReason(str, Enum):
@@ -191,6 +192,8 @@ class MemoryItem(BaseModel):
     primary_capture_device: Optional[str] = None
     corroboration_count: int = 0
     last_corroborated_at: Optional[datetime] = None
+    half_life_days: Optional[float] = None
+    belief_class: Optional[str] = None
     confidence: Optional[float] = None
     superseded_by: Optional[str] = None
     subject_entity_id: Optional[str] = None
