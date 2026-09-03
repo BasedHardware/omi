@@ -14,8 +14,9 @@ from typing import Any, Callable, Dict, Final, List, Optional
 
 import websockets
 
-from config.stt_provider_policy import normalized_stt_language
+from config.stt_provider_policy import normalized_stt_language, soniox_accepts_language_hint
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
+from utils.observability.fallback import record_fallback
 from utils.stt.socket import STTSocket
 
 logger = logging.getLogger(__name__)
@@ -37,9 +38,10 @@ SONIOX_KEEPALIVE_SECONDS: Final = 10.0
 SONIOX_DEATH_IDLE_TIMEOUT: Final = 'soniox_idle_timeout'
 SONIOX_DEATH_ACCOUNT_STATE: Final = 'soniox_account_state'
 SONIOX_DEATH_ROTATION: Final = 'soniox_rotation'
+SONIOX_DEATH_INVALID_HINT: Final = 'soniox_invalid_hint'
 
 
-def soniox_death_reason(error_code: Any, error_type: Any) -> str:
+def soniox_death_reason(error_code: Any, error_type: Any, error_message: Any = None) -> str:
     """Bound a Soniox in-stream error frame to a typed death reason.
 
     The raw provider text stays on the death latch for logs; this mapping is
@@ -55,6 +57,13 @@ def soniox_death_reason(error_code: Any, error_type: Any) -> str:
     except (TypeError, ValueError):
         return 'connection_lost'
     if code == 400:
+        message = str(error_message or '').strip().lower()
+        if 'invalid language hint' in message:
+            # The provider rejected a ``language_hints`` entry outside its
+            # documented vocabulary. Config-shaped, not usage-shaped: this is
+            # not the idle watchdog, and reporting it as one hid a recurring
+            # connect-time death behind a WARNING (prod 2026-09-02/03).
+            return SONIOX_DEATH_INVALID_HINT
         # "No audio received": the idle watchdog fired. The socket's keepalive
         # covers the no-client-audio case; this shape arrives when VAD gating
         # withheld real audio for the whole window.
@@ -211,11 +220,13 @@ class SafeSonioxSocket(STTSocket):
                     continue
                 if msg.get('error_code'):
                     err = f"{msg.get('error_code')} {msg.get('error_type', '')} {msg.get('error_message', '')}".strip()
-                    typed = soniox_death_reason(msg.get('error_code'), msg.get('error_type'))
-                    if typed == SONIOX_DEATH_ACCOUNT_STATE:
-                        # The provider evaluated the account and refused to
-                        # serve: a provider fault, and the dominant signal an
-                        # on-call needs during a balance outage.
+                    typed = soniox_death_reason(msg.get('error_code'), msg.get('error_type'), msg.get('error_message'))
+                    if typed in (SONIOX_DEATH_ACCOUNT_STATE, SONIOX_DEATH_INVALID_HINT):
+                        # The provider evaluated the account (402) or the session
+                        # config (400 invalid language hint) and refused to
+                        # serve: our side of the fence owns the fix, so these
+                        # stay at ERROR for the on-call instead of hiding behind
+                        # the idle/rotation WARNING that hid this signature.
                         logger.error(f'Soniox streaming error: {err}')
                     else:
                         # Idle-timeout and documented rotation are the
@@ -307,10 +318,35 @@ async def process_audio_soniox(
         'enable_speaker_diarization': True,
         'enable_language_identification': True,
     }
-    # 'multi' is auto-detect: send no hint and let identification do the work.
+    # Hints bias recognition; identification still detects every supported
+    # language without one. The provider validates ``language_hints`` against
+    # its documented vocabulary and answers ``400 invalid_request Invalid
+    # language hint`` — after the WebSocket upgrade already succeeded — for any
+    # entry outside it, killing the session at the config frame (prod
+    # backend-listen 2026-09-02/03). 'multi' is our auto-detect sentinel, not an
+    # ISO code, so it must send no hint; compare on the normalized base code so
+    # a capitalized sentinel or a region-tagged locale ('Multi', 'ja-JP') cannot
+    # smuggle a rejected entry past the raw-string guard.
     normalized = normalized_stt_language(language)
-    if normalized and language != 'multi':
-        config['language_hints'] = [normalized]
+    if normalized and normalized != 'multi':
+        if soniox_accepts_language_hint(normalized):
+            config['language_hints'] = [normalized]
+        else:
+            # Auto-detect serves every language the model supports, so the
+            # session stays live; this is a mode change (hinted -> identified)
+            # and must be visible to ops, not silently healed.
+            record_fallback(
+                component='stt_selection',
+                from_mode='soniox_language_hint',
+                to_mode='soniox_language_identification',
+                reason='capability_mismatch',
+                outcome='degraded',
+            )
+            logger.warning(
+                'Soniox language hint dropped: language=%s is outside the documented hint vocabulary; '
+                'falling back to language identification',
+                language,
+            )
 
     logger.info(f'Connecting to Soniox streaming sample_rate={sample_rate} language={language}')
     ws = await websockets.connect(SONIOX_WS_URL, ping_timeout=15, ping_interval=15)

@@ -41,6 +41,7 @@ _KNOWN_FAILURE_REASONS = frozenset(
         'soniox_account_state',
         'soniox_idle_timeout',
         'soniox_rotation',
+        'soniox_invalid_hint',
     }
 )
 _FAILURE_PHASE_BY_REASON = {
@@ -55,6 +56,9 @@ _FAILURE_PHASE_BY_REASON = {
     'soniox_account_state': 'connection',
     'soniox_idle_timeout': 'connection',
     'soniox_rotation': 'connection',
+    # The config frame was rejected after the WebSocket upgrade succeeded:
+    # the session died at session setup, before any audio flowed.
+    'soniox_invalid_hint': 'initialization',
 }
 _CIRCUIT_OPENING_REASONS = frozenset(
     {
