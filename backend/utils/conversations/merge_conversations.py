@@ -275,9 +275,9 @@ def perform_merge_async(
         private_cloud_sync_enabled = any(c.get("private_cloud_sync_enabled", False) for c in sorted_convs)
 
         # Custom STT: True if any source was transcribed on a third-party
-        # provider, so the merged conversation stays behind the Omi-paid LLM
-        # post-processing gate (#7690). A custom-STT source must not be able to
-        # shed the marker by merging with a normal-STT one.
+        # provider, so the merged conversation keeps accurate provenance (#7690).
+        # A custom-STT source must not be able to shed the marker by merging with
+        # a normal-STT one.
         uses_custom_stt = any(c.get('uses_custom_stt', False) for c in sorted_convs)
 
         # Discarded: only if ALL are discarded
