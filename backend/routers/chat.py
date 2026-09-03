@@ -2005,7 +2005,7 @@ def create_initial_message_v1(
 def rate_message(
     message_id: str,
     data: RateMessageRequest,
-    x_app_platform: str | None = Header(None),
+    x_app_platform: str | None = Header(None, alias='X-App-Platform'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Rate a chat message (thumbs up/down). Used by desktop client."""

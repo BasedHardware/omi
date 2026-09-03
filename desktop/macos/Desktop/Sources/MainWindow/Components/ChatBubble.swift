@@ -86,6 +86,7 @@ struct ChatBubble: View {
 
   init(
     message: ChatMessage, app: OmiApp?, showsOmiMark: Bool, onRate: @escaping (Int?) -> Void,
+    onRateReason: ((String) -> Void)? = nil,
     onCitationTap: ((Citation) -> Void)? = nil,
     onOpenInlineCitation: ((ChatCitationReference) -> Void)? = nil,
     isDuplicate: Bool = false,
@@ -98,6 +99,7 @@ struct ChatBubble: View {
     self.app = app
     self.showsOmiMark = showsOmiMark
     self.onRate = onRate
+    self.onRateReason = onRateReason
     self.onCitationTap = onCitationTap
     self.onOpenInlineCitation = onOpenInlineCitation
     self.isDuplicate = isDuplicate

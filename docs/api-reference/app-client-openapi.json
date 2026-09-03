@@ -64333,18 +64333,11 @@
           },
           {
             "in": "header",
-            "name": "x-app-platform",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Platform"
+              "title": "X-App-Platform",
+              "type": "string"
             }
           },
           {
@@ -64353,15 +64346,6 @@
             "required": false,
             "schema": {
               "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
               "type": "string"
             }
           },

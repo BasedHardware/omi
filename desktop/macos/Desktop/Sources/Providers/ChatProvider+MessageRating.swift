@@ -83,9 +83,9 @@ extension ChatProvider {
     if let expectedOwner, RuntimeOwnerIdentity.currentOwnerId() != expectedOwner { return }
     let message = messages.first(where: { $0.id == messageId })
     do {
-      if ChatContinuityInvariants.isProactiveNotification(message), rating == -1 {
+      if let message, ChatContinuityInvariants.isProactiveNotification(message), rating == -1 {
         await InterjectSuggestionFeedbackMutation.recordFromChatRating(
-          message: message, reason: reason)
+          continuityKey: message.clientTurnId, reason: reason)
       }
       if let persistMessageRatingHandler {
         try await persistMessageRatingHandler(messageId, rating)

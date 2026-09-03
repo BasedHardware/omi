@@ -84,19 +84,19 @@ enum InterjectSuggestionFeedbackMutation {
   /// write, not a second tally. Identity prefers the stored notification pair
   /// and falls back to the continuity UUID.
   static func recordFromChatRating(
-    message: ChatMessage?,
+    continuityKey: String?,
     reason: String?,
     store: InterjectSuggestionFeedbackStore = .shared
   ) async {
-    guard let message, ChatContinuityInvariants.isProactiveNotification(message) else { return }
+    guard let continuityKey else { return }
     let verb = ChatRatingReason(rawValue: reason ?? "")?.interjectVerb() ?? .falsePositive
     let resolved = await MainActor.run {
       FloatingControlBarManager.shared.feedbackIdentity(
-        forContinuityKey: message.clientTurnId)
+        forContinuityKey: continuityKey)
     }
     let identity =
       resolved
-      ?? ChatContinuityInvariants.notificationID(fromContinuityKey: message.clientTurnId).map {
+      ?? ChatContinuityInvariants.notificationID(fromContinuityKey: continuityKey).map {
         SuggestionAssistantTelemetry.NotificationIdentity(evaluationID: $0, suggestionID: $0)
       }
     guard let identity else { return }
@@ -107,7 +107,7 @@ enum InterjectSuggestionFeedbackMutation {
       store: store
     )
     await MainActor.run {
-      SuggestionTaskNudgeEngagement.record(fromContinuityKey: message.clientTurnId)
+      SuggestionTaskNudgeEngagement.record(fromContinuityKey: continuityKey)
     }
   }
 }
