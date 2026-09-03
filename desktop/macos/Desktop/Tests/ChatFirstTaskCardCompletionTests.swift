@@ -216,6 +216,50 @@ final class ChatFirstTaskCardCompletionTests: XCTestCase {
         + "\"Task is no longer available\"")
   }
 
+  /// The reader's own tick outranks a store row that reads retired.
+  ///
+  /// This is the field failure: the Removed lane tombstoned live tasks in the
+  /// local cache, so completing one of them read the row back retired and the
+  /// card swapped the reader's ticked box for "Task is no longer available".
+  /// The lane no longer fabricates those tombstones and a migration clears the
+  /// ones it left, but a completion the app accepted must never be erasable by
+  /// a later read — whatever put the retirement there.
+  func testAReaderCompletionSurvivesARowThatReadsRetired() throws {
+    let tombstoned = TaskActionItem(
+      id: "card-task",
+      description: "Fix Omi tasks being too noisy",
+      completed: true,
+      createdAt: Date(),
+      source: "manual"
+    ).retired()
+    XCTAssertTrue(tombstoned.isRetired, "fixture must carry the stale tombstone that caused this")
+
+    XCTAssertNil(
+      ChatFirstTaskCardPresentation.displayTask(
+        liveTask: tombstoned,
+        retainedCompletedTask: tombstoned),
+      "without the reader's own completion, a retired row is still grounds for taking the card away")
+
+    let shown = try XCTUnwrap(
+      ChatFirstTaskCardPresentation.displayTask(
+        liveTask: tombstoned,
+        retainedCompletedTask: nil,
+        locallyCompletedTask: tombstoned),
+      "the reader ticked this card — a retirement found afterwards does not get to undo that")
+    XCTAssertTrue(shown.completed)
+  }
+
+  /// Unticking is the one gesture that clears it: the card follows the reader,
+  /// not a completion it has decided to keep forever.
+  func testUntickingDropsTheRetainedReaderCompletion() {
+    XCTAssertNil(
+      ChatFirstTaskCardPresentation.displayTask(
+        liveTask: nil,
+        retainedCompletedTask: nil,
+        locallyCompletedTask: nil),
+      "the toggle clears the local completion when the reader unticks, leaving the store to answer")
+  }
+
   private func transitionOwner(to ownerID: String?) async {
     do {
       _ = try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(

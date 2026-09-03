@@ -1440,13 +1440,27 @@ class TasksStore: ObservableObject {
       )
       page = .init(items: response.items, hasMore: response.hasMore)
     }
-    // The lane is the authority on retirement, not `isRetired`'s re-derivation
-    // from whatever fields this response happened to carry. Stamping it here —
-    // after both transports, so neither can skip it — is what stops a retired
-    // row being written to the local cache as live and resurfacing as a live
-    // task. Every caller of this page (first load and auto-refresh) syncs it
-    // into SQLite, so normalizing anywhere later would leave one path wrong.
-    return .init(items: page.items.map { $0.retired() }, hasMore: page.hasMore)
+    // Keep only the rows the response itself reports retired, and let the lane
+    // stamp settle the ones that carry retirement through a field this decode
+    // did not read (#11460: a retired row written to the cache as live
+    // resurfaces as a live task).
+    //
+    // The lane used to be treated as the authority and stamped `.retired()`
+    // over the whole page — but `GET /v1/action-items` has no `deleted`
+    // parameter. FastAPI drops the unknown query item, and the handler's
+    // stream skips soft-deleted documents outright, so what came back was the
+    // user's *live* first page. Every caller of this page syncs it into
+    // SQLite, so each visit to Removed tombstoned a hundred live tasks
+    // locally: `deleted = 1` with no `deletedBy` and a canonical status still
+    // `active`. Completing any of them from a chat task card then read the
+    // tombstone back and rendered "Task is no longer available" over the task
+    // the reader had just ticked.
+    //
+    // Until the backend can scope a page to retired rows, Removed shows the
+    // deletions made on this Mac (those carry a local tombstone and a
+    // `deletedBy`) and not another device's. Showing fewer rows is a gap;
+    // manufacturing retirement is data loss.
+    return .init(items: page.items.filter(\.isRetired).map { $0.retired() }, hasMore: page.hasMore)
   }
 
   func syncPage(

@@ -155,6 +155,9 @@ struct TaskCardView: View {
   @State private var showCompletionAcknowledgement = false
   @State private var hydrationFinished = false
   @State private var retainedCompletedTask: TaskActionItem?
+  /// The completion the reader performed on this card, kept whatever the store
+  /// says afterwards. See `ChatFirstTaskCardPresentation.displayTask`.
+  @State private var locallyCompletedTask: TaskActionItem?
 
   init(taskID: String, tasksStore: TasksStore, navigation: ChatFirstShellNavigation) {
     self.taskID = taskID
@@ -170,10 +173,21 @@ struct TaskCardView: View {
     (tasksStore.tasks + tasksStore.deletedTasks).contains { $0.id == taskID && $0.isRetired }
   }
 
+  /// The store's row for this card, retired or not.
+  ///
+  /// `liveTask` is a presentation filter, so it answers nil for a retired row —
+  /// which made it the wrong thing to reconcile a toggle against. Completing a
+  /// task whose local row carried a stale tombstone read back as "the mutation
+  /// did not land", and the card retired itself over the reader's own tick.
+  private var storeRecord: TaskActionItem? {
+    tasksStore.tasks.first { $0.id == taskID }
+  }
+
   private var task: TaskActionItem? {
     ChatFirstTaskCardPresentation.displayTask(
       liveTask: liveTask,
-      retainedCompletedTask: retainedCompletedTask?.id == taskID ? retainedCompletedTask : nil
+      retainedCompletedTask: retainedCompletedTask?.id == taskID ? retainedCompletedTask : nil,
+      locallyCompletedTask: locallyCompletedTask?.id == taskID ? locallyCompletedTask : nil
     )
   }
 
@@ -346,7 +360,16 @@ struct TaskCardView: View {
       await tasksStore.toggleTask(task)
       isToggling = false
 
-      let reconciledTask = self.task
+      let reconciledTask = self.storeRecord
+      // The reader ticked this card and the store took the mutation. That is
+      // the answer the card shows from here on: a retirement discovered
+      // afterwards — a stale local tombstone, a lane that cannot vouch for the
+      // row — is not grounds for erasing a completion they performed.
+      if intendedCompletion {
+        locallyCompletedTask = reconciledTask?.completed == true ? reconciledTask : nil
+      } else {
+        locallyCompletedTask = nil
+      }
       AnalyticsManager.shared.chatFirst(
         .taskMutation(
           lifecycle: reconciledTask?.completed == intendedCompletion ? .success : .rollback,
@@ -415,10 +438,23 @@ enum ChatFirstTaskCardHydration {
 }
 
 enum ChatFirstTaskCardPresentation {
+  /// `locallyCompletedTask` is the completion the reader performed on this card
+  /// and it outranks everything, retirement included.
+  ///
+  /// Every other input is a projection of store state, and store state can say
+  /// a task is gone for reasons that have nothing to do with the reader: the
+  /// Removed lane used to tombstone live rows locally, so ticking one of them
+  /// swapped their own completed card for "Task is no longer available". A
+  /// gesture the app accepted is not something a later read gets to deny — the
+  /// card keeps showing the tick until the reader themselves unticks it.
   static func displayTask(
     liveTask: TaskActionItem?,
-    retainedCompletedTask: TaskActionItem?
+    retainedCompletedTask: TaskActionItem?,
+    locallyCompletedTask: TaskActionItem? = nil
   ) -> TaskActionItem? {
+    if let locallyCompletedTask, locallyCompletedTask.completed {
+      return locallyCompletedTask
+    }
     if let liveTask {
       return liveTask.isRetired ? nil : liveTask
     }
