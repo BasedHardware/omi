@@ -84,7 +84,7 @@ struct FloatingControlBarView: View {
   var onCloseAI: () -> Void
   var onEscape: () -> Void
   var onClearVisibleConversation: () -> Void
-  var onRate: ((String, Int?) -> Void)?
+  var onRate: ((String, Int?, ChatFeedbackReason?) -> Void)?
   var onShareLink: (() async -> String?)?
 
   @State private var isHovering = false

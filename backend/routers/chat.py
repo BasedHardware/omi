@@ -67,6 +67,7 @@ from utils.observability.transcription import TranscriptionAttempt
 from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
+from utils.feedback import record_chat_message_feedback
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.llm.gateway_client import CHAT_AGENT_ROUTE_DIRECT, get_chat_agent_route
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
@@ -2024,7 +2025,18 @@ def rate_message(
 
     # Also store in analytics collection
     value = rating if rating is not None else 0
-    set_chat_message_rating_score(uid, message_id, value, platform='mobile')
+    reason = data.reason.value if data.reason else None
+    set_chat_message_rating_score(uid, message_id, value, reason=reason, platform='mobile')
+
+    # Unified feedback ledger — the daily thumbs-down report reads from here.
+    record_chat_message_feedback(
+        uid,
+        message_id,
+        value,
+        reason=reason,
+        comment=data.comment,
+        platform='mobile',
+    )
 
     # Try to submit feedback to LangSmith
     try:
