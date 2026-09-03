@@ -19,6 +19,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/share_links.dart';
 import 'package:omi/utils/share_sheet.dart';
+import 'package:omi/widgets/components/memory_review_card.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
@@ -95,8 +96,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : _summary == null
-              ? _buildNotFound()
-              : _buildContent(),
+          ? _buildNotFound()
+          : _buildContent(),
     );
   }
 
@@ -302,8 +303,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       final message = result.statusCode == 429
           ? (result.errorDetail ?? context.l10n.recapRegenerateCooldown)
           : result.statusCode == 400
-              ? (result.errorDetail ?? context.l10n.recapRegenerateNoConversations)
-              : context.l10n.recapRegenerateFailed;
+          ? (result.errorDetail ?? context.l10n.recapRegenerateNoConversations)
+          : context.l10n.recapRegenerateFailed;
       AppSnackbar.showSnackbarError(message);
     }
   }
@@ -353,6 +354,10 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                 if (summary.decisionsMade.isNotEmpty) ...[
                   const SizedBox(height: 32),
                   _buildDecisionsMadeSection(summary),
+                ],
+                if (summary.memoriesLearned.isNotEmpty) ...[
+                  const SizedBox(height: 32),
+                  _buildMemoriesLearnedSection(summary),
                 ],
                 if (summary.knowledgeNuggets.isNotEmpty) ...[
                   const SizedBox(height: 32),
@@ -585,8 +590,9 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                     initialCenter: singleLocation ? points.first : LatLng(centerLat, centerLng),
                     initialZoom: singleLocation ? 14 : 12,
                     // Use bounds fitting for multiple locations
-                    initialCameraFit:
-                        singleLocation ? null : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
+                    initialCameraFit: singleLocation
+                        ? null
+                        : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
                     interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
                   ),
                   children: [
@@ -788,6 +794,17 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     );
   }
 
+  /// The same review rows the day-summary chat card shows, so a verdict cast
+  /// in either place lands on the same memory. Placed before the LLM-prose
+  /// learnings, which stay exactly as they were.
+  Widget _buildMemoriesLearnedSection(DailySummary summary) {
+    return MemoryReviewCard(
+      items: summary.memoriesLearned,
+      source: MemoryReviewSource.dailySummaryDetail,
+      impressionKey: summary.id.isNotEmpty ? summary.id : widget.summaryId,
+    );
+  }
+
   Widget _buildKnowledgeNuggetsSection(DailySummary summary) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -828,8 +845,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     final endFormatted = _formatTimeTo12Hour(location.endTime);
     final timeText = startFormatted.isNotEmpty
         ? (endFormatted.isNotEmpty && startFormatted != endFormatted
-            ? '$startFormatted - $endFormatted'
-            : startFormatted)
+              ? '$startFormatted - $endFormatted'
+              : startFormatted)
         : '';
 
     final semanticsLabel = timeText.isEmpty ? location.shortName : '${location.shortName}, $timeText';

@@ -12,7 +12,7 @@ from urllib.parse import unquote, urlsplit
 
 from google.cloud import firestore
 
-from database._client import db
+from database._client import data_plane_db as db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.memory_app_key_grants import (
     APP_KEY_MEMORY_GRANT_DOC_ID,
