@@ -208,6 +208,92 @@ def normalized_stt_language(language: str | None) -> str:
     return language.split('-')[0].split('_')[0].lower()
 
 
+# Soniox rejects any ``language_hints`` entry outside this vocabulary with
+# ``400 invalid_request Invalid language hint`` at the config frame, killing the
+# socket after the WebSocket upgrade already succeeded (prod backend-listen,
+# Loop S sensor 2026-09-02/03: ~16/24h, one window every 30 minutes for 6+ h).
+# Source: https://soniox.com/docs/stt/concepts/supported-languages (single
+# unified model; the page's per-model authority is the authenticated Get-models
+# endpoint, which lists the same languages). Kept beside the other capability
+# tables so a provider vocabulary change is one reviewed change here. Note the
+# 'multi' sentinel is deliberately absent: it is ours, not an ISO code, and
+# auto-detect sessions must send no hint at all.
+SONIOX_SUPPORTED_LANGUAGE_HINTS: Final[frozenset[str]] = frozenset(
+    {
+        'af',
+        'sq',
+        'ar',
+        'az',
+        'eu',
+        'be',
+        'bn',
+        'bs',
+        'bg',
+        'ca',
+        'zh',
+        'hr',
+        'cs',
+        'da',
+        'nl',
+        'en',
+        'et',
+        'fi',
+        'fr',
+        'gl',
+        'de',
+        'el',
+        'gu',
+        'he',
+        'hi',
+        'hu',
+        'id',
+        'it',
+        'ja',
+        'kn',
+        'kk',
+        'ko',
+        'lv',
+        'lt',
+        'mk',
+        'ms',
+        'ml',
+        'mr',
+        'no',
+        'fa',
+        'pl',
+        'pt',
+        'pa',
+        'ro',
+        'ru',
+        'sr',
+        'sk',
+        'sl',
+        'es',
+        'sw',
+        'sv',
+        'tl',
+        'ta',
+        'te',
+        'th',
+        'tr',
+        'uk',
+        'ur',
+        'vi',
+        'cy',
+    }
+)
+
+
+def soniox_accepts_language_hint(language: str | None) -> bool:
+    """Return whether Soniox's documented vocabulary accepts this base code as a hint.
+
+    Selection treats Soniox as serviceable for every language because the model
+    identifies the language itself; this gate governs only the *hint* field, the
+    one part of the config frame the provider validates against a closed set.
+    """
+    return normalized_stt_language(language) in SONIOX_SUPPORTED_LANGUAGE_HINTS
+
+
 def modulate_supports_language(language: str | None) -> bool:
     """Return whether Velma-2 accepts a language code on a serving surface."""
     return normalized_stt_language(language) in MODULATE_SUPPORTED_LANGUAGES
