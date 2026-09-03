@@ -4,37 +4,90 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// The transcript can never host native selection (FC-selection-overlay-layout-loop:
-/// PR #10834 reopened it in Omi Beta 0.12.146). The remedy the boundary names is a
-/// separate non-live reading surface, and this is it — one AppKit text view over
-/// one message, mounted only when the reader asks for it.
+/// **Selection lives in the transcript now.**
+///
+/// It used to live in a popover beside the row, because SwiftUI's own selection
+/// is barred here for good (FC-selection-overlay-layout-loop: PR #10834
+/// reopened it in Omi Beta 0.12.146). The bar is on `SelectionOverlay`, not on
+/// selecting — an `NSTextView` *is* one selection, with no per-`Text` overlay to
+/// install — so the words themselves are the surface now, on the reader's own
+/// turns as much as Omi's.
 @MainActor
-final class ChatSelectableTextSurfaceTests: XCTestCase {
-  private func textView(for text: String) throws -> NSTextView {
-    let scrollView = OmiSelectableTextView.makeScrollView(text: text)
-    return try XCTUnwrap(scrollView.documentView as? NSTextView)
+final class ChatSelectableProseTests: XCTestCase {
+  private func attributed(
+    _ markdown: String,
+    style: OmiMarkdown.Style = .assistant,
+    citations: Set<Int> = []
+  ) throws -> NSAttributedString {
+    try XCTUnwrap(
+      ChatSelectableProse.attributedString(
+        markdown: markdown, style: style, fontSize: 14, fontScale: 1, citationOrdinals: citations))
   }
 
-  func testTheReadingSurfaceIsSelectableButNotEditable() throws {
-    let view = try textView(for: "They arrive on Saturday.")
-    XCTAssertTrue(view.isSelectable, "selecting is the entire point of this surface")
+  private func attribute(
+    _ key: NSAttributedString.Key, of text: NSAttributedString, at substring: String
+  ) throws -> Any? {
+    let range = try XCTUnwrap(
+      text.string.range(of: substring), "\(substring) is not in \(text.string)")
+    return text.attribute(
+      key, at: text.string.distance(from: text.string.startIndex, to: range.lowerBound), effectiveRange: nil)
+  }
+
+  func testTheProseViewIsSelectableAndNotEditable() {
+    let view = ChatProseTextView()
+    view.isEditable = false
+    view.isSelectable = true
+    XCTAssertTrue(view.isSelectable, "selecting the answer is the entire point")
     XCTAssertFalse(view.isEditable, "a transcript row is not a document the reader may rewrite")
   }
 
-  func testTheReadingSurfaceCarriesTheMessageItWasOpenedFor() throws {
-    XCTAssertEqual(try textView(for: "Booking confirmed.").string, "Booking confirmed.")
+  /// Both senders. A user turn was never selectable by any means — the popover
+  /// was reachable from the hover strip, and a user row has no hover strip.
+  func testBothSendersRenderSelectableProse() throws {
+    for style in [OmiMarkdown.Style.assistant, .user] {
+      let text = try attributed("Booking confirmed.", style: style)
+      XCTAssertEqual(text.string, "Booking confirmed.")
+    }
   }
 
-  /// It is one AppKit view, so a rebuild replaces a string rather than
-  /// installing another selection overlay.
-  func testUpdatingTheSurfaceReplacesTheTextInPlace() throws {
-    let scrollView = OmiSelectableTextView.makeScrollView(text: "first")
-    let first = try XCTUnwrap(scrollView.documentView as? NSTextView)
+  func testEmphasisSurvivesTheCrossingIntoAppKit() throws {
+    let text = try attributed("Do **YC application** with *Nick* and run `agentctl`.")
+    XCTAssertEqual(text.string, "Do YC application with Nick and run agentctl.")
 
-    OmiSelectableTextView.apply(text: "second", to: scrollView)
+    let bold = try XCTUnwrap(try attribute(.font, of: text, at: "YC application") as? NSFont)
+    XCTAssertTrue(
+      bold.fontDescriptor.symbolicTraits.contains(.bold), "bold must not flatten into body text")
 
-    XCTAssertIdentical(scrollView.documentView as? NSTextView, first)
-    XCTAssertEqual(first.string, "second")
+    let italic = try XCTUnwrap(try attribute(.font, of: text, at: "Nick") as? NSFont)
+    XCTAssertTrue(italic.fontDescriptor.symbolicTraits.contains(.italic))
+
+    let code = try XCTUnwrap(try attribute(.font, of: text, at: "agentctl") as? NSFont)
+    XCTAssertTrue(
+      code.fontDescriptor.symbolicTraits.contains(.monoSpace),
+      "inline code keeps its monospace face now that it is text rather than a button")
+    XCTAssertNotNil(
+      try attribute(.backgroundColor, of: text, at: "agentctl"), "and keeps its chip wash")
+  }
+
+  /// The marker stays inside the one text view, so it is draggable and
+  /// copyable — which the chip button never was — and still opens its source.
+  func testAKnownCitationMarkerBecomesAnOpenableLink() throws {
+    let text = try attributed("You favoured the clearer concept. [1]", citations: [1])
+    let link = try XCTUnwrap(try attribute(.link, of: text, at: "[1]") as? URL)
+    XCTAssertEqual(ChatSelectableProse.citationOrdinal(from: link), 1)
+  }
+
+  /// A bracketed number the turn has no source for is prose, not a control.
+  func testAnUnknownBracketedNumberIsLeftAsWords() throws {
+    let text = try attributed("Section [4] of the lease.", citations: [1])
+    XCTAssertNil(try attribute(.link, of: text, at: "[4]"))
+  }
+
+  func testProseKeepsTheTranscriptsOwnLeading() throws {
+    let text = try attributed("One line.")
+    let paragraph = try XCTUnwrap(
+      try attribute(.paragraphStyle, of: text, at: "One") as? NSParagraphStyle)
+    XCTAssertEqual(paragraph.lineSpacing, OmiMarkdownContent.chatLineSpacing(fontSize: 14))
   }
 }
 

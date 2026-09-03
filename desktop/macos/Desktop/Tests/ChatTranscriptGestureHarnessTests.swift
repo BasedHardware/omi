@@ -573,6 +573,19 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         let representation = clipView.bitmapImageRepForCachingDisplay(in: bounds)
       else { return nil }
       clipView.cacheDisplay(in: bounds, to: representation)
+      // `cacheDisplay` walks `draw(_:)`, which no longer sees everything: once
+      // the transcript hosts an AppKit text view its prose is drawn from a
+      // backing layer, and a bitmap taken this way shows the SwiftUI chrome
+      // without the words. Compositing the layer tree on top puts the text back
+      // in the picture, so the probe measures the row rather than half of it.
+      if let layer = clipView.layer,
+        let context = NSGraphicsContext(bitmapImageRep: representation)
+      {
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        layer.render(in: context.cgContext)
+        NSGraphicsContext.restoreGraphicsState()
+      }
       guard let image = representation.cgImage else { return nil }
 
       let width = image.width

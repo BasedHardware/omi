@@ -37,19 +37,26 @@ struct OmiMarkdown: View {
   let style: Style
   let citations: [ChatCitationReference]
   let onOpenCitation: ((ChatCitationReference) -> Void)?
+  /// Draw prose through `ChatSelectableProse` (one `NSTextView`) instead of
+  /// SwiftUI `Text`, so the reader can drag across it. This is **not** the
+  /// banned SwiftUI selection: no `SelectionOverlay` is installed anywhere on
+  /// this path, which is the whole distinction the boundary is drawing.
+  let appKitProseSelection: Bool
   @Environment(\.fontScale) private var fontScale
 
   init(
     text: String,
     sender: ChatSender,
     citations: [ChatCitationReference] = [],
-    onOpenCitation: ((ChatCitationReference) -> Void)? = nil
+    onOpenCitation: ((ChatCitationReference) -> Void)? = nil,
+    appKitProseSelection: Bool = false
   ) {
     let style: Style = sender == .user ? .user : .assistant
     self.text = Self.renderableText(text, style: style)
     self.style = style
     self.citations = citations
     self.onOpenCitation = onOpenCitation
+    self.appKitProseSelection = appKitProseSelection
   }
 
   init(text: String, style: Style) {
@@ -57,6 +64,7 @@ struct OmiMarkdown: View {
     self.style = style
     self.citations = []
     self.onOpenCitation = nil
+    self.appKitProseSelection = false
   }
 
   /// Assistant text may open with an Interject classification token; it is
@@ -68,7 +76,7 @@ struct OmiMarkdown: View {
 
   var body: some View {
     Group {
-      if citations.isEmpty {
+      if citations.isEmpty && !appKitProseSelection {
         OmiMarkdownContent(text: text, style: style, fontScale: fontScale)
           .equatable()
       } else {
@@ -77,7 +85,8 @@ struct OmiMarkdown: View {
           style: style,
           fontScale: fontScale,
           citations: citations,
-          onOpenCitation: onOpenCitation)
+          onOpenCitation: onOpenCitation,
+          appKitProseSelection: appKitProseSelection)
       }
     }
     .textSelection(.disabled)
@@ -102,13 +111,15 @@ struct OmiMarkdownContent: View, Equatable {
   let document: OmiMarkdownDocument
   let citations: [ChatCitationReference]
   let onOpenCitation: ((ChatCitationReference) -> Void)?
+  let appKitProseSelection: Bool
 
   init(
     text: String,
     style: OmiMarkdown.Style,
     fontScale: CGFloat,
     citations: [ChatCitationReference] = [],
-    onOpenCitation: ((ChatCitationReference) -> Void)? = nil
+    onOpenCitation: ((ChatCitationReference) -> Void)? = nil,
+    appKitProseSelection: Bool = false
   ) {
     self.text = text
     self.style = style
@@ -116,11 +127,12 @@ struct OmiMarkdownContent: View, Equatable {
     self.document = OmiMarkdownDocument(markdown: text)
     self.citations = citations
     self.onOpenCitation = onOpenCitation
+    self.appKitProseSelection = appKitProseSelection
   }
 
   nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
     lhs.text == rhs.text && lhs.style == rhs.style && lhs.fontScale == rhs.fontScale
-      && lhs.citations == rhs.citations
+      && lhs.citations == rhs.citations && lhs.appKitProseSelection == rhs.appKitProseSelection
   }
 
   var body: some View {
@@ -174,7 +186,16 @@ struct OmiMarkdownContent: View, Equatable {
     )
 
     Group {
-      if !citations.isEmpty {
+      if appKitProseSelection {
+        // One text view per prose block: selection spans the whole block, and
+        // the block is the whole message for all but tables and fenced code.
+        ChatSelectableProseBlock(
+          text: content,
+          style: style,
+          fontScale: fontScale,
+          citations: citations,
+          onOpenCitation: onOpenCitation)
+      } else if !citations.isEmpty {
         OmiMarkdownCitationContent(
           text: content,
           style: style,
@@ -326,7 +347,7 @@ struct OmiMarkdownContent: View, Equatable {
 
   /// Converts block-level elements (headers, asterisk lists) into inline-compatible
   /// form for `AttributedString(markdown:)` with `.inlineOnlyPreservingWhitespace`.
-  static func preprocessText(_ text: String) -> String {
+  nonisolated static func preprocessText(_ text: String) -> String {
     text.components(separatedBy: "\n").map { line in
       var processed = line
 
@@ -1241,7 +1262,7 @@ private struct ChatCitationToken: View {
   }
 }
 
-private struct ChatCitationPreview: View {
+struct ChatCitationPreview: View {
   let reference: ChatCitationReference
   let fontScale: CGFloat
   let onOpen: () -> Void
