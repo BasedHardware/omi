@@ -2808,18 +2808,22 @@ export interface MeetingParticipant {
 
 export interface Memory {
   arguments?: Record<string, unknown>;
+  belief_class?: string | null;
   capture_confidence?: number | null;
   category?: MemoryCategory;
   content: string;
   durability?: string | null;
+  half_life_days?: number | null;
   headline?: string | null;
   object_entity_ids?: Array<string>;
   predicate?: string | null;
   qualifiers?: Record<string, unknown>;
   subject_attribution?: SubjectAttribution;
   subject_entity_id?: string | null;
+  subject_scope?: MemorySubjectScope | null;
   tags?: Array<string>;
   uncertainty_reasons?: Array<string>;
+  valid_to?: string | null;
   veracity?: number | null;
   visibility?: string | null;
 }
@@ -2838,6 +2842,8 @@ export type MemoryCategory = "interesting" | "system" | "manual" | "workflow" | 
 export interface MemoryDB {
   app_id?: string | null;
   arguments?: Record<string, unknown>;
+  as_of?: string | null;
+  belief_class?: string | null;
   body?: string | null;
   canonical_memory_id?: string | null;
   capture_confidence?: number | null;
@@ -2847,10 +2853,13 @@ export interface MemoryDB {
   conversation_id?: string | null;
   created_at: string;
   curation_weight?: number;
+  currency?: number | null;
+  currency_band?: string | null;
   data_protection_level?: string | null;
   durability?: string | null;
   edited?: boolean;
   evidence?: Array<Evidence>;
+  half_life_days?: number | null;
   headline?: string | null;
   id: string;
   intent_backed?: boolean;
@@ -2885,6 +2894,7 @@ export interface MemoryDB {
   updated_at: string;
   user_review?: boolean | null;
   valid_at?: string | null;
+  valid_to?: string | null;
   veracity?: number | null;
   visibility?: string | null;
   write_reason?: LedgerWriteReason | null;
