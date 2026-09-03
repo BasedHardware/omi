@@ -53,6 +53,17 @@ import XCTest
     override func setUp() {
       super.setUp()
       DesktopDiagnosticsManager.shared.resetForTests()
+      // An owner transition abandoned by any earlier suite leaves the process-global
+      // revocation active, and `currentOwnerId` then returns nil for everything that
+      // follows. Name that here instead of letting it resurface as an unrelated
+      // "kernel owner surface clear failed" three suites later, then clear it so this
+      // suite still runs.
+      if RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress {
+        RuntimeOwnerIdentity.resetEffectiveOwnerTransitionForTests()
+        XCTFail(
+          "An earlier suite leaked an effective-owner transition; owner resolution was "
+            + "globally revoked before this suite started. Cleared it to continue.")
+      }
     }
 
     func testJournalProjectionSignalsValueOrderingAndDuplicateDivergenceWithoutChangingTheWinner() throws {
@@ -781,6 +792,39 @@ import XCTest
       XCTAssertEqual(clearCalls.map(\.ownerID), ["fault-harness-owner"])
       XCTAssertEqual(clearCalls.map(\.generation), [9])
       XCTAssertTrue(provider.messages.isEmpty)
+    }
+
+    /// Guards the test seam itself: the scoped helper must always hand the revocation back,
+    /// including when the body throws. A leaked revocation makes `currentOwnerId` return nil
+    /// for every suite that runs afterwards in the same binary, and the revocation lives on a
+    /// `private` singleton that no suite can reach to clear — so a leak here is unrecoverable
+    /// rather than merely noisy.
+    func testEffectiveOwnerTransitionSeamNeverLeaksTheRevocation() async {
+      struct BodyFailure: Error {}
+
+      XCTAssertFalse(RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress)
+
+      await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
+        XCTAssertTrue(
+          RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+          "the seam must actually revoke owner resolution inside the body")
+      }
+      XCTAssertFalse(
+        RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+        "the revocation must be released when the body returns")
+
+      do {
+        try await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
+          throw BodyFailure()
+        }
+        XCTFail("expected the body's error to propagate")
+      } catch is BodyFailure {
+      } catch {
+        XCTFail("unexpected error: \(error)")
+      }
+      XCTAssertFalse(
+        RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+        "the revocation must be released when the body throws")
     }
 
     func testFaultHarnessResetUsesCredentialFreeControlClearOnceAndCompletesProjectionReset() async throws {
