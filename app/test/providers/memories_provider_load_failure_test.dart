@@ -6,12 +6,8 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 
-GetMemoriesResult _failedFetch() => const GetMemoriesResult(
-      [],
-      true,
-      statusCode: 503,
-      failureReason: MemoriesFetchFailureReason.httpError,
-    );
+GetMemoriesResult _failedFetch() =>
+    const GetMemoriesResult([], true, statusCode: 503, failureReason: MemoriesFetchFailureReason.httpError);
 
 Memory _memory() => Memory(
       id: 'mem-1',

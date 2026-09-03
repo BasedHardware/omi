@@ -256,10 +256,7 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
             duration: const Duration(milliseconds: 150),
             child: editing
                 ? _buildEditor(item, memory)
-                : Text(
-                    content,
-                    style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35),
-                  ),
+                : Text(content, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35)),
           ),
           const SizedBox(height: 10),
           SizedBox(

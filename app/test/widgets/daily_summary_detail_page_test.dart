@@ -77,20 +77,18 @@ void main() {
 
   testWidgets('memories learned render as review rows above the prose learnings', (tester) async {
     final memoriesProvider = MemoriesProvider(
-      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async => GetMemoriesResult(
-        [
-          Memory(
-            id: 'mem-1',
-            uid: 'summary-user',
-            content: 'Prefers async standups',
-            category: MemoryCategory.system,
-            createdAt: DateTime.utc(2026, 7, 15),
-            updatedAt: DateTime.utc(2026, 7, 15),
-            visibility: MemoryVisibility.private,
-          ),
-        ],
-        true,
-      ),
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult([
+        Memory(
+          id: 'mem-1',
+          uid: 'summary-user',
+          content: 'Prefers async standups',
+          category: MemoryCategory.system,
+          createdAt: DateTime.utc(2026, 7, 15),
+          updatedAt: DateTime.utc(2026, 7, 15),
+          visibility: MemoryVisibility.private,
+        ),
+      ], true),
       fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
           const GetLedgerHistoryResult([], supported: true),
       reviewMemoryRequest: (id, value) async => true,
