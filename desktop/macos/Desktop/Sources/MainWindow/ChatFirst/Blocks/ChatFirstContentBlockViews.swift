@@ -194,6 +194,14 @@ struct TaskCardView: View {
       } else if hydrationFinished {
         ChatFirstUnavailableBlockView(entityName: "Task")
           .onAppear {
+            log(
+              "TaskCardView: \(taskID) unavailable — store=\(tasksStore.tasks.count)"
+                + " incomplete=\(tasksStore.incompleteTasks.count)"
+                + " completed=\(tasksStore.completedTasks.count)"
+                + " deleted=\(tasksStore.deletedTasks.count)"
+                + " present=\(tasksStore.tasks.contains { $0.id == taskID })"
+                + " retiredHere=\(isExplicitlyRetired)"
+                + " retained=\(retainedCompletedTask?.id ?? "none")")
             AnalyticsManager.shared.chatFirst(
               .richBlock(kind: .taskCard, outcome: .stalePlaceholder, action: .none)
             )
@@ -220,11 +228,26 @@ struct TaskCardView: View {
         hydrationFinished = false
       }
       let resolvedTask = await tasksStore.resolveCanonicalTask(id: taskID)
-      retainCompletedTaskIfNeeded(resolvedTask)
-      if resolvedTask == nil {
-        retainedCompletedTask = nil
+      switch ChatFirstTaskCardHydration.resolution(
+        isCancelled: Task.isCancelled, hasLiveTask: liveTask != nil)
+      {
+      case .abandon:
+        return
+      case .settle:
+        // The toggle won the race and put the task back in the store. That is
+        // a better answer than this hydration's, so take it.
+        retainCompletedTaskIfNeeded(liveTask)
+        hydrationFinished = true
+      case .adopt:
+        if resolvedTask == nil {
+          log("TaskCardView: \(taskID) hydrated to nothing — the store cannot vouch for this task")
+        }
+        // A store that cannot vouch for the row is not the same as a row the
+        // user retired, and only the second is grounds for taking a card away.
+        // `.onChange(of: isExplicitlyRetired)` is the one clearer.
+        retainCompletedTaskIfNeeded(resolvedTask)
+        hydrationFinished = true
       }
-      hydrationFinished = true
     }
   }
 
@@ -355,6 +378,39 @@ struct TaskCardView: View {
         }
       }
     }
+  }
+}
+
+/// What a finished hydration is allowed to write back to the card.
+///
+/// `.task(id:)` cancels the in-flight hydration when its key changes, but Swift
+/// cancellation is cooperative: the body keeps running and its `await` still
+/// returns. A hydration that started while the card had no task can therefore
+/// land *after* the reader has ticked that task, carrying an answer from before
+/// the tick — and `resolveCanonicalTask` answers nil for any row it cannot
+/// vouch for, including one whose owner lease turned over mid-flight. Applying
+/// that late nil cleared the retained task and marked hydration finished, which
+/// is exactly the pair that renders "Task is no longer available" under a task
+/// the reader had just completed.
+///
+/// Observed directly: a card visibly showing its task logged
+/// `hydrated resolved=nil` from a hydration still in flight behind it.
+enum ChatFirstTaskCardHydration {
+  enum Resolution: Equatable {
+    /// Nothing newer arrived; the answer is the card's state.
+    case adopt
+    /// The card already has a live task, so there is nothing to adopt — but
+    /// this hydration is genuinely over.
+    case settle
+    /// A successor hydration owns the card's state. Write nothing at all:
+    /// even `hydrationFinished` would flash the unavailable placeholder in
+    /// the gap before the successor answers.
+    case abandon
+  }
+
+  static func resolution(isCancelled: Bool, hasLiveTask: Bool) -> Resolution {
+    if isCancelled { return .abandon }
+    return hasLiveTask ? .settle : .adopt
   }
 }
 
