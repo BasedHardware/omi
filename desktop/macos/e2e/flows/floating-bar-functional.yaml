@@ -8,6 +8,9 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/FirstRealAppCardCoordinator.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/FirstRealAppCardPolicy.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/AnalyticsManager+FirstRealAppCard.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCard.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderStore.swift
   - desktop/macos/Desktop/Sources/Chat/AgentCompletionVoiceDelivery.swift
   - desktop/macos/Desktop/Sources/Chat/ChatDraftStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
