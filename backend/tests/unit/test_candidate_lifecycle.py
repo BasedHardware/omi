@@ -1441,7 +1441,15 @@ def test_future_available_at_is_not_dispatched(monkeypatch):
         def document(self, _uid):
             return _UserDoc()
 
-    monkeypatch.setattr(integration_outbox_db.db, 'collection', lambda _name: _Users())
+    class _Database:
+        def collection(self, _name):
+            return _Users()
+
+    # Patch the module binding rather than reaching through the lazy Firestore
+    # proxy. Attribute lookup on that proxy constructs a real client before the
+    # test replacement can be installed, which is forbidden by the hermetic
+    # network guard.
+    monkeypatch.setattr(integration_outbox_db, 'db', _Database())
     listed = integration_outbox_db.list_candidate_integration_dispatches('user-1', account_generation=3)
     assert [row['candidate_id'] for row in listed] == ['ready']
 
