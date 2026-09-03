@@ -1,3 +1,0 @@
-{
-  "change": "Fixed the Permissions page reporting Automation as \"Not Granted\" when it was already granted in System Settings"
-}
