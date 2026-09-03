@@ -177,6 +177,57 @@ final class ChatFollowUpChipTests: XCTestCase {
     XCTAssertEqual(ChatFollowUpTail.blockID(messageID: "msg-7"), "msg-7:followup")
   }
 
+  // MARK: - The hermetic e2e contract
+
+  /// The one stub reply that carries a tail, in the wire shape it is sent in.
+  ///
+  /// `chat-hermetic.yaml` S8 asserts both halves of this verbatim, and the
+  /// backend pins the producer in `tests/unit/test_desktop_llm_stub.py`. This is
+  /// the consumer half: if the client's rules ever stop admitting that answer,
+  /// the flow starts asserting a chip that no longer appears, and it should fail
+  /// here — in a second — rather than on a fifteen-minute tier-2 run.
+  func testTheHermeticStubTailBecomesTheStringsTheFlowAsserts() {
+    let answer = "Priya flagged the storage migration in the Tuesday review."
+    let chipQuestion = "What did Priya say about the storage migration?"
+    let wire = "\(answer)\n\n\(ChatFollowUpTail.delimiter) \(chipQuestion)"
+
+    let (visible, question) = ChatFollowUpTail.split(wire)
+    XCTAssertEqual(visible, answer)
+    XCTAssertEqual(question, chipQuestion)
+    XCTAssertFalse(
+      visible.contains(chipQuestion),
+      "the question must leave the prose entirely — the chip and the answer saying it twice is the defect")
+    XCTAssertTrue(
+      ChatFollowUpTail.shouldAttach(question: question, visibleText: visible, failed: false))
+  }
+
+  /// The field `chat-hermetic.yaml` S8 reads, and the value
+  /// `tap_chat_follow_up_chip` sends. One reader, so a flow can never assert a
+  /// chip the tap would then fail to find.
+  func testTheAutomationSnapshotProjectsTheChipQuestionOutOfTheVisibleAnswer() {
+    let provider = ChatProvider()
+    let chipQuestion = "What did Priya say about the storage migration?"
+    provider.messages = [
+      ChatMessage(id: "user-1", text: "Recap the storage migration.", sender: .user),
+      ChatMessage(
+        id: "assistant-1",
+        text: "Priya flagged the storage migration in the Tuesday review.",
+        sender: .ai,
+        contentBlocks: [
+          .text(id: "assistant-1:text", text: "Priya flagged the storage migration in the Tuesday review."),
+          .followUp(id: ChatFollowUpTail.blockID(messageID: "assistant-1"), text: chipQuestion),
+        ]),
+    ]
+
+    XCTAssertEqual(provider.automationLastFollowUpQuestion(), chipQuestion)
+    let snapshot = provider.automationMainChatSnapshot(limit: 10)
+    XCTAssertEqual(snapshot["last_assistant_follow_up_question"], chipQuestion)
+    XCTAssertEqual(
+      snapshot["last_assistant_text"],
+      "Priya flagged the storage migration in the Tuesday review.",
+      "the visible answer must not carry the chip's question")
+  }
+
   // MARK: - Attribution
 
   func testAChipQuestionIsAttributedToTheFollowUpOrigin() {

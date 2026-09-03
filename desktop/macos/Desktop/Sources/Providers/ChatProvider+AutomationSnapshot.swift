@@ -18,6 +18,18 @@ extension ChatProvider {
     automationChatSnapshot(limit: limit)
   }
 
+  /// The grounded follow-up question on the newest answer, or `nil` when it
+  /// carries no chip. One reader for both the snapshot field and the
+  /// `tap_chat_follow_up_chip` action, so a flow can never assert a chip the
+  /// tap would then fail to find.
+  func automationLastFollowUpQuestion() -> String? {
+    guard let lastAssistant = messages.last(where: { $0.sender != .user }) else { return nil }
+    return lastAssistant.contentBlocks.compactMap { block -> String? in
+      if case .followUp(_, let text) = block { return text }
+      return nil
+    }.last
+  }
+
   func automationChatSnapshot(limit: Int) -> [String: String] {
     let boundedLimit = max(1, limit)
     let runtimeChatId = mainChatRuntimeChatId(sessionId: currentSessionId)
@@ -50,8 +62,16 @@ extension ChatProvider {
       "message_count": "\(messages.count)",
       "messages_json": messagesJSON,
     ]
-    if let lastAssistant = messages.last(where: { $0.sender != .user })?.copyableText {
-      detail["last_assistant_text"] = lastAssistant
+    if let lastAssistant = messages.last(where: { $0.sender != .user }) {
+      detail["last_assistant_text"] = lastAssistant.copyableText
+      // The grounded follow-up chip, projected out of the block list so a flow
+      // can assert it without string-matching `messages_json`. The pair matters
+      // more than either half: `last_assistant_text` is the visible prose and
+      // excludes this block, so asserting both pins the tail as *moved* rather
+      // than merely present — the exact defect the split exists to prevent.
+      if let question = automationLastFollowUpQuestion() {
+        detail["last_assistant_follow_up_question"] = question
+      }
     }
     if let ownerId = runtimeOwnerId {
       detail["owner_id"] = ownerId
