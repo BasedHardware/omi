@@ -115,6 +115,7 @@ def _from_day(
         return False
     return window_start <= created_at <= window_end
 
+
 def _conversation_evidence(memory: "MemoryDB") -> frozenset[str]:
     """Every conversation this memory carries evidence from."""
     found: set[str] = set()
