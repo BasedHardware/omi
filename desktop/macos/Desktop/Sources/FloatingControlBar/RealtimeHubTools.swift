@@ -45,13 +45,67 @@ enum RealtimeHubTools {
       + "was misheard; interpret it as \(primary). "
   }
 
+  /// The onboarding demo note while the three-doors step is active, else nil (logged once per session build).
+  @MainActor static func activeOnboardingDemoContext() -> String? {
+    guard let note = ThreeDoorsDemoPage.activeModelNote, !note.isEmpty else { return nil }
+    log("RealtimeHub: onboarding demo note included in voice instructions (\(note.count) chars)")
+    return note
+  }
+
+  /// Only a Gemini session receives the PTT-down frame as in-turn video. Telling every session
+  /// that "every turn arrives with an image of the user's screen" made a provider that never
+  /// receives one answer current-screen questions from memory instead of calling the screenshot
+  /// tool, so the claim is stated only where it is true.
+  static func screenRule(turnFrameAttached: Bool) -> String {
+    let opening =
+      turnFrameAttached
+      ? """
+      every turn arrives with an image of the user's screen captured the instant \
+      they pressed the key. That image IS the current screen. Answer anything that could refer \
+      to it — "this", "that", "here", "it", "the page", "the answer", "the riddle", "the error", \
+      "what am I looking at" — directly from that image, before reaching for any other tool or \
+      for memory of earlier turns. Images from earlier turns are stale: the screen changes \
+      between turns, so never answer a current-screen question from an older image or an \
+      earlier answer. Call the screenshot tool only when no image arrived with this turn or \
+      the user says the screen changed since they pressed the key. When in doubt, look at \
+      this turn's image.
+      """
+      : """
+      no image of the user's screen arrives with a turn on this session. Anything that could \
+      refer to the screen — "this", "that", "here", "it", "the page", "the answer", "the \
+      riddle", "the error", "what am I looking at" — needs the screenshot tool first. Never \
+      answer a current-screen question from memory of an earlier turn or an earlier answer.
+      """
+    return """
+      Screen rule: \(opening) When the screenshot tool succeeds for a current-screen question, the \
+      attached image and, when present, its locally captured foreground-application context are \
+      the only current visual source of truth. The foreground-application context is trustworthy \
+      only for identifying the app active at capture time; it never replaces visual reasoning. \
+      Disregard conflicting kernel context, OCR, work summaries, and earlier screen descriptions. \
+      You MUST then call \
+      report_screen_observation with a concise grounding observation. That report is internal \
+      verification, not your user-facing reply. Once it succeeds, answer the user's original \
+      current-screen question naturally and conversationally from the attached image. Do not let \
+      the report replace the answer or fall back to a generic screen description when the user \
+      asked a specific question. Omi's own floating bar, chat bubble, or window may also be \
+      visible in the image: treat that as assistant chrome, not as the subject of the user's \
+      screen question, unless the user specifically asks about Omi. Answer about the user's \
+      visible work and intent, not the assistant UI.
+      """
+  }
+
   static func systemInstruction(
     kernelContext: String = "",
     kernelSemanticGuidance: String = "",
-    userLanguages: [String] = []
+    userLanguages: [String] = [],
+    onboardingDemoContext: String? = nil,
+    turnScreenFrameAttached: Bool = false
   ) -> String {
     let canonicalContext = kernelContext.trimmingCharacters(in: .whitespacesAndNewlines)
     let semanticGuidance = kernelSemanticGuidance.trimmingCharacters(in: .whitespacesAndNewlines)
+    let demoNote = onboardingDemoContext?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let demoBlock =
+      demoNote.isEmpty ? "" : "\n## Onboarding demo (authoritative for questions about the doors)\n\(demoNote)\n"
 
     return """
       You are Omi, a fast spoken-voice assistant on the user's Mac. You hear the user's \
@@ -59,7 +113,7 @@ enum RealtimeHubTools {
       \(userLanguagesLine(userLanguages))Reply in the same language the user is speaking.
 
       \(canonicalContext)
-
+      \(demoBlock)
       \(semanticGuidance)
 
       \(DesktopCapabilityRegistry.realtimeSelfModelPrompt)
@@ -85,21 +139,8 @@ enum RealtimeHubTools {
       tool call, and never read tool JSON or ids aloud. The think_deeper and web_search tool cards \
       are exceptions: call either one silently and immediately because the app speaks an instant \
       acknowledgement after the kernel accepts it. Do not repeat that acknowledgement when its \
-      result arrives. You cannot see the user's data or screen \
-      without calling a tool. When the screenshot tool succeeds for a current-screen question, the \
-      attached image and, when present, its locally captured foreground-application context are \
-      the only current visual source of truth. The foreground-application context is trustworthy \
-      only for identifying the app active at capture time; it never replaces visual reasoning. \
-      Disregard conflicting kernel context, OCR, work summaries, and earlier screen descriptions. \
-      You MUST then call \
-      report_screen_observation with a concise grounding observation. That report is internal \
-      verification, not your user-facing reply. Once it succeeds, answer the user's original \
-      current-screen question naturally and conversationally from the attached image. Do not let \
-      the report replace the answer or fall back to a generic screen description when the user \
-      asked a specific question. Omi's own floating bar, chat bubble, or window may also be \
-      visible in the image: treat that as assistant chrome, not as the subject of the user's \
-      screen question, unless the user specifically asks about Omi. Answer about the user's \
-      visible work and intent, not the assistant UI.
+      result arrives. You cannot see the user's data without calling a tool. \
+      \(screenRule(turnFrameAttached: turnScreenFrameAttached))
 
       Work you started is still yours. When you hand a task to a background agent, the next thing \
       the user says is usually the next step in that same task — "now search YouTube" after "open \
@@ -123,6 +164,17 @@ enum RealtimeHubTools {
     captureFailure: RealtimeScreenEvidenceCaptureFailure? = nil
   ) -> String {
     guard capturedBytes != nil else {
+      if captureFailure == .screenRecordingNeedsRelaunch {
+        return jsonToolResult([
+          "ok": false,
+          "error": [
+            "code": "screen_recording_needs_relaunch",
+            "permission": "screen_recording",
+            "message":
+              "Screen Recording was granted after Omi launched, so this process still cannot see the screen. Tell the user Screen Recording was granted after Omi started and that they should quit Omi and open it again. Then answer what you can without the screen.",
+          ],
+        ])
+      }
       if captureFailure == .screenRecordingPermissionRequired {
         return jsonToolResult([
           "ok": false,
@@ -272,10 +324,14 @@ enum RealtimeHubTools {
     """
   }
 
-  static func escalationUserPrompt(query: String, toolContext: String) -> String {
+  static func escalationUserPrompt(query: String, toolContext: String, screenContext: String? = nil) -> String {
+    var prompt = query
+    if let screen = screenContext?.trimmingCharacters(in: .whitespacesAndNewlines), !screen.isEmpty {
+      prompt += "\n\nWhat the user's screen showed when they asked (this turn's screenshot):\n" + screen
+    }
     let trimmedToolContext = toolContext.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedToolContext.isEmpty else { return query }
-    return query + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
+    guard !trimmedToolContext.isEmpty else { return prompt }
+    return prompt + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
   }
 
   /// Host-authored public-only request sent to the managed web-search lane.

@@ -47,6 +47,7 @@ class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocke
     super.customSttMode,
     super.onboardingMode,
     super.geolocation,
+    super.clientConversationId,
   }) : super.create(includeSpeechProfile: false);
 }
 
@@ -58,6 +59,7 @@ class ConversationTranscriptSegmentSocketService extends TranscriptSegmentSocket
     super.source,
     super.customSttMode,
     super.geolocation,
+    super.clientConversationId,
   }) : super.create(includeSpeechProfile: true);
 }
 
@@ -68,6 +70,7 @@ class CustomSttTranscriptSegmentSocketService extends TranscriptSegmentSocketSer
     super.language, {
     super.source,
     super.geolocation,
+    super.clientConversationId,
   }) : super.create(includeSpeechProfile: true, customSttMode: true);
 }
 
@@ -90,6 +93,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   String? source;
   bool customSttMode;
   String? sttConfigId;
+  String? clientConversationId;
 
   bool onboardingMode;
   Geolocation? geolocation;
@@ -104,6 +108,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.sttConfigId,
     this.onboardingMode = false,
     this.geolocation,
+    this.clientConversationId,
   }) {
     var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
@@ -111,6 +116,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     if (source != null && source!.isNotEmpty) {
       params += '&source=${Uri.encodeComponent(source!)}';
+    }
+
+    if (clientConversationId != null && clientConversationId!.isNotEmpty) {
+      params += '&client_conversation_id=${Uri.encodeComponent(clientConversationId!)}';
     }
 
     if (customSttMode) {
@@ -154,6 +163,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.sttConfigId,
     this.onboardingMode = false,
     this.geolocation,
+    this.clientConversationId,
   }) {
     _socket = socket;
     _socket.setListener(this);
@@ -331,6 +341,7 @@ class TranscriptSocketServiceFactory {
     String? source,
     String? sttConfigId,
     Geolocation? geolocation,
+    String? clientConversationId,
   }) {
     return TranscriptSegmentSocketService.create(
       sampleRate,
@@ -340,6 +351,7 @@ class TranscriptSocketServiceFactory {
       source: source,
       sttConfigId: sttConfigId ?? 'omi:default',
       geolocation: geolocation,
+      clientConversationId: clientConversationId,
     );
   }
 
@@ -362,9 +374,17 @@ class TranscriptSocketServiceFactory {
     CustomSttConfig config, {
     String? source,
     Geolocation? geolocation,
+    String? clientConversationId,
   }) {
     if (!config.isEnabled) {
-      return createDefault(sampleRate, codec, language, source: source, geolocation: geolocation);
+      return createDefault(
+        sampleRate,
+        codec,
+        language,
+        source: source,
+        geolocation: geolocation,
+        clientConversationId: clientConversationId,
+      );
     }
 
     final sttConfigId = config.sttConfigId;
@@ -390,6 +410,7 @@ class TranscriptSocketServiceFactory {
       sttConfigId: sttConfigId,
       sttProvider: config.provider.name,
       forwardRawAudioToSecondary: config.sendRawAudioToOmi,
+      clientConversationId: clientConversationId,
     );
   }
 
@@ -518,6 +539,7 @@ class TranscriptSocketServiceFactory {
     String? sttProvider,
     required bool forwardRawAudioToSecondary,
     Geolocation? geolocation,
+    String? clientConversationId,
   }) {
     final secondaryService = CustomSttTranscriptSegmentSocketService.create(
       sampleRate,
@@ -525,6 +547,7 @@ class TranscriptSocketServiceFactory {
       language,
       source: source,
       geolocation: geolocation,
+      clientConversationId: clientConversationId,
     );
     final compositeSocket = CompositeTranscriptionSocket(
       primarySocket: primarySocket,
@@ -541,6 +564,7 @@ class TranscriptSocketServiceFactory {
       customSttMode: true,
       sttConfigId: sttConfigId,
       geolocation: geolocation,
+      clientConversationId: clientConversationId,
     );
   }
 }

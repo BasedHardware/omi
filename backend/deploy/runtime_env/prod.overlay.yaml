@@ -61,6 +61,10 @@ overlay:
         OMI_LLM_GATEWAY_FEATURE_MODE:
           value: gateway
           category: rollout
+        # Notes v2 prod-on (2026-09-01). Calendar/OCR context stay dev-only below.
+        CONVERSATION_NOTES_V2_ENABLED:
+          value: 'true'
+          category: rollout
         MEMORY_ENABLED:
           value: 'on'
         # Canonical graph and /v3/memories first-page cursors fail closed without this HMAC.
@@ -108,7 +112,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: dg-nova-3,modulate-velma-2,parakeet
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -206,6 +210,10 @@ overlay:
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
+            category: rollout
+          # Notes v2 prod-on (2026-09-01); keep calendar/OCR context dev-only.
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'true'
             category: rollout
           MEMORY_ENABLED:
             value: 'on'

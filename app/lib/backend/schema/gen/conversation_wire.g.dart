@@ -590,6 +590,46 @@ class GeneratedCalendarEventLink {
   }
 }
 
+class GeneratedCalendarCaptureGap {
+  final String coverage;
+  final DateTime endTime;
+  final String eventId;
+  final DateTime startTime;
+  final String status;
+  final String title;
+
+  const GeneratedCalendarCaptureGap({
+    this.coverage = "not_captured",
+    required this.endTime,
+    required this.eventId,
+    required this.startTime,
+    this.status = "confirmed",
+    required this.title,
+  });
+
+  factory GeneratedCalendarCaptureGap.fromJson(Map<String, dynamic> json) {
+    return GeneratedCalendarCaptureGap(
+      coverage: _required(_readFieldValue<String>(_readField(json, const ["coverage"]), "coverage", _readString, requiredField: false, nullable: false, defaultValue: "not_captured"), "coverage"),
+      endTime: _required(_readFieldValue<DateTime>(_readField(json, const ["end_time"]), "end_time", _readDateTime, requiredField: true, nullable: false), "end_time"),
+      eventId: _required(_readFieldValue<String>(_readField(json, const ["event_id"]), "event_id", _readString, requiredField: true, nullable: false), "event_id"),
+      startTime: _required(_readFieldValue<DateTime>(_readField(json, const ["start_time"]), "start_time", _readDateTime, requiredField: true, nullable: false), "start_time"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "confirmed"), "status"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'coverage': coverage,
+      'end_time': endTime.toUtc().toIso8601String(),
+      'event_id': eventId,
+      'start_time': startTime.toUtc().toIso8601String(),
+      'status': status,
+      'title': title,
+    };
+  }
+}
+
 class GeneratedTranscriptMatchSnippet {
   final double? end;
   final int? endMs;

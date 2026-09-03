@@ -96,6 +96,34 @@ describe("kernel ContextSnapshot", () => {
     store.close();
   });
 
+  it("surfaces a turn's journaled screen_context in recentTurns, bounded, and omits it otherwise", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-screen",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "screen" },
+      defaultAdapterId: "fake",
+    }, () => 1);
+    recordJournalTurn(store, {
+      ownerId: "owner-screen", conversationId: surface.conversationId, turnId: "screen-user",
+      role: "user", surfaceKind: "main_chat", origin: "realtime_voice", status: "completed",
+      content: "what's the answer?", contentBlocks: [], createdAtMs: 1,
+      metadataJson: JSON.stringify({ continuityKey: "voice:1", screen_context: "Riddle on screen: " + "x".repeat(900) }),
+    });
+    recordJournalTurn(store, {
+      ownerId: "owner-screen", conversationId: surface.conversationId, turnId: "screen-assistant",
+      role: "assistant", surfaceKind: "main_chat", origin: "realtime_voice", status: "completed",
+      content: "A keyboard.", contentBlocks: [], createdAtMs: 2,
+    });
+    const snapshot = buildContextSnapshot(store, surface.agentSessionId, "owner-screen", 2);
+    const [user, assistant] = snapshot.recentTurns;
+    expect(user?.screenContext?.startsWith("Riddle on screen: ")).toBe(true);
+    expect(user?.screenContext?.length).toBe(800);
+    expect(assistant?.screenContext).toBeUndefined();
+    expect(renderContextSnapshot(snapshot, "realtime_voice", "coordinator")).toContain("Riddle on screen: ");
+    expect(snapshot.contextPlan.semanticGuidance).toContain("screenContext");
+    store.close();
+  });
+
   it("delivers full history once per binding, then only new or changed canonical turns", () => {
     const { store } = fixture();
     const surface = resolveSurfaceSession(store, {

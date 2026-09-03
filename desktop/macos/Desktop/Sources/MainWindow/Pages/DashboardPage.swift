@@ -1209,7 +1209,8 @@ struct DashboardPage: View {
   private var homeSuggestedQuestions: [String] {
     HomeSuggestionComposer.compose(
       personalized: homeSuggestionsStore.personalizedQuestions,
-      onboarding: PostOnboardingPromptSuggestions.suggestions()
+      onboarding: PostOnboardingPromptSuggestions.suggestions(),
+      dayZero: .live()
     )
   }
 
@@ -1274,8 +1275,14 @@ struct DashboardPage: View {
   /// of whatever surface Home was resting on.
   private func consumePendingMainChatOpenRequest() {
     guard MainChatNavigationRequestStore.shared.consume() else { return }
+    let draft = MainChatNavigationRequestStore.shared.consumeDraft()
+    if let draft {
+      // Prefill, focus, and stop: the user reads the suggestion and decides to send it.
+      chatProvider.draftText = draft
+      homeAskFieldFocused = true
+    }
     guard !useLegacyHomeDesign else { return }
-    openHomeChat()
+    openHomeChat(focusInput: draft == nil)
   }
   private func openHomeChat(focusInput: Bool = true) {
     if let onOpenPrimaryChat {
@@ -1385,6 +1392,13 @@ struct DashboardPage: View {
   }
 
   private func askHomeSuggestion(_ suggestion: String) {
+    if DayZeroChips.isDraftPrompt(suggestion) {
+      // "Remember that I…" is a sentence for the user to finish, not a question to fire.
+      chatProvider.draftText = DayZeroChips.draftText(for: suggestion)
+      if onOpenPrimaryChat == nil { openHomeChat(focusInput: true) }
+      homeAskFieldFocused = true
+      return
+    }
     if let onOpenPrimaryChat {
       onOpenPrimaryChat()
       guard !chatProvider.isSending else { return }
@@ -2082,6 +2096,13 @@ struct DashboardPage: View {
 
   private func handleSuggestedPrompt(_ suggestion: String) {
     PostOnboardingPromptSuggestions.consume()
+    if DayZeroChips.isDraftPrompt(suggestion) {
+      // A sentence for the user to finish: prefill and focus, never send.
+      chatProvider.draftText = DayZeroChips.draftText(for: suggestion)
+      openHomeChat(focusInput: true)
+      homeAskFieldFocused = true
+      return
+    }
     FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
   }
 

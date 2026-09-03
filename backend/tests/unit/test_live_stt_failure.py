@@ -228,6 +228,92 @@ async def test_single_channel_dead_socket_preserves_unsent_buffer_and_terminates
 
 
 @pytest.mark.asyncio
+async def test_dead_socket_with_a_successful_failover_is_not_terminal() -> None:
+    """The send path must offer the session's failover before declaring terminal.
+
+    It observes a provider death on the very next audio chunk — hundreds of
+    milliseconds before the 1s death-monitor poll — so terminating here made
+    #12459's failover structurally unreachable for any session with audio
+    flowing: 3,110 modulate sessions terminated in 30 minutes on 2026-08-31
+    with zero failovers fired.
+    """
+    websocket = FakeClientSocket()
+    session = FakeSession()
+    provider_socket = FakeProviderSocket(dead=True)
+    audio = bytearray(b'synthetic-pcm')
+    failover_calls: list[bool] = []
+
+    async def attempt_failover() -> bool:
+        failover_calls.append(True)
+        return True
+
+    sent = await flush_live_stt_buffer(
+        websocket,
+        session,
+        stt_socket=provider_socket,
+        buffer=audio,
+        provider='modulate',
+        platform='ios',
+        attempt_failover=attempt_failover,
+    )
+
+    assert sent is False
+    # The chunk is retained so the caller can retry it against the replacement.
+    assert audio == b'synthetic-pcm'
+    assert failover_calls == [True]
+    assert session.stt_terminal_failure is False
+    assert session.active is True
+    assert websocket.actions == []
+
+
+@pytest.mark.asyncio
+async def test_dead_socket_with_an_exhausted_failover_chain_stays_terminal() -> None:
+    websocket = FakeClientSocket()
+    session = FakeSession()
+
+    async def attempt_failover() -> bool:
+        return False
+
+    sent = await send_live_stt_audio(
+        websocket,
+        session,
+        stt_socket=FakeProviderSocket(dead=True),
+        audio=b'synthetic-pcm',
+        provider='modulate',
+        platform='ios',
+        attempt_failover=attempt_failover,
+    )
+
+    assert sent is False
+    assert session.stt_terminal_failure is True
+    assert websocket.actions[-1] == ('close', LIVE_STT_FAILURE_CLOSE_CODE, LIVE_STT_FAILURE_CLOSE_REASON)
+
+
+@pytest.mark.asyncio
+async def test_a_death_latched_during_send_also_offers_failover() -> None:
+    websocket = FakeClientSocket()
+    session = FakeSession()
+    provider_socket = FakeProviderSocket(die_during_send=True)
+
+    async def attempt_failover() -> bool:
+        return True
+
+    sent = await send_live_stt_audio(
+        websocket,
+        session,
+        stt_socket=provider_socket,
+        audio=b'synthetic-pcm',
+        provider='modulate',
+        platform='ios',
+        attempt_failover=attempt_failover,
+    )
+
+    assert sent is False
+    assert session.stt_terminal_failure is False
+    assert websocket.actions == []
+
+
+@pytest.mark.asyncio
 async def test_unreadable_provider_death_latch_is_terminal() -> None:
     websocket = FakeClientSocket()
     session = FakeSession()

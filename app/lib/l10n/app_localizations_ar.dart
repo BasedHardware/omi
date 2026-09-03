@@ -9787,12 +9787,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get accountCutoverOpenStore => 'فتح المتجر';
 
   @override
-  String get chatScopeToday => 'اليوم';
-
-  @override
-  String get chatScopeThisWeek => 'هذا الأسبوع';
-
-  @override
   String chatScopeAbout(String title) {
     return 'عن: $title';
   }
@@ -9855,4 +9849,15 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'ذاكرة Pendant ممتلئة وما زال في وضع التسجيل، لذا لا يمكن نقل الصوت المخزّن. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'لم يتم التسجيل ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'النسخ لا يستلم الصوت';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

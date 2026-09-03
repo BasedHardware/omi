@@ -8,6 +8,8 @@ enum HubTool: String {
   case getAgentRun = "get_agent_run"
   case cancelAgentRun = "cancel_agent_run"
   case inspectAgentArtifacts = "inspect_agent_artifacts"
+  case readToolOutput = "read_tool_output"
+  case searchToolOutput = "search_tool_output"
   case updateAgentArtifactLifecycle = "update_agent_artifact_lifecycle"
   case sendAgentMessage = "send_agent_message"
   case spawnAgent = "spawn_agent"
@@ -36,7 +38,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "search_screen_history",
-    "description": "Search the user's on-screen history — what they saw, read, or worked on — by meaning. Use for 'when was I looking at X', 'find where I read about Y', 'what was I doing in app Z'. Returns matching moments with the app and context. Fast synchronous read. Speak the result.",
+    "description": "Search the user's on-screen history — what they saw, read, or worked on — by meaning. Use for 'when was I looking at X', 'find where I read about Y', 'what was I doing in app Z', and for text they read on screen earlier ('the riddle on the first page', 'what did that message say'). Anything displayed rather than spoken lives here, not in conversations. Returns matching moments with the app, context, and an OCR text preview. Fast synchronous read. Speak the result.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -196,6 +198,53 @@ enum GeneratedRealtimeTools {
         }
       },
       "required": []
+    }
+  },
+  {
+    "type": "function",
+    "name": "read_tool_output",
+    "description": "Read a bounded excerpt from an Omi tool-output artifact referenced by a prior toolResultEnvelope. Never request an arbitrary file path.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "description": "Canonical tool-output artifact id."
+        },
+        "maxBytes": {
+          "type": "number",
+          "description": "Maximum excerpt size in bytes. Default 4096, max 8192."
+        }
+      },
+      "required": [
+        "artifactId"
+      ]
+    }
+  },
+  {
+    "type": "function",
+    "name": "search_tool_output",
+    "description": "Search a saved Omi tool-output artifact for matching lines without returning the complete artifact.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "description": "Canonical tool-output artifact id."
+        },
+        "query": {
+          "type": "string",
+          "description": "Text to find in the saved output."
+        },
+        "maxMatches": {
+          "type": "number",
+          "description": "Maximum matching lines. Default 5."
+        }
+      },
+      "required": [
+        "artifactId",
+        "query"
+      ]
     }
   },
   {
@@ -377,7 +426,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "search_conversations",
-    "description": "Search the user's past conversations for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'), or pass a canonical conversation UUID/share link for an exact lookup. Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
+    "description": "Search the user's past spoken conversations (meetings, calls, things said aloud) for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'), or pass a canonical conversation UUID/share link for an exact lookup. Not for things the user read on screen; use search_screen_history for those. Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -677,7 +726,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "screenshot",
-    "description": "Capture the user's current screen so you can see what they're looking at.",
+    "description": "Take a fresh capture of the user's screen. Every turn already includes the screen as it was when the user pressed the key; call this only when no image arrived with this turn or the user says the screen changed since.",
     "parameters": {
       "type": "object",
       "properties": {},

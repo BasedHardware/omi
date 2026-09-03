@@ -249,9 +249,11 @@ final class UserScrollDetectorTests: XCTestCase {
   func testRapidLiveScrollHandsOwnershipToReaderAndDoesNotRearmAwayFromBottom() {
     let (scrollView, hostView) = makeScrollViewAtBottom()
     var userScrollStarts = 0
+    var userScrollEnds = 0
     var settledAtBottom = 0
     let coordinator = UserScrollDetector.Coordinator(
       onUserScroll: { userScrollStarts += 1 },
+      onUserScrollEnded: { userScrollEnds += 1 },
       onScrollSettledAtBottom: { settledAtBottom += 1 }
     )
     coordinator.install(for: hostView)
@@ -264,6 +266,7 @@ final class UserScrollDetectorTests: XCTestCase {
     for scrollTop in [620.0, 400.0, 160.0] {
       scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: scrollTop))
     }
+    XCTAssertEqual(userScrollEnds, 0, "reader ownership must remain active until AppKit ends live scroll")
     NotificationCenter.default.post(
       name: NSScrollView.didEndLiveScrollNotification,
       object: scrollView
@@ -271,6 +274,7 @@ final class UserScrollDetectorTests: XCTestCase {
     drainMainQueue()
 
     XCTAssertEqual(userScrollStarts, 1, "native live scroll must immediately give the reader ownership")
+    XCTAssertEqual(userScrollEnds, 1, "native live-scroll completion must release reader ownership")
     XCTAssertEqual(
       settledAtBottom,
       0,

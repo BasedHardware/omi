@@ -3845,7 +3845,17 @@ class MemoryService:
         items: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         self.ensure_canonical_mutation_ready(uid)
-        result = replace_conversation_sourced_memories(uid, conversation_id, items, db_client=self.db_client)
+        # This wrapper is the conversation-extraction entry (finalize and
+        # reprocess). An empty extraction here is model variance, not deletion
+        # intent, so it keeps any existing rows instead of demanding the
+        # destructive gate the extraction path never holds.
+        result = replace_conversation_sourced_memories(
+            uid,
+            conversation_id,
+            items,
+            db_client=self.db_client,
+            empty_set_intent="extraction",
+        )
         retracted = list(result.get("retracted_memory_ids") or [])
         if retracted:
             self._write_historical_overrides(uid, retracted, MemoryItemStatus.tombstoned)

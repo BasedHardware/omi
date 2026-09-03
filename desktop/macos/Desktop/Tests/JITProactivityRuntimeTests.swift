@@ -133,7 +133,9 @@ final class JITProactivityRuntimeTests: XCTestCase {
     let decision = await runtime.admission(
       authorizationSnapshot: try snapshot(), observation: KnowledgeLedgerTriggerObservation())
 
-    XCTAssertEqual(decision, .suppressed(reason: "empty_watchlist"))
+    // No ambient context was supplied, so the empty watchlist reaches the
+    // ambient local gate rather than a silent suppression.
+    XCTAssertEqual(decision, .suppressed(reason: "ambient_local_gate"))
 
     let remaining = await sequence.remaining
     XCTAssertEqual(remaining, 0, "effective-enabled authority must read the trigger snapshot")
@@ -144,15 +146,118 @@ final class JITProactivityRuntimeTests: XCTestCase {
     XCTAssertEqual(receipts, ["owner"])
   }
 
-  func testEmptyCompleteWatchlistSuppressesWithoutAmbientSpend() async throws {
-    let runtime = try wiredRuntime(triggers: [])
+  func testEmptyCompleteWatchlistReachesAmbientAdmission() async throws {
+    let usageReads = UsageReadProbe()
+    let runtime = try wiredRuntime(
+      triggers: [],
+      ambientNanoUsage: { day, _ in
+        await usageReads.record(day)
+        return JITAmbientNanoUsage(used: 0, lastSpentAt: nil)
+      })
 
     let decision = await runtime.admission(
       authorizationSnapshot: try snapshot(),
       observation: .init(text: "lunch", occurredAt: Date(timeIntervalSince1970: 1_777_248_000)),
       ambient: validAmbient())
 
-    XCTAssertEqual(decision, .suppressed(reason: "empty_watchlist"))
+    // Pacing admitted the spend; the only thing missing in a hermetic test is
+    // the local receipt database, which is the next step after pacing.
+    XCTAssertEqual(decision, .suppressed(reason: "ambient_nano_receipt_unavailable"))
+    let days = await usageReads.days
+    XCTAssertEqual(days.count, 1, "pacing must read today's usage exactly once before spending")
+  }
+
+  func testAmbientPacingDefersUnmatchedContextInsideSpacingWithoutSpend() async throws {
+    let now = Date(timeIntervalSince1970: 1_777_248_000)
+    let runtime = try wiredRuntime(
+      triggers: [],
+      ambientNanoUsage: { _, _ in
+        JITAmbientNanoUsage(used: 2, lastSpentAt: now.addingTimeInterval(-600))
+      })
+
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(text: "lunch", occurredAt: now),
+      ambient: validAmbient())
+
+    XCTAssertEqual(decision, .suppressed(reason: "ambient_paced"))
+  }
+
+  func testDerivedIntentMatchBypassesSpacingButNotTheDailyCap() async throws {
+    let now = Date(timeIntervalSince1970: 1_777_248_000)
+    let match = JITDerivedIntentMatch(entries: [
+      JITDerivedIntentEntry(id: "derived:task", source: .task, label: "ship release", keywords: ["ship", "release"])
+    ])
+    let insideSpacing = try wiredRuntime(
+      triggers: [],
+      ambientNanoUsage: { _, _ in JITAmbientNanoUsage(used: 2, lastSpentAt: now.addingTimeInterval(-600)) },
+      derivedIntent: { _, _ in match })
+    let paced = await insideSpacing.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(text: "ship the release", occurredAt: now),
+      ambient: validAmbient())
+    XCTAssertEqual(paced, .suppressed(reason: "ambient_nano_receipt_unavailable"))
+
+    let exhausted = try wiredRuntime(
+      triggers: [],
+      ambientNanoUsage: { _, _ in JITAmbientNanoUsage(used: 8, lastSpentAt: now.addingTimeInterval(-600)) },
+      derivedIntent: { _, _ in match })
+    let capped = await exhausted.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(text: "ship the release", occurredAt: now),
+      ambient: validAmbient())
+    XCTAssertEqual(capped, .suppressed(reason: "ambient_nano_budget"))
+  }
+
+  func testServerNanoDenialBacksOffInsteadOfRetryingEveryVisit() async throws {
+    let reserves = ReservationRecorder()
+    let now = Date(timeIntervalSince1970: 1_777_248_000)
+    let runtime = try wiredRuntime(
+      triggers: [],
+      reserve: { reservation, _ in
+        await reserves.record(reservation)
+        return false
+      },
+      ambientNanoUsage: { _, _ in JITAmbientNanoUsage(used: 0, lastSpentAt: nil) },
+      claimAmbientNano: { request in
+        JITTriggerWakeupClaim(
+          continuityKey: "jit-nano:\(request.contextID):\(request.semanticFingerprint)",
+          triggerID: "ambient-nano", leaseToken: "lease")
+      })
+
+    let first = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(text: "lunch", occurredAt: now),
+      ambient: validAmbient())
+    XCTAssertEqual(first, .suppressed(reason: "ambient_nano_budget"))
+
+    let second = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(text: "dinner", occurredAt: now.addingTimeInterval(60)),
+      ambient: validAmbient(fingerprint: String(repeating: "b", count: 64)))
+    XCTAssertEqual(second, .suppressed(reason: "ambient_server_denied"))
+    let recorded = await reserves.values
+    XCTAssertEqual(recorded.count, 1, "a denied day must not re-reserve on the next visit")
+
+    let later = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(
+        text: "dinner", occurredAt: now.addingTimeInterval(JITProactivityRuntime.ambientServerDenialBackoff + 1)),
+      ambient: validAmbient(fingerprint: String(repeating: "c", count: 64)))
+    XCTAssertEqual(later, .suppressed(reason: "ambient_nano_budget"))
+  }
+
+  func testAmbientUsageReadFailureFailsClosedBeforeAnySpend() async throws {
+    let runtime = try wiredRuntime(
+      triggers: [],
+      ambientNanoUsage: { _, _ in throw JITTriggerMirrorError.databaseUnavailable })
+
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(text: "lunch", occurredAt: Date(timeIntervalSince1970: 1_777_248_000)),
+      ambient: validAmbient())
+
+    XCTAssertEqual(decision, .suppressed(reason: "ambient_nano_receipt_unavailable"))
   }
 
   func testJITAdmissionSourceDoesNotStartMemoryAssistant() throws {
@@ -449,7 +554,9 @@ final class JITProactivityRuntimeTests: XCTestCase {
     await gate.waitUntilSuspended()
     let second = await runtime.admission(
       authorizationSnapshot: try snapshot(), observation: .init(text: "anything"))
-    XCTAssertEqual(second, .suppressed(reason: "empty_watchlist"))
+    // The deleting snapshot leaves an empty watchlist, which now reaches the
+    // ambient lane; no ambient context is supplied here, so its local gate stops it.
+    XCTAssertEqual(second, .suppressed(reason: "ambient_local_gate"))
     await gate.resumeFirstAdmission()
     let firstDecision = await first.value
 
@@ -600,7 +707,12 @@ final class JITProactivityRuntimeTests: XCTestCase {
     claim: JITProactivityRuntime.ClaimWakeup? = nil,
     begin: JITProactivityRuntime.BeginPlannedExecution? = nil,
     nano: @escaping JITProactivityRuntime.NanoTriage = { _, _ in .unknown },
-    reserve: @escaping JITProactivityRuntime.Reserve = { _, _ in true }
+    reserve: @escaping JITProactivityRuntime.Reserve = { _, _ in true },
+    ambientNanoUsage: JITProactivityRuntime.AmbientNanoUsageReader? = { _, _ in
+      JITAmbientNanoUsage(used: 0, lastSpentAt: nil)
+    },
+    derivedIntent: @escaping JITProactivityRuntime.DerivedIntentResolver = { _, _ in .none },
+    claimAmbientNano: JITProactivityRuntime.ClaimAmbientNano? = nil
   ) throws -> JITProactivityRuntime {
     let rows = try triggers.map { try snapshotRow(for: $0) }
     let serverSnapshot = serverSnapshot(sequence: 4, revision: "revision", rows: rows)
@@ -623,7 +735,10 @@ final class JITProactivityRuntimeTests: XCTestCase {
       },
       beginPlannedExecution: begin,
       reserve: reserve,
-      authorizationCurrent: { _ in authorizationCurrent })
+      authorizationCurrent: { _ in authorizationCurrent },
+      derivedIntent: derivedIntent,
+      ambientNanoUsage: ambientNanoUsage,
+      claimAmbientNano: claimAmbientNano)
   }
 
   private func compiledTrigger(
@@ -651,10 +766,10 @@ final class JITProactivityRuntimeTests: XCTestCase {
     return trigger
   }
 
-  private func validAmbient() -> JITAmbientRuntimeContext {
+  private func validAmbient(fingerprint: String = String(repeating: "a", count: 64)) -> JITAmbientRuntimeContext {
     JITAmbientRuntimeContext(
       id: "bucket",
-      semanticFingerprint: String(repeating: "a", count: 64),
+      semanticFingerprint: fingerprint,
       locallyRelevant: true,
       boundedEvidence: "validated local change")
   }
@@ -734,6 +849,11 @@ private actor SnapshotSequence {
   var remaining: Int {
     snapshots.count
   }
+}
+
+private actor UsageReadProbe {
+  private(set) var days: [String] = []
+  func record(_ day: String) { days.append(day) }
 }
 
 private actor ReservationRecorder {

@@ -9854,12 +9854,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
-  String get chatScopeToday => 'आज';
-
-  @override
-  String get chatScopeThisWeek => 'या आठवड्यात';
-
-  @override
   String chatScopeAbout(String title) {
     return '$title विषयी';
   }
@@ -9922,4 +9916,15 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendant चे स्टोरेज भरले आहे आणि ते अजूनही रेकॉर्डिंग मोडमध्ये आहे, त्यामुळे साठवलेला ऑडिओ हस्तांतरित करता येत नाही. रेकॉर्डिंग थांबवण्यासाठी Pendant चे बटण दाबा, नंतर पुन्हा सिंक करा.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'रेकॉर्ड झाले नाही ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'ट्रान्सक्रिप्शन ऑडिओ घेत नाही';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }
