@@ -34,6 +34,8 @@ done
 if $RUN_UNIT; then
     echo "🧪 Running unit & widget tests..."
     cd "$APP_DIR"
+    bash scripts/validate_mobile_build_config_test.sh
+    bash scripts/mobile_build_wrapper_test.sh
     flutter test
     echo ""
 fi

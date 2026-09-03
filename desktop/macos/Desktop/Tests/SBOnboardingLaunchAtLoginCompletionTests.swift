@@ -20,6 +20,23 @@ final class SBOnboardingLaunchAtLoginCompletionTests: XCTestCase {
     SBOnboardingModel(appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
   }
 
+  func testFreshInstallSeedsLaunchAtLoginOn() {
+    // The seed used to read the live SMAppService status, which is always
+    // "not registered" on a fresh install, so every new user ended up off.
+    let key = DefaultsKey.launchAtLoginUserDeclined.rawValue
+    let previous = UserDefaults.standard.object(forKey: key)
+    defer {
+      if let previous {
+        UserDefaults.standard.set(previous, forKey: key)
+      } else {
+        UserDefaults.standard.removeObject(forKey: key)
+      }
+    }
+    UserDefaults.standard.removeObject(forKey: key)
+    let model = makeModel()
+    XCTAssertTrue(model.launchAtLogin, "A fresh install must default to launching at login")
+  }
+
   func testCompletionPreservesDeclinedLaunchAtLogin() {
     let model = makeModel()
     model.launchAtLogin = false

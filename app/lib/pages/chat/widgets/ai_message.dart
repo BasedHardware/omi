@@ -34,6 +34,7 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
 import 'chart_message_widget.dart';
 import 'package:omi/widgets/components/chat_evidence_card.dart';
+import 'package:omi/utils/share_sheet.dart';
 import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
@@ -1235,7 +1236,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8, left: 4),
+      padding: const EdgeInsets.only(left: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1250,11 +1251,6 @@ class _MessageActionBarState extends State<MessageActionBar> {
                 properties: {'message': widget.messageText},
               );
 
-              // Implicit positive feedback - user copied the message (silent, no UI change)
-              if (_selectedNps == null) {
-                widget.setMessageNps?.call(1, reason: 'user_copied_message');
-              }
-
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1268,7 +1264,6 @@ class _MessageActionBarState extends State<MessageActionBar> {
               }
             },
           ),
-          const SizedBox(width: 20),
           // Thumbs up button
           _buildActionButton(
             icon: _selectedNps == 1 ? FontAwesomeIcons.solidThumbsUp : FontAwesomeIcons.thumbsUp,
@@ -1281,7 +1276,6 @@ class _MessageActionBarState extends State<MessageActionBar> {
               widget.setMessageNps?.call(_selectedNps ?? 0);
             },
           ),
-          const SizedBox(width: 20),
           // Thumbs down button
           _buildActionButton(
             icon: _selectedNps == -1 ? FontAwesomeIcons.solidThumbsDown : FontAwesomeIcons.thumbsDown,
@@ -1300,23 +1294,17 @@ class _MessageActionBarState extends State<MessageActionBar> {
               }
             },
           ),
-          const SizedBox(width: 20),
           // Share button
           _buildActionButton(
             icon: FontAwesomeIcons.share,
             onTap: () async {
               if (widget.messageText.isEmpty) return;
               HapticFeedback.lightImpact();
-              await Share.share(widget.messageText);
+              await Share.share(widget.messageText, sharePositionOrigin: shareSheetOrigin());
               PlatformManager.instance.analytics.track(
                 'Chat Message Shared',
                 properties: {'message': widget.messageText},
               );
-
-              // Implicit positive feedback - user shared the message (silent, no UI change)
-              if (_selectedNps == null) {
-                widget.setMessageNps?.call(1, reason: 'user_shared_message');
-              }
             },
           ),
         ],
@@ -1325,13 +1313,19 @@ class _MessageActionBarState extends State<MessageActionBar> {
   }
 
   Widget _buildActionButton({required FaIconData icon, required VoidCallback onTap, bool isSelected = false}) {
+    // The 14pt glyph alone is far below the 44pt tap minimum; pad the hit area
+    // (34x38) so finger taps on copy/share actually land. Visual pitch is kept
+    // by dropping the 20pt gaps between buttons in favour of this padding.
     return InkWell(
       splashColor: Colors.transparent,
       focusColor: Colors.transparent,
       hoverColor: Colors.transparent,
       highlightColor: Colors.transparent,
       onTap: onTap,
-      child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade600, size: 14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade600, size: 14),
+      ),
     );
   }
 }
