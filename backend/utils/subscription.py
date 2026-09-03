@@ -1117,10 +1117,13 @@ def enforce_chat_quota(
     firestore_client: Any | None = None,
     provision: bool = True,
     required_llm_provider: str | None = None,
+    byok_exempt: bool = True,
 ) -> None:
     """Block or allow a chat request based on the user's plan + usage.
 
-    - BYOK users with an LLM key attached: always allowed, no Omi-side cost.
+    - BYOK users with an LLM key attached: always allowed, no Omi-side cost —
+      unless ``byok_exempt`` is False, for surfaces that only ever spend Omi's
+      own key regardless of the user's (the realtime hub mints platform tokens).
     - Plans whose catalog exhaustion policy is overage: ALLOWED — the call is
       served and the excess accrues a charge. See ``utils.overage``.
     - Hard-capped plans: blocked → 402, which the chat endpoint converts into
@@ -1170,7 +1173,7 @@ def enforce_chat_quota(
     has_exempt_llm = (
         _request_has_byok_provider(required_llm_provider) if required_llm_provider else _request_has_llm_byok_key()
     )
-    if users_db.is_byok_active(uid, firestore_client=firestore_client) and has_exempt_llm:
+    if byok_exempt and users_db.is_byok_active(uid, firestore_client=firestore_client) and has_exempt_llm:
         return
 
     snapshot = get_chat_quota_snapshot(
@@ -1203,11 +1206,14 @@ def enforce_chat_quota(
     )
 
 
-def enforce_desktop_chat_quota(uid: str, platform: Optional[str] = None) -> None:
+def enforce_desktop_chat_quota(uid: str, platform: Optional[str] = None, *, byok_exempt: bool = True) -> None:
     """Quota for the desktop serving plane: production customer data, no Free provision.
 
     Development desktop-backend ADC stays on the compute project for ``agentVm``.
     Entitlements read the customer SA (``SERVICE_ACCOUNT_JSON`` or the Auth file).
+    ``byok_exempt=False`` is for surfaces that hand out Omi's own credential no
+    matter what key the user holds (the realtime hub); a user's Anthropic key
+    must not buy them a managed OpenAI or Gemini session past the cap.
     """
     # Desktop agent chat only consumes Anthropic. An OpenRouter/Gemini/OpenAI
     # key must not exempt this path while the request still uses Omi's managed
@@ -1218,6 +1224,7 @@ def enforce_desktop_chat_quota(uid: str, platform: Optional[str] = None) -> None
         firestore_client=get_customer_firestore_client(),
         provision=False,
         required_llm_provider='anthropic',
+        byok_exempt=byok_exempt,
     )
 
 
