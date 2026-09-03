@@ -16,7 +16,6 @@ final class SearchAnalyticsTests: XCTestCase {
 
   override func tearDown() async throws {
     SearchAnalytics.resetDebounceCoordinatorsForTests()
-    try await super.tearDown()
   }
 
   private func startCapturing() {
