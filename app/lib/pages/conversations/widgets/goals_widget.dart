@@ -531,7 +531,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
         final goals = goalsProvider.goals;
 
-        // If no goals, hide the widget (Add Goals button is now in Daily Score widget)
+        // If no goals, hide the widget (the Add Goals entry point lives in TodayTasksWidget)
         if (goals.isEmpty) {
           return const SizedBox.shrink();
         }

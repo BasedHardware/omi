@@ -12,7 +12,6 @@ covers:
   - app/lib/pages/onboarding/wrapper.dart
   - app/lib/providers/auth_provider.dart
   - app/lib/services/auth_service.dart
-  - app/lib/widgets/consent_bottom_sheet.dart
 preconditions:
   - App must be signed out, showing auth screen with Sign in with Google button
 
@@ -36,7 +35,7 @@ steps:
         values: ["Data & Privacy", "Continue with Google"]
     evidence:
       - screenshot: step-S2.webp
-    note: "Shows ConsentBottomSheet with data & privacy notices"
+    note: "Auth screen shows inline data & privacy consent notices (terms / privacy policy links)"
 
   - id: S3
     name: Continue through consent
