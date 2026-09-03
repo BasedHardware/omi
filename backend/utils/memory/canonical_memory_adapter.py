@@ -1500,6 +1500,7 @@ def write_canonical_extraction_memory(
     required_source_item: Optional[MemoryItem] = None,
     ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
     review_resolution: Optional[CanonicalReviewResolution] = None,
+    admit_neighbors: bool = True,
 ) -> str:
     """Persist one memory to memory_items + ledger (extraction or external/manual writes)."""
     if data.get("ledger_schema_version") is not None and _ledger_authority is not _LEDGER_WRITE_AUTHORITY:
@@ -1583,7 +1584,7 @@ def write_canonical_extraction_memory(
             MemoryProcessingState(item.processing_state.value),
         )
 
-    if belief_model_enabled() and item is not None:
+    if admit_neighbors and belief_model_enabled() and item is not None:
         from utils.memory.belief_evidence import admit_claim_against_neighbors
 
         try:
@@ -1697,14 +1698,26 @@ def write_canonical_external_memory(
                     },
                 )[:32]
             )
-    return write_canonical_extraction_memory(
+    memory_id = write_canonical_extraction_memory(
         uid,
         payload,
         db_client=client,
         evidence_items=reissued_evidence,
         review_resolution=review_resolution,
         _direct_user_authority=_DIRECT_USER_LEDGER_WRITE_AUTHORITY,
+        admit_neighbors=False,
     )
+    if belief_model_enabled():
+        from utils.memory.belief_evidence import schedule_belief_admission
+
+        schedule_belief_admission(
+            uid,
+            memory_id,
+            str(payload.get("content") or ""),
+            db_client=client,
+            new_user_asserted=bool(payload.get("manually_added") or payload.get("user_asserted")),
+        )
+    return memory_id
 
 
 def write_canonical_knowledge_ledger_memory(

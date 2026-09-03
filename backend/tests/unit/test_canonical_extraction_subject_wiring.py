@@ -443,6 +443,7 @@ def _evidence(source_id: str, now: datetime, *, source_type: str = "conversation
 
 def test_api_create_without_attribution_is_primary_user(monkeypatch_trusted_account, monkeypatch):
     monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    monkeypatch.setattr("utils.memory.belief_evidence.schedule_belief_admission", lambda *a, **k: None)
     uid = "uid-api-scope"
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     db = _FakeDb(_control_seed(uid))
@@ -464,6 +465,7 @@ def test_api_create_without_attribution_is_primary_user(monkeypatch_trusted_acco
 
 def test_x_post_legacy_assumed_is_primary_user(monkeypatch_trusted_account, monkeypatch):
     monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    monkeypatch.setattr("utils.memory.belief_evidence.schedule_belief_admission", lambda *a, **k: None)
     uid = "uid-x-scope"
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     db = _FakeDb(_control_seed(uid))
@@ -558,3 +560,35 @@ def test_extractor_media_screen_is_preserved(monkeypatch_trusted_account, monkey
     )
     stored = db.docs[f"users/{uid}/memory_items/mem_media"]
     assert stored["subject_scope"] == "media_screen"
+
+
+def test_api_create_does_not_block_on_admission_judge(monkeypatch_trusted_account, monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    scheduled = []
+
+    def _schedule(*args, **kwargs):
+        scheduled.append((args, kwargs))
+
+    def _admit(*_args, **_kwargs):
+        raise AssertionError("admission judge must not run on the API create path")
+
+    monkeypatch.setattr("utils.memory.belief_evidence.schedule_belief_admission", _schedule)
+    monkeypatch.setattr("utils.memory.belief_evidence.admit_claim_against_neighbors", _admit)
+    uid = "uid-api-defer"
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    db = _FakeDb(_control_seed(uid))
+    write_canonical_external_memory(
+        uid,
+        {
+            "id": "mem_api_defer",
+            "uid": uid,
+            "content": "I prefer dark mode",
+            "created_at": now,
+            "updated_at": now,
+            "evidence": [_evidence("external:mem_api_defer", now, source_type="api")],
+        },
+        db_client=db,
+    )
+    assert scheduled
+    assert scheduled[0][0][:3] == (uid, "mem_api_defer", "I prefer dark mode")
+    assert f"users/{uid}/memory_items/mem_api_defer" in db.docs

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Sequence
@@ -16,6 +17,11 @@ from utils.memory.belief_model import belief_model_enabled
 logger = logging.getLogger(__name__)
 
 ADMISSION_NEIGHBOR_LIMIT = 5
+# Cosine similarity needed before the judge is asked. Below this the neighbor
+# is unrelated and there is no model call. The score never writes by itself.
+# Override with MEMORY_BELIEF_ADMISSION_MIN_SCORE.
+ADMISSION_JUDGE_MIN_SCORE = 0.75
+MEMORY_BELIEF_ADMISSION_MIN_SCORE_ENV = "MEMORY_BELIEF_ADMISSION_MIN_SCORE"
 
 
 class EvidenceEventKind(str, Enum):
@@ -71,6 +77,24 @@ def patch_for_evidence_event(
             extra["superseded_by"] = pointer
         return logical, extra
     return None
+
+
+def admission_judge_min_score() -> float:
+    """Call-boundary env read. Invalid or unset values keep the documented default."""
+    raw = os.getenv(MEMORY_BELIEF_ADMISSION_MIN_SCORE_ENV)
+    if raw is None or not str(raw).strip():
+        return ADMISSION_JUDGE_MIN_SCORE
+    try:
+        return float(raw)
+    except ValueError:
+        return ADMISSION_JUDGE_MIN_SCORE
+
+
+def _neighbor_score(row: Dict[str, Any]) -> float:
+    try:
+        return float(row.get("score") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def default_judge(new_content: str, neighbors: Sequence[Dict[str, Any]]) -> EvidenceEventJudgment:
@@ -166,6 +190,10 @@ def admit_claim_against_neighbors(
             )(uid, content)
             if row.get("memory_id") and row["memory_id"] != new_memory_id
         ]
+        min_score = admission_judge_min_score()
+        neighbors = [row for row in neighbors if _neighbor_score(row) >= min_score]
+        if not neighbors:
+            return EvidenceEventJudgment(event=EvidenceEventKind.unrelated, rationale="below similarity gate")
         judgment = (judge or default_judge)(content, neighbors)
     except Exception:
         logger.warning("belief evidence admission lookup failed memory_id=%s", new_memory_id, exc_info=False)
@@ -225,3 +253,27 @@ def admit_committed_claims(
             )
         except Exception:
             logger.warning("belief evidence admission failed memory_id=%s", memory_id, exc_info=False)
+
+
+def schedule_belief_admission(
+    uid: str,
+    memory_id: str,
+    content: str,
+    *,
+    db_client: Any,
+    new_user_asserted: bool = False,
+) -> None:
+    """Fire-and-forget admission judge. Does not wait on the executor future."""
+    if not belief_model_enabled():
+        return
+    from utils.executors import llm_executor, submit_with_context
+
+    submit_with_context(
+        llm_executor,
+        admit_claim_against_neighbors,
+        uid,
+        memory_id,
+        content,
+        db_client=db_client,
+        new_user_asserted=new_user_asserted,
+    )
