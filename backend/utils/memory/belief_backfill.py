@@ -21,6 +21,7 @@ from models.product_memory import MemoryItem, MemoryItemStatus
 from utils.memory.belief_model import (
     HALF_LIFE_DAYS_BY_CLASS,
     KNOWN_SUBJECT_SCOPES,
+    SUBJECT_SCOPE_ALIASES,
     belief_model_enabled,
     horizon_from_extraction,
 )
@@ -57,6 +58,7 @@ class BeliefBackfillRow(BaseModel):
     @classmethod
     def validate_subject_scope(cls, value: str) -> str:
         scope = (value or "").strip().lower()
+        scope = SUBJECT_SCOPE_ALIASES.get(scope, scope)
         if scope not in KNOWN_SUBJECT_SCOPES:
             raise ValueError(f"unknown subject_scope: {value}")
         return scope

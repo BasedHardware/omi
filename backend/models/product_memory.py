@@ -55,7 +55,6 @@ class MemorySubjectScope(str, Enum):
     user_owned_project = "user_owned_project"
     user_relationship = "user_relationship"
     third_party = "third_party"
-    media_screen = "media_screen"
 
 
 class LedgerWriteReason(str, Enum):

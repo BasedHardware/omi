@@ -204,7 +204,7 @@ def test_subject_scope_never_defaults_unknown_to_the_user():
     assert subject_scope_from_extraction(about="YouTube video") == "third_party"
     assert subject_scope_from_extraction(about="Sarah") == "third_party"
     assert subject_scope_from_extraction() == "third_party"
-    assert subject_scope_from_extraction(extracted_scope="media_screen") == "media_screen"
+    assert subject_scope_from_extraction(extracted_scope="media_screen") == "third_party"
     assert subject_scope_from_extraction(about="David", user_name="David Zheng") == "primary_user"
     assert subject_scope_from_extraction(about="david", user_name="David Zheng") == "primary_user"
     assert (

@@ -28,6 +28,7 @@ from utils.memory.canonical_lineage import (
 )
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from utils.memory.belief_model import (
+    SUBJECT_SCOPE_ALIASES,
     belief_model_enabled,
     horizon_from_extraction,
     public_belief_overlay,
@@ -1374,6 +1375,9 @@ def _canonical_extraction_apply_write(
     ):
         if ledger_key in data and data[ledger_key] is not None:
             patch_payload[ledger_key] = data[ledger_key]
+    raw_scope = patch_payload.get("subject_scope")
+    if isinstance(raw_scope, str) and raw_scope in SUBJECT_SCOPE_ALIASES:
+        patch_payload["subject_scope"] = SUBJECT_SCOPE_ALIASES[raw_scope]
     if belief_model_enabled():
         if "valid_to" not in patch_payload and data.get("invalid_at") is not None:
             patch_payload["valid_to"] = data["invalid_at"]

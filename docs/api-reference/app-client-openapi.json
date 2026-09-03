@@ -18433,8 +18433,7 @@
           "primary_user",
           "user_owned_project",
           "user_relationship",
-          "third_party",
-          "media_screen"
+          "third_party"
         ],
         "title": "MemorySubjectScope",
         "type": "string"

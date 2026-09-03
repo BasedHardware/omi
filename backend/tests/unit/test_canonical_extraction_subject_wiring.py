@@ -538,7 +538,7 @@ def test_conversation_about_other_person_is_third_party(monkeypatch_trusted_acco
     assert stored["subject_scope"] == "third_party"
 
 
-def test_extractor_media_screen_is_preserved(monkeypatch_trusted_account, monkeypatch):
+def test_extractor_media_screen_is_stored_as_third_party(monkeypatch_trusted_account, monkeypatch):
     monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
     uid = "uid-media"
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
@@ -559,7 +559,7 @@ def test_extractor_media_screen_is_preserved(monkeypatch_trusted_account, monkey
         db_client=db,
     )
     stored = db.docs[f"users/{uid}/memory_items/mem_media"]
-    assert stored["subject_scope"] == "media_screen"
+    assert stored["subject_scope"] == "third_party"
 
 
 def test_api_create_does_not_block_on_admission_judge(monkeypatch_trusted_account, monkeypatch):

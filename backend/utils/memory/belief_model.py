@@ -110,9 +110,12 @@ KNOWN_SUBJECT_SCOPES = frozenset(
         "user_owned_project",
         "user_relationship",
         "third_party",
-        "media_screen",
     }
 )
+# Extractor/backfill labels that are not released enum members. The released
+# app-client contract pins MemorySubjectScope, so media and on-screen content
+# is stored as third_party: non-user is what the surface bars need.
+SUBJECT_SCOPE_ALIASES: Mapping[str, str] = {"media_screen": "third_party"}
 
 
 def subject_scope_from_extraction(
@@ -123,8 +126,9 @@ def subject_scope_from_extraction(
     user_name: Optional[str] = None,
     speaker_label: Optional[str] = None,
 ) -> str:
-    """Classify conversation-extracted subjects. media_screen comes only from the extractor."""
+    """Classify conversation-extracted subjects. Extractor-only labels are normalized via SUBJECT_SCOPE_ALIASES."""
     scope = (extracted_scope or "").strip().lower()
+    scope = SUBJECT_SCOPE_ALIASES.get(scope, scope)
     if scope in KNOWN_SUBJECT_SCOPES:
         return scope
     if classify_model_about(about, user_name=user_name, speaker_label=speaker_label) == "primary_user":
