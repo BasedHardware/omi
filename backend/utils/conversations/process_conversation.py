@@ -71,6 +71,12 @@ from utils.observability.finalization import FinalizationFailureReason, record_f
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
+from utils.free_tier_processing_policy import (
+    FreeTierProcessingPlan,
+    free_tier_local_processing_enabled,
+    resolve_free_tier_processing_plan,
+)
+from utils.managed_compute import Decision, authorize_managed_compute, request_carries_validated_byok_key
 from models.other import Person
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.notifications import send_important_conversation_message
@@ -190,6 +196,29 @@ class AppUsageAttribution(str, Enum):
     AUTOMATIC_PROCESSING = 'automatic_processing'
     EXPLICIT_SELECTION = 'explicit_selection'
     NON_USER_REPROCESS = 'non_user_reprocess'
+
+
+class DerivedEffectsDisposition(str, Enum):
+    """What the durable finalizer should do after the coordinator persists.
+
+    RUN is the paid/legacy bundle (or the empty-bundle memory-extraction
+    fallback). TERMINAL_NO_DERIVED_EFFECTS is a successful persist that must
+    not extract memories, fan out apps, or run any other derived effect.
+    Reporting persistence True alone is unsafe: the finalizer treats an empty
+    bundle as "extract memories now". The terminal value is also written onto
+    the Firestore document (see ``TERMINAL_NO_DERIVED_EFFECTS_FIELD``) so a
+    Cloud Tasks retry after a completed minimum still suppresses the bundle.
+    """
+
+    RUN = 'run'
+    TERMINAL_NO_DERIVED_EFFECTS = 'terminal_no_derived_effects'
+
+
+# Unmodeled Firestore field. Same precedent as ``jit_first_open``: Conversation
+# does not declare it, so the persist dict is the only write path. A Cloud Tasks
+# retry after a completed minimum must still see this marker; otherwise the
+# finalizer defaults disposition to RUN and extracts memories.
+TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
 
 
 class ExplicitAppSelectionFailedError(RuntimeError):
@@ -1869,6 +1898,123 @@ def _store_deferred_conversation(
     return conversation
 
 
+def _funding_owner_for_feature(feature: str) -> str:
+    """``byok`` only when this request carries a validated key for ``feature``'s provider.
+
+    Reuses S1's ``request_carries_validated_byok_key`` so the only dynamic
+    ``get_provider(feature)`` site stays inside ``utils/managed_compute.py``.
+    Called only from the injected ``decision_for`` closure so a raising BYOK
+    lookup is caught by the policy's exception guard.
+    """
+    return 'byok' if request_carries_validated_byok_key(feature) else 'omi'
+
+
+def _managed_compute_decision_for(uid: str) -> Callable[[str], Decision]:
+    """Injected ``decision_for(feature) -> Decision`` for the S6 policy.
+
+    Funding owner is computed inside this closure, not before the policy call.
+    A raising BYOK/provider lookup therefore becomes ``policy_unavailable``
+    (deterministic minimum) instead of crashing the coordinator.
+    """
+
+    def decision_for(feature: str) -> Decision:
+        owner = _funding_owner_for_feature(feature)
+        return authorize_managed_compute(uid, feature, owner)
+
+    return decision_for
+
+
+def _terminal_persist_payload(conversation: Conversation) -> dict[str, Any]:
+    """Persist dict for a free-tier terminal store (minimum or projection seam).
+
+    ``Conversation.dict()`` does not model ``jit_first_open`` or the durable
+    terminal-disposition marker. Firestore persist uses ``merge=True``, so a
+    prior pending first-open obligation would survive this write (paid→basic
+    reprocess) and ``get_conversation_by_id`` would dispatch folder assignment
+    and app fan-out. There is no lifecycle_service or first_open_obligations
+    helper that deletes the field; write ``None`` in the same persist so the
+    merge clears it. The terminal marker must be written here too: a completed
+    minimum that then fails receipt/keyframe/fanout-completion is retried by
+    Cloud Tasks against ``status=completed``, which skips process_conversation
+    and would otherwise default the request-scoped disposition to RUN.
+    """
+    payload = conversation.dict()
+    payload['jit_first_open'] = None
+    payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
+    return payload
+
+
+def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker: bool) -> dict[str, Any]:
+    """Persist dict for a completed store that is not a free-tier terminal.
+
+    Write ``TERMINAL_NO_DERIVED_EFFECTS_FIELD=None`` only when the flag-on
+    desktop policy was consulted and returned process_normally. That is the
+    upgrade path (a prior free-tier minimum left the marker True;
+    ``Conversation.dict()`` does not model it; persist uses ``merge=True``)
+    whose write must clear the stale field so derived effects run. Flag-off,
+    non-desktop, and any path that never consulted the policy must omit the
+    key entirely: missing versus explicit-null is a real Firestore distinction,
+    and the dark rollout must not stamp a new field onto every conversation.
+    """
+    payload = conversation.dict()
+    if clear_terminal_marker:
+        payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = None
+    return payload
+
+
+def _store_deterministic_minimum(
+    uid: str,
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+    plan: FreeTierProcessingPlan,
+) -> Tuple[Conversation, bool]:
+    """Persist a conversation at the no-LLM deterministic minimum, terminally.
+
+    Reuses ``_build_deferred_structured`` but does not set ``deferred=True`` or
+    ``status=processing`` — those are the first-open reprocess markers
+    ``get_conversation_by_id`` reads. This path emits no managed call, no JIT
+    obligation, no memory extraction, no app fan-out, and no folder assignment.
+    Typesense is not invoked from this persist path (keyword index is a
+    Firestore→Typesense sync, free of ``get_llm``); nothing that calls
+    ``get_llm`` runs here.
+    """
+    is_initial_creation = isinstance(conversation, (CreateConversation, ExternalIntegrationCreateConversation))
+    structured = _build_deferred_structured(conversation)
+    conversation = _get_conversation_obj(uid, structured, conversation)
+    conversation.deferred = False
+    conversation.status = ConversationStatus.completed
+    payload = _terminal_persist_payload(conversation)
+    if is_initial_creation:
+        persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
+    else:
+        persisted = lifecycle_service.persist_processed_conversation(uid, payload)
+    if not persisted:
+        logger.info(
+            'free-tier: deterministic-minimum persist fenced uid=%s conv=%s mode=%s reason=%s',
+            uid,
+            conversation.id,
+            plan.mode,
+            plan.reason,
+        )
+        return conversation, False
+    logger.info(
+        'free-tier: stored deterministic minimum uid=%s conv=%s mode=%s reason=%s',
+        uid,
+        conversation.id,
+        plan.mode,
+        plan.reason,
+    )
+    return conversation, True
+
+
+def _store_projected_conversation(
+    uid: str,
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+    plan: FreeTierProcessingPlan,
+) -> Tuple[Conversation, bool]:
+    """S4 will persist the client projection as display. Until then, the minimum."""
+    return _store_deterministic_minimum(uid, conversation, plan)
+
+
 def _stored_meeting_context(conversation: Any) -> Optional[CalendarMeetingContext]:
     direct = getattr(conversation, 'calendar_meeting_context', None)
     if isinstance(direct, CalendarMeetingContext):
@@ -2050,15 +2196,22 @@ def process_conversation(
     defer_derived_effects: bool = False,
     derived_effects_observer: Callable[[Callable[[], None]], None] | None = None,
     bypass_jit_first_open: bool = False,
+    derived_effects_disposition_observer: Callable[[DerivedEffectsDisposition], None] | None = None,
 ) -> Conversation:
     if app_usage_attribution is None:
         app_usage_attribution = (
             AppUsageAttribution.NON_USER_REPROCESS if is_reprocess else AppUsageAttribution.AUTOMATIC_PROCESSING
         )
 
-    def report_persistence(current: bool) -> None:
+    def report_persistence(
+        current: bool,
+        *,
+        derived_effects: DerivedEffectsDisposition = DerivedEffectsDisposition.RUN,
+    ) -> None:
         if persistence_observer is not None:
             persistence_observer(current)
+        if derived_effects_disposition_observer is not None:
+            derived_effects_disposition_observer(derived_effects)
 
     is_initial_creation = isinstance(conversation, (CreateConversation, ExternalIntegrationCreateConversation))
     # Trial paywall: skip ALL post-processing (summaries, memories, action
@@ -2090,6 +2243,57 @@ def process_conversation(
         report_persistence(False)
         return cast(Conversation, conversation)
 
+    # Free-tier local processing (S6): when the rollout flag is on, desktop
+    # conversations consult the processing policy instead of the legacy
+    # should_defer_desktop_processing fail-open. Identified-basic and other
+    # denies land at the deterministic minimum (terminal; no first-open luna).
+    # Flag off leaves the legacy branch below byte-identical.
+    # The stale-marker clear below is applied only when this branch actually
+    # consulted the policy and continued to process_normally (paid upgrade).
+    clear_stale_terminal_marker = False
+    if (
+        free_tier_local_processing_enabled()
+        and hasattr(conversation, 'source')
+        and conversation.source == ConversationSource.desktop
+    ):
+        source_value = getattr(conversation.source, 'value', conversation.source)
+        # Nothing before this call may raise: funding-owner resolution lives
+        # inside decision_for, which the policy runs under its exception guard.
+        plan = resolve_free_tier_processing_plan(
+            uid=uid,
+            source=str(source_value),
+            force_process=force_process,
+            is_reprocess=is_reprocess,
+            has_projection=False,
+            decision_for=_managed_compute_decision_for(uid),
+        )
+        if plan.reason == 'plan_identification_fail_open':
+            # Policy is pure (no telemetry). An unresolved plan fail-opens onto
+            # managed processing; emit here so rollout monitoring can see it.
+            record_fallback(
+                component='other',
+                from_mode='unresolved_plan',
+                to_mode='managed_processing',
+                reason='policy',
+                outcome='degraded',
+                log=logger,
+            )
+        if plan.mode != 'process_normally':
+            stored, persisted = (
+                _store_projected_conversation(uid, conversation, plan)
+                if plan.mode == 'store_projection'
+                else _store_deterministic_minimum(uid, conversation, plan)
+            )
+            report_persistence(
+                persisted,
+                derived_effects=(
+                    DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
+                    if persisted
+                    else DerivedEffectsDisposition.RUN
+                ),
+            )
+            return stored
+        clear_stale_terminal_marker = True
     # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
     # paid plan (basic / Neo) get ONLY the raw transcript on capture. The expensive LLM
     # enrichment (summary, action items, memories, embeddings, app results) is deferred until
@@ -2100,7 +2304,9 @@ def process_conversation(
     # force_process does not bypass JIT first-open: Flutter create and macOS
     # finalize need it to still defer folders/apps when rollout admits. Explicit
     # "run everything now" paths pass bypass_jit_first_open=True.
-    if (
+    # Unreachable when FREE_TIER_LOCAL_PROCESSING is on (the branch above already
+    # handled desktop); flag-off behaviour stays the legacy fail-open deferral.
+    elif (
         not force_process
         and not is_reprocess
         and hasattr(conversation, 'source')
@@ -2108,6 +2314,10 @@ def process_conversation(
         and should_defer_desktop_processing(uid)
     ):
         deferred = _store_deferred_conversation(uid, conversation)
+        # Flag-off legacy deferral reports False even when the write succeeded.
+        # That is deliberate and pre-existing: the conversation is not terminally
+        # processed (status=processing, deferred=True; first-open will reprocess).
+        # Do not change this onto the flag-off path — it must stay byte-identical.
         report_persistence(False)
         return deferred
 
@@ -2139,10 +2349,11 @@ def process_conversation(
     # integrations, vectors, memories, action items, audio artifacts, folders,
     # calendar links, usage, or webhooks from a stale in-memory snapshot.
     conversation.status = ConversationStatus.completed
+    payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
     if is_initial_creation:
-        persisted = lifecycle_service.create_completed_conversation(uid, conversation.dict(), idempotent=True)
+        persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
     else:
-        persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+        persisted = lifecycle_service.persist_processed_conversation(uid, payload)
     report_persistence(persisted)
     if not persisted:
         logger.info(
