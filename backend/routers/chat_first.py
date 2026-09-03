@@ -39,6 +39,7 @@ from models.chat_first import (
     ProactiveMaterializationRejectionOutcome,
     ProactiveMaterializationReceiptOutcome,
     MemoryLinkSpec,
+    MemoryReviewCardSpec,
     TaskCardSpec,
     stable_block_id,
 )
@@ -208,6 +209,14 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
     if isinstance(block, MemoryLinkSpec):
         try:
             return bool(fetch_memory_dict(uid, block.memory_id, db_client=getattr(db_client_module, 'db', None)))
+        except HTTPException:
+            return False
+    if isinstance(block, MemoryReviewCardSpec):
+        # Every row is a claim the owner can accept or correct in place, so the
+        # card is only admissible if each one is a memory this account still owns.
+        client = getattr(db_client_module, 'db', None)
+        try:
+            return all(bool(fetch_memory_dict(uid, item.memory_id, db_client=client)) for item in block.items)
         except HTTPException:
             return False
     subject = block.subject
