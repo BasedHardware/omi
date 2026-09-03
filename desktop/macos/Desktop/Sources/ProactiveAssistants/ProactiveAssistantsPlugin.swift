@@ -53,6 +53,9 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var insightAssistant: InsightAssistant?
   private var memoryAssistant: MemoryAssistant?
   private var suggestionAssistant: SuggestionAssistant?
+  private var formAssistAssistant: FormAssistAssistant?
+  private var messageDraftAssistant: MessageDraftAssistant?
+  private var dataAnswerAssistant: DataAnswerAssistant?
   private var captureTimer: Timer?
   private var analysisDelayTimer: Timer?
   private var isInDelayPeriod = false
@@ -252,6 +255,60 @@ public class ProactiveAssistantsPlugin: NSObject {
     log("ProactiveAssistantsPlugin initialized")
   }
 
+  // MARK: - Voice-requested assist
+
+  /// Draft the message on screen because the user asked for it out loud.
+  ///
+  /// The assistants are built when monitoring starts. Someone who asked for a draft is
+  /// owed one whether or not they have proactive monitoring on, so the assistant is
+  /// built here if it does not exist yet — without subscribing it to the watcher, which
+  /// is what monitoring, and only monitoring, turns on.
+  func draftMessageOnDemand(context: String) async -> String {
+    guard let assistant = messageDraftAssistant ?? (try? MessageDraftAssistant()) else {
+      return "Message drafting is unavailable."
+    }
+    messageDraftAssistant = assistant
+    return await assistant.draftOnDemand(context: context)
+  }
+
+  /// Answer the form on screen because the user asked for it out loud.
+  ///
+  /// No form on screen is not a dead end: the user still asked for something, so the
+  /// request falls through to the data lookup and the answer lands on the panel anyway.
+  func assistFormOnDemand(context: String) async -> String {
+    guard let assistant = formAssistAssistant ?? (try? FormAssistAssistant()) else {
+      return "Form assist is unavailable."
+    }
+    formAssistAssistant = assistant
+    switch await assistant.assistOnDemand(context: context) {
+    case .handled(let result):
+      return result
+    case .noForm:
+      // The user asked and there is no form to answer, so the request widens to their
+      // data rather than dead-ending. A branch that changes which assistant answers is
+      // exactly what fallback telemetry is for.
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "panel_lookup", from: "form_assist", to: "data_lookup",
+        reason: "no_form", outcome: .recovered)
+      let question =
+        context.isEmpty
+        ? "The details this user most likely needs to fill in or copy right now: name, email, phone, links, employer, location."
+        : context
+      let answer = await findAndShowOnDemand(question: question)
+      return
+        "No form with empty fields is in front of the user, so this was looked up from their data instead. \(answer)"
+    }
+  }
+
+  /// Find the spoken request in the user's data because they asked for it out loud.
+  func findAndShowOnDemand(question: String) async -> String {
+    guard let assistant = dataAnswerAssistant ?? (try? DataAnswerAssistant()) else {
+      return "Data lookup is unavailable."
+    }
+    dataAnswerAssistant = assistant
+    return await assistant.answerOnDemand(question: question)
+  }
+
   // MARK: - Assistant Management
 
   private func enableAssistant(identifier: String, enabled: Bool) {
@@ -382,6 +439,20 @@ public class ProactiveAssistantsPlugin: NSObject {
 
       if let suggestion = suggestionAssistant {
         AssistantCoordinator.shared.register(suggestion)
+      }
+
+      formAssistAssistant = try FormAssistAssistant()
+
+      if let formAssist = formAssistAssistant {
+        AssistantCoordinator.shared.register(formAssist)
+        Task { await formAssist.startWatching() }
+      }
+
+      messageDraftAssistant = try MessageDraftAssistant()
+
+      if let messageDraft = messageDraftAssistant {
+        AssistantCoordinator.shared.register(messageDraft)
+        Task { await messageDraft.startWatching() }
       }
 
     } catch {

@@ -4742,6 +4742,7 @@ class FloatingControlBarManager {
     assistantText: String,
     origin: String = "realtime_voice",
     continuityKey: String,
+    assistantContentBlocks: [ChatContentBlock] = [],
     assistantStatus: KernelJournalTurnStatus = .completed,
     terminalReason: String? = nil, userScreenContext: String? = nil
   ) async -> Bool {
@@ -4751,6 +4752,7 @@ class FloatingControlBarManager {
       assistantText: assistantText,
       origin: origin,
       continuityKey: continuityKey,
+      assistantContentBlocks: assistantContentBlocks,
       assistantStatus: assistantStatus,
       terminalReason: terminalReason, userScreenContext: userScreenContext,
       ownerID: ownerID

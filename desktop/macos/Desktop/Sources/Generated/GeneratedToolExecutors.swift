@@ -16,6 +16,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case getMemories = "get_memories"
   case searchMemories = "search_memories"
   case createMemory = "create_memory"
+  case createMemories = "create_memories"
   case searchKnowledge = "search_knowledge"
   case readPlaybook = "read_playbook"
   case searchHistoricalFacts = "search_historical_facts"
@@ -41,6 +42,13 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case screenshot = "screenshot"
   case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
+  case showPanel = "show_panel"
+  case updatePanel = "update_panel"
+  case closePanel = "close_panel"
+  case reopenPanel = "reopen_panel"
+  case draftMessage = "draft_message"
+  case assistForm = "assist_form"
+  case findAndShow = "find_and_show"
   case createCanonicalGoal = "create_canonical_goal"
   case getCanonicalGoals = "get_canonical_goals"
   case renderChatBlocks = "render_chat_blocks"
@@ -54,8 +62,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:05dbd2cd609bbec77a825b010d6bc75e9dec8131d1ccaee3ea6c851e728fdccc"
-  static let chatFirstManifestDigest = "sha256:910b2affcb4d24cfe8f2112eb92d015bdb646032e610924ed90b9cfbb431fd59"
+  static let manifestDigest = "sha256:d8992114150a119e5a0a33acf79669049010c4d63f1721b63d17c3abf521a4b0"
+  static let chatFirstManifestDigest = "sha256:cb2622d929592e8870923268ab2edf7da84ecaf358fdf1facb4819c8ab3f52d4"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -78,6 +86,7 @@ enum GeneratedToolExecutors {
     .getMemories: .chatToolExecutor,
     .searchMemories: .chatToolExecutor,
     .createMemory: .chatToolExecutor,
+    .createMemories: .chatToolExecutor,
     .searchKnowledge: .chatToolExecutor,
     .readPlaybook: .chatToolExecutor,
     .searchHistoricalFacts: .chatToolExecutor,
@@ -103,6 +112,13 @@ enum GeneratedToolExecutors {
     .screenshot: .realtimeHub,
     .reportScreenObservation: .realtimeHub,
     .pointClick: .realtimeHub,
+    .showPanel: .realtimeHub,
+    .updatePanel: .realtimeHub,
+    .closePanel: .realtimeHub,
+    .reopenPanel: .realtimeHub,
+    .draftMessage: .realtimeHub,
+    .assistForm: .realtimeHub,
+    .findAndShow: .realtimeHub,
     .createCanonicalGoal: .chatToolExecutor,
     .getCanonicalGoals: .chatToolExecutor,
     .renderChatBlocks: .chatToolExecutor,
@@ -152,6 +168,7 @@ enum GeneratedToolExecutors {
     case getMemories
     case searchMemories
     case createMemory
+    case createMemories
     case searchKnowledge
     case readPlaybook
     case searchHistoricalFacts
@@ -197,6 +214,7 @@ enum GeneratedToolExecutors {
     case .getMemories: return .getMemories
     case .searchMemories: return .searchMemories
     case .createMemory: return .createMemory
+    case .createMemories: return .createMemories
     case .searchKnowledge: return .searchKnowledge
     case .readPlaybook: return .readPlaybook
     case .searchHistoricalFacts: return .searchHistoricalFacts

@@ -85,7 +85,12 @@ final class AgentCompletionVoiceDeliveryTests: XCTestCase {
     await harness.drainScheduledWork()
 
     XCTAssertEqual(harness.peekCount, 1)
-    XCTAssertEqual(harness.injectedPrompts, ["agent finished"])
+    // The completion reaches the session with the screen reminder appended: it is text
+    // to mention, and mentioning it is all the model does unless something names the
+    // tool that puts it on screen.
+    XCTAssertEqual(harness.injectedPrompts.count, 1)
+    XCTAssertEqual(harness.injectedPrompts.first?.hasPrefix("agent finished"), true)
+    XCTAssertEqual(harness.injectedPrompts.first?.contains("call show_panel"), true)
     XCTAssertEqual(harness.acknowledged, [["run-1"]])
   }
 
@@ -129,7 +134,8 @@ final class AgentCompletionVoiceDeliveryTests: XCTestCase {
     harness.sut.observe([surface.key: projection(surface: surface, status: .succeeded)])
     await harness.drainScheduledWork()
 
-    XCTAssertEqual(harness.injectedPrompts, ["agent finished"])
+    XCTAssertEqual(harness.injectedPrompts.count, 1)
+    XCTAssertEqual(harness.injectedPrompts.first?.hasPrefix("agent finished"), true)
     XCTAssertEqual(
       harness.acknowledged, [["run-1"]],
       "unsupported mid-session injection must be consumed, not replayed into an unrelated later turn")

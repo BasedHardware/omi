@@ -426,6 +426,8 @@ extension RealtimeHubController {
       delegate: self)
     pendingContextCacheReplacement = false
     lastWarmAt = nil
+    // A new session has been told nothing, whatever the last one knew.
+    lastSentPanelState = nil
     hubConnected = false
     session = s
     voiceSessionID = VoiceSessionID()
@@ -837,13 +839,35 @@ extension RealtimeHubController {
       log("RealtimeHub: refusing voice journal write after authenticated owner changed")
       return false
     }
+    // A panel the user asked for out loud leaves with its window; the chat transcript
+    // is where its content survives, as a collapsible card under the spoken reply.
+    // Consumed on the write paths that can carry content blocks — so each panel lands in
+    // exactly one turn.
     let surface = FloatingControlBarManager.shared.mainChatSurfaceReference()
     let kernelOwnsExchange = RealtimeHubContinuityRestore.kernelOwnsExchange(
       continuityKey: idempotencyKey,
       kernelTurnIDs: prefetchedVoiceContextTurnIDs)
-    if acceptedSpawnOwnerID == ownerID
+    // A spawn turn and a kernel-owned exchange both write through the kernel, which Swift
+    // only refreshes — there is no assistant message here to attach a card to. Taking the
+    // cards anyway would clear the queue and drop them, and "put that on screen" alongside
+    // a spawned agent is exactly the turn shape that reaches this branch. Left queued, the
+    // next voice turn carries them; unclaimed, they age out.
+    let kernelWritesThisTurn =
+      acceptedSpawnOwnerID == ownerID
       || (kernelOwnsExchange && !streamingJournalWriteLedger.contains(continuityKey: idempotencyKey))
-    {
+    let panelBlocks =
+      kernelWritesThisTurn
+      ? []
+      : await MainActor.run { PanelSession.takeChatCards() }
+        .enumerated().map { index, card in
+          ChatContentBlock.discoveryCard(
+            id: "voice-panel-\(idempotencyKey)-\(index)",
+            title: card.title, summary: card.summary, fullText: card.text)
+        }
+    if !panelBlocks.isEmpty {
+      log("RealtimeHub: voice turn carries \(panelBlocks.count) panel card(s) into chat")
+    }
+    if kernelWritesThisTurn {
       return await RealtimeTurnJournalAuthority.persist(
         turnOwnerID: ownerID,
         acceptedSpawnOwnerID: acceptedSpawnOwnerID,
@@ -861,6 +885,7 @@ extension RealtimeHubController {
       userText: userText,
       assistantText: assistantText,
       continuityKey: idempotencyKey,
+      assistantContentBlocks: panelBlocks,
       assistantStatus: journalStatus,
       terminalReason: terminalReason
     ) {
@@ -890,6 +915,7 @@ extension RealtimeHubController {
             assistantText: assistantText,
             origin: "realtime_voice",
             continuityKey: idempotencyKey,
+            assistantContentBlocks: panelBlocks,
             assistantStatus: journalStatus,
             terminalReason: terminalReason,
             userScreenContext: self.screenContextByContinuityKey[idempotencyKey])

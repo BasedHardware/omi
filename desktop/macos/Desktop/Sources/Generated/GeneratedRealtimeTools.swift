@@ -29,6 +29,13 @@ enum HubTool: String {
   case screenshot = "screenshot"
   case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
+  case showPanel = "show_panel"
+  case updatePanel = "update_panel"
+  case closePanel = "close_panel"
+  case reopenPanel = "reopen_panel"
+  case draftMessage = "draft_message"
+  case assistForm = "assist_form"
+  case findAndShow = "find_and_show"
 }
 
 enum GeneratedRealtimeTools {
@@ -764,6 +771,148 @@ enum GeneratedRealtimeTools {
       "required": [
         "x",
         "y"
+      ]
+    }
+  },
+  {
+    "type": "function",
+    "name": "show_panel",
+    "description": "Put text on the user's screen in a floating panel with a copy button, so they can paste it somewhere. Use it whenever the answer is something to paste or keep rather than only hear: a snippet, an address, a set of values, a written passage. Speak one short line about what you put up; the panel carries the text, so never read long or secret content aloud.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Short title naming what the panel holds."
+        },
+        "items": {
+          "type": "array",
+          "description": "The content. One entry with no label for a single passage of text; one labeled entry per value when there are several.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Short name for this value. Omit for a single passage of prose."
+              },
+              "text": {
+                "type": "string",
+                "description": "The text to show and copy."
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        }
+      },
+      "required": [
+        "title",
+        "items"
+      ]
+    }
+  },
+  {
+    "type": "function",
+    "name": "update_panel",
+    "description": "Rewrite what is already on the panel, in place. Use it whenever the user asks to change what they can see — shorter, warmer, fix a name, drop a line, add one — instead of building the panel again, which would throw away where they dragged it and log the same thing twice in their chat. Every panel tool hands you the panel's current text; send back the full corrected set of items, not only the part that changed. Speak one short line about what you changed and never read the text back.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "New title, or the existing one when only the items change."
+        },
+        "items": {
+          "type": "array",
+          "description": "The panel's complete new contents, in order. Anything omitted is removed from the panel.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Short name for this value."
+              },
+              "text": {
+                "type": "string",
+                "description": "The text to show and copy."
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        }
+      },
+      "required": [
+        "items"
+      ]
+    }
+  },
+  {
+    "type": "function",
+    "name": "close_panel",
+    "description": "Take down the panel you put on the user's screen. Use it when they ask to close, hide, or dismiss it.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "type": "function",
+    "name": "reopen_panel",
+    "description": "Put the last panel back on the user's screen, where they are now. A panel belongs to the window it was opened over and goes away when they leave it, so use this whenever they ask to see it again, and instead of redoing the work that produced it.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "type": "function",
+    "name": "draft_message",
+    "description": "Write the message the user is about to send and put it on screen to copy. Use it when they ask you to draft, write, or reply to a message or email. It reads the conversation in front of them; pass anything they said about what the message should say.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "type": "string",
+          "description": "What the user said the message should say. Omit when they gave no direction."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "function",
+    "name": "assist_form",
+    "description": "Answer the form the user is looking at from what Omi knows about them, and put the values on screen to copy field by field. Use it when they ask for help filling something in. It reads the screen fresh every time, so call it again with what they said when they correct an answer: use my work email, make it shorter, that employer is out of date.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "type": "string",
+          "description": "What the user said about how to fill the form, especially a correction to an answer already on screen. Omit when they gave no direction."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "function",
+    "name": "find_and_show",
+    "description": "Find something in the user's own data — memories, profile, recent work, screen history, conversations — and put it on screen with copy buttons. A stronger model does the searching and reading. Use it when they ask for something of theirs to paste or keep that you don't already have in hand: a link, an address, account details, a list of their things, something they wrote or saw. Speak one short line about what went up; never read long values aloud. For text already in front of you, use show_panel instead.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string",
+          "description": "What the user wants found, in their words, with any constraints they said."
+        }
+      },
+      "required": [
+        "question"
       ]
     }
   }

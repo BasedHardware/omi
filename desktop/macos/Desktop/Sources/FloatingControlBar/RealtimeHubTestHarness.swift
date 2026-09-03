@@ -161,6 +161,13 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .screenshot: stub = "Screen captured."
     case .reportScreenObservation: stub = "Screen observation accepted."
     case .pointClick: stub = "Clicked."
+    case .showPanel: stub = "Panel is on screen with 1 item to copy."
+    case .updatePanel: stub = "Panel updated, now 1 item."
+    case .reopenPanel: stub = "Panel is back on screen with 1 item to copy."
+    case .closePanel: stub = "Panel closed."
+    case .draftMessage: stub = "Draft is on screen to copy."
+    case .assistForm: stub = "Put 3 fields on screen to copy."
+    case .findAndShow: stub = "Found it. Panel is on screen with 2 items to copy: Email, Portfolio."
     case .none: stub = "ok"
     }
     session?.sendToolResult(callId: callId, name: name, output: stub)

@@ -456,20 +456,41 @@ enum GeneratedToolCapabilities {
       title: "Create Memory",
       latency: .fastNetwork,
       surfaces: Set([.desktopChat]),
-      summary: "Save one explicitly requested fact or preference to short-term memory.",
+      summary: "Save one fact the user asked you to remember to short-term memory.",
       bullets: [
-      "Use only when the user explicitly and affirmatively asks you to remember or save something.",
-      "Pass a clean standalone fact: strip the command and lightly clean pronouns. Do not invent names, dates, or facts the user did not ask to persist, and do not infer from the rest of the chat.",
-      "Do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
+      "Use whenever the user asks you to remember, save, or keep something, however they phrase it.",
+      "Pass a clean standalone fact: strip the command and lightly clean pronouns. Save only what the user supplied.",
+      "For more than one fact — a document, a profile, everything the user just shared — call create_memories once instead of calling this repeatedly.",
+      "Do not call for a passing statement of fact, a question about what you remember, or a request not to remember something.",
       "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
-      "For a durable fact correction, a reusable multi-step playbook, or a standing watch request, use the knowledge-ledger tools instead.",
-      "When the current user message explicitly and affirmatively asks Omi to remember or save something, call this tool with a clean standalone fact.",
-      "Strip the command (for example, 'Please remember that I prefer tea' → 'I prefer tea'). Light rewrite and pronoun cleanup are OK; do not invent names, dates, or facts the user did not ask to persist.",
-      "Do not infer from the rest of the chat, and do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
-      "Confirm the save in one line. Never tell the user about validators or internal save rules.",
+      "Call this whenever the user asks you to remember, save, or keep something — any phrasing counts, including a trailing 'and save this' or a request pointing at what they just sent.",
+      "Strip the command and save the fact itself. Light rewrite and pronoun cleanup are fine; save only what the user supplied, and never invent names, dates, or details they did not give you.",
+      "For more than one fact — a document, a profile, everything the user just shared — call create_memories once with the whole list instead of calling this repeatedly.",
+      "Confirm the save in one line. You decide whether the turn asked for a save; never ask the user to rephrase a save request, and never describe internal save rules.",
       "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
       "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory.",
       "For a durable fact correction ('that's no longer true'), a reusable multi-step playbook, or a standing watch request, use the knowledge-ledger tools (close_fact / save_playbook / create_standing_trigger) instead of create_memory."
+    ]
+    ),
+    Capability(
+      toolName: "create_memories",
+      title: "Create Memories",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Save several facts the user asked you to remember to short-term memory in one call.",
+      bullets: [
+      "Use when the user asks you to remember a document, an attachment, a profile, or everything they just shared.",
+      "Split the source into one clean standalone fact per item; do not pack a whole document into one fact.",
+      "Every fact must come from what the user supplied in this turn or the material they pointed at; do not infer or embellish.",
+      "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
+      "For a durable fact correction, a reusable multi-step playbook, or a standing watch request, use the knowledge-ledger tools instead.",
+      "Use this instead of many create_memory calls when the user asks to remember a document, an attachment, or everything they just shared, however they phrase the request.",
+      "Split the source into one clean standalone fact per item. Do not pack a whole document into one fact.",
+      "Every fact must come from what the user supplied or the material they pointed at; do not infer, embellish, or add facts they did not ask to persist.",
+      "Skip contact details, secrets, and anything the user asked you not to keep.",
+      "Confirm with the number saved in one line. You decide whether the turn asked for a save; never ask the user to rephrase a save request, and never describe internal save rules.",
+      "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
+      "The receipt reports how many the server saved; if it is fewer than you sent, say so. Do not claim a memory was promoted to long-term memory."
     ]
     ),
     Capability(
@@ -768,6 +789,76 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
+      toolName: "show_panel",
+      title: "Show Panel",
+      latency: .fastLocal,
+      surfaces: Set([.realtimeHub]),
+      summary: "Put copyable text on the user's screen.",
+      bullets: [
+      "Use when the answer is something the user will paste, keep, or read back."
+    ]
+    ),
+    Capability(
+      toolName: "update_panel",
+      title: "Update Panel",
+      latency: .fastLocal,
+      surfaces: Set([.realtimeHub]),
+      summary: "Revise the panel already on the user's screen.",
+      bullets: [
+      "Use when the user asks to change what is on screen rather than for something new."
+    ]
+    ),
+    Capability(
+      toolName: "close_panel",
+      title: "Close Panel",
+      latency: .fastLocal,
+      surfaces: Set([.realtimeHub]),
+      summary: "Take down the panel currently on screen.",
+      bullets: [
+      "Use when the user asks to close, hide, or dismiss it."
+    ]
+    ),
+    Capability(
+      toolName: "reopen_panel",
+      title: "Reopen Panel",
+      latency: .fastLocal,
+      surfaces: Set([.realtimeHub]),
+      summary: "Put the last panel back on screen.",
+      bullets: [
+      "Use when the user asks to see again what was on screen a moment ago."
+    ]
+    ),
+    Capability(
+      toolName: "draft_message",
+      title: "Draft Message",
+      latency: .fastNetwork,
+      surfaces: Set([.realtimeHub]),
+      summary: "Write the message the user is about to send.",
+      bullets: [
+      "Use when the user asks for a reply, a message, or an email to be written."
+    ]
+    ),
+    Capability(
+      toolName: "assist_form",
+      title: "Assist Form",
+      latency: .fastNetwork,
+      surfaces: Set([.realtimeHub]),
+      summary: "Answer the form in front of the user from their memories.",
+      bullets: [
+      "Use when the user asks for help filling in what is on screen."
+    ]
+    ),
+    Capability(
+      toolName: "find_and_show",
+      title: "Find and Show",
+      latency: .fastNetwork,
+      surfaces: Set([.realtimeHub]),
+      summary: "Find an answer in the user's data and show it to copy.",
+      bullets: [
+      "Use when the user asks for their own information that has to be looked up first."
+    ]
+    ),
+    Capability(
       toolName: "get_local_status",
       title: "Get Local Status",
       latency: .fastLocal,
@@ -809,6 +900,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","read_tool_output","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","search_tool_output","set_desktop_attention_override","spawn_agent","think_deeper","update_action_item","update_agent_artifact_lifecycle","web_search"]
+    ["assist_form","cancel_agent_run","check_permission_status","close_panel","create_action_item","create_calendar_event","draft_message","find_and_show","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","read_tool_output","reopen_panel","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","search_tool_output","set_desktop_attention_override","show_panel","spawn_agent","think_deeper","update_action_item","update_agent_artifact_lifecycle","update_panel","web_search"]
   }
 }

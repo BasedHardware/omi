@@ -87,13 +87,16 @@ struct RealtimeStreamingJournalProjection: Equatable {
     return message
   }
 
-  func assistantMessage(text: String, isStreaming: Bool) -> ChatMessage {
+  func assistantMessage(
+    text: String, isStreaming: Bool, contentBlocks: [ChatContentBlock] = []
+  ) -> ChatMessage {
     var message = ChatMessage(
       id: assistantTurnID,
       clientTurnId: continuityKey,
       text: text,
       sender: .ai,
-      isStreaming: isStreaming
+      isStreaming: isStreaming,
+      contentBlocks: contentBlocks
     )
     if !modelsUsed.isEmpty {
       message.metadata = MessageMetadata(adapterId: "realtime", modelsUsed: modelsUsed)

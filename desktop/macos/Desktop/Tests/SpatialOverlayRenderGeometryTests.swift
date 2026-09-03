@@ -343,6 +343,17 @@ final class SpatialOverlayRenderGeometryTests: XCTestCase {
       String(repeating: "•", count: 12))
   }
 
+  /// A valueless row says why it has nothing to copy when the caller gives a reason,
+  /// and keeps assisted setup's "leave blank" when it does not.
+  func testValuelessRowShowsItsHint() {
+    XCTAssertEqual(
+      CloudConnectorCopyField(id: "portfolio", label: "Portfolio URL", value: "", hint: "no memory")
+        .displayValue,
+      "no memory")
+    XCTAssertEqual(
+      CloudConnectorCopyField(id: "scope", label: "Scope", value: "").displayValue, "leave blank")
+  }
+
   func testRealisticSceneFailsWhenApexIsBelowTheButton() {
     // Regression guard: a placement whose apex sits below the footer (the exact bad
     // screenshot) must be reported as an issue.

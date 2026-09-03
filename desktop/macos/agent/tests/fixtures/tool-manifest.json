@@ -3993,13 +3993,14 @@
   {
     "name": "create_memory",
     "label": "Create Memory",
-    "description": "Save one explicitly requested fact or preference to short-term memory as a clean standalone fact. Call only after an explicit affirmative user command such as 'remember this' or 'save this'. Strip the command and lightly clean pronouns; do not invent facts. Never call for a mere statement, a question, or a negative request such as 'do not remember this'.",
+    "description": "Save one fact the user asked you to remember to short-term memory, as a clean standalone sentence. Call it whenever the user asks for something to be remembered, saved, or kept, however they phrase it. Strip the command and lightly clean pronouns; save only what the user supplied. Do not call for a passing statement, a question about memory, or a request not to remember something.",
     "promptSnippet": "create_memory - Save one explicitly requested fact or preference to short-term memory",
     "promptGuidelines": [
-      "When the current user message explicitly and affirmatively asks Omi to remember or save something, call this tool with a clean standalone fact.",
-      "Strip the command (for example, 'Please remember that I prefer tea' → 'I prefer tea'). Light rewrite and pronoun cleanup are OK; do not invent names, dates, or facts the user did not ask to persist.",
-      "Do not infer from the rest of the chat, and do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
-      "Confirm the save in one line. Never tell the user about validators or internal save rules.",
+      "Call this whenever the user asks you to remember, save, or keep something — any phrasing counts, including a trailing 'and save this' or a request pointing at what they just sent.",
+      "Strip the command and save the fact itself. Light rewrite and pronoun cleanup are fine; save only what the user supplied, and never invent names, dates, or details they did not give you.",
+      "For more than one fact — a document, a profile, everything the user just shared — call create_memories once with the whole list instead of calling this repeatedly.",
+      "Do not call for a passing statement of fact, a question about what you remember, or a request not to remember something.",
+      "Confirm the save in one line. You decide whether the turn asked for a save; never ask the user to rephrase a save request, and never describe internal save rules.",
       "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
       "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory.",
       "For a durable fact correction ('that's no longer true'), a reusable multi-step playbook, or a standing watch request, use the knowledge-ledger tools (close_fact / save_playbook / create_standing_trigger) instead of create_memory."
@@ -4010,7 +4011,7 @@
       "properties": {
         "content": {
           "type": "string",
-          "description": "A clean standalone fact to save as a short-term memory. Strip the remember/save command; light rewrite is OK. Do not invent facts."
+          "description": "One clean standalone fact to save as a short-term memory. Strip the remember/save command; light rewrite is OK. Save only what the user supplied."
         }
       },
       "required": [
@@ -4049,11 +4050,83 @@
     ],
     "capabilityDoc": {
       "title": "Create Memory",
-      "summary": "Save one explicitly requested fact or preference to short-term memory.",
+      "summary": "Save one fact the user asked you to remember to short-term memory.",
       "bullets": [
-        "Use only when the user explicitly and affirmatively asks you to remember or save something.",
-        "Pass a clean standalone fact: strip the command and lightly clean pronouns. Do not invent names, dates, or facts the user did not ask to persist, and do not infer from the rest of the chat.",
-        "Do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
+        "Use whenever the user asks you to remember, save, or keep something, however they phrase it.",
+        "Pass a clean standalone fact: strip the command and lightly clean pronouns. Save only what the user supplied.",
+        "For more than one fact — a document, a profile, everything the user just shared — call create_memories once instead of calling this repeatedly.",
+        "Do not call for a passing statement of fact, a question about what you remember, or a request not to remember something.",
+        "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory."
+      ]
+    }
+  },
+  {
+    "name": "create_memories",
+    "label": "Create Memories",
+    "description": "Save several facts the user asked you to remember to short-term memory in one call. Use instead of repeated create_memory when the user asks to remember a document, a profile, or everything they just shared. Each fact is one clean standalone sentence drawn from what the user supplied; do not invent facts.",
+    "promptSnippet": "create_memories - Save several facts the user asked you to remember",
+    "promptGuidelines": [
+      "Use this instead of many create_memory calls when the user asks to remember a document, an attachment, or everything they just shared, however they phrase the request.",
+      "Split the source into one clean standalone fact per item. Do not pack a whole document into one fact.",
+      "Every fact must come from what the user supplied or the material they pointed at; do not infer, embellish, or add facts they did not ask to persist.",
+      "Skip contact details, secrets, and anything the user asked you not to keep.",
+      "Confirm with the number saved in one line. You decide whether the turn asked for a save; never ask the user to rephrase a save request, and never describe internal save rules.",
+      "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
+      "The receipt reports how many the server saved; if it is fewer than you sent, say so. Do not claim a memory was promoted to long-term memory."
+    ],
+    "latency": "fast network",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "facts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "One clean standalone fact per element, at most 25. Strip the remember/save command; light rewrite is OK. Do not invent facts."
+        }
+      },
+      "required": [
+        "facts"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "idempotentHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "chatToolExecutor"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Requires the coordinator's typed desktop chat surface and authenticated backend access.",
+      "Writes through the batch memory endpoint in a single request; partial success is reported as the saved count."
+    ],
+    "adapters": {
+      "pi-mono": {
+        "advertised": true,
+        "condition": "typedChatCoordinatorOnly"
+      },
+      "omi-tools-stdio": {
+        "advertised": true,
+        "condition": "typedChatCoordinatorOnly"
+      }
+    },
+    "surfaces": [
+      "desktop_chat"
+    ],
+    "capabilityDoc": {
+      "title": "Create Memories",
+      "summary": "Save several facts the user asked you to remember to short-term memory in one call.",
+      "bullets": [
+        "Use when the user asks you to remember a document, an attachment, a profile, or everything they just shared.",
+        "Split the source into one clean standalone fact per item; do not pack a whole document into one fact.",
+        "Every fact must come from what the user supplied in this turn or the material they pointed at; do not infer or embellish.",
         "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
         "For a durable fact correction, a reusable multi-step playbook, or a standing watch request, use the knowledge-ledger tools instead."
       ]
@@ -5706,6 +5779,483 @@
         "required": [
           "x",
           "y"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "name": "show_panel",
+    "label": "Show Panel",
+    "description": "Show copyable text on the user's screen in a floating panel.",
+    "promptSnippet": "show_panel - Show copyable text on screen",
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Short title naming what the panel holds."
+        },
+        "items": {
+          "type": "array",
+          "description": "The content: one unlabeled entry for a passage of text, or one labeled entry per value.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Short name for this value."
+              },
+              "text": {
+                "type": "string",
+                "description": "The text to show and copy."
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "title",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Show Panel",
+      "summary": "Put copyable text on the user's screen.",
+      "bullets": [
+        "Use when the answer is something the user will paste, keep, or read back."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Put text on the user's screen in a floating panel with a copy button, so they can paste it somewhere. Use it whenever the answer is something to paste or keep rather than only hear: a snippet, an address, a set of values, a written passage. Speak one short line about what you put up; the panel carries the text, so never read long or secret content aloud.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Short title naming what the panel holds."
+          },
+          "items": {
+            "type": "array",
+            "description": "The content. One entry with no label for a single passage of text; one labeled entry per value when there are several.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "description": "Short name for this value. Omit for a single passage of prose."
+                },
+                "text": {
+                  "type": "string",
+                  "description": "The text to show and copy."
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "title",
+          "items"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "name": "update_panel",
+    "label": "Update Panel",
+    "description": "Rewrite the contents of the panel already on the user's screen, in place.",
+    "promptSnippet": "update_panel - Revise the panel already on screen",
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "New title, or the existing one when only items change."
+        },
+        "items": {
+          "type": "array",
+          "description": "The panel's complete new contents, in order. Anything omitted is removed.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Short name for this value."
+              },
+              "text": {
+                "type": "string",
+                "description": "The text to show and copy."
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only; a panel must already be on screen."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Update Panel",
+      "summary": "Revise the panel already on the user's screen.",
+      "bullets": [
+        "Use when the user asks to change what is on screen rather than for something new."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Rewrite what is already on the panel, in place. Use it whenever the user asks to change what they can see — shorter, warmer, fix a name, drop a line, add one — instead of building the panel again, which would throw away where they dragged it and log the same thing twice in their chat. Every panel tool hands you the panel's current text; send back the full corrected set of items, not only the part that changed. Speak one short line about what you changed and never read the text back.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "New title, or the existing one when only the items change."
+          },
+          "items": {
+            "type": "array",
+            "description": "The panel's complete new contents, in order. Anything omitted is removed from the panel.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "description": "Short name for this value."
+                },
+                "text": {
+                  "type": "string",
+                  "description": "The text to show and copy."
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "name": "close_panel",
+    "label": "Close Panel",
+    "description": "Dismiss the panel currently on the user's screen.",
+    "promptSnippet": "close_panel - Dismiss the panel on screen",
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Close Panel",
+      "summary": "Take down the panel currently on screen.",
+      "bullets": [
+        "Use when the user asks to close, hide, or dismiss it."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Take down the panel you put on the user's screen. Use it when they ask to close, hide, or dismiss it.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "name": "reopen_panel",
+    "label": "Reopen Panel",
+    "description": "Put the last panel back on the user's screen, at the window in front now.",
+    "promptSnippet": "reopen_panel - Show the last panel again",
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Reopen Panel",
+      "summary": "Put the last panel back on screen.",
+      "bullets": [
+        "Use when the user asks to see again what was on screen a moment ago."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Put the last panel back on the user's screen, where they are now. A panel belongs to the window it was opened over and goes away when they leave it, so use this whenever they ask to see it again, and instead of redoing the work that produced it.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "name": "draft_message",
+    "label": "Draft Message",
+    "description": "Write the message the user is about to send and show it to copy.",
+    "promptSnippet": "draft_message - Draft the message on screen",
+    "latency": "fast network",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "type": "string",
+          "description": "What the user said the message should say."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only; requires Accessibility permission."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Draft Message",
+      "summary": "Write the message the user is about to send.",
+      "bullets": [
+        "Use when the user asks for a reply, a message, or an email to be written."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Write the message the user is about to send and put it on screen to copy. Use it when they ask you to draft, write, or reply to a message or email. It reads the conversation in front of them; pass anything they said about what the message should say.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {
+          "context": {
+            "type": "string",
+            "description": "What the user said the message should say. Omit when they gave no direction."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "name": "assist_form",
+    "label": "Assist Form",
+    "description": "Answer the form in front of the user from their memories and show the values to copy.",
+    "promptSnippet": "assist_form - Answer the form on screen",
+    "latency": "fast network",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "type": "string",
+          "description": "What the user said about how to fill the form, including a correction."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only; requires Accessibility permission."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Assist Form",
+      "summary": "Answer the form in front of the user from their memories.",
+      "bullets": [
+        "Use when the user asks for help filling in what is on screen."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Answer the form the user is looking at from what Omi knows about them, and put the values on screen to copy field by field. Use it when they ask for help filling something in. It reads the screen fresh every time, so call it again with what they said when they correct an answer: use my work email, make it shorter, that employer is out of date.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {
+          "context": {
+            "type": "string",
+            "description": "What the user said about how to fill the form, especially a correction to an answer already on screen. Omit when they gave no direction."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "name": "find_and_show",
+    "label": "Find and Show",
+    "description": "Find an answer in the user's own data with a stronger model and show it to copy.",
+    "promptSnippet": "find_and_show - Look up the user's data and show the answer on screen",
+    "latency": "fast network",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string",
+          "description": "What the user wants found, in their words, with any constraints they said."
+        }
+      },
+      "required": [
+        "question"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Find and Show",
+      "summary": "Find an answer in the user's data and show it to copy.",
+      "bullets": [
+        "Use when the user asks for their own information that has to be looked up first."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Find something in the user's own data — memories, profile, recent work, screen history, conversations — and put it on screen with copy buttons. A stronger model does the searching and reading. Use it when they ask for something of theirs to paste or keep that you don't already have in hand: a link, an address, account details, a list of their things, something they wrote or saw. Speak one short line about what went up; never read long values aloud. For text already in front of you, use show_panel instead.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "What the user wants found, in their words, with any constraints they said."
+          }
+        },
+        "required": [
+          "question"
         ],
         "additionalProperties": false
       }

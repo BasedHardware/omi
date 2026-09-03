@@ -41,6 +41,7 @@ extension FloatingControlBarManager {
     projection: RealtimeStreamingJournalProjection,
     userText: String,
     assistantText: String,
+    assistantContentBlocks: [ChatContentBlock] = [],
     assistantStatus: KernelJournalTurnStatus = .completed,
     terminalReason: String? = nil
   ) async -> Bool {
@@ -58,7 +59,8 @@ extension FloatingControlBarManager {
     for _ in 0..<3 {
       if await provider.kernelTurnProjection.updateTurn(
         surface: surface,
-        message: projection.assistantMessage(text: assistantText, isStreaming: false),
+        message: projection.assistantMessage(
+          text: assistantText, isStreaming: false, contentBlocks: assistantContentBlocks),
         status: assistantStatus, terminalReason: terminalReason, ownerID: projection.ownerID) != nil
       {
         await consumeInterjectHubTranscript(assistantText)

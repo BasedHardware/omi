@@ -74,6 +74,7 @@ extension RealtimeHubController {
     userText: String,
     assistantText: String,
     continuityKey: String,
+    assistantContentBlocks: [ChatContentBlock] = [],
     assistantStatus: KernelJournalTurnStatus = .completed,
     terminalReason: String? = nil
   ) async -> RealtimeStreamingJournalWriteLedger.FinalizationResult {
@@ -82,6 +83,7 @@ extension RealtimeHubController {
       guard projection.ownerID == ownerID else { return false }
       return await FloatingControlBarManager.shared.completeStreamingRealtimeExchange(
         projection: projection, userText: userText, assistantText: assistantText,
+        assistantContentBlocks: assistantContentBlocks,
         assistantStatus: assistantStatus, terminalReason: terminalReason)
     }
   }

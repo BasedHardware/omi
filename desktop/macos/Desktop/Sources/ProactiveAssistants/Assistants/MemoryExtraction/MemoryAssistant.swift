@@ -32,7 +32,7 @@ actor MemoryAssistant: ProactiveAssistant {
 
   private let geminiClient: GeminiClient?
   private let extractionOverride: ExtractionOverride?
-  private let durabilityPipeline: MemoryAssistantDurabilityPipeline
+  private let durabilityPipeline: MemoryWriteDurabilityPipeline
   private var isRunning = false
   private var lastAnalysisTime: Date = .distantPast
   private var previousMemories: [ExtractedMemory] = []  // Last 20 extracted memories for deduplication
@@ -78,7 +78,7 @@ actor MemoryAssistant: ProactiveAssistant {
     self.geminiClient = try GeminiClient(
       apiKey: apiKey, model: ModelQoS.Gemini.lightweight, workload: .extraction)
     self.extractionOverride = nil
-    self.durabilityPipeline = MemoryAssistantDurabilityPipeline(
+    self.durabilityPipeline = MemoryWriteDurabilityPipeline(
       runner: MemoryAssistantProductionDurability(operations: MemoryAssistantLiveDurabilityOperations())
     )
 
@@ -97,11 +97,11 @@ actor MemoryAssistant: ProactiveAssistant {
   /// Gemini client or starting the background frame loop.
   init(
     extractionOverride: @escaping ExtractionOverride,
-    durabilityRunner: any MemoryAssistantDurabilityRunning
+    durabilityRunner: any MemoryWriteDurabilityRunning
   ) {
     self.geminiClient = nil
     self.extractionOverride = extractionOverride
-    self.durabilityPipeline = MemoryAssistantDurabilityPipeline(runner: durabilityRunner)
+    self.durabilityPipeline = MemoryWriteDurabilityPipeline(runner: durabilityRunner)
 
     let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
     self.frameSignal = stream
@@ -138,6 +138,10 @@ actor MemoryAssistant: ProactiveAssistant {
       log("Memory: Starting analysis (interval: \(Int(interval))s, waited: \(Int(waited))s)")
       pendingFrame = nil
       lastAnalysisTime = Date()
+      // Drain before analyzing, and independently of the extraction toggle: a
+      // stranded row is a memory the backend never received, whether or not the
+      // user still wants new ones extracted.
+      await retryUnsyncedMemories()
       await processFrame(frame)
     }
 
@@ -224,7 +228,7 @@ actor MemoryAssistant: ProactiveAssistant {
     }
 
     let durability = await durabilityPipeline.persistSyncAndEmit(
-      MemoryAssistantDurabilityRequest(
+      MemoryWriteDurabilityRequest(
         memory: memory,
         screenshotId: screenshotId,
         contextSummary: memoryResult.contextSummary,
@@ -239,6 +243,10 @@ actor MemoryAssistant: ProactiveAssistant {
     // one closed analysis terminal (and historical success where appropriate).
     guard durability.shouldEmitMemoryExtracted else { return }
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+
+    await MainActor.run {
+      NotificationCenter.default.post(name: .memoriesDidChange, object: nil)
+    }
 
     // Send notification if enabled
     let notificationsEnabled = await MainActor.run {
@@ -337,6 +345,56 @@ actor MemoryAssistant: ProactiveAssistant {
     frameSignalContinuation.finish()
     processingTask?.cancel()
     pendingFrame = nil
+  }
+
+  // MARK: - Backend Sync Repair
+
+  /// Re-send memories whose backend create failed. Without this a single failed
+  /// POST stranded the memory in SQLite forever: it stayed on this Mac, absent
+  /// from chat recall, the phone, and the knowledge graph.
+  func retryUnsyncedMemories(limit: Int = 20) async {
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
+    let stranded: [MemoryRecord]
+    do {
+      stranded = try await MemoryStorage.shared.unsyncedLocalMemories(limit: limit)
+    } catch {
+      logError("Memory: Failed to read unsynced memories", error: error)
+      return
+    }
+    guard !stranded.isEmpty else { return }
+
+    log("Memory: Retrying backend sync for \(stranded.count) stranded memor\(stranded.count == 1 ? "y" : "ies")")
+    var synced = 0
+    for record in stranded {
+      guard let localID = record.id else { continue }
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+      let request = MemoryWriteDurabilityRequest(
+        memory: ExtractedMemory(
+          content: record.content,
+          category: ExtractedMemoryCategory(rawValue: record.category) ?? .system,
+          sourceApp: record.sourceApp ?? "desktop",
+          confidence: record.confidence ?? 1.0
+        ),
+        screenshotId: record.screenshotId,
+        contextSummary: record.contextSummary ?? "",
+        windowTitle: record.windowTitle,
+        ownerID: ownerID
+      )
+      let outcome = await durabilityPipeline.syncPersistedLocal(request, localID: localID)
+      if outcome == .synced {
+        synced += 1
+        continue
+      }
+      // A retry that still cannot reach the backend ends the pass; the rest
+      // stay queued for the next tick rather than burning the whole backlog.
+      if outcome == .syncFailed { break }
+    }
+    if synced > 0 {
+      log("Memory: Recovered \(synced) stranded memories")
+      await MainActor.run {
+        NotificationCenter.default.post(name: .memoriesDidChange, object: nil)
+      }
+    }
   }
 
   // MARK: - Analysis

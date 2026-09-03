@@ -8,18 +8,36 @@ struct CloudConnectorCopyField: Identifiable, Sendable {
   let id: String
   let label: String
   let value: String
+  /// Shown where the value would go when there is none, saying why this row is blank.
+  /// Without one an empty row still reads "leave blank", which is what assisted setup
+  /// means by it.
+  let hint: String?
   /// When true, the on-screen preview is masked but copy still uses `value`.
   let masksValue: Bool
+  /// Renders the value as wrapped body text under its label instead of one truncated
+  /// line. A connector field is a token to paste; a drafted passage has to be readable.
+  let wraps: Bool
+  /// The label is known and the value is still being worked out. The row shows the
+  /// label with a spinner where the value will land, so the user can see what is being
+  /// answered before it is answered.
+  let isPending: Bool
 
-  init(id: String, label: String, value: String, masksValue: Bool? = nil) {
+  init(
+    id: String, label: String, value: String, hint: String? = nil, masksValue: Bool? = nil,
+    wraps: Bool = false, isPending: Bool = false
+  ) {
     self.id = id
     self.label = label
     self.value = value
+    self.hint = hint
     self.masksValue = masksValue ?? Self.defaultMasksValue(label: label, value: value)
+    self.wraps = wraps
+    self.isPending = isPending
   }
 
   var displayValue: String {
-    if value.isEmpty { return "leave blank" }
+    if isPending { return hint ?? "" }
+    if value.isEmpty { return hint ?? "leave blank" }
     return masksValue ? String(repeating: "•", count: 12) : value
   }
 
@@ -38,6 +56,26 @@ struct CloudConnectorCopyField: Identifiable, Sendable {
       precondition(Set(ids).count == ids.count, "CloudConnectorCopyField ids must be unique")
     #endif
   }
+}
+
+/// The row at the foot of a card that is asking before it does the work: a box to steer
+/// the answer with and a ✓ to buy it. A card carrying one has spent nothing yet, which is
+/// the whole point — reading the screen is free, answering from it is not. The ✗ that
+/// declines is the header's, so the card never grows a second one.
+@MainActor
+struct CopyCardAsk {
+  let placeholder: String
+  let confirmLabel: String
+  let onConfirm: (String) -> Void
+}
+
+/// The copy card is the feature, not app chrome: values the user is meant to paste have
+/// to stay on screen even while the dev automation bridge is parking ordinary windows.
+private final class FieldCopyCardPanel: NSPanel, AutomationPresentationExemptWindow {
+  /// Only a card with an ask row takes keystrokes. A card of copy buttons must never
+  /// become key: it sits over the very form the user is typing into.
+  var acceptsKeys = false
+  override var canBecomeKey: Bool { acceptsKeys }
 }
 
 /// A visible group of copy rows on the assisted cloud-connector card.
@@ -73,6 +111,34 @@ struct CloudConnectorCopySection: Identifiable, Sendable {
   }
 }
 
+/// The live contents of the field-copy card.
+///
+/// The card used to be built once from immutable values, so every change meant closing
+/// the window and opening a new one — a visible flicker, and it threw away wherever the
+/// user had dragged the card to. Work that takes seconds (a form answered from memories)
+/// has to be able to show up first and fill in afterwards, so the content is observable
+/// and the window outlives it.
+@MainActor
+final class FieldCopyCardModel: ObservableObject {
+  @Published var title: String
+  @Published var subtitle: String
+  @Published var sections: [CloudConnectorCopySection]
+  @Published var size: CGSize
+  /// Present while the card is still an offer. Cleared the moment the user answers it.
+  @Published var ask: CopyCardAsk?
+
+  init(
+    title: String, subtitle: String, sections: [CloudConnectorCopySection], size: CGSize,
+    ask: CopyCardAsk? = nil
+  ) {
+    self.title = title
+    self.subtitle = subtitle
+    self.sections = sections
+    self.size = size
+    self.ask = ask
+  }
+}
+
 @MainActor
 final class CloudConnectorGuidanceOverlay {
   static let shared = CloudConnectorGuidanceOverlay()
@@ -83,8 +149,21 @@ final class CloudConnectorGuidanceOverlay {
   private var lastAutomationState: [String: String]?
   private var dragCardSize: CGSize?
   private var dragTargetState: ScreenRecordingDragTargetState?
+  /// Live contents of the field-copy card, so it can be updated without rebuilding it.
+  private var fieldCopyModel: FieldCopyCardModel?
+  private var fieldCopyMaxHeight: CGFloat?
+  private var fieldCopyMoveObserver: (any NSObjectProtocol)?
+  private var fieldCopyUserDismiss: (() -> Void)?
+  /// Told when the card's own countdown runs out. Without it the owner never learns the
+  /// card left, keeps it remembered, and puts an expired offer back up on the next
+  /// context return — with a fresh countdown.
+  private var fieldCopyDidExpire: (() -> Void)?
 
   private init() {}
+
+  /// True while any card from this overlay is on screen. Another surface must not
+  /// close a card the user is still working through.
+  var isPresenting: Bool { window != nil }
 
   func presentClaudeAddHint(windowFrame: CGRect, candidates: [SpatialOverlayAnchorCandidate]) {
     presentClaudeHint(
@@ -450,24 +529,122 @@ final class CloudConnectorGuidanceOverlay {
     title: String,
     subtitle: String,
     fields: [CloudConnectorCopyField],
-    near anchor: CGRect?
+    near anchor: CGRect?,
+    at preferredFrame: CGRect? = nil,
+    maxHeight: CGFloat? = nil,
+    autoDismissAfter: TimeInterval? = CloudConnectorGuidanceOverlay.fieldCopyCardLifetime,
+    remembersPosition: Bool = false,
+    ask: CopyCardAsk? = nil,
+    onUserDismiss: (() -> Void)? = nil,
+    onExpire: (() -> Void)? = nil
   ) {
     presentFieldCopyCard(
       title: title,
       subtitle: subtitle,
       sections: [CloudConnectorCopySection(id: "fields", title: "", fields: fields)],
-      near: anchor
+      near: anchor,
+      at: preferredFrame,
+      maxHeight: maxHeight,
+      autoDismissAfter: autoDismissAfter,
+      remembersPosition: remembersPosition,
+      ask: ask,
+      onUserDismiss: onUserDismiss,
+      onExpire: onExpire
     )
+  }
+
+  /// Change what the card on screen says without rebuilding it: the window, and wherever
+  /// the user dragged it to, both survive. Silently does nothing when no card is up —
+  /// work that finishes after the user closed the card has nothing to say.
+  func updateFieldCopyCard(title: String, subtitle: String, fields: [CloudConnectorCopyField]) {
+    updateFieldCopyCard(
+      title: title,
+      subtitle: subtitle,
+      sections: [CloudConnectorCopySection(id: "fields", title: "", fields: fields)])
+  }
+
+  func updateFieldCopyCard(title: String, subtitle: String, sections: [CloudConnectorCopySection]) {
+    guard let model = fieldCopyModel else { return }
+    CloudConnectorCopySection.assertUniqueIDs(sections)
+    model.title = title
+    model.subtitle = subtitle
+    model.sections = sections
+    applyFieldCopyGeometry()
+  }
+
+  /// The user answered the card's ask. The row goes and the countdown an unanswered
+  /// offer runs on stops with it: what the card holds from here is work they asked for,
+  /// and that does not expire while they are reading it.
+  func resolveFieldCopyAsk() {
+    dismissTask?.cancel()
+    guard let model = fieldCopyModel, model.ask != nil else { return }
+    model.ask = nil
+    applyFieldCopyGeometry()
+  }
+
+  /// Resize the card to whatever it now holds, without rebuilding it.
+  ///
+  /// The card grows and shrinks from its top-right corner, which is the corner it was
+  /// placed by — so a card filling in with answers stays put instead of walking down the
+  /// screen. Clamped, because a card that grew past the display is unusable.
+  private func applyFieldCopyGeometry() {
+    guard let model = fieldCopyModel, let window else { return }
+    let fields = CloudConnectorCopySection.flattenedFields(model.sections)
+    let size = Self.fieldCopyCardSize(
+      title: model.title,
+      subtitle: model.subtitle,
+      fieldCount: fields.count,
+      sectionTitleCount: CloudConnectorCopySection.visibleTitleCount(model.sections),
+      maxHeight: fieldCopyMaxHeight,
+      wrappedCharacterCounts: fields.filter(\.wraps).map(\.value.count),
+      hasAsk: model.ask != nil
+    )
+    model.size = size
+
+    let current = window.frame
+    var frame = CGRect(
+      x: current.maxX - size.width, y: current.maxY - size.height,
+      width: size.width, height: size.height)
+    if let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
+      frame.origin.x = min(max(frame.minX, visible.minX), max(visible.minX, visible.maxX - size.width))
+      frame.origin.y = min(max(frame.minY, visible.minY), max(visible.minY, visible.maxY - size.height))
+    }
+    window.setFrame(frame, display: true)
+    lastAutomationState?["title"] = model.title
+    lastAutomationState?["subtitle"] = model.subtitle
+    lastAutomationState?["fieldCount"] = "\(fields.count)"
+    lastAutomationState?["fieldLabels"] = fields.map(\.label).joined(separator: "|")
+    lastAutomationState?["asking"] = model.ask == nil ? "false" : "true"
+    lastAutomationState?["panelFrame"] = Self.string(frame)
+  }
+
+  /// The card's size for a given row count, so a caller can place it itself.
+  func fieldCopyCardSize(
+    title: String, subtitle: String, fieldCount: Int, maxHeight: CGFloat? = nil,
+    wrappedCharacterCounts: [Int] = [], hasAsk: Bool = false
+  ) -> CGSize {
+    Self.fieldCopyCardSize(
+      title: title, subtitle: subtitle, fieldCount: fieldCount, sectionTitleCount: 0,
+      maxHeight: maxHeight, wrappedCharacterCounts: wrappedCharacterCounts, hasAsk: hasAsk)
   }
 
   func presentFieldCopyCard(
     title: String,
     subtitle: String,
     sections: [CloudConnectorCopySection],
-    near anchor: CGRect?
+    near anchor: CGRect?,
+    at preferredFrame: CGRect? = nil,
+    maxHeight: CGFloat? = nil,
+    autoDismissAfter: TimeInterval? = CloudConnectorGuidanceOverlay.fieldCopyCardLifetime,
+    remembersPosition: Bool = false,
+    ask: CopyCardAsk? = nil,
+    onUserDismiss: (() -> Void)? = nil,
+    onExpire: (() -> Void)? = nil
   ) {
     dismissTask?.cancel()
     closeCurrentOverlay()
+    fieldCopyUserDismiss = onUserDismiss
+    fieldCopyDidExpire = onExpire
 
     CloudConnectorCopySection.assertUniqueIDs(sections)
     let fields = CloudConnectorCopySection.flattenedFields(sections)
@@ -475,11 +652,16 @@ final class CloudConnectorGuidanceOverlay {
       title: title,
       subtitle: subtitle,
       fieldCount: fields.count,
-      sectionTitleCount: CloudConnectorCopySection.visibleTitleCount(sections)
+      sectionTitleCount: CloudConnectorCopySection.visibleTitleCount(sections),
+      maxHeight: maxHeight,
+      wrappedCharacterCounts: fields.filter(\.wraps).map(\.value.count),
+      hasAsk: ask != nil
     )
     let screen = Self.screen(forAnchor: anchor)
-    let frame = Self.instructionCardFrame(
-      anchor: anchor, cardSize: cardSize, visibleFrame: screen.visibleFrame)
+    let frame =
+      preferredFrame
+      ?? Self.instructionCardFrame(
+        anchor: anchor, cardSize: cardSize, visibleFrame: screen.visibleFrame)
 
     lastAutomationState = [
       "visible": "true",
@@ -488,19 +670,26 @@ final class CloudConnectorGuidanceOverlay {
       "subtitle": subtitle,
       "fieldCount": "\(fields.count)",
       "fieldLabels": fields.map(\.label).joined(separator: "|"),
+      "asking": ask == nil ? "false" : "true",
       "panelFrame": Self.string(frame),
     ]
 
+    let model = FieldCopyCardModel(
+      title: title, subtitle: subtitle, sections: sections, size: cardSize, ask: ask)
+    fieldCopyModel = model
+    fieldCopyMaxHeight = maxHeight
     let view = CloudConnectorFieldCopyCardView(
-      title: title,
-      subtitle: subtitle,
-      sections: sections,
-      size: cardSize,
-      onDismiss: { [weak self] in self?.dismiss() })
+      model: model,
+      // The ✗ is the user closing *this* card. Anything else that takes the overlay is
+      // reuse, and its owner must not be told the user let go of it.
+      onDismiss: { [weak self] in
+        self?.fieldCopyUserDismiss?()
+        self?.dismiss()
+      })
     let hostingController = NSHostingController(rootView: view)
     hostingController.view.frame = CGRect(origin: .zero, size: cardSize)
 
-    let panel = NSPanel(
+    let panel = FieldCopyCardPanel(
       contentRect: frame,
       styleMask: [.borderless, .nonactivatingPanel],
       backing: .buffered,
@@ -513,6 +702,9 @@ final class CloudConnectorGuidanceOverlay {
     panel.level = .popUpMenu
     // Copy buttons must receive clicks; .nonactivatingPanel keeps the browser focused.
     panel.ignoresMouseEvents = false
+    // Only an asking card takes the keyboard, and only so its context box can. A card of
+    // copy rows becoming key would pull focus out of the form the user is filling in.
+    panel.acceptsKeys = ask != nil
     // The card can sit over the provider's form — let the user drag it anywhere
     // by grabbing any non-button area.
     panel.isMovableByWindowBackground = true
@@ -520,29 +712,61 @@ final class CloudConnectorGuidanceOverlay {
     panel.animationBehavior = .none
     panel.orderFrontRegardless()
     window = panel
+    if remembersPosition { observeFieldCopyCardMoves(panel) }
 
+    guard let autoDismissAfter else { return }
     dismissTask = Task { [weak self] in
-      // Generous window: the user works through several fields (and, for ChatGPT,
-      // may need to enable Developer mode first).
-      try? await Task.sleep(nanoseconds: 240_000_000_000)
+      try? await Task.sleep(for: .seconds(autoDismissAfter))
       await MainActor.run {
         guard !Task.isCancelled else { return }
+        // Read before dismissing: closing the card clears its callbacks.
+        let expired = self?.fieldCopyDidExpire
         self?.dismiss()
+        expired?()
       }
     }
   }
+
+  /// Generous window: the user works through several fields (and, for ChatGPT, may need
+  /// to enable Developer mode first). A card the user asked for passes nil instead — it
+  /// stays until they close it, because they may leave to paste what it holds.
+  static let fieldCopyCardLifetime: TimeInterval = 240
+
+  /// Roughly how tall a wrapped value renders at the card's text width. An estimate is
+  /// enough: the rows scroll when it is short and `maxHeight` caps it when it is long.
+  static func wrappedFieldHeight(characterCount: Int) -> CGFloat {
+    let charactersPerLine = 62.0
+    let lineHeight = 15.0
+    let lines = max(1, (Double(characterCount) / charactersPerLine).rounded(.up))
+    return CGFloat(lines * lineHeight) + 24
+  }
+
+  /// The ✓ row an asking card carries. Sits outside the row area's cap: an offer whose
+  /// tick got clamped off the bottom of the card cannot be accepted at all.
+  static let fieldCopyAskRowHeight: CGFloat = 44
 
   static func fieldCopyCardSize(
     title: String,
     subtitle: String,
     fieldCount: Int,
-    sectionTitleCount: Int = 0
+    sectionTitleCount: Int = 0,
+    maxHeight: CGFloat? = nil,
+    wrappedCharacterCounts: [Int] = [],
+    hasAsk: Bool = false
   ) -> CGSize {
     // Match instruction-card subtitle wrapping: long copy needs extra header height.
     let compactSubtitleThreshold = 86
     let headerHeight: CGFloat = subtitle.count <= compactSubtitleThreshold ? 96 : 118
     let sectionHeaderHeight = CGFloat(sectionTitleCount) * 24
-    return CGSize(width: 460, height: headerHeight + CGFloat(fieldCount) * 30 + sectionHeaderHeight)
+    let wrapped = wrappedCharacterCounts.reduce(CGFloat(0)) { $0 + wrappedFieldHeight(characterCount: $1) }
+    let compactCount = max(0, fieldCount - wrappedCharacterCounts.count)
+    let natural = headerHeight + CGFloat(compactCount) * 30 + wrapped + sectionHeaderHeight
+    let askHeight = hasAsk ? fieldCopyAskRowHeight : 0
+    // A caller with a bound gets a card that stops there and scrolls its rows instead.
+    // Never below the header plus one row, however little room was offered. The ✓ row is
+    // taken off the bound before the rows are measured against it, not added afterwards.
+    let height = maxHeight.map { min(natural, max(headerHeight + 30, $0 - askHeight)) } ?? natural
+    return CGSize(width: 460, height: height + askHeight)
   }
 
   private static func screen(forAnchor anchor: CGRect?) -> NSScreen {
@@ -598,9 +822,31 @@ final class CloudConnectorGuidanceOverlay {
     dragTargetState = nil
   }
 
+  /// A card the user dragged is a card they chose a place for; the next one opens there.
+  /// Only cards placed by the shared panel corner opt in — a connector card is pinned to
+  /// the window it points at, and its position says nothing about where panels belong.
+  private func observeFieldCopyCardMoves(_ panel: NSWindow) {
+    fieldCopyMoveObserver = NotificationCenter.default.addObserver(
+      forName: NSWindow.didMoveNotification, object: panel, queue: .main
+    ) { [weak panel] _ in
+      MainActor.assumeIsolated {
+        guard let panel, let visible = panel.screen?.visibleFrame else { return }
+        PanelPlacementStore.record(panelFrame: panel.frame, visibleFrame: visible)
+      }
+    }
+  }
+
   private func closeCurrentOverlay() {
     settingsWatchTask?.cancel()
     settingsWatchTask = nil
+    if let fieldCopyMoveObserver {
+      NotificationCenter.default.removeObserver(fieldCopyMoveObserver)
+    }
+    fieldCopyMoveObserver = nil
+    fieldCopyModel = nil
+    fieldCopyMaxHeight = nil
+    fieldCopyUserDismiss = nil
+    fieldCopyDidExpire = nil
     window?.close()
     window = nil
   }
@@ -1050,29 +1296,66 @@ private struct ScreenRecordingDragCardView: View {
 }
 
 private struct CloudConnectorFieldCopyCardView: View {
-  let title: String
-  let subtitle: String
-  let sections: [CloudConnectorCopySection]
-  let size: CGSize
+  @ObservedObject var model: FieldCopyCardModel
   let onDismiss: () -> Void
 
   @State private var copiedFieldID: String?
+  @State private var askText = ""
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      CloudConnectorCardHeaderView(title: title, subtitle: subtitle, onDismiss: onDismiss)
+      CloudConnectorCardHeaderView(
+        title: model.title, subtitle: model.subtitle, onDismiss: onDismiss)
 
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        ForEach(sections) { section in
-          sectionView(section)
+      ScrollView {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          ForEach(model.sections) { section in
+            sectionView(section)
+          }
         }
+        // The list keeps the card's full width whether or not it needs to scroll.
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
+      // A card that already fits must not rubber-band when the user drags it.
+      .scrollBounceBehavior(.basedOnSize)
+
+      if let ask = model.ask { askRow(ask) }
     }
     .padding(.leading, OmiSpacing.lg)
     .padding(.trailing, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.lg)
-    .frame(width: size.width, height: size.height, alignment: .topLeading)
+    .frame(width: model.size.width, height: model.size.height, alignment: .topLeading)
     .inkGlassPanel()
+  }
+
+  /// The offer's ✓, and a box to steer it with before it is spent. Declining is the
+  /// header's ✗ — the card asks one question and shows one way to say no to it.
+  private func askRow(_ ask: CopyCardAsk) -> some View {
+    HStack(spacing: OmiSpacing.sm) {
+      TextField(ask.placeholder, text: $askText)
+        .textFieldStyle(.plain)
+        .scaledFont(size: 12, weight: .regular)
+        .foregroundColor(Ink.primary)
+        .onSubmit { ask.onConfirm(askText) }
+        .padding(.horizontal, OmiSpacing.md)
+        .frame(height: 32)
+        .background(Capsule().fill(Ink.rowFillHover))
+
+      Button {
+        ask.onConfirm(askText)
+      } label: {
+        Image(systemName: "checkmark")
+          .scaledFont(size: 11, weight: .bold)
+          .foregroundColor(Ink.primary)
+          .frame(width: 28, height: 28)
+          .background(Circle().fill(Ink.rowFillHover))
+          .contentShape(Circle())
+      }
+      .buttonStyle(.plain)
+      .help(ask.confirmLabel)
+      .accessibilityLabel(ask.confirmLabel)
+    }
+    .frame(height: 32)
   }
 
   private func sectionView(_ section: CloudConnectorCopySection) -> some View {
@@ -1092,7 +1375,40 @@ private struct CloudConnectorFieldCopyCardView: View {
     }
   }
 
+  @ViewBuilder
   private func fieldRow(_ field: CloudConnectorCopyField) -> some View {
+    if field.wraps {
+      wrappingFieldRow(field)
+    } else {
+      compactFieldRow(field)
+    }
+  }
+
+  /// Label above, value wrapped below. The copy button sits on the label line so it
+  /// stays reachable however tall the value grows.
+  private func wrappingFieldRow(_ field: CloudConnectorCopyField) -> some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+      HStack(spacing: OmiSpacing.sm) {
+        if !field.label.isEmpty {
+          Text(field.label)
+            .scaledFont(size: 11.5, weight: .medium)
+            .foregroundColor(Ink.secondary)
+            .lineLimit(1)
+        }
+        Spacer(minLength: 0)
+        trailingControl(field)
+      }
+      Text(field.displayValue)
+        .scaledFont(size: 11.5, weight: .regular)
+        .italic(field.value.isEmpty)
+        .foregroundColor(field.value.isEmpty ? Ink.secondary : Ink.primary)
+        .textSelection(.enabled)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+
+  private func compactFieldRow(_ field: CloudConnectorCopyField) -> some View {
     HStack(spacing: OmiSpacing.sm) {
       Text(field.label)
         .scaledFont(size: 11.5, weight: .medium)
@@ -1109,17 +1425,26 @@ private struct CloudConnectorFieldCopyCardView: View {
         .truncationMode(.middle)
         .frame(maxWidth: .infinity, alignment: .leading)
 
-      if field.value.isEmpty {
-        Text("—")
-          .scaledFont(size: 10.5, weight: .semibold)
-          .foregroundColor(Ink.secondary)
-          .padding(.horizontal, OmiSpacing.sm)
-          .padding(.vertical, OmiSpacing.xxs)
-      } else {
-        copyButton(field)
-      }
+      trailingControl(field)
     }
     .frame(height: 24)
+  }
+
+  @ViewBuilder
+  private func trailingControl(_ field: CloudConnectorCopyField) -> some View {
+    if field.isPending {
+      ProgressView()
+        .controlSize(.small)
+        .frame(width: 28, height: 22)
+    } else if field.value.isEmpty {
+      Text("—")
+        .scaledFont(size: 10.5, weight: .semibold)
+        .foregroundColor(Ink.secondary)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.xxs)
+    } else {
+      copyButton(field)
+    }
   }
 
   private func copyButton(_ field: CloudConnectorCopyField) -> some View {

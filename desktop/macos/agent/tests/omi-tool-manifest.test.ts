@@ -39,7 +39,7 @@ describe("omi tool manifest", () => {
         content: {
           type: "string",
           description:
-            "A clean standalone fact to save as a short-term memory. Strip the remember/save command; light rewrite is OK. Do not invent facts.",
+            "One clean standalone fact to save as a short-term memory. Strip the remember/save command; light rewrite is OK. Save only what the user supplied.",
         },
       },
       required: ["content"],
@@ -54,6 +54,28 @@ describe("omi tool manifest", () => {
       .not.toContain("create_memory");
     expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "main_chat", executionRole: "leaf" }))
       .not.toContain("create_memory");
+  });
+
+  it("projects create_memories to the same typed chat surfaces as create_memory", () => {
+    const batch = toolsForAdapter("omi-tools-stdio", { surfaceKind: "main_chat", executionRole: "coordinator" })
+      .find((entry) => entry.name === "create_memories");
+
+    expect(batch).toMatchObject({
+      surfaces: ["desktop_chat"],
+      executor: { kind: "swiftTool", executorName: "chatToolExecutor" },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    });
+    expect(batch?.inputSchema).toMatchObject({
+      type: "object",
+      properties: { facts: { type: "array", items: { type: "string" } } },
+      required: ["facts"],
+    });
+    for (const surfaceKind of ["realtime_voice", "task_chat"] as const) {
+      expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind, executionRole: "coordinator" }))
+        .not.toContain("create_memories");
+    }
+    expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "main_chat", executionRole: "leaf" }))
+      .not.toContain("create_memories");
   });
   it("projects agent-management tools out of leaf worker contexts", () => {
     for (const adapterId of ["pi-mono", "omi-tools-stdio"] as const) {

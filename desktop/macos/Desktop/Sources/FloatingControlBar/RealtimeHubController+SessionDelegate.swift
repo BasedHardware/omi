@@ -32,6 +32,86 @@ extension RealtimeHubController {
     return true
   }
 
+  /// Tools whose result is a background run's status. They answer a question about a
+  /// task, never a question about what the user is looking at.
+  private static let agentStatusTools: Set<String> = [
+    "list_agent_sessions", "get_agent_run", "inspect_agent_artifacts",
+  ]
+
+  /// The note appended to a spawn.
+  ///
+  /// Measured: "write a two paragraph product description for an espresso machine and
+  /// put it on my screen" spawned a background agent and put nothing up. Writing at
+  /// length reads as background work, and the "put it on my screen" half is lost. The
+  /// instruction already says a spawned agent cannot reach the screen; saying it again
+  /// in the result says it at the moment the model is about to be wrong, and it is
+  /// simply true.
+  private static let spawnedAgentPanelNote =
+    "This background run CANNOT put anything on the user's screen. If they asked to "
+    + "see, copy, or keep something now — a description, a draft, a note, a list — that "
+    + "part is still unanswered: call show_panel in this same turn with the text "
+    + "itself. Do not tell them to wait for the background task for something they "
+    + "asked to have on screen."
+
+  /// Tell an agent-status result that a panel is on screen.
+  ///
+  /// A prompt rule was not enough — measured: with a note on screen and a stale
+  /// background run in the session, "make that shorter and more casual" still routed to
+  /// `list_agent_sessions`, and the reply spoke about "that bio" the agent had been
+  /// spawned for. Once a run exists it pulls every later request toward reporting on it.
+  ///
+  /// The tool surface is fixed at session setup, so the status tool cannot be hidden per
+  /// turn. What can change is what it says back: the result is authoritative and feeds
+  /// the same turn. The real status is kept — the user may genuinely have asked about
+  /// the task.
+  ///
+  /// These results are JSON, and `RealtimeProviderToolResultPolicy.finalize` rejects a
+  /// payload it cannot parse — appending prose to one replaced the entire result with
+  /// "The tool returned an invalid response." So the note goes in as a field.
+  @MainActor
+  static func panelAwareOutput(_ output: String, forTool name: String) -> String {
+    if name == "spawn_agent" {
+      log("RealtimeHub: reminding spawn_agent that it cannot reach the screen")
+      return merging(spawnedAgentPanelNote, into: output, as: "panelReminder")
+    }
+    guard agentStatusTools.contains(name), PanelSession.isPresenting,
+      let content = PanelSession.modelVisibleContent()
+    else { return output }
+    let note =
+      "A panel is on screen and it reads:\n\(content)\n\n"
+      + "If the user asked you to change or reword what they can see — including a vague "
+      + "ask like \"shorter\", \"make it nicer\", or \"not that one\" — that is this panel, "
+      + "not this background task. Call update_panel with the complete corrected items "
+      + "and do not report task status. Report the status above only if they asked about "
+      + "that task by name."
+    log("RealtimeHub: redirecting \(name) toward the panel on screen")
+    return merging(note, into: output, as: "panelOnScreen")
+  }
+
+  /// Add a note to a tool result without breaking it.
+  ///
+  /// These results are often JSON, and `RealtimeProviderToolResultPolicy.finalize`
+  /// replaces anything it cannot parse with "The tool returned an invalid response" —
+  /// measured, 986 bytes became 404. So a JSON payload takes the note as a field and
+  /// everything else takes it as prose.
+  private static func merging(_ note: String, into output: String, as key: String) -> String {
+    guard var payload = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any]
+    else { return output + "\n\n" + note }
+    // A spawn result is compacted down to its `providerResult` before it reaches the
+    // model (`RealtimeProviderToolResultPolicy.prepare`), so a key added beside that is
+    // thrown away. It has to go inside the object that survives.
+    if var providerResult = payload["providerResult"] as? [String: Any] {
+      providerResult[key] = note
+      payload["providerResult"] = providerResult
+    } else {
+      payload[key] = note
+    }
+    guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+      let merged = String(data: data, encoding: .utf8)
+    else { return output }
+    return merged
+  }
+
   func sendToolResultIfCurrent(
     source: RealtimeHubSession,
     callId: String,
@@ -53,6 +133,7 @@ extension RealtimeHubController {
       return
     }
     toolEffectIdentityByTransportKey.removeValue(forKey: key)
+    let output = Self.panelAwareOutput(output, forTool: name)
     let turnID = VoiceTurnID(identity.generation)
     let deferredScreenProtocol =
       name == HubTool.screenshot.rawValue
@@ -649,8 +730,161 @@ extension RealtimeHubController {
       }
       return .succeeded("Clicked at \(Int(x)), \(Int(y)).")
 
+    case .showPanel:
+      // Readable or nothing: an identifier the model picked out of its own tool
+      // vocabulary ("floating_chat") would otherwise become the heading on the user's card.
+      let title =
+        (command.input["title"] as? String)
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .flatMap { VoicePanel.isReadableTitle($0) ? $0 : nil } ?? ""
+      let items = Self.voicePanelItems(command.input["items"])
+      guard !title.isEmpty, !items.isEmpty else {
+        return .succeeded("Could not show the panel: show_panel needs a title and at least one item with text.")
+      }
+      guard
+        let shown = Self.performOwnerBoundPhysicalEffect(
+          expectedOwnerID: command.ownerID,
+          effect: { VoicePanel.present(title: title, items: items) })
+      else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      guard let shown else { return .succeeded("Could not show the panel: no item had any text.") }
+      return .succeeded(
+        "Panel is on screen with \(shown) item\(shown == 1 ? "" : "s") to copy."
+          + (VoicePanel.shortfall(from: items).map { " \($0)" } ?? "")
+          + Self.panelContentSuffix())
+
+    case .updatePanel:
+      // An unreadable title keeps the one the panel already has: renaming the user's
+      // card to an internal token is worse than leaving the heading alone.
+      let title = (command.input["title"] as? String)
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .flatMap { VoicePanel.isReadableTitle($0) ? $0 : nil }
+      let items = Self.voicePanelItems(command.input["items"])
+      guard !items.isEmpty else {
+        return .succeeded(
+          "Could not change the panel: update_panel needs the panel's complete new items.")
+      }
+      guard
+        let outcome = Self.performOwnerBoundPhysicalEffect(
+          expectedOwnerID: command.ownerID,
+          effect: {
+            PanelSession.revise(
+              title: (title?.isEmpty ?? true) ? nil : title,
+              fields: VoicePanel.copyFields(from: items))
+          })
+      else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      let shortfall = VoicePanel.shortfall(from: items).map { " \($0)" } ?? ""
+      switch outcome {
+      case .revised(let count):
+        return .succeeded(
+          "Panel updated, now \(count) item\(count == 1 ? "" : "s")." + shortfall
+            + Self.panelContentSuffix())
+      case .created(let count):
+        return .succeeded(
+          "Nothing was on screen, so this went up as a new panel with \(count) "
+            + "item\(count == 1 ? "" : "s")." + shortfall + Self.panelContentSuffix())
+      case .refused(let reason):
+        // Spelled out because a vague refusal is what the model papers over by claiming
+        // it made the change anyway.
+        return .succeeded("The panel was not changed. \(reason)")
+      }
+
+    case .reopenPanel:
+      guard
+        let shown = Self.performOwnerBoundPhysicalEffect(
+          expectedOwnerID: command.ownerID,
+          effect: { VoicePanel.reopen() })
+      else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      guard let shown else { return .succeeded("There is no panel to show again.") }
+      return .succeeded(
+        "Panel is back on screen with \(shown) item\(shown == 1 ? "" : "s") to copy."
+          + Self.panelContentSuffix())
+
+    case .closePanel:
+      guard
+        let dismissed = Self.performOwnerBoundPhysicalEffect(
+          expectedOwnerID: command.ownerID,
+          effect: { VoicePanel.dismiss() })
+      else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      return .succeeded(dismissed ? "Panel closed." : "There was no panel on screen.")
+
+    case .draftMessage:
+      let context =
+        (command.input["context"] as? String)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let result = await ProactiveAssistantsPlugin.shared.draftMessageOnDemand(context: context)
+      guard AuthorizedToolExecution.isOwnerCurrent(command.ownerID) else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      return .succeeded(result + Self.panelContentSuffix())
+
+    case .assistForm:
+      let context =
+        (command.input["context"] as? String)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let result = await ProactiveAssistantsPlugin.shared.assistFormOnDemand(context: context)
+      guard AuthorizedToolExecution.isOwnerCurrent(command.ownerID) else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      return .succeeded(result + Self.panelContentSuffix())
+
+    case .findAndShow:
+      let question =
+        (command.input["question"] as? String)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let result = await ProactiveAssistantsPlugin.shared.findAndShowOnDemand(question: question)
+      guard AuthorizedToolExecution.isOwnerCurrent(command.ownerID) else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      return .succeeded(result + Self.panelContentSuffix())
+
     default:
       return .failed(Self.authorizedRealtimeToolError(code: "wrong_realtime_executor_tool"))
+    }
+  }
+
+  /// The provider hands back `items` as loosely-typed JSON. An entry without text is
+  /// dropped rather than shown as an empty row: the panel exists to be copied from.
+  /// The panel's text, appended to every panel tool result.
+  ///
+  /// Without it the model is blind to what it just put up: "make that shorter" had
+  /// nothing to shorten, so the only move left was rebuilding the panel from scratch,
+  /// which loses the user's edits and where they dragged the window. Secrets and
+  /// spinners are filtered out upstream.
+  @MainActor
+  static func panelContentSuffix() -> String {
+    // Through `isPresenting`, not the remembered content: a tool whose panel is already
+    // gone — a lookup that found nothing and took its card down — must not hand the
+    // model text as if it were on screen.
+    guard PanelSession.isPresenting, let content = PanelSession.modelVisibleContent()
+    else { return "" }
+    return """
+
+
+      It now reads:
+      \(content)
+
+      That text is for changing it with update_panel, not for speaking: say one short \
+      line about the panel instead of reading it back.
+      """
+  }
+
+  nonisolated static func voicePanelItems(_ raw: Any?) -> [VoicePanelItem] {
+    guard let entries = raw as? [[String: Any]] else { return [] }
+    return entries.compactMap { entry in
+      guard let text = (entry["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !text.isEmpty
+      else { return nil }
+      return VoicePanelItem(
+        label: (entry["label"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+        text: text)
     }
   }
 
@@ -667,6 +901,36 @@ extension RealtimeHubController {
     AgentCompletionVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
     NotchCardVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
     InterjectClassificationDelivery.shared.voiceSessionDidOpenInputWindow()
+    sendPanelStateIfChanged(source: source)
+  }
+
+  /// Tell the session what is on the panel before the user's words arrive, because a
+  /// turn that calls no tool otherwise learns nothing about it — and a model that cannot
+  /// see the panel cannot obey the rule about not claiming it changed one.
+  private func sendPanelStateIfChanged(source: RealtimeHubSession) {
+    guard let line = RealtimeHubPanelStateContext.line(lastSent: lastSentPanelState),
+      line != inFlightPanelState
+    else { return }
+    let label = RealtimeHubPanelStateContext.label()
+    inFlightPanelState = line
+    Task { [weak self, weak source] in
+      defer { if self?.inFlightPanelState == line { self?.inFlightPanelState = nil } }
+      guard let source else { return }
+      // Only remember what actually went. The window can close under us, and marking a
+      // dropped line as sent would leave the session permanently unaware of the panel.
+      // A provider with no background-context role never will, so stop re-sending there.
+      switch await source.sendBackgroundAgentContext(line) {
+      case .retry:
+        log("RealtimeHub: panel state not delivered, will retry next turn")
+        return
+      case .unsupported:
+        self?.lastSentPanelState = line
+        log("RealtimeHub: provider has no safe background-context role; panel state stays tool-backed")
+      case .delivered:
+        self?.lastSentPanelState = line
+        log("RealtimeHub: panel state sent state=\(label) (\(line.count) chars)")
+      }
+    }
   }
 
   func hubDidConnect(source: RealtimeHubSession) {
