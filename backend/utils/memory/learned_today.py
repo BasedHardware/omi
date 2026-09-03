@@ -34,10 +34,14 @@ logger = logging.getLogger(__name__)
 # is a glance, not a queue.
 MEMORIES_LEARNED_LIMIT = 3
 
-# Newest-first read depth. `MemoryService.read` returns the merged canonical +
-# historical page ordered by updated_at/created_at descending, so one bounded
-# page is enough to cover a single day for any realistic capture rate.
+# Newest-first read depth. `MemoryService.read` orders by **updated_at**, not
+# created_at, so a bulk touch (a sweep job, a re-processing pass, an edit spree)
+# can push more than one page of older memories in front of the day being
+# summarised and leave the card silently empty. One page still ends the scan for
+# every user whose page comes back short — the overwhelming majority — and only
+# a user who actually has a full page pays for the next one.
 MEMORIES_LEARNED_SCAN_LIMIT = 200
+MEMORIES_LEARNED_SCAN_PAGES = 3
 
 MemoryReader = Callable[..., List["MemoryDB"]]
 
@@ -93,17 +97,33 @@ def _from_day(
     window. A memory that points at a conversation *outside* the summarised set
     is deliberately excluded — it belongs to another day's card.
     """
-    # `MemoryDB.memory_id` is a deprecated alias that always mirrors `id`, so
-    # `conversation_id` is the only conversation evidence on this model.
-    conversation_id = memory.conversation_id
-    if conversation_id:
-        return conversation_id in conversation_ids
+    # `MemoryDB.conversation_id` is NOT the only conversation evidence on this
+    # model: `memory_item_to_memorydb` walks every evidence row and overwrites
+    # `conversation_id` with each conversation-sourced `source_id`, so a memory
+    # supported by two conversations keeps only the last one. Matching on that
+    # scalar alone would reject a memory genuinely produced by one of today's
+    # conversations because a later merge attributed it elsewhere.
+    # `MemoryService.retract_conversation_memories` already matches evidence the
+    # same way.
+    evidence_ids = _conversation_evidence(memory)
+    if evidence_ids:
+        return bool(evidence_ids & conversation_ids)
     window_start = _aware(start)
     window_end = _aware(end)
     created_at = _aware(memory.created_at)
     if window_start is None or window_end is None or created_at is None:
         return False
     return window_start <= created_at <= window_end
+
+def _conversation_evidence(memory: "MemoryDB") -> frozenset[str]:
+    """Every conversation this memory carries evidence from."""
+    found: set[str] = set()
+    if memory.conversation_id:
+        found.add(memory.conversation_id)
+    for evidence in memory.evidence or []:
+        if evidence.source_id and evidence.source_type == 'conversation':
+            found.add(evidence.source_id)
+    return frozenset(found)
 
 
 def _rank(memory: "MemoryDB") -> _MemoryRank:
@@ -145,6 +165,24 @@ def select_memories_learned(
     ]
 
 
+def _report_read_failure(error: BaseException) -> None:
+    """Fail-open: the day still gets a summary, just no review card.
+
+    That is a correctness change, so it is reported rather than swallowed. Every
+    way of reaching the memory stack is covered, the lazy import included: a
+    failure there used to propagate and cost the whole recap.
+    """
+    record_fallback(
+        component='daily_summary',
+        from_mode='memories_learned',
+        to_mode='none',
+        reason='malformed_doc' if isinstance(error, (TypeError, ValueError)) else 'other',
+        outcome='degraded',
+        log=logger,
+    )
+    logger.warning('memories_learned read failed for daily summary: %s', type(error).__name__)
+
+
 def memories_learned_for_summary(
     uid: str,
     *,
@@ -154,32 +192,35 @@ def memories_learned_for_summary(
     limit: int = MEMORIES_LEARNED_LIMIT,
     read_memories: Optional[MemoryReader] = None,
     scan_limit: int = MEMORIES_LEARNED_SCAN_LIMIT,
+    scan_pages: int = MEMORIES_LEARNED_SCAN_PAGES,
 ) -> List[LearnedMemoryRef]:
-    """Read one bounded canonical page and select the day's review items.
+    """Read a bounded newest-first window and select the day's review items.
+
+    The window is at most ``scan_pages`` pages and stops at the first short page,
+    so the common user costs exactly one read and no user costs an unbounded scan.
 
     Never raises: the daily summary is the product, and a memory-read failure
     must degrade to "no card", not to "no summary".
     """
     reader = read_memories
     if reader is None:
-        from utils.memory.memory_service import MemoryService  # local: heavy import, avoids a cycle
+        try:
+            from utils.memory.memory_service import MemoryService  # local: heavy import, avoids a cycle
 
-        reader = MemoryService().read
-    try:
-        page: List["MemoryDB"] = reader(uid, limit=scan_limit, offset=0)
-    except Exception as error:  # noqa: BLE001 - the summary must still ship
-        # Fail-open: the day still gets a summary, just no review card. That is a
-        # correctness change, so it is reported rather than swallowed silently.
-        record_fallback(
-            component='daily_summary',
-            from_mode='memories_learned',
-            to_mode='none',
-            reason='malformed_doc' if isinstance(error, (TypeError, ValueError)) else 'other',
-            outcome='degraded',
-            log=logger,
-        )
-        logger.warning('memories_learned read failed for daily summary: %s', type(error).__name__)
-        return []
+            reader = MemoryService().read
+        except Exception as error:  # noqa: BLE001 - resolving the memory stack can fail too
+            _report_read_failure(error)
+            return []
+    page: List["MemoryDB"] = []
+    for page_index in range(max(1, int(scan_pages))):
+        try:
+            rows: List["MemoryDB"] = reader(uid, limit=scan_limit, offset=page_index * scan_limit)
+        except Exception as error:  # noqa: BLE001 - the summary must still ship
+            _report_read_failure(error)
+            break
+        page.extend(rows)
+        if len(rows) < scan_limit:
+            break
     return select_memories_learned(
         page,
         conversation_ids=conversation_ids,
@@ -187,6 +228,37 @@ def memories_learned_for_summary(
         window_end=window_end,
         limit=limit,
     )
+
+
+def memories_learned_payload(
+    uid: str,
+    conversations: Sequence[Any],
+    window_start: Optional[datetime] = None,
+    window_end: Optional[datetime] = None,
+) -> List[dict[str, Any]]:
+    """Stored projection of the day's review items for a summary being generated.
+
+    Both senders — the scheduled job and the /daily-summary-settings/test route —
+    build the card from what the generator returns, so both must select through
+    this one helper. The read lives here rather than inside
+    ``generate_comprehensive_daily_summary``: that module is the LLM summary
+    builder, and giving it a memory dependency would put a Firestore read behind
+    every caller and every test of it.
+    """
+    return [
+        ref.model_dump(mode='json')
+        for ref in memories_learned_for_summary(
+            uid,
+            # getattr, not attribute access: this selection is fail-open by
+            # contract, so a conversation shape without an id must cost the card
+            # and never the recap it is attached to.
+            conversation_ids=[
+                getattr(c, 'id', None) or '' for c in conversations if not getattr(c, 'discarded', False)
+            ],
+            window_start=window_start,
+            window_end=window_end,
+        )
+    ]
 
 
 def memory_review_card_block(

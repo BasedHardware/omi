@@ -17,7 +17,7 @@ from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
-from utils.memory.learned_today import memory_review_card_block
+from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.notifications import send_bulk_notification, send_notification
 from utils.other import daily_summary_budget as summary_budget
 from utils.webhooks import day_summary_webhook
@@ -56,7 +56,7 @@ DAILY_SUMMARY_USER_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_USER_BUDGET_SECOND
 # prompt. ~360k chars is roughly 90k tokens, comfortably inside the 272k-token
 # model limit even alongside the prompt scaffolding and the user's memories.
 # The overflow seen in production was ~290k tokens of input.
-DAILY_SUMMARY_MAX_HISTORY_CHARS = _env_int('DAILY_SUMMARY_MAX_HISTORY_CHARS', 360_000)
+DAILY_SUMMARY_MAX_HISTORY_CHARS = _env_int('DAILY_SUMMARY_MAX_HISTORY_CHARS', summary_budget.DEFAULT_MAX_HISTORY_CHARS)
 # A per-user timeout abandons (it cannot cancel) a worker thread. Stop the run
 # once enough threads are abandoned that the pool would starve the rest.
 DAILY_SUMMARY_MAX_ABANDONED_USERS = _env_int('DAILY_SUMMARY_MAX_ABANDONED_USERS', 12)
@@ -154,7 +154,7 @@ async def send_daily_summary_notification() -> DailySummaryCronOutcome:
     """
     deadline = monotonic() + DAILY_SUMMARY_JOB_BUDGET_SECONDS
     stats = DailySummaryJobStats()
-    cursor_key = summary_budget.job_cursor_key(datetime.now(pytz.utc))
+    cursor_key = summary_budget.job_cursor_key()
 
     try:
         timezones_by_hour = _get_timezones_grouped_by_hour()
@@ -189,7 +189,7 @@ async def send_daily_summary_notification() -> DailySummaryCronOutcome:
 
         stats.groups_attempted += 1
         try:
-            users, query_error = await _get_users_for_daily_summary(timezones, target_hour)
+            users, query_error, group_fully_read = await _get_users_for_daily_summary(timezones, target_hour)
         except Exception as e:
             # One hour group's read failing must not cost the other 23 groups.
             stats.groups_failed += 1
@@ -200,6 +200,18 @@ async def send_daily_summary_notification() -> DailySummaryCronOutcome:
             stats.groups_failed += 1
             logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, query_error)
             return ProcessOutcome.reject(str(query_error), reason='user_query')
+
+        if not group_fully_read:
+            # A dropped timezone chunk means this hour was only *partially*
+            # enumerated. Serving what did read is right, but declaring the run
+            # complete afterwards would clear the checkpoint and retire users the
+            # job never even listed. Keep the run resumable and point the next
+            # execution at this hour.
+            completed_all = False
+            await _checkpoint(cursor_key, target_hour, None)
+            _record_daily_summary_fallback(
+                from_mode='full_run', to_mode='resumable_tail', reason='other', outcome='degraded'
+            )
 
         if not users:
             return ProcessOutcome.ack()
@@ -272,7 +284,16 @@ async def _checkpoint(cursor_key: str, target_hour: Optional[int], uid: Optional
 
 async def _get_users_for_daily_summary(
     timezones: List[str], target_hour: int
-) -> Tuple[List[Tuple[str, List[str], Any]], Optional[BaseException]]:
+ ) -> Tuple[List[Tuple[str, List[str], Any]], Optional[BaseException], bool]:
+    """Read one hour group's users.
+
+    Returns ``(users, query_error, every_chunk_read)``. A dropped chunk is a
+    *partial* read, and a caller that cannot tell the difference finishes the
+    hour, clears the checkpoint, and permanently retires users it never listed.
+    Serving the chunks that did read is still right — the flag only stops the
+    run from calling itself complete.
+
+    """
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
     # return_exceptions: one failing timezone chunk degrades that chunk's users,
     # it does not throw away the chunks that did read successfully.
@@ -285,15 +306,17 @@ async def _get_users_for_daily_summary(
     )
     users: List[Tuple[str, List[str], Any]] = []
     chunk_errors: List[BaseException] = []
+    every_chunk_read = True
     for chunk_index, chunk in enumerate(chunk_results):
         if isinstance(chunk, BaseException):
+            every_chunk_read = False
             logger.error(
                 'daily_summary_user_query_chunk_failed hour=%s chunk=%d error=%s', target_hour, chunk_index, chunk
             )
             chunk_errors.append(chunk)
             continue
         users.extend(chunk)
-    return users, chunk_errors[0] if chunk_errors else None
+    return users, chunk_errors[0] if chunk_errors else None, every_chunk_read
 
 
 def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
@@ -416,8 +439,19 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
             from_mode='full_day', to_mode='truncated_day', reason='quota', outcome='degraded'
         )
     conversations = bounded.conversations
-
-    summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
+    # The review card is built from what the generator returns, so the scheduled
+    # path — the only path real users receive — has to make the same selection
+    # the /v1/users/daily-summary-settings/test path makes. Omitting it left
+    # ``memories_learned`` at its None default, which made the block below
+    # unconditionally None: the card was dead in production as shipped.
+    summary_data = generate_comprehensive_daily_summary(
+        uid,
+        conversations,
+        date_str,
+        start_date_utc,
+        end_date_utc,
+        memories_learned=memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
+    )
 
     # Store in database
     summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
