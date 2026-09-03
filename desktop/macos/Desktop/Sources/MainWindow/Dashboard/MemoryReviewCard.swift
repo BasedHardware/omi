@@ -396,3 +396,40 @@ final class MemoryReviewCardStore: ObservableObject {
     send(succeeded ? .requestSucceeded(action) : .requestFailed(action), to: item)
   }
 }
+
+// MARK: - Harness handle
+
+/// The store of the review section currently on screen, for non-production automation only.
+///
+/// The section owns its store as a `@StateObject` built at init, so a mounted card was reachable
+/// from nowhere: an E2E flow could seed a summary and see a card render, but could not read which
+/// rows it had bound or click one of them without the cursor. The bridge's `memory_review_*`
+/// actions read and drive through this handle, which makes them second *callers* of the same
+/// `MemoryReviewCardStore.send` the ✓ / ✗ buttons call — never a second row state machine.
+///
+/// `weak`, so the handle never keeps a dismissed card's rows alive, and gated: on a production
+/// bundle `register` does nothing and `mounted` is always nil, so nothing here is a shipped path.
+@MainActor
+enum MemoryReviewCardRegistry {
+  private(set) static weak var mounted: MemoryReviewCardStore?
+
+  static func register(_ store: MemoryReviewCardStore) {
+    register(store, enabled: AppBuild.isNonProduction)
+  }
+
+  /// The gate as a parameter, because `AppBuild.isNonProduction` reads `Bundle.main`, and under
+  /// `swift test` that is the test runner rather than an Omi bundle — so a test asserting the
+  /// production no-op would pass for the wrong reason and a test asserting the registration
+  /// could not run at all.
+  static func register(_ store: MemoryReviewCardStore, enabled: Bool) {
+    guard enabled else { return }
+    mounted = store
+  }
+
+  /// Identity-checked: two sections can overlap for a frame while the card rebuilds on new rows,
+  /// and the outgoing one must not clear the handle the incoming one just took.
+  static func unregister(_ store: MemoryReviewCardStore) {
+    guard mounted === store else { return }
+    mounted = nil
+  }
+}
