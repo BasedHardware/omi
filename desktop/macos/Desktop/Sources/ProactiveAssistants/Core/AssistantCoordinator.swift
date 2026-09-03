@@ -308,6 +308,8 @@ class AssistantCoordinator {
         newWindowTitle: newWindowTitle
       )
     }
+    await ContextReminderCoordinator.shared.observeFrontmostChange(
+      appName: newApp, windowTitle: newWindowTitle)
   }
 
   private func finishContextTransition(_ request: ContextTransitionRequest) {

@@ -4477,6 +4477,8 @@ class FloatingControlBarManager {
       // opens focused with the question in it, unsent.
       FirstRealAppCardCoordinator.shared.handleCardTapped(prompt: prompt)
       return
+    case .contextReminder:
+      break
     case nil:
       break
     }

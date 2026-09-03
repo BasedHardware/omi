@@ -189,6 +189,10 @@ enum DesktopCapabilityRegistry {
       when: !available(taskWriteTools).isEmpty
     )
     append(
+      "Remind the user next time they return to the current app or document -> create_context_reminder. Timed reminders stay on create_action_item.",
+      when: has("create_context_reminder")
+    )
+    append(
       "User explicitly asks to remember/save -> create_memory with a clean standalone fact.",
       when: has("create_memory")
     )
