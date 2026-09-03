@@ -565,7 +565,6 @@ class PushToTalkManager: ObservableObject {
     if !FloatingControlBarManager.shared.isVisible {
       FloatingControlBarManager.shared.show()
     }
-    guard FloatingControlBarManager.shared.isVisible else { return }
     log("PushToTalkManager: modifier-only double tap — entering locked listening")
     enterLockedListening()
   }
@@ -592,7 +591,13 @@ class PushToTalkManager: ObservableObject {
       FloatingControlBarManager.shared.show()
     }
 
-    guard FloatingControlBarManager.shared.isVisible else { return }
+    // The press that reveals the bar must still start the turn. Dropping it cost the
+    // user the start sound, the listening animation and — a double tap being two
+    // presses — locked mode, every time the bar had to be revealed first. That happens
+    // routinely on a second display, where following the cursor re-places the window.
+    if !FloatingControlBarManager.shared.isVisible {
+      log("PushToTalkManager: bar not visible after show() — starting the turn anyway")
+    }
     handleShortcutDown()
   }
 
