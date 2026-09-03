@@ -2360,6 +2360,9 @@ def _apply_canonical_user_mutation(
     raise RuntimeError("canonical user mutation conflicted repeatedly")
 
 
+apply_canonical_user_mutation = _apply_canonical_user_mutation
+
+
 @dataclass(frozen=True)
 class CanonicalTriggerFeedbackResult:
     item: MemoryItem

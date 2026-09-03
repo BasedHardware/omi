@@ -147,7 +147,7 @@ def horizon_from_extraction(
     """Return (belief_class, half_life_days) for a new claim."""
     if user_asserted:
         return (belief_class or "identity", None)
-    resolved_class = belief_class if belief_class in HALF_LIFE_DAYS_BY_CLASS else "state"
+    resolved_class = belief_class if belief_class is not None and belief_class in HALF_LIFE_DAYS_BY_CLASS else "state"
     if half_life_days_override is not None:
         if half_life_days_override <= 0:
             raise ValueError("half_life_days must be positive when set")

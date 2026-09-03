@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from models.memory_contracts import LifecycleState
 from models.product_memory import MemoryItem
@@ -93,7 +93,9 @@ def default_judge(new_content: str, neighbors: Sequence[Dict[str, Any]]) -> Evid
         f"NEW: {new_content!r}\nEXISTING:\n{listed}\n"
         f"{parser.get_format_instructions()}"
     )
-    parsed = parser.parse(get_llm("memory_conflict").invoke([("human", prompt)]).content)
+    content = get_llm("memory_conflict").invoke([("human", prompt)]).content
+    text = "\n".join(str(part) for part in content) if isinstance(content, list) else str(content)
+    parsed = parser.parse(text)
     return EvidenceEventJudgment.model_validate(parsed)
 
 
@@ -122,12 +124,12 @@ def _default_applier(
     extra_updates: Dict[str, Any],
     db_client: Any,
 ) -> Any:
-    from utils.memory.canonical_memory_adapter import _apply_canonical_user_mutation
+    from utils.memory.canonical_memory_adapter import apply_canonical_user_mutation
 
     def build_patch(_item: MemoryItem, _now: datetime) -> tuple[Dict[str, Any], Dict[str, Any]]:
         return logical_updates, extra_updates
 
-    _previous, updated = _apply_canonical_user_mutation(
+    _previous, updated = apply_canonical_user_mutation(
         uid,
         memory_id,
         mutation_kind=f"belief_evidence:{logical_updates.get('metadata', {}).get('evidence_event', 'event')}",

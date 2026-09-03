@@ -223,7 +223,7 @@ def _content_from_response(response: object) -> str:
 
 
 def _with_deterministic_archive_ids(
-    items: List[WorkingObservationArchiveItem], uid: str, source_id: str, source_type: str
+    items: Sequence[WorkingObservationArchiveItem], uid: str, source_id: str, source_type: str
 ) -> List[WorkingObservationArchiveItem]:
     normalized: list[WorkingObservationArchiveItem] = []
     for item in items:
@@ -248,7 +248,7 @@ def _with_deterministic_archive_ids(
 
 
 def _bounded_archive_items(
-    items: List[WorkingObservationArchiveItem],
+    items: Sequence[WorkingObservationArchiveItem],
 ) -> List[WorkingObservationArchiveItem]:
     """Preserve provider order while deduplicating within one attributed subject."""
     bounded: List[WorkingObservationArchiveItem] = []
