@@ -827,6 +827,35 @@ import XCTest
         "the revocation must be released when the body throws")
     }
 
+    /// The revocation is a shared boolean, not a counter, so the seam restores the state it
+    /// found instead of ending unconditionally. Two cases depend on that: a nested scope
+    /// must not un-revoke while its caller is still inside, and a revocation leaked by an
+    /// earlier suite must survive — `setUp` reports that leak, and a seam that quietly
+    /// cleared it would hide the defect this seam exists to expose.
+    func testSeamRestoresTheRevocationStateItFound() async {
+      await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
+        await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
+          XCTAssertTrue(RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress)
+        }
+        XCTAssertTrue(
+          RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+          "a nested scope must not release its caller's revocation")
+      }
+      XCTAssertFalse(
+        RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+        "the outermost scope still releases what it started")
+
+      // Simulate entering the seam with a revocation already leaked into the process.
+      await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
+        await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {}
+        XCTAssertTrue(
+          RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+          "an inherited revocation must outlive an inner scope")
+      }
+      RuntimeOwnerIdentity.resetEffectiveOwnerTransitionForTests()
+      XCTAssertFalse(RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress)
+    }
+
     func testFaultHarnessResetUsesCredentialFreeControlClearOnceAndCompletesProjectionReset() async throws {
       let provider = ChatProvider()
       let surface = provider.mainChatSurfaceReference()

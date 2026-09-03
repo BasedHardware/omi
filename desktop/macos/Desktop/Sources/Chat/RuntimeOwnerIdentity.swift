@@ -207,12 +207,25 @@ enum RuntimeOwnerIdentity {
   /// on a `private` singleton no suite can clear. A test that leaked it would strand every
   /// later suite in the same binary with no way to recover — the #12039 failure shape. The
   /// `defer` makes that leak unrepresentable.
+  /// `@MainActor` rather than isolation-generic: every caller is a `@MainActor` XCTestCase,
+  /// and `#isolation` appears nowhere else in this codebase — not a construct to introduce
+  /// for a test seam.
+  @MainActor
   static func withEffectiveOwnerTransitionForTests<T>(
-    isolation: isolated (any Actor)? = #isolation,
     _ body: () async throws -> T
   ) async rethrows -> T {
+    // Restore the entry state rather than ending unconditionally. The revocation is a
+    // shared boolean, not a counter, so a bare `end()` in `defer` would clear a
+    // revocation this scope never started: an outer scope's, or — worse — a leak
+    // inherited from an earlier suite, which is the exact condition `setUp` exists to
+    // report. Swallowing that leak here would hide the bug this seam was built to find.
+    let wasRevokedOnEntry = EffectiveOwnerAuthorizationRevocation.shared.isActive
     EffectiveOwnerAuthorizationRevocation.shared.begin()
-    defer { EffectiveOwnerAuthorizationRevocation.shared.end() }
+    defer {
+      if !wasRevokedOnEntry {
+        EffectiveOwnerAuthorizationRevocation.shared.end()
+      }
+    }
     return try await body()
   }
 
