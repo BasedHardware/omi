@@ -62,13 +62,13 @@ class MemoriesProvider extends ChangeNotifier {
     ReviewMemoryRequest? reviewMemoryRequest,
     EditMemoryRequest? editMemoryRequest,
     RevertMemoryRequest? revertMemoryRequest,
-  }) : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
-       _fetchLedgerHistoryRequest =
-           fetchLedgerHistoryRequest ?? (fetchMemoriesRequest == null ? getLedgerHistory : _noLedgerHistory),
-       _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer,
-       _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer,
-       _editMemoryRequest = editMemoryRequest ?? editMemoryServer,
-       _revertMemoryRequest = revertMemoryRequest ?? revertMemoryServer;
+  })  : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
+        _fetchLedgerHistoryRequest =
+            fetchLedgerHistoryRequest ?? (fetchMemoriesRequest == null ? getLedgerHistory : _noLedgerHistory),
+        _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer,
+        _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer,
+        _editMemoryRequest = editMemoryRequest ?? editMemoryServer,
+        _revertMemoryRequest = revertMemoryRequest ?? revertMemoryServer;
 
   List<Memory> get memories => _memories;
   bool get loading => _loading;
@@ -110,11 +110,12 @@ class MemoriesProvider extends ChangeNotifier {
         (memory.supersededBy ?? '').trim().isNotEmpty;
   }
 
-  List<Memory> get currentLedgerFacts =>
-      _memories
-          .where((memory) => memory.isCurrentKnowledgeLedgerRow && memory.ledgerKind == KnowledgeLedgerKind.fact)
-          .toList(growable: false)
-        ..sort(_ledgerOrder);
+  List<Memory> get currentLedgerFacts => _memories
+      .where(
+        (memory) => memory.isCurrentKnowledgeLedgerRow && memory.ledgerKind == KnowledgeLedgerKind.fact,
+      )
+      .toList(growable: false)
+    ..sort(_ledgerOrder);
 
   List<Memory> get currentLedgerPlaybooks =>
       _memories.where((memory) => memory.isCurrentKnowledgeLedgerRow && memory.isLedgerPlaybook).toList(growable: false)
@@ -163,8 +164,7 @@ class MemoriesProvider extends ChangeNotifier {
       // When the server does not support device_scope, legacy memories have no
       // primary_capture_device/capture_device_ids. Skip the local device filter
       // in that case to avoid hiding all legacy rows on the "This device" view.
-      final deviceMatch =
-          !_filterThisDeviceOnly ||
+      final deviceMatch = !_filterThisDeviceOnly ||
           !_deviceScopeSupported ||
           ClientDeviceService.instance.memoryMatchesThisDevice(
             primaryCaptureDevice: memory.primaryCaptureDevice,
@@ -172,7 +172,8 @@ class MemoriesProvider extends ChangeNotifier {
           );
 
       return matchesSearch && categoryMatch && deviceMatch;
-    }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void setFilterThisDeviceOnly(bool enabled) {
@@ -539,7 +540,11 @@ class MemoriesProvider extends ChangeNotifier {
       final replacement = result.authoritativeMemory;
       final currentTail = _matchingCurrentTail(currentSource);
       if (replacement == null ||
-          !_isAuthoritativeRevertReplacement(currentSource, replacement, expectedVisibility: currentTail?.visibility)) {
+          !_isAuthoritativeRevertReplacement(
+            currentSource,
+            replacement,
+            expectedVisibility: currentTail?.visibility,
+          )) {
         return false;
       }
 

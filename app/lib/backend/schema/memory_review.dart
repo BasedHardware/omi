@@ -12,7 +12,12 @@ class MemoryReviewItem {
   final String category;
   final DateTime? capturedAt;
 
-  const MemoryReviewItem({required this.memoryId, required this.content, this.category = '', this.capturedAt});
+  const MemoryReviewItem({
+    required this.memoryId,
+    required this.content,
+    this.category = '',
+    this.capturedAt,
+  });
 
   factory MemoryReviewItem.fromGenerated(wire.GeneratedLearnedMemoryRef generated) {
     return MemoryReviewItem(
@@ -58,7 +63,12 @@ class MemoryReviewCardBlock {
   final String date;
   final List<MemoryReviewItem> items;
 
-  const MemoryReviewCardBlock({required this.id, required this.summaryId, required this.date, required this.items});
+  const MemoryReviewCardBlock({
+    required this.id,
+    required this.summaryId,
+    required this.date,
+    required this.items,
+  });
 
   static const int maxItems = 3;
 

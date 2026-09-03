@@ -18,7 +18,10 @@ Widget _app({required bool showLoadError}) {
       body: MemoriesEmptyOrError(
         showLoadError: showLoadError,
         onRetry: () {},
-        emptyState: const Center(key: Key('memories_empty_state'), child: Text('🧠 No memories yet')),
+        emptyState: const Center(
+          key: Key('memories_empty_state'),
+          child: Text('🧠 No memories yet'),
+        ),
       ),
     ),
   );

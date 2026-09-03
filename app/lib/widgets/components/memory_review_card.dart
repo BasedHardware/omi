@@ -256,7 +256,10 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
             duration: const Duration(milliseconds: 150),
             child: editing
                 ? _buildEditor(item, memory)
-                : Text(content, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35)),
+                : Text(
+                    content,
+                    style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35),
+                  ),
           ),
           const SizedBox(height: 10),
           SizedBox(
@@ -359,9 +362,9 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
           label: 'Fix',
           onTap: enabled
               ? () => setState(() {
-                  _failed.remove(item.memoryId);
-                  _editors[item.memoryId] = TextEditingController(text: memory.content.trim());
-                })
+                    _failed.remove(item.memoryId);
+                    _editors[item.memoryId] = TextEditingController(text: memory.content.trim());
+                  })
               : null,
         ),
       ],
@@ -372,8 +375,8 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     final color = onTap == null
         ? Colors.grey.shade700
         : emphasized
-        ? Colors.white
-        : Colors.grey.shade300;
+            ? Colors.white
+            : Colors.grey.shade300;
     return Semantics(
       button: true,
       enabled: onTap != null,

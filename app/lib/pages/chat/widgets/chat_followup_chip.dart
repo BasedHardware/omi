@@ -7,7 +7,12 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// Tapping sends the chip's words as a normal user message through the existing
 /// chat send path; the chip owns no send logic of its own.
 class ChatFollowUpChip extends StatelessWidget {
-  const ChatFollowUpChip({super.key, required this.question, required this.onSend, this.source = 'chat_block'});
+  const ChatFollowUpChip({
+    super.key,
+    required this.question,
+    required this.onSend,
+    this.source = 'chat_block',
+  });
 
   final String question;
   final void Function(String) onSend;
@@ -36,7 +41,10 @@ class ChatFollowUpChip extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
               ),
-              child: Text(question, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.3)),
+              child: Text(
+                question,
+                style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.3),
+              ),
             ),
           ),
         ),

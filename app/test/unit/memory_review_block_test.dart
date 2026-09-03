@@ -32,7 +32,9 @@ const _reviewBlock = {
 
 void main() {
   test('decodes a memoryReviewCard delivered as FCM JSON text', () {
-    final message = ServerMessage.fromJson(_fcmDaySummaryData(contentBlocks: jsonEncode([_reviewBlock])));
+    final message = ServerMessage.fromJson(
+      _fcmDaySummaryData(contentBlocks: jsonEncode([_reviewBlock])),
+    );
 
     final card = message.memoryReviewCard;
     expect(card, isNotNull);
@@ -131,7 +133,9 @@ void main() {
   });
 
   test('fallback text is sensible for both new block types', () {
-    final reviewOnly = ServerMessage.fromJson(_fcmDaySummaryData(text: '', contentBlocks: [_reviewBlock]));
+    final reviewOnly = ServerMessage.fromJson(
+      _fcmDaySummaryData(text: '', contentBlocks: [_reviewBlock]),
+    );
     expect(reviewOnly.text, 'Things I learned today');
 
     final followUpOnly = ServerMessage.fromJson({
