@@ -158,6 +158,64 @@ final class ChatDailySummaryTests: XCTestCase {
     return defaults
   }
 
+  /// Clearing Chat has to take the card with it.
+  ///
+  /// The card is chrome above the thread, not a turn (INV-CHAT-1 keeps
+  /// transcript authorship in the kernel), so the journal clear cannot reach
+  /// it — and the day's summary was left sitting alone in a chat the reader had
+  /// just emptied, which reads as a clear that did not work.
+  @MainActor
+  func testClearingChatWithdrawsTheCard() async throws {
+    let box = Box()
+    box.records = [record(id: "ds_1")]
+    let coordinator = makeCoordinator(box, defaults: try makeDefaults())
+    await coordinator.refresh()
+    XCTAssertFalse(coordinator.isClearedFromTranscript)
+
+    coordinator.noteChatCleared()
+    XCTAssertTrue(coordinator.isClearedFromTranscript, "the card must leave with the thread")
+
+    // Still cleared after the next read: the same summary does not come back on
+    // a refresh, or the card would reappear over an empty chat minutes later.
+    box.clock = box.clock.addingTimeInterval(3_600)
+    await coordinator.refresh()
+    XCTAssertTrue(coordinator.isClearedFromTranscript)
+  }
+
+  /// Clearing suppresses one summary, not the feature. Tomorrow's comes back.
+  @MainActor
+  func testANewerSummaryReturnsAfterAClear() async throws {
+    let box = Box()
+    box.records = [record(id: "ds_1")]
+    let coordinator = makeCoordinator(box, defaults: try makeDefaults())
+    await coordinator.refresh()
+    coordinator.noteChatCleared()
+    XCTAssertTrue(coordinator.isClearedFromTranscript)
+
+    box.records = [record(id: "ds_2", date: "2026-09-02")]
+    box.clock = box.clock.addingTimeInterval(3_600)
+    await coordinator.refresh()
+    XCTAssertFalse(
+      coordinator.isClearedFromTranscript,
+      "a clear withdraws the summary that was on screen, not every summary after it")
+  }
+
+  /// The watermark is per account, like the announcement's. Clearing on one
+  /// account must not blank the next reader's day on a shared Mac.
+  @MainActor
+  func testAClearOnOneAccountDoesNotWithdrawAnothersSummary() async throws {
+    let box = Box()
+    box.records = [record(id: "ds_1")]
+    let coordinator = makeCoordinator(box, defaults: try makeDefaults())
+    await coordinator.refresh()
+    coordinator.noteChatCleared()
+
+    box.owner = "owner-b"
+    box.clock = box.clock.addingTimeInterval(3_600)
+    await coordinator.refresh()
+    XCTAssertFalse(coordinator.isClearedFromTranscript)
+  }
+
   @MainActor
   func testNoSummaryLeavesNothingToRenderAndAnnouncesNothing() async throws {
     let box = Box()

@@ -191,6 +191,13 @@ struct ScopedDefaultsKey {
     Self(rawValue: "dailySummary.lastSeenID.v1.\(ownerID)")
   }
 
+  /// Owner-scoped id of the daily summary that was on screen when the owner last cleared Chat.
+  /// The card is chrome rather than a turn (INV-CHAT-1), so clearing the transcript cannot
+  /// delete it — this is what makes Clear take it away anyway, until a newer summary arrives.
+  static func dailySummaryClearedID(ownerID: String) -> Self {
+    Self(rawValue: "dailySummary.clearedID.v1.\(ownerID)")
+  }
+
   static func importConnectorAvailabilityText(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
   }

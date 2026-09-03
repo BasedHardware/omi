@@ -22,6 +22,17 @@ final class ChatDailySummaryCoordinator: ObservableObject {
 
   let store: HomeDailySummaryStore
 
+  /// True while the summary on hand is the one the owner cleared out of Chat.
+  ///
+  /// Clearing the transcript is a statement about the whole surface, not about
+  /// the rows the journal happens to own. The card is chrome above the thread
+  /// (INV-CHAT-1 keeps transcript authorship in the kernel, so nothing here
+  /// writes a turn) and a journal clear cannot reach it — which left the day's
+  /// summary sitting alone in a chat the reader had just emptied. Clearing
+  /// records the summary it was showing instead, and the card stays away until
+  /// a newer day's summary arrives.
+  @Published private(set) var isClearedFromTranscript = false
+
   private let defaults: UserDefaults
   private let cardSink: CardSink
   private let ownerID: () -> String?
@@ -63,6 +74,7 @@ final class ChatDailySummaryCoordinator: ObservableObject {
   func refreshIfNeeded() async {
     guard ownerID() != nil else { return }
     await store.refreshIfNeeded()
+    refreshClearedState()
     announceIfNew()
   }
 
@@ -71,7 +83,31 @@ final class ChatDailySummaryCoordinator: ObservableObject {
   func refresh() async {
     guard ownerID() != nil else { return }
     await store.refresh()
+    refreshClearedState()
     announceIfNew()
+  }
+
+  // MARK: - Clearing
+
+  /// Chat was cleared. Take the card with it.
+  ///
+  /// Recording the id rather than a flag is what lets tomorrow's summary come
+  /// back on its own: the card is withdrawn only while the summary on hand is
+  /// the one that was on screen when the reader cleared.
+  func noteChatCleared() {
+    guard let owner = ownerID(), let record = store.latest else { return }
+    defaults.set(record.id, forKey: ScopedDefaultsKey.dailySummaryClearedID(ownerID: owner))
+    isClearedFromTranscript = true
+    AnalyticsManager.shared.trackDailySummary(.cardDismissed)
+  }
+
+  private func refreshClearedState() {
+    guard let owner = ownerID(), let record = store.latest else {
+      isClearedFromTranscript = false
+      return
+    }
+    isClearedFromTranscript =
+      defaults.string(forKey: ScopedDefaultsKey.dailySummaryClearedID(ownerID: owner)) == record.id
   }
 
   // MARK: - New-summary announcement

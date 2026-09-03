@@ -456,6 +456,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// See `admitDailySummaryIfFollowing` (INV-CHAT-2).
   @State private var dailySummaryAdmitted = false
   @ObservedObject private var dailySummaryStore: HomeDailySummaryStore = ChatDailySummaryCoordinator.shared.store
+  /// Withdraws the card when the reader clears Chat. See `noteChatCleared`.
+  @ObservedObject private var dailySummaryCoordinator: ChatDailySummaryCoordinator =
+    ChatDailySummaryCoordinator.shared
   /// Throttle token for scrollToBottom — prevents the streaming + scroll
   /// detection feedback loop from saturating the main thread.
   @State private var scrollThrottleWorkItem: DispatchWorkItem?
@@ -632,8 +635,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       VStack(spacing: OmiSpacing.lg) {
         loadMoreButton
         // Chrome, above the thread — not a message. It renders once, at the top, whether or not
-        // the transcript has rows, and it records no turn (INV-CHAT-1).
-        if showsDailySummary, dailySummaryAdmitted {
+        // the transcript has rows, and it records no turn (INV-CHAT-1). Clearing Chat withdraws
+        // it here rather than through admission, so it leaves with the thread on the same frame.
+        if showsDailySummary, dailySummaryAdmitted, !dailySummaryCoordinator.isClearedFromTranscript {
           ChatDailySummaryCard()
         }
         messageContent
@@ -846,7 +850,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// stays; a summary that disappears (owner change) withdraws it.
   private func admitDailySummaryIfFollowing(proxy: ScrollViewProxy) {
     guard showsDailySummary else { return }
-    guard dailySummaryStore.latest != nil else {
+    guard dailySummaryStore.latest != nil, !dailySummaryCoordinator.isClearedFromTranscript else {
       dailySummaryAdmitted = false
       return
     }
