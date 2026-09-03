@@ -39,7 +39,7 @@ TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
 TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
 MUTATION_RECEIPTS_COLLECTION = 'workflow_mutation_receipts'
 # Legacy test/call-site compatibility only; new persistence paths use _get_db().
-db = getattr(_client, 'data_plane_db', _client.db)
+db = _client.db
 
 
 class GoalStoreError(RuntimeError):
@@ -57,8 +57,8 @@ class GoalConflictError(GoalStoreError):
 def _get_db(firestore_client: Any = None) -> Any:
     if firestore_client is not None:
         return firestore_client
-    getter = getattr(_client, 'get_data_plane_firestore_client', None)
-    return getter() if getter is not None else db
+    getter = getattr(_client, 'get_firestore_client', None)
+    return getter() if getter is not None else _client.db
 
 
 def _goal_ref(uid: str, goal_id: str, *, firestore_client: Any = None):
