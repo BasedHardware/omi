@@ -23,7 +23,7 @@ This repo already has an in-flight catalog migration — `.github/agent-docs/pla
 | Location | Kind | Needs update when prices/tiers change? |
 |---|---|---|
 | `desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift` (line 198-206) | hardcoded_amount | Likely dead, but Yes if reachable — stale "$199/month Omi Pro" alert, plan name doesn't match any current tier |
-| `desktop/macos/Desktop/Sources/Providers/ChatProvider.swift` (line 2959,4341,5340) | hardcoded_amount | Yes — literal $50 free-tier spend cap duplicated at 3 call sites |
+| `desktop/macos/Desktop/Sources/Providers/ChatProvider.swift` (line 3158,4555,5566) | hardcoded_amount | Yes — literal $50 free-tier spend cap duplicated at 3 call sites |
 | `...Settings/Components/SettingsContentView+BillingHelpers.swift:34` (comment) | hardcoded_amount | Yes (comment) — "Neo ($20) \| Operator ($49) \| Architect ($200)" |
 | `...BillingHelpers.swift:141-152` `planSubtitle` | feature_limit_number | Yes — fallback subtitle question counts, only shown when catalog omits `subtitle`. Now `static` for testability |
 | `...BillingHelpers.swift:195-206` `planDescription` | feature_limit_number | Yes — fallback descriptions; internal inconsistency (100 vs 200 for "unlimited") fixed in this PR. Now `static` for testability |
@@ -106,7 +106,7 @@ This repo already has an in-flight catalog migration — `.github/agent-docs/pla
 |---|---|---|
 | `backend/config/plan_catalog.json` (line 115-570) allocations, `:12-76` allocation_profiles | feature_limit_number | Yes — this IS the canonical place to edit finite quotas/budgets |
 | `backend/utils/subscription.py` (line 474-535) `get_paid_plan_definitions` | plan_name_or_tier_copy | Yes — hardcoded storefront titles/eyebrows/subtitle/description text |
-| `backend/utils/subscription.py` (line 484,496,508,520,532) `annual_description` | hardcoded_amount | Yes — "Save ~17%" baked into copy, not computed from live Stripe monthly/annual ratio |
+| `backend/utils/subscription.py` (line 484,496) `annual_description` | hardcoded_amount | Yes — "Save ~17% with annual billing." baked into Neo/Operator copy, not computed from live Stripe ratio; lines 508 (architect), 520 (plus), 532 (unlimited_v2) say "Save with annual billing." (no percentage) |
 | `backend/utils/subscription.py` (line 987-1002) `_chat_allowance_text` | config_value | Yes (via editing plan_catalog.json) — derives "$400" from catalog usd_cent value; live-read but easy to mistake for Stripe-sourced |
 | `backend/routers/payment.py` (line 196) docstring example | localized_copy | Cosmetic only — illustrative comment, not runtime |
 | `backend/charts/backend-listen/{dev,prod}_*_values.yaml`, `backend/charts/pusher/{dev,prod}_*_values.yaml` | config_value | Yes — Helm env vars duplicate quota overlays and Stripe price IDs for legacy plans; must update both dev+prod together |

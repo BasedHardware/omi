@@ -27,5 +27,6 @@ final class SettingsContentViewBillingFallbackTests: XCTestCase {
     let subtitle = SettingsContentView.planSubtitle(for: "operator")
     let description = SettingsContentView.planDescription(for: "operator")
     XCTAssertEqual(leadingQuestionCount(in: subtitle), leadingQuestionCount(in: description))
+    XCTAssertEqual(leadingQuestionCount(in: description), "500")
   }
 }
