@@ -34,6 +34,7 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
 import 'chart_message_widget.dart';
 import 'package:omi/widgets/components/chat_evidence_card.dart';
+import 'package:omi/utils/share_sheet.dart';
 import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
@@ -1250,11 +1251,6 @@ class _MessageActionBarState extends State<MessageActionBar> {
                 properties: {'message': widget.messageText},
               );
 
-              // Implicit positive feedback - user copied the message (silent, no UI change)
-              if (_selectedNps == null) {
-                widget.setMessageNps?.call(1, reason: 'user_copied_message');
-              }
-
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1304,16 +1300,11 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               if (widget.messageText.isEmpty) return;
               HapticFeedback.lightImpact();
-              await Share.share(widget.messageText);
+              await Share.share(widget.messageText, sharePositionOrigin: shareSheetOrigin());
               PlatformManager.instance.analytics.track(
                 'Chat Message Shared',
                 properties: {'message': widget.messageText},
               );
-
-              // Implicit positive feedback - user shared the message (silent, no UI change)
-              if (_selectedNps == null) {
-                widget.setMessageNps?.call(1, reason: 'user_shared_message');
-              }
             },
           ),
         ],
