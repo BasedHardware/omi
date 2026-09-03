@@ -3234,5 +3234,7 @@
     "pendantRecordingSyncBlocked": "Pendant vis dar įrašinėja, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite dar kartą.",
     "pendantFullSyncBlocked": "Pendant atmintis pilna ir jis vis dar įrašymo režime, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite iš naujo.",
     "conversationsNotCapturedCount": "Neįrašyta ({count})",
-    "transcriptionNoAudio": "Transkripcija negauna garso"
+    "transcriptionNoAudio": "Transkripcija negauna garso",
+    "couldNotLoadMemories": "Nepavyko įkelti prisiminimų",
+    "couldNotLoadKnowledgeGraph": "Nepavyko įkelti žinių grafo"
 }

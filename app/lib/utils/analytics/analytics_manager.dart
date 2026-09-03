@@ -761,6 +761,42 @@ class AnalyticsManager {
     );
   }
 
+  /// "Things I learned today" card became visible. Counts only — the card's
+  /// content and memory ids never leave the device through analytics.
+  void memoryReviewCardShown({required int itemCount, required String source}) {
+    track('memory_review_card_shown', properties: {'item_count': itemCount, 'source': source});
+  }
+
+  /// One accept / reject / edit verdict on a learned memory.
+  ///
+  /// [action] is accept|reject|edit, [outcome] is ok|error, [source] is
+  /// chat_block|daily_summary_detail. `memory_category` is the coarse category
+  /// label; no memory content and no raw memory id are ever attached.
+  void memoryReviewAction({
+    required String source,
+    required String action,
+    required String outcome,
+    required String memoryCategory,
+  }) {
+    track(
+      'memory_review_action',
+      properties: {
+        'source': source,
+        'action': action,
+        'outcome': outcome,
+        'memory_category': memoryCategory,
+      },
+    );
+  }
+
+  /// The one grounded follow-up chip under an answer was tapped.
+  ///
+  /// Mobile has no `question_asked` event to attribute to, so the origin is
+  /// carried by this event instead of as a property on a send event.
+  void followUpChipTapped({required String source}) {
+    track('followup_chip_tapped', properties: {'source': source});
+  }
+
   void memoriesAllVisibilityChanged(MemoryVisibility newVisibility, int count) {
     track('All Facts Visibility Changed', properties: {'new_visibility': newVisibility.name, 'facts_count': count});
   }

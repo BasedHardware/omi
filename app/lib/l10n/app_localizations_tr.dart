@@ -9930,4 +9930,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Anılar yüklenemedi';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Bilgi grafiği yüklenemedi';
 }

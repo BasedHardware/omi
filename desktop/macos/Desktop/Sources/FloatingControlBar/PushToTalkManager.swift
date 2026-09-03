@@ -80,6 +80,26 @@ struct PTTSilentMicRecoveryPolicy {
   }
 }
 
+/// Routes a shortcut press through the reveal decision. Both PTT entry points call this,
+/// so injecting `reveal`/`start` in a test exercises the shipping ordering rather than a
+/// restatement of it.
+///
+/// The bar used to swallow the very press that revealed it, which cost the start sound,
+/// the listening animation and — a double tap being two presses — locked mode. That bit
+/// every press on a second display, where following the cursor re-places the window so it
+/// is routinely not yet visible.
+enum PushToTalkBarRevealPolicy {
+  /// Reveals the bar when it is hidden, then *always* starts the turn.
+  static func startPress(
+    barVisible: Bool,
+    reveal: () -> Void,
+    start: () -> Void
+  ) {
+    if !barVisible { reveal() }
+    start()
+  }
+}
+
 /// Modifier-only shortcuts (Option, Fn, etc.) overlap with normal text editing:
 /// Option-arrow navigation and dead-key entry first emit `flagsChanged`, then a
 /// normal key-down. Do not let that first modifier event barge into an active
@@ -562,12 +582,15 @@ class PushToTalkManager: ObservableObject {
       return
     }
     lastModifierQuickTapTime = 0
-    if !FloatingControlBarManager.shared.isVisible {
-      FloatingControlBarManager.shared.show()
-    }
-    guard FloatingControlBarManager.shared.isVisible else { return }
-    log("PushToTalkManager: modifier-only double tap — entering locked listening")
-    enterLockedListening()
+    // Same reveal rule as a held press: the lock must happen even when the bar was not
+    // showing on this display yet, or the double tap is lost on a second monitor.
+    PushToTalkBarRevealPolicy.startPress(
+      barVisible: FloatingControlBarManager.shared.isVisible,
+      reveal: { FloatingControlBarManager.shared.show() },
+      start: {
+        log("PushToTalkManager: modifier-only double tap — entering locked listening")
+        self.enterLockedListening()
+      })
   }
 
   private func cancelPendingModifierOnlyShortcutStart() {
@@ -588,12 +611,13 @@ class PushToTalkManager: ObservableObject {
     // Let the first shortcut press reveal the compact bar instead of requiring it
     // to already be visible. This keeps onboarding step 3 quiet on entry while
     // still allowing the user to trigger the bar by pressing the key.
-    if !FloatingControlBarManager.shared.isVisible {
-      FloatingControlBarManager.shared.show()
-    }
-
-    guard FloatingControlBarManager.shared.isVisible else { return }
-    handleShortcutDown()
+    PushToTalkBarRevealPolicy.startPress(
+      barVisible: FloatingControlBarManager.shared.isVisible,
+      reveal: {
+        FloatingControlBarManager.shared.show()
+        log("PushToTalkManager: revealed the bar for this press — starting the turn")
+      },
+      start: { self.handleShortcutDown() })
   }
 
   private func handleShortcutDown() {

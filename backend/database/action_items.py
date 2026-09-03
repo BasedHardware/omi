@@ -11,6 +11,7 @@ from google.api_core.exceptions import (
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from database.action_items_cache import bump_action_items_list_version
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from database.firestore_index_registry import (
@@ -371,7 +372,7 @@ def create_action_item(
         write_transaction.set(doc_ref, payload)
         return doc_ref.id
 
-    return cast(
+    created_id = cast(
         str,
         run_with_transaction_contention_retry(
             db.transaction,
@@ -379,6 +380,8 @@ def create_action_item(
             operation_name="action_item_create",
         ),
     )
+    bump_action_items_list_version(uid)
+    return created_id
 
 
 def create_action_items_batch(
@@ -454,7 +457,7 @@ def create_action_items_batch(
             write_transaction.set(doc_ref, {**item, 'account_generation': account_generation})
         return doc_refs
 
-    return cast(
+    created_ids = cast(
         List[str],
         run_with_transaction_contention_retry(
             db.transaction,
@@ -462,6 +465,8 @@ def create_action_items_batch(
             operation_name="action_item_batch_create",
         ),
     )
+    bump_action_items_list_version(uid)
+    return created_ids
 
 
 # *****************************
@@ -1066,13 +1071,16 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
             write_transaction.update(action_item_ref, {**update_data, 'updated_at': now})
             return True
 
-        return bool(
+        updated = bool(
             run_with_transaction_contention_retry(
                 db.transaction,
                 update_linked,
                 operation_name="action_item_linked_update",
             )
         )
+        if updated:
+            bump_action_items_list_version(uid)
+        return updated
 
     # Check if exists
     if not action_item_ref.get().exists:
@@ -1083,6 +1091,7 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
 
     # Update the document
     action_item_ref.update(update_data)
+    bump_action_items_list_version(uid)
 
     return True
 
@@ -1121,6 +1130,8 @@ def batch_update_action_items(uid: str, items: Iterable[_BatchUpdateEntry]) -> B
             continue
         result.updated_ids.append(item.id)
 
+    if result.updated_ids:
+        bump_action_items_list_version(uid)
     return result
 
 
@@ -1168,6 +1179,7 @@ def delete_action_item(uid: str, action_item_id: str) -> bool:
 
     # Delete the document
     action_item_ref.delete()
+    bump_action_items_list_version(uid)
 
     return True
 
@@ -1200,6 +1212,7 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
     if count > 0:
         batch.commit()
 
+    bump_action_items_list_version(uid)
     return list(action_item_ids)
 
 
@@ -1229,6 +1242,7 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
 
     if count > 0:
         batch.commit()
+        bump_action_items_list_version(uid)
 
     return count
 
@@ -1270,6 +1284,7 @@ def retire_action_items_for_conversation(
         count += 1
     if count:
         batch.commit()
+        bump_action_items_list_version(uid)
     return count
 
 
@@ -1293,6 +1308,7 @@ def batch_set_sync_requested(uid: str, item_ids: List[str]) -> None:
         batch.update(doc_ref, {'sync_requested': True, 'updated_at': now})
 
     batch.commit()
+    bump_action_items_list_version(uid)
 
 
 def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
@@ -1366,6 +1382,8 @@ def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> B
             continue
         result.updated_ids.append(entry['id'])
 
+    if result.updated_ids:
+        bump_action_items_list_version(uid)
     return result
 
 
@@ -1388,6 +1406,7 @@ def unlock_all_action_items(uid: str) -> None:
             count = 0
     if count > 0:
         batch.commit()
+    bump_action_items_list_version(uid)
     logger.info(f"Unlocked all action items for user {uid}")
 
 

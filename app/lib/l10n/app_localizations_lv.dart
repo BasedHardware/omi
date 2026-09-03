@@ -9942,4 +9942,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Neizdevās ielādēt atmiņas';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Neizdevās ielādēt zināšanu grafu';
 }

@@ -89,6 +89,9 @@ environment_shared:
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'false'
           category: rollout
+        WAKE_WORD_ADJUDICATION_ENABLED:
+          value: 'true'
+          category: rollout
         HOSTED_PARAKEET_API_URL:
           category: service_discovery
         LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
@@ -328,6 +331,9 @@ environment_shared:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
             value: 'false'
+            category: rollout
+          WAKE_WORD_ADJUDICATION_ENABLED:
+            value: 'true'
             category: rollout
           OMI_LLM_GATEWAY_URL:
             env_var: OMI_LLM_GATEWAY_URL
