@@ -22,10 +22,10 @@ in those three files with no matching commit, this is almost certainly why;
 If your local `pnpm --version` is a different major (e.g. a system package
 manager installed 11+), `.npmrc`'s `node-linker=hoisted` may be silently
 ignored, breaking the pi-mono dependency-closure postinstall check
-(`scripts/verify-pimono-unpack.mjs`) with a confusing "closure package(s) do
+(`scripts/verify-pimono-unpack.mjs`) with "closure package(s) do
 not resolve on disk" error. Use `npx pnpm@10 <command>` if your system pnpm
 is a different major version — don't downgrade a system-managed pnpm install
-for this alone. **Node pin:** `>=22.19.0 <23` (`.nvmrc`; Node 24+ breaks vitest jsdom — `pretest` calls `scripts/check-node-version.mjs`).
+for this alone. **Node pin:** `>=22.19.0 <23` (`.nvmrc`; 24+ fails pretest).
 
 ## Development Workflow
 
