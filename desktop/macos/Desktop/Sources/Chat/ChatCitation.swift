@@ -249,6 +249,42 @@ enum ChatCitationMarkup {
     !kindOnlyMatches(in: text).isEmpty
   }
 
+  /// References a follow-up borrows from the turns before it.
+  ///
+  /// Ordinals are assigned per attempt, so `[1]` in one answer and `[1]` in the
+  /// next can name different sources. But a turn that retrieved nothing has no
+  /// ordinals of its own, and when the model writes `[1]` there it is pointing
+  /// back at the list the reader was just shown — "pick one conversation from
+  /// that day" answered without a tool call is exactly this. Left unbound the
+  /// marker drew as plain text next to a title the reader could not open.
+  ///
+  /// Only ordinals this turn cannot resolve itself are borrowed, and each from
+  /// the nearest earlier assistant turn that persisted it, so a turn's own
+  /// provenance always outranks the past and a stale list is never reached
+  /// past a fresher one that has the same number.
+  static func inheritedReferences(
+    citedIn message: ChatMessage,
+    resolved: [ChatCitationReference],
+    earlierTurns: [ChatMessage],
+    lookback: Int = 8
+  ) -> [ChatCitationReference] {
+    var unresolved = message.citedCitationOrdinals.subtracting(resolved.map(\.ordinal))
+    guard !unresolved.isEmpty else { return [] }
+    var inherited = [ChatCitationReference]()
+    var searched = 0
+    for earlier in earlierTurns.reversed() where earlier.sender == .ai && earlier.id != message.id {
+      guard searched < lookback else { break }
+      searched += 1
+      for block in earlier.contentBlocks {
+        guard case .citation(_, let reference) = block, unresolved.remove(reference.ordinal) != nil
+        else { continue }
+        inherited.append(reference)
+      }
+      if unresolved.isEmpty { break }
+    }
+    return inherited.sorted { $0.ordinal < $1.ordinal }
+  }
+
   /// Replace `[memory]` / `[conversation]` with the numeric marker for the best matching source of
   /// that kind. Unmatched labels stay inert instead of opening a random row.
   static func resolvingKindLabels(
@@ -565,13 +601,19 @@ extension ChatMessage {
     }
   }
 
-  mutating func persistCitedReferences(from references: [ChatCitationReference]) {
+  /// Every numeric marker the answer writes, in its body and its text blocks.
+  var citedCitationOrdinals: Set<Int> {
     var cited = Set(ChatCitationMarkup.ordinals(in: text))
     for block in contentBlocks {
       if case .text(_, let blockText) = block {
         cited.formUnion(ChatCitationMarkup.ordinals(in: blockText))
       }
     }
+    return cited
+  }
+
+  mutating func persistCitedReferences(from references: [ChatCitationReference]) {
+    let cited = citedCitationOrdinals
     let existing = Set(
       contentBlocks.compactMap { block -> Int? in
         guard case .citation(_, let reference) = block else { return nil }
