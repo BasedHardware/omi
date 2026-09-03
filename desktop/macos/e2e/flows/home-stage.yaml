@@ -24,6 +24,11 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/HomeStagePresentation.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeSuggestionsStore.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeKnowsComposer.swift
+  # Knows-list impression ledger and the daily-summary memory review rows render on the same stage.
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeKnowsImpressionLedger.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/AnalyticsManager+HomeKnows.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/MemoryReviewCard.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/MemoryReviewRowView.swift
   - desktop/macos/Desktop/Sources/MainWindow/MainChatNavigationRequest.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   # The five home_* actions every step below drives, lifted out of the registry.

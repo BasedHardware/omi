@@ -519,6 +519,28 @@ extension PostHogManager {
     )
   }
 
+  static func conversationProcessingProperties(elapsedSeconds: Int, outcome: String?) -> [String: Any] {
+    var properties: [String: Any] = ["elapsed_seconds": max(0, elapsedSeconds)]
+    if let outcome {
+      properties["outcome"] = outcome
+    }
+    return properties
+  }
+
+  func conversationProcessingCompleted(conversationId _: String, elapsedSeconds: Int, outcome: String) {
+    track(
+      "Conversation Processing Completed",
+      properties: Self.conversationProcessingProperties(elapsedSeconds: elapsedSeconds, outcome: outcome)
+    )
+  }
+
+  func conversationProcessingStalled(conversationId _: String, elapsedSeconds: Int) {
+    track(
+      "Conversation Processing Stalled",
+      properties: Self.conversationProcessingProperties(elapsedSeconds: elapsedSeconds, outcome: nil)
+    )
+  }
+
   func memoryDeleted(conversationId: String) {
     track(
       "Memory Deleted",
@@ -557,16 +579,20 @@ extension PostHogManager {
 
   // MARK: - Search Events
 
-  func searchQueryEntered(query: String) {
-    track(
-      "Search Query Entered",
-      properties: [
-        "query_length": query.count
-      ])
+  func searchQueryEntered(properties: [String: Any]) {
+    track("Search Query Entered", properties: properties)
   }
 
-  func searchBarFocused() {
-    track("Search Bar Focused")
+  func searchBarFocused(properties: [String: Any]) {
+    track("Search Bar Focused", properties: properties)
+  }
+
+  func searchResultOpened(properties: [String: Any]) {
+    track("Search Result Opened", properties: properties)
+  }
+
+  func conversationOpenedFromSearch(properties: [String: Any]) {
+    track("Conversation Opened From Search", properties: properties)
   }
 
   // MARK: - Settings Events

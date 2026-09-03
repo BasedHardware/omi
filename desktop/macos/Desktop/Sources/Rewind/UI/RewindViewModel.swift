@@ -419,9 +419,6 @@ class RewindViewModel: ObservableObject {
     isSearching = true
     activeSearchQuery = trimmedQuery
 
-    // Track rewind search
-    AnalyticsManager.shared.rewindSearchPerformed(queryLength: trimmedQuery.count)
-
     // **Searching Rewind searches all of Rewind.** This used to clamp both queries to the day the
     // timeline happened to be showing, which made the one control that could reach the whole
     // history the one control that could not: a phrase you read last week returned nothing, and
@@ -466,10 +463,12 @@ class RewindViewModel: ObservableObject {
           }
           guard ownerSnapshot.isCurrent() else { return }
           screenshots = merged
+          emitRewindSearchAnalytics(query: trimmedQuery, resultsCount: merged.count)
         }
       } catch {
         if !Task.isCancelled {
           logError("RewindViewModel: Search failed: \(error)")
+          emitRewindSearchAnalytics(query: trimmedQuery, resultsCount: 0)
         }
       }
 
@@ -480,6 +479,11 @@ class RewindViewModel: ObservableObject {
   }
 
   // MARK: - Filtering
+
+  private func emitRewindSearchAnalytics(query: String, resultsCount: Int) {
+    SearchAnalytics.queryEntered(surface: .rewind, query: query, resultsCount: resultsCount)
+    AnalyticsManager.shared.rewindSearchPerformed(queryLength: query.count)
+  }
 
   func filterByApp(_ app: String?) async {
     guard !isCitationFocusInProgress else { return }
@@ -695,6 +699,11 @@ class RewindViewModel: ObservableObject {
     selectedScreenshot = screenshot
     alignSelectedDay(to: screenshot.timestamp)
     AnalyticsManager.shared.rewindScreenshotViewed(timestamp: screenshot.timestamp)
+    SearchAnalytics.resultOpened(
+      surface: .rewind,
+      resultIndex: screenshots.firstIndex(where: { $0.id == screenshot.id }),
+      searchIsActive: activeSearchQuery != nil
+    )
   }
 
   /// Admit an exact citation target into the active timeline even when the day loader returned an

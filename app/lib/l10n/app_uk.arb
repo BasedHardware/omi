@@ -3234,5 +3234,7 @@
     "pendantRecordingSyncBlocked": "Pendant усе ще записує, тому збережене аудіо не можна передати. Натисніть кнопку Pendant, щоб зупинити запис, а потім синхронізуйте знову.",
     "pendantFullSyncBlocked": "Пам'ять Pendant заповнена, і він досі в режимі запису, тому збережене аудіо не можна передати. Натисніть кнопку Pendant, щоб зупинити запис, а потім синхронізуйте знову.",
     "conversationsNotCapturedCount": "Не записано ({count})",
-    "transcriptionNoAudio": "Транскрипція не отримує аудіо"
+    "transcriptionNoAudio": "Транскрипція не отримує аудіо",
+    "couldNotLoadMemories": "Не вдалося завантажити спогади",
+    "couldNotLoadKnowledgeGraph": "Не вдалося завантажити граф знань"
 }

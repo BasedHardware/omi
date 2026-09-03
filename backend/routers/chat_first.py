@@ -18,6 +18,7 @@ import database.chat_first_intents as chat_first_intents_db
 import database.conversation_finalization_jobs as finalization_jobs_db
 import database.conversations as conversations_db
 import database.goals as goals_db
+from database.durable_queue import oldest_ready_age_seconds
 from database.firestore_read_metrics import FirestoreReadSite
 import database.task_intelligence_control as task_control_db
 from models.chat_first import (
@@ -42,6 +43,7 @@ from models.chat_first import (
     stable_block_id,
 )
 from utils.metrics import CHAT_FIRST_PROACTIVE_TOTAL
+from utils.durable_queue_metrics import observe_oldest_ready_age
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.memory_service import fetch_memory_dict
 from utils.other import endpoints as auth
@@ -524,6 +526,13 @@ def _materialize_prompts(
         CHAT_FIRST_PROACTIVE_TOTAL.labels(
             event='stalled', source=batch.stalled_source, reason='ready_older_than_24h'
         ).inc()
+    observe_oldest_ready_age(
+        'chat_first_proactive_intents',
+        oldest_ready_age_seconds(
+            [intent.created_at for intent in batch.intents],
+            now=now,
+        ),
+    )
     CHAT_FIRST_PROACTIVE_TOTAL.labels(event='fetch', source='materialization', reason='none').inc()
     return MaterializePromptsResponse(
         intents=[

@@ -174,6 +174,18 @@ def test_no_attempts_reports_an_empty_range_instead_of_dividing_by_zero(report) 
     assert 'No chat_agent attempts found' in report.render(totals, rates, 'chat_agent')
 
 
+def test_no_attempts_report_keeps_uid_scope(report) -> None:
+    totals = report.build_totals([])
+    rates = report.Rates('test', 0, 0, 0, 0, 0)
+
+    rendered = report.render(totals, rates, 'chat_agent', uid='u-1')
+
+    assert rendered.splitlines() == [
+        'scope: uid=u-1',
+        'No chat_agent attempts found. Check the date range and that accounting is enabled.',
+    ]
+
+
 def test_rates_come_from_the_real_card_and_an_unknown_model_fails_loudly(report) -> None:
     """Pricing the report against a model with no card would silently understate spend."""
     card_path = BACKEND_ROOT / 'llm_gateway' / 'config' / 'cost_rate_cards.yaml'

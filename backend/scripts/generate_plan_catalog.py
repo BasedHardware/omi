@@ -94,6 +94,42 @@ SOURCE_SCAN_EXCLUDED_PARTS = {
 }
 
 
+def _git_ignored_paths(root: Path) -> set[Path]:
+    """Absolute paths git ignores under `root`.
+
+    The Stripe-literal scan walks the working tree, but the contract is about the
+    tree CI checks out. A developer machine also carries gitignored siblings —
+    `.claude/worktrees/` is a documented multi-worktree pattern — each holding a
+    full copy of the repo. Walking into those reports chart values files that are
+    untracked, absent from the diff, and absent in CI, so the gate fails only
+    locally and reads as broken (#12476).
+
+    Returns an empty set when git cannot answer, leaving the static
+    SOURCE_SCAN_EXCLUDED_PARTS behaviour unchanged.
+    """
+    try:
+        completed = subprocess.run(
+            [
+                'git',
+                '-C',
+                str(root),
+                'ls-files',
+                '--others',
+                '--ignored',
+                '--exclude-standard',
+                '--directory',
+                '-z',
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    return {(root / entry).resolve() for entry in completed.stdout.split('\0') if entry}
+
+
 def load_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
     with path.open(encoding='utf-8') as catalog_file:
         value = json.load(catalog_file)
@@ -660,8 +696,13 @@ def scan_embedded_stripe_ids(catalog: Mapping[str, Any]) -> list[str]:
     known_prices = set(_recognized_price_map(catalog))
     known_products = set(_recognized_product_map(catalog))
     errors: list[str] = []
+    ignored = _git_ignored_paths(ROOT)
     for directory, directory_names, file_names in os.walk(ROOT):
-        directory_names[:] = sorted(name for name in directory_names if name not in SOURCE_SCAN_EXCLUDED_PARTS)
+        directory_names[:] = sorted(
+            name
+            for name in directory_names
+            if name not in SOURCE_SCAN_EXCLUDED_PARTS and (Path(directory) / name).resolve() not in ignored
+        )
         for file_name in sorted(file_names):
             path = Path(directory) / file_name
             if not _is_scannable_source(path):

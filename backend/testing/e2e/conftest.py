@@ -384,6 +384,23 @@ def isolate_e2e_state(fake_firestore, fake_redis, fake_storage):
         except Exception:
             pass
         try:
+            from utils.stt.streaming import (
+                _parakeet_circuit,
+                _deepgram_circuit,
+                _modulate_circuit,
+                _soniox_circuit,
+            )
+
+            for circuit in (
+                _parakeet_circuit,
+                _deepgram_circuit,
+                _modulate_circuit,
+                _soniox_circuit,
+            ):
+                circuit.record_success()
+        except Exception:
+            pass
+        try:
             import database.webhook_health as webhook_health
 
             webhook_health.r = fake_redis

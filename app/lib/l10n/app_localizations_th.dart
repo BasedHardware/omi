@@ -9861,4 +9861,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'ไม่สามารถโหลดความทรงจำได้';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'ไม่สามารถโหลดกราฟความรู้ได้';
 }

@@ -16,6 +16,8 @@ import database.chat as chat_db
 import database.llm_usage as llm_usage_db
 from database.users import set_chat_message_rating_score
 from models.chat import Message
+from models.feedback import MAX_COMMENT_LENGTH, FeedbackReason, FeedbackSurface
+from utils.feedback import record_chat_message_feedback
 from models.chat_session import (
     ChatSessionResponse,
     DeleteMessagesResponse,
@@ -69,9 +71,26 @@ class SaveMessageRequest(BaseModel):
     journal_revision: int | None = Field(None, ge=1, le=9_007_199_254_740_991)
 
 
+# Client `surface` values -> ledger surfaces. The client resolves 'notification'
+# for proactive cards (ChatProvider.ratingSurface); rejecting it here would 422
+# the PATCH and revert the user's thumbs-down instead of recording it.
+_LEDGER_SURFACES = {
+    'text': FeedbackSurface.chat_text,
+    'voice': FeedbackSurface.chat_voice,
+    'notification': FeedbackSurface.chat_notification,
+}
+
+
 class RateMessageRequest(BaseModel):
     rating: int | None = Field(None, ge=-1, le=1)
     app_version: str | None = None
+    # `reason`/`comment` are why a thumbs-down happened; `surface` separates
+    # main-window chat from floating-bar voice answers, which fail in different
+    # ways. All three are optional so an older desktop build keeps working —
+    # a rating with no reason records as "not captured", never as "no reason".
+    reason: FeedbackReason | None = None
+    comment: str | None = Field(None, max_length=MAX_COMMENT_LENGTH)
+    surface: str = Field('text', pattern=r'^(text|voice|notification)$')
 
 
 class InitialMessageRequest(BaseModel):
@@ -261,7 +280,24 @@ def rate_message(
     # Also write to analytics collection (same as mobile endpoint) so ratings
     # appear in the admin dashboard chat ratings chart.
     value = request.rating if request.rating is not None else 0
-    set_chat_message_rating_score(uid, message_id, value, platform='desktop', app_version=request.app_version)
+    set_chat_message_rating_score(
+        uid,
+        message_id,
+        value,
+        reason=request.reason.value if request.reason else None,
+        platform='desktop',
+        app_version=request.app_version,
+    )
+    record_chat_message_feedback(
+        uid,
+        message_id,
+        value,
+        surface=_LEDGER_SURFACES.get(request.surface, FeedbackSurface.chat_text),
+        reason=request.reason.value if request.reason else None,
+        comment=request.comment,
+        platform='desktop',
+        app_version=request.app_version,
+    )
     return {'status': 'ok'}
 
 

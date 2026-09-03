@@ -852,6 +852,11 @@ final class SBOnboardingModel: ObservableObject {
     Task { [appState] in
       appState.startTranscription()
       await appState.reconcileCapture()
+      // Ambient transcription opens the shared input device on its way in and
+      // releases any parked push-to-talk capture to avoid two IOProcs on one
+      // device. Re-arm behind it: the first ⌥ hold after onboarding is the one
+      // that used to be lost to capture-start latency.
+      PushToTalkManager.shared.prewarmMicCapture(trigger: .onboardingCompleted)
     }
     // NOTE: previously this created a "Run omi for two days…" welcome task. That
     // seeded onboarding scaffolding into the user's real Tasks surface (there is no
