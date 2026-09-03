@@ -18438,4 +18438,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 434 client methods generated.
+// Total: 435 client methods generated.
