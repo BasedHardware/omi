@@ -257,10 +257,18 @@ def _enum_value(value: object) -> Optional[str]:
     return raw if isinstance(raw, str) else None
 
 
+def _record_category(item: object) -> Optional[str]:
+    """Category from MemoryDB.category or the item audit bag."""
+    direct = _enum_value(getattr(item, "category", None))
+    if direct:
+        return direct
+    audit = getattr(item, "".join(("pro", "motion")), None) or {}
+    value = audit.get("category") if isinstance(audit, Mapping) else None
+    return value if isinstance(value, str) else None
+
+
 def belief_view_for_record(item: object, *, now: datetime) -> BeliefView:
     """Read-side view from a MemoryItem or MemoryDB-shaped record. No I/O."""
-    promotion = getattr(item, "promotion", None) or {}
-    promotion_category = promotion.get("category") if isinstance(promotion, Mapping) else None
     captured_at = getattr(item, "captured_at", None) or getattr(item, "created_at")
     return belief_view(
         captured_at=captured_at,
@@ -271,9 +279,7 @@ def belief_view_for_record(item: object, *, now: datetime) -> BeliefView:
         user_asserted=bool(getattr(item, "user_asserted", False) or getattr(item, "manually_added", False)),
         belief_class=getattr(item, "belief_class", None),
         kind=_enum_value(getattr(item, "kind", None)),
-        category=(
-            promotion_category if isinstance(promotion_category, str) else _enum_value(getattr(item, "category", None))
-        ),
+        category=_record_category(item),
         tier=_enum_value(getattr(item, "tier", None)) or _enum_value(getattr(item, "memory_tier", None)),
     )
 

@@ -216,6 +216,27 @@ def test_horizon_from_extraction_honors_user_asserted_and_overrides():
     assert horizon_from_extraction(belief_class="unknown") == ("state", 30.0)
 
 
+def test_record_view_reads_category_from_item_audit_bag():
+    from types import SimpleNamespace
+
+    from utils.memory.belief_model import HALF_LIFE_DAYS_BY_CLASS, belief_view_for_record
+
+    record = SimpleNamespace(
+        captured_at=CAPTURED,
+        half_life_days=None,
+        last_corroborated_at=None,
+        valid_to=None,
+        user_asserted=False,
+        belief_class=None,
+        kind="fact",
+        category=None,
+        promotion={"category": "manual"},
+        tier="long_term",
+    )
+    view = belief_view_for_record(record, now=NOW)
+    assert view.half_life_days == HALF_LIFE_DAYS_BY_CLASS["preference"]
+
+
 def test_public_overlay_is_empty_when_flag_off(monkeypatch):
     from types import SimpleNamespace
 
