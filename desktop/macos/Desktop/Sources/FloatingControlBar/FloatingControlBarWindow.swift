@@ -4687,13 +4687,15 @@ class FloatingControlBarManager {
   func askChatLaneForSpokenAnswer(
     prompt: String,
     invocationID: String,
-    expectedOwnerID: String
+    expectedOwnerID: String,
+    imageData: Data? = nil
   ) async throws -> String {
     guard let provider = historyChatProvider else { throw RealtimeChatLaneError.unavailable }
     return try await provider.askChatLaneForSpokenAnswer(
       prompt: prompt,
       invocationID: invocationID,
-      expectedOwnerID: expectedOwnerID)
+      expectedOwnerID: expectedOwnerID,
+      imageData: imageData)
   }
 
   func cancelActiveRealtimeChatLaneInvocation() {
