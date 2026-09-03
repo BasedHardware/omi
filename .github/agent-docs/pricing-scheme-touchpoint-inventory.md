@@ -1,6 +1,6 @@
 # Pricing Scheme Touchpoint Inventory
 
-This repo already has an in-flight catalog migration — `docs/agents/plan-source-of-truth.md` and `docs/agents/plan-catalog.md` — which owns plan identity, entitlement numbers, and the Stripe price/product ledger; Stripe remains the sole authority for actual dollar amounts. This document is the broader map: every place across the codebase where pricing, plan names, or feature-limit numbers surface at all, including non-architectural touchpoints (docs, tests, marketing copy, assets) that the catalog migration doesn't itself track. Within each table, hardcoded/copy items that will need a manual touch are listed above `reads_live_no_update_needed` items, which are included for completeness/confirmation only.
+This repo already has an in-flight catalog migration — `.github/agent-docs/plan-source-of-truth.md` and `.github/agent-docs/plan-catalog.md` — which owns plan identity, entitlement numbers, and the Stripe price/product ledger; Stripe remains the sole authority for actual dollar amounts. This document is the broader map: every place across the codebase where pricing, plan names, or feature-limit numbers surface at all, including non-architectural touchpoints (docs, tests, marketing copy, assets) that the catalog migration doesn't itself track. Within each table, hardcoded/copy items that will need a manual touch are listed above `reads_live_no_update_needed` items, which are included for completeness/confirmation only.
 
 ## Flutter mobile app (app/) — pricing, plans, and paywall
 
@@ -115,7 +115,7 @@ This repo already has an in-flight catalog migration — `docs/agents/plan-sourc
 | `backend/deploy/runtime_env/dev.overlay.yaml` (absence) | config_value | Confirm intentional — no dev price IDs for Plus/Unlimited-v2 today |
 | `config/deployment-setting-classification.json` (line 172-175) | config_value | Yes, if new plan price env-var names are introduced (need a classification entry) |
 | `backend/config/plan_catalog.json` (line 571-712) recognized_stripe_prices/products | config_value | Yes — append-only ledger; new Stripe prices for new/changed tiers must be appended here |
-| `docs/agents/plan-source-of-truth.md` (line 405-421) (open ledger gap) | other | Yes — pre-existing unresolved discrepancy between a test fixture and the dev ledger for Architect |
+| `.github/agent-docs/plan-source-of-truth.md` (line 405-421) (open ledger gap) | other | Yes — pre-existing unresolved discrepancy between a test fixture and the dev ledger for Architect |
 | `backend/tests/unit/test_available_plans_resilience.py` (line 19-22,111) | test_fixture | Yes, if the dev ledger gap above is resolved |
 | `backend/tests/unit/test_overage_catalog.py` (line 8-16,29-42) | test_fixture | Yes — hardcoded per-plan hard-cap-vs-overage policy and quota numbers (500/$400/200) mirror catalog |
 | `backend/tests/unit/test_subscription_restructure.py` (line 1-2,88-98,510-515) | test_fixture | Yes — stale $49/$400 figures in docstring, plus hardcoded display-name assertions |
@@ -134,7 +134,7 @@ This repo already has an in-flight catalog migration — `docs/agents/plan-sourc
 | `docs/doc/developer/mcp/tools.mdx` (line 225) | feature_limit_number | Yes, if the free-tier preview length changes — hardcoded "70 characters" |
 | `docs/doc/developer/mcp/tools.mdx` (line 202,223), `docs/doc/developer/mcp/troubleshooting.mdx` (line 59-61) | plan_name_or_tier_copy | Only if the free/paid gating boundary itself changes — generic "paid plan" language |
 | `docs/doc/developer/apps/Oauth.mdx` (line 220) | other | Only if marketplace-app monetization scope changes — separate pricing system from the 6-plan catalog |
-| `docs/agents/web-app-destinations.md` (line 14) | other | No — pointer doc only, no names/prices |
+| `.github/agent-docs/web-app-destinations.md` (line 14) | other | No — pointer doc only, no names/prices |
 | `docs/api-reference/app-client-openapi.json` (other endpoint descriptions) | reads_live_no_update_needed | No — auto-generated mirrors of backend docstrings |
 | `backend/AGENTS.md` (line 16) | reads_live_no_update_needed | No — describes live-validation behavior |
 | `docs/doc/developer/backend/Backend_Setup.mdx` (line 86) | reads_live_no_update_needed | No — generic setup instructions |
