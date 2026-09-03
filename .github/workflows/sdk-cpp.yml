@@ -24,3 +24,5 @@ jobs:
       - run: cmake -S . -B build -DOMI_DEVICE_BUILD_TESTS=ON
       - run: cmake --build build
       - run: ctest --test-dir build --output-on-failure
+      # Consumers of the retired SimpleBLE flags must fail at configure time.
+      - run: bash tests/retired-ble-flags.sh

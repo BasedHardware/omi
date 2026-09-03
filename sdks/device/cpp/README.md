@@ -52,6 +52,13 @@ omi::device::ListenPayload(device_id, [](const std::vector<std::uint8_t>& pcm_or
 `Listen` subscribes to `kAudioDataUuid` on `kServiceUuid`. Without a backend,
 `Scan`/`Listen`/`ListenPayload` throw `omi::device::BleDisabled`.
 
+## Migrating from `-DOMI_DEVICE_BLE=ON`
+
+That flag and `-DOMI_DEVICE_SIMPLEBLE_SOURCE_DIR` are gone, along with the
+SimpleBLE dependency they pulled in. Passing either is a hard configure error
+that points here rather than a silent no-op. Implement `BleBackend` as above and
+install it with `SetBleBackend()`; `Scan`/`Listen`/`ListenPayload` are unchanged.
+
 ## Tests
 
 ```sh
