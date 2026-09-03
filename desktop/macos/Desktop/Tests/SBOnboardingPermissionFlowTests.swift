@@ -486,6 +486,41 @@ final class AppStatePermissionProbeTests: XCTestCase {
     XCTAssertFalse(recorder.ranOnMainThread)
   }
 
+  /// The passive probe is launch-capable since it learned to start System
+  /// Events: it can wait on LaunchServices for up to ~5s. `ChatToolExecutor`
+  /// is `@MainActor`, so a synchronous call there freezes the chat window.
+  /// The check-status tool must route the probe through `Task.detached`, the
+  /// same rule `AppState.refreshAutomationPermission` already follows.
+  func testChatPermissionStatusProbeNeverRunsOnTheMainActor() throws {
+    // omi-test-quality: source-inspection -- static contract: the probe's
+    // LaunchServices wait cannot be exercised hermetically; the isolation
+    // contract is the observable invariant.
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("Sources/Providers/ChatToolExecutor.swift")
+    let src = try String(contentsOf: url, encoding: .utf8)
+
+    guard
+      let fn = src.range(of: "private static func currentPermissionStatuses("),
+      let end = src.range(of: "\n  }", range: fn.upperBound..<src.endIndex)?.lowerBound
+    else { return XCTFail("currentPermissionStatuses must exist") }
+    let body = String(src[fn.upperBound..<end])
+    guard
+      let detached = body.range(of: "await Task.detached(priority: .userInitiated) {")?
+        .upperBound
+    else {
+      return XCTFail(
+        "currentPermissionStatuses is @MainActor-isolated; the launch-capable probe must run via Task.detached")
+    }
+    XCTAssertNil(
+      body.range(of: "AppState.queryAutomationPermissionStatus()", range: body.startIndex..<detached),
+      "the launch-capable probe must not be called synchronously inside the @MainActor tool")
+    let windowEnd = body.index(detached, offsetBy: 200, limitedBy: body.endIndex) ?? body.endIndex
+    XCTAssertNotNil(
+      body.range(of: "AppState.queryAutomationPermissionStatus()", range: detached..<windowEnd),
+      "the automation probe must run inside the detached task")
+  }
+
   /// The reported bug: Automation on in System Settings, "Not Granted" on the
   /// Permissions page, on every refresh, for the whole session. System Events
   /// had exited, so every probe answered `-600`, which preserves the previous

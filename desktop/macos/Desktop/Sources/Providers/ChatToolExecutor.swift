@@ -2428,7 +2428,12 @@ class ChatToolExecutor {
       targets: AppState.accessibilityProbeTargets())
     let accessibilityProjection = AppState.accessibilityProjection(accessibilitySignals)
     let accessibilityGranted = accessibilityProjection.hasPermission
-    let automationStatus = AppState.queryAutomationPermissionStatus()
+    // The automation probe may start System Events and wait for LaunchServices
+    // (up to ~5s on a cold target), so it must never run on the main actor —
+    // same rule as `AppState.refreshAutomationPermission`.
+    let automationStatus = await Task.detached(priority: .userInitiated) {
+      AppState.queryAutomationPermissionStatus()
+    }.value
     let fullDiskAccessGranted = checkFullDiskAccessDirectly()
     guard
       isPermissionAuthorizationCurrent(
@@ -2545,7 +2550,24 @@ class ChatToolExecutor {
           completion(OSStatus(errAEEventNotPermitted))
           return
         }
-        completion(AppState.queryAutomationPermissionStatus())
+        // The passive probe may start System Events and wait for LaunchServices
+        // (up to ~5s), so it cannot run inside this `Task { @MainActor … }` —
+        // hop off, then route the answer back through `completion` (the
+        // once-resume adapter already tolerates a late completion).
+        Task.detached(priority: .userInitiated) {
+          let status = AppState.queryAutomationPermissionStatus()
+          await MainActor.run {
+            guard
+              isPermissionAuthorizationCurrent(
+                expectedOwnerID,
+                authorizationSnapshot: authorizationSnapshot)
+            else {
+              completion(OSStatus(errAEEventNotPermitted))
+              return
+            }
+            completion(status)
+          }
+        }
       }
     }
   }
