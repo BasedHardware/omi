@@ -71,9 +71,8 @@ Future<ProviderLinkResult> resolveProviderCredentialCollision({
   required Future<String?> Function() establishDestination,
 }) async {
   final sourceToken = sourceIsAnonymous ? await captureSourceToken() : null;
-  final anonymousSourceMigration = sourceToken == null
-      ? null
-      : AnonymousSourceMigration(uid: sourceUid, token: sourceToken);
+  final anonymousSourceMigration =
+      sourceToken == null ? null : AnonymousSourceMigration(uid: sourceUid, token: sourceToken);
   final destinationUid = await establishDestination();
   return ProviderLinkResult(destinationUid: destinationUid, anonymousSourceMigration: anonymousSourceMigration);
 }
@@ -105,11 +104,11 @@ class AuthService {
   static AuthService get instance => _instance;
 
   AuthService._internal()
-    : _tokenGateway = _FirebaseAuthTokenGateway(),
-      _refreshAttemptTimeout = _defaultRefreshAttemptTimeout,
-      _refreshDelay = _defaultRefreshDelay,
-      _recordTelemetry = _recordProductionTelemetry,
-      _telemetryContextProvider = _productionTelemetryContext;
+      : _tokenGateway = _FirebaseAuthTokenGateway(),
+        _refreshAttemptTimeout = _defaultRefreshAttemptTimeout,
+        _refreshDelay = _defaultRefreshDelay,
+        _recordTelemetry = _recordProductionTelemetry,
+        _telemetryContextProvider = _productionTelemetryContext;
 
   @visibleForTesting
   AuthService.forTesting({
@@ -118,11 +117,11 @@ class AuthService {
     Duration? refreshAttemptTimeout,
     AuthTelemetryRecorder? recordTelemetry,
     AuthTelemetryContextProvider? telemetryContextProvider,
-  }) : _tokenGateway = tokenGateway,
-       _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
-       _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
-       _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
-       _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
+  })  : _tokenGateway = tokenGateway,
+        _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
+        _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
+        _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
+        _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
 
   static const int _maxRefreshAttempts = 3;
 
@@ -167,10 +166,10 @@ class AuthService {
   }
 
   static Map<String, dynamic> _productionTelemetryContext() => {
-    'platform': PlatformManager.instance.platform,
-    'app_version': PlatformManager.instance.appVersion,
-    'release_channel': Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev'),
-  };
+        'platform': PlatformManager.instance.platform,
+        'app_version': PlatformManager.instance.appVersion,
+        'release_channel': Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev'),
+      };
 
   bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
 
@@ -506,17 +505,15 @@ class AuthService {
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize')
-          .replace(
-            queryParameters: {
-              'provider': provider,
-              'redirect_uri': redirectUri,
-              'state': state,
-              'code_challenge': codeChallenge,
-              'code_challenge_method': 'S256',
-            },
-          )
-          .toString();
+      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
+        queryParameters: {
+          'provider': provider,
+          'redirect_uri': redirectUri,
+          'state': state,
+          'code_challenge': codeChallenge,
+          'code_challenge_method': 'S256',
+        },
+      ).toString();
 
       Logger.debug('Authorization URL: $authUrl');
 
@@ -813,15 +810,13 @@ class AuthService {
           Logger.debug('Web platform detected - attempting updateProfile with caution');
 
           // Try with a timeout to prevent hanging
-          await user
-              .updateProfile(displayName: fullName)
-              .timeout(
-                const Duration(seconds: 5),
-                onTimeout: () {
-                  Logger.debug('updateProfile timed out on web platform');
-                  throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
-                },
-              );
+          await user.updateProfile(displayName: fullName).timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              Logger.debug('updateProfile timed out on web platform');
+              throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
+            },
+          );
         } else {
           await user.updateProfile(displayName: fullName);
         }
@@ -880,17 +875,15 @@ class AuthService {
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize')
-          .replace(
-            queryParameters: {
-              'provider': provider,
-              'redirect_uri': redirectUri,
-              'state': state,
-              'code_challenge': codeChallenge,
-              'code_challenge_method': 'S256',
-            },
-          )
-          .toString();
+      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
+        queryParameters: {
+          'provider': provider,
+          'redirect_uri': redirectUri,
+          'state': state,
+          'code_challenge': codeChallenge,
+          'code_challenge_method': 'S256',
+        },
+      ).toString();
 
       Logger.debug('Authorization URL: $authUrl');
 

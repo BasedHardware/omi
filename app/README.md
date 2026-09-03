@@ -47,11 +47,11 @@ Before getting started, make sure your device is connected and unlocked. If you'
 
    `bash setup.sh ios` is the safe local-development path: it uses the local
    API/emulator harness and the `demo-omi-local` Firebase project. For a real
-   iPhone, set `OMI_DEV_HOST` to the Mac's LAN address (RFC 1918, e.g.
-   `192.168.x.x`) before running both `setup.sh ios` and `make dev-up` (export
-   it so both commands see it) — the harness now binds there too, not just the
-   app build. Sign in with Google on the device completes against the Auth
-   emulator; rebuild after changing `OMI_DEV_HOST`.
+   iPhone, set `OMI_DEV_HOST` to the Mac's LAN or Tailscale address (RFC 1918
+   `192.168.x.x` or CGNAT `100.x.x.x`) before running both `setup.sh ios` and
+   `make dev-up` (export it so both commands see it) — the harness now binds
+   there too, not just the app build. Sign in with Google on the device
+   completes against the Auth emulator; rebuild after changing `OMI_DEV_HOST`.
 
    iOS setup requires macOS/Xcode, so Windows developers should use the Android setup path.
 
