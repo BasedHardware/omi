@@ -489,3 +489,24 @@ describe("omi tool manifest", () => {
     }
   });
 });
+
+describe("native component guidance", () => {
+  const byName = (name: string) =>
+    [...omiToolManifest, ...chatFirstToolManifest].find((tool) => tool.name === name);
+
+  it("teaches conversation and memory retrieval to render the component when the entity is the answer", () => {
+    expect(byName("get_conversations")?.promptGuidelines?.join("\n")).toContain("captureLink");
+    expect(byName("get_conversations")?.promptGuidelines?.join("\n")).toContain("'pick one'");
+    expect(byName("search_conversations")?.promptGuidelines?.join("\n")).toContain("captureLink");
+    expect(byName("get_memories")?.promptGuidelines?.join("\n")).toContain("memoryLink");
+    expect(byName("search_memories")?.promptGuidelines?.join("\n")).toContain("memoryLink");
+    expect(byName("get_action_items")?.promptGuidelines?.join("\n")).toContain("a count, never their names");
+  });
+
+  it("makes the component the default for anything Omi draws natively, with prose reserved for reading", () => {
+    const lead = byName("render_chat_blocks")?.promptGuidelines?.[0] ?? "";
+    expect(lead).toContain("Default to a component");
+    expect(lead).toContain("a summary, a recap, an analysis, a comparison, a count");
+    expect(lead).toContain("a bold title with a citation number is not a substitute");
+  });
+});

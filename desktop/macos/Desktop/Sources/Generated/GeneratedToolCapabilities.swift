@@ -417,7 +417,10 @@ enum GeneratedToolCapabilities {
       summary: "Retrieve conversations by recency or date range.",
       bullets: [
       "Use for latest/recent conversations and time-based conversation retrieval.",
-      "For voice, this returns summaries only and should be spoken briefly."
+      "For voice, this returns summaries only and should be spoken briefly.",
+      "If the user asked to see, find, open, pick or choose a conversation — 'show me the call with Paul', 'which one was most interesting', 'find the meeting about pricing' — the conversation is the answer: render it as a captureLink block ({type:'captureLink', conversationId:'<canonical id from this result>', summary:'...'}) with render_chat_blocks, and keep the prose to one lead-in line. Do not answer with a bold title and a citation number in place of the component.",
+      "A follow-up that narrows an earlier result — 'pick one', 'the second one', 'tell me more about that one' — still renders the component for what it picks.",
+      "A recap of a day, a summary, a comparison, a count, or a list longer than three is prose that cites the conversations inline instead."
     ]
     ),
     Capability(
@@ -428,7 +431,9 @@ enum GeneratedToolCapabilities {
       summary: "Search the user's past conversations by topic or exact canonical ID/share link.",
       bullets: [
       "Use for specific topics, decisions, or events discussed in conversations.",
-      "For a canonical conversation UUID or https://h.omi.me/conversations/<uuid> link, pass it unchanged for an exact lookup."
+      "For a canonical conversation UUID or https://h.omi.me/conversations/<uuid> link, pass it unchanged for an exact lookup.",
+      "If the user asked to find, see, open or pick a conversation, the match is the answer: render it as a captureLink block ({type:'captureLink', conversationId:'<canonical id from this result>', summary:'...'}) with render_chat_blocks and keep the prose to one lead-in line. Up to three matches render; say how many more there are.",
+      "When the conversation is only evidence for something you are answering in prose — what was decided, whether it happened, what someone said — cite it inline and render nothing."
     ]
     ),
     Capability(
@@ -438,7 +443,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Retrieve stored facts, preferences, habits, people, and background about the user.",
       bullets: [
-      "Use for broad 'what do you know about me' questions or personal facts."
+      "Use for broad 'what do you know about me' questions or personal facts.",
+      "If the user asked to see, review, find or pick specific memories, the memories are the answer: render the ones that matter as memoryLink blocks ({type:'memoryLink', memoryId:'<id from this result>', summary:'...'}) with render_chat_blocks — a count in prose, never a bulleted copy of the cards.",
+      "'What do you know about me' and other summaries, comparisons or long lists answer in prose and cite the memories inline instead."
     ]
     ),
     Capability(
@@ -448,7 +455,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Semantic search across user memories.",
       bullets: [
-      "Use for a specific personal fact that is not already in the visible user context."
+      "Use for a specific personal fact that is not already in the visible user context.",
+      "If the user asked to find, see or pick a memory, the match is the answer: render up to three as memoryLink blocks ({type:'memoryLink', memoryId:'<id from this result>', summary:'...'}) with render_chat_blocks and keep the prose to one lead-in line.",
+      "When a memory is only evidence for an answer in prose, cite it inline and render nothing."
     ]
     ),
     Capability(

@@ -1157,6 +1157,11 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Get Conversations",
     description: "Retrieve user conversations with summaries, action items, metadata. Use for time-based queries or recaps.",
     promptSnippet: "get_conversations - Retrieve conversations by date range",
+    promptGuidelines: [
+      "If the user asked to see, find, open, pick or choose a conversation — 'show me the call with Paul', 'which one was most interesting', 'find the meeting about pricing' — the conversation is the answer: render it as a captureLink block ({type:'captureLink', conversationId:'<canonical id from this result>', summary:'...'}) with render_chat_blocks, and keep the prose to one lead-in line. Do not answer with a bold title and a citation number in place of the component.",
+      "A follow-up that narrows an earlier result — 'pick one', 'the second one', 'tell me more about that one' — still renders the component for what it picks.",
+      "A recap of a day, a summary, a comparison, a count, or a list longer than three is prose that cites the conversations inline instead.",
+    ],
     latency: "fast network",
     inputSchema: schema({
       start_date: { type: "string", description: "ISO date with timezone" },
@@ -1178,6 +1183,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Search Conversations",
     description: "Search conversations by topic or exact canonical ID/share link.",
     promptSnippet: "search_conversations - Find conversations about a topic or exact ID/share link",
+    promptGuidelines: [
+      "If the user asked to find, see, open or pick a conversation, the match is the answer: render it as a captureLink block ({type:'captureLink', conversationId:'<canonical id from this result>', summary:'...'}) with render_chat_blocks and keep the prose to one lead-in line. Up to three matches render; say how many more there are.",
+      "When the conversation is only evidence for something you are answering in prose — what was decided, whether it happened, what someone said — cite it inline and render nothing.",
+    ],
     latency: "fast network",
     inputSchema: schema(
       {
@@ -1202,6 +1211,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Get Memories",
     description: "Retrieve user memories - facts, preferences, habits. Use for 'what do you know about me?' type questions.",
     promptSnippet: "get_memories - Retrieve stored facts and preferences",
+    promptGuidelines: [
+      "If the user asked to see, review, find or pick specific memories, the memories are the answer: render the ones that matter as memoryLink blocks ({type:'memoryLink', memoryId:'<id from this result>', summary:'...'}) with render_chat_blocks — a count in prose, never a bulleted copy of the cards.",
+      "'What do you know about me' and other summaries, comparisons or long lists answer in prose and cite the memories inline instead.",
+    ],
     latency: "fast network",
     inputSchema: schema({
       limit: { type: "number", description: "Default 50" },
@@ -1222,6 +1235,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Search Memories",
     description: "Semantic search across user memories. Find memories about a topic using AI embeddings.",
     promptSnippet: "search_memories - Find memories about a topic",
+    promptGuidelines: [
+      "If the user asked to find, see or pick a memory, the match is the answer: render up to three as memoryLink blocks ({type:'memoryLink', memoryId:'<id from this result>', summary:'...'}) with render_chat_blocks and keep the prose to one lead-in line.",
+      "When a memory is only evidence for an answer in prose, cite it inline and render nothing.",
+    ],
     latency: "fast network",
     inputSchema: schema(
       {
@@ -2130,6 +2147,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     description: "Render native, interactive Omi components on the producing main Chat turn. Use it when the entity IS the answer — the user asked to see or act on that task, goal, memory or conversation, or this turn created or changed one — so the next thing they do is click it. Do NOT use it for entities you merely read to answer in prose: those are sources, and sources belong in citations. Most turns need no components at all. Render at most three. The components ARE the list: when you render them, the message text must be at most one short lead-in sentence, and must never be a numbered or bulleted list repeating what the components already show. For taskCard, taskId MUST be the opaque canonical ID returned by get_action_items or create_action_item; never use a local SQLite/execute_sql numeric row ID. If another lookup found task text, call get_action_items before rendering. Supported shapes include {type:'taskCard', taskId:'...'}, {type:'goalLink', goalId:'...', summary:'...'}, {type:'memoryLink', memoryId:'...', summary:'...'}, and {type:'captureLink', conversationId:'...', summary:'...'}.",
     promptSnippet: "render_chat_blocks - Render a native interactive Omi component when the entity is what the user asked for or acted on; cite sources in prose otherwise",
     promptGuidelines: [
+      "Default to a component whenever the user asks for something Omi draws natively — a task, goal, memory, conversation or capture. Prose wins only when the request is to read rather than to open or act on the thing: a summary, a recap, an analysis, a comparison, a count, or a list too long to render. 'Pick one', 'show me', 'which one', 'find the one about X', 'my tasks for today' all want the component, and a bold title with a citation number is not a substitute for it.",
       "Render a component when the entity is the point of the turn: the user asked to see or act on it, or this turn created, completed, or changed it.",
       "Rendering replaces the writing. \"Here are your three tasks:\" followed by three task cards is right; the same sentence followed by a numbered list of those same three tasks, with or without cards, is the failure this rule exists to stop.",
       "Answering a question from what you read is the common case and needs no components. Cite those entities inline instead — a summary of yesterday cites the conversations it drew on, it does not stack cards above itself.",
