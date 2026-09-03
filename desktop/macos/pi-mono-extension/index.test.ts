@@ -1225,6 +1225,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     capture_screen: [],
     check_permission_status: [],
     request_permission: ["type"],
+    web_search: ["query"],
   };
   for (const tool of OMI_TOOLS) {
     const req = (tool.parameters as any).required ?? [];
