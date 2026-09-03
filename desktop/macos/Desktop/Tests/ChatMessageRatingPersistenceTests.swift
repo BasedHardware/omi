@@ -63,10 +63,10 @@ final class ChatMessageRatingPersistenceTests: XCTestCase {
 
   func testQueuedRatingCarriesReasonThroughSync() {
     var queue = ChatMessageRatingQueue()
-    queue.enqueue(messageId: "m1", rating: -1, reason: "already_done")
+    queue.enqueue(messageId: "m1", rating: -1, reason: .alreadyDone)
     let synced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: true)
     let ready = queue.drain(using: [synced])
-    XCTAssertEqual(ready.first?.reason, "already_done")
+    XCTAssertEqual(ready.first?.reason, .alreadyDone)
   }
 
   func testQueuedVoiceRatingKeepsItsSurfaceThroughSync() {

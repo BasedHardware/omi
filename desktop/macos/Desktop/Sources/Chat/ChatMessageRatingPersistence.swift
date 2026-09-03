@@ -69,7 +69,8 @@ struct ChatMessageRatingQueue: Equatable {
   mutating func drain(
     using messages: [ChatMessage]
   ) -> [(messageId: String, rating: Int?, surface: String, reason: ChatFeedbackReason?)] {
-    var persist: [(messageId: String, rating: Int?, surface: String, reason: ChatFeedbackReason?)] = []    let snapshot = pending
+    var persist: [(messageId: String, rating: Int?, surface: String, reason: ChatFeedbackReason?)] = []
+    let snapshot = pending
     for (messageId, entry) in snapshot {
       guard let message = messages.first(where: { $0.id == messageId || $0.clientTurnId == messageId }) else {
         pending.removeValue(forKey: messageId)

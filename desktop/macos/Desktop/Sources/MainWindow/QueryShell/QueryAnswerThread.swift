@@ -48,9 +48,6 @@ struct QueryAnswerThread: View {
         onRate: { messageId, rating, reason in
           Task { await chatProvider.rateMessage(messageId, rating: rating, reason: reason) }
         },
-        onRateReason: { messageId, reason in
-          Task { await chatProvider.rateMessage(messageId, reason: reason) }
-        },
         onOpenInlineCitation: onOpenCitation,
         sessionsLoadError: chatProvider.sessionsLoadError.map {
           UserFacingErrorPresentation.message(from: $0, while: .chatSessions)
