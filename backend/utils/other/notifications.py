@@ -189,12 +189,17 @@ async def send_daily_summary_notification() -> DailySummaryCronOutcome:
 
         stats.groups_attempted += 1
         try:
-            users = await _get_users_for_daily_summary(timezones, target_hour)
+            users, query_error = await _get_users_for_daily_summary(timezones, target_hour)
         except Exception as e:
             # One hour group's read failing must not cost the other 23 groups.
             stats.groups_failed += 1
             logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, e)
             return ProcessOutcome.reject(str(e), reason='user_query')
+
+        if query_error and not users:
+            stats.groups_failed += 1
+            logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, query_error)
+            return ProcessOutcome.reject(str(query_error), reason='user_query')
 
         if not users:
             return ProcessOutcome.ack()
@@ -221,6 +226,9 @@ async def send_daily_summary_notification() -> DailySummaryCronOutcome:
                 f'{hour_send_failures} user send(s) failed at hour {target_hour}',
                 reason='hour_send_failed',
             )
+        if query_error:
+            stats.groups_failed += 1
+            return ProcessOutcome.reject(str(query_error), reason='user_query')
         return ProcessOutcome.ack()
 
     groups = [(hour, timezones_by_hour[hour]) for hour in ordered_hours]
@@ -262,7 +270,9 @@ async def _checkpoint(cursor_key: str, target_hour: Optional[int], uid: Optional
     )
 
 
-async def _get_users_for_daily_summary(timezones: List[str], target_hour: int) -> List[Tuple[str, List[str], Any]]:
+async def _get_users_for_daily_summary(
+    timezones: List[str], target_hour: int
+) -> Tuple[List[Tuple[str, List[str], Any]], Optional[BaseException]]:
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
     # return_exceptions: one failing timezone chunk degrades that chunk's users,
     # it does not throw away the chunks that did read successfully.
@@ -274,14 +284,16 @@ async def _get_users_for_daily_summary(timezones: List[str], target_hour: int) -
         return_exceptions=True,
     )
     users: List[Tuple[str, List[str], Any]] = []
+    chunk_errors: List[BaseException] = []
     for chunk_index, chunk in enumerate(chunk_results):
         if isinstance(chunk, BaseException):
             logger.error(
                 'daily_summary_user_query_chunk_failed hour=%s chunk=%d error=%s', target_hour, chunk_index, chunk
             )
+            chunk_errors.append(chunk)
             continue
         users.extend(chunk)
-    return users
+    return users, chunk_errors[0] if chunk_errors else None
 
 
 def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
