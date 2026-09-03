@@ -914,15 +914,20 @@ extension RealtimeHubController {
     Task { [weak self, weak source] in
       defer { if self?.inFlightPanelState == line { self?.inFlightPanelState = nil } }
       guard let source else { return }
-      let delivered = await source.sendBackgroundAgentContext(line)
       // Only remember what actually went. The window can close under us, and marking a
       // dropped line as sent would leave the session permanently unaware of the panel.
-      guard delivered else {
+      // A provider with no background-context role never will, so stop re-sending there.
+      switch await source.sendBackgroundAgentContext(line) {
+      case .retry:
         log("RealtimeHub: panel state not delivered, will retry next turn")
         return
+      case .unsupported:
+        self?.lastSentPanelState = line
+        log("RealtimeHub: provider has no safe background-context role; panel state stays tool-backed")
+      case .delivered:
+        self?.lastSentPanelState = line
+        log("RealtimeHub: panel state sent state=\(label) (\(line.count) chars)")
       }
-      self?.lastSentPanelState = line
-      log("RealtimeHub: panel state sent state=\(label) (\(line.count) chars)")
     }
   }
 

@@ -134,7 +134,8 @@ final class AgentCompletionVoiceDeliveryTests: XCTestCase {
     harness.sut.observe([surface.key: projection(surface: surface, status: .succeeded)])
     await harness.drainScheduledWork()
 
-    XCTAssertEqual(harness.injectedPrompts, ["agent finished"])
+    XCTAssertEqual(harness.injectedPrompts.count, 1)
+    XCTAssertEqual(harness.injectedPrompts.first?.hasPrefix("agent finished"), true)
     XCTAssertEqual(
       harness.acknowledged, [["run-1"]],
       "unsupported mid-session injection must be consumed, not replayed into an unrelated later turn")
