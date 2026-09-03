@@ -212,7 +212,7 @@ enum RuntimeOwnerIdentity {
   /// for a test seam.
   @MainActor
   static func withEffectiveOwnerTransitionForTests<T>(
-    _ body: () async throws -> T
+    _ body: @MainActor () async throws -> T
   ) async rethrows -> T {
     // Restore the entry state rather than ending unconditionally. The revocation is a
     // shared boolean, not a counter, so a bare `end()` in `defer` would clear a
