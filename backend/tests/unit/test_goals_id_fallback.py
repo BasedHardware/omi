@@ -26,8 +26,6 @@ def goals():
     """Fresh database.goals against a stubbed database._client + firestore chain."""
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
-    client_stub.data_plane_db = client_stub.db
-    client_stub.get_data_plane_firestore_client = lambda: client_stub.db
     client_stub.document_id_from_seed = MagicMock(return_value="doc-id")
 
     firestore_stub = ModuleType("google.cloud.firestore")

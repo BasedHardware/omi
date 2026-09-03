@@ -75,6 +75,7 @@ from routers import (
     tools,
     metrics,
     fair_use_admin,
+    feedback_admin,
     staged_tasks,
     focus_sessions,
     advice,
@@ -203,6 +204,7 @@ app.include_router(agents.router)
 app.include_router(users.router)
 app.include_router(referrals.router)
 app.include_router(csat.router)
+app.include_router(feedback_admin.router)
 app.include_router(email_preferences.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
