@@ -237,7 +237,7 @@ def download_landing_html(
 <body>
     <div class="container">
         <p class="status-chip" id="status-chip">
-            <span class="status-dot" aria-hidden="true"></span><span id="status-text">Starting download</span>
+            <span class="status-dot" aria-hidden="true"></span><span id="status-text">Downloading</span>
         </p>
         <h1>Omi {channel_label}for {os_name}</h1>
         <p class="meta">{version_display} &middot; Didn&rsquo;t start?
@@ -259,7 +259,7 @@ def download_landing_html(
         setTimeout(function() {{
             window.location.href = "{dmg_url}";
             document.body.classList.add("done");
-            document.getElementById("status-text").textContent = "Download started";
+            document.getElementById("status-text").textContent = "In your Downloads";
             document.getElementById("demo-video").style.display = "block";
         }}, 2000);
     </script>
