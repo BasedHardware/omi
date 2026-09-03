@@ -42,11 +42,44 @@ final class PTTWarmMicKeepAliveTests: XCTestCase {
     // omi-test-quality: source-inspection -- static contract: ambient capture re-arms PTT behind itself
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    XCTAssertTrue(source.contains("PushToTalkManager.shared.releaseParkedMicCapture()"))
+    // Scoped to the function that displaces the capture, and ordered: a re-arm
+    // that sits anywhere else in the file, or ahead of the release, would satisfy
+    // a whole-file `contains` while leaving the microphone exactly as cold as the
+    // regression left it.
+    guard let body = functionBody(named: "func startMicCaptureIfNeeded() async -> Bool {", in: source)
+    else { return XCTFail("startMicCaptureIfNeeded not found — the displacing path moved") }
+
+    guard let release = body.range(of: "PushToTalkManager.shared.releaseParkedMicCapture()") else {
+      return XCTFail("ambient startup no longer releases the parked PTT capture")
+    }
+    guard
+      let rearm = body.range(
+        of: "PushToTalkManager.shared.schedulePTTCaptureWarmup(trigger: .ambientCaptureStarted)")
+    else {
+      return XCTFail("releasing the parked PTT capture must be followed by re-arming one")
+    }
     XCTAssertTrue(
-      source.contains(
-        "PushToTalkManager.shared.schedulePTTCaptureWarmup(trigger: .ambientCaptureStarted)"),
-      "releasing the parked PTT capture must be followed by re-arming one")
+      release.upperBound < rearm.lowerBound,
+      "the re-arm must follow the release, not precede it")
+  }
+
+  /// Brace-matched body of a Swift function, so an ordering assertion cannot be
+  /// satisfied by a match somewhere else in the file.
+  private func functionBody(named signature: String, in source: String) -> Substring? {
+    guard let start = source.range(of: signature) else { return nil }
+    var depth = 1
+    var index = start.upperBound
+    while index < source.endIndex {
+      switch source[index] {
+      case "{": depth += 1
+      case "}":
+        depth -= 1
+        if depth == 0 { return source[start.upperBound..<index] }
+      default: break
+      }
+      index = source.index(after: index)
+    }
+    return nil
   }
 
   /// Onboarding completion and the first-real-app card both ask for a warm
@@ -147,11 +180,20 @@ final class PTTWarmMicKeepAliveTests: XCTestCase {
     let source = try pushToTalkManagerSource()
 
     XCTAssertTrue(source.contains("pttLifecycle.captureWasRequested ? pttLifecycle.holdSeconds : nil"))
-    // Both readers of the hold go through the gate. Counted rather than matched
-    // on argument text, which a reformat could silently make vacuous.
+    // Count the thing that must not spread, not the gate that wraps it: the raw
+    // hold has exactly one reader, the gate itself. (Counting `judgeableHoldSeconds`
+    // instead went red the moment a comment named it — a headcount of the safe
+    // name measures prose, a headcount of the unsafe one measures the invariant.)
     XCTAssertEqual(
-      source.components(separatedBy: "judgeableHoldSeconds").count - 1, 6,
-      "the discard judgement and the dead-mic policy must all read the gated hold")
+      source.components(separatedBy: "pttLifecycle.holdSeconds").count - 1, 1,
+      "the ungated hold must be read only by judgeableHoldSeconds")
+    // And every discard reader takes the gated value.
+    XCTAssertEqual(
+      source.components(separatedBy: "holdSec: judgeableHoldSeconds ?? totalSec").count - 1, 4,
+      "every dead-mic policy call site must pass the gated hold")
+    XCTAssertTrue(
+      source.contains("holdSeconds: judgeableHoldSeconds,"),
+      "the discard judgement must read the gated hold")
     // What makes an automation turn ungated: it returns before `startMicCapture`,
     // so nothing ever records a capture-start request for it.
     let bridge = try pushToTalkManagerSource()

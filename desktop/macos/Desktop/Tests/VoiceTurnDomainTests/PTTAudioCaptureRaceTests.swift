@@ -57,7 +57,16 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
     let turnID = VoiceTurnID()
     let started = reducer.reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
 
-    let finished = reducer.reduce(started, .finish(turnID: turnID, reason: .captureNotReady))
+    // Derived, not asserted: a 1.4s hold that delivered no audio is the exact
+    // shape of the bug. Injecting `.captureNotReady` here would leave the
+    // classifier untested, so a regression that called this a short tap would
+    // still pass.
+    let resolution = PTTDiscardedTurnResolution(
+      PTTTurnDiscardJudgement.judge(
+        holdSeconds: 1.4, deliveredAudioSeconds: 0, minTurnAudioSeconds: 0.35))
+    XCTAssertEqual(resolution.terminalReason, .captureNotReady)
+
+    let finished = reducer.reduce(started, .finish(turnID: turnID, reason: resolution.terminalReason))
 
     XCTAssertEqual(finished.model.turn?.phase, .terminal(.captureNotReady))
     XCTAssertEqual(
