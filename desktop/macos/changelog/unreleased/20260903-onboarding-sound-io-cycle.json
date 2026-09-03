@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Onboarding no longer quits if the Mac's speakers are not ready to play the intro sounds"
+  ]
+}
