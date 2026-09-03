@@ -186,3 +186,57 @@ def test_non_campaign_send_does_not_require_a_campaign_id(monkeypatch):
 
     assert result == {'status': 'Ok'}
     send.assert_called_once_with('uid1', 't', 'b', {'navigate_to': '/chat'})
+
+
+def test_campaign_send_with_a_null_data_body_does_not_500(monkeypatch):
+    # "data": null used to reach send_notification, which tolerates it. The new
+    # campaign gate must not turn that into an AttributeError -> HTTP 500.
+    monkeypatch.setenv('ADMIN_KEY', 'admin-key')
+
+    with patch.object(notif_mod, 'send_notification') as send:
+        result = notif_mod.send_notification_to_user(
+            data={'uid': 'uid1', 'title': 't', 'body': 'b', 'data': None},
+            secret_key='admin-key',
+        )
+
+    assert result == {'status': 'Ok'}
+    send.assert_called_once_with('uid1', 't', 'b', {})
+
+
+@pytest.mark.parametrize(
+    'campaign_id',
+    [
+        'has spaces',
+        'has\nnewline',
+        'hash#char',
+        '   ',
+        'x' * 65,
+    ],
+)
+def test_campaign_id_the_download_route_would_reject_is_refused_at_send(monkeypatch, campaign_id):
+    # The download CTA constrains campaign_id. Accepting one here that it rejects
+    # would let the send succeed and the CTA 400, losing the attribution outright.
+    monkeypatch.setenv('ADMIN_KEY', 'admin-key')
+
+    with pytest.raises(HTTPException) as e:
+        notif_mod.send_notification_to_user(
+            data={
+                'uid': 'uid1',
+                'title': 't',
+                'body': 'b',
+                'data': {'kind': 'campaign', 'campaign_id': campaign_id},
+            },
+            secret_key='admin-key',
+        )
+
+    assert e.value.status_code == 400
+    assert 'campaign_id' in e.value.detail
+
+
+def test_sender_and_download_route_share_one_campaign_id_rule():
+    # Both ends must read the same constants, not two literals that can drift: a
+    # sender that accepts what the CTA rejects loses the attribution silently.
+    import campaign_attribution
+
+    assert notif_mod.CAMPAIGN_ID_PATTERN is campaign_attribution.CAMPAIGN_ID_PATTERN
+    assert notif_mod.CAMPAIGN_ID_MAX_LENGTH is campaign_attribution.CAMPAIGN_ID_MAX_LENGTH

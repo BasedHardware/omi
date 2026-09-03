@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple, cast
 
@@ -15,6 +16,7 @@ from utils.app_integrations import send_app_notification
 import database.notifications as notification_db
 from models.other import FcmTokenResponse, SaveFcmTokenRequest
 from models.integrations import IntegrationNotificationResponse
+from campaign_attribution import CAMPAIGN_ID_MAX_LENGTH, CAMPAIGN_ID_PATTERN
 from utils.notifications import (
     send_notification,
 )
@@ -114,12 +116,26 @@ def send_notification_to_user(data: Dict[str, Any], secret_key: str = Header(...
     uid = cast(str, data['uid'])
     title = cast(str, data['title'])
     body = cast(str, data['body'])
-    notification_data = cast(Dict[str, Any], data.get('data', {}))
-    if notification_data.get('kind') == 'campaign' and not notification_data.get('campaign_id'):
-        raise HTTPException(
-            status_code=400,
-            detail='data.campaign_id is required when data.kind is "campaign"',
-        )
+    # `or {}` rather than a default: an explicit "data": null previously reached
+    # send_notification, which tolerates it, so it must not start raising here.
+    notification_data = cast(Dict[str, Any], data.get('data') or {})
+    if notification_data.get('kind') == 'campaign':
+        campaign_id = notification_data.get('campaign_id')
+        # Validated against the same rule the download CTA enforces. Accepting an
+        # id that /v2/desktop/download/latest rejects would let the send succeed
+        # and the CTA 400, losing the attribution this gate exists to guarantee.
+        if (
+            not isinstance(campaign_id, str)
+            or len(campaign_id) > CAMPAIGN_ID_MAX_LENGTH
+            or not re.match(CAMPAIGN_ID_PATTERN, campaign_id)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    'data.campaign_id is required when data.kind is "campaign", and must match '
+                    f'{CAMPAIGN_ID_PATTERN} within {CAMPAIGN_ID_MAX_LENGTH} characters'
+                ),
+            )
     send_notification(uid, title, body, notification_data)
     return {'status': 'Ok'}
 

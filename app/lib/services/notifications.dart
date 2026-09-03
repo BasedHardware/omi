@@ -57,10 +57,10 @@ class NotificationUtil {
   }
 
   static Future<void> onActionReceivedMethodImpl(ReceivedAction receivedAction) async {
-    if (receivedAction.payload == null || receivedAction.payload!.isEmpty) {
-      return;
-    }
-    await _handleAppLinkOrDeepLink(receivedAction.payload!);
+    // A payloadless notification is still a tap. Returning early here would drop
+    // it from the open count entirely, so pass an empty payload through and let
+    // the handler emit the event and then no-op on routing (#12645).
+    await _handleAppLinkOrDeepLink(receivedAction.payload ?? const <String, dynamic>{});
   }
 
   /// Public entry for FCM background/terminated notification taps (#5126).
@@ -92,7 +92,11 @@ class NotificationUtil {
     put('campaign_id', payload['campaign_id']);
     put('navigate_to', payload['navigate_to']);
     // Senders set one or the other; `notification_type` is the newer spelling.
-    put('notification_type', payload['notification_type'] ?? payload['type']);
+    // `??` alone would keep an empty `notification_type` and lose a valid legacy
+    // `type`, since an empty string is not null but is dropped by `put`.
+    final notificationType = payload['notification_type'];
+    final hasNotificationType = notificationType is String && notificationType.isNotEmpty;
+    put('notification_type', hasNotificationType ? notificationType : payload['type']);
     return properties;
   }
 
@@ -168,7 +172,12 @@ class NotificationUtil {
     final externalTarget = externalTargetFor(navigateTo);
     if (externalTarget != null) {
       try {
-        await launchUrl(externalTarget, mode: LaunchMode.externalApplication);
+        // launchUrl reports "no handler" by returning false, not by throwing, so
+        // the result has to be checked or a CTA that never opened looks succeeded.
+        final launched = await launchUrl(externalTarget, mode: LaunchMode.externalApplication);
+        if (!launched) {
+          Logger.debug('No handler opened external navigate_to=$navigateTo');
+        }
       } catch (e) {
         Logger.debug('Failed to open external navigate_to=$navigateTo: $e');
       }

@@ -86,6 +86,17 @@ void main() {
       );
     });
 
+    test('falls back to the legacy type when notification_type is an empty string', () {
+      // `??` alone would keep the empty value and drop the valid legacy one, so a
+      // sender that sets both would lose its notification type entirely.
+      expect(
+        NotificationUtil.notificationOpenedProperties(
+          const {'notification_type': '', 'type': 'day_summary'},
+        )['notification_type'],
+        'day_summary',
+      );
+    });
+
     test('prefers notification_type over the legacy type key', () {
       expect(
         NotificationUtil.notificationOpenedProperties(

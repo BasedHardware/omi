@@ -210,6 +210,17 @@ class _FCMNotificationService implements NotificationInterface {
         if (navigateTo != null && navigateTo.toString().isNotEmpty) {
           payload['navigate_to'] = navigateTo.toString();
         }
+        // Attribution keys ride along with the foreground notification too. A tap
+        // on it re-enters through onActionReceivedMethodImpl rather than
+        // handleFcmTap, so without these the Android foreground case — the user
+        // already has the app open, which is when a campaign matters most — would
+        // emit a `Notification Opened` carrying no campaign_id (#12645).
+        for (final key in const ['campaign_id', 'notification_type', 'type']) {
+          final value = data[key];
+          if (value != null && value.toString().isNotEmpty) {
+            payload[key] = value.toString();
+          }
+        }
 
         // Handle action item data messages
         final messageType = data['type'];

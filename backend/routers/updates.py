@@ -14,6 +14,11 @@ from fastapi.responses import Response, HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from desktop_download_page import download_landing_html
+from campaign_attribution import (
+    CAMPAIGN_ID_MAX_LENGTH,
+    CAMPAIGN_ID_PATTERN,
+    NO_CAMPAIGN_SENTINEL,
+)
 from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
 from database.desktop_update_channels import (
     admit_qualified_beta_manifest,
@@ -836,7 +841,7 @@ def _log_download_served(*, platform: str, channel: str, version: str, campaign_
         platform,
         channel,
         version,
-        campaign_id or "none",
+        campaign_id or NO_CAMPAIGN_SENTINEL,
     )
 
 
@@ -845,10 +850,10 @@ async def download_latest_desktop_release(
     platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
     channel: str = Query(default="stable", pattern="^(beta|stable)$"),
     identity: Optional[str] = Query(default=None, pattern="^(stable|beta)$"),
-    # Attribution only: never changes which installer is served. The pattern
-    # bounds it to log-safe characters so a campaign id cannot inject a field
-    # separator or a newline into the line Cloud Logging counts.
-    campaign_id: Optional[str] = Query(default=None, max_length=64, pattern="^[A-Za-z0-9._:-]+$"),
+    # Attribution only: never changes which installer is served. Shares its rule
+    # with the sender so an accepted send cannot produce a CTA this route rejects,
+    # and the character set bounds it to log-safe values.
+    campaign_id: Optional[str] = Query(default=None, max_length=CAMPAIGN_ID_MAX_LENGTH, pattern=CAMPAIGN_ID_PATTERN),
 ):
     """
     Serve the latest desktop release installer as an auto-download landing page.

@@ -1258,7 +1258,7 @@ class TestDownloadEndpoint:
 
         assert resp.status_code == 200
         # A campaign's count needs a denominator, so the line is always emitted.
-        assert "campaign_id=none" in caplog.text
+        assert "campaign_id=(absent)" in caplog.text
 
     @pytest.mark.asyncio
     async def test_campaign_id_does_not_change_which_installer_is_served(self):
@@ -1276,6 +1276,26 @@ class TestDownloadEndpoint:
 
         assert plain.status_code == attributed.status_code == 200
         assert plain.text == attributed.text
+
+    @pytest.mark.asyncio
+    async def test_a_campaign_literally_named_none_is_not_read_as_absent(self, caplog):
+        # The sentinel must not be spellable as a campaign id, or that campaign's
+        # downloads would be silently counted into the untracked bucket.
+        mock_releases = [
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.2.3+45", "build": "45"},
+                "release": {"assets": [_dmg_asset("https://example.com/Omi-stable.dmg")]},
+            },
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                with caplog.at_level(logging.INFO, logger="routers.updates"):
+                    resp = await client.get("/v2/desktop/download/latest?channel=stable&campaign_id=none")
+
+        assert resp.status_code == 200
+        assert "campaign_id=none" in caplog.text
+        assert "campaign_id=(absent)" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_campaign_id_carrying_a_log_separator_is_rejected(self):
