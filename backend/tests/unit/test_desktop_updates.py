@@ -1972,6 +1972,21 @@ class TestDownloadLandingInstallSteps:
         assert "omi-setup.exe" in html
         assert "Run anyway" in html
 
+    def test_download_status_is_one_chip_not_a_stack(self):
+        """The old page stacked six centered elements above the video: headline,
+        version, badge, status text, a large checkmark, and a fallback link. The
+        status is now a single chip and the fallback link folds into the meta line."""
+        html = download_landing_html("https://example.com/omi.dmg", version="0.12.264")
+
+        assert html.count('class="status-chip"') == 1
+        # the separate spinner/checkmark block and its standalone copy are gone
+        assert 'class="checkmark"' not in html
+        assert 'id="status-icon"' not in html
+        assert "Your download should start automatically" not in html
+        # the manual fallback survives, inline in the meta line rather than on its own row
+        assert 'class="meta"' in html
+        assert html.count('class="download-link"') == 1
+
     def test_landing_page_renders_the_steps_below_the_video(self):
         html = download_landing_html("https://example.com/omi.dmg", version="0.12.264")
 
