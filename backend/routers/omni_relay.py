@@ -3,6 +3,7 @@ import logging
 import os
 from typing import cast
 from urllib.parse import quote
+from uuid import uuid4
 
 import websockets
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, WebSocketException
@@ -16,6 +17,19 @@ from utils.byok import (
 )
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
+from utils.llm.managed_spend_ledger import (
+    DESKTOP_REALTIME_FEATURE,
+    OMNI_RELAY_CALLER,
+    ManagedAttempt,
+    schedule_managed_attempt,
+)
+from utils.llm.realtime_usage import (
+    DEFAULT_REALTIME_MODELS,
+    RealtimeRelayObserver,
+    RealtimeTurnUsage,
+    price_realtime_turn,
+    realtime_turn_metadata,
+)
 from utils.observability.fallback import record_fallback
 from utils.other.endpoints import _verify_ws_auth  # type: ignore[reportPrivateUsage]  # shared WS auth helper, intentionally reused cross-module
 import database.users as users_db
@@ -46,6 +60,44 @@ GEMINI_URL = (
     "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key={key}"
 )
 OPENAI_URL = "wss://api.openai.com/v1/realtime?model={model}"
+OPENAI_DEFAULT_MODEL = DEFAULT_REALTIME_MODELS["openai"]
+
+
+def _relay_turn_attempt(
+    *,
+    session_id: str,
+    uid: str,
+    provider: str,
+    model: str,
+    payer: str,
+    ordinal: int,
+    turn: RealtimeTurnUsage,
+) -> ManagedAttempt:
+    """The ledger row for one provider response observed on the relay.
+
+    Every turn of a session shares one invocation id and takes the next
+    ordinal, so a session's turns group in the ledger the way a gateway
+    request's retries do.
+    """
+    return ManagedAttempt(
+        request_id=session_id,
+        caller=OMNI_RELAY_CALLER,
+        user_uid=uid,
+        feature=DESKTOP_REALTIME_FEATURE,
+        api_surface=f"{provider}_realtime_websocket",
+        payer=payer,
+        provider=provider,
+        configured_model=model or "unknown",
+        outcome=turn.outcome,
+        error_class=turn.error_class,
+        route_artifact_id=f"{OMNI_RELAY_CALLER}.{provider}",
+        metadata=realtime_turn_metadata(turn),
+        # None when usage was not reported or the model has no rate table: the
+        # row stays `unpriced` rather than a confident zero.
+        priced=price_realtime_turn(turn, model),
+        invocation_id=session_id,
+        ordinal=ordinal,
+    )
 
 
 def _upstream(provider: str, model: str | None) -> tuple[tuple[str, dict[str, str]], None] | tuple[None, str]:
@@ -144,6 +196,52 @@ async def omni_relay(websocket: WebSocket):
         return
     url, headers = cast(tuple[str, dict[str, str]], upstream_cfg)
 
+    # Spend attribution: each billable provider response the relay forwards
+    # becomes one `llm_gateway_attempts` row (best-effort, never on the audio
+    # path's critical section). BYOK sessions are recorded as not Omi cost.
+    session_id = str(uuid4())
+    # Who the provider bills is decided by the credential `_upstream` actually
+    # selects — a validated key for this provider — not by enrollment. An
+    # unenrolled user with a valid key still pays the provider directly, and
+    # the quota policy above is a separate question from the payer.
+    payer = "byok" if validated_byok.get(provider) else "omi"
+    observer = RealtimeRelayObserver(provider, model=(model or OPENAI_DEFAULT_MODEL) if provider == "openai" else model)
+
+    def record_turn(turn: RealtimeTurnUsage) -> None:
+        schedule_managed_attempt(
+            _relay_turn_attempt(
+                session_id=session_id,
+                uid=uid,
+                provider=provider,
+                model=observer.model,
+                payer=payer,
+                ordinal=turn.ordinal,
+                turn=turn,
+            )
+        )
+
+    def account_upstream_frame(message: str | bytes | bytearray) -> None:
+        # Accounting never gets to end a session: the frame is already
+        # forwarded, and anything it throws is our bug, not the user's.
+        try:
+            for turn in observer.observe_upstream_frame(message):
+                record_turn(turn)
+        except Exception:
+            logger.warning("omni relay accounting failed provider=%s", provider)
+
+    def account_session_end() -> None:
+        try:
+            for turn in observer.flush():
+                record_turn(turn)
+            if observer.dropped_at_flush:
+                logger.warning(
+                    "omni relay accounting dropped %d open responses at session end provider=%s",
+                    observer.dropped_at_flush,
+                    provider,
+                )
+        except Exception:
+            logger.warning("omni relay accounting flush failed provider=%s", provider)
+
     await websocket.accept()
     try:
         async with websockets.connect(
@@ -157,15 +255,23 @@ async def omni_relay(websocket: WebSocket):
                         return
                     if (text := msg.get("text")) is not None:
                         await upstream.send(text)
+                        observer.observe_client_frame(text)
                     elif (data := msg.get("bytes")) is not None:
                         await upstream.send(data)
+                        observer.observe_client_frame(data)
 
             async def upstream_to_client():
                 async for message in upstream:
-                    if isinstance(message, (bytes, bytearray)):
-                        await websocket.send_bytes(message)
-                    else:
-                        await websocket.send_text(message)
+                    try:
+                        if isinstance(message, (bytes, bytearray)):
+                            await websocket.send_bytes(message)
+                        else:
+                            await websocket.send_text(message)
+                    finally:
+                        # Forward first, account second: the client never waits
+                        # on us, but a failed downstream send must not discard a
+                        # provider terminal frame from the ledger.
+                        account_upstream_frame(message)
 
             t1 = asyncio.create_task(client_to_upstream(), name=f"ws:{uid}:omni_c2u")
             t2 = asyncio.create_task(upstream_to_client(), name=f"ws:{uid}:omni_u2c")
@@ -180,6 +286,9 @@ async def omni_relay(websocket: WebSocket):
     except Exception as e:
         logger.error(f"omni relay error (uid={uid}, provider={provider}): {e}")
     finally:
+        # A response still in flight when the socket ends was a provider
+        # attempt too; it is recorded as cancelled with whatever usage arrived.
+        account_session_end()
         try:
             await websocket.close()
         except Exception:

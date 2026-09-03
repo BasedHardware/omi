@@ -27,9 +27,19 @@ const MAX_CONCURRENCY = 8;
 // their cached aggregation is never trusted.
 const VOLATILE_DAYS = 3;
 
-const PROVIDERS = ["openai", "anthropic", "gemini", "openrouter", "perplexity"] as const;
+const PROVIDERS = [
+  "openai",
+  "anthropic",
+  "gemini",
+  "openrouter",
+  "perplexity",
+] as const;
 
-export type FeatureClass = "desktop" | "mobile" | "sharedExtraction" | "sharedChat";
+export type FeatureClass =
+  | "desktop"
+  | "mobile"
+  | "sharedExtraction"
+  | "sharedChat";
 
 // Which platform's ledger spend a gateway feature represents. `desktop` is
 // spend only the desktop app can produce; `sharedExtraction` / `sharedChat` are
@@ -45,6 +55,14 @@ export type FeatureClass = "desktop" | "mobile" | "sharedExtraction" | "sharedCh
 export const FEATURE_CLASS: Record<string, FeatureClass> = {
   // Desktop-only.
   desktop_proactive_extraction: "desktop",
+  // The desktop Gemini proxy: company-paid calls via the gateway lanes and
+  // the direct Vertex / AI Studio routes (routers/desktop_proxy.py) share
+  // this feature so one query covers both doors.
+  desktop_proactivity: "desktop",
+  // Realtime voice (floating-bar PTT): the legacy omni relay writes one row
+  // per provider turn (routers/omni_relay.py); the same feature name is the
+  // llm_usage account the direct hub debits.
+  desktop_chat_realtime: "desktop",
   desktop_proactive_reasoning: "desktop",
   // Structured lane of the desktop chat router — the automation planner and
   // the local-agent loop (routers/desktop_chat.py `_gateway_feature_for_lane`).
@@ -154,7 +172,10 @@ function cacheKey(date: string): string {
 }
 
 function formatDate(d: Date): string {
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
 // Oldest day still considered volatile: anything on or after this recomputes.
@@ -212,7 +233,11 @@ async function runAggregate(filters: Filter[]): Promise<AggResult> {
 // The ledger records BYOK attempts (user-supplied keys) alongside Omi-paid
 // ones. We want Omi-paid only; if that filter can't be served we take the
 // superset and say so.
-function dayFilters(date: string, payerScoped: boolean, extra?: Filter): Filter[] {
+function dayFilters(
+  date: string,
+  payerScoped: boolean,
+  extra?: Filter
+): Filter[] {
   const filters: Filter[] = [["date", date]];
   if (extra) filters.push(extra);
   if (payerScoped) filters.push(["payer", "omi"]);
@@ -227,7 +252,10 @@ async function computeDay(date: string): Promise<GatewayLedgerDay | null> {
   try {
     total = await aggregate(dayFilters(date, true));
   } catch (err) {
-    console.warn(`gateway ledger: payer-scoped aggregation rejected for ${date}, retrying without it:`, err);
+    console.warn(
+      `gateway ledger: payer-scoped aggregation rejected for ${date}, retrying without it:`,
+      err
+    );
     payerScoped = false;
     try {
       total = await aggregate(dayFilters(date, false));
@@ -241,11 +269,18 @@ async function computeDay(date: string): Promise<GatewayLedgerDay | null> {
   let parts: AggResult[];
   try {
     parts = await Promise.all([
-      ...PROVIDERS.map((p) => aggregate(dayFilters(date, payerScoped, ["provider", p]))),
-      ...featureNames.map((f) => aggregate(dayFilters(date, payerScoped, ["feature", f]))),
+      ...PROVIDERS.map((p) =>
+        aggregate(dayFilters(date, payerScoped, ["provider", p]))
+      ),
+      ...featureNames.map((f) =>
+        aggregate(dayFilters(date, payerScoped, ["feature", f]))
+      ),
     ]);
   } catch (err) {
-    console.error(`gateway ledger: per-slice aggregation failed for ${date}:`, err);
+    console.error(
+      `gateway ledger: per-slice aggregation failed for ${date}:`,
+      err
+    );
     return null;
   }
 
@@ -291,7 +326,9 @@ async function computeDay(date: string): Promise<GatewayLedgerDay | null> {
 // immutable once a day has settled. Returns null only when every requested day
 // failed — a partially covered window is still useful (days without ledger data
 // simply keep the static shares downstream).
-export async function fetchGatewayLedgerDays(dates: string[]): Promise<GatewayLedgerDay[] | null> {
+export async function fetchGatewayLedgerDays(
+  dates: string[]
+): Promise<GatewayLedgerDay[] | null> {
   if (dates.length === 0) return null;
   const cutoff = volatileCutoff();
 
@@ -300,7 +337,7 @@ export async function fetchGatewayLedgerDays(dates: string[]): Promise<GatewayLe
       if (date >= cutoff) return null; // still filling; always recompute
       const hit = await getPayload<GatewayLedgerDay>(cacheKey(date));
       return hit?.data ?? null;
-    }),
+    })
   );
 
   const missing: number[] = [];
@@ -314,7 +351,7 @@ export async function fetchGatewayLedgerDays(dates: string[]): Promise<GatewayLe
       const day = await computeDay(dates[i]);
       if (day) await setPayload(cacheKey(dates[i]), day);
       return day;
-    }),
+    })
   );
 
   const out: GatewayLedgerDay[] = [];

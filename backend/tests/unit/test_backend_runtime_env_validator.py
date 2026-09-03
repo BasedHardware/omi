@@ -78,7 +78,11 @@ def with_memory_env(payload: str) -> str:
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
         '        {"name": "GCP_LOCATION", "value": "us-central1"},\n'
-        '        {"name": "USE_VERTEX_AI", "value": "true"},\n' + memory_env,
+        '        {"name": "USE_VERTEX_AI", "value": "true"},\n'
+        # Direct-provider surfaces (desktop_proxy, omni_relay) write their attempts to the
+        # gateway ledger under this switch; the manifest declares it on the Cloud Run
+        # `backend` service, so the deployed state must carry it too.
+        '        {"name": "LLM_GATEWAY_ACCOUNTING_ENABLED", "value": "true"},\n' + memory_env,
     )
 
 

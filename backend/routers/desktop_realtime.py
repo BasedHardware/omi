@@ -13,6 +13,7 @@ from pydantic import BaseModel, StrictInt, StrictStr
 from database._client import get_customer_firestore_client
 from database import llm_usage as llm_usage_db
 from utils.executors import db_executor, run_blocking
+from utils.llm.realtime_usage import client_reported_cost_usd, client_reported_turn
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import enforce_desktop_chat_quota
 
@@ -216,23 +217,20 @@ def _record_usage(
 
 
 def _usage_cost(report: UsageReport) -> float:
-    rates = (4.0, 32.0, 0.4, 24.0, 64.0) if report.provider == "openai" else (0.75, 3.0, 0.075, 4.5, 12.0)
-    return (
-        sum(
-            value * rate
-            for value, rate in zip(
-                (
-                    max(report.input_text_tokens, 0),
-                    max(report.input_audio_tokens, 0),
-                    max(report.input_cached_tokens, 0),
-                    max(report.output_text_tokens, 0),
-                    max(report.output_audio_tokens, 0),
-                ),
-                rates,
-            )
-        )
-        / 1_000_000
+    # One rate table for every realtime route: the relay prices the turns it
+    # observes on the wire with the same module (utils/llm/realtime_usage.py).
+    # The client cannot choose the rate card: mint_session issued one fixed
+    # model per provider and only that server-selected model is authoritative.
+    turn = client_reported_turn(
+        report.provider,
+        input_text_tokens=report.input_text_tokens,
+        input_audio_tokens=report.input_audio_tokens,
+        input_cached_tokens=report.input_cached_tokens,
+        output_text_tokens=report.output_text_tokens,
+        output_audio_tokens=report.output_audio_tokens,
     )
+    issued_model = _OPENAI_REALTIME_MODEL if report.provider == 'openai' else _GEMINI_LIVE_MODEL
+    return client_reported_cost_usd(report.provider, issued_model, turn)
 
 
 @router.post("/v2/realtime/usage", status_code=204)
