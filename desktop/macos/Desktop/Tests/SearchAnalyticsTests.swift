@@ -113,7 +113,6 @@ final class SearchAnalyticsTests: XCTestCase {
   }
 
   func testCommittedSearchCallSitesCoverEverySurface() throws {
-    // omi-test-quality: source-inspection -- static contract: each listed desktop search surface must call SearchAnalytics on committed search; SwiftUI pages have no hermetic seam for the debounce/submit path
     let sourcesRoot = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
@@ -137,8 +136,8 @@ final class SearchAnalyticsTests: XCTestCase {
     ]
 
     for (relativePath, needle) in required {
-      let source = try String(
-        contentsOf: sourcesRoot.appendingPathComponent(relativePath), encoding: .utf8)
+      // omi-test-quality: source-inspection -- static contract: each search surface must call SearchAnalytics
+      let source = try String(contentsOf: sourcesRoot.appendingPathComponent(relativePath), encoding: .utf8)
       XCTAssertTrue(
         source.contains(needle),
         "\(relativePath) must commit search analytics with \(needle)")
@@ -146,7 +145,6 @@ final class SearchAnalyticsTests: XCTestCase {
   }
 
   func testPayloadBuildersNeverAdvertiseAQueryStringKey() throws {
-    // omi-test-quality: source-inspection -- static contract: PostHog search payloads cannot grow a query/search_query string key
     let sourcesRoot = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
@@ -156,8 +154,8 @@ final class SearchAnalyticsTests: XCTestCase {
       "Analytics/AnalyticsManager+Search.swift",
     ]
     for relativePath in files {
-      let source = try String(
-        contentsOf: sourcesRoot.appendingPathComponent(relativePath), encoding: .utf8)
+      // omi-test-quality: source-inspection -- static contract: PostHog search payloads cannot grow a query string key
+      let source = try String(contentsOf: sourcesRoot.appendingPathComponent(relativePath), encoding: .utf8)
       for forbidden in ["\"query\"", "\"search_query\"", "\"search_term\""] {
         XCTAssertFalse(
           source.contains("\(forbidden):"),
