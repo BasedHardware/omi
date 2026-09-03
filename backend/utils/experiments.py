@@ -116,14 +116,18 @@ def _normalized_arms(arms: Sequence[ArmSpec]) -> list[tuple[str, int]]:
     weights: list[float] = []
     names: list[str] = []
     for item in items:
-        if not isinstance(item, (tuple, list)) or len(item) != 2:
+        # Runtime validation of registry edits: the annotation promises
+        # ArmSpec, but a malformed constant must fail loud at first draw,
+        # not silently re-split the buckets. Pyright cannot see that intent.
+        if not isinstance(item, (tuple, list)) or len(item) != 2:  # pyright: ignore[reportUnnecessaryIsInstance]
             raise ValueError('each arm must be a (name, weight) pair')
         name, weight = item
-        if not isinstance(name, str) or not name.strip():
+        if not isinstance(name, str) or not name.strip():  # pyright: ignore[reportUnnecessaryIsInstance]
             raise ValueError('arm names must be non-empty strings')
         if name in seen:
             raise ValueError(f'duplicate arm name: {name}')
-        if not isinstance(weight, (int, float)) or not math.isfinite(float(weight)) or weight <= 0:
+        weight_is_numeric = isinstance(weight, (int, float))  # pyright: ignore[reportUnnecessaryIsInstance]
+        if not weight_is_numeric or not math.isfinite(float(weight)) or weight <= 0:
             raise ValueError(f'arm weight for {name!r} must be a positive finite number')
         seen.add(name)
         names.append(name)
