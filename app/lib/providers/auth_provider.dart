@@ -148,7 +148,7 @@ class AuthenticationProvider extends BaseProvider {
     try {
       final credential = await AuthService.instance.signInWithLocalDevToken();
       if (credential != null && _hasFirebaseUser) {
-        await _signIn(onSignIn);
+        await _signIn(onSignIn, credential: credential, authProvider: 'local_dev');
       } else {
         AppSnackbar.showSnackbarError('Local development sign-in did not produce a session.');
       }
