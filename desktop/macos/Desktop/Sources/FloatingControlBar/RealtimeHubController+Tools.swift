@@ -25,21 +25,24 @@ extension RealtimeHubController {
     // The same kernel snapshot material the realtime session was instructed
     // with, scoped to the current owner.
     let context = voiceSessionContext(for: currentOwnerScope)
-    // Same-turn pixels first: the frozen PTT-down frame plus kernel-authorized
-    // screenshots from this exact turn. When no pixels exist, fall back to the
-    // accepted screen observation, then to OCR of the PTT-down frame, so the
-    // escalation is never blind to the current screen.
-    let screenJPEGs = RealtimeHubTools.escalationScreenJPEGs(
-      expectedTurnID: invocationTurnID,
-      evidence: screenEvidence,
-      authorizedScreenshots: authorizedRealtimeScreenshotImages)
-    var screenContext = screenContextByContinuityKey[turnIdempotencyKey]
-    if screenJPEGs.isEmpty,
-      screenContext == nil,
+    // Screen pixels are forwarded only for an explicitly visual request. This
+    // preserves the exact same-turn evidence while keeping unrelated research
+    // escalations from inheriting an ambient settings page.
+    let needsTurnImage = RealtimeHubTools.escalationNeedsTurnImage(query: query)
+    let screenJPEGs =
+      needsTurnImage
+      ? RealtimeHubTools.escalationScreenJPEGs(
+        expectedTurnID: invocationTurnID,
+        evidence: screenEvidence,
+        authorizedScreenshots: authorizedRealtimeScreenshotImages)
+      : []
+    var screenContext = needsTurnImage ? screenContextByContinuityKey[turnIdempotencyKey] : nil
+    if needsTurnImage, screenJPEGs.isEmpty, screenContext == nil,
       let ocr = await PushToTalkManager.shared.visibleScreenText(timeout: 1.5)
     {
       screenContext = "OCR text of the screen at the moment they pressed the key:\n\(ocr)"
     }
+    let publicWebEvidence = invocationTurnID.flatMap { turnPublicWebEvidence?.evidence(for: $0) }
     let body = RealtimeHubTools.escalationBody(
       query: query,
       kernelSemanticGuidance: context.semanticGuidance,
@@ -49,6 +52,7 @@ extension RealtimeHubController {
       contextPlanID: context.planID,
       toolContext: toolContext,
       screenContext: screenContext,
+      publicWebEvidence: publicWebEvidence,
       thinkingLevel: thinkingLevel,
       screenJPEGs: screenJPEGs)
     let t0 = Date()
@@ -81,21 +85,57 @@ extension RealtimeHubController {
   /// answer for the realtime provider to speak faithfully.
   func searchPublicWeb(
     _ query: String,
+    scope: RealtimePublicWebSearchScope,
     toolContext _: String,
     invocationID: String,
-    ownerID: String
+    ownerID: String,
+    turnID: VoiceTurnID
   ) async -> AuthorizedRealtimeToolExecutionResult {
     guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
       return .failed(Self.authorizedRealtimeOwnerChangedError())
     }
     let t0 = Date()
     do {
-      let answer = try await APIClient.shared.searchPublicWebForVoice(
-        query: RealtimeHubTools.publicWebSearchPrompt(query: query),
-        expectedOwnerID: ownerID)
+      let prompts = RealtimeHubTools.publicWebSearchPrompts(query: query, scope: scope)
+      let answer: String
+      if prompts.count == 1 {
+        answer = try await APIClient.shared.searchPublicWebForVoice(
+          query: prompts[0], expectedOwnerID: ownerID)
+      } else {
+        async let primary = try? await APIClient.shared.searchPublicWebForVoice(
+          query: prompts[0], expectedOwnerID: ownerID, includeSourceEvidence: true)
+        async let corroborating = try? await APIClient.shared.searchPublicWebForVoice(
+          query: prompts[1], expectedOwnerID: ownerID, includeSourceEvidence: true)
+        async let exactMatch = try? await APIClient.shared.searchPublicWebForVoice(
+          query: prompts[2], expectedOwnerID: ownerID, includeSourceEvidence: true)
+        let (primaryAnswer, corroboratingAnswer, exactMatchAnswer) = await (
+          primary, corroborating, exactMatch
+        )
+        guard
+          let combined = RealtimeHubTools.combinedHistoricalWebEvidence(
+            primary: primaryAnswer,
+            corroborating: corroboratingAnswer,
+            exactMatch: exactMatchAnswer)
+        else {
+          DesktopDiagnosticsManager.shared.recordFallback(
+            area: "realtime_hub", from: "primary_search", to: "corroborating_search",
+            reason: "other", outcome: .exhausted)
+          throw RealtimePublicWebSearchError.noEvidence
+        }
+        if primaryAnswer == nil || corroboratingAnswer == nil || exactMatchAnswer == nil {
+          DesktopDiagnosticsManager.shared.recordFallback(
+            area: "realtime_hub", from: "historical_dual_search", to: "single_search_evidence",
+            reason: "other", outcome: .degraded)
+        }
+        answer = combined
+      }
       guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
         return .failed(Self.authorizedRealtimeOwnerChangedError())
       }
+      guard VoiceTurnCoordinator.shared.activeTurnID == turnID else {
+        return .failed(Self.authorizedRealtimeToolError(code: "stale_realtime_tool_authorization"))
+      }
+      turnPublicWebEvidence = RealtimePublicWebEvidenceReceipt(turnID: turnID, evidence: answer)
       let ms = Int(Date().timeIntervalSince(t0) * 1000)
       log("RealtimeHub: web_search public lane OK in \(ms)ms (\(answer.count) chars)")
       return .succeeded(answer)
@@ -165,4 +205,8 @@ extension RealtimeHubController {
     guard let coordinate, coordinate.isFinite else { return nil }
     return coordinate
   }
+}
+
+private enum RealtimePublicWebSearchError: Error {
+  case noEvidence
 }

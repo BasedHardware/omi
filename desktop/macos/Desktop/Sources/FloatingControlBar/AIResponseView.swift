@@ -21,6 +21,13 @@ struct AIResponseView: View {
   var onShareLink: (() async -> String?)?
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)?
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+  /// Tapping the grounded follow-up chip sends its question as a new user turn
+  /// in this same lane. Nil leaves the chip out entirely rather than rendering
+  /// one that does nothing.
+  var onAskFollowUp: ((String) -> Void)?
+  /// The "or hold ⌥ to ask aloud" hint, named for the shortcut actually bound.
+  /// Nil where push-to-talk is off or unavailable.
+  var followUpVoiceHint: String?
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -118,9 +125,13 @@ struct AIResponseView: View {
         return ["chatFirstConversation", id].joined(separator: "\u{1E}")
       case .memoryLink(let id, _, _):
         return ["chatFirstMemory", id].joined(separator: "\u{1E}")
+      case .memoryReviewCard(let id, _, _, let items):
+        return ["memoryReviewCard", id, String(items.count)].joined(separator: "\u{1E}")
       case .citation(let id, let reference):
         return ["citation", id, String(reference.ordinal), reference.sourceID]
           .joined(separator: "\u{1E}")
+      case .followUp(let id, let text):
+        return ["followUp", id, text].joined(separator: "\u{1E}")
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):
@@ -219,8 +230,21 @@ struct AIResponseView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         // The floating/notch surface never opts into rich chat-first controls.
         // Keep journaled blocks inert if an older runtime projects them here.
-        case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
+        // The review card is three controls and an inline editor over stored memories — the
+        // clearest case of a rich control this passive surface does not own.
+        case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
+          .memoryReviewCard:
           EmptyView()
+        case .followUp(_, let question):
+          if let onAskFollowUp {
+            FollowUpChip(
+              question: question,
+              palette: .glass,
+              voiceHint: followUpVoiceHint,
+              action: { onAskFollowUp(question) }
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+          }
         case .agentSpawn(
           _, let pillId, let sessionId, let runId, let title, let objective, let provider
         ):

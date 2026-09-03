@@ -1550,6 +1550,7 @@ export interface DailySummaryResponse {
   id?: string | null;
   knowledge_nuggets?: Array<DailySummaryKnowledgeNugget> | null;
   locations?: Array<DailySummaryLocationPin> | null;
+  memories_learned?: Array<LearnedMemoryRef>;
   overview?: string | null;
   stats?: DailySummaryDayStats | null;
   unresolved_questions?: Array<DailySummaryUnresolvedQuestion> | null;
@@ -2526,6 +2527,13 @@ export interface KnowledgeGraphResponse {
   node_limit?: number | null;
   nodes: Array<Record<string, unknown>>;
   truncated?: boolean;
+}
+
+export interface LearnedMemoryRef {
+  captured_at?: string | null;
+  category?: string;
+  content: string;
+  memory_id: string;
 }
 
 export interface LedgerMirrorAliasEnvelope {
@@ -5056,6 +5064,7 @@ export interface OmiApiSchemas {
   "JITTriggerSnapshotEnvelope": JITTriggerSnapshotEnvelope;
   "JITTriggerSnapshotRowEnvelope": JITTriggerSnapshotRowEnvelope;
   "KnowledgeGraphResponse": KnowledgeGraphResponse;
+  "LearnedMemoryRef": LearnedMemoryRef;
   "LedgerMirrorAliasEnvelope": LedgerMirrorAliasEnvelope;
   "LedgerMirrorRowEnvelope": LedgerMirrorRowEnvelope;
   "LedgerMirrorSnapshotEnvelope": LedgerMirrorSnapshotEnvelope;

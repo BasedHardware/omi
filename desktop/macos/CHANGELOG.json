@@ -2,6 +2,35 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.272",
+      "date": "2026-09-03",
+      "changes": [
+        "Notification cards in the notch no longer shrink to a narrow strip when you hold the push-to-talk shortcut to reply to them.",
+        "Push-to-talk on a second display now plays the start sound and shows the listening animation on the first press instead of the second"
+      ]
+    },
+    {
+      "version": "0.12.271",
+      "date": "2026-09-03",
+      "changes": [
+        "Voice answers now carry the exact current-screen image into deeper thinking, keep unrelated background results out of your next question, and use deeper research for company and product history"
+      ]
+    },
+    {
+      "version": "0.12.270",
+      "date": "2026-09-03",
+      "changes": [
+        "Double-tap for Locked Mode works again on modifier-only push-to-talk keys; a single accidental tap still does nothing"
+      ]
+    },
+    {
+      "version": "0.12.269",
+      "date": "2026-09-02",
+      "changes": [
+        "Thumbs on proactive notification cards (focus, insights, tasks, memories) are now tracked separately from ratings of regular Omi answers."
+      ]
+    },
+    {
       "version": "0.12.268",
       "date": "2026-09-02",
       "changes": [

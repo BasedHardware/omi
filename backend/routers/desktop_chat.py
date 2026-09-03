@@ -50,6 +50,7 @@ from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.other import endpoints as auth
+from utils.retrieval.tools.perplexity_tools import WEB_SEARCH_RETRIEVAL_APPENDIX
 from utils.subscription import enforce_desktop_chat_quota
 
 _MAX_BODY_BYTES = 16 * 1024 * 1024
@@ -488,6 +489,31 @@ def _with_public_web_routing_instruction(messages: list[dict[str, object]]) -> l
     return [{'role': 'system', 'content': _PUBLIC_WEB_ROUTING_INSTRUCTION}, *updated]
 
 
+def _append_web_search_retrieval_appendix(messages: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Append the fixed primary-source retrieval hint to the last user message.
+
+    The managed web-search lane sends the raw client question to sonar-pro,
+    which retrieves what the query describes — product-history questions stop
+    at the vendor marketing site (live RCA 2026-09-02). The same appendix the
+    agentic tool's hop-2 uses redirects retrieval at founder interviews,
+    Product Hunt launch posts, and postmortems. Idempotent.
+    """
+    updated = [dict(message) for message in messages]
+    for message in reversed(updated):
+        if message.get('role') != 'user':
+            continue
+        content = message.get('content')
+        if isinstance(content, str):
+            if WEB_SEARCH_RETRIEVAL_APPENDIX not in content:
+                message['content'] = f'{content}{WEB_SEARCH_RETRIEVAL_APPENDIX}'
+        elif isinstance(content, list) and not any(
+            isinstance(block, Mapping) and block.get('text') == WEB_SEARCH_RETRIEVAL_APPENDIX for block in content
+        ):
+            message['content'] = [*content, {'type': 'text', 'text': WEB_SEARCH_RETRIEVAL_APPENDIX}]
+        return updated
+    return updated
+
+
 def _carries_private_tool_output(messages: object) -> bool:
     # The desktop hub also inlines tool output into the user turn behind a
     # literal marker instead of sending an OpenAI `tool` message, so the same
@@ -703,7 +729,7 @@ def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LAN
         # are a live lookup, not a client-tool continuation.
         result.pop('tools', None)
         result.pop('tool_choice', None)
-        result['messages'] = _with_public_web_routing_instruction(translated)
+        result['messages'] = _append_web_search_retrieval_appendix(_with_public_web_routing_instruction(translated))
     if _is_thinking_escalation(body):
         # Single-shot Luna reasoning: OpenAI rejects function tools combined
         # with a non-none reasoning_effort on gpt-5.6-luna, so the escalation

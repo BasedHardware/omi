@@ -3234,5 +3234,7 @@
     "pendantRecordingSyncBlocked": "Pendant tar fortsatt opp, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.",
     "pendantFullSyncBlocked": "Lagringen på Pendant er full, og den er fortsatt i opptaksmodus, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.",
     "conversationsNotCapturedCount": "Ikke fanget opp ({count})",
-    "transcriptionNoAudio": "Transkripsjon mottar ikke lyd"
+    "transcriptionNoAudio": "Transkripsjon mottar ikke lyd",
+    "couldNotLoadMemories": "Kunne ikke laste minner",
+    "couldNotLoadKnowledgeGraph": "Kunne ikke laste kunnskapsgrafen"
 }

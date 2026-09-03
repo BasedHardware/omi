@@ -1,6 +1,24 @@
 import Foundation
 import VoiceTurnDomain
 
+enum RealtimePublicWebSearchScope: String {
+  case narrowCurrent = "narrow_current"
+  case historicalResearch = "historical_research"
+
+  init(toolValue: Any?) {
+    self = (toolValue as? String).flatMap(Self.init(rawValue:)) ?? .narrowCurrent
+  }
+}
+
+struct RealtimePublicWebEvidenceReceipt: Equatable {
+  let turnID: VoiceTurnID
+  let evidence: String
+
+  func evidence(for expectedTurnID: VoiceTurnID) -> String? {
+    turnID == expectedTurnID ? evidence : nil
+  }
+}
+
 // MARK: - Realtime Hub tool surface
 //
 // Both realtime providers receive the same generated capability declarations.
@@ -144,7 +162,13 @@ enum RealtimeHubTools {
       \(screenRule(turnFrameAttached: turnScreenFrameAttached))
 
       Keep latency low for simple requests. Never skip a tool call required by its declaration \
-      just to answer faster.
+      just to answer faster. The user's latest spoken words are always the request; the attached \
+      screen is supporting context only. Never replace the spoken request with a different \
+      question inferred from the screen. If the user repeats a request, answer that request again \
+      and repeat any required tool sequence instead of switching to an unrelated screen detail. \
+      Use earlier turns only to resolve a genuine follow-up or reference in the latest request; \
+      when the latest request stands alone, do not continue or append an older topic. The language \
+      of the latest spoken request controls the response language.
       """
   }
 
@@ -313,7 +337,13 @@ enum RealtimeHubTools {
     tool JSON, or tool trace. Prefer one to four spoken sentences unless the user asks \
     for more detail. If you use tools, speak the conclusion rather than narrating the \
     tool work. The realtime voice will read this answer faithfully and may make only \
-    light pronunciation or spoken-flow adjustments; it will not rewrite a long essay.
+    light pronunciation or spoken-flow adjustments; it will not rewrite a long essay. When tool \
+    context contains multiple research passes, a no-results statement from one pass is not evidence \
+    against a sourced result from another. Prefer source-backed evidence and describe a conflict only \
+    when sources actually disagree. For an elapsed-time question, when sources support a named sprint \
+    or pivot-to-launch interval that reasonably answers the user, lead with that approximate interval \
+    and then state its scope. Do not replace the supported answer with "no exact figure" merely because \
+    the interval includes launch work as well as implementation.
     """
   }
 
@@ -342,10 +372,28 @@ enum RealtimeHubTools {
   /// the no-tools chat-agent lane and validates the reasoning effort.
   static let escalationModel = "omi-luna-think"
 
-  static func escalationUserPrompt(query: String, toolContext: String, screenContext: String? = nil) -> String {
+  static func escalationUserPrompt(
+    query: String,
+    toolContext: String,
+    screenContext: String? = nil,
+    publicWebEvidence: String? = nil
+  ) -> String {
     var prompt = query
     if let screen = screenContext?.trimmingCharacters(in: .whitespacesAndNewlines), !screen.isEmpty {
       prompt += "\n\nWhat the user's screen showed when they asked (this turn's screenshot):\n" + screen
+    }
+    let authoritativeWebEvidence = publicWebEvidence?.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let evidence = authoritativeWebEvidence, !evidence.isEmpty {
+      prompt += """
+
+
+        Fresh public-web evidence captured by Omi for this exact voice turn (authoritative; use this \
+        evidence rather than the realtime model's summary of it):
+        \(evidence)
+        """
+    }
+    if authoritativeWebEvidence?.isEmpty == false {
+      return prompt
     }
     let trimmedToolContext = toolContext.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedToolContext.isEmpty else { return prompt }
@@ -367,6 +415,7 @@ enum RealtimeHubTools {
     contextPlanID: String,
     toolContext: String,
     screenContext: String? = nil,
+    publicWebEvidence: String? = nil,
     thinkingLevel: EscalationThinkingLevel = .normal,
     screenJPEGs: [Data] = []
   ) -> [String: Any] {
@@ -391,7 +440,10 @@ enum RealtimeHubTools {
       .filter { !$0.isEmpty }
       .joined(separator: "\n\n")
     let userText = escalationUserPrompt(
-      query: query, toolContext: toolContext, screenContext: screenContext)
+      query: query,
+      toolContext: toolContext,
+      screenContext: screenContext,
+      publicWebEvidence: publicWebEvidence)
 
     let userContent: Any
     if screenJPEGs.isEmpty {
@@ -457,16 +509,146 @@ enum RealtimeHubTools {
     return jpegs
   }
 
+  /// Screen pixels are powerful evidence for an explicitly visual request and distracting input
+  /// for everything else. Keep this decision on the host's exact question instead of trusting a
+  /// provider-authored tool summary that may already have drifted toward an unrelated screen.
+  static func escalationNeedsTurnImage(query: String) -> Bool {
+    if ScreenContextInterestDetector.isScreenContextRequest(query) { return true }
+    let lower = query.lowercased()
+      .replacingOccurrences(of: "’", with: "'")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let directVisualPhrases = [
+      "screenshot", "mockup", "figma", "this image", "these images", "this picture",
+      "these pictures", "this photo", "these photos", "this diagram", "these diagrams",
+      "this riddle", "this question", "which design", "these designs", "those designs",
+    ]
+    return directVisualPhrases.contains { lower.contains($0) }
+  }
+
+  /// Returns only the exact, still-fresh JPEG captured for the authorized voice turn.
+  /// The companion chat lane must never recapture the screen or inherit a later turn's pixels.
+  static func escalationImageData(
+    from evidence: RealtimeScreenEvidence?,
+    expectedTurnID: VoiceTurnID,
+    speechEndedAt: Date?,
+    now: Date = Date()
+  ) -> Data? {
+    guard let evidence,
+      evidence.descriptor.turnID == expectedTurnID,
+      evidence.descriptor.canVerifyCurrentScreen,
+      RealtimeScreenEvidenceFreshnessPolicy.isFresh(
+        evidence.descriptor, now: now, speechEndedAt: speechEndedAt)
+    else { return nil }
+    return evidence.jpeg
+  }
+
   /// Host-authored public-only request sent to the managed web-search lane.
   /// Private realtime context is deliberately excluded: provider-hosted search
   /// must never inherit memories or tool output from the canonical chat session.
   static func publicWebSearchPrompt(query: String) -> String {
-    """
-    Search the live public web before answering this request. Reply with one to four concise, \
-    natural spoken sentences. Name the source you relied on, but do not use Markdown or recite a URL.
+    let normalizedQuery = normalizedPublicWebQuery(query)
+    return """
+      Search the live public web thoroughly before answering this request. Correct likely \
+      speech-transcription or spelling errors in names before searching. For a historical claim, \
+      prefer a primary or founder source and corroborate it with another source; state any conflict \
+      instead of guessing. For a question about how long a first version took, search specifically \
+      for founder interviews, podcasts, posts, or articles using first version, MVP, pivot, and launch \
+      plus quoted duration discovery phrases such as "six-week sprint", "six weeks after", and \
+      "built in six weeks". Treat those phrases as search candidates, not facts: report a duration \
+      only when a source supports it. Do not infer build duration from launch dates, and do not stop \
+      at product launch pages that omit the requested timeline. \
+      Reply with one to four concise, natural spoken sentences. Name the sources you relied on, but \
+      do not use Markdown or recite a URL.
 
-    Request:
-    \(query)
-    """
+      Request:
+      \(normalizedQuery)
+      """
+  }
+
+  /// An independent discovery pass for historical questions. This is intentionally phrased
+  /// differently from the primary search so one retrieval miss cannot become the final answer.
+  static func publicWebCorroborationPrompt(query: String) -> String {
+    let normalizedQuery = normalizedPublicWebQuery(query)
+    return """
+      Independently research this historical public question before answering. Find direct evidence \
+      from founders, interviews, podcasts, posts, or reputable reporting, then corroborate it. Search \
+      name variants and concrete wording that a source might use. If the question asks how long a \
+      first version took, try exact discovery phrases including "six-week sprint", "six weeks after", \
+      and "built in six weeks", alongside first version, MVP, pivot, and launch. These are discovery \
+      terms, not assumed facts. Do not infer duration from launch dates. Reply with concise evidence, \
+      naming the sources but not reciting URLs.
+
+      Request:
+      \(normalizedQuery)
+      """
+  }
+
+  /// Exact-match pass for source snippets that broad semantic retrieval can miss.
+  static func publicWebExactMatchPrompt(query: String) -> String {
+    let normalizedQuery = normalizedPublicWebQuery(query)
+    return """
+      Run an exact-match source discovery pass for this historical elapsed-time question. Search \
+      the correctly spelled product or company name separately with phrases such as "first version", \
+      "built in", "launch sprint", "six weeks", "six weeks after", "MVP", "pivot", and "launched". \
+      Inspect founder interviews, podcast transcripts, posts, newsletters, reputable reporting, and \
+      search-result snippets. A credible secondary source that attributes the claim is useful even \
+      when no primary source is indexed: report it explicitly as source-attributed and preserve any \
+      scope caveat. Do not say no timeline exists merely because a primary source is unavailable. \
+      Do not infer a duration from dates alone or treat candidate phrases as facts without a matching \
+      source. Return concise source-backed evidence and name the sources without reciting URLs.
+
+      Request:
+      \(normalizedQuery)
+      """
+  }
+
+  static func publicWebSearchPrompts(query: String, scope: RealtimePublicWebSearchScope) -> [String] {
+    let primary = publicWebSearchPrompt(query: query)
+    guard scope == .historicalResearch else { return [primary] }
+    return [
+      primary,
+      publicWebCorroborationPrompt(query: query),
+      publicWebExactMatchPrompt(query: query),
+    ]
+  }
+
+  static func authorizedPublicWebQuery(
+    proposedQuery: String,
+    turnTranscript: String,
+    scope: RealtimePublicWebSearchScope
+  ) -> String {
+    let spokenQuestion = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    if scope == .historicalResearch, !spokenQuestion.isEmpty {
+      return spokenQuestion
+    }
+    return proposedQuery
+  }
+
+  static func combinedHistoricalWebEvidence(
+    primary: String?,
+    corroborating: String?,
+    exactMatch: String?
+  ) -> String? {
+    let answers = [
+      ("Research pass 1", primary),
+      ("Independent corroboration pass", corroborating),
+      ("Exact-match discovery pass", exactMatch),
+    ].compactMap { label, answer -> String? in
+      guard let answer = answer?.trimmingCharacters(in: .whitespacesAndNewlines), !answer.isEmpty else {
+        return nil
+      }
+      return "\(label):\n\(answer)"
+    }
+    return answers.isEmpty ? nil : answers.joined(separator: "\n\n")
+  }
+
+  /// Repairs a known dictated brand-name collision before public retrieval. Keeping this at the
+  /// host boundary makes audio and typed tool calls behave identically even when the realtime
+  /// model repeats its transcript verbatim in the tool arguments.
+  static func normalizedPublicWebQuery(_ query: String) -> String {
+    query.replacingOccurrences(
+      of: #"\bwhisper\s+flow\b"#,
+      with: "Wispr Flow",
+      options: [.regularExpression, .caseInsensitive])
   }
 }
