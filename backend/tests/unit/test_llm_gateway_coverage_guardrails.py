@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -166,6 +167,70 @@ def test_inventory_surfaces_have_status_guardrails_and_resolvable_code_paths():
         assert _inventory_file_exists(surface['code_path']), surface['code_path']
 
 
+_ACCESSOR_PROBE_SOURCE = textwrap.dedent("""
+    import openai
+    from openai import AsyncOpenAI
+
+    _async_openai = None
+
+
+    def _get_async_openai() -> AsyncOpenAI:
+        global _async_openai
+        if _async_openai is None:
+            _async_openai = AsyncOpenAI(timeout=120.0)
+        return _async_openai
+
+
+    def _get_sync_openai():
+        return openai
+
+
+    async def ask():
+        await _get_async_openai().chat.completions.create(model='m', messages=[])
+        _get_sync_openai().files.create(file=None, purpose='assistants')
+    """)
+
+
+def test_direct_provider_scan_sees_through_a_provider_accessor():
+    """A helper that hands back a provider client is not a boundary.
+
+    ``_dotted_name`` drops the receiver when it is a call, so
+    ``_get_async_openai().chat.completions.create(...)`` read as the unowned
+    ``chat.completions.create`` and the scan saw nothing. That is how a real
+    direct-OpenAI fallback in ``utils/other/chat_file.py`` became invisible
+    while its allowlist entry stayed behind as a stale one, which is what
+    this whole test module reports.
+
+    The accessor resolves by return annotation, by returning an imported
+    provider module, or by returning a name bound to a constructor call —
+    all three appear in the probe below.
+
+    red-proof: drop the accessor re-read in ``_direct_provider_uses`` and both
+    assertions fail; the plain dotted-name walk yields no provider symbol.
+    """
+    uses = {use.symbol for use in _direct_provider_uses('probe.py', ast.parse(_ACCESSOR_PROBE_SOURCE))}
+
+    assert 'openai.chat.completions' in uses, 'a lazily constructed client reached through an accessor'
+    assert 'openai.files' in uses, 'the provider module itself returned by an accessor'
+
+
+def test_direct_provider_scan_reports_the_file_chat_direct_fallback():
+    """The live site the accessor blind spot hid.
+
+    ``chat_file.py`` falls back to direct OpenAI when the gateway lane is
+    missing or returns a model-not-found. That call is real, it is
+    allowlisted, and the scan must keep seeing it: an inventory that silently
+    stops detecting a direct provider call is worse than one that never had
+    the entry.
+    """
+    rel = 'utils/other/chat_file.py'
+    tree = ast.parse((BACKEND_DIR / rel).read_text(encoding='utf-8'))
+
+    uses = {use.symbol for use in _direct_provider_uses(rel, tree)}
+
+    assert 'openai.chat.completions' in uses
+
+
 @pytest.mark.slow
 def test_direct_provider_usage_stays_inside_approved_boundaries():
     detected = set()
@@ -255,17 +320,119 @@ def _is_skipped_path(rel: str) -> bool:
 
 def _direct_provider_uses(rel: str, tree: ast.AST) -> set[DirectUse]:
     aliases = _import_aliases(tree)
+    accessors = _provider_accessors(tree, aliases)
     uses: set[DirectUse] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             call_name = _expanded_name(_dotted_name(node.func), aliases)
             matched = _direct_symbol(call_name)
+            if matched is None:
+                # ``_dotted_name`` drops the receiver when it is a call, so
+                # ``_get_async_openai().chat.completions.create`` reads as the
+                # unowned ``chat.completions.create``. Re-read it with the
+                # accessor resolved to its provider root.
+                through = _expanded_name(_dotted_name_through_accessors(node.func, accessors), aliases)
+                matched = _direct_symbol(through)
             if matched is not None:
                 uses.add(DirectUse(rel, matched))
             env_var = _provider_env_var_from_call(node)
             if env_var is not None:
                 uses.add(DirectUse(rel, env_var))
     return uses
+
+
+# Provider roots reachable through an accessor, derived from the constructor
+# names above so the two cannot drift apart.
+DIRECT_PROVIDER_ROOTS = {name.rsplit('.', 1)[0] for name in DIRECT_CONSTRUCTOR_NAMES}
+
+
+def _provider_root(expanded: str | None) -> str | None:
+    """The provider root a resolved name belongs to, if any."""
+    if not expanded:
+        return None
+    if expanded in DIRECT_PROVIDER_ROOTS:
+        return expanded
+    for constructor in DIRECT_CONSTRUCTOR_NAMES:
+        if expanded == constructor:
+            return constructor.rsplit('.', 1)[0]
+    return None
+
+
+def _module_level_constructor_bindings(tree: ast.AST, aliases: dict[str, str]) -> dict[str, str]:
+    """Module-level names bound to a direct-provider constructor call.
+
+    ``_async_openai = AsyncOpenAI(...)`` anywhere in the module binds that name
+    to the ``openai`` root, including the lazy-singleton form where the
+    assignment lives inside the accessor under ``global``.
+    """
+    bound: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        value = node.value
+        if not isinstance(value, ast.Call):
+            continue
+        root = _provider_root(_expanded_name(_dotted_name(value.func), aliases))
+        if root is None:
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        for target in targets:
+            if isinstance(target, ast.Name):
+                bound[target.id] = root
+    return bound
+
+
+def _provider_accessors(tree: ast.AST, aliases: dict[str, str]) -> dict[str, str]:
+    """Module-level functions that hand back a provider module or SDK client.
+
+    ``_get_sync_openai().chat.completions.create(...)`` is a direct provider
+    call, but the receiver is a ``Call`` node, so a dotted-name walk bottoms
+    out at ``None`` and the scanner sees nothing. Resolving the accessor to
+    its provider root is what makes the indirection visible: a helper is not
+    a boundary.
+
+    An accessor resolves by its return annotation, or by returning an
+    imported provider module, or by returning a name bound to a direct
+    constructor call.
+    """
+    accessors: dict[str, str] = {}
+    bound = _module_level_constructor_bindings(tree, aliases)
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        root = _provider_root(_expanded_name(_dotted_name(node.returns), aliases)) if node.returns else None
+        if root is None:
+            for child in ast.walk(node):
+                if not isinstance(child, ast.Return) or child.value is None:
+                    continue
+                returned = child.value
+                if isinstance(returned, ast.Name) and returned.id in bound:
+                    root = bound[returned.id]
+                    break
+                candidate = _expanded_name(_dotted_name(returned), aliases)
+                root = _provider_root(candidate)
+                if root is None and isinstance(returned, ast.Call):
+                    root = _provider_root(_expanded_name(_dotted_name(returned.func), aliases))
+                if root is not None:
+                    break
+        if root is not None:
+            accessors[node.name] = root
+    return accessors
+
+
+def _dotted_name_through_accessors(node: ast.AST, accessors: dict[str, str]) -> str | None:
+    """``_dotted_name`` that resolves a provider accessor call as its root."""
+    if isinstance(node, ast.Call):
+        callee = _dotted_name(node.func)
+        if callee is not None:
+            return accessors.get(callee.rsplit('.', 1)[-1])
+        return None
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _dotted_name_through_accessors(node.value, accessors)
+        return f'{parent}.{node.attr}' if parent else None
+    return None
 
 
 def _import_aliases(tree: ast.AST) -> dict[str, str]:

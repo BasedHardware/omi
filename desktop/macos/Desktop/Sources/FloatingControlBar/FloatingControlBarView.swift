@@ -84,7 +84,7 @@ struct FloatingControlBarView: View {
   var onCloseAI: () -> Void
   var onEscape: () -> Void
   var onClearVisibleConversation: () -> Void
-  var onRate: ((String, Int?) -> Void)?
+  var onRate: ((String, Int?, ChatFeedbackReason?) -> Void)?
   var onShareLink: (() async -> String?)?
 
   @State private var isHovering = false
@@ -1647,6 +1647,15 @@ struct FloatingControlBarView: View {
     FloatingControlBarManager.shared.sharedFloatingProvider
   }
 
+  /// The chip's secondary hint names the shortcut actually bound, and is absent
+  /// when push-to-talk is off — a hint for a disabled gesture is a wrong hint.
+  @MainActor static func followUpVoiceHint(settings: ShortcutSettings = ShortcutSettings.shared) -> String? {
+    guard settings.pttEnabled else { return nil }
+    let tokens = settings.pttShortcut.displayTokens
+    guard let token = tokens.first, !token.isEmpty else { return nil }
+    return "or hold \(token) to ask aloud"
+  }
+
   private var aiResponseView: some View {
     // Re-read derived content when viewport anchors or streamed answer tokens change.
     let _ = state.chatViewport
@@ -1675,7 +1684,12 @@ struct FloatingControlBarView: View {
       },
       onOpenAgentRef: { ref, completion in
         openAgentInChat(ref: ref, completion: completion)
-      }
+      },
+      onAskFollowUp: { question in
+        AnalyticsManager.shared.questionOriginating(.followUp)
+        FloatingControlBarManager.shared.openAIInputWithQuery(question)
+      },
+      followUpVoiceHint: Self.followUpVoiceHint()
     )
     .transition(
       .asymmetric(
@@ -2180,8 +2194,11 @@ private struct AgentMainChatView: View {
           case .discoveryCard(_, let title, let summary, let fullText):
             DiscoveryCard(title: title, summary: summary, fullText: fullText)
               .frame(maxWidth: .infinity, alignment: .leading)
-          // Rich controls are main-chat-only; floating/notch stays passive.
-          case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
+          // Rich controls are main-chat-only; floating/notch stays passive. The
+          // follow-up chip belongs to the answer surface, not this agent-pill
+          // transcript, which has no lane to send the next turn on.
+          case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
+            .followUp, .memoryReviewCard:
             EmptyView()
           case .agentSpawn(
             _, let pillId, let sessionId, let runId, let title, let objective, let provider

@@ -9945,4 +9945,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Herinneringen konden niet worden geladen';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Kennisgrafiek kon niet worden geladen';
 }

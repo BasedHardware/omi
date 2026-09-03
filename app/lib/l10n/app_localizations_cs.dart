@@ -9919,4 +9919,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Nepodařilo se načíst vzpomínky';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nepodařilo se načíst graf znalostí';
 }

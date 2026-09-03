@@ -519,6 +519,28 @@ extension PostHogManager {
     )
   }
 
+  static func conversationProcessingProperties(elapsedSeconds: Int, outcome: String?) -> [String: Any] {
+    var properties: [String: Any] = ["elapsed_seconds": max(0, elapsedSeconds)]
+    if let outcome {
+      properties["outcome"] = outcome
+    }
+    return properties
+  }
+
+  func conversationProcessingCompleted(conversationId _: String, elapsedSeconds: Int, outcome: String) {
+    track(
+      "Conversation Processing Completed",
+      properties: Self.conversationProcessingProperties(elapsedSeconds: elapsedSeconds, outcome: outcome)
+    )
+  }
+
+  func conversationProcessingStalled(conversationId _: String, elapsedSeconds: Int) {
+    track(
+      "Conversation Processing Stalled",
+      properties: Self.conversationProcessingProperties(elapsedSeconds: elapsedSeconds, outcome: nil)
+    )
+  }
+
   func memoryDeleted(conversationId: String) {
     track(
       "Memory Deleted",

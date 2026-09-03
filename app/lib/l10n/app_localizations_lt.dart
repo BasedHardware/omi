@@ -9938,4 +9938,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Nepavyko įkelti prisiminimų';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nepavyko įkelti žinių grafo';
 }

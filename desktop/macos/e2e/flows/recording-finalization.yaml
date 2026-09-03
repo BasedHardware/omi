@@ -4,6 +4,9 @@ tier: manual
 description: Desktop recording finalization flow - verify a granted microphone recording stops into one durable backend conversation and opens in detail view
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/ConversationProcessingProgress.swift
+  - desktop/macos/Desktop/Sources/ProcessingConversationWatcher.swift
+  - desktop/macos/Desktop/Sources/AnalyticsManager+ConversationProcessing.swift
   - desktop/Desktop/Sources/AppState.swift
   - desktop/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
   - desktop/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift

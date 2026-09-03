@@ -9949,4 +9949,10 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Spominov ni bilo mogoče naložiti';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Grafa znanja ni bilo mogoče naložiti';
 }

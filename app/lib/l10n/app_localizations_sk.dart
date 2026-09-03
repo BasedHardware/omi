@@ -9911,4 +9911,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Nepodarilo sa načítať spomienky';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nepodarilo sa načítať graf znalostí';
 }

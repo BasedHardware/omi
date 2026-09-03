@@ -11647,5 +11647,44 @@
       "receiver": "Omi - Services Alerting (Telegram)"
     },
     "record": null
+  },
+  {
+    "uid": "omi-queue-oldest-ready",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Durable queue - oldest ready item stalled",
+    "condition": "C",
+    "data": [
+      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max(omi_queue_oldest_ready_age_seconds) > 21600 or absent(omi_queue_oldest_ready_age_seconds)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
+      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "B", "type": "reduce"}},
+      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "B", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "threshold"}}
+    ],
+    "updated": "2026-09-03T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "A durable queue has a ready item older than 6 hours, or the omi_queue_oldest_ready_age_seconds gauge is absent",
+      "threshold": "oldest ready age > 6h or absent() for 5m",
+      "user_impact": "Independent items behind a poison head can stall: memories, task integrations, Chat-first cards, or capture finalization may stop advancing.",
+      "scope": "Every backend durable queue that publishes omi_queue_oldest_ready_age_seconds.",
+      "verification": "Break down omi_queue_oldest_ready_age_seconds by queue, then inspect that queue's dead-letter rows and last_error_text before changing retry budgets.",
+      "safe_next_action": "Confirm poison items reached a dead letter; redrive by identity only after the error is understood. Do not raise the attempt budget.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "api",
+      "alert_identity": "omi-queue-oldest-ready",
+      "component": "api",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
   }
 ]

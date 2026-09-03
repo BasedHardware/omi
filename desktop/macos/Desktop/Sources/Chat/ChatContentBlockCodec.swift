@@ -140,6 +140,26 @@ enum ChatContentBlockCodec {
       case "memoryLink":
         guard let memoryId = dict["memoryId"] as? String, let summary = dict["summary"] as? String else { continue }
         blocks.append(.memoryLink(id: id, memoryId: memoryId, summary: summary))
+      case "memoryReviewCard":
+        guard let items = dict["items"] as? [[String: Any]] else { continue }
+        // A row without an id cannot be voted on or corrected, and a row without content has
+        // nothing to show, so neither is a review row. An empty card is not rendered at all.
+        let parsed = items.compactMap { entry -> MemoryReviewItem? in
+          guard let memoryID = entry["memoryId"] as? String,
+            !memoryID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            let content = entry["content"] as? String,
+            !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          else { return nil }
+          return MemoryReviewItem(
+            memoryID: memoryID, content: content, category: entry["category"] as? String ?? "")
+        }
+        guard !parsed.isEmpty else { continue }
+        blocks.append(
+          .memoryReviewCard(
+            id: id,
+            summaryId: dict["summaryId"] as? String ?? "",
+            date: dict["date"] as? String ?? "",
+            items: parsed))
       case "citation":
         guard let ordinal = ChatJSONScalar.int(dict["ordinal"]),
           let kindValue = dict["kind"] as? String,
@@ -160,6 +180,9 @@ enum ChatContentBlockCodec {
               createdAt: dict["createdAt"] as? String ?? dict["created_at"] as? String,
               appName: dict["appName"] as? String ?? dict["app_name"] as? String,
               url: (dict["url"] as? String).flatMap(URL.init(string:)))))
+      case "followUp", "follow_up":
+        guard let question = ChatFollowUpTail.validatedQuestion(dict["text"] as? String ?? "") else { continue }
+        blocks.append(.followUp(id: id, text: question))
       case "agentSpawn":
         guard let sessionId = dict["sessionId"] as? String,
           !sessionId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -328,6 +351,16 @@ enum ChatContentBlockCodec {
       return dict
     case .memoryLink(let id, let memoryId, let summary):
       return ["type": "memoryLink", "id": id, "memoryId": memoryId, "summary": summary]
+    case .memoryReviewCard(let id, let summaryId, let date, let items):
+      return [
+        "type": "memoryReviewCard",
+        "id": id,
+        "summaryId": summaryId,
+        "date": date,
+        "items": items.map { item -> [String: Any] in
+          ["memoryId": item.memoryID, "content": item.content, "category": item.category]
+        },
+      ]
     case .citation(let id, let reference):
       var dict: [String: Any] = [
         "type": "citation",
@@ -343,6 +376,8 @@ enum ChatContentBlockCodec {
       if let value = reference.appName { dict["appName"] = value }
       if let value = reference.url { dict["url"] = value.absoluteString }
       return dict
+    case .followUp(let id, let text):
+      return ["type": "followUp", "id": id, "text": text]
     case .agentSpawn(
       let id, let pillId, let sessionId, let runId, let title, let objective, let provider
     ):

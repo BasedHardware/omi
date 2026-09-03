@@ -9955,4 +9955,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Не удалось загрузить воспоминания';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Не удалось загрузить граф знаний';
 }

@@ -329,6 +329,15 @@ class AppState: ObservableObject {
   /// Used to prevent asynchronous work from mutating a newer recording decision.
   var recordingGeneration: UInt64 = 0
   @Published var isSavingConversation = false
+  /// True from the moment a capture stops until its conversation has been
+  /// loaded into the list. Keeps the Live card's slot occupied so the meeting
+  /// visibly lands as a row instead of vanishing and reappearing.
+  @Published var isFinalizingCapture = false
+  /// Follows visible processing rows to a terminal state (see the type).
+  lazy var processingWatcher = ProcessingConversationWatcher.live(
+    fetch: ProcessingConversationWatcher.fetchDetail,
+    onResolved: { [weak self] refreshed in self?.conversationRepository.replace(refreshed) }
+  )
   // currentTranscript is internal-only (not observed by views), so no @Published needed
   var currentTranscript: String = ""
   @Published var hasMicrophonePermission = false
@@ -678,6 +687,7 @@ class AppState: ObservableObject {
     conversationRepository.onSnapshot = { [weak self] snapshot in
       guard let self else { return }
       self.conversations = snapshot.conversations
+      self.processingWatcher.sync(with: snapshot.conversations)
       self.isLoadingConversations = snapshot.isLoading
       self.conversationsError = snapshot.error
       if self.hasActiveConversationFilters {

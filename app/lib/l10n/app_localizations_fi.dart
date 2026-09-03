@@ -9919,4 +9919,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Muistoja ei voitu ladata';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Tietograafia ei voitu ladata';
 }

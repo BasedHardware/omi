@@ -9752,4 +9752,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => '추억을 불러올 수 없습니다';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => '지식 그래프를 불러올 수 없습니다';
 }

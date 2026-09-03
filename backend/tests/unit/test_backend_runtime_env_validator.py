@@ -124,6 +124,22 @@ def with_meeting_receipt_reconciler_env(payload: str) -> str:
     )
 
 
+def with_wake_word_adjudication_env(payload: str) -> str:
+    """The wake-word adjudicator kill switch is declared on Cloud Run `backend` too.
+
+    Live finalization runs in backend-listen; reprocess runs process_conversation
+    inline here. A deploy that carries the flag on only one host cannot turn the
+    adjudicator off for both paths.
+    """
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "WAKE_WORD_ADJUDICATION_ENABLED", "value": "true"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_backend_public_shared_chat_auth_env(payload: str) -> str:
     return re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
@@ -185,12 +201,14 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
-        with_meeting_receipt_reconciler_env(
-            with_conversation_notes_v2_env(
-                with_backend_pusher_env(
-                    with_parity_pack_env(
-                        with_listen_finalization_orphan_env(
-                            with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+        with_wake_word_adjudication_env(
+            with_meeting_receipt_reconciler_env(
+                with_conversation_notes_v2_env(
+                    with_backend_pusher_env(
+                        with_parity_pack_env(
+                            with_listen_finalization_orphan_env(
+                                with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+                            )
                         )
                     )
                 )

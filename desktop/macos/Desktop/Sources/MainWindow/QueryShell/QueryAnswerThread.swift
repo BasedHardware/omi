@@ -45,8 +45,8 @@ struct QueryAnswerThread: View {
         isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing,
         app: nil,
         onLoadMore: { await chatProvider.loadMoreMessages() },
-        onRate: { messageId, rating in
-          Task { await chatProvider.rateMessage(messageId, rating: rating) }
+        onRate: { messageId, rating, reason in
+          Task { await chatProvider.rateMessage(messageId, rating: rating, reason: reason) }
         },
         onOpenInlineCitation: onOpenCitation,
         sessionsLoadError: chatProvider.sessionsLoadError.map {

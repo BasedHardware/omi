@@ -3212,5 +3212,7 @@
     "pendantRecordingSyncBlocked": "Pendant stále nahrává, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu nahrávání zastavte a poté synchronizujte znovu.",
     "pendantFullSyncBlocked": "Úložiště Pendantu je plné a stále je v režimu nahrávání, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu zastavte nahrávání a poté znovu synchronizujte.",
     "conversationsNotCapturedCount": "Nezaznamenáno ({count})",
-    "transcriptionNoAudio": "Transkripce nepřijímá zvuk"
+    "transcriptionNoAudio": "Transkripce nepřijímá zvuk",
+    "couldNotLoadMemories": "Nepodařilo se načíst vzpomínky",
+    "couldNotLoadKnowledgeGraph": "Nepodařilo se načíst graf znalostí"
 }

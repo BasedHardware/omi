@@ -91,6 +91,11 @@ def wire_common_stubs(install) -> SimpleNamespace:
     llm_usage_db.record_chat_quota_question = MagicMock(return_value=True)
     users_db = install('database.users')
     users_db.set_chat_message_rating_score = MagicMock()
+    # The feedback ledger reaches Firestore for real. Importing it inside a
+    # process that has stubbed google.cloud.firestore_v1 makes protobuf reject
+    # the duplicate descriptor registration, so stub it like its siblings.
+    feedback_utils = install('utils.feedback', ModuleType('utils.feedback'))
+    feedback_utils.record_chat_message_feedback = MagicMock()
     redis_db = install('database.redis_db')
     redis_db.try_acquire_goal_extraction_lock = MagicMock(return_value=False)
     redis_db.check_rate_limit = MagicMock(return_value=(True, 99, 0))

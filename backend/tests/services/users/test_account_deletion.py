@@ -1516,7 +1516,10 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
     account_deletion.delete_action_item_vectors_batch.assert_called_once_with('uid1', ['a1'])
     account_deletion.delete_screen_activity_vectors.assert_called_once_with('uid1', ['s1'])
     account_deletion.delete_all_conversation_recordings.assert_called_once_with('uid1')
-    account_deletion.purge_canonical_derived_user_data.assert_called_once_with('uid1')
+    account_deletion.purge_canonical_derived_user_data.assert_called_once()
+    purge_args, purge_kwargs = account_deletion.purge_canonical_derived_user_data.call_args
+    assert purge_args == ('uid1',)
+    assert 'db_client' in purge_kwargs
     assert [failure['operation'] for failure in result['required_failures']] == [
         'conversation_vectors',
         'transcript_chunk_vectors',

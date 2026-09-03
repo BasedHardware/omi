@@ -42,8 +42,7 @@ users_collection = 'users'
 def _account_write_gated(function: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(function)
     def wrapped(uid: str, *args: Any, **kwargs: Any) -> Any:
-        database = _get_db(kwargs.get("firestore_client"))
-        with external_write_fence(uid, firestore_client=database):
+        with external_write_fence(uid, firestore_client=kwargs.get("firestore_client")):
             return function(uid, *args, **kwargs)
 
     return wrapped
@@ -52,8 +51,7 @@ def _account_write_gated(function: Callable[..., Any]) -> Callable[..., Any]:
 def _destination_account_write_gated(function: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(function)
     def wrapped(prev_uid: str, new_uid: str, *args: Any, **kwargs: Any) -> Any:
-        database = _get_db(kwargs.get("firestore_client"))
-        with external_write_fence(new_uid, firestore_client=database):
+        with external_write_fence(new_uid, firestore_client=kwargs.get("firestore_client")):
             return function(prev_uid, new_uid, *args, **kwargs)
 
     return wrapped

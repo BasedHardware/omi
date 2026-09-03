@@ -1481,6 +1481,24 @@
       ]
     },
     {
+      "collectionGroup": "feedback_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "value",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "hourly_usage",
       "queryScope": "COLLECTION",
       "fields": [

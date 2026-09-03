@@ -864,7 +864,7 @@ struct HarnessChatHost: View {
           isLoadingInitial: model.isLoadingInitial,
           app: nil,
           onLoadMore: {},
-          onRate: { _, _ in },
+          onRate: { _, _, _ in },
           localSendToken: model.localSendToken,
           horizontalContentPadding: 0,
           transcriptWindowPolicy: model.transcriptWindowPolicy,

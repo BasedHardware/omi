@@ -98,7 +98,11 @@ def test_message_adapter_preserves_arbitrary_chart_data_union_payloads():
     assert "const requiredKeys = {'chart_type', 'title', 'datasets'};" in adapter
     assert "return (chartType == 'line' || chartType == 'bar') && requiredKeys.every(json.containsKey);" in adapter
     assert 'static ServerMessage fromResponseJson(Map<String, dynamic> json)' in adapter
-    assert "Map<String, dynamic>.from(json)..remove('evidence')" in adapter
+    # The cascade is formatted across lines by `dart format`, so match the
+    # operations rather than one physical line.
+    assert "Map<String, dynamic>.from(json)" in adapter
+    assert "..remove('evidence')" in adapter
+    assert "..remove('content_blocks')" in adapter
     assert 'wire.GeneratedResponseMessage.fromJson(generatedJson)' in adapter
     assert 'askForNps: generated.askForNps ?? false' in adapter
     assert 'final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);' in adapter

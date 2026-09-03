@@ -96,6 +96,7 @@ import {
   isAcpProviderAuthFailure,
 } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
+import { backendOutboxRetryAtMs } from "./runtime/durable-queue.js";
 import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
@@ -3586,19 +3587,11 @@ async function main(): Promise<void> {
             conversationGeneration: result.conversationGeneration,
             payloadHash: result.payloadHash,
             errorCode: result.errorCode ?? "backend_sync_failed",
-            retryAtMs: result.attemptCount < 5
-              && [
-                "backend_sync_failed",
-                "backend_sync_owner_changed",
-                "backend_sync_http_retryable",
-                "network_unavailable",
-                "timeout",
-                "connection_lost",
-              ].includes(
-                result.errorCode ?? "backend_sync_failed",
-              )
-              ? Date.now() + Math.min(60_000, 1_000 * 2 ** result.attemptCount)
-              : undefined,
+            retryAtMs: backendOutboxRetryAtMs({
+              attemptCount: result.attemptCount,
+              errorCode: result.errorCode ?? "backend_sync_failed",
+              nowMs: Date.now(),
+            }),
           });
         }
         pumpJournalOutbox();
@@ -3637,17 +3630,11 @@ async function main(): Promise<void> {
             deliveryGeneration: result.deliveryGeneration,
             payloadHash: result.payloadHash,
             errorCode,
-            retryAtMs: result.attemptCount < 5
-              && [
-                "backend_delete_failed",
-                "backend_sync_owner_changed",
-                "backend_sync_http_retryable",
-                "network_unavailable",
-                "timeout",
-                "connection_lost",
-              ].includes(errorCode)
-              ? Date.now() + Math.min(60_000, 1_000 * 2 ** result.attemptCount)
-              : undefined,
+            retryAtMs: backendOutboxRetryAtMs({
+              attemptCount: result.attemptCount,
+              errorCode,
+              nowMs: Date.now(),
+            }),
           });
         }
         pumpJournalOutbox();

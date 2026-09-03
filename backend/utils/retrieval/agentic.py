@@ -84,6 +84,11 @@ from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.executors import run_blocking, db_executor
 from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout
+from utils.chat_followup import (
+    FOLLOWUP_PROMPT_SECTION,
+    FollowUpTailStreamFilter,
+    split_followup_tail,
+)
 from database.redis_db import get_cached_user_geolocation
 from database.users import get_user_location_context_consent
 from models.geolocation import Geolocation
@@ -1497,6 +1502,11 @@ IMPORTANT: Always call a matching integration tool when relevant. Never tell the
 You have fetch_url_tool available. When the user shares any URL (starting with http:// or https://), you MUST call fetch_url_tool to read its content before responding. Never say you cannot browse, visit, or read a URL. Always attempt to fetch it first.
 </url_fetching_instructions>"""
 
+    # The typed lanes almost never end an answer with a question, so a turn that
+    # had an obvious next hop still ends the session. The tail is stripped from
+    # the visible text below and delivered as one structured chip instead.
+    system_prompt += FOLLOWUP_PROMPT_SECTION
+
     # Live chat-agent tools are OpenAI chat-completions functions. Perplexity
     # covers web search; Anthropic server tools are not on this lane.
     tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
@@ -1548,6 +1558,9 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
 
     full_response = []
     tool_usage_count = 0
+    # The follow-up tail is model output like any other token. Hold it back from
+    # what the user watches stream in so the chip's text never appears twice.
+    followup_filter = FollowUpTailStreamFilter()
 
     def attach_evidence_to_callback() -> None:
         """Expose only the bounded references collected by successful JIT tools."""
@@ -1581,10 +1594,12 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         """
         if callback_data is None:
             return False
-        streamed = ''.join(full_response)
+        streamed, _ = split_followup_tail(''.join(full_response))
         if not streamed:
             return False
         callback_data['answer'] = streamed
+        # A turn that stopped early is a failed turn; it never invites a next question.
+        callback_data.pop('followup', None)
         callback_data['memories_found'] = conversations_collected if conversations_collected else []
         callback_data['ask_for_nps'] = tool_usage_count > 0
         attach_evidence_to_callback()
@@ -1629,13 +1644,26 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
             if chunk.startswith("think: ") and chunk != f'think: {AGENT_STREAM_PROGRESS_HEARTBEAT}':
                 tool_usage_count += 1
 
+            if chunk.startswith("data: "):
+                visible = followup_filter.push(chunk[len("data: ") :])
+                if not visible:
+                    continue
+                chunk = f'data: {visible}'
+
             yield chunk
 
         producer_failure = await task
 
+        held_back = followup_filter.flush()
+        if held_back:
+            yield f'data: {held_back}'
+
         # Store results in callback_data
         if callback_data is not None:
-            callback_data['answer'] = ''.join(full_response)
+            answer_text, followup_question = split_followup_tail(''.join(full_response))
+            callback_data['answer'] = answer_text
+            if followup_question and not producer_failure:
+                callback_data['followup'] = followup_question
             # Reported even though the stream ended cleanly, so the router can tell a failed
             # turn from one the model ended empty on its own.
             if producer_failure:

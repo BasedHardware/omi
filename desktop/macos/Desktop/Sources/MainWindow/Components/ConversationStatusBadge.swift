@@ -7,11 +7,20 @@ import SwiftUI
 /// in its normal titled state.
 struct ConversationStatusBadge: View {
   let state: ConversationDisplayState
+  /// Only read for `.processing`; the row derives it from the clock.
+  var phase: ConversationProcessingPhase = .summarizing
 
   var body: some View {
     switch state {
     case .processing:
-      ProcessingPill()
+      ProcessingPill(phase: phase)
+    case .awaitingFirstOpen:
+      Pill(
+        icon: "sparkles",
+        text: "Tap to summarize",
+        color: Ink.accent,
+        help: "The transcript is saved. Open the conversation to generate its title and summary."
+      )
     case .locked:
       Pill(
         icon: "lock.fill",
@@ -66,31 +75,61 @@ private struct Pill: View {
   }
 }
 
-/// Animated "Processing…" pill with a subtle pulsing dot.
+/// Pill for a live pipeline. The wording and colour track how long the wait
+/// has lasted, so the row never promises "shortly" without a bound.
 private struct ProcessingPill: View {
+  let phase: ConversationProcessingPhase
   @State private var pulse = false
+
+  static func label(for phase: ConversationProcessingPhase) -> String {
+    switch phase {
+    case .summarizing: return "Summarizing"
+    case .slow: return "Taking longer than usual"
+    case .stalled: return "Stuck"
+    }
+  }
+
+  static func help(for phase: ConversationProcessingPhase) -> String {
+    switch phase {
+    case .summarizing:
+      return "Omi is writing the title and summary. This usually takes under two minutes."
+    case .slow:
+      return "Still processing. Longer conversations and busy periods can take a few minutes."
+    case .stalled:
+      return "This has been processing for over ten minutes. Reprocess to run it again."
+    }
+  }
+
+  private var color: Color {
+    switch phase {
+    case .summarizing: return Ink.accent
+    case .slow: return PageGlass.warning
+    case .stalled: return Ink.errorRed
+    }
+  }
 
   var body: some View {
     HStack(spacing: 4) {
       Circle()
-        .fill(Ink.accent)
+        .fill(color)
         .frame(width: 6, height: 6)
-        .opacity(pulse ? 0.4 : 1.0)
+        .opacity(pulse && phase != .stalled ? 0.4 : 1.0)
         .animation(
-          .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+          phase == .stalled ? nil : .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
           value: pulse
         )
-      Text("Processing")
+      Text(Self.label(for: phase))
         .scaledFont(size: 10, weight: .semibold)
-        .foregroundColor(Ink.accent)
+        .foregroundColor(color)
     }
     .padding(.horizontal, 7)
     .padding(.vertical, 3)
     .background(
       Capsule(style: .continuous)
-        .fill(Ink.accent.opacity(0.16))
+        .fill(color.opacity(0.16))
     )
     .onAppear { pulse = true }
-    .help("This conversation is still being processed. Title and summary will appear shortly.")
+    .help(Self.help(for: phase))
+    .accessibilityLabel(Self.label(for: phase))
   }
 }

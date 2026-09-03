@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
 from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
 
+from database import _client as _client_mod
 from database import projection_repair
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
@@ -17,7 +18,8 @@ from models.memory_state_head import (
     trusted_memory_state_head_fields_from_control,
     trusted_memory_state_head_fields_from_state,
 )
-from ._client import db
+
+db = getattr(_client_mod, 'data_plane_db', _client_mod.db)
 
 T = TypeVar("T")
 

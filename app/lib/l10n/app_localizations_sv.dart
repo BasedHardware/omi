@@ -9922,4 +9922,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Kunde inte läsa in minnen';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Kunde inte läsa in kunskapsgrafen';
 }

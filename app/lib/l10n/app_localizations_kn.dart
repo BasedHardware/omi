@@ -9950,4 +9950,10 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'ನೆನಪುಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'ಜ್ಞಾನ ಗ್ರಾಫ್ ಅನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
 }

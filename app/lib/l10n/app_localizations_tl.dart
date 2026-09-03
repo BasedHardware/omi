@@ -10009,4 +10009,10 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Hindi ma-load ang mga alaala';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Hindi ma-load ang knowledge graph';
 }

@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, cast
 
+from database.durable_queue import ProcessOutcome, QueuePolicy, decide_attempt, drain_isolated
+
 from ._client import db
 
 users_collection = 'users'
@@ -118,31 +120,48 @@ def process_projection_repairs(
         if len(docs) >= limit:
             break
 
-    for doc in docs:
-        repair: Dict[str, Any] = _typed_doc(doc)
+    policy = QueuePolicy(max_attempts=max_attempts)
+    observed_now = datetime.now(timezone.utc)
+
+    def process_one(doc: Any) -> ProcessOutcome:
+        repair = _typed_doc(doc)
         fact_id = repair.get('fact_id')
         try:
             action = repair_func(uid, fact_loader(cast(str, fact_id)))
-            doc.reference.update(
-                {
-                    'status': 'repaired',
-                    'repair_action': action,
-                    'updated_at': datetime.now(timezone.utc),
-                }
-            )
-            repaired.append(repair.get('repair_id') or doc.id)
         except Exception as exc:
-            next_attempt_count = int(repair.get('attempt_count') or 0) + 1
-            next_status = 'dead_letter' if next_attempt_count >= max_attempts else 'failed'
-            doc.reference.update(
-                {
-                    'status': next_status,
-                    'attempt_count': next_attempt_count,
-                    'error': str(exc),
-                    'updated_at': datetime.now(timezone.utc),
-                }
-            )
-            failed.append(repair.get('repair_id') or doc.id)
+            return ProcessOutcome.retry(str(exc), reason='projection_repair_failed')
+        doc.reference.update(
+            {
+                'status': 'repaired',
+                'repair_action': action,
+                'updated_at': observed_now,
+            }
+        )
+        repaired.append(repair.get('repair_id') or doc.id)
+        return ProcessOutcome.ack()
+
+    for result in drain_isolated(docs, process_one):
+        if result.outcome.kind == ProcessOutcome.ack().kind:
+            continue
+        doc = result.item
+        repair = _typed_doc(doc)
+        decision = decide_attempt(
+            attempt_count=int(repair.get('attempt_count') or 0) + 1,
+            outcome=result.outcome,
+            policy=policy,
+            now=observed_now,
+        )
+        doc.reference.update(
+            {
+                'status': 'dead_letter' if decision.terminal else 'failed',
+                'attempt_count': decision.attempt_count,
+                'error': decision.error_text,
+                'last_error_text': decision.error_text,
+                'dead_letter_reason': decision.reason if decision.terminal else None,
+                'updated_at': observed_now,
+            }
+        )
+        failed.append(repair.get('repair_id') or doc.id)
     return {'repaired': repaired, 'failed': failed, 'processed': len(repaired) + len(failed)}
 
 

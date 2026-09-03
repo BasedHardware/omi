@@ -9918,4 +9918,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'بارگذاری خاطرات ممکن نشد';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'بارگذاری گراف دانش ممکن نشد';
 }

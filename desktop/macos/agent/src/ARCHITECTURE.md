@@ -54,6 +54,8 @@ Swift desktop client
   journal generation, invalidates remote reconciliation, preserves only the
   identity of already-delivering POST claims, and gates both remote reads and
   new-generation POSTs until the backend DELETE is acknowledged.
+  Inventory of every durable queue (kernel SQLite, backend Firestore, Swift
+  app-local): [`backend/docs/durable_queues.mdx`](../../../../backend/docs/durable_queues.mdx).
 - `run-tool-capability.ts` and `tool-invocation-ledger.ts` jointly authorize and
   record physical effects. Request IDs are tracing keys, never authorization.
 - `sqlite-store.ts` owns schema creation, migrations, startup reconciliation,

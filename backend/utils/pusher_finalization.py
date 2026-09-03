@@ -46,7 +46,7 @@ async def process_conversation_task(
     """
     if byok_keys:
         # Listen already validated these against enrollment; mark them validated
-        # so process_conversation can reuse request_has_llm_byok_key().
+        # so the LLM/STT clients inside process_conversation route through them.
         set_validated_byok_keys(byok_keys, uid)
 
     async def send_result(result: Dict[str, Any]) -> None:

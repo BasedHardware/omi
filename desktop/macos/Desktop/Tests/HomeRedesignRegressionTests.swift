@@ -146,7 +146,7 @@ final class ChatBubbleMetadataBandLayoutTests: XCTestCase {
         isSynced: isSynced),
       app: nil,
       showsOmiMark: false,
-      onRate: { _ in })
+      onRate: { _, _ in })
   }
 
   private func rowHeight(showsMetadata: Bool) -> CGFloat {
@@ -237,7 +237,7 @@ final class ChatBubbleIdentityTests: XCTestCase {
         ]),
       app: nil,
       showsOmiMark: true,
-      onRate: { _ in })
+      onRate: { _, _ in })
     XCTAssertNotEqual(withoutArtifact, withArtifact)
   }
 
@@ -253,7 +253,7 @@ final class ChatBubbleIdentityTests: XCTestCase {
         journalStatus: .failed),
       app: nil,
       showsOmiMark: true,
-      onRate: { _ in })
+      onRate: { _, _ in })
     XCTAssertNotEqual(completed, failed)
   }
 
@@ -270,7 +270,7 @@ final class ChatBubbleIdentityTests: XCTestCase {
         metadata: metadata),
       app: nil,
       showsOmiMark: true,
-      onRate: { _ in })
+      onRate: { _, _ in })
   }
 }
 

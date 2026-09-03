@@ -9912,4 +9912,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Mälestusi ei õnnestunud laadida';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Teadmiste graafi ei õnnestunud laadida';
 }

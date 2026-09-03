@@ -26,6 +26,37 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
     XCTAssertTrue(result.pendingMutations.isEmpty)
   }
 
+  func testServerListWithoutTranscriptKeepsLoadedLocalTranscript() {
+    let segment = TranscriptSegment(
+      id: "s1", text: "the first line of the meeting transcript", speaker: "SPEAKER_00", isUser: false,
+      personId: nil, start: 0, end: 1)
+    var local = makeConversation(id: "c1", title: "", status: .processing)
+    local.transcriptSegments = [segment]
+    local.transcriptSegmentsIncluded = true
+    var server = makeConversation(id: "c1", title: "", status: .processing)
+    server.transcriptSegmentsIncluded = false
+
+    let result = ConversationReconciliationPolicy.mergeList(server: [server], current: [local])
+
+    XCTAssertEqual(result.conversations[0].transcriptSegments.map(\.id), ["s1"])
+    XCTAssertTrue(result.conversations[0].transcriptSegmentsIncluded)
+    XCTAssertEqual(result.conversations[0].displayTitle, "The first line of the meeting transcript")
+  }
+
+  func testServerListWithTranscriptWinsOverLocal() {
+    var local = makeConversation(id: "c1", status: .processing)
+    local.transcriptSegments = [
+      TranscriptSegment(
+        id: "old", text: "old words", speaker: nil, isUser: false, personId: nil, start: 0, end: 1)
+    ]
+    var server = makeConversation(id: "c1", status: .completed)
+    server.transcriptSegmentsIncluded = true
+    server.transcriptSegments = []
+
+    let result = ConversationReconciliationPolicy.mergeList(server: [server], current: [local])
+    XCTAssertTrue(result.conversations[0].transcriptSegments.isEmpty, "An included empty transcript is authoritative")
+  }
+
   func testStaleLocalTitleDoesNotMaskServerWithoutPendingMutation() {
     let local = makeConversation(id: "c1", title: "Local stale")
     let server = makeConversation(id: "c1", title: "Server fresh")

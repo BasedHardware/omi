@@ -9923,4 +9923,10 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'স্মৃতি লোড করা যায়নি';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'নলেজ গ্রাফ লোড করা যায়নি';
 }

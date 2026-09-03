@@ -141,7 +141,9 @@ def grants_cloud_screen_vectors(uid: str) -> bool:
     if cached is not None and time.monotonic() - cached[1] < _SCREEN_VECTOR_ENTITLEMENT_CACHE_TTL_SECONDS:
         return cached[0]
     try:
-        subscription = users_db.get_user_valid_subscription(uid)
+        subscription = users_db.get_user_valid_subscription(
+            uid, firestore_client=get_customer_firestore_client(), provision=False
+        )
         plan = subscription.plan if subscription else PlanType.basic
         entitled = effective_desktop_access_tier(plan, subscription) != DESKTOP_ACCESS_TIER_FREE
     except Exception as e:

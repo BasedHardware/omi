@@ -29,7 +29,7 @@ from typing import Iterable
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY_PATH = REPOSITORY_ROOT / "backend" / "runtime_images.json"
-IGNORED_SOURCE_DIRECTORIES = {".git", ".pytest_cache", ".venv", "__pycache__"}
+IGNORED_SOURCE_DIRECTORIES = {".git", ".pytest_cache", ".venv", ".openapi-venv", "__pycache__"}
 # First-party modules that raise at import time unless an environment variable is set.
 # An import smoke reaching one of these without the variable fails the deploy, so the
 # registry must declare a non-production placeholder in ``smoke_environment``.

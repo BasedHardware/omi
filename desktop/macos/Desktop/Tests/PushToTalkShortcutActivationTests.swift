@@ -65,6 +65,49 @@ final class PushToTalkShortcutActivationTests: XCTestCase {
     XCTAssertEqual(gate.modifierStateChanged(isShortcutActive: false), .releaseStartedTurn)
   }
 
+  // MARK: - Bar reveal must never swallow the press
+
+  /// Records the order of the two effects the shipping handlers pass to the seam.
+  private func recordPress(barVisible: Bool) -> [String] {
+    var calls: [String] = []
+    PushToTalkBarRevealPolicy.startPress(
+      barVisible: barVisible,
+      reveal: { calls.append("reveal") },
+      start: { calls.append("start") })
+    return calls
+  }
+
+  func testHiddenBarPressRevealsTheBarThenStartsTheTurn() {
+    // Regression: `handleKeyShortcutDown` revealed the bar and then returned before
+    // `handleShortcutDown()`, so startListening() never ran — no start sound, no
+    // listening animation. On a second display the bar is re-placed as it follows the
+    // cursor, so it is routinely hidden at press time and every first press was lost.
+    // This fails if the start effect is ever skipped or ordered before the reveal.
+    XCTAssertEqual(recordPress(barVisible: false), ["reveal", "start"])
+  }
+
+  func testVisibleBarPressStartsTheTurnWithoutRevealing() {
+    XCTAssertEqual(recordPress(barVisible: true), ["start"])
+  }
+
+  func testHiddenBarDoubleTapRevealsThenEntersLockedListening() {
+    // The same early return ate the first tap of a double tap, which is why locked mode
+    // did not work on a second display. The gate reports both quick taps regardless of
+    // bar visibility, and the lock site runs through the same seam.
+    var gate = ModifierOnlyPTTActivationGate()
+    for _ in 0..<2 {
+      XCTAssertEqual(gate.modifierStateChanged(isShortcutActive: true), .scheduleStart)
+      XCTAssertEqual(
+        gate.modifierStateChanged(isShortcutActive: false), .cancelPendingStartAsQuickTap)
+    }
+    var calls: [String] = []
+    PushToTalkBarRevealPolicy.startPress(
+      barVisible: false,
+      reveal: { calls.append("reveal") },
+      start: { calls.append("enterLockedListening") })
+    XCTAssertEqual(calls, ["reveal", "enterLockedListening"])
+  }
+
   func testQuickModifierTapNeverStartsOrReleasesPTT() {
     // A quick tap still starts no turn — an accidental brush of the modifier must
     // never record. It is only reported as a quick tap so the double-tap detector

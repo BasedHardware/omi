@@ -624,24 +624,15 @@ extension AppState {
     return (hasPermission, error)
   }
 
-  /// Query the TCC automation permission status for System Events without triggering a prompt
+  /// Query the TCC automation permission status for System Events without triggering a prompt.
+  ///
+  /// Delegates to `SBAutomationConsent`, which owns this mechanism, so the
+  /// passive read and the consent request cannot disagree. In particular it
+  /// starts System Events when the target is stopped: without that step the
+  /// probe answers `-600` on an idle Mac and a granted permission is
+  /// indistinguishable from an absent one.
   nonisolated static func queryAutomationPermissionStatus() -> OSStatus {
-    let bundleIDString = "com.apple.systemevents"
-    var addressDesc = AEAddressDesc()
-
-    let status: OSStatus = bundleIDString.withCString { cString in
-      AECreateDesc(typeApplicationBundleID, cString, strlen(cString), &addressDesc)
-      let result = AEDeterminePermissionToAutomateTarget(
-        &addressDesc,
-        typeWildCard,
-        typeWildCard,
-        false  // askUserIfNeeded = false → never shows dialog
-      )
-      AEDisposeDesc(&addressDesc)
-      return result
-    }
-
-    return status
+    SBAutomationConsent.currentSystemEventsPermission()
   }
 
   /// Check accessibility permission status

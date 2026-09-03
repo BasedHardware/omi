@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, List, Optional, TypedDict, TypeVar, cast
 from pinecone import Pinecone
 
 from database import projection_repair
-from database._client import db as default_db_client
+from database._client import data_plane_db as default_db_client
 from database.legal_holds import external_write_fence
 from database.memory_vector_metadata import (
     build_archive_memory_vector_filter,

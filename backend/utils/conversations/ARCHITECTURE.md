@@ -22,6 +22,9 @@ and background processing.
 - `meeting_treatment.py` owns the post-capture meeting policy. It uses durable
   conversation timestamps plus the union of transcribed-speech intervals, so
   dual microphone/system-audio transcripts cannot double-count speech.
+- `overview_markdown.py` renders notes-v2 `structured.overview` markdown to a
+  closed HTML subset for the share-email body (headings, lists, emphasis,
+  `http(s)` links; every text node escaped).
 - `meeting_receipt.py` is the sole writer of the final meeting verdict. It
   records reason and measured inputs on the finalization job, projects the
   verdict to the conversation, and attaches the deterministic Chat intent.

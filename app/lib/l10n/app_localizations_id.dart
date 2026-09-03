@@ -9929,4 +9929,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Tidak dapat memuat kenangan';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Tidak dapat memuat graf pengetahuan';
 }

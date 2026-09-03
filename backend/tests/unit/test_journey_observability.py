@@ -121,6 +121,7 @@ def test_idle_metrics_and_monitoring_contract_distinguish_traffic_from_a_missing
     exported = metrics.generate_latest().decode()
     assert 'omi_journey_accepted_total{journey="chat_response"}' in exported
     assert 'omi_live_stt_accepted_total' in exported
+    assert 'omi_queue_oldest_ready_age_seconds' in exported
     assert 'omi_live_stt_terminal_total' in exported
     assert 'omi_journey_terminal_total{journey="pusher_session",outcome="success"}' in exported
     assert 'omi_capture_finalization_reconciliations_total{outcome="requeued"}' in exported

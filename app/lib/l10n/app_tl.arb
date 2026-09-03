@@ -10800,5 +10800,7 @@
     "pendantRecordingSyncBlocked": "Nagre-record pa rin ang Pendant, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.",
     "pendantFullSyncBlocked": "Puno na ang storage ng Pendant at nasa recording mode pa rin ito, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.",
     "conversationsNotCapturedCount": "Hindi na-record ({count})",
-    "transcriptionNoAudio": "Hindi tumatanggap ng audio ang transkripsyon"
+    "transcriptionNoAudio": "Hindi tumatanggap ng audio ang transkripsyon",
+    "couldNotLoadMemories": "Hindi ma-load ang mga alaala",
+    "couldNotLoadKnowledgeGraph": "Hindi ma-load ang knowledge graph"
 }

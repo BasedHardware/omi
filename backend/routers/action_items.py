@@ -6,6 +6,7 @@ import uuid
 from utils.executors import postprocess_executor, submit_with_context
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse
 from typing import Optional, List
 from datetime import datetime, timezone
 
@@ -20,6 +21,17 @@ from database.vector_db import (
     delete_action_item_vectors_batch,
     search_action_items_by_vector,
 )
+from database.action_items_cache import (
+    compute_etag,
+    get_action_items_list_version,
+    if_none_match_matches,
+    list_cache_key,
+    list_cache_ttl_seconds,
+    read_cached_list,
+    write_cached_list,
+)
+from utils.action_items_list_guard import enforce_hot_client_list_ceiling
+from utils.metrics import record_action_items_list_cache
 from utils.users import get_user_display_name
 from utils.share_links import build_share_url
 from utils.other import endpoints as auth
@@ -347,6 +359,128 @@ def _ensure_aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
+def _action_items_list_cache_params(
+    *,
+    limit: int,
+    offset: int,
+    completed: Optional[bool],
+    conversation_id: Optional[str],
+    start_date: Optional[datetime],
+    end_date: Optional[datetime],
+    due_start_date: Optional[datetime],
+    due_end_date: Optional[datetime],
+) -> Optional[dict]:
+    """Cacheable request shape, or None when this request must not be cached.
+
+    Only the unfiltered listing is cached. That is the whole hot path (98.6% of
+    the measured traffic is ``limit=500&offset=0&completed=true|false``) and it
+    keeps the key space per user to a handful of entries; date- and
+    conversation-scoped reads are rare, high-cardinality, and stay uncached.
+    """
+    if (
+        conversation_id is not None
+        or start_date is not None
+        or end_date is not None
+        or due_start_date is not None
+        or due_end_date is not None
+    ):
+        return None
+    return {"limit": limit, "offset": offset, "completed": completed}
+
+
+def _serve_action_items_list_from_cache(
+    uid: str,
+    *,
+    request: Optional[Request],
+    limit: int,
+    offset: int,
+    completed: Optional[bool],
+    conversation_id: Optional[str],
+    start_date: Optional[datetime],
+    end_date: Optional[datetime],
+    due_start_date: Optional[datetime],
+    due_end_date: Optional[datetime],
+):
+    """Return a 304 or a cached 200 when one is available, else None.
+
+    Both return paths read **zero** Firestore documents — that is the entire
+    point of this function and what the ``omi_action_items_list_cache_total``
+    counter proves after a deploy.
+    """
+    ttl = list_cache_ttl_seconds()
+    if ttl <= 0:
+        return None
+    params = _action_items_list_cache_params(
+        limit=limit,
+        offset=offset,
+        completed=completed,
+        conversation_id=conversation_id,
+        start_date=start_date,
+        end_date=end_date,
+        due_start_date=due_start_date,
+        due_end_date=due_end_date,
+    )
+    if params is None:
+        record_action_items_list_cache('bypass')
+        return None
+    version = get_action_items_list_version(uid)
+    if version is None:
+        # Redis could not answer. Fail open to a real read rather than risk
+        # serving a page addressed by an unknown invalidation version.
+        record_action_items_list_cache('unavailable')
+        return None
+    entry = read_cached_list(list_cache_key(uid, version, params))
+    if entry is None:
+        record_action_items_list_cache('miss')
+        return None
+
+    etag = entry['etag']
+    inm = request.headers.get('if-none-match') if request is not None else None
+    if if_none_match_matches(inm, etag):
+        record_action_items_list_cache('not_modified')
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "private, no-cache"})
+    record_action_items_list_cache('hit')
+    return JSONResponse(
+        content=entry['body'],
+        headers={"ETag": etag, "Cache-Control": "private, no-cache"},
+    )
+
+
+def _store_action_items_list_in_cache(
+    uid: str,
+    body: dict,
+    *,
+    etag: str,
+    limit: int,
+    offset: int,
+    completed: Optional[bool],
+    conversation_id: Optional[str],
+    start_date: Optional[datetime],
+    end_date: Optional[datetime],
+    due_start_date: Optional[datetime],
+    due_end_date: Optional[datetime],
+) -> None:
+    ttl = list_cache_ttl_seconds()
+    if ttl <= 0:
+        return
+    params = _action_items_list_cache_params(
+        limit=limit,
+        offset=offset,
+        completed=completed,
+        conversation_id=conversation_id,
+        start_date=start_date,
+        end_date=end_date,
+        due_start_date=due_start_date,
+        due_end_date=due_end_date,
+    )
+    if params is None:
+        return
+    version = get_action_items_list_version(uid)
+    if version is None:
+        return
+    write_cached_list(list_cache_key(uid, version, params), body=body, etag=etag, ttl=ttl)
+
+
 @router.get("/v1/action-items", response_model=ActionItemsResponse, tags=['action-items'])
 def get_action_items(
     request: Request = None,  # type: ignore[assignment]
@@ -376,6 +510,27 @@ def get_action_items(
         and _ensure_aware(due_start_date) > _ensure_aware(due_end_date)
     ):
         raise HTTPException(status_code=400, detail="due_start_date must be earlier than or equal to due_end_date")
+
+    # Second ceiling for the known hot-loop client class. Raises 429 before any
+    # Firestore work, so a refused poll costs zero document reads. The 12/min
+    # action_items:list bucket has already been charged in the auth dependency;
+    # these two limits compose (both must admit), they do not replace each other.
+    enforce_hot_client_list_ceiling(uid, request)
+
+    cached_response = _serve_action_items_list_from_cache(
+        uid,
+        request=request,
+        limit=limit,
+        offset=offset,
+        completed=completed,
+        conversation_id=conversation_id,
+        start_date=start_date,
+        end_date=end_date,
+        due_start_date=due_start_date,
+        due_end_date=due_end_date,
+    )
+    if cached_response is not None:
+        return cached_response
 
     budget = list_read_budget_for_request(request, route='action-items')
     action_items = action_items_db.get_action_items(
@@ -407,7 +562,36 @@ def get_action_items(
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if truncated else 'complete')
 
-    return {"action_items": response_items, "has_more": has_more, "truncated": truncated}
+    result = {"action_items": response_items, "has_more": has_more, "truncated": truncated}
+
+    # A truncated page is not a complete answer for this (uid, version, params);
+    # caching it would pin a budget-exhaustion artifact for the whole TTL, and a
+    # client that retried would keep getting the partial page for free.
+    if not truncated:
+        body = {
+            "action_items": [item.model_dump(mode='json') for item in response_items],
+            "has_more": has_more,
+            "truncated": truncated,
+        }
+        etag = compute_etag(body)
+        if response is not None:
+            response.headers["ETag"] = etag
+            response.headers["Cache-Control"] = "private, no-cache"
+        _store_action_items_list_in_cache(
+            uid,
+            body,
+            etag=etag,
+            limit=limit,
+            offset=offset,
+            completed=completed,
+            conversation_id=conversation_id,
+            start_date=start_date,
+            end_date=end_date,
+            due_start_date=due_start_date,
+            due_end_date=due_end_date,
+        )
+
+    return result
 
 
 @router.get("/v1/action-items/search", response_model=ActionItemsSearchResponse, tags=['action-items'])

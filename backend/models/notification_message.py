@@ -1,4 +1,5 @@
-from typing import Optional
+import json
+from typing import Any, Optional
 import uuid
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
@@ -14,6 +15,9 @@ class NotificationMessage(BaseModel):
     notification_type: str
     text: Optional[str] = ""
     navigate_to: Optional[str] = None
+    # Structured chat content blocks for the message the client materializes
+    # from this push. Same block vocabulary as `models.chat.Message.content_blocks`.
+    content_blocks: Optional[list[dict[str, Any]]] = None
 
     @staticmethod
     def get_message_as_dict(
@@ -28,5 +32,13 @@ class NotificationMessage(BaseModel):
 
         if message.navigate_to is None:
             del message_dict['navigate_to']
+
+        # FCM data payloads are Dict[str, str]: a nested list would make the whole
+        # batch send fail. Structured payloads travel as JSON text, the same shape
+        # `utils.notifications` already uses for batched action items.
+        if message.content_blocks:
+            message_dict['content_blocks'] = json.dumps(message.content_blocks, ensure_ascii=False)
+        else:
+            del message_dict['content_blocks']
 
         return message_dict

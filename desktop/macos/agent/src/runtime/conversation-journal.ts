@@ -1,6 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import { structuredTurnFallbackText } from "./content-block-fallback.js";
 import { conversationTurnFromRow } from "./conversation-turns.js";
+import {
+  adoptOnIdentity,
+  decideAttempt,
+  DEFERRAL_OUTBOX_POLICY,
+  JOURNAL_OUTBOX_POLICY,
+  oldestReadyCreatedAtMs,
+} from "./durable-queue.js";
 import { generateAgentId } from "./sqlite-store.js";
 import type {
   AgentStore,
@@ -1117,6 +1124,7 @@ function materializeChatFirstIntentInTransaction(
     [intentId],
   );
   if (existingReceipt) {
+    adoptOnIdentity(intentId, intentId);
     if (
       String(existingReceipt.owner_id) !== input.ownerId
       || String(existingReceipt.conversation_id) !== input.conversationId
@@ -1423,13 +1431,27 @@ export function settleChatFirstDeferralOutbox(
         [now, now, input.continuityKey],
       );
     } else {
-      const retryable = !input.errorCode?.endsWith("_4xx") && attempts < 5;
+      const errorText = boundedOutboxError(input.errorCode);
+      const outcome = input.errorCode?.endsWith("_4xx")
+        ? { kind: "reject" as const, errorText, reason: errorText }
+        : { kind: "retry" as const, errorText, reason: errorText };
+      const decision = decideAttempt({
+        attemptCount: attempts,
+        outcome,
+        policy: DEFERRAL_OUTBOX_POLICY,
+        nowMs: now,
+      });
       store.execute(
         `UPDATE chat_first_deferral_outbox
          SET status = ?, available_at_ms = ?, lease_expires_at_ms = NULL,
              last_error_code = ?, updated_at_ms = ? WHERE continuity_key = ?`,
-        [retryable ? "retrying" : "failed", retryable ? now + Math.min(30_000, attempts * 1_000) : now,
-          boundedOutboxError(input.errorCode), now, input.continuityKey],
+        [
+          decision.terminal ? "failed" : "retrying",
+          decision.retryAtMs ?? now,
+          decision.errorText,
+          now,
+          input.continuityKey,
+        ],
       );
     }
     return true;
@@ -3038,11 +3060,21 @@ export function drainBackendTurnOutbox(
         // stall that persists across restarts because the row is durable).
         // Parking to 'failed' excludes it from future selection; a later
         // `updateJournalTurn` re-stamps the hash and re-arms it to 'pending'.
+        const decision = decideAttempt({
+          attemptCount: Math.max(currentOutbox.attemptCount, 1),
+          outcome: {
+            kind: "reject",
+            errorText: OUTBOX_CANONICAL_HASH_MISMATCH_CODE,
+            reason: "malformed",
+          },
+          policy: JOURNAL_OUTBOX_POLICY,
+          nowMs: now,
+        });
         store.execute(
           `UPDATE backend_turn_outbox
            SET status = 'failed', last_error_code = ?, lease_expires_at_ms = NULL, updated_at_ms = ?
            WHERE turn_id = ?`,
-          [OUTBOX_CANONICAL_HASH_MISMATCH_CODE, now, turnId],
+          [decision.errorText, now, turnId],
         );
         quarantined.push(turnId);
         continue;
@@ -3303,16 +3335,27 @@ export function getJournalObservability(
     `SELECT status, COUNT(*) AS count FROM backend_turn_outbox${deliveryWhere} GROUP BY status`,
     input.ownerId ? [input.ownerId] : [],
   );
+  const ownerFilter = input.ownerId ? " AND owner_id = ?" : "";
+  const oldestParams = input.ownerId ? [input.ownerId, input.ownerId, input.ownerId] : [];
   const oldest = store.getOptionalRow(
-    `SELECT MIN(created_at_ms) AS oldest
-     FROM backend_turn_outbox
-     WHERE status IN ('pending', 'delivering', 'retrying')${input.ownerId ? " AND owner_id = ?" : ""}`,
-    input.ownerId ? [input.ownerId] : [],
+    `SELECT MIN(created_at_ms) AS oldest FROM (
+       SELECT created_at_ms FROM backend_turn_outbox
+       WHERE status IN ('pending', 'delivering', 'retrying')${ownerFilter}
+       UNION ALL
+       SELECT created_at_ms FROM backend_conversation_delete_outbox
+       WHERE status IN ('pending', 'delivering', 'retrying')${ownerFilter}
+       UNION ALL
+       SELECT created_at_ms FROM chat_first_deferral_outbox
+       WHERE status IN ('pending', 'delivering', 'retrying')${ownerFilter}
+     )`,
+    oldestParams,
   );
   return {
     turnStatusCounts: countRows<ConversationTurnStatus>(turnRows),
     deliveryStatusCounts: countRows<BackendTurnOutboxStatus>(deliveryRows),
-    oldestPendingDeliveryCreatedAtMs: oldest?.oldest == null ? null : Number(oldest.oldest),
+    oldestPendingDeliveryCreatedAtMs: oldestReadyCreatedAtMs(
+      oldest?.oldest == null ? [] : [Number(oldest.oldest)],
+    ),
   };
 }
 
@@ -3965,13 +4008,11 @@ function enqueueChatFirstDeferral(
   };
   const payloadHash = sha256(stableJson(payload));
   const existing = store.getOptionalRow(
-    "SELECT payload_hash FROM chat_first_deferral_outbox WHERE continuity_key = ?",
+    "SELECT continuity_key FROM chat_first_deferral_outbox WHERE continuity_key = ?",
     [input.continuityKey],
   );
   if (existing) {
-    if (String(existing.payload_hash) !== payloadHash) {
-      throw new Error("Question deferral continuity key was reused with different content");
-    }
+    adoptOnIdentity(String(existing.continuity_key), input.continuityKey);
     return;
   }
   store.execute(

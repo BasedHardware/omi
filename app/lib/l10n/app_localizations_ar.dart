@@ -9860,4 +9860,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'تعذر تحميل الذكريات';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'تعذر تحميل الرسم البياني للمعرفة';
 }

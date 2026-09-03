@@ -42,6 +42,7 @@ for sub in [
     "tasks",
     "trends",
     "action_items",
+    "action_items_cache",
     "folders",
     "calendar_meetings",
     "vector_db",
@@ -68,6 +69,18 @@ sys.modules["database.firestore_transaction_retry"].FirestoreContentionExhausted
     {},
 )
 sys.modules["database.task_intelligence_control"].get_task_workflow_control = MagicMock()
+
+# The action-items router imports the list-cache seams at module scope. Keep
+# this sharing test's database package stubbed and provide inert implementations
+# for the unrelated list endpoint cache.
+action_items_cache_mod = sys.modules["database.action_items_cache"]
+action_items_cache_mod.compute_etag = MagicMock()
+action_items_cache_mod.get_action_items_list_version = MagicMock(return_value=None)
+action_items_cache_mod.if_none_match_matches = MagicMock(return_value=False)
+action_items_cache_mod.list_cache_key = MagicMock()
+action_items_cache_mod.list_cache_ttl_seconds = MagicMock(return_value=0)
+action_items_cache_mod.read_cached_list = MagicMock(return_value=None)
+action_items_cache_mod.write_cached_list = MagicMock()
 
 # Stub vector_db functions used by routers.action_items
 vector_db_mod = sys.modules["database.vector_db"]
@@ -102,6 +115,7 @@ sys.modules["utils.task_sync"].auto_sync_action_item = MagicMock()
 # Stub redis_db.r so Redis helper tests can patch it
 redis_mod = sys.modules["database.redis_db"]
 redis_mod.r = MagicMock()
+redis_mod.check_rate_limit = MagicMock(return_value=(True, 0, 0))
 redis_mod.try_catch_decorator = lambda f: f
 redis_mod.TASK_SHARE_TTL = 60 * 60 * 24 * 30
 redis_mod.json = __import__("json")

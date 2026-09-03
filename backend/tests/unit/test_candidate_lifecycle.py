@@ -1293,6 +1293,113 @@ def test_integration_outbox_rejects_completion_from_an_expired_lease(fake_db):
     assert fake_db.rows[outbox_path]['status'] == 'completed'
 
 
+def test_poison_integration_item_does_not_block_the_item_behind_it(fake_db, monkeypatch):
+    processed: list[str] = []
+
+    def dispatch(uid, candidate_id, task_id, *, account_generation):
+        processed.append(candidate_id)
+        if candidate_id == 'cand-poison':
+            raise RuntimeError('malformed payload')
+        return True
+
+    monkeypatch.setattr(candidate_service, '_dispatch_task_integration', dispatch)
+    monkeypatch.setattr(
+        candidates_db,
+        'list_candidate_integration_dispatches',
+        lambda uid, account_generation, limit=100: [
+            {
+                'candidate_id': 'cand-poison',
+                'task_id': 'task-poison',
+                'status': 'pending',
+                'account_generation': account_generation,
+                'created_at': datetime(2026, 7, 1, tzinfo=timezone.utc),
+            },
+            {
+                'candidate_id': 'cand-healthy',
+                'task_id': 'task-healthy',
+                'status': 'pending',
+                'account_generation': account_generation,
+                'created_at': datetime(2026, 7, 2, tzinfo=timezone.utc),
+            },
+        ],
+    )
+
+    scheduled = candidate_service.drain_candidate_integrations('user-1', account_generation=3)
+    assert processed == ['cand-poison', 'cand-healthy']
+    assert scheduled == 1
+
+
+def test_integration_poison_reaches_dead_letter_with_error_text(fake_db):
+    record = create_record(fake_db)
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    for _ in range(5):
+        lease = candidates_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        assert lease is not None
+        assert candidates_db.complete_candidate_integration_dispatch(
+            'user-1',
+            record.candidate_id,
+            account_generation=3,
+            lease_token=lease,
+            succeeded=False,
+            error_text='canonical hash mismatch',
+        )
+    outbox = next(data for path, data in fake_db.rows.items() if 'candidate_integration_outbox' in path)
+    assert outbox['status'] == 'dead_letter'
+    assert outbox['last_error_text'] == 'canonical hash mismatch'
+    assert outbox['dead_letter_reason'] == 'integration_failed'
+    assert candidates_db.redrive_candidate_integration_dead_letter('user-1', record.candidate_id, account_generation=3)
+    assert fake_db.rows[('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)]['status'] == 'pending'
+
+
+def test_integration_age_gauge_reflects_oldest_ready_item(fake_db, monkeypatch):
+    observed: dict[str, object] = {}
+    older = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    newer = datetime(2026, 7, 2, tzinfo=timezone.utc)
+
+    def observe(queue, age):
+        observed['queue'] = queue
+        observed['age'] = age
+
+    monkeypatch.setattr(candidate_service, 'observe_oldest_ready_age', observe)
+    monkeypatch.setattr(candidate_service, '_dispatch_task_integration', lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        candidates_db,
+        'list_candidate_integration_dispatches',
+        lambda uid, account_generation, limit=100: [
+            {
+                'candidate_id': 'cand-old',
+                'task_id': 'task-old',
+                'status': 'pending',
+                'account_generation': account_generation,
+                'created_at': older,
+            },
+            {
+                'candidate_id': 'cand-new',
+                'task_id': 'task-new',
+                'status': 'pending',
+                'account_generation': account_generation,
+                'created_at': newer,
+            },
+        ],
+    )
+
+    candidate_service.drain_candidate_integrations('user-1', account_generation=3)
+    assert observed['queue'] == 'candidate_integration_outbox'
+    assert observed['age'] == pytest.approx(
+        (datetime.now(timezone.utc) - older).total_seconds(),
+        abs=5,
+    )
+
+
+def test_integration_duplicate_identity_is_adopted_not_raised(fake_db):
+    record = create_record(fake_db)
+    first = candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    second = candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    assert first.task_id == second.task_id
+    outboxes = [data for path, data in fake_db.rows.items() if 'candidate_integration_outbox' in path]
+    assert len(outboxes) == 1
+
+
 @pytest.mark.parametrize('stored_expires_at', [True, False])
 def test_the_stored_document_answers_the_deadline_exactly_like_the_record(fake_db, stored_expires_at):
     """The raw-document twin exists so readers that never parse a record can still

@@ -9730,4 +9730,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => '无法加载回忆';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => '无法加载知识图谱';
 }

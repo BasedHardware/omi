@@ -65,6 +65,14 @@ struct ChatDailySummaryCard: View {
           .fixedSize(horizontal: false, vertical: true)
       }
 
+      let learned = Self.memoriesLearned(in: summary)
+      if !learned.isEmpty {
+        // Keyed to the summary, so tomorrow's card starts from tomorrow's memories rather than
+        // inheriting a row model built for yesterday's.
+        MemoryReviewSection(items: learned, source: .dailySummaryChat)
+          .id("memory-review-\(summary.id)")
+      }
+
       if isExpanded {
         expandedBody(summary)
       }
@@ -234,5 +242,17 @@ struct ChatDailySummaryCard: View {
 
   nonisolated static func actionItems(in summary: DailySummaryRecord) -> [DailySummaryRecord.ActionItem] {
     (summary.actionItems ?? []).filter { !($0.description ?? "").isEmpty }
+  }
+
+  /// The review rows, and only from `memories_learned`.
+  ///
+  /// Deliberately never falls back to `knowledge_nuggets`: a nugget is LLM prose with no memory
+  /// behind it, so a ✓ on one would mutate nothing and a ✗ would teach extraction nothing. A day
+  /// with no qualifying memory shows no section, which is the honest empty state.
+  nonisolated static func memoriesLearned(in summary: DailySummaryRecord) -> [MemoryReviewItem] {
+    summary.memoriesLearned
+      .filter { !$0.memoryID.isEmpty && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+      .prefix(MemoryReviewSection.maxRows)
+      .map(MemoryReviewItem.init)
   }
 }

@@ -46,6 +46,9 @@ extension AnalyticsManager {
       "message_length": messageLength,
     ]
     if let attemptID { props["attempt_id"] = attemptID }
+    // Added, never substituted: `surface` says where the question was asked,
+    // `origin` says what prompted it (see AnalyticsManager+QuestionOrigin).
+    props["origin"] = consumeQuestionOrigin().rawValue
     questionTelemetryCaptureForTests?("question_asked", props)
     PostHogManager.shared.track("question_asked", properties: props)
     Task { @MainActor in

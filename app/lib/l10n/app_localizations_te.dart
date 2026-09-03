@@ -9967,4 +9967,10 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'జ్ఞాపకాలను లోడ్ చేయలేకపోయాం';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'నాలెడ్జ్ గ్రాఫ్‌ను లోడ్ చేయలేకపోయాం';
 }

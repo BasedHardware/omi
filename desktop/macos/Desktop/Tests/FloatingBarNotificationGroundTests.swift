@@ -61,7 +61,7 @@ final class FloatingBarNotificationGroundTests: XCTestCase {
       onCloseAI: {},
       onEscape: {},
       onClearVisibleConversation: {},
-      onRate: { _, _ in },
+      onRate: { _, _, _ in },
       onShareLink: { nil }
     )
     .environmentObject(state)
