@@ -181,7 +181,8 @@ struct ConversationsPage: View {
           QuerySearchBar(
             text: $searchQuery,
             accessibilityID: "conversations-search-field",
-            placeholder: "Search conversations…"
+            placeholder: "Search conversations…",
+            searchSurface: .conversations
           )
           .onChange(of: searchQuery) { _, newValue in
             if !newValue.isEmpty { selectedConversation = nil }
@@ -451,7 +452,8 @@ struct ConversationsPage: View {
         OmiSearchField(
           placeholder: "Search conversations",
           text: $searchQuery,
-          isLoading: isSearching
+          isLoading: isSearching,
+          searchSurface: .conversations
         )
         .onChange(of: searchQuery) { _, newValue in submitSearch(newValue) }
         .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
@@ -567,6 +569,11 @@ struct ConversationsPage: View {
           conversation: conversation,
           onTap: {
             AnalyticsManager.shared.memoryListItemClicked(conversationId: conversation.id)
+            SearchAnalytics.resultOpened(
+              surface: .conversations,
+              resultIndex: visibleSearchResults.firstIndex(where: { $0.id == conversation.id }),
+              searchIsActive: true
+            )
             selectedConversation = conversation
           },
           folders: appState.folders,
@@ -612,7 +619,6 @@ struct ConversationsPage: View {
     isSearching = true
     searchError = nil
     log("Search: Starting search for '\(query)'")
-    AnalyticsManager.shared.searchQueryEntered(query: query)
 
     Task {
       do {
@@ -620,6 +626,7 @@ struct ConversationsPage: View {
         log("Search: Found \(result.count) results")
         searchResults = result
         isSearching = false
+        SearchAnalytics.queryEntered(surface: .conversations, query: query, resultsCount: result.count)
       } catch is CancellationError {
         // A newer query owns the search UI now.
       } catch {
@@ -627,6 +634,7 @@ struct ConversationsPage: View {
         searchError = UserFacingErrorPresentation.message(for: error, while: .conversationSearch)
         searchResults = []
         isSearching = false
+        SearchAnalytics.queryEntered(surface: .conversations, query: query, resultsCount: 0)
       }
     }
   }
