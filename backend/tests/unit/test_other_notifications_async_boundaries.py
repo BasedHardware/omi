@@ -1,3 +1,4 @@
+import importlib.util
 import asyncio
 import threading
 from contextlib import contextmanager
@@ -8,6 +9,17 @@ from typing import Any, Iterator
 from testing.import_isolation import load_module_fresh, stub_modules
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _load_durable_queue() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        'database.durable_queue',
+        BACKEND_DIR / 'database' / 'durable_queue.py',
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _module(name: str, **attributes: Any) -> ModuleType:
@@ -60,11 +72,16 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
             send_notification=lambda *_args, **_kwargs: None,
         ),
         'utils.webhooks': _module('utils.webhooks', day_summary_webhook=no_async_work),
+        'utils.durable_queue_metrics': _module(
+            'utils.durable_queue_metrics',
+            observe_oldest_ready_age=lambda *_args, **_kwargs: None,
+        ),
         'database.daily_summaries': _module(
             'database.daily_summaries',
             get_daily_summary_by_date=lambda *_args: None,
             create_daily_summary=lambda *_args: 'summary-id',
         ),
+        'database.durable_queue': _load_durable_queue(),
     }
 
     with stub_modules(stubs):
@@ -160,3 +177,20 @@ def test_daily_summary_db_failure_remains_fail_soft() -> None:
         notification_db.get_users_for_daily_summary = fail_read
 
         assert asyncio.run(notifications.send_daily_summary_notification()) is None
+
+
+def test_daily_summary_poison_hour_does_not_block_later_hours() -> None:
+    with _loaded_other_notifications() as (notifications, notification_db):
+        processed: list[int] = []
+
+        def users_for_hour(timezones: list[str], target_hour: int) -> list[Any]:
+            processed.append(target_hour)
+            if target_hour == 8:
+                raise RuntimeError('malformed payload')
+            return []
+
+        notifications._get_timezones_grouped_by_hour = lambda: {8: ['UTC'], 9: ['US/Eastern']}
+        notification_db.get_users_for_daily_summary = users_for_hour
+
+        assert asyncio.run(notifications.send_daily_summary_notification()) is None
+        assert processed == [8, 9]

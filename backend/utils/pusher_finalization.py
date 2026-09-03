@@ -1,11 +1,13 @@
 import json
 import logging
 import struct
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 
 from database import conversation_finalization_jobs as finalization_jobs_db
+from database.durable_queue import ProcessOutcome, QueuePolicy, decide_attempt
 from services.conversation_finalization import final_attempt_failed
 from utils.byok import set_validated_byok_keys
 from utils.cloud_tasks import get_listen_finalization_tasks_max_attempts
@@ -83,7 +85,13 @@ async def process_conversation_task(
         """
         if job_id is None or generation is None or lease_epoch is None:
             return False
-        terminal = attempt_count >= get_listen_finalization_tasks_max_attempts()
+        decision = decide_attempt(
+            attempt_count=max(attempt_count, 1),
+            outcome=ProcessOutcome.retry(failure_code, reason=failure_code),
+            policy=QueuePolicy(max_attempts=get_listen_finalization_tasks_max_attempts()),
+            now=datetime.now(timezone.utc),
+        )
+        terminal = decision.terminal
         try:
             if terminal:
                 marked_dead_letter = await run_blocking(

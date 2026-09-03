@@ -59,6 +59,7 @@ from database.firestore_index_registry import (
     DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY,
     DAILY_SWEEP_ONBOARDING_CONVERSATIONS_QUERY,
 )
+from database.durable_queue import ProcessOutcome
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import cleanup_expired_memory_deletion_receipts
 from models.memory_apply import MemoryControlState, WriterMode
@@ -72,6 +73,7 @@ from models.product_memory import (
     normalized_memory_content_key,
 )
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item
+from utils.memory.daily_memory_sweep_queue import drain_sweep_uids
 from utils.memory.knowledge_ledger import (
     LedgerProvenance,
     LedgerWrite,
@@ -4820,17 +4822,16 @@ def run_daily_memory_sweep_scheduler(
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("now must be timezone-aware")
     bounded_uids = tuple(sorted({uid.strip() for uid in uid_inventory if uid.strip()}))[: max(1, min(400, max_users))]
+
     # Crash-recovery cleanup is a privacy lifecycle operation, not a rollout
     # decision. Run it before authority, kill-switch, and cohort gates so a
     # disabled/skipped account cannot retain transcript-derived pages forever.
-    for uid in bounded_uids:
-        try:
-            cleanup_expired_daily_memory_sweep_stages(uid, db_client=db_client, now=now)
-            cleanup_expired_memory_deletion_receipts(uid, db_client=db_client, now=now)
-        except Exception:
-            # Cleanup is fail-closed for each row; a transient janitor error
-            # must not open writes or alter the rollout result.
-            continue
+    def cleanup_one(uid: str) -> ProcessOutcome:
+        cleanup_expired_daily_memory_sweep_stages(uid, db_client=db_client, now=now)
+        cleanup_expired_memory_deletion_receipts(uid, db_client=db_client, now=now)
+        return ProcessOutcome.ack()
+
+    drain_sweep_uids(bounded_uids, cleanup_one)
 
     resolved_authority = authority or daily_memory_sweep_authority_from_environment()
     if not resolved_authority.may_write:

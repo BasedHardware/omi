@@ -4,15 +4,16 @@ import asyncio
 from datetime import datetime, time, timedelta
 from typing import Any, Dict, List, Tuple
 
-from utils.executors import db_executor, postprocess_executor, run_blocking
-
 import pytz
 
 import database.conversations as conversations_db
+from database.durable_queue import ProcessOutcome, drain_isolated_async
 import database.notifications as notification_db
 from database.redis_db import try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
+from utils.durable_queue_metrics import observe_oldest_ready_age
+from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.notifications import send_bulk_notification, send_notification
 from utils.webhooks import day_summary_webhook
@@ -45,22 +46,31 @@ async def send_daily_summary_notification() -> None:
 
     Groups timezones by their current local hour, then for each hour group,
     queries users in those timezones who have that hour preference.
+    One hour-group failure never aborts later independent hour groups.
     """
     try:
-        # Group timezones by their current local hour
         timezones_by_hour = _get_timezones_grouped_by_hour()
-
-        for target_hour, timezones in timezones_by_hour.items():
-            # Get users in those timezones who want notifications at this hour
-            users = await _get_users_for_daily_summary(timezones, target_hour)
-
-            if users:
-                logger.info(f"Sending daily summary to {len(users)} users at local hour {target_hour}")
-                await _send_bulk_summary_notification(users)
-
     except Exception as e:
-        logger.error(f"Error sending daily summary: {e}")
+        logger.error(f"Error grouping daily summary timezones: {e}")
         return None
+
+    async def process_hour(group: Tuple[int, List[str]]) -> ProcessOutcome:
+        target_hour, timezones = group
+        users = await _get_users_for_daily_summary(timezones, target_hour)
+        if users:
+            logger.info(f"Sending daily summary to {len(users)} users at local hour {target_hour}")
+            await _send_bulk_summary_notification(users)
+        return ProcessOutcome.ack()
+
+    results = await drain_isolated_async(list(timezones_by_hour.items()), process_hour)
+    observe_oldest_ready_age('daily_summary_hour_groups', 0.0)
+    for result in results:
+        if result.outcome.kind != ProcessOutcome.ack().kind:
+            logger.error(
+                "Daily summary hour group failed hour=%s error=%s",
+                result.item[0],
+                result.outcome.error_text,
+            )
 
 
 async def _get_users_for_daily_summary(timezones: List[str], target_hour: int) -> List[Tuple[str, List[str], Any]]:
