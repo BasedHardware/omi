@@ -265,10 +265,9 @@ class _FCMNotificationService implements NotificationInterface {
 
     void handleNotificationTap(RemoteMessage? message) {
       if (message == null) return;
-      final navigateTo = NotificationUtil.navigateToFromFcmData(message.data);
-      if (navigateTo != null) {
-        NotificationUtil.handleNavigateTo(navigateTo);
-      }
+      // The whole data map goes through, not just the route: the tap event reads
+      // `campaign_id` from it, and routing still ignores everything else (#12645).
+      NotificationUtil.handleFcmTap(message.data);
     }
 
     // Background: app is backgrounded and the user taps a push notification (#5126).
