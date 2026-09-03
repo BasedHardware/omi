@@ -113,7 +113,12 @@ final class SBOnboardingModel: ObservableObject {
   @Published var notifState: PermState = .ask  // notifications
   @Published var localFileProfileState: LocalFileProfileState = .idle
 
-  var launchAtLogin: Bool = LaunchAtLoginManager.shared.isEnabled
+  /// Fresh installs default to launching at login: every proactive path needs
+  /// the process alive, and `SMAppService` reports "not registered" for every
+  /// new install, so seeding from the live status meant every new user finished
+  /// onboarding with auto-start off. The user's Settings toggle stays
+  /// authoritative afterwards (`LaunchAtLoginPreference`).
+  var launchAtLogin: Bool = LaunchAtLoginPreference.defaultForOnboarding()
 
   /// One-shot guard: fire a single throwaway ScreenCaptureKit capture to surface
   /// the "bypass the private window picker" consent in-context once Screen
@@ -164,6 +169,10 @@ final class SBOnboardingModel: ObservableObject {
   /// that state, leave PTT unarmed and offer an explicit retry or skip instead
   /// of presenting a shortcut which cannot answer.
   @Published var screenDemoPTTUnavailable = false
+  /// The three-doors demo page was opened for the current visit to the screen-demo step.
+  @Published var threeDoorsOpened = false
+  var openDoorsObserver: NSObjectProtocol?
+  var doorsCompletedObserver: NSObjectProtocol?
   var voiceCancellable: AnyCancellable?
   var voiceTimeout: Task<Void, Never>?
   var screenDemoSetupTask: Task<Void, Never>?

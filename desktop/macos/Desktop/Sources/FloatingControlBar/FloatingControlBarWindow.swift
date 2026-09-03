@@ -885,15 +885,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       size = NSSize(width: expandedContentWidth, height: height)
     } else if !state.pttHintText.isEmpty {
       size = pttHintSurfaceSize(usesNotchIsland: notchModeEnabled)
-    } else if state.isVoiceListening {
-      size = notchModeEnabled ? notchSize(active: true) : Self.voiceBarSize
-    } else if state.currentNotification != nil {
-      size = NSSize(
-        width: Self.notificationWidth,
-        height: notchChromeHeightForCurrentScreen + Self.notificationSpacing + Self.notificationHeight
-      )
     } else {
-      size = notchModeEnabled ? notchIdleOrHoverSurfaceSize() : collapsedBarSize
+      size = collapsedChromeSurfaceSize(usesNotchIsland: notchModeEnabled)
     }
     let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: size)
     return NSRect(origin: defaultTopCenteredOrigin(for: windowSize), size: windowSize)
@@ -919,24 +912,57 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     if !state.pttHintText.isEmpty {
       return pttHintSurfaceSize(usesNotchIsland: usesNotchIsland)
     }
-    if state.isVoiceListening {
-      return usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize
-    }
-    if state.currentNotification != nil {
-      let barHeight =
-        usesNotchIsland
-        ? notchChromeHeightForCurrentScreen
-        : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
-      return NSSize(
-        width: Self.notificationWidth,
-        height: barHeight + Self.notificationSpacing + Self.notificationHeight
-      )
-    }
-    return usesNotchIsland ? notchIdleOrHoverSurfaceSize() : Self.minBarSize
+    return collapsedChromeSurfaceSize(usesNotchIsland: usesNotchIsland)
   }
 
   private func currentSurfaceSizeForCurrentScreen(frameIncludesVoiceGlow: Bool? = nil) -> NSSize {
     currentSurfaceSize(usesNotchIsland: notchModeEnabled, frameIncludesVoiceGlow: frameIncludesVoiceGlow)
+  }
+
+  /// Shared closed-conversation size: a mounted notification card wins over
+  /// the listening/thinking island so Interject PTT cannot crush the card.
+  private func collapsedChromeSurfaceSize(usesNotchIsland: Bool, screen: NSScreen? = nil) -> NSSize {
+    let barHeight: CGFloat
+    if usesNotchIsland {
+      barHeight = screen.map { Self.notchChromeHeight(for: $0) } ?? notchChromeHeightForCurrentScreen
+    } else {
+      barHeight = state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height
+    }
+    let notificationSize = NSSize(
+      width: Self.notificationWidth,
+      height: barHeight + Self.notificationSpacing + Self.notificationHeight
+    )
+    let listeningSize: NSSize
+    if usesNotchIsland {
+      listeningSize =
+        screen.map { notchSize(sideWidth: Self.notchActiveSideWidth, for: $0) }
+        ?? notchSize(active: true)
+    } else {
+      listeningSize = Self.voiceBarSize
+    }
+    let thinkingSize: NSSize
+    if usesNotchIsland {
+      thinkingSize =
+        screen.map { notchSize(sideWidth: Self.notchThinkingSideWidth, for: $0) }
+        ?? notchSize(sideWidth: Self.notchThinkingSideWidth)
+    } else {
+      thinkingSize = Self.minBarSize
+    }
+    let idleSize: NSSize
+    if usesNotchIsland {
+      idleSize = screen.map { notchIdleOrHoverSurfaceSize(for: $0) } ?? notchIdleOrHoverSurfaceSize()
+    } else {
+      idleSize = Self.minBarSize
+    }
+    return FloatingControlBarGeometry.collapsedSurfaceSize(
+      hasMountedNotification: state.currentNotification != nil,
+      isVoiceListening: state.isVoiceListening,
+      isThinking: state.isThinking || state.isVoiceResponseWaiting,
+      notificationSize: notificationSize,
+      listeningSize: listeningSize,
+      thinkingSize: thinkingSize,
+      idleSize: idleSize
+    )
   }
 
   private func frameForCurrentState(on screen: NSScreen, usesNotchIsland: Bool) -> NSRect {
@@ -953,19 +979,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       )
     } else if !state.pttHintText.isEmpty {
       size = pttHintSurfaceSize(usesNotchIsland: usesNotchIsland, screen: screen)
-    } else if state.isVoiceListening {
-      size = usesNotchIsland ? notchSize(sideWidth: Self.notchActiveSideWidth, for: screen) : Self.voiceBarSize
-    } else if state.currentNotification != nil {
-      let barHeight =
-        usesNotchIsland
-        ? Self.notchChromeHeight(for: screen)
-        : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
-      size = NSSize(
-        width: Self.notificationWidth,
-        height: barHeight + Self.notificationSpacing + Self.notificationHeight
-      )
     } else {
-      size = usesNotchIsland ? notchIdleOrHoverSurfaceSize(for: screen) : Self.minBarSize
+      size = collapsedChromeSurfaceSize(usesNotchIsland: usesNotchIsland, screen: screen)
     }
     let windowSize = responseGlowWindowSize(forSurfaceSize: size, usesNotchIsland: usesNotchIsland)
     return NSRect(
@@ -2207,7 +2222,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// The window frame for the current active sub-state, in the given mode.
   private func activeIslandTargetFrame(on screen: NSScreen, island: Bool) -> NSRect {
     let size: NSSize
-    if island {
+    if state.currentNotification != nil, !state.showingAIConversation {
+      let surface = collapsedChromeSurfaceSize(usesNotchIsland: island, screen: screen)
+      size = responseGlowWindowSize(forSurfaceSize: surface, usesNotchIsland: island)
+    } else if island {
       let base: NSSize
       if state.isVoiceListening {
         base = notchSize(sideWidth: Self.notchActiveSideWidth, for: screen)
@@ -2594,22 +2612,23 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
-    let minimumWidth: CGFloat
-    if state.showingAIConversation {
-      minimumWidth = expandedContentWidth
-    } else if state.currentNotification != nil {
-      minimumWidth = FloatingControlBarWindow.notificationWidth
-    } else if state.isVoiceListening && !notchModeEnabled {
-      minimumWidth = FloatingControlBarWindow.voiceBarSize.width
-    } else if state.isHoveringBar {
-      minimumWidth = FloatingControlBarWindow.expandedBarSize.width
-    } else {
-      minimumWidth = collapsedBarSize.width
-    }
-
+    let notificationSize = collapsedChromeSurfaceSize(
+      usesNotchIsland: notchModeEnabled)
+    let minimum = FloatingControlBarGeometry.windowResizeMinimumSize(
+      showingAIConversation: state.showingAIConversation,
+      hasMountedNotification: state.currentNotification != nil,
+      isVoiceListening: state.isVoiceListening,
+      isHovering: state.isHoveringBar,
+      usesNotchIsland: notchModeEnabled,
+      conversationWidth: expandedContentWidth,
+      notificationSize: notificationSize,
+      listeningWidth: Self.voiceBarSize.width,
+      hoverWidth: Self.expandedBarSize.width,
+      idleSize: collapsedBarSize
+    )
     return NSSize(
-      width: max(frameSize.width, minimumWidth),
-      height: max(frameSize.height, FloatingControlBarWindow.minBarSize.height)
+      width: max(frameSize.width, minimum.width),
+      height: max(frameSize.height, minimum.height)
     )
   }
 
@@ -3087,7 +3106,7 @@ class FloatingControlBarManager {
     barWindow.onRate = { [weak chatProvider] messageId, rating in
       guard let provider = chatProvider else { return }
       Task { @MainActor in
-        await provider.rateMessage(messageId, rating: rating)
+        await provider.rateMessage(messageId, rating: rating, surface: "voice")
       }
     }
 
@@ -3993,36 +4012,12 @@ class FloatingControlBarManager {
 
   /// Open the floating conversation surface. Harness/automation-only entry:
   /// every user-facing typed-input path now opens the main app instead.
+  /// "Ask Omi" lands in the main chat. The notch is not a text surface: it shows answers,
+  /// notifications and agent pills, and typed conversation belongs to the main window. This used to
+  /// open a composer inside the notch.
   func openAIInput() {
-    guard let window = window else { return }
-
-    // The bar is a non-activating panel, so it can become key for text input
-    // without surfacing the main Omi window.
-
-    // If a conversation is already showing, just focus the follow-up input
-    if window.state.showingAIConversation && window.state.showingAIResponse {
-      if !window.isVisible {
-        // Show without persisting enabled state — bar hides again when conversation closes
-        window.makeKeyAndOrderFront(nil)
-      }
-      window.makeKeyAndOrderFront(nil)
-      window.focusInputField()
-      return
-    }
-
     AnalyticsManager.shared.floatingBarAskOmiOpened(source: "shortcut")
-    if !window.isVisible {
-      // Show window without persisting enabled state — if the user has the bar
-      // disabled, it will hide again when the AI conversation closes.
-      window.makeKeyAndOrderFront(nil)
-    }
-
-    if openRecentNotificationConversationIfAvailable(in: window) {
-      return
-    }
-
-    window.showAIConversation()
-    window.orderFrontRegardless()
+    AppDelegate.summonWindowTarget()?.openMainAppChat()
   }
 
   /// Open AI input with a pre-filled query and auto-send (used by PTT).
@@ -4444,6 +4439,11 @@ class FloatingControlBarManager {
       // have nothing to resolve.
       MeetingSummaryShareActions.openSummary(conversationID: conversationID)
       return
+    case .askOmiPrefilled(let prompt):
+      // The one "ask this" entry that leaves the send to the user: the composer
+      // opens focused with the question in it, unsent.
+      FirstRealAppCardCoordinator.shared.handleCardTapped(prompt: prompt)
+      return
     case nil:
       break
     }
@@ -4708,7 +4708,7 @@ class FloatingControlBarManager {
     origin: String = "realtime_voice",
     continuityKey: String,
     assistantStatus: KernelJournalTurnStatus = .completed,
-    terminalReason: String? = nil
+    terminalReason: String? = nil, userScreenContext: String? = nil
   ) async -> Bool {
     await historyChatProvider?.kernelTurnProjection.recordExchange(
       surface: surface,
@@ -4717,7 +4717,7 @@ class FloatingControlBarManager {
       origin: origin,
       continuityKey: continuityKey,
       assistantStatus: assistantStatus,
-      terminalReason: terminalReason,
+      terminalReason: terminalReason, userScreenContext: userScreenContext,
       ownerID: ownerID
     ) ?? false
   }
@@ -5119,7 +5119,8 @@ class FloatingControlBarManager {
     AnalyticsManager.shared.floatingBarQuerySent(
       messageLength: message.count,
       hasScreenshot: screenshotData != nil,
-      source: .visibleQuery(fromVoice: queryFromVoice)
+      source: .visibleQuery(fromVoice: queryFromVoice),
+      attemptID: voiceTurnID?.description
     )
 
     let shouldPlayVoice = ShortcutSettings.shared.shouldSpeakFloatingBarResponse(
@@ -5373,7 +5374,8 @@ class FloatingControlBarManager {
     AnalyticsManager.shared.floatingBarQuerySent(
       messageLength: message.count,
       hasScreenshot: screenshotData != nil,
-      source: .pttVoiceOnly
+      source: .pttVoiceOnly,
+      attemptID: voiceTurnID.description
     )
 
     // Speaking shortly after a notch card is usually a follow-up about it. Tapping the

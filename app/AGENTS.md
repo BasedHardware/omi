@@ -6,7 +6,7 @@ Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds 
 
 ### Flavors
 - **dev**: Android `com.friend.ios.dev`, iOS `com.friend-app-with-wearable.ios12.development` — uses `.dev.env`, Firebase project `based-hardware-dev`
-- **prod**: Android `com.friend.ios`, iOS `com.friend-app-with-wearable.ios12` — uses `.prod.env`, Firebase project `based-hardware-prod`
+- **prod**: Android `com.friend.ios`, iOS `com.friend-app-with-wearable.ios12` — uses `.env`, Firebase project `based-hardware-prod`
 - **raybanDat**: camera-capable iOS target with the same iOS development identity; use `scripts/rayban_dat.sh`, which excludes mcumgr only for that transaction and restores the default graph.
 
 ### Generated Files (never edit manually)
@@ -23,6 +23,11 @@ Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds 
 bash setup.sh ios    # or: bash setup.sh android
 ```
 This handles: pub get, build_runner, gen-l10n, and flavor configuration.
+
+For physical-device builds, use the wrapper: it owns `dev + local_dev` and
+`prod + mobile_beta` pairing plus auth env setup. Direct builds must first run
+`scripts/validate_mobile_build_config.sh --flavor <dev|prod> --profile <profile>`
+with the matching `OMI_APP_PROFILE`; release/profile helpers do this too.
 
 ### Firebase Config
 Never run `flutterfire configure` — it overwrites prod credentials. Config files:
@@ -94,6 +99,7 @@ PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Test state machine logic via minimal abstractions mirroring production flow
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
+- Chat transcript layout: a test that only pumps `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs. Chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes). That file is the Mobile App Checks contract for this class.
 - A test that needs a live service, device, or real API goes under `integration_test/`, which `test.sh`/CI never runs. For integration tests against a local backend, set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`; use `OMI_APP_TEST_USE_PROD_API_DEFAULT=1` only when a test intentionally needs the prod API default. State in the PR how you ran it; it must not be the only evidence the change works.
 - Coverage rules (bug fix → regression test; feature → core + main error path): see root `AGENTS.md` → Testing.
 

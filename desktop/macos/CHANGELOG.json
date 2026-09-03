@@ -2,6 +2,129 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.270",
+      "date": "2026-09-03",
+      "changes": [
+        "Double-tap for Locked Mode works again on modifier-only push-to-talk keys; a single accidental tap still does nothing"
+      ]
+    },
+    {
+      "version": "0.12.269",
+      "date": "2026-09-02",
+      "changes": [
+        "Thumbs on proactive notification cards (focus, insights, tasks, memories) are now tracked separately from ratings of regular Omi answers."
+      ]
+    },
+    {
+      "version": "0.12.268",
+      "date": "2026-09-02",
+      "changes": [
+        "Thumbs up/down on responses now records whether it was a chat or a voice reply, powering the team quality dashboards.",
+        "Onboarding permission steps now lead with the Allow action; the way past a permission is a quieter text link beneath it rather than a second button of equal weight"
+      ]
+    },
+    {
+      "version": "0.12.267",
+      "date": "2026-09-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.266",
+      "date": "2026-09-02",
+      "changes": [
+        "Your daily summary now appears at the top of Chat — the day's headline, stats, highlights, and action items, with a one-tap follow-up question",
+        "The first app you open after setup now gets a notch card that opens Ask Omi with a question about your screen already typed",
+        "When Omi can't see your screen during a voice question, it now explains why — Screen Recording isn't granted, was granted after Omi launched and needs a reopen, or the screen just wasn't available — instead of flatly saying it couldn't verify the current screen."
+      ]
+    },
+    {
+      "version": "0.12.265",
+      "date": "2026-09-02",
+      "changes": [
+        "Fixed large voice-tool results so useful summaries load successfully and can be inspected in more detail.",
+        "Fixed meeting notes and daily opener cards getting stuck behind an undeliverable Chat item",
+        "Redesigned the first-use popup: pick what to try first (a game, design feedback, a post, shopping) and Try it now opens that site",
+        "The first-use popup previews are back to the drawn pages, with the site name larger at the top",
+        "Omi can ask users who never got going to walk through onboarding again on their next launch"
+      ]
+    },
+    {
+      "version": "0.12.260",
+      "date": "2026-09-02",
+      "changes": [
+        "Onboarding door 3 hint asks the question directly instead of telling Omi to check screen history, which is not searchable yet that early in onboarding"
+      ]
+    },
+    {
+      "version": "0.12.259",
+      "date": "2026-09-02",
+      "changes": [
+        "Voice questions about what is on screen now always see the current screen: the frame captured when you press the key is attached to every turn, and think-deeper answers read its text too"
+      ]
+    },
+    {
+      "version": "0.12.258",
+      "date": "2026-09-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.257",
+      "date": "2026-09-01",
+      "changes": [
+        "Fixed the onboarding riddle demo answering the first door again when you asked about the second: Omi now checks which door is on screen and passes it along when it thinks deeper"
+      ]
+    },
+    {
+      "version": "0.12.256",
+      "date": "2026-09-01",
+      "changes": [
+        "Onboarding's ask demo now opens a three-door riddle page in your browser so you can try asking Omi about what's on screen, including something no longer visible",
+        "Fixed Omi answering \"that was never mentioned\" when you ask about something you read on screen earlier; voice and chat now check your screen history, not just conversations",
+        "When you ask Omi by voice about what's on your screen, what it saw is now kept with that message, so later questions like \"what did that page say?\" work from conversation history"
+      ]
+    },
+    {
+      "version": "0.12.255",
+      "date": "2026-09-01",
+      "changes": [
+        "Proactive Focus, Insight and Task notifications now come from one just-in-time lane that prioritizes what you already told Omi (open tasks, goals, calendar) and spreads its daily budget across the day instead of spending it all after midnight"
+      ]
+    },
+    {
+      "version": "0.12.254",
+      "date": "2026-09-01",
+      "changes": [
+        "Fixed chat jumping to the latest message while you are still scrolling",
+        "Memories you delete on another device now disappear here too, and deleting a memory that is already gone no longer makes it reappear a few seconds later"
+      ]
+    },
+    {
+      "version": "0.12.253",
+      "date": "2026-09-01",
+      "changes": [
+        "Every answer now shows which model actually produced it: the Response Context (i) popover — including on the latest message and on voice answers — gains a Model row reporting the served model observed on the response itself (e.g. the managed chat lane's real model), never the requested alias.",
+        "Stop meeting notes from labeling Telegram (and other native messaging-app) calls as Speaker 1 when the other party's name is on the call window."
+      ]
+    },
+    {
+      "version": "0.12.252",
+      "date": "2026-08-31",
+      "changes": [
+        "Fixed Interject reply cards shrinking into an unreadable notch island, and follow-up PTT no longer drops to a fallback voice that then fails"
+      ]
+    },
+    {
+      "version": "0.12.251",
+      "date": "2026-08-31",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.250",
       "date": "2026-08-31",
       "changes": [

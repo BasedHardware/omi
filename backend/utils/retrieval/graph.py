@@ -384,7 +384,7 @@ async def execute_chat_stream(
     messages: List[Message],
     app: Optional[App] = None,
     cited: Optional[bool] = False,
-    callback_data: Dict[str, Any] = {},
+    callback_data: Optional[Dict[str, Any]] = None,
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
     platform: Optional[str] = None,
@@ -396,6 +396,8 @@ async def execute_chat_stream(
     - File attachments -> file chat (OpenAI Assistants)
     - Everything else -> Anthropic agentic chat (Claude decides whether to use tools)
     """
+    if callback_data is None:
+        callback_data = {}
     logger.info(f'execute_chat_stream app: {app.id if app else "<none>"}')
     # One absolute setup deadline covers router metadata and agentic prompt/tool
     # load so the SSE body cannot stay silent for two stacked 25s budgets.

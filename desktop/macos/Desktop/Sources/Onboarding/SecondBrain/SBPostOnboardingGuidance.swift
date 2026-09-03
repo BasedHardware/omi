@@ -41,6 +41,9 @@ struct SBSetupSnapshot: Equatable, Sendable {
   /// The answer to "what do your days look like" — a picked chip ("Founder")
   /// or the user's own words. Empty when the question was skipped.
   var role: String = ""
+  /// Endonym of the system language when Omi listens in a different one;
+  /// `nil` when they match. See `DayZeroChipSignals.languageMismatchName`.
+  var systemLanguageName: String? = nil
   /// The capture mode the user chose on the last step. `skip()` leaves whatever
   /// was already configured, which is exactly what should be described.
   var listening: Listening = .disabled
@@ -89,10 +92,11 @@ enum SBPostOnboardingGuidance {
   /// orientation cues above it.
   static let maxSuggestions = 4
 
-  /// A tail question that needs no connector and no permission, so the list is
-  /// never bare for a user who skipped everything. Dropped by the cap whenever
-  /// real setup produced enough concrete asks.
-  static let universalFallback = "What can you help me with?"
+  /// The former tail question, "What can you help me with?", is gone: it
+  /// returns a feature list with nothing to act on and over-indexed 3x among
+  /// users who stopped after one question. A user who skipped everything gets
+  /// the universal first question and the teach-me draft, both answerable.
+  static let teachMeDraft = DayZeroChips.rememberDraft
 
   /// The ordered candidate rules. Each pairs a question with the precondition
   /// that makes it answerable; a candidate whose precondition is false is never
@@ -100,16 +104,24 @@ enum SBPostOnboardingGuidance {
   static func suggestions(for setup: SBSetupSnapshot) -> [String] {
     var candidates: [String] = [HomeSuggestionComposer.universalFirstQuestion]
 
+    if let language = setup.systemLanguageName {
+      candidates.append(DayZeroChips.switchLanguage(to: language))
+    }
     // Screen Recording is the most immediately demonstrable capability: the
     // answer is on the user's display right now, whatever else they skipped.
     if setup.canSeeScreen {
-      candidates.append("What's on my screen right now?")
+      candidates.append(DayZeroChips.summarizeScreen)
     }
     if setup.connectedContextIDs.contains("calendar") {
-      candidates.append("What's on my calendar today?")
+      candidates.append(DayZeroChips.calendarToday)
     }
     if let roleQuestion = roleQuestion(for: setup) {
       candidates.append(roleQuestion)
+    }
+    if setup.canSeeScreen {
+      // Screen history answers this within minutes; it ranks below the
+      // connector-backed questions so the cap keeps one of each kind.
+      candidates.append(DayZeroChips.lastHour)
     }
     if setup.connectedContextIDs.contains("gmail") {
       candidates.append("What email follow-ups matter most today?")
@@ -123,7 +135,7 @@ enum SBPostOnboardingGuidance {
     if let agent = setup.connectedAgentNames.first(where: { !$0.trimmed.isEmpty }) {
       candidates.append("What can \(agent.trimmed) do for me?")
     }
-    candidates.append(universalFallback)
+    candidates.append(teachMeDraft)
 
     return Array(dedupedNonEmpty(candidates).prefix(maxSuggestions))
   }
@@ -267,6 +279,7 @@ extension SBOnboardingModel {
     let canHear = micState == .on || appState.hasMicrophonePermission
     return SBSetupSnapshot(
       role: role ?? roleDraft,
+      systemLanguageName: DayZeroChipSignals.live().systemLanguageName,
       listening: SBSetupSnapshot.Listening(
         audioRecordingModeRaw: appState.audioRecordingMode.rawValue,
         canHear: canHear),

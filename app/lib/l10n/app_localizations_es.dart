@@ -9868,12 +9868,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get accountCutoverOpenStore => 'Abrir tienda';
 
   @override
-  String get chatScopeToday => 'Hoy';
-
-  @override
-  String get chatScopeThisWeek => 'Esta semana';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Sobre: $title';
   }
@@ -9937,4 +9931,15 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'El almacenamiento de tu Pendant está lleno y sigue en modo de grabación, por lo que su audio almacenado no se puede transferir. Pulsa el botón del Pendant para detener la grabación y vuelve a sincronizar.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'No capturado ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'La transcripción no recibe audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

@@ -126,6 +126,7 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
                   child: _LiveTranscriptView(
                     segments: provider.transcriptSegments,
                     getSpeakerLabel: provider.getSpeakerLabel,
+                    status: provider.transcriptionStatus,
                   ),
                 ),
                 _CallControls(
@@ -214,12 +215,26 @@ class _CallInfoHeader extends StatelessWidget {
 class _LiveTranscriptView extends StatelessWidget {
   final List<TranscriptSegment> segments;
   final String Function(TranscriptSegment) getSpeakerLabel;
+  final TranscriptionStatus status;
 
-  const _LiveTranscriptView({required this.segments, required this.getSpeakerLabel});
+  const _LiveTranscriptView({required this.segments, required this.getSpeakerLabel, required this.status});
 
   @override
   Widget build(BuildContext context) {
     if (segments.isEmpty) {
+      if (status == TranscriptionStatus.noAudio) {
+        // Do not promise a transcript the session is not receiving audio for.
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              context.l10n.transcriptionNoAudio,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.orange[300], fontSize: 14),
+            ),
+          ),
+        );
+      }
       return Center(
         child: Text(context.l10n.transcriptPlaceholder, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
       );
@@ -604,6 +619,10 @@ class _TranscriptionStatusIndicator extends StatelessWidget {
       case TranscriptionStatus.failed:
         dotColor = Colors.red;
         label = context.l10n.transcriptionUnavailable;
+        break;
+      case TranscriptionStatus.noAudio:
+        dotColor = Colors.orange;
+        label = context.l10n.transcriptionNoAudio;
         break;
       default:
         return const SizedBox.shrink();

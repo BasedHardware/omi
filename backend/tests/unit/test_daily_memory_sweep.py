@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from google.cloud import firestore
 import pytest
 
-from models.memory_apply import MemoryControlState
+from models.memory_apply import MemoryControlState, WriterMode
 from models.memory_contracts import deterministic_contract_id
 from services.users import data_export
 from utils.memory.daily_memory_sweep import (
@@ -1822,3 +1822,200 @@ def test_unstructured_fallback_marker_matches_the_prompt_rule():
     assert UNSTRUCTURED_SUMMARY_MARKER in prompts._DAILY_SWEEP_SHARED_RULES
     rule = next(line for line in prompts._DAILY_SWEEP_SHARED_RULES.splitlines() if UNSTRUCTURED_SUMMARY_MARKER in line)
     assert "NEVER set a slot" in rule
+
+
+def _legacy_row_payload(index: int, content: str):
+    from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState
+    from models.memory_evidence import SourceState
+
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    return {
+        "memory_id": f"memory-{index:05d}",
+        "uid": "user-1",
+        "version": 1,
+        "tier": MemoryTier.long_term.value,
+        "status": MemoryItemStatus.active.value,
+        "processing_state": ProcessingState.processed.value,
+        "content": content,
+        "source_state": SourceState.active.value,
+        "sensitivity_labels": [],
+        "visibility": "private",
+        "user_asserted": True,
+        "captured_at": now,
+        "updated_at": now,
+        "ledger_commit_id": f"commit-{index}",
+        "ledger_sequence": index + 1,
+    }
+
+
+class _PaginatedLegacyDb:
+    """A fake whose legacy query obeys limit + start_after over sorted rows."""
+
+    def __init__(self, rows):
+        self._rows = sorted(rows, key=lambda snapshot: snapshot.id)
+
+    def collection(self, _path):
+        rows = self._rows
+
+        class Query:
+            def __init__(self, normalized=False, after_id=None, count=None):
+                self.normalized = normalized
+                self.after_id = after_id
+                self.count = count
+
+            def where(self, *, filter):
+                return Query(
+                    self.normalized or filter.field_path == "normalized_content_key", self.after_id, self.count
+                )
+
+            def limit(self, count):
+                return Query(self.normalized, self.after_id, count)
+
+            def start_after(self, snapshot):
+                return Query(self.normalized, snapshot.id, self.count)
+
+            def stream(self):
+                if self.normalized:
+                    return []
+                selected = [row for row in rows if self.after_id is None or row.id > self.after_id]
+                return selected[: self.count] if self.count is not None else selected
+
+        class Collection:
+            def where(self, *, filter):
+                return Query(filter.field_path == "normalized_content_key")
+
+        return Collection()
+
+
+class _LegacySnapshot:
+    def __init__(self, payload, row_id):
+        self._payload = payload
+        self.id = row_id
+
+    def to_dict(self):
+        return self._payload
+
+
+def test_legacy_compatibility_proof_survives_a_real_accounts_cohort():
+    """Regression: dev sweep stuck since 2026-08-30 (canonical_occupant_query_unavailable).
+
+    The compatibility occupant proof capped the whole cohort at one 64-row
+    page, so an account with more active unslotted facts than that — the
+    owner's dogfood account holds ~196 — could never complete a sweep day:
+    every hourly run failed closed with "exceeded proof budget". Completeness
+    now comes from draining the cursor; the duplicate is still found even
+    when it sits past the old cap.
+    """
+
+    rows = [_legacy_row_payload(index, f"legacy fact {index}") for index in range(700)]
+    rows[650]["content"] = "Alice owns release review"
+    db = _PaginatedLegacyDb([_LegacySnapshot(payload, payload["memory_id"]) for payload in rows])
+
+    occupant = _find_active_slot_or_subject("user-1", _candidate(slot=None), db_client=db)
+
+    assert occupant is not None and occupant.memory_id == "memory-00650"
+
+
+def test_legacy_compatibility_proof_completes_with_no_duplicate_past_the_old_cap():
+    rows = [_legacy_row_payload(index, f"legacy fact {index}") for index in range(100)]
+    db = _PaginatedLegacyDb([_LegacySnapshot(payload, payload["memory_id"]) for payload in rows])
+
+    occupant = _find_active_slot_or_subject("user-1", _candidate(slot=None), db_client=db)
+
+    assert occupant is None
+
+
+def test_legacy_compatibility_proof_still_fails_closed_above_the_scan_ceiling():
+    from utils.memory.daily_memory_sweep import MAX_LEGACY_COMPAT_OCCUPANT_SCAN, SweepAuthoritativeQueryUnavailable
+
+    total = MAX_LEGACY_COMPAT_OCCUPANT_SCAN + 1
+    rows = [_legacy_row_payload(index, f"legacy fact {index}") for index in range(total)]
+    db = _PaginatedLegacyDb([_LegacySnapshot(payload, payload["memory_id"]) for payload in rows])
+
+    with pytest.raises(SweepAuthoritativeQueryUnavailable):
+        _find_active_slot_or_subject("user-1", _candidate(slot=None), db_client=db)
+
+
+def test_scheduler_skips_predrain_accounts_without_error_or_claims(monkeypatch):
+    """Regression: enrolled-but-undrained accounts failed the job hourly.
+
+    Every beta account starts in ``compatibility`` writer mode until the
+    maintenance drain publishes its ledger cutover, and ordinary ledger writes
+    are refused there (``require_writer_admitted``). The scheduler used to
+    claim the day anyway: the write died with WriterAdmissionError, the burned
+    receipt lease shadowed the retries as ``source_idempotency_conflict``, and
+    the hourly job exited 1 — observed continuously in dev on the dogfood
+    account (still compatibility at epoch 0). Pre-drain is an expected rollout
+    state: skip quietly, advance the fair page, and leave the account's day
+    cursor untouched so pending days catch up after the drain.
+    """
+
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+    )
+    assert control.writer_mode is not WriterMode.ledger
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    db = _Db()
+    source_calls = []
+
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: source_calls.append(True),
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: True,
+    )
+
+    assert summary.errors == ()
+    assert summary.completed_uids == ("user-1",)
+    assert summary.failed_uids == ()
+    assert summary.blocked_users == 1
+    assert source_calls == []
+    # No receipt claim, cursor write, or any other document was touched.
+    assert db.store == {}
+
+
+def test_scheduler_proceeds_for_ledger_mode_accounts(monkeypatch):
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    db = _Db()
+    source_calls = []
+
+    run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: source_calls.append(True) or None,
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: True,
+    )
+
+    # The gate is passed: the scheduler advanced beyond writer-mode admission
+    # into ordinary day planning for this account (which asks the source
+    # provider for the pending day's packet).
+    assert source_calls != []

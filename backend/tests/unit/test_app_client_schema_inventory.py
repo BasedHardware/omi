@@ -4,12 +4,19 @@ import json
 import re
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from scripts import inventory_app_client_schemas
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
+
+
+def test_repo_relative_path_uses_forward_slashes_on_windows(monkeypatch):
+    windows_root = PureWindowsPath('C:/repo')
+    monkeypatch.setattr(inventory_app_client_schemas, 'ROOT_DIR', windows_root)
+
+    assert inventory_app_client_schemas.repo_relative_path(windows_root / 'app/lib/model.dart') == 'app/lib/model.dart'
 
 
 def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
@@ -128,7 +135,7 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     ) not in unmodeled_operations
     assert ('GET', '/v1/users/language', 'get_user_language_v1_users_language_get') not in unmodeled_operations
     assert ('GET', '/v1/users/export', 'export_all_user_data_v1_users_export_get') not in unmodeled_operations
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     export_properties = spec['components']['schemas']['UserDataExportResponse']['properties']
     assert {
         'profile',
@@ -300,12 +307,15 @@ def test_inventory_classifies_bounded_error_discriminator_as_non_rest_decode(tmp
     schema_dir = tmp_path / 'schema'
     api_dir.mkdir()
     schema_dir.mkdir()
-    (api_dir / 'conversations.dart').write_text("""
+    (api_dir / 'conversations.dart').write_text(
+        """
 bool isSyncRecoveryWindowExceededResponse(Response response) {
   final body = jsonDecode(response.body);
   return body is Map && body['code'] == 'backfill_lookback_exceeded';
 }
-""")
+""",
+        encoding='utf-8',
+    )
 
     monkeypatch.setattr(inventory_app_client_schemas, 'APP_API_DIR', api_dir)
     monkeypatch.setattr(inventory_app_client_schemas, 'APP_SCHEMA_DIR', schema_dir)

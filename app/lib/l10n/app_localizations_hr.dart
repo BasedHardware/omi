@@ -9880,12 +9880,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
-  String get chatScopeToday => 'Danas';
-
-  @override
-  String get chatScopeThisWeek => 'Ovaj tjedan';
-
-  @override
   String chatScopeAbout(String title) {
     return 'O: $title';
   }
@@ -9949,4 +9943,15 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pohrana Pendanta je puna i još je u načinu snimanja, pa se pohranjeni zvuk ne može prenijeti. Pritisnite gumb na Pendantu da zaustavite snimanje, a zatim ponovno sinkronizirajte.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Nije snimljeno ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripcija ne prima zvuk';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

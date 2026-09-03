@@ -126,17 +126,17 @@ See `TUNING_RESULTS.md` for the full tuning sweep across beam sizes, compute typ
 The backend uses NLLB via the `TranslationProvider` enum in `utils/translation.py`. Provider is controlled exclusively by `TRANSLATION_SERVICE_MODELS` — the URL alone never changes provider.
 
 ```bash
-# 1. Gemini only (default — no config needed)
+# 1. NLLB only (default — no config needed)
 # TRANSLATION_SERVICE_MODELS is unset
 
-# 2. NLLB primary with Gemini fallback
+# 2. NLLB primary with Gemini fallback for capacity/outage only (prod/dev listen)
 TRANSLATION_SERVICE_MODELS=nllb,gemini
 
 # 3. NLLB only (errors stay retryable; no implicit Gemini fallback)
 TRANSLATION_SERVICE_MODELS=nllb
 ```
 
-The comma-separated list is the exact provider order: fallbacks are used only when they are named. `HOSTED_TRANSLATION_API_URL` must also be set for `nllb` to activate. If the list is empty or contains no usable provider, the backend defaults to Gemini. The legacy `google` configuration token is accepted during migration but resolves and emits as `gemini`.
+The comma-separated list is the exact provider order: fallbacks are used only when they are named. `HOSTED_TRANSLATION_API_URL` must also be set for `nllb` to activate. If the list is empty or contains no usable provider, the backend defaults to NLLB. Gemini is tried only for NLLB timeout, 429, 5xx, or transport unavailability — not for unsupported languages or invalid responses. The legacy `google` configuration token is accepted during migration but resolves and emits as `gemini`.
 
 ## Deploy
 

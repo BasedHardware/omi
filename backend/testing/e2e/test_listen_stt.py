@@ -348,7 +348,13 @@ def test_web_listen_streaming_stt_send_failure_emits_terminal_status_then_closes
     test_uid,
     monkeypatch,
 ):
-    """A provider death is explicit and terminal instead of leaving a green socket."""
+    """With no provider left to fail over to, a death is explicit and terminal.
+
+    The fake's default ``failover_selection`` models an exhausted chain, so the
+    send path's failover attempt (#12469) finds nothing and the session must
+    still end with the bounded ``stt_failed``/1011 wire contract instead of
+    leaving a green socket.
+    """
 
     seed_listen_user(test_uid, uses_custom_stt=False)
     sockets = install_streaming_stt_fake(monkeypatch, die_on_first_send=True)
@@ -398,6 +404,45 @@ def test_web_listen_streaming_stt_send_failure_emits_terminal_status_then_closes
     }
     assert len(sockets) == 1
     assert len(sockets[0].sent_chunks) == 1
+
+
+def test_web_listen_streaming_stt_send_failure_fails_over_and_the_session_survives(
+    client,
+    test_uid,
+    monkeypatch,
+):
+    """A provider death with a provider left in the chain moves the session, not ends it.
+
+    The send path observes the death on the very next audio chunk — before the
+    1s death-monitor poll — and must hand the session to the next provider
+    (#12459's chain, made reachable by #12469): the buffered audio reaches the
+    replacement socket in the same flush, a transcript flows from it, and the
+    client socket never sees ``stt_failed``.
+    """
+    from utils.stt.streaming import STTService
+
+    seed_listen_user(test_uid, uses_custom_stt=False)
+    sockets = install_streaming_stt_fake(
+        monkeypatch,
+        die_on_first_send=True,
+        failover_selection=(STTService.modulate, "en", "modulate-velma-2"),
+    )
+
+    with client.websocket_connect("/v4/web/listen?sample_rate=8000&codec=pcm8&source=desktop") as websocket:
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        assert websocket.receive_json() == {"type": "auth_response", "success": True}
+        receive_until(websocket, is_conversation_session_event)
+        receive_until(websocket, is_ready_event)
+
+        websocket.send_bytes(b"\x80" * 320)
+
+        segments = receive_until(websocket, is_streaming_segment_batch)
+
+    assert segments[0]["text"] == "Hermetic streaming STT transcript from the fake socket."
+    assert len(sockets) == 2
+    # The dead socket's buffered audio was retried against the replacement.
+    assert sockets[1].sent_chunks == sockets[0].sent_chunks
+    assert sockets[0].finish_calls >= 1
 
 
 def test_web_listen_reconnect_reuses_active_conversation_id(client, test_uid, monkeypatch):

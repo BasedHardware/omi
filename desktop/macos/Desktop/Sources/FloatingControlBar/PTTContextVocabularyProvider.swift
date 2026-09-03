@@ -8,6 +8,9 @@ struct PTTContextSnapshot {
   /// hub's screen_now context and explicit screenshot tool.
   let keywords: [String]
   let sourceCount: Int
+  /// OCR text of the pre-overlay frame, bounded. Used only as the chat-lane fallback when the
+  /// realtime model escalates a turn without having grounded it on the screen image.
+  let visibleText: String?
 }
 
 enum PTTContextVocabularyProvider {
@@ -46,6 +49,8 @@ enum PTTContextVocabularyProvider {
     }
 
     let keywords = collector.values
+    let boundedVisibleText = visibleText.map { String($0.prefix(maxImmediateOCRLength)) }
+      .flatMap { $0.isEmpty ? nil : $0 }
     let sample = keywords.prefix(12).joined(separator: ", ")
     let immediateSourceCount = (visibleText?.isEmpty == false) ? 1 : 0
     log(
@@ -54,7 +59,8 @@ enum PTTContextVocabularyProvider {
     return PTTContextSnapshot(
       capturedAt: capturedAt,
       keywords: keywords,
-      sourceCount: immediateSourceCount
+      sourceCount: immediateSourceCount,
+      visibleText: boundedVisibleText
     )
   }
 

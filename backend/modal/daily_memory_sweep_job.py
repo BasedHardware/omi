@@ -109,6 +109,12 @@ def run_daily_memory_sweep_job() -> None:
         advance_page=summary.attempted_users > 0,
     )
     if summary.errors:
+        # The summary already bounds this tuple to 16 entries of
+        # `uid=<uid>:<reason-or-exception-type>` (or a scheduler-level token),
+        # with no memory, transcript, or prompt content. Without this line the
+        # job reports only a count, and a single account failing every hourly
+        # run is undiagnosable from logs.
+        logger.error("daily-memory-sweep errors: %s", ", ".join(summary.errors))
         raise RuntimeError(f"daily-memory-sweep completed with {len(summary.errors)} error(s)")
 
 
