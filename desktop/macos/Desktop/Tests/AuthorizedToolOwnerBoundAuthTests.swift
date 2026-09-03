@@ -204,7 +204,7 @@ private actor PermissionCallbackBox<Value: Sendable> {
     XCTAssertFalse(result.contains("owner-a-private-memory"))
   }
 
-  func testMemoryReadReturnsResponseWhileOriginalOwnerRemainsCurrent() async {
+  func testMemoryReadReturnsResponseWhileOriginalOwnerRemainsCurrent() async throws {
     let client = await makeClient()
     let operation = Task { @MainActor in
       await ChatToolExecutor.execute(
@@ -220,7 +220,13 @@ private actor PermissionCallbackBox<Value: Sendable> {
         #"{"tool_name":"get_memories","result_text":"owner-a-memory","is_error":false}"#)
 
     let result = await operation.value
-    XCTAssertEqual(result, "owner-a-memory")
+    let object = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any])
+    XCTAssertEqual(object["ok"] as? Bool, true)
+    XCTAssertEqual(object["tool"] as? String, "get_memories")
+    let sections = try XCTUnwrap(object["sections"] as? [[String: Any]])
+    let textSection = try XCTUnwrap(sections.first { $0["name"] as? String == "text" })
+    XCTAssertEqual(textSection["items"] as? [String], ["owner-a-memory"])
   }
 
   func testActionItemWriteKeepsOriginalCredentialAndRejectsResultAfterMidFlightAccountSwitch() async {

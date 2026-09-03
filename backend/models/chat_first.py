@@ -4,7 +4,7 @@ from datetime import datetime
 from hashlib import sha256
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from models.task_intelligence import StableId
 
@@ -134,7 +134,8 @@ ProactiveIntentSource = Literal[
     'cold_start_rich',
     'cold_start_sparse',
 ]
-ProactiveIntentDeliveryState = Literal['ready', 'pending_kernel_receipt', 'delivered']
+ProactiveIntentDeliveryState = Literal['ready', 'pending_kernel_receipt', 'delivered', 'dead_letter']
+MaterializableProactiveIntentDeliveryState = Literal['ready', 'pending_kernel_receipt', 'delivered']
 ColdStartSequenceTerminalState = Literal['completed', 'abandoned']
 
 
@@ -157,12 +158,31 @@ class ProactiveIntent(_StrictModel):
     created_at: datetime
     delivered_at: datetime | None = None
     materialization_receipt_id: StableId | None = None
+    materialization_attempts: int = Field(default=0, ge=0)
+    last_rejection_code: str | None = Field(default=None, min_length=1, max_length=64, pattern=r'^[a-z0-9_]+$')
+    last_rejection_at: datetime | None = None
+    fetch_count: int = Field(default=0, ge=0)
+    last_fetched_at: datetime | None = None
+    first_deferred_at: datetime | None = None
+    last_deferral_at: datetime | None = None
+    dead_letter_reason: str | None = Field(default=None, min_length=1, max_length=128, pattern=r'^[a-z0-9_:.-]+$')
+    requeue_count: int = Field(default=0, ge=0, le=1)
     # This is a terminal local-journal receipt on the same sparse cold-start
     # intent, never an operator-owned completion switch. It is the bounded
     # server projection needed to stop suppressing agent-tier turns once the
     # sequence has actually ended in the canonical transcript.
     cold_start_sequence_terminal_state: ColdStartSequenceTerminalState | None = None
     cold_start_sequence_terminal_receipt_id: StableId | None = None
+
+    # Firestore documents outlive individual backend revisions.  Stored-state
+    # readers must tolerate fields written by newer revisions during rolling
+    # deploys; request/response models remain strict.
+    model_config = ConfigDict(extra='ignore', frozen=True)
+
+    @field_validator('delivery_state', mode='before')
+    @classmethod
+    def unknown_delivery_states_are_terminal_on_read(cls, value):
+        return value if value in {'ready', 'pending_kernel_receipt', 'delivered', 'dead_letter'} else 'dead_letter'
 
     @model_validator(mode='after')
     def validate_cold_start_sequence_state(self):
@@ -180,6 +200,39 @@ class ProactiveIntent(_StrictModel):
     @property
     def consumes_turn_budget(self) -> bool:
         return self.source == 'agent_judgment'
+
+
+class DeadLetteredProactiveIntent(ProactiveIntent):
+    """Full terminal record stored outside the rolling reader's collection."""
+
+    delivery_state: Literal['dead_letter'] = 'dead_letter'  # pyright: ignore[reportIncompatibleVariableOverride]
+    dead_letter_reason: str = Field(  # pyright: ignore[reportIncompatibleVariableOverride]
+        default='unknown', min_length=1, max_length=128, pattern=r'^[a-z0-9_:.-]+$'
+    )
+
+
+class MaterializableProactiveIntent(_StrictModel):
+    """Wire-safe intent state; terminal dead letters never leave the store."""
+
+    intent_id: StableId
+    continuity_key: StableId
+    account_generation: int = Field(ge=0)
+    source: ProactiveIntentSource
+    subject: ChatFirstSubject | None = None
+    blocks: list[ChatFirstBlockSpec] = Field(min_length=1, max_length=8)
+    delivery_state: MaterializableProactiveIntentDeliveryState = 'ready'
+    created_at: datetime
+    delivered_at: datetime | None = None
+    materialization_receipt_id: StableId | None = None
+    materialization_attempts: int = Field(default=0, ge=0)
+    requeue_count: int = Field(default=0, ge=0, le=1, exclude=True)
+    last_rejection_code: str | None = Field(default=None, min_length=1, max_length=64, pattern=r'^[a-z0-9_]+$')
+    last_rejection_at: datetime | None = None
+    fetch_count: int = Field(default=0, ge=0)
+    last_fetched_at: datetime | None = None
+    dead_letter_reason: str | None = Field(default=None, min_length=1, max_length=128, pattern=r'^[a-z0-9_:.-]+$')
+    cold_start_sequence_terminal_state: ColdStartSequenceTerminalState | None = None
+    cold_start_sequence_terminal_receipt_id: StableId | None = None
 
 
 class ProactiveBudgetReservation(_StrictModel):
@@ -202,6 +255,31 @@ class ProactiveMaterializationReceipt(_StrictModel):
     receipt_id: StableId
 
 
+class ProactiveMaterializationRejection(_StrictModel):
+    """Content-free typed rejection emitted by the local kernel."""
+
+    intent_id: StableId
+    code: str = Field(min_length=1, max_length=64, pattern=r'^[a-z0-9_]+$')
+    message: str | None = Field(default=None, max_length=300)
+
+
+class ProactiveMaterializationDeferral(_StrictModel):
+    """A fetched intent the kernel intentionally left behind a transcript tail."""
+
+    intent_id: StableId
+    code: Literal['tail_question', 'streaming_tail']
+
+
+class ProactiveMaterializationReceiptOutcome(_StrictModel):
+    intent_id: StableId
+    outcome: Literal['acknowledged', 'already_terminal', 'missing', 'conflict', 'generation_mismatch']
+
+
+class ProactiveMaterializationRejectionOutcome(_StrictModel):
+    intent_id: StableId
+    outcome: Literal['recorded', 'absorbed', 'generation_mismatch', 'malformed', 'missing']
+
+
 class ColdStartSequenceTerminalReceipt(_StrictModel):
     """A durable local-journal acknowledgement that sparse sequencing ended."""
 
@@ -217,6 +295,8 @@ class MaterializePromptsRequest(_StrictModel):
     window_foreground: bool = False
     initial_page_loaded: bool = False
     receipts: list[ProactiveMaterializationReceipt] = Field(default_factory=list, max_length=16)
+    rejections: list[ProactiveMaterializationRejection] = Field(default_factory=list, max_length=16)
+    deferrals: list[ProactiveMaterializationDeferral] = Field(default_factory=list, max_length=16)
     cold_start_sequence_terminal_receipts: list[ColdStartSequenceTerminalReceipt] = Field(
         default_factory=list, max_length=16
     )
@@ -226,6 +306,16 @@ class MaterializePromptsRequest(_StrictModel):
         intent_ids = [receipt.intent_id for receipt in self.receipts]
         if len(intent_ids) != len(set(intent_ids)):
             raise ValueError('materialization receipt intent IDs must be unique')
+        rejection_ids = [rejection.intent_id for rejection in self.rejections]
+        if len(rejection_ids) != len(set(rejection_ids)):
+            raise ValueError('materialization rejection intent IDs must be unique')
+        if set(intent_ids) & set(rejection_ids):
+            raise ValueError('an intent cannot be both acknowledged and rejected')
+        deferral_ids = [deferral.intent_id for deferral in self.deferrals]
+        if len(deferral_ids) != len(set(deferral_ids)):
+            raise ValueError('materialization deferral intent IDs must be unique')
+        if set(intent_ids) & set(deferral_ids) or set(rejection_ids) & set(deferral_ids):
+            raise ValueError('an intent cannot have more than one materialization outcome')
         sequence_ids = [receipt.sequence_id for receipt in self.cold_start_sequence_terminal_receipts]
         if len(sequence_ids) != len(set(sequence_ids)):
             raise ValueError('cold-start terminal receipt sequence IDs must be unique')
@@ -233,7 +323,21 @@ class MaterializePromptsRequest(_StrictModel):
 
 
 class MaterializePromptsResponse(_StrictModel):
-    intents: list[ProactiveIntent] = Field(default_factory=list)
+    intents: list[MaterializableProactiveIntent] = Field(default_factory=list)
+    receipt_outcomes: list[ProactiveMaterializationReceiptOutcome] = Field(default_factory=list)
+    rejection_outcomes: list[ProactiveMaterializationRejectionOutcome] = Field(default_factory=list)
+
+    @field_validator('intents', mode='before')
+    @classmethod
+    def narrow_internal_intents_for_wire(cls, intents):
+        return [
+            (
+                intent.model_dump(exclude={'first_deferred_at', 'last_deferral_at'})
+                if isinstance(intent, ProactiveIntent)
+                else intent
+            )
+            for intent in intents
+        ]
 
 
 class LegacyProactiveIntent(_StrictModel):
@@ -243,10 +347,16 @@ class LegacyProactiveIntent(_StrictModel):
     source: ProactiveIntentSource
     subject: ChatFirstSubject | None = None
     blocks: list[LegacyChatFirstBlockSpec] = Field(min_length=1, max_length=8)
-    delivery_state: ProactiveIntentDeliveryState = 'ready'
+    delivery_state: MaterializableProactiveIntentDeliveryState = 'ready'
     created_at: datetime
     delivered_at: datetime | None = None
     materialization_receipt_id: StableId | None = None
+    materialization_attempts: int = Field(default=0, ge=0)
+    last_rejection_code: str | None = None
+    last_rejection_at: datetime | None = None
+    fetch_count: int = Field(default=0, ge=0)
+    last_fetched_at: datetime | None = None
+    dead_letter_reason: str | None = None
     cold_start_sequence_terminal_state: ColdStartSequenceTerminalState | None = None
     cold_start_sequence_terminal_receipt_id: StableId | None = None
 
@@ -323,6 +433,7 @@ __all__ = [
     'ProactiveDeferral',
     'ProactiveIntent',
     'ProactiveMaterializationReceipt',
+    'ProactiveMaterializationRejection',
     'QuestionCardSpec',
     'QuestionOption',
     'TaskCardSpec',

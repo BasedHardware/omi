@@ -26,7 +26,7 @@ final class NotchCardVoiceDelivery {
   }
 
   private let isVoiceSessionLive: @MainActor () -> Bool
-  private let injectContext: @MainActor (String) async -> Bool
+  private let injectContext: @MainActor (String) async -> RealtimeBackgroundContextDeliveryResult
   private let scheduleWork: @MainActor (@escaping @MainActor () async -> Void) -> Void
 
   /// The newest card awaiting delivery. Only the newest matters: if two cards appear
@@ -39,7 +39,7 @@ final class NotchCardVoiceDelivery {
 
   init(
     isVoiceSessionLive: @escaping @MainActor () -> Bool = { RealtimeHubController.shared.hasLiveVoiceSession },
-    injectContext: @escaping @MainActor (String) async -> Bool = {
+    injectContext: @escaping @MainActor (String) async -> RealtimeBackgroundContextDeliveryResult = {
       await RealtimeHubController.shared.injectBackgroundAgentCompletionContext($0)
     },
     scheduleWork: @escaping @MainActor (@escaping @MainActor () async -> Void) -> Void = { work in
@@ -90,15 +90,19 @@ final class NotchCardVoiceDelivery {
     defer { isDelivering = false }
     guard let card = pendingCard else { return }
 
-    let delivered = await injectContext(Self.contextBlock(for: card.text))
-    guard delivered else {
+    switch await injectContext(Self.contextBlock(for: card.text)) {
+    case .retry:
       // Stays pending; retried on the next capability signal.
       log("NotchCardVoiceDelivery: session refused card \(card.id) — will retry on connect/input-window")
       return
+    case .unsupported:
+      log("NotchCardVoiceDelivery: provider has no safe background-context role; visible card remains authoritative")
+    case .delivered:
+      log("NotchCardVoiceDelivery: delivered card \(card.id) into the live voice session")
     }
-    log("NotchCardVoiceDelivery: delivered card \(card.id) into the live voice session")
 
-    // Only clear if this is still the card we sent — a newer one may have arrived mid-flight.
+    // Delivered or intentionally unsupported: do not retry stale text into a later turn/provider.
+    // Only clear if this is still the card we handled — a newer one may have arrived mid-flight.
     if pendingCard?.id == card.id {
       pendingCard = nil
     }

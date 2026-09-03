@@ -207,6 +207,12 @@ class PostHogManager {
     return PostHogSDK.shared.getFeatureFlag(flag)
   }
 
+  /// Get the JSON payload configured on a feature flag
+  func getFeatureFlagPayload(_ flag: String) -> Any? {
+    guard isInitialized else { return nil }
+    return PostHogSDK.shared.getFeatureFlagResult(flag)?.payload
+  }
+
   /// The SDK's own flag-delivery signal (posted on the main queue after the
   /// initial preload and after every reload) — re-exported so observers get a
   /// compile-checked symbol instead of a raw notification-name string.
