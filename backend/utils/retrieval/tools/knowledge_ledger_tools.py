@@ -322,14 +322,14 @@ def search_knowledge(
         return "Error: User ID not found in configuration"
 
     try:
-        from database._client import get_data_plane_firestore_client
+        from database._client import get_firestore_client
 
         rows = search_current_knowledge(
             uid,
             normalized_query,
             kinds=parsed_kinds,
             limit=limit,
-            db_client=get_data_plane_firestore_client(),
+            db_client=get_firestore_client(),
         )
         return _format_search_results(rows, query=normalized_query)
     except Exception as exc:
@@ -374,9 +374,9 @@ def search_historical_facts(
         return "Error: User ID not found in configuration"
 
     try:
-        from database._client import get_data_plane_firestore_client
+        from database._client import get_firestore_client
 
-        page = MemoryService(db_client=get_data_plane_firestore_client()).search_ledger_history_page(
+        page = MemoryService(db_client=get_firestore_client()).search_ledger_history_page(
             uid,
             normalized_query,
             limit=limit,
@@ -426,9 +426,9 @@ def read_playbook(
         return "Error: User ID not found in configuration"
 
     try:
-        from database._client import get_data_plane_firestore_client
+        from database._client import get_firestore_client
 
-        item = read_current_playbook(uid, normalized_id, db_client=get_data_plane_firestore_client())
+        item = read_current_playbook(uid, normalized_id, db_client=get_firestore_client())
         if item is None:
             return "Playbook unavailable."
         description = " ".join((item.content or "").split())[:MAX_PLAYBOOK_DESCRIPTION_CHARACTERS]

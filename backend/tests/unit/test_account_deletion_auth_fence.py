@@ -168,3 +168,39 @@ def test_auth_fence_fails_closed_when_the_data_plane_client_cannot_be_resolved(m
 
     assert error.value.status_code == 503
     assert error.value.detail == {"code": "account_deletion_state_unavailable", "retryable": True}
+
+
+class _RaisingGetClient:
+    """Resolved data-plane client whose document get() fails after the client is already in hand."""
+
+    def collection(self, name):
+        document = MagicMock()
+        document.get.side_effect = RuntimeError("firestore ServiceUnavailable")
+        collection = MagicMock()
+        collection.document.return_value = document
+        return collection
+
+
+def test_auth_fence_fails_closed_when_the_resolved_data_plane_read_raises(monkeypatch):
+    """A timeout/ServiceUnavailable after client resolution must be HTTP 503, not a clean miss.
+
+    The production marker has no except around snapshot.get(). Swallowing only that
+    get() into None is the mutation this test is for: the fence would then allow.
+    """
+    compute_plane = _PlaneClient({})
+    data_plane = _RaisingGetClient()
+
+    monkeypatch.setattr(users, "get_firestore_client", lambda: compute_plane)
+    monkeypatch.setattr(users, "get_data_plane_firestore_client", lambda: data_plane, raising=False)
+    monkeypatch.setattr("database._client.get_firestore_client", lambda: compute_plane)
+    monkeypatch.setattr("database._client.get_data_plane_firestore_client", lambda: data_plane)
+    monkeypatch.setattr(
+        "database.account_deletion_marker.get_data_plane_firestore_client", lambda: data_plane, raising=False
+    )
+    monkeypatch.setattr("database.account_deletion_marker.get_firestore_client", lambda: compute_plane, raising=False)
+
+    with pytest.raises(HTTPException) as error:
+        endpoints.enforce_account_deletion_http_access("old-uid")
+
+    assert error.value.status_code == 503
+    assert error.value.detail == {"code": "account_deletion_state_unavailable", "retryable": True}
