@@ -7,15 +7,16 @@ from datetime import datetime, time, timedelta
 from time import monotonic
 from typing import Any, Dict, List, Optional, Tuple
 
-from utils.executors import db_executor, postprocess_executor, run_blocking
-
 import pytz
 
 import database.conversations as conversations_db
+from database.durable_queue import ProcessOutcome, drain_isolated_async
 import database.notifications as notification_db
 from database.redis_db import try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
+from utils.durable_queue_metrics import observe_oldest_ready_age
+from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.memory.learned_today import memory_review_card_block
 from utils.notifications import send_bulk_notification, send_notification
@@ -130,7 +131,6 @@ async def send_daily_summary_notification() -> None:
 
     Groups timezones by their current local hour, then for each hour group,
     queries users in those timezones who have that hour preference.
-
     Survivability contract (#12530). This runs as a Cloud Run Job with a hard
     600s task timeout, over tens of thousands of users:
 
@@ -152,7 +152,7 @@ async def send_daily_summary_notification() -> None:
     try:
         timezones_by_hour = _get_timezones_grouped_by_hour()
     except Exception as e:
-        logger.error(f"Error sending daily summary: {e}")
+        logger.error(f"Error grouping daily summary timezones: {e}")
         return None
 
     cursor = await run_blocking(db_executor, summary_budget.read_job_cursor, cursor_key)
@@ -164,27 +164,33 @@ async def send_daily_summary_notification() -> None:
     ordered_hours = summary_budget.rotate_to(sorted(timezones_by_hour.keys()), resume_hour)
     completed_all = True
 
-    for target_hour in ordered_hours:
-        if monotonic() >= deadline:
+    stop_processing = False
+
+    async def process_hour(group: Tuple[int, List[str]]) -> ProcessOutcome:
+        nonlocal completed_all, resume_uid, stop_processing
+
+        target_hour, timezones = group
+        if stop_processing or monotonic() >= deadline:
             completed_all = False
+            stop_processing = True
             await _checkpoint(cursor_key, target_hour, None)
             _record_daily_summary_fallback(
                 from_mode='full_run', to_mode='resumable_tail', reason='timeout', outcome='degraded'
             )
             logger.warning('daily_summary_job_budget_exhausted resume_hour=%s', target_hour)
-            break
+            return ProcessOutcome.retry('daily summary budget exhausted', reason='timeout')
 
         stats.groups_attempted += 1
         try:
-            users = await _get_users_for_daily_summary(timezones_by_hour[target_hour], target_hour)
+            users = await _get_users_for_daily_summary(timezones, target_hour)
         except Exception as e:
             # One hour group's read failing must not cost the other 23 groups.
             stats.groups_failed += 1
             logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, e)
-            continue
+            return ProcessOutcome.reject(str(e), reason='user_query')
 
         if not users:
-            continue
+            return ProcessOutcome.ack()
 
         ordered_users = summary_budget.rotate_to(
             sorted(users, key=lambda user: str(user[0])),
@@ -198,7 +204,21 @@ async def send_daily_summary_notification() -> None:
         )
         if not finished_group:
             completed_all = False
-            break
+            stop_processing = True
+            return ProcessOutcome.retry('daily summary group budget exhausted', reason='timeout')
+        return ProcessOutcome.ack()
+
+    groups = [(hour, timezones_by_hour[hour]) for hour in ordered_hours]
+    results = await drain_isolated_async(groups, process_hour)
+    observe_oldest_ready_age('daily_summary_hour_groups', 0.0)
+    for result in results:
+        if result.outcome.kind != ProcessOutcome.ack().kind:
+            logger.error(
+                "Daily summary hour group failed hour=%s reason=%s error=%s",
+                result.item[0],
+                result.outcome.reason,
+                result.outcome.error_text,
+            )
 
     if completed_all:
         await run_blocking(db_executor, summary_budget.clear_job_cursor, cursor_key)

@@ -153,7 +153,10 @@ void main() {
   });
 
   testWidgets('a plain answer with no blocks gains neither a chip nor a card', (tester) async {
-    await pumpMessage(tester, message: _aiMessage(text: 'You met Priya on Tuesday.', type: MessageType.text));
+    await pumpMessage(
+      tester,
+      message: _aiMessage(text: 'You met Priya on Tuesday.', type: MessageType.text),
+    );
 
     expect(find.byKey(const Key('chat_followup_chip')), findsNothing);
     expect(find.byType(MemoryReviewCard), findsNothing);

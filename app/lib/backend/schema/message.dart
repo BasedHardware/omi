@@ -393,10 +393,7 @@ class ServerMessage {
 
   /// Decode only additive evidence fields. A malformed or unknown payload is
   /// treated as absent so released text/chat behavior remains unchanged.
-  static ChatEvidenceReferenceEnvelope? _decodeEvidenceEnvelope(
-    Map<String, dynamic> json,
-    String? metadata,
-  ) {
+  static ChatEvidenceReferenceEnvelope? _decodeEvidenceEnvelope(Map<String, dynamic> json, String? metadata) {
     final direct =
         json['evidence'] ?? json['evidence_envelope'] ?? json['evidence_refs'] ?? json['evidence_references'];
     final parsedDirect = _tryEvidenceEnvelope(direct);

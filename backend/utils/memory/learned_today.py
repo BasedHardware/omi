@@ -15,6 +15,7 @@ on the other.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Iterable, List, Optional, Sequence
 
@@ -39,6 +40,16 @@ MEMORIES_LEARNED_LIMIT = 3
 MEMORIES_LEARNED_SCAN_LIMIT = 200
 
 MemoryReader = Callable[..., List["MemoryDB"]]
+
+
+@dataclass(frozen=True, order=True)
+class _MemoryRank:
+    """Named sortable key for deterministic review-card ordering."""
+
+    capture_confidence: float
+    veracity: float
+    created_timestamp: float
+    memory_id: str
 
 
 def _aware(value: Optional[datetime]) -> Optional[datetime]:
@@ -95,15 +106,15 @@ def _from_day(
     return window_start <= created_at <= window_end
 
 
-def _rank(memory: "MemoryDB") -> tuple[float, float, float, str]:
+def _rank(memory: "MemoryDB") -> _MemoryRank:
     """Highest capture_confidence, then veracity, then newest, then stable id."""
     created_at = _aware(memory.created_at)
     created_ts = created_at.timestamp() if created_at else float('-inf')
-    return (
-        -(memory.capture_confidence if memory.capture_confidence is not None else 0.0),
-        -(memory.veracity if memory.veracity is not None else 0.0),
-        -created_ts,
-        memory.id or '',
+    return _MemoryRank(
+        capture_confidence=-(memory.capture_confidence if memory.capture_confidence is not None else 0.0),
+        veracity=-(memory.veracity if memory.veracity is not None else 0.0),
+        created_timestamp=-created_ts,
+        memory_id=memory.id or '',
     )
 
 

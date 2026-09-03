@@ -13,12 +13,7 @@ import 'package:omi/backend/schema/memory_review.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
 
-Memory _memory({
-  required String id,
-  String content = 'Prefers async standups',
-  bool? userReview,
-  bool edited = false,
-}) {
+Memory _memory({required String id, String content = 'Prefers async standups', bool? userReview, bool edited = false}) {
   return Memory(
     id: id,
     uid: 'review-card-user',
@@ -74,7 +69,12 @@ void main() {
   });
 
   testWidgets('renders one row per learned memory with all three controls', (tester) async {
-    final provider = _provider(rows: [_memory(id: 'mem-1'), _memory(id: 'mem-2', content: 'Runs on Tuesdays')]);
+    final provider = _provider(
+      rows: [
+        _memory(id: 'mem-1'),
+        _memory(id: 'mem-2', content: 'Runs on Tuesdays'),
+      ],
+    );
     addTearDown(provider.dispose);
     await provider.loadMemories();
 

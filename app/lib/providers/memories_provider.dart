@@ -111,9 +111,7 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   List<Memory> get currentLedgerFacts => _memories
-      .where(
-        (memory) => memory.isCurrentKnowledgeLedgerRow && memory.ledgerKind == KnowledgeLedgerKind.fact,
-      )
+      .where((memory) => memory.isCurrentKnowledgeLedgerRow && memory.ledgerKind == KnowledgeLedgerKind.fact)
       .toList(growable: false)
     ..sort(_ledgerOrder);
 
@@ -540,11 +538,7 @@ class MemoriesProvider extends ChangeNotifier {
       final replacement = result.authoritativeMemory;
       final currentTail = _matchingCurrentTail(currentSource);
       if (replacement == null ||
-          !_isAuthoritativeRevertReplacement(
-            currentSource,
-            replacement,
-            expectedVisibility: currentTail?.visibility,
-          )) {
+          !_isAuthoritativeRevertReplacement(currentSource, replacement, expectedVisibility: currentTail?.visibility)) {
         return false;
       }
 
