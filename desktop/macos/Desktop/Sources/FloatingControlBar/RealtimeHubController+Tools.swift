@@ -7,32 +7,74 @@ import VoiceTurnDomain
 extension RealtimeHubController {
   // MARK: - Tools
 
-  /// think_deeper — run the question through the same kernel session,
-  /// model selection, and tool surface as typed Chat. Returns its final text
-  /// for the realtime provider to speak faithfully.
+  /// think_deeper — single-shot Luna escalation with explicit reasoning effort.
+  /// Forwards the kernel context snapshot, the untrusted tool context, and the
+  /// exact screenshots the PTT agent viewed this turn, then returns the final
+  /// text for the realtime provider to speak faithfully.
   func escalateToHigherModel(
     _ query: String,
     toolContext: String,
-    invocationID: String,
+    thinkingLevel: RealtimeHubTools.EscalationThinkingLevel,
+    invocationTurnID: VoiceTurnID?,
+    invocationID _: String,
     ownerID: String
   ) async -> AuthorizedRealtimeToolExecutionResult {
-    // The chat lane cannot see the screen; hand it what this turn's screenshot showed so
-    // "what's the answer to this riddle?" resolves to the riddle on screen, not an earlier one.
-    // When the realtime model escalated without grounding on the image, fall back to the OCR
-    // text of the same PTT-down frame so the escalation is never blind to the current screen.
+    guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
+      return .failed(Self.authorizedRealtimeOwnerChangedError())
+    }
+    // The same kernel snapshot material the realtime session was instructed
+    // with, scoped to the current owner.
+    let context = voiceSessionContext(for: currentOwnerScope)
+    // Same-turn pixels first: the frozen PTT-down frame plus kernel-authorized
+    // screenshots from this exact turn. When no pixels exist, fall back to the
+    // accepted screen observation, then to OCR of the PTT-down frame, so the
+    // escalation is never blind to the current screen.
+    let screenJPEGs = RealtimeHubTools.escalationScreenJPEGs(
+      expectedTurnID: invocationTurnID,
+      evidence: screenEvidence,
+      authorizedScreenshots: authorizedRealtimeScreenshotImages)
     var screenContext = screenContextByContinuityKey[turnIdempotencyKey]
-    if screenContext == nil,
+    if screenJPEGs.isEmpty,
+      screenContext == nil,
       let ocr = await PushToTalkManager.shared.visibleScreenText(timeout: 1.5)
     {
       screenContext = "OCR text of the screen at the moment they pressed the key:\n\(ocr)"
     }
-    return await queryChatLaneForVoice(
-      prompt: RealtimeHubTools.escalationUserPrompt(
-        query: query, toolContext: toolContext, screenContext: screenContext),
-      invocationID: invocationID,
-      ownerID: ownerID,
-      toolName: HubTool.thinkDeeper.rawValue,
-      failureMessage: "I ran into an error reaching the model.")
+    let body = RealtimeHubTools.escalationBody(
+      query: query,
+      kernelSemanticGuidance: context.semanticGuidance,
+      kernelContext: context.rendered,
+      stableCacheIdentity: context.stableCacheIdentity,
+      dynamicContextIdentity: context.dynamicContextIdentity,
+      contextPlanID: context.planID,
+      toolContext: toolContext,
+      screenContext: screenContext,
+      thinkingLevel: thinkingLevel,
+      screenJPEGs: screenJPEGs)
+    let t0 = Date()
+    do {
+      let answer = try await APIClient.shared.thinkDeeperForVoice(
+        body: body,
+        thinkingLevel: thinkingLevel,
+        expectedOwnerID: ownerID)
+      guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      let ms = Int(Date().timeIntervalSince(t0) * 1000)
+      log(
+        "RealtimeHub: think_deeper ← \(RealtimeHubTools.escalationModel) "
+          + "effort=\(thinkingLevel.lunaReasoningEffort) images=\(screenJPEGs.count) "
+          + "OK in \(ms)ms (\(answer.count) chars)")
+      return .succeeded(answer)
+    } catch AuthError.userChangedDuringRequest {
+      return .failed(Self.authorizedRealtimeOwnerChangedError())
+    } catch {
+      guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      log("RealtimeHub: think_deeper failed — \(error.localizedDescription)")
+      return .succeeded("I ran into an error reaching the model.")
+    }
   }
 
   /// web_search — execute a fresh public-only lookup and return its grounded
@@ -63,33 +105,6 @@ extension RealtimeHubController {
       }
       log("RealtimeHub: web_search failed — \(error.localizedDescription)")
       return .succeeded("The web lookup failed. Please try again.")
-    }
-  }
-
-  private func queryChatLaneForVoice(
-    prompt: String,
-    invocationID: String,
-    ownerID: String,
-    toolName: String,
-    failureMessage: String
-  ) async -> AuthorizedRealtimeToolExecutionResult {
-    guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
-      return .failed(Self.authorizedRealtimeOwnerChangedError())
-    }
-    let t0 = Date()
-    do {
-      let answer = try await FloatingControlBarManager.shared.askChatLaneForSpokenAnswer(
-        prompt: prompt,
-        invocationID: invocationID,
-        expectedOwnerID: ownerID)
-      let ms = Int(Date().timeIntervalSince(t0) * 1000)
-      log("RealtimeHub: \(toolName) chat lane OK in \(ms)ms (\(answer.count) chars)")
-      return .succeeded(answer)
-    } catch RealtimeChatLaneError.ownerChanged {
-      return .failed(Self.authorizedRealtimeOwnerChangedError())
-    } catch {
-      log("RealtimeHub: \(toolName) failed — \(error.localizedDescription)")
-      return .succeeded(failureMessage)
     }
   }
 

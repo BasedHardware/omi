@@ -1,4 +1,5 @@
 import Foundation
+import VoiceTurnDomain
 
 // MARK: - Realtime Hub tool surface
 //
@@ -316,6 +317,31 @@ enum RealtimeHubTools {
     """
   }
 
+  /// Product thinking levels for the `think_deeper` escalation. Exactly two today:
+  /// `normal` maps to Luna reasoning effort `high`, `heavy` maps to `xhigh`.
+  enum EscalationThinkingLevel: String, CaseIterable, Sendable {
+    case normal
+    case heavy
+
+    /// OpenAI Chat Completions `reasoning_effort` wire value for gpt-5.6-luna.
+    /// OpenAI rejects function tools combined with a non-none effort on that
+    /// surface, so escalations carry no client tools and the effort travels
+    /// verbatim on the request.
+    var lunaReasoningEffort: String {
+      self == .heavy ? "xhigh" : "high"
+    }
+
+    /// Unknown, missing, or invalid tool input falls back to the default level.
+    static func fromToolInput(_ raw: Any?) -> EscalationThinkingLevel {
+      guard let value = raw as? String else { return .normal }
+      return EscalationThinkingLevel(rawValue: value.lowercased()) ?? .normal
+    }
+  }
+
+  /// Managed Luna alias the escalation posts to. The desktop backend maps it to
+  /// the no-tools chat-agent lane and validates the reasoning effort.
+  static let escalationModel = "omi-luna-think"
+
   static func escalationUserPrompt(query: String, toolContext: String, screenContext: String? = nil) -> String {
     var prompt = query
     if let screen = screenContext?.trimmingCharacters(in: .whitespacesAndNewlines), !screen.isEmpty {
@@ -324,6 +350,111 @@ enum RealtimeHubTools {
     let trimmedToolContext = toolContext.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedToolContext.isEmpty else { return prompt }
     return prompt + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
+  }
+
+  /// Body for the single-shot Luna thinking escalation. The system message stays
+  /// kernel-scoped (typed plan cache marker + canonical snapshot); tool-provided
+  /// context stays on the user message, marked untrusted. When the PTT agent
+  /// viewed screenshots this turn, the exact frozen JPEGs are attached to the
+  /// user message as `image_url` data-URI parts so the thinking agent reasons on
+  /// the same pixels instead of a re-description.
+  static func escalationBody(
+    query: String,
+    kernelSemanticGuidance: String,
+    kernelContext: String,
+    stableCacheIdentity: String,
+    dynamicContextIdentity: String,
+    contextPlanID: String,
+    toolContext: String,
+    screenContext: String? = nil,
+    thinkingLevel: EscalationThinkingLevel = .normal,
+    screenJPEGs: [Data] = []
+  ) -> [String: Any] {
+    let semanticGuidance = kernelSemanticGuidance.trimmingCharacters(in: .whitespacesAndNewlines)
+    let canonicalContext = kernelContext.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    // The cache marker is derived only from the typed kernel plan. It separates
+    // the stable escalation policy from the dynamic canonical snapshot; tool
+    // context is never trusted as part of that system contract.
+    let cacheBoundary: String
+    if !semanticGuidance.isEmpty,
+      !stableCacheIdentity.isEmpty,
+      !dynamicContextIdentity.isEmpty,
+      !contextPlanID.isEmpty
+    {
+      cacheBoundary =
+        "<!-- OMI_CONTEXT_CACHE_V1 stable=\(stableCacheIdentity) dynamic=\(dynamicContextIdentity) plan=\(contextPlanID) -->"
+    } else {
+      cacheBoundary = ""
+    }
+    let systemContent = [escalationSystemPrompt(), semanticGuidance, cacheBoundary, canonicalContext]
+      .filter { !$0.isEmpty }
+      .joined(separator: "\n\n")
+    let userText = escalationUserPrompt(
+      query: query, toolContext: toolContext, screenContext: screenContext)
+
+    let userContent: Any
+    if screenJPEGs.isEmpty {
+      userContent = userText
+    } else {
+      var parts: [[String: Any]] = [["type": "text", "text": userText]]
+      for jpeg in screenJPEGs {
+        parts.append([
+          "type": "image_url",
+          "image_url": ["url": "data:image/jpeg;base64," + jpeg.base64EncodedString()],
+        ])
+      }
+      userContent = parts
+    }
+
+    return [
+      "model": escalationModel,
+      "reasoning_effort": thinkingLevel.lunaReasoningEffort,
+      "max_completion_tokens": 4096,
+      "messages": [
+        ["role": "system", "content": systemContent],
+        ["role": "user", "content": userContent],
+      ],
+      "stream": false,
+    ]
+  }
+
+  /// The exact current-turn JPEGs the PTT agent already viewed, for forwarding
+  /// to the thinking agent: the frozen PTT-down frame plus any kernel-authorized
+  /// screenshots from the same turn. Same pixels, never a second capture;
+  /// stale-turn evidence is excluded by the caller-supplied turn id.
+  static func escalationScreenJPEGs(
+    expectedTurnID: VoiceTurnID?,
+    evidence: RealtimeScreenEvidence?,
+    authorizedScreenshots: [String: RealtimeScreenEvidenceAttachment]
+  ) -> [Data] {
+    guard let expectedTurnID else { return [] }
+    var ordered: [(capturedAt: Date, digest: String?, jpeg: Data)] = []
+    if let evidence,
+      evidence.descriptor.turnID == expectedTurnID,
+      let jpeg = evidence.jpeg
+    {
+      ordered.append(
+        (evidence.descriptor.capturedAt, evidence.descriptor.imageDigest, jpeg))
+    }
+    for attachment in authorizedScreenshots.values
+    where attachment.descriptor.turnID == expectedTurnID {
+      ordered.append(
+        (attachment.descriptor.capturedAt, attachment.descriptor.imageDigest, attachment.jpeg))
+    }
+    // Oldest first so the PTT-down frame precedes any later screenshot of the
+    // same turn, and duplicate captures of the same pixels collapse to one.
+    ordered.sort { $0.capturedAt < $1.capturedAt }
+    var seen = Set<String>()
+    var jpegs: [Data] = []
+    for item in ordered {
+      if let digest = item.digest {
+        guard !seen.contains(digest) else { continue }
+        seen.insert(digest)
+      }
+      jpegs.append(item.jpeg)
+    }
+    return jpegs
   }
 
   /// Host-authored public-only request sent to the managed web-search lane.
