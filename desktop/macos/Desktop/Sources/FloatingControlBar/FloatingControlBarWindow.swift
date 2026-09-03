@@ -160,7 +160,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     .canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle,
   ]
   static let notchExpandedWidth: CGFloat = 382
-  private static let notificationWidth: CGFloat = 508
+  static let notificationWidth: CGFloat = 508
   private static let notificationHeight: CGFloat = 128
   private static let notificationSpacing: CGFloat = 8
   /// Vertical room for the readable PTT status banner under chrome/pill.
@@ -883,10 +883,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     if state.showingAIConversation {
       let height = max(inputPanelHeight, frame.height)
       size = NSSize(width: expandedContentWidth, height: height)
-    } else if !state.pttHintText.isEmpty {
-      size = pttHintSurfaceSize(usesNotchIsland: notchModeEnabled)
     } else {
-      size = collapsedChromeSurfaceSize(usesNotchIsland: notchModeEnabled)
+      size = closedSurfaceSize(usesNotchIsland: notchModeEnabled)
     }
     let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: size)
     return NSRect(origin: defaultTopCenteredOrigin(for: windowSize), size: windowSize)
@@ -907,31 +905,34 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       let contentHeight = max(panelHeight + statusBanner, frame.height - reservedGlowOutset)
       return NSSize(width: width, height: contentHeight)
     }
-    // Grow just enough to fit the readable PTT status banner under chrome/pill.
-    // (isVoiceListening is true during the hint, so this must precede it.)
-    if !state.pttHintText.isEmpty {
-      return pttHintSurfaceSize(usesNotchIsland: usesNotchIsland)
-    }
-    return collapsedChromeSurfaceSize(usesNotchIsland: usesNotchIsland)
+    return closedSurfaceSize(usesNotchIsland: usesNotchIsland)
   }
 
   private func currentSurfaceSizeForCurrentScreen(frameIncludesVoiceGlow: Bool? = nil) -> NSSize {
     currentSurfaceSize(usesNotchIsland: notchModeEnabled, frameIncludesVoiceGlow: frameIncludesVoiceGlow)
   }
 
-  /// Shared closed-conversation size: a mounted notification card wins over
-  /// the listening/thinking island so Interject PTT cannot crush the card.
-  private func collapsedChromeSurfaceSize(usesNotchIsland: Bool, screen: NSScreen? = nil) -> NSSize {
+  /// The mounted notification card's own surface: chrome band, the gap under
+  /// it, and the card body. Single authority — every caller that needs to know
+  /// how big a card is (sizing, resizing, PTT and status-banner unions) reads
+  /// it here rather than re-deriving `notificationWidth` locally.
+  private func notificationSurfaceSize(usesNotchIsland: Bool, screen: NSScreen? = nil) -> NSSize {
     let barHeight: CGFloat
     if usesNotchIsland {
       barHeight = screen.map { Self.notchChromeHeight(for: $0) } ?? notchChromeHeightForCurrentScreen
     } else {
       barHeight = state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height
     }
-    let notificationSize = NSSize(
+    return NSSize(
       width: Self.notificationWidth,
       height: barHeight + Self.notificationSpacing + Self.notificationHeight
     )
+  }
+
+  /// Shared closed-conversation size: a mounted notification card wins over
+  /// the listening/thinking island so Interject PTT cannot crush the card.
+  private func collapsedChromeSurfaceSize(usesNotchIsland: Bool, screen: NSScreen? = nil) -> NSSize {
+    let notificationSize = notificationSurfaceSize(usesNotchIsland: usesNotchIsland, screen: screen)
     let listeningSize: NSSize
     if usesNotchIsland {
       listeningSize =
@@ -965,6 +966,23 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     )
   }
 
+  /// The whole closed-conversation surface: the notification card, the PTT
+  /// status banner, and the idle/listening/thinking island *composed*, never
+  /// substituted for one another. The banner stacks under the chrome and above
+  /// the card, so a card that is up while a "too short" hint fires needs both
+  /// budgets — returning the bare hint surface both narrowed the card to
+  /// `notchExpandedWidth` and clipped its body off the bottom.
+  func closedSurfaceSize(usesNotchIsland: Bool, screen: NSScreen? = nil) -> NSSize {
+    let collapsed = collapsedChromeSurfaceSize(usesNotchIsland: usesNotchIsland, screen: screen)
+    guard !state.pttHintText.isEmpty else { return collapsed }
+    return FloatingControlBarGeometry.notificationPreservingSurfaceSize(
+      transientSize: pttHintSurfaceSize(usesNotchIsland: usesNotchIsland, screen: screen),
+      hasMountedNotification: state.currentNotification != nil,
+      notificationSize: collapsed,
+      additionalHeight: Self.pttStatusBannerBudget
+    )
+  }
+
   private func frameForCurrentState(on screen: NSScreen, usesNotchIsland: Bool) -> NSRect {
     let size: NSSize
     if state.showingAIConversation {
@@ -977,10 +995,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         width: width,
         height: max(panelHeight + statusBanner, frame.height, chromeHeight + statusBanner)
       )
-    } else if !state.pttHintText.isEmpty {
-      size = pttHintSurfaceSize(usesNotchIsland: usesNotchIsland, screen: screen)
     } else {
-      size = collapsedChromeSurfaceSize(usesNotchIsland: usesNotchIsland, screen: screen)
+      size = closedSurfaceSize(usesNotchIsland: usesNotchIsland, screen: screen)
     }
     let windowSize = responseGlowWindowSize(forSurfaceSize: size, usesNotchIsland: usesNotchIsland)
     return NSRect(
@@ -2153,30 +2169,46 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   /// Resize window for PTT state (expanded when listening, compact circle when idle)
+  ///
+  /// A mounted notification card outlives the voice turn on purpose: Interject
+  /// keeps it up so "hold fn to reply" has a referent while the user speaks and
+  /// while the answer is thinking. So the PTT surface is *unioned* with the
+  /// card rather than substituted for it — swapping in the bare voice island
+  /// crushed a 508pt card into the ~270pt notch lobe for the whole turn, which
+  /// is the scrunched notch users reported.
   func resizeForPTTState(expanded: Bool) {
     if expanded { cancelPendingRetraction() }
-    if notchModeEnabled {
-      if state.showingAIConversation {
-        return
-      }
-      let targetSize = expanded ? notchSize(active: true) : notchCollapsedSize
-      resizeSurfaceTransition(
-        .pushToTalk(expanded: expanded),
-        toSurfaceSize: targetSize,
-        animated: true,
-        animationDuration: Self.askOmiAnimationDuration
-      )
+    let usesNotchIsland = notchModeEnabled
+    if usesNotchIsland, state.showingAIConversation {
       return
     }
-    // On legacy displays, when the voice-response glow is still active
-    // (e.g. realtime audio received this turn), collapse to the glow-adjusted
-    // compact size so the white glow/stroke is not clipped until the idle
-    // timer clears it.
     resizeSurfaceTransition(
       .pushToTalk(expanded: expanded),
-      toSurfaceSize: expanded ? Self.voiceBarSize : Self.minBarSize,
+      toSurfaceSize: pushToTalkSurfaceSize(expanded: expanded),
       animated: true,
-      animationDuration: 0.18
+      animationDuration: usesNotchIsland ? Self.askOmiAnimationDuration : 0.18
+    )
+  }
+
+  /// The closed surface a Push-to-Talk transition should take: the bare voice
+  /// island, grown to keep any mounted notification card whole.
+  func pushToTalkSurfaceSize(expanded: Bool) -> NSSize {
+    let usesNotchIsland = notchModeEnabled
+    let voiceSize: NSSize
+    if usesNotchIsland {
+      voiceSize = expanded ? notchSize(active: true) : notchCollapsedSize
+    } else {
+      // On legacy displays, when the voice-response glow is still active
+      // (e.g. realtime audio received this turn), collapse to the glow-adjusted
+      // compact size so the white glow/stroke is not clipped until the idle
+      // timer clears it.
+      voiceSize = expanded ? Self.voiceBarSize : Self.minBarSize
+    }
+    return FloatingControlBarGeometry.notificationPreservingSurfaceSize(
+      transientSize: voiceSize,
+      hasMountedNotification: state.currentNotification != nil,
+      notificationSize: notificationSurfaceSize(usesNotchIsland: usesNotchIsland),
+      additionalHeight: state.pttHintText.isEmpty ? 0 : Self.pttStatusBannerBudget
     )
   }
   /// Size the notch to fit the "thinking" indicator (active width) while a PTT
@@ -2287,15 +2319,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     guard !state.showingAIConversation else { return }
     cancelPendingRetraction()
     state.currentNotification = notification
-    let barHeight =
-      notchModeEnabled
-      ? notchChromeHeightForCurrentScreen
-      : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
-    let targetSize = NSSize(
-      width: Self.notificationWidth,
-      height: barHeight + Self.notificationSpacing + Self.notificationHeight
+    resizeAnchored(
+      to: closedSurfaceSize(usesNotchIsland: notchModeEnabled),
+      makeResizable: false,
+      animated: animated,
+      anchorTop: true
     )
-    resizeAnchored(to: targetSize, makeResizable: false, animated: animated, anchorTop: true)
   }
 
   func dismissNotification(animated: Bool = true) {
@@ -2303,12 +2332,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     state.currentNotification = nil
 
     let targetSize: NSSize
-    if state.isVoiceListening && !notchModeEnabled {
+    if notchModeEnabled {
+      // Dismissing the card hands the island back to whatever transient state
+      // is still running underneath it — listening, thinking, or a status
+      // banner. Collapsing straight to the idle lobe is the same substitution
+      // bug in the other direction.
+      targetSize = closedSurfaceSize(usesNotchIsland: true)
+    } else if state.isVoiceListening {
       targetSize = Self.voiceBarSize
-    } else if notchModeEnabled && !state.isVoiceListening {
-      targetSize = notchCollapsedSize
     } else {
-      targetSize = state.isHoveringBar && !notchModeEnabled ? Self.expandedBarSize : collapsedBarSize
+      targetSize = state.isHoveringBar ? Self.expandedBarSize : collapsedBarSize
     }
     resizeAnchored(to: targetSize, makeResizable: false, animated: animated, anchorTop: true)
   }
@@ -4713,13 +4746,15 @@ class FloatingControlBarManager {
   func askChatLaneForSpokenAnswer(
     prompt: String,
     invocationID: String,
-    expectedOwnerID: String
+    expectedOwnerID: String,
+    imageData: Data? = nil
   ) async throws -> String {
     guard let provider = historyChatProvider else { throw RealtimeChatLaneError.unavailable }
     return try await provider.askChatLaneForSpokenAnswer(
       prompt: prompt,
       invocationID: invocationID,
-      expectedOwnerID: expectedOwnerID)
+      expectedOwnerID: expectedOwnerID,
+      imageData: imageData)
   }
 
   func cancelActiveRealtimeChatLaneInvocation() {
@@ -5661,6 +5696,13 @@ extension FloatingControlBarWindow {
   func savePreChatCenterIfNeeded() {
     guard preChatCenter == nil else { return }
     let size = collapsedBarSize
+    // The center is read back off `frame` below, so the canonical frame is
+    // normally established by snapping to it. A mounted notification card is
+    // the exception: it is still on screen and still the user's content, and
+    // snapping the panel down to the collapsed pill would crush the card into
+    // the notch lobe for as long as it stays up. Record the center from the
+    // computed frame instead of the window's.
+    var recordedFrame: NSRect?
     if !ShortcutSettings.shared.draggableBarEnabled || notchModeEnabled {
       // Non-draggable: always snap to the default pill position before saving.
       // This ensures preChatCenter is always the canonical default, not a
@@ -5673,9 +5715,12 @@ extension FloatingControlBarWindow {
       } else {
         snapFrame = NSRect(origin: defaultPillOrigin(), size: size)
       }
-      isResizingProgrammatically = true
-      setFrame(snapFrame, display: true, animate: false)
-      isResizingProgrammatically = false
+      recordedFrame = snapFrame
+      if state.currentNotification == nil {
+        isResizingProgrammatically = true
+        setFrame(snapFrame, display: true, animate: false)
+        isResizingProgrammatically = false
+      }
       pendingRestoreFrame = nil
     } else if let restoreFrame = pendingRestoreFrame {
       // Draggable: if a restore animation is running, snap to its target frame
@@ -5689,15 +5734,16 @@ extension FloatingControlBarWindow {
       isResizingProgrammatically = false
       pendingRestoreFrame = nil
     }
+    let reference = recordedFrame ?? frame
     if !notchModeEnabled, state.isNotchHoverMenuVisible {
       // Chat is opening from the taller pill agent list. The pill's true
       // center is the list's top-center minus half a pill — recording the
       // list frame's midpoint would drop the restored pill lower every
       // open/close cycle.
-      preChatCenter = NSPoint(x: frame.midX, y: frame.maxY - size.height / 2)
+      preChatCenter = NSPoint(x: reference.midX, y: reference.maxY - size.height / 2)
       return
     }
-    preChatCenter = NSPoint(x: frame.midX, y: frame.midY)
+    preChatCenter = NSPoint(x: reference.midX, y: reference.midY)
   }
 
   /// Invalidates any in-flight windowDidResignKey dismiss animation so a new PTT

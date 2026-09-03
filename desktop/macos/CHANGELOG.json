@@ -2,6 +2,20 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.271",
+      "date": "2026-09-03",
+      "changes": [
+        "Voice answers now carry the exact current-screen image into deeper thinking, keep unrelated background results out of your next question, and use deeper research for company and product history"
+      ]
+    },
+    {
+      "version": "0.12.270",
+      "date": "2026-09-03",
+      "changes": [
+        "Double-tap for Locked Mode works again on modifier-only push-to-talk keys; a single accidental tap still does nothing"
+      ]
+    },
+    {
       "version": "0.12.269",
       "date": "2026-09-02",
       "changes": [
