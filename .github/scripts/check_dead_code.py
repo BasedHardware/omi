@@ -274,7 +274,13 @@ def scan_ts(root: Path, area: str, area_root_rel: str, entry_specs: list[str],
             if not TS_SKIP.search(rel):
                 files[rel] = path
     static_imp, dynamic_imp = _import_patterns(aliases)
-    stems = {posixpath.splitext(rel)[0].rsplit("/", 1)[-1]: rel for rel in files}
+    # Deterministic winner: rglob order is filesystem-dependent, so with bare-stem
+    # collisions ("index" for main/index.ts, preload/index.ts,
+    # main/codingAgent/pi-mono-extension/index.ts, ...) this last-writer-wins map
+    # used to flip which file a sibling ref resolves to between machines — silently
+    # flipping reachability verdicts (first seen as a CI-only windows-area failure).
+    # Sorted input makes the lexicographically-last rel the stable winner.
+    stems = {posixpath.splitext(rel)[0].rsplit("/", 1)[-1]: rel for rel in sorted(files)}
     edges: dict[str, set[str]] = defaultdict(set)
 
     def resolve(spec: str, importer: str) -> str | None:
