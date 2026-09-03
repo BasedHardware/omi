@@ -823,11 +823,32 @@ async def get_desktop_appcast_xml(
         raise HTTPException(status_code=500, detail=f"Error generating appcast: {str(e)}")
 
 
+def _log_download_served(*, platform: str, channel: str, version: str, campaign_id: Optional[str]) -> None:
+    """Emit one greppable line per served installer page.
+
+    Cloud Logging is the counting surface for campaign attribution: a push CTA
+    points here with campaign_id, and that campaign's download count is a filter
+    on this line. Emitted for every served page, with campaign_id=none when the
+    request carries no campaign, so a campaign's count keeps a denominator.
+    """
+    logger.info(
+        "desktop_download_served platform=%s channel=%s version=%s campaign_id=%s",
+        platform,
+        channel,
+        version,
+        campaign_id or "none",
+    )
+
+
 @router.get("/v2/desktop/download/latest")
 async def download_latest_desktop_release(
     platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
     channel: str = Query(default="stable", pattern="^(beta|stable)$"),
     identity: Optional[str] = Query(default=None, pattern="^(stable|beta)$"),
+    # Attribution only: never changes which installer is served. The pattern
+    # bounds it to log-safe characters so a campaign id cannot inject a field
+    # separator or a newline into the line Cloud Logging counts.
+    campaign_id: Optional[str] = Query(default=None, max_length=64, pattern="^[A-Za-z0-9._:-]+$"),
 ):
     """
     Serve the latest desktop release installer as an auto-download landing page.
@@ -840,6 +861,8 @@ async def download_latest_desktop_release(
     When identity is absent it follows the channel (channel=beta alone serves
     the beta-identity DMG — the macos.omi.me/beta redirect contract); pass
     identity explicitly to request the cross product.
+    campaign_id attributes the download to a push campaign and is recorded on
+    the served-page log line; it does not affect resolution.
     """
     if identity is None:
         # macos.omi.me/beta redirects here with only channel=beta — the URL-map redirect
@@ -864,6 +887,7 @@ async def download_latest_desktop_release(
             installer_url = await _resolve_beta_identity_dmg(entry)
             if installer_url:
                 version = entry["version_info"]["version"]
+                _log_download_served(platform=platform, channel=channel, version=version, campaign_id=campaign_id)
                 return HTMLResponse(
                     content=download_landing_html(installer_url, channel=channel, version=version, platform=platform)
                 )
@@ -874,6 +898,7 @@ async def download_latest_desktop_release(
         raise HTTPException(status_code=404, detail=f"No installer found for platform {platform}, channel: {channel}")
     entry, installer_url = picked
     version = entry["version_info"]["version"]
+    _log_download_served(platform=platform, channel=channel, version=version, campaign_id=campaign_id)
     return HTMLResponse(
         content=download_landing_html(installer_url, channel=channel, version=version, platform=platform)
     )

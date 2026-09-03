@@ -92,6 +92,21 @@ def save_token(
 
 @router.post('/v1/notification')
 def send_notification_to_user(data: Dict[str, Any], secret_key: str = Header(...)) -> Dict[str, str]:
+    """Send one FCM notification to a user.
+
+    `data.data` is forwarded to FCM untouched and reaches the client as the tap
+    payload. Two keys in it are a convention rather than transport:
+
+      kind         "campaign" marks a marketing or growth send.
+      campaign_id  identifies that campaign. The client emits it back on the
+                   notification tap, and a campaign CTA carries it into
+                   /v2/desktop/download/latest, so sends, opens and downloads
+                   share one id.
+
+    A campaign send without a campaign_id is rejected. Afterwards it is
+    indistinguishable from an untracked send, and the gap only surfaces once the
+    campaign is over and the opens can no longer be recovered.
+    """
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
@@ -100,6 +115,11 @@ def send_notification_to_user(data: Dict[str, Any], secret_key: str = Header(...
     title = cast(str, data['title'])
     body = cast(str, data['body'])
     notification_data = cast(Dict[str, Any], data.get('data', {}))
+    if notification_data.get('kind') == 'campaign' and not notification_data.get('campaign_id'):
+        raise HTTPException(
+            status_code=400,
+            detail='data.campaign_id is required when data.kind is "campaign"',
+        )
     send_notification(uid, title, body, notification_data)
     return {'status': 'Ok'}
 

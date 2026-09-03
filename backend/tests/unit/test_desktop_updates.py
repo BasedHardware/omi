@@ -1,5 +1,6 @@
 """Tests for desktop update system (appcast XML, channel filtering, download endpoint)."""
 
+import logging
 from datetime import timedelta
 import xml.etree.ElementTree as ET
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
@@ -1213,6 +1214,76 @@ class TestDownloadEndpoint:
                 resp = await client.get("/v2/desktop/download/windows?channel=beta")
         assert resp.status_code == 404
         assert "channel: beta" in resp.json()["detail"]
+
+    # --- campaign attribution (#12645) ---
+    #
+    # Cloud Logging is the counting surface: a push CTA points here carrying
+    # campaign_id, and that campaign's downloads are a filter on the served line.
+
+    @pytest.mark.asyncio
+    async def test_campaign_id_is_recorded_on_the_served_page(self, caplog):
+        mock_releases = [
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.2.3+45", "build": "45"},
+                "release": {"assets": [_dmg_asset("https://example.com/Omi-stable.dmg")]},
+            },
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                with caplog.at_level(logging.INFO, logger="routers.updates"):
+                    resp = await client.get(
+                        "/v2/desktop/download/latest?channel=stable&campaign_id=macos-push-2026-09-02"
+                    )
+
+        assert resp.status_code == 200
+        assert "https://example.com/Omi-stable.dmg" in resp.text
+        assert "desktop_download_served" in caplog.text
+        assert "campaign_id=macos-push-2026-09-02" in caplog.text
+        assert "version=1.2.3+45" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_download_without_a_campaign_still_logs_a_countable_line(self, caplog):
+        mock_releases = [
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.2.3+45", "build": "45"},
+                "release": {"assets": [_dmg_asset("https://example.com/Omi-stable.dmg")]},
+            },
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                with caplog.at_level(logging.INFO, logger="routers.updates"):
+                    resp = await client.get("/v2/desktop/download/latest?channel=stable")
+
+        assert resp.status_code == 200
+        # A campaign's count needs a denominator, so the line is always emitted.
+        assert "campaign_id=none" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_campaign_id_does_not_change_which_installer_is_served(self):
+        mock_releases = [
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.2.3+45", "build": "45"},
+                "release": {"assets": [_dmg_asset("https://example.com/Omi-stable.dmg")]},
+            },
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                plain = await client.get("/v2/desktop/download/latest?channel=stable")
+                attributed = await client.get("/v2/desktop/download/latest?channel=stable&campaign_id=abc")
+
+        assert plain.status_code == attributed.status_code == 200
+        assert plain.text == attributed.text
+
+    @pytest.mark.asyncio
+    async def test_campaign_id_carrying_a_log_separator_is_rejected(self):
+        # The id lands in a space-separated log line, so a value carrying a space
+        # or a newline could forge a field or a whole record.
+        async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+            resp = await client.get("/v2/desktop/download/latest?channel=stable&campaign_id=a%20b")
+        assert resp.status_code == 422
 
 
 # --- Clear cache endpoint ---
