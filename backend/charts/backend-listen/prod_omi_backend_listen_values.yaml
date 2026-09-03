@@ -148,6 +148,8 @@ env:
     value: "false"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
     value: "false"
+  - name: WAKE_WORD_ADJUDICATION_ENABLED
+    value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
     value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE

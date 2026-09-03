@@ -260,6 +260,8 @@ def _record_usage(
 def _usage_cost(report: UsageReport) -> float:
     # One rate table for every realtime route: the relay prices the turns it
     # observes on the wire with the same module (utils/llm/realtime_usage.py).
+    # The client cannot choose the rate card: mint_session issued one fixed
+    # model per provider and only that server-selected model is authoritative.
     turn = client_reported_turn(
         report.provider,
         input_text_tokens=report.input_text_tokens,
@@ -268,7 +270,8 @@ def _usage_cost(report: UsageReport) -> float:
         output_text_tokens=report.output_text_tokens,
         output_audio_tokens=report.output_audio_tokens,
     )
-    return client_reported_cost_usd(report.provider, report.model, turn)
+    issued_model = _OPENAI_REALTIME_MODEL if report.provider == 'openai' else _GEMINI_LIVE_MODEL
+    return client_reported_cost_usd(report.provider, issued_model, turn)
 
 
 @router.post("/v2/realtime/usage", status_code=204)

@@ -31,6 +31,7 @@ import logging
 import os
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
+from threading import RLock
 from typing import Any
 from uuid import uuid4
 
@@ -69,8 +70,23 @@ DESKTOP_REALTIME_FEATURE = 'desktop_chat_realtime'
 # most this pool plus the capped queue and never a shared executor that gates
 # quota or auth reads.
 _LEDGER_WORKERS = 2
-_ledger_executor = ThreadPoolExecutor(max_workers=_LEDGER_WORKERS, thread_name_prefix='spend-ledger')
+_ledger_executor: ThreadPoolExecutor | None = None
+_ledger_state_lock = RLock()
 _pending_writes: set[Future[bool]] = set()
+_ledger_shutdown_in_progress = False
+
+
+def _get_ledger_executor() -> ThreadPoolExecutor:
+    global _ledger_executor
+    with _ledger_state_lock:
+        if _ledger_executor is None:
+            _ledger_executor = ThreadPoolExecutor(max_workers=_LEDGER_WORKERS, thread_name_prefix='spend-ledger')
+        return _ledger_executor
+
+
+def _discard_pending_write(future: Future[bool]) -> None:
+    with _ledger_state_lock:
+        _pending_writes.discard(future)
 
 
 @dataclass(frozen=True)
@@ -159,11 +175,6 @@ def schedule_managed_attempt(attempt: ManagedAttempt) -> bool:
     """
     if not accounting_enabled():
         return False
-    if len(_pending_writes) >= accounting_max_pending_traces():
-        logger.warning(
-            'managed_spend_ledger_dropped caller=%s feature=%s reason=pending_cap', attempt.caller, attempt.feature
-        )
-        return False
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -174,13 +185,24 @@ def schedule_managed_attempt(attempt: ManagedAttempt) -> bool:
     # No request context is copied into the write: the attempt already holds
     # every field the row needs, and a request's context vars can carry
     # validated BYOK credentials that a stalled write must not keep alive.
-    try:
-        future = _ledger_executor.submit(record_managed_attempt, attempt)
-    except RuntimeError:
-        # Interpreter shutdown: the executor no longer accepts work.
-        return False
-    _pending_writes.add(future)
-    future.add_done_callback(_pending_writes.discard)
+    with _ledger_state_lock:
+        if _ledger_shutdown_in_progress:
+            logger.warning(
+                'managed_spend_ledger_dropped caller=%s feature=%s reason=shutdown', attempt.caller, attempt.feature
+            )
+            return False
+        if len(_pending_writes) >= accounting_max_pending_traces():
+            logger.warning(
+                'managed_spend_ledger_dropped caller=%s feature=%s reason=pending_cap', attempt.caller, attempt.feature
+            )
+            return False
+        try:
+            future = _get_ledger_executor().submit(record_managed_attempt, attempt)
+        except RuntimeError:
+            # Interpreter shutdown: the executor no longer accepts work.
+            return False
+        _pending_writes.add(future)
+        future.add_done_callback(_discard_pending_write)
     loop.create_task(_observe(attempt, asyncio.wrap_future(future, loop=loop)), name='managed-spend-ledger-persistence')
     return True
 
@@ -210,9 +232,34 @@ async def _observe(attempt: ManagedAttempt, future: 'asyncio.Future[bool]') -> N
 async def drain_pending_writes() -> None:
     """Give scheduled writes one configured timeout during orderly shutdown (and tests)."""
     loop = asyncio.get_running_loop()
-    pending = [asyncio.wrap_future(future, loop=loop) for future in tuple(_pending_writes)]
+    with _ledger_state_lock:
+        pending = [asyncio.wrap_future(future, loop=loop) for future in tuple(_pending_writes)]
     if pending:
         await asyncio.wait(pending, timeout=accounting_write_timeout_seconds())
+
+
+async def shutdown_managed_spend_ledger() -> None:
+    """Drain accepted writes and close the private executor for app shutdown.
+
+    The executor is detached before shutdown so a later in-process app/test
+    lifespan can lazily create a fresh pool. Already-running writes are not
+    cancelled after the bounded drain; they retain the best-effort ledger
+    contract while no new work is accepted by the retired pool.
+    """
+    global _ledger_executor, _ledger_shutdown_in_progress
+    with _ledger_state_lock:
+        if _ledger_shutdown_in_progress:
+            return
+        _ledger_shutdown_in_progress = True
+    try:
+        await drain_pending_writes()
+    finally:
+        with _ledger_state_lock:
+            executor = _ledger_executor
+            _ledger_executor = None
+            _ledger_shutdown_in_progress = False
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=True)
 
 
 def accounting_enabled() -> bool:

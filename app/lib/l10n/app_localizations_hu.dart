@@ -9959,4 +9959,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Nem sikerült betölteni az emlékeket';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nem sikerült betölteni a tudásgráfot';
 }
