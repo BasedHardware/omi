@@ -92,7 +92,8 @@ final class DesktopExperimentTests: XCTestCase {
 
   @MainActor
   func testPostcardLandingConsumesEachSummaryExactlyOnce() async throws {
-    let defaults = UserDefaults(suiteName: "desktop-experiment-tests-\(UUID().uuidString)")!
+    let defaults = try XCTUnwrap(
+      UserDefaults(suiteName: "desktop-experiment-tests-\(UUID().uuidString)"))
     let box = SummaryBox()
     let store = HomeDailySummaryStore(
       ownerFence: { { true } },
