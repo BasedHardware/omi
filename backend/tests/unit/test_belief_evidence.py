@@ -103,8 +103,9 @@ def test_resolved_sets_valid_to():
     )
     assert patch is not None
     logical, extra = patch
-    assert extra["valid_to"] == NOW
-    assert logical["result_status"] == "superseded"
+    assert logical["valid_to"] == NOW
+    assert "result_status" not in logical
+    assert extra == {}
 
 
 def test_unrelated_and_similarity_alone_write_nothing():

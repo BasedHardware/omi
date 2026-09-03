@@ -58,9 +58,10 @@ def patch_for_evidence_event(
             },
         )
     if judgment.event is EvidenceEventKind.resolved:
+        # History by date, not by status: /v3 still lists the row with band=history.
         return (
-            {"result_status": LifecycleState.superseded.value, "metadata": metadata},
-            {"valid_to": now},
+            {"valid_to": now, "metadata": metadata},
+            {},
         )
     if judgment.event is EvidenceEventKind.contradicted:
         extra: Dict[str, Any] = {"confidence": 0.0}
