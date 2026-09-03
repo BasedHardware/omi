@@ -84,7 +84,17 @@ final class HubEscalationTests: XCTestCase {
     let prompt = RealtimeHubTools.publicWebSearchPrompt(
       query: "What is the weather in New York right now?")
 
-    XCTAssertTrue(prompt.hasPrefix("Search the live public web"))
+    // The opening sentence, matched on its two load-bearing halves rather than
+    // as one exact string. Pinning the whole sentence made this assertion a
+    // tripwire for adverbs: `bce354d767` inserted "thoroughly" between them and
+    // reddened main without changing anything this test is about.
+    let opening = prompt.prefix(while: { $0 != "." })
+    XCTAssertTrue(
+      opening.hasPrefix("Search the live public web"),
+      "the prompt must open by directing a live public web search, not a model recall")
+    XCTAssertTrue(
+      opening.contains("before answering this request"),
+      "the search must precede the answer, not decorate it")
     XCTAssertTrue(prompt.contains("weather in New York right now"))
     XCTAssertTrue(prompt.contains("one to four concise"))
     XCTAssertTrue(prompt.contains("Name the source"))
