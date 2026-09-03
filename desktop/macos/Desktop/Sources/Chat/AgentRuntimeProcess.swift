@@ -2,8 +2,7 @@ import Foundation
 import OmiSupport
 
 extension Notification.Name {
-  /// Posted on MainActor after the runtime handshake makes direct control
-  /// tools admissible. Carries no owner id or request content.
+  /// Posted on MainActor after the runtime handshake makes direct control tools admissible.
   static let agentRuntimeDidBecomeReady = Notification.Name("com.omi.desktop.agentRuntimeDidBecomeReady")
 }
 
@@ -3696,8 +3695,9 @@ actor AgentRuntimeProcess {
         suppressedByStreamingTail: message.payload["suppressedByStreamingTail"] as? Bool ?? false,
         materializationStoppedByTail: message.payload["materializationStoppedByTail"] as? Bool ?? false,
         materializationReceipts: Self.chatFirstMaterializationReceipts(
-          from: message.payload["materializationReceipts"]
-        ),
+          from: message.payload["materializationReceipts"]),
+        materializationRejections: Self.chatFirstRejections(from: message.payload["materializationRejections"]),
+        materializationDeferrals: Self.chatFirstDeferrals(from: message.payload["materializationDeferrals"]),
         coldStartSequenceTerminalReceipts: Self.chatFirstColdStartSequenceTerminalReceipts(
           from: message.payload["coldStartSequenceTerminalReceipts"]
         ),
@@ -3987,7 +3987,7 @@ actor AgentRuntimeProcess {
         journalRequest.continuation.resume(throwing: BridgeError.authMissing)
         return
       }
-      log("AgentRuntimeProcess: journal operation failed (code-only)")
+      log(Self.chatFirstJournalFailureLog(failure: failure, payload: message.payload, raw: raw))
       journalRequest.continuation.resume(
         throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
       )

@@ -233,6 +233,11 @@ enum FloatingBarNotificationAction: Equatable {
   /// the conversation to share and the calendar-detected recipients a
   /// one-click "Send to …" email would go to (empty = no send button).
   case meetingSummaryShare(conversationID: String, recipients: [ConversationShareRecipient])
+  /// Open the main chat with `prompt` already in the composer, focused and
+  /// **not sent**. Raised by the first-real-app card, whose whole purpose is to
+  /// turn a dead-end notch card into the user's first question — they still
+  /// press return, so the question stays theirs.
+  case askOmiPrefilled(prompt: String)
 }
 
 /// A custom in-app notification rendered directly below the floating bar.

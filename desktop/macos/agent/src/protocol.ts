@@ -1128,6 +1128,8 @@ export interface JournalOperationResultMessage extends OutboundEnvelope {
   suppressedByStreamingTail?: boolean;
   materializationStoppedByTail?: boolean;
   materializationReceipts?: Array<{ intentId: string; receiptId: string }>;
+  materializationRejections?: Array<{ intentId: string; code: string; message: string }>;
+  materializationDeferrals?: Array<{ intentId: string; code: "tail_question" | "streaming_tail" }>;
   coldStartSequenceTerminalReceipts?: Array<{
     sequenceId: string;
     receiptId: string;
