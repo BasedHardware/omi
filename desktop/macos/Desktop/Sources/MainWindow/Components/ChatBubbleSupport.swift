@@ -49,7 +49,11 @@ enum ChatAssistantAnswerText {
       }
     }
 
-    let fallbackText = fallback.trimmingCharacters(in: .whitespacesAndNewlines)
+    // A body that is only the blocks' own degradation has nothing the cards
+    // above it do not already say, so it is not answer text at all.
+    let fallbackText =
+      ChatStructuredFallbackText.bodyIsBlockProjection(text: fallback, contentBlocks: contentBlocks)
+      ? "" : fallback.trimmingCharacters(in: .whitespacesAndNewlines)
     guard
       let lastTool = contentBlocks.lastIndex(where: { block in
         if case .toolCall = block { return true }
@@ -72,6 +76,81 @@ enum ChatAssistantAnswerText {
       return beforeTools.joined(separator: "\n")
     }
     return fallbackText
+  }
+}
+
+/// The unaware-client projection of a turn's structured blocks.
+///
+/// A turn that answers with cards writes no prose, so the runtime synthesizes
+/// one line per block — "Goal - Make Omi Great Again", the bare word "Task"
+/// once per task card — and puts it on the message's ordinary text field. That
+/// is the degradation contract for clients that cannot draw the cards
+/// (`agent/src/runtime/content-block-fallback.ts`). A client that *does* draw
+/// them must recognize its own projection and not print it back underneath the
+/// controls it just rendered. Mobile recognizes it the same way, in
+/// `ServerMessage.textIsStructuredFallback`; the two must agree, so this
+/// mirrors the producer case for case.
+enum ChatStructuredFallbackText {
+  static func bodyIsBlockProjection(text: String, contentBlocks: [ChatContentBlock]) -> Bool {
+    guard !contentBlocks.isEmpty else { return false }
+    let projection = projected(contentBlocks)
+    guard !projection.isEmpty else { return false }
+    let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return body.isEmpty || normalized(body) == normalized(projection)
+  }
+
+  static func projected(_ contentBlocks: [ChatContentBlock]) -> String {
+    contentBlocks.map(line(for:)).filter { !$0.isEmpty }.joined(separator: "\n")
+  }
+
+  private static func normalized(_ value: String) -> String {
+    value.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+  }
+
+  private static func labelled(_ label: String, _ details: String?...) -> String {
+    var unique: [String] = []
+    for detail in details {
+      let trimmed = detail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      guard !trimmed.isEmpty, !unique.contains(trimmed) else { continue }
+      unique.append(trimmed)
+    }
+    return unique.isEmpty ? label : "\(label) - \(unique.joined(separator: " - "))"
+  }
+
+  private static func nonEmpty(_ value: String, or fallback: String) -> String {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? fallback : trimmed
+  }
+
+  private static func line(for block: ChatContentBlock) -> String {
+    switch block {
+    case .text(_, let text):
+      return nonEmpty(text, or: "Message")
+    case .toolCall(_, let name, _, _, let input, let output):
+      return labelled("Tool", name, output ?? input?.summary)
+    case .thinking(_, let text):
+      return labelled("Thinking", text)
+    case .discoveryCard(_, let title, let summary, _):
+      return labelled("Discovery", title, summary)
+    case .questionCard(_, _, let text, _, _, _, _):
+      return nonEmpty(text, or: "Question")
+    case .taskCard:
+      return "Task"
+    case .goalLink(_, _, let summary):
+      return labelled("Goal", summary)
+    case .captureLink(_, _, _, let summary):
+      return labelled("Capture", summary)
+    case .conversationLink(_, _, let summary, _):
+      return labelled("Meeting notes ready", summary)
+    case .memoryLink(_, _, let summary):
+      return labelled("Memory", summary)
+    case .citation(_, let reference):
+      return labelled("Source", reference.title, reference.preview)
+    case .agentSpawn(_, _, _, _, let title, let objective, _):
+      return labelled("Agent started", title, objective)
+    case .agentCompletion(_, _, _, _, let title, _, let output, _):
+      return labelled("Agent completed", title, output)
+    }
   }
 }
 

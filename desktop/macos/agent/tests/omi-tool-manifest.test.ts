@@ -275,9 +275,15 @@ describe("omi tool manifest", () => {
     expect(toolNamesForAdapter("pi-mono", {
       surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
     })).toEqual(expect.arrayContaining(["get_canonical_goals", "render_chat_blocks", "search_chat_history", "show_rewind_evidence"]));
-    expect(enabled.find((tool) => tool.name === "render_chat_blocks")?.description).toContain(
-      "call this in the same turn whenever you retrieve, create, or summarize tasks",
-    );
+    // The tool is for entities the user asked for or acted on, not for every
+    // entity a turn happened to read. The old "render whenever you retrieve"
+    // wording stacked three conversation cards above a summary that had merely
+    // cited those conversations.
+    const renderDescription = enabled.find((tool) => tool.name === "render_chat_blocks")?.description ?? "";
+    expect(renderDescription).toContain("when the entity IS the answer");
+    expect(renderDescription).toContain("sources belong in citations");
+    expect(renderDescription).toContain("Render at most three");
+    expect(renderDescription).not.toContain("whenever you retrieve");
     expect(enabled.find((tool) => tool.name === "render_chat_blocks")?.description).toContain(
       "never use a local SQLite/execute_sql numeric row ID",
     );

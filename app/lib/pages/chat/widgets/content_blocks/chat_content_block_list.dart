@@ -4,7 +4,9 @@ import 'package:omi/backend/schema/chat_content_block.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 
+import 'agent_run_blocks.dart';
 import 'conversation_link_blocks.dart';
+import 'discovery_card_block.dart';
 import 'goal_link_block.dart';
 import 'memory_link_block.dart';
 import 'question_card_block.dart';
@@ -12,11 +14,11 @@ import 'task_card_block.dart';
 
 /// Renders the interactable components for a message's `content_blocks`.
 ///
-/// Only blocks that have their own mobile component are rendered here. text,
-/// thinking, toolCall, discoveryCard, citation, agentSpawn, agentCompletion and
-/// unknown types are already covered by the message body (or its synthesized
-/// fallback text) and deliberately render nothing extra — but they never hide
-/// the message.
+/// Every block the desktop transcript draws as its own control has a component
+/// here, so a turn reads the same on both clients. text, thinking, toolCall,
+/// citation and unknown types are covered by the message body (or its
+/// synthesized fallback text) and deliberately render nothing extra — but they
+/// never hide the message.
 class ChatContentBlockList extends StatelessWidget {
   const ChatContentBlockList({
     super.key,
@@ -40,7 +42,10 @@ class ChatContentBlockList extends StatelessWidget {
         block is CaptureLinkContentBlock ||
         block is ConversationLinkContentBlock ||
         block is MemoryLinkContentBlock ||
-        block is QuestionCardContentBlock;
+        block is QuestionCardContentBlock ||
+        block is DiscoveryCardContentBlock ||
+        block is AgentSpawnContentBlock ||
+        block is AgentCompletionContentBlock;
   }
 
   Widget? _build(ChatContentBlock block) {
@@ -57,13 +62,16 @@ class ChatContentBlockList extends StatelessWidget {
         return MemoryLinkBlock(block: block);
       case QuestionCardContentBlock():
         return QuestionCardBlock(block: block, sendMessage: sendMessage);
+      case DiscoveryCardContentBlock():
+        return DiscoveryCardBlock(block: block);
+      case AgentSpawnContentBlock():
+        return AgentSpawnBlock(block: block);
+      case AgentCompletionContentBlock():
+        return AgentCompletionBlock(block: block);
       case TextContentBlock():
       case ThinkingContentBlock():
       case ToolCallContentBlock():
-      case DiscoveryCardContentBlock():
       case CitationContentBlock():
-      case AgentSpawnContentBlock():
-      case AgentCompletionContentBlock():
       case UnknownContentBlock():
         return null;
     }
