@@ -161,6 +161,35 @@ extension SettingsContentView {
     ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
   }
 
+  /// Endpoint/model fields for the Local provider, shown under the AI Provider
+  /// picker (in both aiChatSection and the Advanced AI Provider card) when
+  /// Local is selected.
+  var localProviderFields: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      GlassSeparator()
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+        Text("Base URL")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundColor(Ink.secondary)
+        TextField(AIProvider.defaultLocalBaseURL, text: $localLLMBaseURL)
+          .textFieldStyle(.roundedBorder)
+      }
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+        Text("Model")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundColor(Ink.secondary)
+        TextField(AIProvider.defaultLocalModelID, text: $localLLMModelID)
+          .textFieldStyle(.roundedBorder)
+      }
+
+      Text("An OpenAI-compatible endpoint (e.g. LM Studio, Ollama). Never routed through Omi's servers.")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+    }
+  }
+
   var aiChatSection: some View {
     VStack(spacing: OmiSpacing.xl) {
       // AI Provider card
@@ -203,6 +232,10 @@ extension SettingsContentView {
                 .scaledFont(size: OmiType.caption)
                 .foregroundColor(Ink.secondary)
             }
+          }
+
+          if chatBridgeMode == "local" {
+            localProviderFields
           }
 
           if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {

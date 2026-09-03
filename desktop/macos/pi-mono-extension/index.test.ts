@@ -50,6 +50,7 @@ import {
   OMI_CHAT_CONTRACT_VERSION,
   __installOmiJitFetchGuardForTest,
   __resetOmiJitFetchGuardForTest,
+  default as omiProvider,
 } from "./index.ts";
 import type { ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { agentControlCapabilityManifest } from "../agent/dist/runtime/control-tool-manifest.js";
@@ -3006,4 +3007,104 @@ test("registerUserMcpTools: a connecting server gets neutral frozen wording, and
     if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
     await rm(dir, { recursive: true, force: true });
   }
+// omiProvider — conditional "omi-local" registration
+// ---------------------------------------------------------------------------
+
+/** Minimal ExtensionAPI stub: omiProvider only calls registerProvider and on(). */
+function fakePi() {
+  const registered: Array<{ name: string; config: any }> = [];
+  return {
+    registerProvider: (name: string, config: any) => registered.push({ name, config }),
+    registerTool: () => {},
+    on: () => {},
+    registered,
+  };
+}
+
+function withEnv(vars: Record<string, string | undefined>, fn: () => void) {
+  const original: Record<string, string | undefined> = {};
+  for (const key of Object.keys(vars)) {
+    original[key] = process.env[key];
+    if (vars[key] === undefined) delete process.env[key];
+    else process.env[key] = vars[key];
+  }
+  try {
+    fn();
+  } finally {
+    for (const key of Object.keys(original)) {
+      if (original[key] === undefined) delete process.env[key];
+      else process.env[key] = original[key];
+    }
+  }
+}
+
+test("omiProvider: registers omi-local when both env vars are present", () => {
+  withEnv(
+    { OMI_LOCAL_BASE_URL: "http://100.85.206.120:1234/v1", OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx" },
+    () => {
+      const pi = fakePi();
+      omiProvider(pi as any);
+
+      const omi = pi.registered.find((r) => r.name === "omi");
+      const local = pi.registered.find((r) => r.name === "omi-local");
+      assert.ok(omi, "existing omi provider must still register");
+      assert.ok(local, "omi-local must register when both env vars are present");
+      assert.equal(local!.config.baseUrl, "http://100.85.206.120:1234/v1");
+      assert.equal(local!.config.models[0].id, "qwen3.8-27b-mlx");
+      assert.equal(local!.config.models[0].cost.input, 0);
+      // pi-ai only recognizes a handful of hosts as needing "max_tokens";
+      // everything else (including a local server) defaults to
+      // "max_completion_tokens", which LM Studio silently ignores — leaving
+      // requests with no effective token cap. This must be forced explicitly.
+      assert.equal(local!.config.models[0].compat.maxTokensField, "max_tokens");
+    }
+  );
+});
+
+test("omiProvider: falls back to a non-empty apiKey placeholder for omi-local", () => {
+  withEnv(
+    {
+      OMI_LOCAL_BASE_URL: "http://100.85.206.120:1234/v1",
+      OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx",
+      OMI_LOCAL_API_KEY: undefined,
+    },
+    () => {
+      const pi = fakePi();
+      omiProvider(pi as any);
+      const local = pi.registered.find((r) => r.name === "omi-local");
+      // pi's openai-completions client throws on an empty apiKey string.
+      assert.ok(local!.config.apiKey && local!.config.apiKey.length > 0);
+    }
+  );
+});
+
+test("omiProvider: does not register omi-local when OMI_LOCAL_MODEL_ID is missing", () => {
+  withEnv(
+    { OMI_LOCAL_BASE_URL: "http://100.85.206.120:1234/v1", OMI_LOCAL_MODEL_ID: undefined },
+    () => {
+      const pi = fakePi();
+      omiProvider(pi as any);
+      assert.ok(!pi.registered.some((r) => r.name === "omi-local"));
+    }
+  );
+});
+
+test("omiProvider: does not register omi-local when OMI_LOCAL_BASE_URL is missing", () => {
+  withEnv(
+    { OMI_LOCAL_BASE_URL: undefined, OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx" },
+    () => {
+      const pi = fakePi();
+      omiProvider(pi as any);
+      assert.ok(!pi.registered.some((r) => r.name === "omi-local"));
+    }
+  );
+});
+
+test("omiProvider: does not register omi-local when neither env var is set", () => {
+  withEnv({ OMI_LOCAL_BASE_URL: undefined, OMI_LOCAL_MODEL_ID: undefined }, () => {
+    const pi = fakePi();
+    omiProvider(pi as any);
+    assert.ok(!pi.registered.some((r) => r.name === "omi-local"));
+    assert.ok(pi.registered.some((r) => r.name === "omi"));
+  });
 });

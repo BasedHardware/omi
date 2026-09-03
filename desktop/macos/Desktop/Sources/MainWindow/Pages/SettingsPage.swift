@@ -366,6 +366,8 @@ struct SettingsContentView: View {
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") var chatBridgeMode: String = "piMono"
+  @AppStorage(AIProvider.localBaseURLKey) var localLLMBaseURL: String = AIProvider.defaultLocalBaseURL
+  @AppStorage(AIProvider.localModelIDKey) var localLLMModelID: String = AIProvider.defaultLocalModelID
   @AppStorage("realtimeOmniProvider") var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
   @AppStorage("askModeEnabled") var askModeEnabled = false
   @AppStorage("aiChatWorkingDirectory") var aiChatWorkingDirectory: String = ""

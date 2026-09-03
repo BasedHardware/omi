@@ -1855,6 +1855,42 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
     applyOmiProviderHeaders(event.headers, raw);
   });
 
+  // Local provider: a user-configured OpenAI-compatible endpoint (e.g. LM
+  // Studio, Ollama) — never routes through api.omi.me, never bills or logs
+  // usage server-side. Only registered when both env vars are present, so
+  // this has no effect on installs that haven't configured a local model.
+  const localBaseUrl = process.env.OMI_LOCAL_BASE_URL;
+  const localModelId = process.env.OMI_LOCAL_MODEL_ID;
+  if (localBaseUrl && localModelId) {
+    pi.registerProvider("omi-local", {
+      api: "openai-completions",
+      baseUrl: localBaseUrl,
+      // Most local OpenAI-compatible servers (LM Studio, Ollama, etc.) don't
+      // check the key, but pi's openai-completions client requires a
+      // non-empty string or it throws before sending the request.
+      apiKey: process.env.OMI_LOCAL_API_KEY || "not-needed",
+      models: [
+        {
+          id: localModelId,
+          name: localModelId,
+          reasoning: false,
+          input: ["text"],
+          contextWindow: 32_000,
+          maxTokens: 8_192,
+          // Genuinely free — never tracked anywhere, client or server.
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          // pi-ai auto-detects the max-tokens field name from the base URL and
+          // only recognizes a handful of known hosts as "max_tokens"; every
+          // unknown host (including a local LM Studio/Ollama server) falls
+          // back to "max_completion_tokens", which LM Studio silently ignores
+          // — the request would go out with no effective token cap. Force the
+          // field LM Studio (and most local OpenAI-compatible servers) accept.
+          compat: { maxTokensField: "max_tokens" },
+        },
+      ],
+    });
+  }
+
   pi.on("tool_call", async (event): Promise<ToolCallEventResult | void> => {
     let decision: DenyDecision | null = null;
     let builtInToolPolicy: OmiBuiltInToolPolicy = "read_only";

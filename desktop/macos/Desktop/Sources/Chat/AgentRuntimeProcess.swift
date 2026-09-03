@@ -2590,12 +2590,34 @@ actor AgentRuntimeProcess {
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
     applyLocalAgentEnvironment(to: &env)
 
+    // Provider selection within the piMono harness: "omi" (default, routed
+    // through the Rust backend) or "omi-local" (a user-configured
+    // OpenAI-compatible endpoint, chosen app-wide in Settings — see
+    // AIProvider.currentProviderMode). Meaningless for every other harness.
+    let providerMode = preferredAdapterId == .piMono ? AIProvider.currentProviderMode : "omi"
+    let isLocalProvider = preferredAdapterId == .piMono && providerMode == "omi-local"
+    if isLocalProvider {
+      // Local provider: talk directly to a user-configured OpenAI-compatible
+      // endpoint (e.g. LM Studio, Ollama). No Firebase auth, no Rust backend,
+      // no BYOK — this session never reaches api.omi.me at all.
+      let defaults = UserDefaults.standard
+      let localBaseURL = defaults.string(forKey: AIProvider.localBaseURLKey) ?? AIProvider.defaultLocalBaseURL
+      let localModelID = defaults.string(forKey: AIProvider.localModelIDKey) ?? AIProvider.defaultLocalModelID
+      guard !localBaseURL.isEmpty, !localModelID.isEmpty else {
+        log("AgentRuntimeProcess: local provider start refused — base URL or model id not configured")
+        throw BridgeError.localConfigMissing
+      }
+      env["OMI_PROVIDER"] = "omi-local"
+      env["OMI_LOCAL_BASE_URL"] = localBaseURL
+      env["OMI_LOCAL_MODEL_ID"] = localModelID
+    }
+
     let rustBase = await APIClient.shared.rustBackendURL
     try assertStartupAuthority(
       authorizationSnapshot,
       expectedAuthorityEpoch: admissionAuthorityEpoch)
     env = Self.childBackendRoutingEnvironment(baseEnvironment: env, rustBase: rustBase)
-    if rustBase.isEmpty && preferredAdapterId == .piMono {
+    if rustBase.isEmpty && preferredAdapterId == .piMono && !isLocalProvider {
       log("AgentRuntimeProcess: pi-mono start refused, OMI_DESKTOP_API_URL is not configured")
       throw BridgeError.bridgeScriptNotFound
     }
@@ -2624,7 +2646,7 @@ actor AgentRuntimeProcess {
       isNonProduction: AppBuild.isNonProduction,
       hermeticFaultModelToken: hermeticFaultModelToken)
     let requiresPiMonoCredentials =
-      preferredAdapterId == .piMono && shouldFetchManagedToken
+      preferredAdapterId == .piMono && !isLocalProvider && shouldFetchManagedToken
     let authService = await MainActor.run { AuthService.shared }
     let forceRefreshToken =
       preferredAdapterId == .piMono

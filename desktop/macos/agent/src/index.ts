@@ -1637,6 +1637,12 @@ async function main(): Promise<void> {
   const defaultAdapterId = adapterIdForHarnessMode(defaultHarnessMode);
   logErr(`Default harness mode: ${defaultHarnessMode}`);
 
+  // Provider selection: "omi" (default) routes through the Rust backend and
+  // requires Firebase auth below. "omi-local" talks directly to a
+  // user-configured OpenAI-compatible endpoint (see pi-mono-extension) and
+  // never authenticates to Omi at all.
+  const provider = process.env.OMI_PROVIDER || "omi";
+
   // 1. Start Unix socket for omi-tools relay
   omiToolsPipePath = await startOmiToolsRelay();
   logErr("omi-tools relay started");
@@ -1692,7 +1698,11 @@ async function main(): Promise<void> {
     await Promise.all([...localAcpAdapters].map((adapter) => adapter.stop()));
   };
   const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
-    if (!authToken) return false;
+    // SECURITY: the "omi" provider authenticates to api.omi.me with a Firebase
+    // ID token. Never fall back to ANTHROPIC_API_KEY — that would leak the
+    // upstream Anthropic provider secret to the Omi backend. Local providers
+    // never send this token in the first place.
+    if (provider === "omi" && !authToken) return false;
     piMonoAuthToken = authToken;
     piMonoClasses ??= await import("./adapters/pi-mono.js");
     if (!registry.has("pi-mono")) {
@@ -1700,6 +1710,8 @@ async function main(): Promise<void> {
         const harness = new piMonoClasses!.PiMonoAdapter({
           omiApiBaseUrl: process.env.OMI_API_BASE_URL,
           authToken: piMonoAuthToken,
+          provider,
+          model: provider === "omi" ? undefined : process.env.OMI_LOCAL_MODEL_ID,
           onDisposed: () => piMonoAdapters.delete(harness),
         });
         piMonoAdapters.add(harness);
@@ -1728,7 +1740,10 @@ async function main(): Promise<void> {
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
   if (!piMonoAvailable && defaultAdapterId === "pi-mono" && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY !== "1") {
-    const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
+    const msg =
+      provider === "omi"
+        ? "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token) for provider \"omi\"; refusing to start"
+        : "pi-mono mode failed to start local provider; refusing to start";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);

@@ -1166,6 +1166,112 @@ describe("PiMonoAdapter capabilities", () => {
   });
 });
 
+describe("PiMonoAdapter local provider", () => {
+  beforeEach(() => {
+    vi.mocked(spawn).mockClear();
+  });
+
+  it("throws when provider is omi (default) and authToken is missing", async () => {
+    const config: HarnessConfig = {};
+    const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
+    await expect(adapter.start()).rejects.toThrow(
+      'requires config.authToken (Firebase ID token) for provider "omi"'
+    );
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("does not require authToken when provider is omi-local", async () => {
+    const config: HarnessConfig = {
+      provider: "omi-local",
+      model: "qwen3.8-27b-mlx",
+    };
+    const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
+    await expect(adapter.start()).resolves.toBeUndefined();
+
+    const [, args] = vi.mocked(spawn).mock.calls[0];
+    expect(args).toEqual(expect.arrayContaining([
+      "--provider", "omi-local",
+      "--model", "qwen3.8-27b-mlx",
+    ]));
+
+    await adapter.stop();
+  });
+
+  it("does not set OMI_API_KEY in the subprocess env for a local provider", async () => {
+    const config: HarnessConfig = {
+      provider: "omi-local",
+      model: "qwen3.8-27b-mlx",
+    };
+    const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
+    await adapter.start();
+
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [string, string[], { env: Record<string, string> }];
+    expect(options.env.OMI_API_KEY).toBeUndefined();
+    expect(options.env.ANTHROPIC_API_KEY).toBeUndefined();
+
+    await adapter.stop();
+  });
+
+  it("createSession targets the configured local model regardless of the requested model id", async () => {
+    const config: HarnessConfig = {
+      provider: "omi-local",
+      model: "qwen3.8-27b-mlx",
+    };
+    const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
+    const sendCommand = vi.fn();
+    (adapter as any).sendCommand = sendCommand;
+
+    // Swift/ChatProvider still requests a Claude model id — the local
+    // provider must ignore it and target its one configured model.
+    await adapter.createSession({ cwd: "/tmp", model: "claude-sonnet-4-6" });
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "set_model",
+        provider: "omi-local",
+        modelId: "qwen3.8-27b-mlx",
+      })
+    );
+  });
+
+  it("setModel ignores the requested model id for a local provider", async () => {
+    const config: HarnessConfig = {
+      provider: "omi-local",
+      model: "qwen3.8-27b-mlx",
+    };
+    const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
+    const sendCommand = vi.fn();
+    (adapter as any).sendCommand = sendCommand;
+
+    await adapter.setModel("session-1", "claude-opus-4-6");
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "set_model",
+        provider: "omi-local",
+        modelId: "qwen3.8-27b-mlx",
+      })
+    );
+  });
+
+  it("regression: default provider still maps Claude ids to omi-sonnet/omi-opus", async () => {
+    const config: HarnessConfig = { authToken: "test-token" };
+    const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
+    const sendCommand = vi.fn();
+    (adapter as any).sendCommand = sendCommand;
+
+    await adapter.createSession({ cwd: "/tmp", model: "claude-opus-4-6" });
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "set_model",
+        provider: "omi",
+        modelId: "omi-opus",
+      })
+    );
+  });
+});
+
 describe("tool_use event filtering", () => {
   // Two-layer defense:
   // 1. Source-level assertion verifies the filter EXISTS in the real code

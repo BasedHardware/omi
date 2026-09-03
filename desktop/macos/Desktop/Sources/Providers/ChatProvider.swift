@@ -83,7 +83,11 @@ struct ChatRunAccountingPolicy: Equatable {
   let recordsPersonalProviderUsage: Bool
 
   init(pinnedAdapterID: String) {
-    usesOmiAccountQuota = pinnedAdapterID == AgentAdapterId.piMono.rawValue
+    // piMono is shared by the Omi-billed "omi" provider and the free
+    // "omi-local" provider (see AIProvider) — only "omi" ever touches the
+    // Omi account's quota or spend accounting.
+    usesOmiAccountQuota =
+      pinnedAdapterID == AgentAdapterId.piMono.rawValue && AIProvider.currentProviderMode == "omi"
     recordsPersonalProviderUsage = pinnedAdapterID == AgentAdapterId.acp.rawValue
   }
 }
@@ -1332,13 +1336,17 @@ class ChatProvider: ObservableObject {
     case piMono = "piMono"
     case hermes = "hermes"
     case openClaw = "openclaw"
+    case local = "local"
   }
   @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.piMono.rawValue
 
   /// Future-session preference hint for startup/UI only. A live send must use
   /// `ChatRunAccountingPolicy` from its resolved immutable session profile.
+  /// "local" shares piMono's Node harness (see AgentRuntimeRouting) but is
+  /// never the Omi-billed account — excluded explicitly since harness alone
+  /// can't tell the two apart.
   var isUsingOmiAccountProvider: Bool {
-    resolvedHarnessMode() == "piMono"
+    resolvedHarnessMode() == "piMono" && bridgeMode != BridgeMode.local.rawValue
   }
 
   nonisolated static func harnessMode(for mode: BridgeMode) -> String {

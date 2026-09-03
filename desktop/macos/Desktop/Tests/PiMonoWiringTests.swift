@@ -106,6 +106,46 @@ final class PiMonoWiringTests: XCTestCase {
       "Error: I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
   }
 
+  // MARK: - ChatProvider.BridgeMode → (Node harness, pi provider) mapping
+  // Mirrors the real mapping used by TaskChatState.ensureBridgeStarted() and
+  // ChatProvider's agentBridge construction, via the actual enum (not a
+  // reimplementation) so this exercises the real logic.
+
+  func testBridgeModePiMonoMapsToOmiProvider() {
+    XCTAssertEqual(ChatProvider.BridgeMode.piMono.nodeHarnessMode, "piMono")
+    XCTAssertEqual(ChatProvider.BridgeMode.piMono.providerMode, "omi")
+  }
+
+  func testBridgeModeLocalSharesNodeHarnessButDifferentProvider() {
+    // Local must run the same Node harness as piMono (the pi-mono subprocess)
+    // but configure a different pi provider — this is exactly what makes the
+    // piMono <-> local no-op guard bug possible if identity is derived from
+    // the Node harness string instead of the raw BridgeMode.
+    XCTAssertEqual(ChatProvider.BridgeMode.local.nodeHarnessMode, "piMono")
+    XCTAssertEqual(ChatProvider.BridgeMode.local.providerMode, "omi-local")
+    XCTAssertEqual(
+      ChatProvider.BridgeMode.local.nodeHarnessMode,
+      ChatProvider.BridgeMode.piMono.nodeHarnessMode
+    )
+    XCTAssertNotEqual(
+      ChatProvider.BridgeMode.local.providerMode,
+      ChatProvider.BridgeMode.piMono.providerMode
+    )
+    XCTAssertNotEqual(ChatProvider.BridgeMode.local.rawValue, ChatProvider.BridgeMode.piMono.rawValue)
+  }
+
+  func testBridgeModeUserClaudeMapsToAcpHarness() {
+    XCTAssertEqual(ChatProvider.BridgeMode.userClaude.nodeHarnessMode, "acp")
+  }
+
+  func testBridgeModeLegacyOmiAIMapsToPiMonoHarness() {
+    // Legacy "agentSDK" auto-migrates to piMono — the Node harness/provider
+    // mapping must already treat it as piMono even before the explicit
+    // migration in ChatProvider runs.
+    XCTAssertEqual(ChatProvider.BridgeMode.omiAI.nodeHarnessMode, "piMono")
+    XCTAssertEqual(ChatProvider.BridgeMode.omiAI.providerMode, "omi")
+  }
+
   // MARK: - ApiKeysResponse shape assertion
   // After #6594, the response must NOT contain anthropic_api_key.
 
@@ -237,7 +277,16 @@ final class PiMonoWiringTests: XCTestCase {
   }
 
   func testAIProviderAllContainsSupportedProviders() {
-    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude", "hermes", "openclaw"])
+    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude", "hermes", "openclaw", "local"])
+  }
+
+  func testAIProviderLocalHasCorrectValues() {
+    let p = AIProvider.local
+    XCTAssertEqual(p.id, "local")
+    XCTAssertEqual(p.displayName, "Local")
+    XCTAssertEqual(p.bridgeModeRawValue, "local")
+    XCTAssertNil(p.attributionURL)
+    XCTAssertFalse(p.tagline.isEmpty)
   }
 
   func testAIProviderFromBridgeModeReturnsCorrectProvider() {
@@ -245,6 +294,7 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(AIProvider.from(bridgeMode: "claudeCode")?.id, "claude")
     XCTAssertEqual(AIProvider.from(bridgeMode: "hermes")?.id, "hermes")
     XCTAssertEqual(AIProvider.from(bridgeMode: "openclaw")?.id, "openclaw")
+    XCTAssertEqual(AIProvider.from(bridgeMode: "local")?.id, "local")
     XCTAssertNil(AIProvider.from(bridgeMode: "unknown"))
     XCTAssertNil(AIProvider.from(bridgeMode: "agentSDK"))
   }
