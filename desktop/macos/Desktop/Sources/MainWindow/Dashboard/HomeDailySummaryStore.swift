@@ -100,16 +100,18 @@ final class HomeDailySummaryStore: ObservableObject {
           return
         }
         self.latest = summaries.first
-        // `summaries` is newest-first and `lastWriteWins` keeps the *last* pair seen, so the
-        // sequence has to be reversed: iterated as served, a duplicated date (#4608) would
-        // resolve to the older of the two records.
+        // `lastWriteWins` keeps the *last* pair seen, so the sequence is ordered worst-first and
+        // the winner lands last. The backend orders by `date` alone, so for a duplicated date
+        // (#4608) the served order between the two records is unspecified — sorting by
+        // `created_at` is what actually picks the newer write; the array order cannot.
         self.byDate = Dictionary(
-          lastWriteWins: summaries.reversed().compactMap { record -> (String, DailySummaryRecord)? in
+          lastWriteWins: summaries.compactMap { record -> (String, DailySummaryRecord)? in
             guard let date = record.date, ChatDailySummaryPresentation.day(from: date) != nil else {
               return nil
             }
             return (date, record)
-          })
+          }
+          .sorted { ($0.1.createdAt ?? "") < ($1.1.createdAt ?? "") })
         self.summaryHour = resolvedHour
         self.lastError = nil
         self.lastRefresh = self.now()
@@ -125,13 +127,29 @@ final class HomeDailySummaryStore: ObservableObject {
   }
 
   /// Publish a record the user just generated or regenerated so the timeline updates in place.
-  func upsert(_ record: DailySummaryRecord) {
-    if let date = record.date, ChatDailySummaryPresentation.day(from: date) != nil {
-      byDate[date] = record
+  ///
+  /// `isOwnerStillCurrent` is the fence captured *before* the request that produced `record`.
+  /// INV-AUTH-1: generation is a network round trip that outlives an account switch, and
+  /// `.runtimeOwnerDidChange` only clears what is already here — a late result would otherwise
+  /// repopulate this shared store with the previous owner's recap and render it to the new one.
+  func upsert(_ record: DailySummaryRecord, isOwnerStillCurrent: () -> Bool) {
+    guard isOwnerStillCurrent() else {
+      log("HomeDailySummaryStore: dropped generated recap after account switch")
+      return
     }
-    if latest == nil || latest?.date == record.date || latest?.id == record.id {
-      latest = record
-    }
+    guard let date = record.date, ChatDailySummaryPresentation.day(from: date) != nil else { return }
+    byDate[date] = record
+    // Promote to `latest` when this is the newest day we hold. Matching only the *same* date left
+    // Chat rendering yesterday's card after the user generated today's — the one action whose
+    // whole point was to replace it.
+    if let current = latest?.date, current > date, latest?.id != record.id { return }
+    latest = record
+  }
+
+  /// Fence for a request this store did not issue, captured at call time.
+  /// Callers hold it across their own await and hand it back to `upsert`.
+  func captureOwnerFence() -> (() -> Bool)? {
+    ownerFence()
   }
 
   private func reset() {

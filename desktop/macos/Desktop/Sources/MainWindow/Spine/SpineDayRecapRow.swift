@@ -8,15 +8,23 @@ enum SpineDayRecapContent: Equatable {
   case emptyGenerate
   case hidden
 
+  /// A stored recap belongs to the day, not to the query, so it survives any filter. The
+  /// *generate* affordance does not: `SpineDay.conversationCount` is recomputed from the
+  /// filtered rows, so under a soloed kind or a typed query it reports the matches, not the
+  /// day. Offering "Generate recap" off that number would claim a day was recorded-but-unsummarized
+  /// on the strength of a count that cannot say so — the same reason `SpineHourRail` drops its
+  /// conversation footer while filtering.
   static func resolve(
     recap: DailySummaryRecord?,
     conversationCount: Int,
+    isFiltering: Bool,
     dayID: Date,
     now: Date,
     calendar: Calendar,
     summaryHour: Int
   ) -> SpineDayRecapContent {
     if let recap { return .recap(recap) }
+    guard !isFiltering else { return .hidden }
     guard conversationCount > 0 else { return .hidden }
     if calendar.isDate(dayID, inSameDayAs: now) {
       let hour = calendar.component(.hour, from: now)
@@ -60,6 +68,7 @@ struct SpineDayRecapRow: View {
         } else {
           Button("Generate recap") { Task { await runGenerate() } }
             .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+            .accessibilityIdentifier("spine-day-recap-generate")
         }
       }
       if let errorMessage {
@@ -146,9 +155,17 @@ struct SpineDayRecapRow: View {
     isWorking = true
     errorMessage = nil
     defer { isWorking = false }
+    let store = ChatDailySummaryCoordinator.shared.store
+    // INV-AUTH-1: capture the fence before the request, not after — the answer belongs to the
+    // owner who asked for it.
+    guard let isOwnerStillCurrent = store.captureOwnerFence() else { return }
     do {
       let record = try await APIClient.shared.createDailySummary(date: dateKey)
-      ChatDailySummaryCoordinator.shared.store.upsert(record)
+      store.upsert(record, isOwnerStillCurrent: isOwnerStillCurrent)
+    } catch APIError.httpError(statusCode: 409, detail: _) {
+      // The scheduled run for this day is mid-flight. Saying "couldn't generate" would be a
+      // false negative at the one moment the recap is actually on its way.
+      errorMessage = "Already being generated — check back in a moment."
     } catch {
       errorMessage = "Couldn't generate this recap."
     }
@@ -158,9 +175,11 @@ struct SpineDayRecapRow: View {
     isWorking = true
     errorMessage = nil
     defer { isWorking = false }
+    let store = ChatDailySummaryCoordinator.shared.store
+    guard let isOwnerStillCurrent = store.captureOwnerFence() else { return }
     do {
       let updated = try await APIClient.shared.regenerateDailySummary(id: record.id)
-      ChatDailySummaryCoordinator.shared.store.upsert(updated)
+      store.upsert(updated, isOwnerStillCurrent: isOwnerStillCurrent)
     } catch {
       errorMessage = "Couldn't regenerate this recap."
     }

@@ -130,22 +130,70 @@ final class HomeDailySummaryTests: XCTestCase {
   }
 
   @MainActor
-  /// Two records for one date is the #4608 duplicate-write bug, and the endpoint serves
-  /// **newest-first**. So the lookup must resolve to the newer of the two, and — the reason this
-  /// test exists at all — must not trap the way `Dictionary(uniqueKeysWithValues:)` would.
-  func testByDateLookupResolvesDuplicateDatesToTheNewestAndDoesNotTrap() async {
+  /// Two records for one date is the #4608 duplicate-write bug. The endpoint orders by `date`
+  /// alone, so the *served order* between two records sharing a date is unspecified — only
+  /// `created_at` can say which write is newer. The lookup must resolve to that one, and — the
+  /// reason this test exists at all — must not trap the way `Dictionary(uniqueKeysWithValues:)`
+  /// would. Served here worst-last, so an implementation trusting array order fails.
+  func testByDateLookupResolvesDuplicateDatesByCreatedAtAndDoesNotTrap() async {
     let store = HomeDailySummaryStore(
       ownerFence: { { true } },
       fetch: { _ in
         [
-          DailySummaryRecord(id: "newer", date: "2026-09-01", headline: "new", overview: "o"),
-          DailySummaryRecord(id: "older", date: "2026-09-01", headline: "old", overview: "o"),
+          DailySummaryRecord(
+            id: "newer", date: "2026-09-01", createdAt: "2026-09-02T09:00:00Z", headline: "new",
+            overview: "o"),
+          DailySummaryRecord(
+            id: "older", date: "2026-09-01", createdAt: "2026-09-01T23:00:00Z", headline: "old",
+            overview: "o"),
         ]
       },
       now: Date.init)
     await store.refresh()
-    XCTAssertEqual(store.latest?.id, "newer")
     XCTAssertEqual(store.byDate["2026-09-01"]?.id, "newer")
+  }
+
+  @MainActor
+  /// INV-AUTH-1. Generation is a network round trip that can outlive an account switch, and
+  /// `.runtimeOwnerDidChange` only clears what is already stored. Without a fence captured before
+  /// the request, a late result repopulates this shared store — and Chat and Activity then render
+  /// one account's recap to another.
+  func testUpsertDropsARecordWhoseOwnerIsNoLongerCurrent() async {
+    let store = HomeDailySummaryStore(
+      ownerFence: { { true } }, fetch: { _ in [] }, settingsHour: { 22 }, now: Date.init)
+    await store.refresh()
+    store.upsert(
+      DailySummaryRecord(id: "other-owner", date: "2026-09-01", headline: "h", overview: "o"),
+      isOwnerStillCurrent: { false })
+    XCTAssertNil(store.byDate["2026-09-01"])
+    XCTAssertNil(store.latest)
+  }
+
+  @MainActor
+  /// Generating today's recap from the timeline is the one action whose entire point is to
+  /// replace the stale card. Matching only the *same* date left `latest` on yesterday, so Chat
+  /// kept showing the old recap until the next 15-minute refresh.
+  func testUpsertPromotesANewerDayToLatestButKeepsOlderDaysAddressable() async {
+    let store = HomeDailySummaryStore(
+      ownerFence: { { true } },
+      fetch: { _ in
+        [DailySummaryRecord(id: "yesterday", date: "2026-09-01", headline: "h", overview: "o")]
+      },
+      now: Date.init)
+    await store.refresh()
+    XCTAssertEqual(store.latest?.id, "yesterday")
+
+    store.upsert(
+      DailySummaryRecord(id: "today", date: "2026-09-02", headline: "h", overview: "o"),
+      isOwnerStillCurrent: { true })
+    XCTAssertEqual(store.latest?.id, "today")
+
+    // An older day generated from the timeline is addressable by date but must not become `latest`.
+    store.upsert(
+      DailySummaryRecord(id: "backfilled", date: "2026-08-30", headline: "h", overview: "o"),
+      isOwnerStillCurrent: { true })
+    XCTAssertEqual(store.latest?.id, "today")
+    XCTAssertEqual(store.byDate["2026-08-30"]?.id, "backfilled")
   }
 
   @MainActor

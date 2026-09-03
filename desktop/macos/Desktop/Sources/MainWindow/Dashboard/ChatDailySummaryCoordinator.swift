@@ -36,13 +36,10 @@ final class ChatDailySummaryCoordinator: ObservableObject {
     ownerID: @escaping () -> String? = { RuntimeOwnerIdentity.captureAuthorizationSnapshot()?.ownerID },
     cardSink: CardSink? = nil
   ) {
-    self.store =
-      store
-      ?? HomeDailySummaryStore(
-        settingsHour: {
-          (try? await APIClient.shared.getDailySummarySettings())?.hour ?? 22
-        }
-      )
+    // No `settingsHour` override: the store's own default reads the same setting and falls back
+    // to `HomeDailySummaryStore.defaultSummaryHour`. Passing a second closure here duplicated the
+    // literal 22, so a change to the backend default would have moved one of them and not the other.
+    self.store = store ?? HomeDailySummaryStore()
     self.defaults = defaults
     self.ownerID = ownerID
     self.cardSink = cardSink ?? Self.defaultCardSink

@@ -21,7 +21,9 @@ def _install_generation_fakes(monkeypatch, *, existing_by_date=None, tokens_unus
 
     existing_by_date = existing_by_date if existing_by_date is not None else {}
 
+    released = []
     monkeypatch.setattr(notif, 'try_acquire_daily_summary_lock', lambda *_a, **_k: True)
+    monkeypatch.setattr(notif, 'release_daily_summary_lock', lambda uid, date_str: released.append(date_str))
     monkeypatch.setattr(
         notif.daily_summaries_db,
         'get_daily_summary_by_date',
@@ -43,11 +45,11 @@ def _install_generation_fakes(monkeypatch, *, existing_by_date=None, tokens_unus
     monkeypatch.setattr(notif.postprocess_executor, 'submit', lambda *a, **k: None)
     monkeypatch.setattr(notif, 'day_summary_webhook', lambda *a, **k: None)
     monkeypatch.setattr(notif, 'send_notification', lambda *a, **k: sent.append({'args': a, 'kwargs': k}))
-    return generated_dates, created, sent
+    return generated_dates, created, sent, released
 
 
 def test_tokenless_user_gets_a_record_and_no_push(monkeypatch):
-    generated_dates, created, sent = _install_generation_fakes(monkeypatch)
+    generated_dates, created, sent, _released = _install_generation_fakes(monkeypatch)
     notif._send_summary_notification(('u1', [], 'UTC'))
     assert created, 'a tokenless user must still get a daily summary record'
     assert generated_dates, 'generation must run without an FCM token'
@@ -55,12 +57,15 @@ def test_tokenless_user_gets_a_record_and_no_push(monkeypatch):
 
 
 def test_user_with_tokens_gets_record_and_push(monkeypatch):
-    generated_dates, created, sent = _install_generation_fakes(monkeypatch)
+    generated_dates, created, sent, _released = _install_generation_fakes(monkeypatch)
     notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
     assert created
     assert generated_dates
     assert len(sent) == 1
-    assert sent[0]['kwargs'].get('tokens') == ['tok1'] or sent[0]['args'][0] == 'u1'
+    # Only the tokens kwarg proves delivery targeted this user's devices. The `or` on the uid
+    # positional that used to sit here was always true, so the assertion passed with the tokens
+    # dropped entirely — the exact regression this test exists to catch.
+    assert sent[0]['kwargs'].get('tokens') == ['tok1']
 
 
 def test_backfill_generates_missing_day_skips_present_without_llm_and_never_notifies(monkeypatch):
@@ -68,7 +73,7 @@ def test_backfill_generates_missing_day_skips_present_without_llm_and_never_noti
     present = (display - timedelta(days=1)).strftime('%Y-%m-%d')
     missing = (display - timedelta(days=2)).strftime('%Y-%m-%d')
     existing = {present: {'id': 'already', 'date': present}}
-    generated_dates, created, sent = _install_generation_fakes(monkeypatch, existing_by_date=existing)
+    generated_dates, created, sent, _released = _install_generation_fakes(monkeypatch, existing_by_date=existing)
 
     notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
 
@@ -81,7 +86,7 @@ def test_backfill_generates_missing_day_skips_present_without_llm_and_never_noti
 
 
 def test_backfill_cap_is_honored(monkeypatch):
-    generated_dates, created, sent = _install_generation_fakes(monkeypatch)
+    generated_dates, created, sent, _released = _install_generation_fakes(monkeypatch)
     notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
     # Current day + at most 3 backfilled generations, even if 7 days are empty.
     assert len(generated_dates) == 1 + notif._DAILY_SUMMARY_BACKFILL_GENERATE_CAP
@@ -122,8 +127,8 @@ def _route_patches(users_router, **overrides):
         'daily_summaries_db': MagicMock(),
         'get_generic_cache': MagicMock(return_value=None),
         'set_generic_cache': MagicMock(),
-        'generate_and_store_daily_summary': MagicMock(
-            return_value={'id': 'new-1', 'date': '2026-08-20', 'headline': 'H'}
+        'generate_daily_summary_on_demand': MagicMock(
+            return_value=({'id': 'new-1', 'date': '2026-08-20', 'headline': 'H'}, None)
         ),
         'local_day_bounds_utc': MagicMock(return_value=(datetime.utcnow(), datetime.utcnow())),
     }
@@ -142,7 +147,7 @@ def test_create_route_happy_path():
         result = users_router.create_user_daily_summary(request, uid='u1', x_app_platform='macos')
     assert result['id'] == 'new-1'
     patches['enforce_chat_quota'].assert_called_once_with('u1', platform='macos')
-    patches['generate_and_store_daily_summary'].assert_called_once()
+    patches['generate_daily_summary_on_demand'].assert_called_once()
     patches['set_generic_cache'].assert_called_once()
 
 
@@ -157,7 +162,7 @@ def test_create_route_already_exists_does_not_bill():
     with patch.multiple(users_router, **patches):
         result = users_router.create_user_daily_summary(request, uid='u1', x_app_platform='macos')
     assert result == existing
-    patches['generate_and_store_daily_summary'].assert_not_called()
+    patches['generate_daily_summary_on_demand'].assert_not_called()
     patches['set_generic_cache'].assert_not_called()
 
 
@@ -170,7 +175,7 @@ def test_create_route_malformed_date_is_422():
         with pytest.raises(HTTPException) as exc:
             users_router.create_user_daily_summary(request, uid='u1', x_app_platform='macos')
     assert exc.value.status_code == 422
-    patches['generate_and_store_daily_summary'].assert_not_called()
+    patches['generate_daily_summary_on_demand'].assert_not_called()
 
 
 def test_create_route_future_date_is_422():
@@ -182,7 +187,7 @@ def test_create_route_future_date_is_422():
         with pytest.raises(HTTPException) as exc:
             users_router.create_user_daily_summary(request, uid='u1', x_app_platform='macos')
     assert exc.value.status_code == 422
-    patches['generate_and_store_daily_summary'].assert_not_called()
+    patches['generate_daily_summary_on_demand'].assert_not_called()
 
 
 def test_create_route_cooldown_is_429():
@@ -194,7 +199,7 @@ def test_create_route_cooldown_is_429():
         with pytest.raises(HTTPException) as exc:
             users_router.create_user_daily_summary(request, uid='u1', x_app_platform='macos')
     assert exc.value.status_code == 429
-    patches['generate_and_store_daily_summary'].assert_not_called()
+    patches['generate_daily_summary_on_demand'].assert_not_called()
 
 
 def test_backfill_is_skipped_for_a_user_with_no_conversations(monkeypatch):
@@ -204,7 +209,7 @@ def test_backfill_is_skipped_for_a_user_with_no_conversations(monkeypatch):
     lock writes, seven by-date reads and seven conversation queries chasing holes it can never
     fill.
     """
-    generated_dates, created, sent = _install_generation_fakes(monkeypatch)
+    generated_dates, created, sent, _released = _install_generation_fakes(monkeypatch)
 
     conversation_queries = []
 
@@ -228,3 +233,89 @@ def test_backfill_is_skipped_for_a_user_with_no_conversations(monkeypatch):
     assert len(lock_dates) == 1, f'backfill must not walk back for a dormant user: {lock_dates}'
     # The current day is looked at twice at most (generation guard + the has-conversations probe).
     assert len(conversation_queries) <= 2, conversation_queries
+
+
+def test_a_day_declined_before_the_llm_releases_its_lock(monkeypatch):
+    """The on-demand button used to poison the day it was pressed on.
+
+    Every guard between the lock and the LLM call returned while still holding a 2h key, so a
+    press on a quiet evening left the 22:00 cron tick unable to acquire the lock — and that day
+    never got a recap at all. A guard that spends no tokens must give the day back.
+    """
+    _generated, _created, _sent, released = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif.conversations_db, 'get_conversations', lambda *a, **k: [])
+
+    record, created, declined = notif._generate_and_store_daily_summary(
+        'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
+    )
+
+    assert record is None and created is False
+    assert declined == notif._DECLINE_NO_CONVERSATIONS
+    assert released == ['2026-08-20'], 'a declined day must not stay locked for the full TTL'
+
+
+def test_losing_the_lock_does_not_release_another_workers_day(monkeypatch):
+    """Releasing on decline must not turn into releasing a lock this call never took."""
+    _generated, _created, _sent, released = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif, 'try_acquire_daily_summary_lock', lambda *_a, **_k: False)
+
+    _record, _created_flag, declined = notif._generate_and_store_daily_summary(
+        'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
+    )
+
+    assert declined == notif._DECLINE_LOCKED
+    assert released == []
+
+
+def test_a_day_of_only_locked_conversations_still_backfills(monkeypatch):
+    """`is_locked` conversations prove the owner was recording, so their older days are worth
+    walking back for. Classifying the day as `no_conversations` skipped the backfill entirely
+    for exactly the accounts that had one."""
+    generated_dates, _created, _sent, _released = _install_generation_fakes(monkeypatch)
+    display = notif._display_date_for_now('UTC')
+    today = display.strftime('%Y-%m-%d')
+
+    def _conversations(uid, start_date=None, end_date=None, **k):
+        # Only the current day is all-locked; the backfill days have usable conversations.
+        if start_date and start_date.date() >= display:
+            return [{'is_locked': True, 'id': 'c1'}]
+        return [{'is_locked': False, 'id': 'c2'}]
+
+    monkeypatch.setattr(notif.conversations_db, 'get_conversations', _conversations)
+    notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
+
+    assert today not in generated_dates
+    assert generated_dates, 'an owner whose day was all-locked must still have earlier days filled'
+
+
+def test_create_route_does_not_arm_the_cooldown_when_nothing_was_generated():
+    """Arming before the call charged a user for an attempt that spent no tokens: they got a 400
+    and then 30s of 429 on the retry that would have worked once they recorded something."""
+    import routers.users as users_router
+
+    patches = _route_patches(
+        users_router, generate_daily_summary_on_demand=MagicMock(return_value=(None, 'no_conversations'))
+    )
+    request = users_router.CreateDailySummaryRequest(date='2026-08-20')
+    with patch.multiple(users_router, **patches):
+        with pytest.raises(HTTPException) as exc:
+            users_router.create_user_daily_summary(request, uid='u1', x_app_platform='macos')
+    assert exc.value.status_code == 400
+    patches['set_generic_cache'].assert_not_called()
+
+
+def test_create_route_reports_contention_as_retryable_not_as_an_empty_day():
+    """A held day lock means someone is summarizing this day right now. Reporting that as
+    'nothing to summarize' told the user their day was empty at the moment it was being filled."""
+    import routers.users as users_router
+
+    patches = _route_patches(
+        users_router,
+        generate_daily_summary_on_demand=MagicMock(return_value=(None, users_router.DAILY_SUMMARY_DECLINE_LOCKED)),
+    )
+    request = users_router.CreateDailySummaryRequest(date='2026-08-20')
+    with patch.multiple(users_router, **patches):
+        with pytest.raises(HTTPException) as exc:
+            users_router.create_user_daily_summary(request, uid='u1', x_app_platform='macos')
+    assert exc.value.status_code == 409
+    patches['set_generic_cache'].assert_not_called()

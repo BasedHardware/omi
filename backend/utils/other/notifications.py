@@ -12,7 +12,7 @@ import pytz
 import database.conversations as conversations_db
 from database.durable_queue import ProcessOutcome, drain_isolated_async
 import database.notifications as notification_db
-from database.redis_db import try_acquire_daily_summary_lock
+from database.redis_db import release_daily_summary_lock, try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
 from utils.executors import db_executor, postprocess_executor, run_blocking
@@ -75,6 +75,12 @@ def _display_date_for_now(tz_name: Optional[str]):
 # queries on holes it cannot fill.
 _DECLINE_LOCKED = 'locked'
 _DECLINE_NO_CONVERSATIONS = 'no_conversations'
+# The window held conversations, but none this job may summarize (all ``is_locked``, or none
+# carried transcript content). Distinct from ``no_conversations`` because the owner *was*
+# active: their earlier days are worth walking back for, and the caller may say so.
+_DECLINE_NOTHING_TO_SUMMARIZE = 'nothing_to_summarize'
+# Public name for the one decline a caller outside this module has to act on differently.
+DAILY_SUMMARY_DECLINE_LOCKED = _DECLINE_LOCKED
 
 
 def generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc) -> Optional[dict]:
@@ -94,6 +100,19 @@ def generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc
     return record
 
 
+def generate_daily_summary_on_demand(
+    uid, date_str, start_date_utc, end_date_utc
+) -> Tuple[Optional[dict], Optional[str]]:
+    """``generate_and_store_daily_summary`` plus the reason it declined.
+
+    A caller with a user waiting on the other end has to tell "you have nothing recorded for
+    this day" apart from "another writer is mid-generation" — the first is the answer, the
+    second is a retry.
+    """
+    record, _created, declined = _generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc)
+    return record, declined
+
+
 def _generate_and_store_daily_summary(
     uid, date_str, start_date_utc, end_date_utc
 ) -> Tuple[Optional[dict], bool, Optional[str]]:
@@ -103,6 +122,12 @@ def _generate_and_store_daily_summary(
     **Nothing happens before the lock.** A tick that loses the lock must not read conversations:
     another worker is already doing exactly that work, and probing anyway doubles the read load
     on precisely the contended user.
+
+    **A decline before the LLM call releases the lock.** The lock's job is to stop two workers
+    spending tokens on the same day, and a guard that declines has spent none. Holding it for
+    the full 2h TTL instead barred the day: the on-demand button poisoned the very day it was
+    pressed on — press it at 21:30 on a quiet day and the 22:00 cron tick lost the lock and
+    the day never got a recap at all.
     """
     if not try_acquire_daily_summary_lock(uid, date_str):
         return None, False, _DECLINE_LOCKED
@@ -123,18 +148,21 @@ def _generate_and_store_daily_summary(
         uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
     )
     if not conversations_data or len(conversations_data) == 0:
+        release_daily_summary_lock(uid, date_str)
         return None, False, _DECLINE_NO_CONVERSATIONS
 
     conversations = [
         deserialize_conversation(convo_data) for convo_data in conversations_data if not convo_data.get('is_locked')
     ]
     if not conversations:
-        return None, False, _DECLINE_NO_CONVERSATIONS
+        release_daily_summary_lock(uid, date_str)
+        return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
 
     # Skip recap if no conversation captured any speech.
     if not any(c.transcript_segments for c in conversations if not c.discarded):
         logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with transcript content')
-        return None, False, None
+        release_daily_summary_lock(uid, date_str)
+        return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
 
     # Bound the generator's input (#12530). Keep the most recent conversations
     # that fit, drop the rest loudly, and always keep at least one so a recap is
@@ -555,6 +583,11 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     # The reason comes from the attempt above rather than from a second query: re-reading
     # conversations here would undo the "lose the lock, do no work" guarantee that keeps a
     # contended user from being read twice.
+    #
+    # Only an *empty* window means dormant. A day whose conversations were all `is_locked`, or
+    # carried no transcript, still proves the owner was recording — those are the accounts whose
+    # earlier days most need walking back — so `_DECLINE_NOTHING_TO_SUMMARIZE` is deliberately
+    # absent from this set.
     if declined in (_DECLINE_LOCKED, _DECLINE_NO_CONVERSATIONS):
         return
 

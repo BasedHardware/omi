@@ -328,6 +328,7 @@ struct SpineStream: View {
     let content = SpineDayRecapContent.resolve(
       recap: recap(for: day),
       conversationCount: day.conversationCount,
+      isFiltering: request.isFiltering,
       dayID: day.id,
       now: Date(),
       calendar: store.calendar,

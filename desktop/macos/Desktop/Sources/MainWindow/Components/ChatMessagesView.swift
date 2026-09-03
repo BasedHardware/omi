@@ -495,7 +495,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         }
       }
       .onPreferenceChange(ChatDailySummaryBarHeightKey.self) { height in
-        dailySummaryBarHeight = height
+        // INV-CHAT-2: this height feeds the transcript's top padding, so every change to it is a
+        // change to the scroll document *above* the reader — the same class of instability the
+        // eager-measurement note on `scrollContent` exists to prevent. Take the high-water mark
+        // rather than the live value: a rewrap on window resize then costs no shift, and the
+        // reserve can never fall behind the bar and let it occlude the newest message.
+        if height > dailySummaryBarHeight { dailySummaryBarHeight = height }
       }
       .overlay(alignment: .trailing) {
         if enablesPromptTimeline {

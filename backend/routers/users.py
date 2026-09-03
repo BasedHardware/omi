@@ -120,7 +120,11 @@ from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
-from utils.other.notifications import generate_and_store_daily_summary, local_day_bounds_utc
+from utils.other.notifications import (
+    DAILY_SUMMARY_DECLINE_LOCKED,
+    generate_daily_summary_on_demand,
+    local_day_bounds_utc,
+)
 from models.notification_message import NotificationMessage
 from models.daily_summary_payload import LearnedMemoryRef
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
@@ -1913,16 +1917,22 @@ def create_user_daily_summary(
             status_code=429,
             detail='Please wait a few seconds before regenerating this recap again.',
         )
-    set_generic_cache(cooldown_key, {'at': datetime.utcnow().isoformat()}, ttl=_REGENERATE_COOLDOWN_SECONDS)
 
     start_date_utc, end_date_utc = local_day_bounds_utc(target_date, time_zone_name)
-    record = generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc)
-    if not record:
-        # generate_and_store_daily_summary declines for several reasons — no conversations, no
-        # transcript content, or another writer holding the day lock — so the message stays about
-        # the outcome rather than naming a cause this layer cannot distinguish.
-        raise HTTPException(status_code=400, detail=f'Nothing to summarize for {date_str}')
-    return record
+    record, declined = generate_daily_summary_on_demand(uid, date_str, start_date_utc, end_date_utc)
+    if record:
+        # The cooldown exists to rate-limit LLM spend, so it is armed by a generation that
+        # happened. Arming it before the call charged the user for attempts that cost nothing
+        # and left them 429'd for 30s after a 400 they could have fixed by recording something.
+        set_generic_cache(cooldown_key, {'at': datetime.utcnow().isoformat()}, ttl=_REGENERATE_COOLDOWN_SECONDS)
+        return record
+
+    if declined == DAILY_SUMMARY_DECLINE_LOCKED:
+        # Another writer — almost always the cron for the same day — is mid-generation. That is a
+        # retry, not an answer; reporting it as "nothing to summarize" told the user their day was
+        # empty at the exact moment it was being summarized.
+        raise HTTPException(status_code=409, detail='This recap is already being generated. Try again in a moment.')
+    raise HTTPException(status_code=400, detail=f'Nothing to summarize for {date_str}')
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)
