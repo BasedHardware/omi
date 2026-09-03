@@ -2100,6 +2100,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
       "Rendering replaces the writing. \"Here are your three tasks:\" followed by three task cards is right; the same sentence followed by a numbered list of those same three tasks, with or without cards, is the failure this rule exists to stop.",
       "Answering a question from what you read is the common case and needs no components. Cite those entities inline instead — a summary of yesterday cites the conversations it drew on, it does not stack cards above itself.",
       "Render at most three components in a turn, and prefer none to a wall of them.",
+      "The cap is not a reason to fall back to prose. When the user asked to see or work through their tasks, goals or memories, render the three that matter and say how many more there are — a numbered list of entities written out in the message is the exact thing components replace.",
       "Do not ask whether the user wants cards, and do not substitute a Markdown table for entities the user asked to act on.",
       "For task cards, obtain opaque canonical task IDs from get_action_items or create_action_item; execute_sql numeric row IDs are invalid.",
       "Never invent entity identifiers or URLs; the server validates every requested reference.",
