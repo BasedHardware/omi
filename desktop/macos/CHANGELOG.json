@@ -2,6 +2,21 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.278",
+      "date": "2026-09-03",
+      "changes": [
+        "Onboarding no longer quits if the Mac's speakers are not ready to play the intro sounds"
+      ]
+    },
+    {
+      "version": "0.12.277",
+      "date": "2026-09-03",
+      "changes": [
+        "Push-to-talk now has the microphone running before your first hold, so the first question after setup is no longer dropped with \"Hold longer to record\". A hold whose microphone was still starting says so and retries instead of blaming the press.",
+        "Fixed ChatGPT and Claude tagged memory imports and added actionable failure messages"
+      ]
+    },
+    {
       "version": "0.12.276",
       "date": "2026-09-03",
       "changes": [

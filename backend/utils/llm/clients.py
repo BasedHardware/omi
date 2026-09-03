@@ -244,14 +244,26 @@ _gateway_embeddings_route_absent_warned = False
 
 
 def _warn_gateway_embeddings_route_absent(operation: str) -> None:
-    """Report gateway/backend deploy skew once per process.
+    """Report gateway/backend deploy skew: one metric per degrade, one log per process.
 
-    Once per process, not per call: this condition holds until the gateway is
-    redeployed, and the callers behind it run thousands of embeddings an hour.
-    The gateway's own access log keeps counting the 404s, so nothing is lost by
-    not repeating ourselves here.
+    The fallback telemetry fires on every degrade (``backend/AGENTS.md`` rule
+    10 / ``docs/agents/fallback-telemetry.md``: a branch that changes mode MUST
+    call ``record_fallback``), because ``omi_fallback_total`` is how operators
+    see how much embeddings traffic and ledger spend is bypassing the gateway
+    while the skew lasts. The narrative ERROR log stays once per process: the
+    condition holds until the gateway is redeployed, the callers behind it run
+    thousands of embeddings an hour, and the gateway's own access log keeps
+    counting the 404s, so nothing is lost by not repeating ourselves there.
     """
     global _gateway_embeddings_route_absent_warned
+    record_fallback(
+        component='llm_gateway',
+        from_mode='gateway_embeddings',
+        to_mode='direct_embeddings',
+        reason='capability_mismatch',
+        outcome='degraded',
+        log=logger,
+    )
     if _gateway_embeddings_route_absent_warned:
         return
     _gateway_embeddings_route_absent_warned = True
