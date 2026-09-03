@@ -13,6 +13,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from ._client import db, get_firestore_client
+from .action_items_cache import bump_action_items_list_version
 from .firestore_index_registry import LEGACY_CONVERSATION_RECOVERY_QUERY
 import database.action_items as action_items_db
 
@@ -472,6 +473,11 @@ def restore_legacy_conversation_items(
             else:
                 restored += 1
                 break
+
+    if restored:
+        # Recovery creates action items directly (not through
+        # database.action_items), so the list cache is invalidated here too.
+        bump_action_items_list_version(uid)
 
     return {
         'restored': restored,

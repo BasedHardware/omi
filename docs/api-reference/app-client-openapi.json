@@ -9964,6 +9964,13 @@
             ],
             "title": "Locations"
           },
+          "memories_learned": {
+            "items": {
+              "$ref": "#/components/schemas/LearnedMemoryRef"
+            },
+            "title": "Memories Learned",
+            "type": "array"
+          },
           "overview": {
             "anyOf": [
               {
@@ -12457,6 +12464,18 @@
         ],
         "title": "FeedbackCreate",
         "type": "object"
+      },
+      "FeedbackReason": {
+        "description": "Structured reason for a thumbs-down.\n\nThese five match the values the mobile client has always sent to\n`POST /v1/users/analytics/chat_message`; keeping them identical means the\nledger and the legacy `analytics` rows stay comparable.",
+        "enum": [
+          "too_verbose",
+          "incorrect_or_hallucination",
+          "not_helpful_or_irrelevant",
+          "didnt_follow_instructions",
+          "other"
+        ],
+        "title": "FeedbackReason",
+        "type": "string"
       },
       "FeedbackRecord": {
         "additionalProperties": false,
@@ -15759,6 +15778,42 @@
           "edges"
         ],
         "title": "KnowledgeGraphResponse",
+        "type": "object"
+      },
+      "LearnedMemoryRef": {
+        "description": "One memory the day actually produced, addressed by its canonical id.\n\nThis is the identity `knowledge_nuggets` never had: a client can render a\nnative review card and vote or correct through the existing memory\nendpoints. Review state (`user_review`, `edited`) is deliberately absent —\nclients read it live from the memory so a vote on one device shows on the\nother.",
+        "properties": {
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "category": {
+            "default": "",
+            "title": "Category",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "memory_id": {
+            "title": "Memory Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memory_id",
+          "content"
+        ],
+        "title": "LearnedMemoryRef",
         "type": "object"
       },
       "LedgerMirrorAliasEnvelope": {
@@ -20595,6 +20650,18 @@
       },
       "RateMessageRequest": {
         "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
           "rating": {
             "anyOf": [
               {
@@ -20605,6 +20672,16 @@
               }
             ],
             "title": "Rating"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedbackReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "RateMessageRequest",
@@ -25894,6 +25971,36 @@
         "title": "TranscriptSegment",
         "type": "object"
       },
+      "TranscriptionAllowanceSnapshot": {
+        "description": "The one server answer to which STT mode the client should open (local-models free tier, S16).\n\n``mode``: ``managed`` (Omi-billed socket), ``on_device`` (the plan's managed\nminutes are spent; the local engine is free on every plan), ``blocked``\n(desktop trial paywall). ``remaining_seconds`` is null when unlimited.",
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "remaining_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Seconds"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "TranscriptionAllowanceSnapshot",
+        "type": "object"
+      },
       "TranscriptionErrorDetail": {
         "properties": {
           "error": {
@@ -27673,6 +27780,16 @@
           },
           "subscription": {
             "$ref": "#/components/schemas/Subscription"
+          },
+          "transcription_allowance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptionAllowanceSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "transcription_seconds_limit": {
             "title": "Transcription Seconds Limit",
@@ -58617,7 +58734,7 @@
     },
     "/v1/users/me/subscription": {
       "get": {
-        "description": "Gets the user's subscription plan and usage.",
+        "description": "Gets the user's subscription plan and usage, plus the one transcription-allowance answer.",
         "operationId": "get_user_subscription_endpoint_v1_users_me_subscription_get",
         "parameters": [
           {

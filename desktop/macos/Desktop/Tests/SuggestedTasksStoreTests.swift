@@ -49,7 +49,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
       taskMutationCandidate(id: "blind-complete"),
       workProposal(id: "proposal"),
     ]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
 
     await store.load()
 
@@ -68,7 +69,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
 
   func testExactRecommendedCandidateCanBeInsertedOutsideThePagedList() async {
     let api = FakeSuggestedTasksClient()
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
 
     let revealed = store.revealCandidateForNavigation(
@@ -87,7 +89,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
         createdAt: "2026-07-\(String(format: "%02d", index))T12:00:00Z"
       )
     }
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
 
     let revealed = store.revealCandidateForNavigation(
@@ -111,7 +114,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
         createdAt: "2026-07-\(String(format: "%02d", index))T12:00:00Z"
       )
     }
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
 
     await store.load()
 
@@ -131,7 +135,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
       candidate(id: "backend-first", status: .pending, createdAt: "2026-07-09T12:00:00Z"),
       candidate(id: "backend-second", status: .pending, createdAt: "2026-07-09T12:00:00.500+00:00"),
     ]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
 
     await store.load()
 
@@ -141,7 +146,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
   func testCandidateList404CalmlyDisablesSuggestedWhileOtherFailuresRemainVisible() async {
     let api = FakeSuggestedTasksClient()
     api.records = [candidate(id: "candidate-1", status: .pending)]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
     XCTAssertEqual(store.candidates.map(\.id), ["candidate-1"])
 
@@ -162,7 +168,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
   func testAutomationDumpNeverReturnsCandidateTitles() async throws {
     let api = FakeSuggestedTasksClient()
     api.records = [candidate(id: "candidate-private", status: .pending)]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
     let result = store.automationDump()
 
@@ -175,7 +182,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
   func testTaskMutationCandidateFailsClosedWithoutAConcreteDiff() async {
     let api = FakeSuggestedTasksClient()
     api.records = [taskMutationCandidate(id: "blind-complete")]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
 
     await store.load()
 
@@ -185,7 +193,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
   func testCandidateInterventionUsesCanonicalBoundedRecommendationDedupeKey() async {
     let api = FakeSuggestedTasksClient()
     api.records = [candidate(id: "candidate-1", status: .pending)]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
 
     await store.presented(candidateID: "candidate-1")
@@ -202,6 +211,7 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let store = SuggestedTasksStore(
       client: api,
       suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
       reportAttribution: { events.append($0) }
     )
     await store.load()
@@ -228,7 +238,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let api = FakeSuggestedTasksClient()
     api.workflowMode = .write
     api.records = [candidate(id: "sidecar-only", status: .pending)]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
 
     await store.load()
 
@@ -240,7 +251,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let api = FakeSuggestedTasksClient()
     api.records = [candidate(id: "candidate-1", status: .pending)]
     api.acceptedTaskID = "task-1"
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
 
     let taskID = await store.doNow(candidateID: "candidate-1", editedTitle: nil)
@@ -255,7 +267,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let api = FakeSuggestedTasksClient()
     api.records = [candidate(id: "candidate-1", status: .pending)]
     api.acceptedTaskID = "task-1"
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
 
     _ = await store.doNow(candidateID: "candidate-1", editedTitle: "Send the revised budget")
@@ -268,7 +281,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let api = FakeSuggestedTasksClient()
     api.records = [candidate(id: "candidate-1", status: .pending)]
     api.failAccept = true
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
 
     _ = await store.doNow(candidateID: "candidate-1", editedTitle: nil)
@@ -288,7 +302,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     }
     api.failAccept = true
     var store: SuggestedTasksStore!
-    store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     api.onAccept = {
       _ = store.revealCandidateForNavigation(self.candidate(id: "candidate-101", status: .pending))
     }
@@ -396,7 +411,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     api.records = [candidate(id: "candidate-1", status: .pending)]
     let persistence = MemorySuppressionStore()
     let now = Date(timeIntervalSince1970: 1_800_000_000)
-    let first = SuggestedTasksStore(client: api, suppressionStore: persistence, now: { now })
+    let first = SuggestedTasksStore(
+      client: api, suppressionStore: persistence, feedbackOutboxStore: MemoryFeedbackOutboxStore(), now: { now })
     await first.load()
 
     await first.later(candidateID: "candidate-1")
@@ -405,7 +421,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     XCTAssertTrue(api.rejectedCandidateIDs.isEmpty)
     XCTAssertEqual(api.feedback.map(\.action), [.later])
 
-    let reloaded = SuggestedTasksStore(client: api, suppressionStore: persistence, now: { now })
+    let reloaded = SuggestedTasksStore(
+      client: api, suppressionStore: persistence, feedbackOutboxStore: MemoryFeedbackOutboxStore(), now: { now })
     await reloaded.load()
     XCTAssertTrue(reloaded.candidates.isEmpty)
   }
@@ -438,6 +455,7 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let store = SuggestedTasksStore(
       client: api,
       suppressionStore: suppression,
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
       now: { currentTime }
     )
     await store.load()
@@ -454,6 +472,51 @@ final class SuggestedTasksStoreTests: XCTestCase {
     XCTAssertNotEqual(laterKeys[0], laterKeys[1])
   }
 
+  /// `SuggestedFeedbackOutboxDefaults.currentOwnerID()` resolves to
+  /// `UserDefaults.standard[.authUserId]`, which is process-global and shared by every
+  /// suite in the test binary. `dismiss` re-checks owner currency *after* awaiting the
+  /// backend reject, so a store that leaves the feedback outbox on that global owner can
+  /// have the value change underneath it at the suspension point and silently return
+  /// without recording feedback — the store drops the dismissal on the floor.
+  ///
+  /// That is the #12039 flake: `testNotMineAndAlreadyHandledPersistReasonAndResolveCandidate`
+  /// failed in CI with `("nil") is not equal to ("Optional(…not_mine)")` purely because of
+  /// suite ordering. Injecting `MemoryFeedbackOutboxStore` pins the feedback owner to the
+  /// suite, which is what makes these tests order-independent.
+  ///
+  /// The `onReject` hook writes the global key at exactly the awaited moment, so this
+  /// reproduces the hazard deterministically instead of relying on suite order.
+  func testDismissSurvivesAGlobalAuthOwnerFlipAtTheAwaitedRejectPoint() async {
+    let defaults = UserDefaults.standard
+    let restore = defaults.string(forKey: .authUserId)
+    defaults.set("owner-before-flip", forKey: .authUserId)
+    defer {
+      if let restore {
+        defaults.set(restore, forKey: .authUserId)
+      } else {
+        defaults.removeObject(forKey: DefaultsKey.authUserId.rawValue)
+      }
+    }
+
+    let api = FakeSuggestedTasksClient()
+    api.records = [candidate(id: "candidate-owner-flip", status: .pending)]
+    api.onReject = { defaults.set("owner-after-flip", forKey: .authUserId) }
+
+    let store = SuggestedTasksStore(
+      client: api,
+      suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore()
+    )
+    await store.load()
+
+    await store.dismiss(candidateID: "candidate-owner-flip", reason: .not_mine)
+
+    XCTAssertEqual(api.rejectedCandidateIDs, ["candidate-owner-flip"])
+    XCTAssertEqual(
+      api.feedback.last?.reason, .not_mine,
+      "a global auth-owner write must not void feedback for a suite-owned store")
+  }
+
   func testNotMineAndAlreadyHandledPersistReasonAndResolveCandidate() async {
     for reason in [
       OmiAPI.TaskIntelligenceFeedbackReason.not_mine,
@@ -461,7 +524,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     ] {
       let api = FakeSuggestedTasksClient()
       api.records = [candidate(id: reason.rawValue, status: .pending)]
-      let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+      let store = SuggestedTasksStore(
+        client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
       await store.load()
 
       await store.dismiss(candidateID: reason.rawValue, reason: reason)
@@ -480,6 +544,7 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let store = SuggestedTasksStore(
       client: api,
       suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
       receiptInvalidator: invalidator,
       pendingReceiptInvalidationStore: pendingInvalidations
     )
@@ -503,6 +568,7 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let store = SuggestedTasksStore(
       client: api,
       suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
       receiptInvalidator: invalidator,
       pendingReceiptInvalidationStore: pendingInvalidations
     )
@@ -524,6 +590,7 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let store = SuggestedTasksStore(
       client: api,
       suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
       receiptInvalidator: invalidator,
       pendingReceiptInvalidationStore: pendingInvalidations
     )
@@ -550,6 +617,7 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let store = SuggestedTasksStore(
       client: api,
       suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
       receiptInvalidator: invalidator,
       pendingReceiptInvalidationStore: pendingInvalidations
     )
@@ -611,6 +679,7 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let store = SuggestedTasksStore(
       client: api,
       suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
       receiptInvalidator: invalidator,
       pendingReceiptInvalidationStore: pendingInvalidations
     )
@@ -633,6 +702,7 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let store = SuggestedTasksStore(
       client: api,
       suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
       receiptInvalidator: invalidator,
       pendingReceiptInvalidationStore: pendingInvalidations
     )
@@ -670,6 +740,7 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let store = SuggestedTasksStore(
       client: api,
       suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
       receiptInvalidator: invalidator,
       pendingReceiptInvalidationStore: pendingInvalidations
     )
@@ -840,7 +911,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
   func testConcurrentSameOwnerLoadAwaitsInFlightDataInsteadOfNoOp() async {
     let api = FakeSuggestedTasksClient()
     api.records = [candidate(id: "candidate-a", status: .pending)]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
 
     // First same-owner load suspends inside getCandidateWorkflowControl.
     api.controlSuspensionsRemaining = 1

@@ -249,6 +249,21 @@ class ImageRateCard:
 
 
 @dataclass(frozen=True)
+class PricedUsage:
+    """A cost the caller computed itself, for usage the YAML rate cards cannot price.
+
+    The token rate cards are text-only. Realtime voice bills audio and text
+    tokens at different rates, so a surface that knows the modality split
+    prices the attempt and hands the ledger the result together with the
+    identifier of the rates it used, the same way a rate card would.
+    """
+
+    micro_usd: int
+    rate_card_id: str
+    cost_basis: str
+
+
+@dataclass(frozen=True)
 class AccountingEvent:
     attempt_id: str
     invocation_id: str
@@ -526,7 +541,12 @@ def cache_write_ttl_for_anthropic_request(request: Mapping[str, Any]) -> str | N
     return 'mixed' if ttls else None
 
 
-def build_accounting_event(context: AccountingContext, attempt: ProviderAttempt) -> AccountingEvent:
+def build_accounting_event(
+    context: AccountingContext,
+    attempt: ProviderAttempt,
+    *,
+    priced: PricedUsage | None = None,
+) -> AccountingEvent:
     now = datetime.now(timezone.utc)
     usage = attempt.usage or ProviderUsage()
     cost_status, estimated_cost, cache_savings, rate_card_id, cost_basis = _estimate_cost(
@@ -537,6 +557,15 @@ def build_accounting_event(context: AccountingContext, attempt: ProviderAttempt)
         usage_status=attempt.usage_status,
         traffic_type=attempt.traffic_type,
     )
+    if priced is not None and cost_status in {CostStatus.UNPRICED, CostStatus.ESTIMATED}:
+        # A caller-priced attempt is still an Omi cost, so BYOK (not_omi_cost)
+        # and indeterminate usage keep the estimator's verdict; only the
+        # rate-card estimate is replaced, and the basis says by what.
+        cost_status = CostStatus.ESTIMATED
+        estimated_cost = max(priced.micro_usd, 0)
+        cache_savings = None
+        rate_card_id = priced.rate_card_id
+        cost_basis = priced.cost_basis
     return AccountingEvent(
         attempt_id=f'{context.invocation_id}:{attempt.ordinal}',
         invocation_id=context.invocation_id,

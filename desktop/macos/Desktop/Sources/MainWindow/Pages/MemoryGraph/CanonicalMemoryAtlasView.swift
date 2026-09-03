@@ -1605,6 +1605,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   private func adoptSelection(_ nodeID: String, edgeID: String? = nil) {
     selectedEdgeID = edgeID
     selectedNodeID = nodeID
+    SearchAnalytics.resultOpened(surface: .brainMap, searchIsActive: DebouncedSearchCoordinator.isActive(searchText))
     if let placement = snapshot.nodeByID[nodeID] {
       focus(on: placement)
     }
@@ -2132,9 +2133,10 @@ private struct CanonicalMemoryAtlasSurface: View {
           || placement.node.aliases.contains { $0.localizedCaseInsensitiveContains(query) }
       }.map(\.id))
     matchingNodeIDs = matches
-    matchingEdges = snapshot.rankedEdges.filter { edge in
-      matches.contains(edge.edge.sourceId) || matches.contains(edge.edge.targetId)
+    matchingEdges = snapshot.rankedEdges.filter {
+      matches.contains($0.edge.sourceId) || matches.contains($0.edge.targetId)
     }
+    SearchAnalytics.scheduleQueryEntered(surface: .brainMap, query: query) { matches.count }
   }
 
   private func selectFirstSearchResult() {

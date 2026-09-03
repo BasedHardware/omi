@@ -176,6 +176,10 @@ final class SBOnboardingModel: ObservableObject {
   var voiceCancellable: AnyCancellable?
   var voiceTimeout: Task<Void, Never>?
   var screenDemoSetupTask: Task<Void, Never>?
+  /// Dwell-time origin for the current step's `Onboarding Step Completed` event.
+  var stepStartedAt = Date()
+  /// Guards double-fire when `skip()`/`complete()` run after `advance` already recorded.
+  var stepExitRecorded = false
 
   // Connectors — keyed by a stable id ("openclaw", "calendar", …) → state string
   // ("idle" | "connecting" | "on" | "unavailable" | "needsSignIn").
@@ -531,6 +535,8 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   func streamMessage(for step: Step) {
+    stepStartedAt = OnboardingStepTelemetry.now()
+    stepExitRecorded = false
     streamTask?.cancel()
     showWidget = false
     typing = true
@@ -585,10 +591,12 @@ final class SBOnboardingModel: ObservableObject {
     if let userAnswer, !userAnswer.isEmpty {
       thread.append(Msg(isOmi: false, text: userAnswer))
     }
+    recordStepExit()
     teardownStep(step)
     // Don't ask for a permission the user has already granted — skip straight to
     // the first step that still needs an answer.
     let target = firstUnaskedStep(from: next)
+    recordJumpedPermissionSteps(from: next, to: target)
     step = target
     UserDefaults.standard.set(target.rawValue, forKey: Self.resumeStepKey)
     streamMessage(for: target)
@@ -821,11 +829,13 @@ final class SBOnboardingModel: ObservableObject {
       complete()
       return
     }
+    recordStepExit(skipped: true)
     finishOnboardingHandoff(clearOnboardingChatFlag: false)
   }
 
   /// Replicates the essential real side-effects of the legacy handleOnboardingComplete().
   private func complete() {
+    recordStepExit(skipped: false)
     // Do NOT mark file indexing complete here. Onboarding never actually scans, so
     // setting this flag "faked" the Files connector as connected while indexing
     // nothing — and, worse, permanently suppressed the Home view's automatic
@@ -852,6 +862,11 @@ final class SBOnboardingModel: ObservableObject {
     Task { [appState] in
       appState.startTranscription()
       await appState.reconcileCapture()
+      // Ambient transcription opens the shared input device on its way in and
+      // releases any parked push-to-talk capture to avoid two IOProcs on one
+      // device. Re-arm behind it: the first ⌥ hold after onboarding is the one
+      // that used to be lost to capture-start latency.
+      PushToTalkManager.shared.prewarmMicCapture(trigger: .onboardingCompleted)
     }
     // NOTE: previously this created a "Run omi for two days…" welcome task. That
     // seeded onboarding scaffolding into the user's real Tasks surface (there is no

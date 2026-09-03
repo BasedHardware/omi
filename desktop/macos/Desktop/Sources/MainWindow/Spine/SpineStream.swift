@@ -91,6 +91,7 @@ struct SpineStream: View {
   @ObservedObject var appState: AppState
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   @ObservedObject var tasksStore: TasksStore
+  var searchSurface: SearchSurface
 
   /// Hands a conversation to the page that owns conversations. The whole record, not its id: the
   /// row already holds it, and handing over an id forced the receiver to look it back up against a
@@ -151,7 +152,10 @@ struct SpineStream: View {
     .onReceive(appState.$conversations) { _ in ingest() }
     .onReceive(memoriesViewModel.$streamMemories) { _ in ingest() }
     .onReceive(tasksStore.$incompleteTasks) { _ in ingest() }
-    .onChange(of: request) { _, newValue in store.apply(request: newValue) }
+    .onChange(of: request) { _, newValue in
+      store.apply(request: newValue)
+      commitSearchAnalytics(newValue)
+    }
   }
 
   private func ingest() {
@@ -161,9 +165,35 @@ struct SpineStream: View {
       tasks: tasksStore.incompleteTasks
     )
     store.apply(request: request)
+    commitSearchAnalytics(request)
     // A store that was hydrated and has since been truncated under us reopens its cursor; this is
     // where the spine notices and goes back for the rest.
     hydrator.resume()
+  }
+
+  private func commitSearchAnalytics(_ request: QueryShellRequest) {
+    SearchAnalytics.scheduleQueryEntered(surface: searchSurface, query: request.text) {
+      store.matchCount
+    }
+  }
+
+  private var searchIsActive: Bool {
+    DebouncedSearchCoordinator.isActive(request.text)
+  }
+
+  private func openConversationFromSearch(_ conversation: ServerConversation) {
+    SearchAnalytics.resultOpened(surface: searchSurface, searchIsActive: searchIsActive)
+    onOpenConversation(conversation)
+  }
+
+  private func openMemoryFromSearch(_ memory: SpineMemory) {
+    SearchAnalytics.resultOpened(surface: searchSurface, searchIsActive: searchIsActive)
+    onOpenMemory(memory)
+  }
+
+  private func openRewindFromSearch() {
+    SearchAnalytics.resultOpened(surface: searchSurface, searchIsActive: searchIsActive)
+    onOpenRewind()
   }
 
   /// The two paged stores, as the hydrator sees them. Neither is owned here — the spine reads the
@@ -199,8 +229,8 @@ struct SpineStream: View {
                 SpineRowView(
                   row: row,
                   showsIndent: store.kind == .everything,
-                  onOpenConversation: onOpenConversation,
-                  onOpenMemory: onOpenMemory,
+                  onOpenConversation: openConversationFromSearch,
+                  onOpenMemory: openMemoryFromSearch,
                   onToggleTask: { task in Task { await tasksStore.toggleTask(task) } },
                   onToggleStar: toggleStar,
                   // Clicking a moment used to discard the moment and navigate to the Rewind
@@ -212,7 +242,7 @@ struct SpineStream: View {
                       strip.map { QuickLookFrame(screenshot: $0.screenshot) },
                       startingAt: String(moment.id))
                   },
-                  onShowAllMoments: onOpenRewind,
+                  onShowAllMoments: openRewindFromSearch,
                   onOpenBrainMap: onOpenBrainMap
                 )
                 .background(anchor(for: row, in: day))

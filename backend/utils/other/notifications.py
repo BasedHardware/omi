@@ -1,25 +1,116 @@
 # async-blockers: no-import-scope
 # async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
 import asyncio
+import os
+from dataclasses import dataclass
 from datetime import datetime, time, timedelta
-from typing import Any, Dict, List, Tuple
-
-from utils.executors import db_executor, postprocess_executor, run_blocking
+from time import monotonic
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytz
 
 import database.conversations as conversations_db
+from database.durable_queue import ProcessOutcome, drain_isolated_async
 import database.notifications as notification_db
 from database.redis_db import try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
+from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
+from utils.memory.learned_today import memory_review_card_block
 from utils.notifications import send_bulk_notification, send_notification
+from utils.other import daily_summary_budget as summary_budget
 from utils.webhooks import day_summary_webhook
 import database.daily_summaries as daily_summaries_db
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name) or default)
+    except ValueError:
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name) or default)
+    except ValueError:
+        return default
+
+
+# --- Budgets for the daily-summary Cloud Run Job (#12530) --------------------
+# The job's Cloud Run task timeout is 600s. Before this, an execution simply ran
+# until SIGKILL: whoever sat past the 600s mark was never reached and never
+# produced an error attributable to them, so their recap silently vanished.
+#
+# The job now runs to its own budget (below the task timeout), checkpoints where
+# it stopped, and reports what it could not serve.
+DAILY_SUMMARY_JOB_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_JOB_BUDGET_SECONDS', 480.0)
+# One account cannot own the job. A recap is one LLM call plus Firestore reads;
+# 90s is generous for that and still bounds a wedged provider call.
+DAILY_SUMMARY_USER_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_USER_BUDGET_SECONDS', 90.0)
+# Rendered-character budget for the conversation material fed to the summary
+# prompt. ~360k chars is roughly 90k tokens, comfortably inside the 272k-token
+# model limit even alongside the prompt scaffolding and the user's memories.
+# The overflow seen in production was ~290k tokens of input.
+DAILY_SUMMARY_MAX_HISTORY_CHARS = _env_int('DAILY_SUMMARY_MAX_HISTORY_CHARS', 360_000)
+# A per-user timeout abandons (it cannot cancel) a worker thread. Stop the run
+# once enough threads are abandoned that the pool would starve the rest.
+DAILY_SUMMARY_MAX_ABANDONED_USERS = _env_int('DAILY_SUMMARY_MAX_ABANDONED_USERS', 12)
+
+_BATCH_SIZE = 8
+
+_FALLBACK_COMPONENT = 'daily_summary'
+
+
+def _record_daily_summary_fallback(*, from_mode: str, to_mode: str, reason: str, outcome: str) -> None:
+    """Emit the shared fallback counter for a daily-summary fail-open branch.
+
+    Imported lazily so loading this module in a test harness does not drag in
+    the Prometheus registry.
+    """
+    try:
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component=_FALLBACK_COMPONENT,
+            from_mode=from_mode,
+            to_mode=to_mode,
+            reason=reason,
+            outcome=outcome,
+            log=logger,
+        )
+    except Exception as e:  # telemetry must never break the job
+        logger.warning('daily_summary_fallback_record_failed error=%s', e)
+
+
+@dataclass
+class DailySummaryJobStats:
+    """Per-execution accounting, emitted as one job-end line."""
+
+    groups_attempted: int = 0
+    groups_failed: int = 0
+    attempted: int = 0
+    succeeded: int = 0
+    failed: int = 0
+    timed_out: int = 0
+    skipped_for_budget: int = 0
+
+    def as_log(self) -> str:
+        return (
+            f'groups_attempted={self.groups_attempted} groups_failed={self.groups_failed} '
+            f'attempted={self.attempted} succeeded={self.succeeded} failed={self.failed} '
+            f'timed_out={self.timed_out} skipped_for_budget={self.skipped_for_budget}'
+        )
+
+
+@dataclass(frozen=True)
+class DailySummaryCronOutcome:
+    ok: bool
+    error_text: Optional[str] = None
 
 
 def should_run_job() -> bool:
@@ -36,42 +127,173 @@ async def start_cron_job() -> None:
     """
     logger.info(f'start_cron_job at UTC hour {datetime.now(pytz.utc).hour}')
     await send_daily_notification()
-    await send_daily_summary_notification()
+    summary_outcome = await send_daily_summary_notification()
+    if not summary_outcome.ok:
+        logger.error('Daily summary cron run failed: %s', summary_outcome.error_text)
 
 
-async def send_daily_summary_notification() -> None:
+async def send_daily_summary_notification() -> DailySummaryCronOutcome:
     """
     Send daily summary notifications to users based on their local hour preference.
 
     Groups timezones by their current local hour, then for each hour group,
     queries users in those timezones who have that hour preference.
+    Survivability contract (#12530). This runs as a Cloud Run Job with a hard
+    600s task timeout, over tens of thousands of users:
+
+    * **Nothing aborts the whole run.** One hour group's Firestore read or one
+      user's provider error is caught where it happens; the run continues.
+    * **The run has its own budget**, below the task timeout, so it ends by
+      *deciding* to stop rather than by being killed mid-batch.
+    * **Progress is checkpointed** in Redis and the next execution rotates the
+      work to start at the unfinished tail. Before this, every execution
+      restarted at the head and died in the same place, so the users after that
+      point were never reached on any run — a permanent, silent tail loss.
+    * **The run reports itself**: a structured line per failed user and one
+      job-end line with attempted/succeeded/failed/skipped counts.
     """
+    deadline = monotonic() + DAILY_SUMMARY_JOB_BUDGET_SECONDS
+    stats = DailySummaryJobStats()
+    cursor_key = summary_budget.job_cursor_key(datetime.now(pytz.utc))
+
     try:
-        # Group timezones by their current local hour
         timezones_by_hour = _get_timezones_grouped_by_hour()
-
-        for target_hour, timezones in timezones_by_hour.items():
-            # Get users in those timezones who want notifications at this hour
-            users = await _get_users_for_daily_summary(timezones, target_hour)
-
-            if users:
-                logger.info(f"Sending daily summary to {len(users)} users at local hour {target_hour}")
-                await _send_bulk_summary_notification(users)
-
     except Exception as e:
-        logger.error(f"Error sending daily summary: {e}")
+        logger.error(f"Error grouping daily summary timezones: {e}")
+        return DailySummaryCronOutcome(ok=False, error_text=str(e))
+
+    cursor = await run_blocking(db_executor, summary_budget.read_job_cursor, cursor_key)
+    resume_hour = summary_budget.cursor_hour(cursor)
+    resume_uid = summary_budget.cursor_uid(cursor)
+
+    # Deterministic order, rotated to the checkpoint: the tail is served first
+    # and the head is still covered in the same pass.
+    ordered_hours = summary_budget.rotate_to(sorted(timezones_by_hour.keys()), resume_hour)
+    completed_all = True
+
+    stop_processing = False
+
+    async def process_hour(group: Tuple[int, List[str]]) -> ProcessOutcome:
+        nonlocal completed_all, resume_uid, stop_processing
+
+        target_hour, timezones = group
+        if stop_processing or monotonic() >= deadline:
+            completed_all = False
+            stop_processing = True
+            await _checkpoint(cursor_key, target_hour, None)
+            _record_daily_summary_fallback(
+                from_mode='full_run', to_mode='resumable_tail', reason='timeout', outcome='degraded'
+            )
+            logger.warning('daily_summary_job_budget_exhausted resume_hour=%s', target_hour)
+            return ProcessOutcome.retry('daily summary budget exhausted', reason='timeout')
+
+        stats.groups_attempted += 1
+        try:
+            users, query_error = await _get_users_for_daily_summary(timezones, target_hour)
+        except Exception as e:
+            # One hour group's read failing must not cost the other 23 groups.
+            stats.groups_failed += 1
+            logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, e)
+            return ProcessOutcome.reject(str(e), reason='user_query')
+
+        if query_error and not users:
+            stats.groups_failed += 1
+            logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, query_error)
+            return ProcessOutcome.reject(str(query_error), reason='user_query')
+
+        if not users:
+            return ProcessOutcome.ack()
+
+        ordered_users = summary_budget.rotate_to(
+            sorted(users, key=lambda user: str(user[0])),
+            _resume_user(users, resume_uid) if target_hour == resume_hour else None,
+        )
+        resume_uid = None
+
+        logger.info(f"Sending daily summary to {len(ordered_users)} users at local hour {target_hour}")
+        failed_before = stats.failed
+        timed_out_before = stats.timed_out
+        finished_group = await _send_bulk_summary_notification(
+            ordered_users, deadline=deadline, stats=stats, target_hour=target_hour, cursor_key=cursor_key
+        )
+        if not finished_group:
+            completed_all = False
+            stop_processing = True
+            return ProcessOutcome.retry('daily summary group budget exhausted', reason='timeout')
+        hour_send_failures = (stats.failed - failed_before) + (stats.timed_out - timed_out_before)
+        if hour_send_failures:
+            return ProcessOutcome.reject(
+                f'{hour_send_failures} user send(s) failed at hour {target_hour}',
+                reason='hour_send_failed',
+            )
+        if query_error:
+            stats.groups_failed += 1
+            return ProcessOutcome.reject(str(query_error), reason='user_query')
+        return ProcessOutcome.ack()
+
+    groups = [(hour, timezones_by_hour[hour]) for hour in ordered_hours]
+    results = await drain_isolated_async(groups, process_hour)
+    failures = [result for result in results if result.outcome.kind != ProcessOutcome.ack().kind]
+    for result in failures:
+        logger.error(
+            "Daily summary hour group failed hour=%s reason=%s error=%s",
+            result.item[0],
+            result.outcome.reason,
+            result.outcome.error_text,
+        )
+
+    if completed_all:
+        await run_blocking(db_executor, summary_budget.clear_job_cursor, cursor_key)
+
+    logger.info('daily_summary_job_summary complete=%s %s', completed_all, stats.as_log())
+    if failures:
+        return DailySummaryCronOutcome(
+            ok=False,
+            error_text='; '.join(result.outcome.error_text or 'hour_failed' for result in failures),
+        )
+    return DailySummaryCronOutcome(ok=True)
+
+
+def _resume_user(users: List[Tuple[Any, ...]], resume_uid: Optional[str]) -> Optional[Tuple[Any, ...]]:
+    """Map a checkpointed uid back onto this run's user tuple, if still present."""
+    if not resume_uid:
         return None
+    for user in users:
+        if str(user[0]) == resume_uid:
+            return user
+    return None
 
 
-async def _get_users_for_daily_summary(timezones: List[str], target_hour: int) -> List[Tuple[str, List[str], Any]]:
+async def _checkpoint(cursor_key: str, target_hour: Optional[int], uid: Optional[str]) -> None:
+    await run_blocking(
+        db_executor, summary_budget.write_job_cursor, cursor_key, summary_budget.make_cursor(target_hour, uid)
+    )
+
+
+async def _get_users_for_daily_summary(
+    timezones: List[str], target_hour: int
+) -> Tuple[List[Tuple[str, List[str], Any]], Optional[BaseException]]:
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
+    # return_exceptions: one failing timezone chunk degrades that chunk's users,
+    # it does not throw away the chunks that did read successfully.
     chunk_results = await asyncio.gather(
         *[
             run_blocking(db_executor, notification_db.get_users_for_daily_summary, chunk, target_hour)
             for chunk in timezone_chunks
-        ]
+        ],
+        return_exceptions=True,
     )
-    return [user for chunk in chunk_results for user in chunk]
+    users: List[Tuple[str, List[str], Any]] = []
+    chunk_errors: List[BaseException] = []
+    for chunk_index, chunk in enumerate(chunk_results):
+        if isinstance(chunk, BaseException):
+            logger.error(
+                'daily_summary_user_query_chunk_failed hour=%s chunk=%d error=%s', target_hour, chunk_index, chunk
+            )
+            chunk_errors.append(chunk)
+            continue
+        users.extend(chunk)
+    return users, chunk_errors[0] if chunk_errors else None
 
 
 def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
@@ -175,6 +397,26 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with transcript content')
         return
 
+    # Bound the generator's input (#12530). The summary prompt renders the user's
+    # whole day; one account's exceptional day overflowed the model context
+    # window (~290k tokens against a 272k limit) and returned a provider 400
+    # every single day. Keep the most recent conversations that fit, drop the
+    # rest loudly, and always keep at least one so a recap is still attempted.
+    bounded = summary_budget.select_conversations_within_budget(conversations, DAILY_SUMMARY_MAX_HISTORY_CHARS)
+    if bounded.truncated:
+        logger.warning(
+            'daily_summary_input_truncated uid=%s date=%s kept=%d dropped=%d rendered_chars=%d',
+            uid,
+            date_str,
+            len(bounded.conversations),
+            bounded.dropped,
+            bounded.rendered_chars,
+        )
+        _record_daily_summary_fallback(
+            from_mode='full_day', to_mode='truncated_day', reason='quota', outcome='degraded'
+        )
+    conversations = bounded.conversations
+
     summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
 
     # Store in database
@@ -188,12 +430,24 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     if len(summary_body) > 150:
         summary_body = summary_body[:147] + "..."
 
+    # Native review card for the memories this day produced. The scheduled send is
+    # the path users actually receive, so it must carry the same block the
+    # /v1/users/daily-summary-settings/test path builds. ``text`` is untouched: a
+    # client that does not know the block renders exactly what it rendered before,
+    # and the block is omitted entirely when the day produced nothing to review.
+    review_block = memory_review_card_block(
+        summary_id,
+        date=date_str,
+        memories_learned=summary_data.get('memories_learned') or [],
+    )
+
     ai_message = NotificationMessage(
         text=summary_body,
         from_integration='false',
         type='day_summary',
         notification_type='daily_summary',
         navigate_to=f"/daily-summary/{summary_id}",
+        content_blocks=[review_block] if review_block else None,
     )
 
     # Also send webhook with the full summary data (day_summary_webhook is async, so wrap in asyncio.run).
@@ -207,15 +461,101 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     )
 
 
-async def _send_bulk_summary_notification(users: List[Tuple[Any, ...]]) -> None:
-    _BATCH_SIZE = 8
+async def _send_bulk_summary_notification(
+    users: List[Tuple[Any, ...]],
+    *,
+    deadline: Optional[float] = None,
+    stats: Optional[DailySummaryJobStats] = None,
+    target_hour: Optional[int] = None,
+    cursor_key: Optional[str] = None,
+) -> bool:
+    """Send one hour group's summaries. Returns True if the whole group was served.
+
+    Isolation is per user, not per batch: a provider error, a context overflow,
+    or a wedged call is recorded against that uid and the remaining users in the
+    same batch still complete. A user who exceeds the per-user budget is
+    abandoned (a worker thread cannot be cancelled) rather than allowed to hold
+    the batch barrier for the rest of the run.
+    """
+    counters = stats if stats is not None else DailySummaryJobStats()
+
     for i in range(0, len(users), _BATCH_SIZE):
+        if deadline is not None and monotonic() >= deadline:
+            counters.skipped_for_budget += len(users) - i
+            if cursor_key:
+                await _checkpoint(cursor_key, target_hour, str(users[i][0]))
+            _record_daily_summary_fallback(
+                from_mode='full_run', to_mode='resumable_tail', reason='timeout', outcome='degraded'
+            )
+            logger.warning(
+                'daily_summary_group_budget_exhausted hour=%s served=%d deferred=%d resume_uid=%s',
+                target_hour,
+                i,
+                len(users) - i,
+                users[i][0],
+            )
+            return False
+
         batch = users[i : i + _BATCH_SIZE]
-        tasks = [run_blocking(postprocess_executor, _send_summary_notification, user_tokens) for user_tokens in batch]
+        per_user_timeout = DAILY_SUMMARY_USER_BUDGET_SECONDS
+        if deadline is not None:
+            per_user_timeout = max(1.0, min(per_user_timeout, deadline - monotonic()))
+
+        tasks = [
+            asyncio.wait_for(
+                run_blocking(postprocess_executor, _send_summary_notification, user_tokens),
+                timeout=per_user_timeout,
+            )
+            for user_tokens in batch
+        ]
+        counters.attempted += len(batch)
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for j, result in enumerate(results):
-            if isinstance(result, Exception):
-                logger.error(f"Daily summary failed for user batch[{i + j}]: {result}")
+            uid = str(batch[j][0])
+            if isinstance(result, (asyncio.TimeoutError, TimeoutError)):
+                counters.timed_out += 1
+                logger.error(
+                    'daily_summary_user_failed uid=%s hour=%s reason=user_budget_exceeded budget_seconds=%s',
+                    uid,
+                    target_hour,
+                    per_user_timeout,
+                )
+                _record_daily_summary_fallback(
+                    from_mode='generated', to_mode='skipped', reason='timeout', outcome='degraded'
+                )
+            elif isinstance(result, BaseException):
+                counters.failed += 1
+                logger.error(
+                    'daily_summary_user_failed uid=%s hour=%s reason=generation_error error_type=%s error=%s',
+                    uid,
+                    target_hour,
+                    type(result).__name__,
+                    result,
+                )
+            else:
+                counters.succeeded += 1
+
+        if cursor_key and i + _BATCH_SIZE < len(users):
+            await _checkpoint(cursor_key, target_hour, str(users[i + _BATCH_SIZE][0]))
+
+        if counters.timed_out >= DAILY_SUMMARY_MAX_ABANDONED_USERS:
+            # Abandoned threads still occupy postprocess_executor slots. Past this
+            # point the pool cannot serve the remaining users any faster than the
+            # next execution can, so stop and let the checkpoint carry the tail.
+            remaining = max(0, len(users) - (i + _BATCH_SIZE))
+            counters.skipped_for_budget += remaining
+            logger.error(
+                'daily_summary_group_abandoned_users hour=%s timed_out=%d deferred=%d',
+                target_hour,
+                counters.timed_out,
+                remaining,
+            )
+            _record_daily_summary_fallback(
+                from_mode='full_run', to_mode='resumable_tail', reason='capacity_full', outcome='degraded'
+            )
+            return False
+
+    return True
 
 
 async def send_daily_notification() -> None:

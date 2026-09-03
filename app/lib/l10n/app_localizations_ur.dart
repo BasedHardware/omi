@@ -9930,4 +9930,10 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'یادیں لوڈ نہیں ہو سکیں';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'نالج گراف لوڈ نہیں ہو سکا';
 }

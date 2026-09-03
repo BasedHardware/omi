@@ -141,7 +141,7 @@ struct QueryShellHome: View {
           // **The search bar is always on screen.** It is pure search — typing narrows the spine
           // below; clearing it returns the panel to the conversation. The chat composer is a
           // different control and stays pinned inside the panel (INV-6: one chat composer).
-          QuerySearchBar(text: $searchText)
+          QuerySearchBar(text: $searchText, searchSurface: .home)
           QueryResultsPanel(
             request: requestBinding(),
             mode: mode,
@@ -318,6 +318,7 @@ struct QueryShellHome: View {
         appState: appState,
         memoriesViewModel: memoriesViewModel,
         tasksStore: tasksStore,
+        searchSurface: .home,
         onOpenConversation: openConversationRecord,
         onOpenMemory: openMemory,
         onOpenBrainMap: openBrainMap,

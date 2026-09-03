@@ -40,6 +40,19 @@ def test_registered_runtime_image_sources_are_closed(contracts_module):
     assert contracts_module.check_source_closures(contracts_module.load_contracts()) == []
 
 
+def test_source_copy_skips_local_openapi_venv(contracts_module, tmp_path):
+    source = tmp_path / 'backend'
+    source.mkdir()
+    (source / 'main.py').write_text('ok\n', encoding='utf-8')
+    venv = source / '.openapi-venv'
+    venv.mkdir()
+    (venv / 'payload').write_text('huge\n', encoding='utf-8')
+    dest = tmp_path / 'staged'
+    contracts_module._copy_source(source, dest)
+    assert (dest / 'main.py').is_file()
+    assert not (dest / '.openapi-venv').exists()
+
+
 def _contract_with_dockerfile(contracts_module, tmp_path, dockerfile_text):
     dockerfile = tmp_path / 'Dockerfile'
     dockerfile.write_text(dockerfile_text, encoding='utf-8')
