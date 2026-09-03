@@ -32,10 +32,11 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
-  # Follow-up chip: tail parser, chip view, and question-origin attribution ride the same hermetic chat turn.
-  - desktop/macos/Desktop/Sources/Chat/ChatFollowUpTail.swift
-  - desktop/macos/Desktop/Sources/Chat/FollowUpChip.swift
-  - desktop/macos/Desktop/Sources/Analytics/AnalyticsManager+QuestionOrigin.swift
+  # Deliberately no entry for the follow-up chip (ChatFollowUpTail, FollowUpChip,
+  # AnalyticsManager+QuestionOrigin). This turn runs against OMI_LLM_STUB, whose
+  # replies never carry a `<<<FOLLOWUP>>>` tail, so no chip is produced; and
+  # main_chat_snapshot exposes no field that could assert one. Add the steps
+  # first — a covers: entry with no step behind it reads as coverage that exists.
   - desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalEventHub.swift
