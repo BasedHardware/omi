@@ -72,7 +72,7 @@ from utils.memory.canonical_required_processing import (
     list_pending_required_processing_items,
 )
 from utils.memory.decision_path_telemetry import emit_memory_promotion_decision, emit_memory_promotion_failure
-from utils.memory.belief_model import belief_model_enabled
+from utils.memory.belief_model import HALF_LIFE_DAYS_BY_CLASS, belief_model_enabled
 from utils.memory.rejected_memory_feedback import (
     RejectedMemoryFeedback,
     get_recent_rejected_memory_feedback,
@@ -1297,7 +1297,9 @@ def _ordered_route_evidence_ids(
 
 
 def _route_result_status(decision: ConsolidationAgentDecision) -> LifecycleState:
-    return LifecycleState.hidden if decision.route == "reject" else LifecycleState.active
+    if decision.route == "reject" and not belief_model_enabled():
+        return LifecycleState.hidden
+    return LifecycleState.active
 
 
 def _route_target_tier(decision: ConsolidationAgentDecision, *, quarantine: bool) -> MemoryLayer:
@@ -1523,6 +1525,9 @@ def apply_consolidation_decision(
             quarantine=quarantine,
         ),
     }
+    if belief_model_enabled() and decision.route == "reject":
+        carried = getattr(decision, "belief_class", None)
+        patch_payload["belief_class"] = carried if carried in HALF_LIFE_DAYS_BY_CLASS else "meta_residue"
     mutation_identity = build_patch_mutation_identity(patch_payload)
     patch_payload["mutation_metadata"] = mutation_identity
     logical_payload["mutation_metadata"] = mutation_identity
