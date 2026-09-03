@@ -10005,4 +10005,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Propers passos recomanats';
+
+  @override
+  String get couldNotLoadMemories => 'No s\'han pogut carregar els records';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'No s\'ha pogut carregar el graf de coneixement';
 }

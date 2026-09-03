@@ -3244,5 +3244,7 @@
     "chatBlockOpenConversation": "Відкрити розмову",
     "chatBlockOpenInMemories": "Відкрити у «Спогадах»",
     "chatBlockUnavailable": "Більше недоступно",
-    "chatBlockRecommendedNextSteps": "Рекомендовані наступні кроки"
+    "chatBlockRecommendedNextSteps": "Рекомендовані наступні кроки",
+    "couldNotLoadMemories": "Не вдалося завантажити спогади",
+    "couldNotLoadKnowledgeGraph": "Не вдалося завантажити граф знань"
 }

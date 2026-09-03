@@ -9972,4 +9972,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Próximos pasos recomendados';
+
+  @override
+  String get couldNotLoadMemories => 'No se pudieron cargar los recuerdos';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'No se pudo cargar el grafo de conocimiento';
 }

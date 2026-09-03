@@ -21,7 +21,7 @@ extension ChatBubble {
     message: ChatMessage,
     app: OmiApp?,
     showsOmiMark: Bool,
-    onRate: @escaping (Int?) -> Void,
+    onRate: @escaping (Int?, ChatFeedbackReason?) -> Void,
     onCitationTap: ((Citation) -> Void)? = nil,
     onOpenInlineCitation: ((ChatCitationReference) -> Void)? = nil,
     isDuplicate: Bool = false,

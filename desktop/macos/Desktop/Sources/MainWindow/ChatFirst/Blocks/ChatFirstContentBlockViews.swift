@@ -811,6 +811,25 @@ struct MemoryLinkView: View {
   }
 }
 
+// MARK: - Memory review card
+
+/// The `memoryReviewCard` block, rendered as the same rows the daily summary card uses.
+///
+/// One row view, two arrival paths. The desktop's live path is the summary record — this app has
+/// no `day_summary` chat row today — but the block is the contract both shells share, and giving it
+/// a second row implementation is how the two surfaces would drift into disagreeing about what a
+/// verdict means.
+struct MemoryReviewCardView: View {
+  let summaryID: String
+  let date: String
+  let items: [MemoryReviewItem]
+
+  var body: some View {
+    MemoryReviewSection(items: items, source: .chatBlock)
+      .id("memory-review-block-\(summaryID)-\(date)")
+  }
+}
+
 private struct ChatFirstLinkBlockView: View {
   let eyebrow: String
   let systemImage: String

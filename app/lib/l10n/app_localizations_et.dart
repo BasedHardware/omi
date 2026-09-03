@@ -9942,4 +9942,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Soovitatud järgmised sammud';
+
+  @override
+  String get couldNotLoadMemories => 'Mälestusi ei õnnestunud laadida';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Teadmiste graafi ei õnnestunud laadida';
 }

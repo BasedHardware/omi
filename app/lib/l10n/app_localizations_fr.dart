@@ -10035,4 +10035,10 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Prochaines étapes recommandées';
+
+  @override
+  String get couldNotLoadMemories => 'Impossible de charger les souvenirs';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Impossible de charger le graphe de connaissances';
 }

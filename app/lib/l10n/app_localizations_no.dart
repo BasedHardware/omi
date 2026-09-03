@@ -9946,4 +9946,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Anbefalte neste trinn';
+
+  @override
+  String get couldNotLoadMemories => 'Kunne ikke laste minner';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Kunne ikke laste kunnskapsgrafen';
 }

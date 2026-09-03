@@ -3244,5 +3244,7 @@
     "chatBlockOpenConversation": "Atvērt sarunu",
     "chatBlockOpenInMemories": "Atvērt sadaļā “Atmiņas”",
     "chatBlockUnavailable": "Vairs nav pieejams",
-    "chatBlockRecommendedNextSteps": "Ieteicamie nākamie soļi"
+    "chatBlockRecommendedNextSteps": "Ieteicamie nākamie soļi",
+    "couldNotLoadMemories": "Neizdevās ielādēt atmiņas",
+    "couldNotLoadKnowledgeGraph": "Neizdevās ielādēt zināšanu grafu"
 }

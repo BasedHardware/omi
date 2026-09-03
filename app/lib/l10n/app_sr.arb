@@ -10810,5 +10810,7 @@
     "chatBlockOpenConversation": "Отвори разговор",
     "chatBlockOpenInMemories": "Отвори у Сећањима",
     "chatBlockUnavailable": "Више није доступно",
-    "chatBlockRecommendedNextSteps": "Препоручени следећи кораци"
+    "chatBlockRecommendedNextSteps": "Препоручени следећи кораци",
+    "couldNotLoadMemories": "Није могуће учитати успомене",
+    "couldNotLoadKnowledgeGraph": "Није могуће учитати граф знања"
 }

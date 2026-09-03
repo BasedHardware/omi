@@ -3279,5 +3279,7 @@
     "chatBlockOpenConversation": "Ouvrir la conversation",
     "chatBlockOpenInMemories": "Ouvrir dans Souvenirs",
     "chatBlockUnavailable": "N’est plus disponible",
-    "chatBlockRecommendedNextSteps": "Prochaines étapes recommandées"
+    "chatBlockRecommendedNextSteps": "Prochaines étapes recommandées",
+    "couldNotLoadMemories": "Impossible de charger les souvenirs",
+    "couldNotLoadKnowledgeGraph": "Impossible de charger le graphe de connaissances"
 }

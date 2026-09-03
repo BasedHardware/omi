@@ -10810,5 +10810,7 @@
     "chatBlockOpenConversation": "ಸಂಭಾಷಣೆ ತೆರೆಯಿರಿ",
     "chatBlockOpenInMemories": "ನೆನಪುಗಳಲ್ಲಿ ತೆರೆಯಿರಿ",
     "chatBlockUnavailable": "ಇನ್ನು ಲಭ್ಯವಿಲ್ಲ",
-    "chatBlockRecommendedNextSteps": "ಶಿಫಾರಸು ಮಾಡಿದ ಮುಂದಿನ ಹಂತಗಳು"
+    "chatBlockRecommendedNextSteps": "ಶಿಫಾರಸು ಮಾಡಿದ ಮುಂದಿನ ಹಂತಗಳು",
+    "couldNotLoadMemories": "ನೆನಪುಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ",
+    "couldNotLoadKnowledgeGraph": "ಜ್ಞಾನ ಗ್ರಾಫ್ ಅನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ"
 }

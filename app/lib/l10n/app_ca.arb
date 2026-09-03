@@ -3222,5 +3222,7 @@
     "chatBlockOpenConversation": "Obre la conversa",
     "chatBlockOpenInMemories": "Obre a Records",
     "chatBlockUnavailable": "Ja no està disponible",
-    "chatBlockRecommendedNextSteps": "Propers passos recomanats"
+    "chatBlockRecommendedNextSteps": "Propers passos recomanats",
+    "couldNotLoadMemories": "No s'han pogut carregar els records",
+    "couldNotLoadKnowledgeGraph": "No s'ha pogut carregar el graf de coneixement"
 }

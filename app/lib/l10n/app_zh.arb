@@ -3266,5 +3266,7 @@
     "chatBlockOpenConversation": "打开对话",
     "chatBlockOpenInMemories": "在记忆中打开",
     "chatBlockUnavailable": "已不再可用",
-    "chatBlockRecommendedNextSteps": "建议的后续步骤"
+    "chatBlockRecommendedNextSteps": "建议的后续步骤",
+    "couldNotLoadMemories": "无法加载回忆",
+    "couldNotLoadKnowledgeGraph": "无法加载知识图谱"
 }

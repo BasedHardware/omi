@@ -920,7 +920,9 @@ extension ChatContentBlock {
     case .captureLink(let id, _, _, _): return "c:\(id)"
     case .conversationLink(let id, _, _, _): return "v:\(id)"
     case .memoryLink(let id, _, _): return "m:\(id)"
+    case .memoryReviewCard(let id, _, _, let items): return "mr:\(id):\(items.count)"
     case .citation(let id, let reference): return "r:\(id):\(reference.ordinal)"
+    case .followUp(let id, let text): return "f:\(id):\(text.count)"
     case .agentSpawn(let id, let pillId, _, _, _, _, _): return "s:\(id):\(pillId?.uuidString ?? "")"
     case .agentCompletion(let id, let pillId, _, _, _, _, _, _): return "a:\(id):\(pillId?.uuidString ?? "")"
     }

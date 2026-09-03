@@ -9779,4 +9779,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'おすすめの次のステップ';
+
+  @override
+  String get couldNotLoadMemories => '記憶を読み込めませんでした';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'ナレッジグラフを読み込めませんでした';
 }

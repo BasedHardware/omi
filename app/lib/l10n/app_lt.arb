@@ -3244,5 +3244,7 @@
     "chatBlockOpenConversation": "Atidaryti pokalbį",
     "chatBlockOpenInMemories": "Atidaryti skiltyje „Prisiminimai“",
     "chatBlockUnavailable": "Nebepasiekiama",
-    "chatBlockRecommendedNextSteps": "Rekomenduojami tolesni veiksmai"
+    "chatBlockRecommendedNextSteps": "Rekomenduojami tolesni veiksmai",
+    "couldNotLoadMemories": "Nepavyko įkelti prisiminimų",
+    "couldNotLoadKnowledgeGraph": "Nepavyko įkelti žinių grafo"
 }

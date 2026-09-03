@@ -9952,4 +9952,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Rekommenderade nästa steg';
+
+  @override
+  String get couldNotLoadMemories => 'Kunde inte läsa in minnen';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Kunde inte läsa in kunskapsgrafen';
 }

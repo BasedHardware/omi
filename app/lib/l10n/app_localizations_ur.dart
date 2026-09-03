@@ -9960,4 +9960,10 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'تجویز کردہ اگلے اقدامات';
+
+  @override
+  String get couldNotLoadMemories => 'یادیں لوڈ نہیں ہو سکیں';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'نالج گراف لوڈ نہیں ہو سکا';
 }

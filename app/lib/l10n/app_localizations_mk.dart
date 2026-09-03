@@ -10001,4 +10001,10 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Препорачани следни чекори';
+
+  @override
+  String get couldNotLoadMemories => 'Не можеа да се вчитаат спомените';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Не можеше да се вчита графот на знаење';
 }

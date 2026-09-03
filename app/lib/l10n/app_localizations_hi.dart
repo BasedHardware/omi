@@ -9927,4 +9927,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'अनुशंसित अगले कदम';
+
+  @override
+  String get couldNotLoadMemories => 'यादें लोड नहीं हो सकीं';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'नॉलेज ग्राफ़ लोड नहीं हो सका';
 }

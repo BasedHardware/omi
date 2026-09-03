@@ -9979,4 +9979,10 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Priporočeni naslednji koraki';
+
+  @override
+  String get couldNotLoadMemories => 'Spominov ni bilo mogoče naložiti';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Grafa znanja ni bilo mogoče naložiti';
 }

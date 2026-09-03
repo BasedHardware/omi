@@ -3221,5 +3221,7 @@
     "chatBlockOpenConversation": "Gespräch öffnen",
     "chatBlockOpenInMemories": "In Erinnerungen öffnen",
     "chatBlockUnavailable": "Nicht mehr verfügbar",
-    "chatBlockRecommendedNextSteps": "Empfohlene nächste Schritte"
+    "chatBlockRecommendedNextSteps": "Empfohlene nächste Schritte",
+    "couldNotLoadMemories": "Erinnerungen konnten nicht geladen werden",
+    "couldNotLoadKnowledgeGraph": "Wissensgraph konnte nicht geladen werden"
 }

@@ -3244,5 +3244,7 @@
     "chatBlockOpenConversation": "Deschide conversația",
     "chatBlockOpenInMemories": "Deschide în Amintiri",
     "chatBlockUnavailable": "Nu mai este disponibil",
-    "chatBlockRecommendedNextSteps": "Pașii următori recomandați"
+    "chatBlockRecommendedNextSteps": "Pașii următori recomandați",
+    "couldNotLoadMemories": "Nu s-au putut încărca amintirile",
+    "couldNotLoadKnowledgeGraph": "Nu s-a putut încărca graful de cunoștințe"
 }

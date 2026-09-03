@@ -10810,5 +10810,7 @@
     "chatBlockOpenConversation": "פתיחת השיחה",
     "chatBlockOpenInMemories": "פתיחה בזיכרונות",
     "chatBlockUnavailable": "אינו זמין עוד",
-    "chatBlockRecommendedNextSteps": "השלבים הבאים המומלצים"
+    "chatBlockRecommendedNextSteps": "השלבים הבאים המומלצים",
+    "couldNotLoadMemories": "לא ניתן לטעון את הזיכרונות",
+    "couldNotLoadKnowledgeGraph": "לא ניתן לטעון את גרף הידע"
 }

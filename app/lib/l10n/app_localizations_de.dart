@@ -10031,4 +10031,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Empfohlene nächste Schritte';
+
+  @override
+  String get couldNotLoadMemories => 'Erinnerungen konnten nicht geladen werden';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Wissensgraph konnte nicht geladen werden';
 }

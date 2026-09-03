@@ -3245,5 +3245,7 @@
     "chatBlockOpenConversation": "बातचीत खोलें",
     "chatBlockOpenInMemories": "स्मृतियों में खोलें",
     "chatBlockUnavailable": "अब उपलब्ध नहीं है",
-    "chatBlockRecommendedNextSteps": "अनुशंसित अगले कदम"
+    "chatBlockRecommendedNextSteps": "अनुशंसित अगले कदम",
+    "couldNotLoadMemories": "यादें लोड नहीं हो सकीं",
+    "couldNotLoadKnowledgeGraph": "नॉलेज ग्राफ़ लोड नहीं हो सका"
 }

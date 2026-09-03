@@ -67,6 +67,7 @@ from utils.observability.transcription import TranscriptionAttempt
 from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
+from utils.feedback import record_chat_message_feedback
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.llm.gateway_client import CHAT_AGENT_ROUTE_DIRECT, get_chat_agent_route
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
@@ -84,6 +85,7 @@ from utils.retrieval.graph import execute_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.users import get_user_display_name
 from utils.log_sanitizer import sanitize_pii
+from utils.chat_followup import followup_content_blocks
 from utils.observability import submit_langsmith_feedback
 from utils.observability.fallback import record_fallback
 from utils.journey_metrics_contract import resolve_client_kind, resolve_client_kind_from_headers
@@ -527,8 +529,9 @@ def send_message(
 
         memories_id = extract_memory_ids(memories) if memories else []
 
+        ai_message_id = str(uuid.uuid4())
         ai_message = Message(
-            id=str(uuid.uuid4()),
+            id=ai_message_id,
             text=response,
             created_at=datetime.now(timezone.utc),
             sender='ai',
@@ -540,6 +543,14 @@ def send_message(
             prompt_name=prompt_name,  # LangSmith prompt name for versioning
             prompt_commit=prompt_commit,  # LangSmith prompt commit for traceability
             evidence=evidence,
+            # One grounded next question, as a chip the client can tap. Empty for
+            # any turn that failed or has nothing to go one hop further into.
+            content_blocks=followup_content_blocks(
+                ai_message_id,
+                callback_data.get('followup'),
+                visible_text=response,
+                failed=bool(callback_data.get('error')),
+            ),
         )
         if chat_session:
             ai_message.chat_session_id = chat_session.id
@@ -2014,7 +2025,18 @@ def rate_message(
 
     # Also store in analytics collection
     value = rating if rating is not None else 0
-    set_chat_message_rating_score(uid, message_id, value, platform='mobile')
+    reason = data.reason.value if data.reason else None
+    set_chat_message_rating_score(uid, message_id, value, reason=reason, platform='mobile')
+
+    # Unified feedback ledger — the daily thumbs-down report reads from here.
+    record_chat_message_feedback(
+        uid,
+        message_id,
+        value,
+        reason=reason,
+        comment=data.comment,
+        platform='mobile',
+    )
 
     # Try to submit feedback to LangSmith
     try:

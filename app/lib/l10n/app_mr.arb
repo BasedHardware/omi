@@ -10810,5 +10810,7 @@
     "chatBlockOpenConversation": "संभाषण उघडा",
     "chatBlockOpenInMemories": "स्मृतींमध्ये उघडा",
     "chatBlockUnavailable": "आता उपलब्ध नाही",
-    "chatBlockRecommendedNextSteps": "शिफारस केलेली पुढील पावले"
+    "chatBlockRecommendedNextSteps": "शिफारस केलेली पुढील पावले",
+    "couldNotLoadMemories": "आठवणी लोड करता आल्या नाहीत",
+    "couldNotLoadKnowledgeGraph": "ज्ञान आलेख लोड करता आला नाही"
 }

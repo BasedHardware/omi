@@ -3244,5 +3244,7 @@
     "chatBlockOpenConversation": "대화 열기",
     "chatBlockOpenInMemories": "메모리에서 열기",
     "chatBlockUnavailable": "더 이상 사용할 수 없음",
-    "chatBlockRecommendedNextSteps": "권장 다음 단계"
+    "chatBlockRecommendedNextSteps": "권장 다음 단계",
+    "couldNotLoadMemories": "추억을 불러올 수 없습니다",
+    "couldNotLoadKnowledgeGraph": "지식 그래프를 불러올 수 없습니다"
 }

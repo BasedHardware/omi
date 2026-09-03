@@ -9974,4 +9974,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Langkah seterusnya yang disyorkan';
+
+  @override
+  String get couldNotLoadMemories => 'Tidak dapat memuatkan kenangan';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Tidak dapat memuatkan graf pengetahuan';
 }

@@ -9959,4 +9959,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Langkah berikutnya yang disarankan';
+
+  @override
+  String get couldNotLoadMemories => 'Tidak dapat memuat kenangan';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Tidak dapat memuat graf pengetahuan';
 }

@@ -3244,5 +3244,7 @@
     "chatBlockOpenConversation": "Öppna konversation",
     "chatBlockOpenInMemories": "Öppna i Minnen",
     "chatBlockUnavailable": "Inte längre tillgänglig",
-    "chatBlockRecommendedNextSteps": "Rekommenderade nästa steg"
+    "chatBlockRecommendedNextSteps": "Rekommenderade nästa steg",
+    "couldNotLoadMemories": "Kunde inte läsa in minnen",
+    "couldNotLoadKnowledgeGraph": "Kunde inte läsa in kunskapsgrafen"
 }

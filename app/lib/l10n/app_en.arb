@@ -11784,5 +11784,13 @@
     "chatBlockRecommendedNextSteps": "Recommended next steps",
     "@chatBlockRecommendedNextSteps": {
         "description": "Header above recommended action items on a chat conversation link block"
+    },
+    "couldNotLoadMemories": "Couldn't load memories",
+    "couldNotLoadKnowledgeGraph": "Couldn't load knowledge graph",
+    "@couldNotLoadMemories": {
+        "description": "Retryable error when fetching memories failed instead of returning an empty list"
+    },
+    "@couldNotLoadKnowledgeGraph": {
+        "description": "Short user-facing error when the knowledge graph request is non-200; must not include the response body"
     }
 }

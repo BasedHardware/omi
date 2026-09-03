@@ -3249,5 +3249,7 @@
     "chatBlockOpenConversation": "Mở cuộc trò chuyện",
     "chatBlockOpenInMemories": "Mở trong Ký ức",
     "chatBlockUnavailable": "Không còn khả dụng",
-    "chatBlockRecommendedNextSteps": "Các bước tiếp theo được đề xuất"
+    "chatBlockRecommendedNextSteps": "Các bước tiếp theo được đề xuất",
+    "couldNotLoadMemories": "Không thể tải ký ức",
+    "couldNotLoadKnowledgeGraph": "Không thể tải đồ thị tri thức"
 }

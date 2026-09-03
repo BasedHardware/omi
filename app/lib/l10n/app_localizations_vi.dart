@@ -9943,4 +9943,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Các bước tiếp theo được đề xuất';
+
+  @override
+  String get couldNotLoadMemories => 'Không thể tải ký ức';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Không thể tải đồ thị tri thức';
 }

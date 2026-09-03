@@ -74,7 +74,7 @@ struct ChatBubble: View {
   let message: ChatMessage
   let app: OmiApp?
   let showsOmiMark: Bool
-  let onRate: (Int?) -> Void
+  let onRate: (Int?, ChatFeedbackReason?) -> Void
   var onCitationTap: ((Citation) -> Void)? = nil
   var onOpenInlineCitation: ((ChatCitationReference) -> Void)? = nil
   var isDuplicate: Bool = false
@@ -93,6 +93,9 @@ struct ChatBubble: View {
   @State private var isExpanded = false
   @State private var showCopied = false
   @State private var showRatingFeedback = false
+  /// Shown after a thumbs-down so the user can say *why* in one click.
+  @State private var showReasonPicker = false
+  @State private var submittedReason: ChatFeedbackReason?
   @State private var showInfoPopover = false
 
   /// Automation seam: the bridge's `main_chat_open_response_context` posts this
@@ -104,7 +107,8 @@ struct ChatBubble: View {
   @FocusState private var isMetadataControlFocused: Bool
 
   init(
-    message: ChatMessage, app: OmiApp?, showsOmiMark: Bool, onRate: @escaping (Int?) -> Void,
+    message: ChatMessage, app: OmiApp?, showsOmiMark: Bool,
+    onRate: @escaping (Int?, ChatFeedbackReason?) -> Void,
     onCitationTap: ((Citation) -> Void)? = nil,
     onOpenInlineCitation: ((ChatCitationReference) -> Void)? = nil,
     isDuplicate: Bool = false,
@@ -549,6 +553,34 @@ struct ChatBubble: View {
           context: chatFirstRichBlockContext
         )
       )
+    case .memoryReviewCard(_, let summaryID, let date, let items):
+      return AnyView(MemoryReviewCardView(summaryID: summaryID, date: date, items: items))
+    case .followUp(_, let question):
+      let provider = chatFirstRichBlockContext.chatProvider
+      return AnyView(
+        FollowUpChip(
+          question: question,
+          palette: .standard,
+          action: {
+            Task { @MainActor in
+              // Analytics commit at the provider's own acceptance boundary: a
+              // send it refuses emits nothing and mislabels nothing later.
+              _ = await provider.sendMessage(
+                question,
+                surfaceRef: provider.mainChatSurfaceReference(),
+                turnOwner: .mainChat,
+                onAccepted: {
+                  AnalyticsManager.shared.questionOriginating(.followUp)
+                  AnalyticsManager.shared.chatMessageSent(
+                    messageLength: question.count,
+                    source: "follow_up_chip"
+                  )
+                }
+              )
+            }
+          }
+        )
+      )
     case .agentSpawn(
       _, let pillId, let sessionId, let runId, let title, let objective, let provider
     ):
@@ -587,6 +619,7 @@ struct ChatBubble: View {
     let isVisible =
       metadataRevealOverrideForTesting
       ?? (metadataHoverState.keepsMetadataVisible || isMetadataControlFocused || showRatingFeedback
+        || showReasonPicker
         || showCopied || showInfoPopover)
     // **One cluster under the message.** Controls far left and timestamp far right
     // of one line is how two halves of a row end up reading as page furniture.
@@ -633,7 +666,9 @@ struct ChatBubble: View {
         let newRating = message.rating == 1 ? nil : 1
         guard newRating != lastSubmittedRating else { return }
         lastSubmittedRating = newRating
-        onRate(newRating)
+        showReasonPicker = false
+        submittedReason = nil
+        onRate(newRating, nil)
         if newRating != nil { showRatingFeedbackBriefly() }
       }) {
         Image(systemName: message.rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
@@ -654,8 +689,13 @@ struct ChatBubble: View {
         let newRating = message.rating == -1 ? nil : -1
         guard newRating != lastSubmittedRating else { return }
         lastSubmittedRating = newRating
-        onRate(newRating)
-        if newRating != nil { showRatingFeedbackBriefly() }
+        submittedReason = nil
+        // Send the thumbs-down straight away rather than waiting on a reason:
+        // a user who taps and walks away has still told us the answer was bad,
+        // and that must be recorded. Picking a reason sends a second rating
+        // carrying it, which the daily report folds into the same entry.
+        onRate(newRating, nil)
+        showReasonPicker = newRating != nil
       }) {
         Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
           .scaledFont(size: OmiType.caption)
@@ -676,8 +716,18 @@ struct ChatBubble: View {
           .foregroundColor(Ink.secondary)
           .transition(.opacity)
       }
+
+      if showReasonPicker {
+        ChatFeedbackReasonPicker(
+          selected: submittedReason,
+          onSelect: submitReason,
+          onSkip: { showReasonPicker = false }
+        )
+        .transition(.opacity)
+      }
     }
     .omiAnimation(.easeInOut(duration: 0.2), value: showRatingFeedback)
+    .omiAnimation(.easeInOut(duration: 0.2), value: showReasonPicker)
     // Keep the dedupe shadow in sync with the live rating. Without this, an
     // external rating change (background sync/poll updates message.rating on a
     // stable .id(message.id) view) leaves lastSubmittedRating stale, so a later
@@ -686,6 +736,15 @@ struct ChatBubble: View {
     .onChange(of: message.rating, initial: true) { _, newValue in
       lastSubmittedRating = newValue
     }
+  }
+
+  private func submitReason(_ reason: ChatFeedbackReason) {
+    submittedReason = reason
+    showReasonPicker = false
+    // Re-send the same thumbs-down with the reason attached. `lastSubmittedRating`
+    // is untouched so this does not look like a rating change to the dedupe guard.
+    onRate(-1, reason)
+    showRatingFeedbackBriefly()
   }
 
   private func showRatingFeedbackBriefly() {
@@ -1108,6 +1167,8 @@ enum ContentBlockGroup: Identifiable {
     recommendedActionItems: [ConversationLinkActionItem]
   )
   case memoryLink(id: String, memoryID: String, summary: String)
+  case memoryReviewCard(id: String, summaryID: String, date: String, items: [MemoryReviewItem])
+  case followUp(id: String, question: String)
   case agentSpawn(
     id: String,
     pillId: UUID?,
@@ -1141,6 +1202,8 @@ enum ContentBlockGroup: Identifiable {
     case .captureLink(let id, _, _, _): return id
     case .conversationLink(let id, _, _, _): return id
     case .memoryLink(let id, _, _): return id
+    case .memoryReviewCard(let id, _, _, _): return id
+    case .followUp(let id, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
     }
@@ -1203,6 +1266,15 @@ enum ContentBlockGroup: Identifiable {
       case .memoryLink(let id, let memoryID, let summary):
         flushToolCalls()
         groups.append(.memoryLink(id: id, memoryID: memoryID, summary: summary))
+      case .memoryReviewCard(let id, let summaryID, let date, let items):
+        flushToolCalls()
+        // Ungated, like the follow-up chip: the rows need no Chat-first navigation context, and a
+        // card whose whole purpose is to be answered is not a rich-link preview to hold back.
+        guard !items.isEmpty else { continue }
+        groups.append(.memoryReviewCard(id: id, summaryID: summaryID, date: date, items: items))
+      case .followUp(let id, let question):
+        flushToolCalls()
+        groups.append(.followUp(id: id, question: question))
       case .citation:
         // Answer-level provenance is rendered by OmiMarkdown at the inline marker.
         continue
@@ -1306,6 +1378,14 @@ enum ContentBlockGroup: Identifiable {
       case .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
         .agentSpawn, .agentCompletion:
         return group
+      // Like the follow-up chip: a card asking to be answered has no business
+      // appearing before the turn it belongs to has finished arriving.
+      case .memoryReviewCard:
+        return isStreaming ? nil : group
+      // The chip is only ever attached to a finished, grounded answer, so it
+      // never appears mid-stream to be tapped before the answer it follows from.
+      case .followUp:
+        return isStreaming ? nil : group
       case .thinking:
         return isStreaming ? group : nil
       case .toolCalls(let id, let calls):

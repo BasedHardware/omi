@@ -9960,4 +9960,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Önerilen sonraki adımlar';
+
+  @override
+  String get couldNotLoadMemories => 'Anılar yüklenemedi';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Bilgi grafiği yüklenemedi';
 }

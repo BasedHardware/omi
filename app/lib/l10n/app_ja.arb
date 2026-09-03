@@ -3220,5 +3220,7 @@
     "chatBlockOpenConversation": "会話を開く",
     "chatBlockOpenInMemories": "メモリーで開く",
     "chatBlockUnavailable": "現在は利用できません",
-    "chatBlockRecommendedNextSteps": "おすすめの次のステップ"
+    "chatBlockRecommendedNextSteps": "おすすめの次のステップ",
+    "couldNotLoadMemories": "記憶を読み込めませんでした",
+    "couldNotLoadKnowledgeGraph": "ナレッジグラフを読み込めませんでした"
 }

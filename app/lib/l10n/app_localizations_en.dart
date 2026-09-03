@@ -9939,4 +9939,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Recommended next steps';
+
+  @override
+  String get couldNotLoadMemories => 'Couldn\'t load memories';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Couldn\'t load knowledge graph';
 }

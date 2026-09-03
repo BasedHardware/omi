@@ -10018,4 +10018,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Προτεινόμενα επόμενα βήματα';
+
+  @override
+  String get couldNotLoadMemories => 'Δεν ήταν δυνατή η φόρτωση των αναμνήσεων';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Δεν ήταν δυνατή η φόρτωση του γραφήματος γνώσης';
 }

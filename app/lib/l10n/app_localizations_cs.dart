@@ -9949,4 +9949,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Doporučené další kroky';
+
+  @override
+  String get couldNotLoadMemories => 'Nepodařilo se načíst vzpomínky';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nepodařilo se načíst graf znalostí';
 }

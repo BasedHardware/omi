@@ -3244,5 +3244,7 @@
     "chatBlockOpenConversation": "เปิดบทสนทนา",
     "chatBlockOpenInMemories": "เปิดในความทรงจำ",
     "chatBlockUnavailable": "ไม่พร้อมใช้งานอีกต่อไป",
-    "chatBlockRecommendedNextSteps": "ขั้นตอนถัดไปที่แนะนำ"
+    "chatBlockRecommendedNextSteps": "ขั้นตอนถัดไปที่แนะนำ",
+    "couldNotLoadMemories": "ไม่สามารถโหลดความทรงจำได้",
+    "couldNotLoadKnowledgeGraph": "ไม่สามารถโหลดกราฟความรู้ได้"
 }

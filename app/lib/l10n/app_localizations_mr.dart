@@ -9957,4 +9957,10 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'शिफारस केलेली पुढील पावले';
+
+  @override
+  String get couldNotLoadMemories => 'आठवणी लोड करता आल्या नाहीत';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'ज्ञान आलेख लोड करता आला नाही';
 }

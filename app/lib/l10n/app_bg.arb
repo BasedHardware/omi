@@ -3222,5 +3222,7 @@
     "chatBlockOpenConversation": "Отваряне на разговора",
     "chatBlockOpenInMemories": "Отваряне в „Спомени“",
     "chatBlockUnavailable": "Вече не е налично",
-    "chatBlockRecommendedNextSteps": "Препоръчани следващи стъпки"
+    "chatBlockRecommendedNextSteps": "Препоръчани следващи стъпки",
+    "couldNotLoadMemories": "Неуспешно зареждане на спомените",
+    "couldNotLoadKnowledgeGraph": "Неуспешно зареждане на графа на знанията"
 }

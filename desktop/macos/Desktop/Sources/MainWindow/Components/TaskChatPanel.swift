@@ -62,7 +62,7 @@ struct TaskChatPanel: View {
           isLoadingInitial: false,
           app: nil,
           onLoadMore: {},
-          onRate: { _, _ in },
+          onRate: { _, _, _ in },
           localSendToken: taskState.localSendToken,
           // The task panel renders the same interactable content blocks as the
           // main window; taps route the one shell (`ChatFirstRichBlockContext.auxiliary`).

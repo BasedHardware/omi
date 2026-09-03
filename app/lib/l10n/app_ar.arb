@@ -3220,5 +3220,7 @@
     "chatBlockOpenConversation": "فتح المحادثة",
     "chatBlockOpenInMemories": "فتح في الذكريات",
     "chatBlockUnavailable": "لم يعد متاحًا",
-    "chatBlockRecommendedNextSteps": "الخطوات التالية الموصى بها"
+    "chatBlockRecommendedNextSteps": "الخطوات التالية الموصى بها",
+    "couldNotLoadMemories": "تعذر تحميل الذكريات",
+    "couldNotLoadKnowledgeGraph": "تعذر تحميل الرسم البياني للمعرفة"
 }

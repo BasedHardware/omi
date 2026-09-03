@@ -3244,5 +3244,7 @@
     "chatBlockOpenConversation": "Άνοιγμα συνομιλίας",
     "chatBlockOpenInMemories": "Άνοιγμα στις Αναμνήσεις",
     "chatBlockUnavailable": "Δεν είναι πλέον διαθέσιμο",
-    "chatBlockRecommendedNextSteps": "Προτεινόμενα επόμενα βήματα"
+    "chatBlockRecommendedNextSteps": "Προτεινόμενα επόμενα βήματα",
+    "couldNotLoadMemories": "Δεν ήταν δυνατή η φόρτωση των αναμνήσεων",
+    "couldNotLoadKnowledgeGraph": "Δεν ήταν δυνατή η φόρτωση του γραφήματος γνώσης"
 }

@@ -77,9 +77,11 @@ struct ChatFirstRichBlockGroupView: View {
         summary: summary,
         navigation: context.navigation
       )
-    case .text, .commentary, .toolCalls, .thinking, .discoveryCard, .agentSpawn, .agentCompletion:
-      // Not this view's kinds. Exhaustive rather than a `default` so a block
-      // added later has to state its answer here instead of vanishing.
+    case .text, .commentary, .toolCalls, .thinking, .discoveryCard, .agentSpawn, .agentCompletion,
+      .memoryReviewCard, .followUp:
+      // Not this view's kinds — the review card and the follow-up chip are
+      // rendered by the bubble itself. Exhaustive rather than a `default` so a
+      // block added later has to state its answer here instead of vanishing.
       EmptyView()
     }
   }

@@ -10018,4 +10018,10 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'பரிந்துரைக்கப்பட்ட அடுத்த படிகள்';
+
+  @override
+  String get couldNotLoadMemories => 'நினைவுகளை ஏற்ற முடியவில்லை';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'அறிவு வரைபடத்தை ஏற்ற முடியவில்லை';
 }

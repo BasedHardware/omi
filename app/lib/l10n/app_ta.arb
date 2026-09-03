@@ -10810,5 +10810,7 @@
     "chatBlockOpenConversation": "உரையாடலைத் திறக்க",
     "chatBlockOpenInMemories": "நினைவுகளில் திறக்க",
     "chatBlockUnavailable": "இனி கிடைக்கவில்லை",
-    "chatBlockRecommendedNextSteps": "பரிந்துரைக்கப்பட்ட அடுத்த படிகள்"
+    "chatBlockRecommendedNextSteps": "பரிந்துரைக்கப்பட்ட அடுத்த படிகள்",
+    "couldNotLoadMemories": "நினைவுகளை ஏற்ற முடியவில்லை",
+    "couldNotLoadKnowledgeGraph": "அறிவு வரைபடத்தை ஏற்ற முடியவில்லை"
 }

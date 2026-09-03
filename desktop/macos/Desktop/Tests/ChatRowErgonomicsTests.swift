@@ -231,7 +231,7 @@ final class ChatTranscriptRowRhythmTests: XCTestCase {
 
   private func rowHeight(_ message: ChatMessage) -> CGFloat {
     NSHostingView(
-      rootView: ChatBubble(message: message, app: nil, showsOmiMark: true, onRate: { _ in })
+      rootView: ChatBubble(message: message, app: nil, showsOmiMark: true, onRate: { _, _ in })
         .frame(width: Self.width)
     ).fittingSize.height
   }

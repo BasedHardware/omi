@@ -9989,4 +9989,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Javasolt következő lépések';
+
+  @override
+  String get couldNotLoadMemories => 'Nem sikerült betölteni az emlékeket';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nem sikerült betölteni a tudásgráfot';
 }

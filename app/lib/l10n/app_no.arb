@@ -3244,5 +3244,7 @@
     "chatBlockOpenConversation": "Åpne samtale",
     "chatBlockOpenInMemories": "Åpne i Minner",
     "chatBlockUnavailable": "Ikke lenger tilgjengelig",
-    "chatBlockRecommendedNextSteps": "Anbefalte neste trinn"
+    "chatBlockRecommendedNextSteps": "Anbefalte neste trinn",
+    "couldNotLoadMemories": "Kunne ikke laste minner",
+    "couldNotLoadKnowledgeGraph": "Kunne ikke laste kunnskapsgrafen"
 }

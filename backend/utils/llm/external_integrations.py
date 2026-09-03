@@ -40,6 +40,7 @@ def _basic_daily_summary(
     total_duration_minutes: float,
     actual_action_items: List[Dict[str, Any]],
     locations: List[Dict[str, Any]],
+    memories_learned: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     return {
         "id": str(uuid.uuid4()),
@@ -58,6 +59,7 @@ def _basic_daily_summary(
         "unresolved_questions": [],
         "decisions_made": [],
         "knowledge_nuggets": [],
+        "memories_learned": list(memories_learned or []),
         "locations": locations,
     }
 
@@ -194,12 +196,19 @@ def generate_comprehensive_daily_summary(
     date_str: str,
     start_date_utc: Optional[datetime] = None,
     end_date_utc: Optional[datetime] = None,
+    memories_learned: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Generate a comprehensive daily summary with structured data for storage.
 
+    ``memories_learned`` is the already-selected review contract from
+    ``utils.memory.learned_today``. It is passed in rather than read here: this
+    module is the LLM summary builder, and making it reach into the memory stack
+    would put a Firestore read behind every caller and every test of it.
+
     Returns a dictionary matching the DailySummary model structure.
     """
+    learned_refs: List[Dict[str, Any]] = list(memories_learned or [])
     # Get user's timezone
     user_profile = users_db.get_user_profile(uid)
     user_tz_str = user_profile.get('time_zone', 'UTC')
@@ -403,15 +412,16 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "unresolved_questions": unresolved_questions,
             "decisions_made": decisions_made,
             "knowledge_nuggets": knowledge_nuggets,
+            "memories_learned": learned_refs,
             "locations": locations,
         }
     except json.JSONDecodeError as e:
         logger.error("Failed to decode daily summary payload JSON: %s", sanitize(str(e)))
         return _basic_daily_summary(
-            date_str, total_conversations, total_duration_minutes, actual_action_items, locations
+            date_str, total_conversations, total_duration_minutes, actual_action_items, locations, learned_refs
         )
     except ValidationError as e:
         logger.error("Failed to validate daily summary payload: %s", sanitize_validation_error(cast(Any, e)))
         return _basic_daily_summary(
-            date_str, total_conversations, total_duration_minutes, actual_action_items, locations
+            date_str, total_conversations, total_duration_minutes, actual_action_items, locations, learned_refs
         )

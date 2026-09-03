@@ -20,6 +20,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
+import 'package:omi/pages/chat/widgets/chat_followup_chip.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/chat_content_block_list.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
@@ -35,6 +36,8 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
 import 'chart_message_widget.dart';
 import 'package:omi/widgets/components/chat_evidence_card.dart';
+import 'package:omi/widgets/components/memory_review_card.dart';
+import 'package:omi/utils/share_sheet.dart';
 import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
@@ -344,7 +347,11 @@ Widget buildMessageWidget(
 
   final evidence = visibleSupplementalEvidence(message);
   final appendBlocks = contentBlocks != null && !blocksReplaceBody;
-  if (evidence == null && !appendBlocks) return messageWidget;
+  // Native content blocks. Both are additive chrome: an absent or malformed
+  // block leaves the answer exactly as it renders today.
+  final reviewCard = showTypingIndicator ? null : message.memoryReviewCard;
+  final followUp = showTypingIndicator ? null : message.followUpQuestion;
+  if (evidence == null && !appendBlocks && reviewCard == null && followUp == null) return messageWidget;
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisSize: MainAxisSize.min,
@@ -354,6 +361,14 @@ Widget buildMessageWidget(
         const SizedBox(height: 8),
         contentBlocks,
       ],
+      if (reviewCard != null) ...[
+        const SizedBox(height: 12),
+        MemoryReviewCard(
+          items: reviewCard.items,
+          source: MemoryReviewSource.chatBlock,
+          impressionKey: reviewCard.id.isNotEmpty ? reviewCard.id : message.id,
+        ),
+      ],
       if (evidence != null) ...[
         const SizedBox(height: 8),
         // The released mobile surface has no trusted evidence navigator yet.
@@ -361,6 +376,7 @@ Widget buildMessageWidget(
         // can never become an external action.
         ChatEvidenceReferenceList(envelope: evidence),
       ],
+      if (followUp != null) ...[const SizedBox(height: 8), ChatFollowUpChip(question: followUp, onSend: sendMessage)],
     ],
   );
 }
@@ -1276,11 +1292,6 @@ class _MessageActionBarState extends State<MessageActionBar> {
                 properties: {'message': widget.messageText},
               );
 
-              // Implicit positive feedback - user copied the message (silent, no UI change)
-              if (_selectedNps == null) {
-                widget.setMessageNps?.call(1, reason: 'user_copied_message');
-              }
-
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1330,16 +1341,11 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               if (widget.messageText.isEmpty) return;
               HapticFeedback.lightImpact();
-              await Share.share(widget.messageText);
+              await Share.share(widget.messageText, sharePositionOrigin: shareSheetOrigin());
               PlatformManager.instance.analytics.track(
                 'Chat Message Shared',
                 properties: {'message': widget.messageText},
               );
-
-              // Implicit positive feedback - user shared the message (silent, no UI change)
-              if (_selectedNps == null) {
-                widget.setMessageNps?.call(1, reason: 'user_shared_message');
-              }
             },
           ),
         ],

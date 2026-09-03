@@ -9760,4 +9760,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => '建议的后续步骤';
+
+  @override
+  String get couldNotLoadMemories => '无法加载回忆';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => '无法加载知识图谱';
 }

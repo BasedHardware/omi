@@ -9948,4 +9948,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'گام‌های بعدی پیشنهادی';
+
+  @override
+  String get couldNotLoadMemories => 'بارگذاری خاطرات ممکن نشد';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'بارگذاری گراف دانش ممکن نشد';
 }

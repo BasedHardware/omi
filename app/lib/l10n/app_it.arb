@@ -3244,5 +3244,7 @@
     "chatBlockOpenConversation": "Apri conversazione",
     "chatBlockOpenInMemories": "Apri in Ricordi",
     "chatBlockUnavailable": "Non è più disponibile",
-    "chatBlockRecommendedNextSteps": "Prossimi passi consigliati"
+    "chatBlockRecommendedNextSteps": "Prossimi passi consigliati",
+    "couldNotLoadMemories": "Impossibile caricare i ricordi",
+    "couldNotLoadKnowledgeGraph": "Impossibile caricare il grafo della conoscenza"
 }

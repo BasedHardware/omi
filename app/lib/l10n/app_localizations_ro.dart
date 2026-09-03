@@ -9995,4 +9995,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Pașii următori recomandați';
+
+  @override
+  String get couldNotLoadMemories => 'Nu s-au putut încărca amintirile';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nu s-a putut încărca graful de cunoștințe';
 }

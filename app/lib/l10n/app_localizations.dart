@@ -18524,6 +18524,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recommended next steps'**
   String get chatBlockRecommendedNextSteps;
+
+  /// Retryable error when fetching memories failed instead of returning an empty list
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load memories'**
+  String get couldNotLoadMemories;
+
+  /// Short user-facing error when the knowledge graph request is non-200; must not include the response body
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load knowledge graph'**
+  String get couldNotLoadKnowledgeGraph;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

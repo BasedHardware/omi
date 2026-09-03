@@ -8,6 +8,7 @@ Behavioral tests use a standalone sliding-window implementation to verify the pa
 """
 
 import os
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
@@ -234,22 +235,34 @@ class TestSpeakerIdentificationPool:
         assert 'sync_executor' in context
 
 
+def _bulk_summary_function_body() -> str:
+    """The whole `_send_bulk_summary_notification` body, up to the next top-level def.
+
+    The guard used to slice the first 400 characters after the signature; the
+    #12530 fix gave the function keyword-only parameters and a docstring, which
+    pushed the executor and batch references past that window without changing
+    what the function does. Asserting over the full body keeps the contract
+    (postprocess executor, batched fan-out) independent of signature length.
+    """
+    src = _read_source('utils/other/notifications.py')
+    func_start = src.index('async def _send_bulk_summary_notification')
+    next_def = re.search(r'^(?:async )?def ', src[func_start + 1 :], re.MULTILINE)
+    func_end = func_start + 1 + next_def.start() if next_def else len(src)
+    return src[func_start:func_end]
+
+
 class TestNotificationsFanOut:
     """notifications.py must not use storage_executor for summary work."""
 
     def test_bulk_summary_uses_postprocess_executor(self):
         """_send_bulk_summary_notification must use postprocess_executor, not storage_executor."""
-        src = _read_source('utils/other/notifications.py')
-        func_start = src.index('async def _send_bulk_summary_notification')
-        func_body = src[func_start : func_start + 400]
+        func_body = _bulk_summary_function_body()
         assert 'postprocess_executor' in func_body
         assert 'storage_executor' not in func_body
 
     def test_bulk_summary_is_batched(self):
         """_send_bulk_summary_notification must process users in batches."""
-        src = _read_source('utils/other/notifications.py')
-        func_start = src.index('async def _send_bulk_summary_notification')
-        func_body = src[func_start : func_start + 400]
+        func_body = _bulk_summary_function_body()
         assert '_BATCH_SIZE' in func_body
 
 

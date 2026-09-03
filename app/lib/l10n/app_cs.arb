@@ -3222,5 +3222,7 @@
     "chatBlockOpenConversation": "Otevřít konverzaci",
     "chatBlockOpenInMemories": "Otevřít ve Vzpomínkách",
     "chatBlockUnavailable": "Již není k dispozici",
-    "chatBlockRecommendedNextSteps": "Doporučené další kroky"
+    "chatBlockRecommendedNextSteps": "Doporučené další kroky",
+    "couldNotLoadMemories": "Nepodařilo se načíst vzpomínky",
+    "couldNotLoadKnowledgeGraph": "Nepodařilo se načíst graf znalostí"
 }

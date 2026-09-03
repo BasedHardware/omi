@@ -9977,4 +9977,10 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Preporučeni sljedeći koraci';
+
+  @override
+  String get couldNotLoadMemories => 'Nije moguće učitati uspomene';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nije moguće učitati graf znanja';
 }

@@ -9978,4 +9978,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Zalecane kolejne kroki';
+
+  @override
+  String get couldNotLoadMemories => 'Nie udało się wczytać wspomnień';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nie udało się wczytać grafu wiedzy';
 }

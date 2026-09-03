@@ -150,6 +150,10 @@ enum ChatStructuredFallbackText {
       return labelled("Agent started", title, objective)
     case .agentCompletion(_, _, _, _, let title, _, let output, _):
       return labelled("Agent completed", title, output)
+    case .memoryReviewCard:
+      return "Memory review"
+    case .followUp(_, let question):
+      return nonEmpty(question, or: "Follow-up")
     }
   }
 }

@@ -720,8 +720,9 @@ enum GeneratedToolCapabilities {
       "Always call before answering explicit think-hard requests, including 'think carefully', 'go deep', 'don't just guess', and 'what should I do', plus advice, tradeoffs, multi-step plans, or pushback on a weak prior answer.",
       "A short, vague, or first-turn request still counts: call with the question as given instead of answering or asking a clarifying question first.",
       "Also call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. When unsure, escalate.",
-      "Skip only chit-chat, short confirmations, obvious stable facts, or a single fast realtime tool that fully answers the request.",
-      "When current public facts and deeper judgment are both needed, call web_search first and pass its result as context to think_deeper."
+      "Always use the web_search -> think_deeper sequence for historical public research about how, when, or why a company, product, or person did something, and for any public question that may require finding or corroborating multiple sources. First call web_search; after its result arrives, call think_deeper with the original question and that result as context.",
+      "Skip only chit-chat, short confirmations, obvious stable facts, or one narrow current fact that a fast realtime tool fully answers, such as weather, a current price, or a score.",
+      "For historical research or public synthesis, never call think_deeper without fresh public evidence. If no web_search result is present in this turn, call web_search first; then call think_deeper and include the result in context."
     ]
     ),
     Capability(
@@ -732,7 +733,8 @@ enum GeneratedToolCapabilities {
       summary: "Search the live public web through Omi's typed-chat retrieval lane, then speak a grounded answer.",
       bullets: [
       "You MUST use this for current public information such as weather, news, prices, scores, schedules, releases, and officeholders.",
-      "You MUST also use it when the user explicitly asks you to search, browse, look something up online, verify a public fact, or cite sources.",
+      "You MUST also use it for an explicitly requested narrow lookup, verification, or citation of one current public fact.",
+      "Use scope=narrow_current only for a narrow current fact. For historical company or product research, comparisons, or any question likely to need multiple sources or synthesis, use scope=historical_research, then call think_deeper with the original question and the complete search result in context.",
       "Never claim that web search, internet access, or real-time data is unavailable. If this tool fails, say that the lookup failed."
     ]
     ),

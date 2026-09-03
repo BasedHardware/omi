@@ -9985,4 +9985,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Рекомендуемые следующие шаги';
+
+  @override
+  String get couldNotLoadMemories => 'Не удалось загрузить воспоминания';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Не удалось загрузить граф знаний';
 }

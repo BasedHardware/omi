@@ -165,11 +165,19 @@ class AnalyticsManager {
   /// Test seam for `question_asked` / `question_answered`; the emitters live in
   /// `Analytics/AnalyticsManager+Questions.swift`, so this is internal, not private.
   var questionTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  /// Test seam for search events; emitters live in `Analytics/AnalyticsManager+Search.swift`.
+  var searchTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
 
   func setFloatingBarQueryTelemetryCaptureForTests(
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
   ) {
     floatingBarQueryTelemetryCaptureForTests = capture
+  }
+
+  func setSearchTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    searchTelemetryCaptureForTests = capture
   }
 
   // MARK: - Initialization
@@ -852,16 +860,6 @@ class AnalyticsManager {
       "Desktop Prompt Dismissed", properties: ["prompt_id": promptId, "prompt_type": promptType])
   }
 
-  // MARK: - Search Events
-
-  func searchQueryEntered(query: String) {
-    PostHogManager.shared.searchQueryEntered(query: query)
-  }
-
-  func searchBarFocused() {
-    PostHogManager.shared.searchBarFocused()
-  }
-
   // MARK: - Settings Events
 
   func settingsPageOpened() {
@@ -916,9 +914,13 @@ class AnalyticsManager {
     PostHogManager.shared.track("chat_session_deleted", properties: [:])
   }
 
-  func messageRated(rating: Int) {
+  func messageRated(rating: Int, surface: String = "text") {
     let ratingString = rating == 1 ? "thumbs_up" : "thumbs_down"
-    PostHogManager.shared.track("message_rated", properties: ["rating": ratingString])
+    // `source` splits the admin thumbs-ratio chart: "text" = main-window
+    // chat, "voice" = floating-bar responses. Events before this dimension
+    // existed chart as the combined series only.
+    PostHogManager.shared.track(
+      "message_rated", properties: ["rating": ratingString, "source": surface])
   }
 
   func initialMessageGenerated(hasApp: Bool) {

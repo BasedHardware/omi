@@ -9970,4 +9970,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Рекомендовані наступні кроки';
+
+  @override
+  String get couldNotLoadMemories => 'Не вдалося завантажити спогади';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Не вдалося завантажити граф знань';
 }

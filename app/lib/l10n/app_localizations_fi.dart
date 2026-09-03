@@ -9949,4 +9949,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Suositellut seuraavat vaiheet';
+
+  @override
+  String get couldNotLoadMemories => 'Muistoja ei voitu ladata';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Tietograafia ei voitu ladata';
 }

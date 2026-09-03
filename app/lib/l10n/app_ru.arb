@@ -3279,5 +3279,7 @@
     "chatBlockOpenConversation": "Открыть разговор",
     "chatBlockOpenInMemories": "Открыть в «Воспоминаниях»",
     "chatBlockUnavailable": "Больше недоступно",
-    "chatBlockRecommendedNextSteps": "Рекомендуемые следующие шаги"
+    "chatBlockRecommendedNextSteps": "Рекомендуемые следующие шаги",
+    "couldNotLoadMemories": "Не удалось загрузить воспоминания",
+    "couldNotLoadKnowledgeGraph": "Не удалось загрузить граф знаний"
 }

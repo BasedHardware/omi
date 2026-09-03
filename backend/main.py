@@ -75,6 +75,7 @@ from routers import (
     tools,
     metrics,
     fair_use_admin,
+    feedback_admin,
     staged_tasks,
     focus_sessions,
     advice,
@@ -124,6 +125,7 @@ from services.conversation_finalization import reconcile_abandoned_byok_finaliza
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_processing_conversations
+from database.durable_queue_age import publish_all_queue_oldest_ready_ages
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 from utils.other.local_storage import local_storage_root_from_env
 
@@ -202,6 +204,7 @@ app.include_router(agents.router)
 app.include_router(users.router)
 app.include_router(referrals.router)
 app.include_router(csat.router)
+app.include_router(feedback_admin.router)
 app.include_router(email_preferences.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
@@ -435,6 +438,10 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
                 logger.info(f"Periodic meeting-receipt reconciliation: {receipt_result}")
         except Exception as e:
             logger.error(f"Periodic meeting-receipt reconciliation failed: {e}")
+        try:
+            await run_blocking(db_executor, publish_all_queue_oldest_ready_ages)
+        except Exception as e:
+            logger.error(f"Periodic durable-queue age publish failed: {e}")
 
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring

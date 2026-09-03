@@ -17,10 +17,17 @@ struct AIResponseView: View {
   var onEscape: (() -> Void)?
   /// Typing lives in the main app now — the bar only offers a jump there.
   var onOpenMainApp: (() -> Void)?
-  var onRate: ((String, Int?) -> Void)?
+  var onRate: ((String, Int?, ChatFeedbackReason?) -> Void)?
   var onShareLink: (() async -> String?)?
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)?
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+  /// Tapping the grounded follow-up chip sends its question as a new user turn
+  /// in this same lane. Nil leaves the chip out entirely rather than rendering
+  /// one that does nothing.
+  var onAskFollowUp: ((String) -> Void)?
+  /// The "or hold ⌥ to ask aloud" hint, named for the shortcut actually bound.
+  /// Nil where push-to-talk is off or unavailable.
+  var followUpVoiceHint: String?
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -118,9 +125,13 @@ struct AIResponseView: View {
         return ["chatFirstConversation", id].joined(separator: "\u{1E}")
       case .memoryLink(let id, _, _):
         return ["chatFirstMemory", id].joined(separator: "\u{1E}")
+      case .memoryReviewCard(let id, _, _, let items):
+        return ["memoryReviewCard", id, String(items.count)].joined(separator: "\u{1E}")
       case .citation(let id, let reference):
         return ["citation", id, String(reference.ordinal), reference.sourceID]
           .joined(separator: "\u{1E}")
+      case .followUp(let id, let text):
+        return ["followUp", id, text].joined(separator: "\u{1E}")
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):
@@ -229,6 +240,20 @@ struct AIResponseView: View {
             .environment(\.colorScheme, .light)
             .frame(maxWidth: .infinity, alignment: .leading)
           }
+        // The review card is three controls and an inline editor over stored memories — the
+        // clearest case of a rich control this passive surface does not own.
+        case .memoryReviewCard:
+          EmptyView()
+        case .followUp(_, let question):
+          if let onAskFollowUp {
+            FollowUpChip(
+              question: question,
+              palette: .glass,
+              voiceHint: followUpVoiceHint,
+              action: { onAskFollowUp(question) }
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+          }
         case .agentSpawn(
           _, let pillId, let sessionId, let runId, let title, let objective, let provider
         ):
@@ -304,8 +329,8 @@ struct AIResponseView: View {
   private func messageWithHoverActions(message: ChatMessage) -> some View {
     MessageHoverOverlay(
       message: message,
-      onRate: { [id = message.id] rating in
-        onRate?(id, rating)
+      onRate: { [id = message.id] rating, reason in
+        onRate?(id, rating, reason)
       }
     ) {
       contentBlocksView(for: message)
@@ -553,7 +578,7 @@ struct AIResponseView: View {
 /// Overlay that shows action buttons (thumbs up/down, copy, info) on hover over an AI message
 struct MessageHoverOverlay<Content: View>: View {
   let message: ChatMessage
-  let onRate: (Int?) -> Void
+  let onRate: (Int?, ChatFeedbackReason?) -> Void
   @ViewBuilder let content: () -> Content
 
   @State private var isHovered = false
@@ -619,7 +644,10 @@ struct MessageHoverOverlay<Content: View>: View {
             let newRating = currentRating == 1 ? nil : 1
             guard newRating != lastSubmittedRating else { return }
             lastSubmittedRating = newRating
-            onRate(newRating)
+            // The floating bar's hover overlay is too narrow for the reason
+            // chips the main chat window shows, so a voice thumbs-down records
+            // with no reason for now (the report calls that "not captured").
+            onRate(newRating, nil)
             if newRating != nil { showRatingFeedbackBriefly() }
           }) {
             Image(systemName: currentRating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
@@ -634,7 +662,10 @@ struct MessageHoverOverlay<Content: View>: View {
             let newRating = currentRating == -1 ? nil : -1
             guard newRating != lastSubmittedRating else { return }
             lastSubmittedRating = newRating
-            onRate(newRating)
+            // The floating bar's hover overlay is too narrow for the reason
+            // chips the main chat window shows, so a voice thumbs-down records
+            // with no reason for now (the report calls that "not captured").
+            onRate(newRating, nil)
             if newRating != nil { showRatingFeedbackBriefly() }
           }) {
             Image(systemName: currentRating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")

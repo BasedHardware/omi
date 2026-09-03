@@ -84,7 +84,7 @@ struct FloatingControlBarView: View {
   var onCloseAI: () -> Void
   var onEscape: () -> Void
   var onClearVisibleConversation: () -> Void
-  var onRate: ((String, Int?) -> Void)?
+  var onRate: ((String, Int?, ChatFeedbackReason?) -> Void)?
   var onShareLink: (() async -> String?)?
 
   @State private var isHovering = false
@@ -1619,11 +1619,15 @@ struct FloatingControlBarView: View {
           .lineLimit(1)
       }
 
-      if state.isVoiceLocked && state.pttHintText.isEmpty {
-        Image(systemName: "lock.fill")
-          .scaledFont(size: OmiType.micro, weight: .bold)
+      // Locked mode is a mode the user has to be able to see at a glance: a bare glyph
+      // read as decoration, and gating it on an empty hint hid it for most of the turn.
+      // Restores the pre-2b416572c0 badge, always shown while locked.
+      if state.isVoiceLocked {
+        Text("LOCKED")
+          .scaledFont(size: 10, weight: .bold)
           .foregroundColor(.orange)
-          .frame(width: 18, height: 18)
+          .padding(.horizontal, 6)
+          .padding(.vertical, 2)
           .background(Color.orange.opacity(0.2))
           .cornerRadius(4)
       }
@@ -1641,6 +1645,15 @@ struct FloatingControlBarView: View {
 
   private var floatingChatProvider: ChatProvider? {
     FloatingControlBarManager.shared.sharedFloatingProvider
+  }
+
+  /// The chip's secondary hint names the shortcut actually bound, and is absent
+  /// when push-to-talk is off — a hint for a disabled gesture is a wrong hint.
+  @MainActor static func followUpVoiceHint(settings: ShortcutSettings = ShortcutSettings.shared) -> String? {
+    guard settings.pttEnabled else { return nil }
+    let tokens = settings.pttShortcut.displayTokens
+    guard let token = tokens.first, !token.isEmpty else { return nil }
+    return "or hold \(token) to ask aloud"
   }
 
   private var aiResponseView: some View {
@@ -1671,7 +1684,12 @@ struct FloatingControlBarView: View {
       },
       onOpenAgentRef: { ref, completion in
         openAgentInChat(ref: ref, completion: completion)
-      }
+      },
+      onAskFollowUp: { question in
+        AnalyticsManager.shared.questionOriginating(.followUp)
+        FloatingControlBarManager.shared.openAIInputWithQuery(question)
+      },
+      followUpVoiceHint: Self.followUpVoiceHint()
     )
     .transition(
       .asymmetric(
@@ -2189,6 +2207,11 @@ private struct AgentMainChatView: View {
               .environment(\.colorScheme, .light)
               .frame(maxWidth: .infinity, alignment: .leading)
             }
+          // The follow-up chip belongs to the answer surface, not this agent-pill
+          // transcript, which has no lane to send the next turn on, and the review
+          // card is a rich editor this passive surface does not own.
+          case .followUp, .memoryReviewCard:
+            EmptyView()
           case .agentSpawn(
             _, let pillId, let sessionId, let runId, let title, let objective, let provider
           ):

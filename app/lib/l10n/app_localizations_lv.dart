@@ -9972,4 +9972,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Ieteicamie nākamie soļi';
+
+  @override
+  String get couldNotLoadMemories => 'Neizdevās ielādēt atmiņas';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Neizdevās ielādēt zināšanu grafu';
 }

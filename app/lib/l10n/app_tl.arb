@@ -10810,5 +10810,7 @@
     "chatBlockOpenConversation": "Buksan ang pag-uusap",
     "chatBlockOpenInMemories": "Buksan sa Mga Alaala",
     "chatBlockUnavailable": "Hindi na available",
-    "chatBlockRecommendedNextSteps": "Mga inirerekomendang susunod na hakbang"
+    "chatBlockRecommendedNextSteps": "Mga inirerekomendang susunod na hakbang",
+    "couldNotLoadMemories": "Hindi ma-load ang mga alaala",
+    "couldNotLoadKnowledgeGraph": "Hindi ma-load ang knowledge graph"
 }

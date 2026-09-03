@@ -3244,5 +3244,7 @@
     "chatBlockOpenConversation": "Buka perbualan",
     "chatBlockOpenInMemories": "Buka dalam Memori",
     "chatBlockUnavailable": "Tidak lagi tersedia",
-    "chatBlockRecommendedNextSteps": "Langkah seterusnya yang disyorkan"
+    "chatBlockRecommendedNextSteps": "Langkah seterusnya yang disyorkan",
+    "couldNotLoadMemories": "Tidak dapat memuatkan kenangan",
+    "couldNotLoadKnowledgeGraph": "Tidak dapat memuatkan graf pengetahuan"
 }

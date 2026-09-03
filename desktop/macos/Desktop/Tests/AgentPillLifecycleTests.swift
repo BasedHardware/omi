@@ -681,7 +681,7 @@ import XCTest
     XCTAssertTrue(windowSource.contains("static let notchActiveSideWidth: CGFloat = 42"))
     XCTAssertTrue(windowSource.contains("func resizeForAgentSwitcher(visible: Bool)"))
     XCTAssertTrue(windowSource.contains("max(collapsedBarSize.width, Self.notchExpandedWidth)"))
-    XCTAssertTrue(windowSource.contains("      if state.showingAIConversation {\n        return\n      }"))
+    XCTAssertTrue(windowSource.contains("if usesNotchIsland, state.showingAIConversation {\n      return\n    }"))
   }
 
   func testSpacesTransitionPreservesUserResizedNotchChatFrame() {
@@ -1587,7 +1587,7 @@ import XCTest
 
     // Legacy PTT collapse supplies the bare compact surface to the shared
     // transition path, which applies the active response/agent glow exactly once.
-    XCTAssertTrue(source.contains("toSurfaceSize: expanded ? Self.voiceBarSize : Self.minBarSize"))
+    XCTAssertTrue(source.contains("voiceSize = expanded ? Self.voiceBarSize : Self.minBarSize"))
     XCTAssertTrue(source.contains("let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: size)"))
     XCTAssertTrue(source.contains("guard state.isVoiceResponseGlowActive || collapsedPillAgentGlowActive else"))
   }

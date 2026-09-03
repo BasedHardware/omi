@@ -3244,5 +3244,7 @@
     "chatBlockOpenConversation": "Ava vestlus",
     "chatBlockOpenInMemories": "Ava mälestustes",
     "chatBlockUnavailable": "Pole enam saadaval",
-    "chatBlockRecommendedNextSteps": "Soovitatud järgmised sammud"
+    "chatBlockRecommendedNextSteps": "Soovitatud järgmised sammud",
+    "couldNotLoadMemories": "Mälestusi ei õnnestunud laadida",
+    "couldNotLoadKnowledgeGraph": "Teadmiste graafi ei õnnestunud laadida"
 }

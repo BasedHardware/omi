@@ -20,6 +20,9 @@ enum ConversationDisplayState: Equatable {
   case titled(String)
   /// Pipeline is still running. Title will arrive soon.
   case processing
+  /// Stored with the raw transcript only; the backend enriches it the first
+  /// time it is opened (free-tier desktop capture). Nothing is running.
+  case awaitingFirstOpen
   /// Conversation is locked (subscription gating). Title intentionally hidden.
   case locked
   /// Processing finished but the title slot is empty AND the transcript has
@@ -337,7 +340,10 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     }
     switch status {
     case .inProgress, .processing, .merging:
-      return .processing
+      // A deferred row wears `processing` on the wire only so the client
+      // re-fetches on open. Nothing is running for it, so it must not look
+      // like — or be timed like — a live pipeline.
+      return deferred ? .awaitingFirstOpen : .processing
     case .failed:
       return .failed
     case .completed:
@@ -354,11 +360,30 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     }
   }
 
+  /// Identity for a row that has no LLM title yet: the first substantive
+  /// transcript line, or the recording time when the transcript is not loaded.
+  /// Never the pipeline status — that belongs in the badge.
+  var provisionalTitle: String {
+    ConversationProcessingProgress.provisionalTitle(from: transcriptSegments)
+      ?? "Recording at \(Self.provisionalTimeFormatter.string(from: startedAt ?? createdAt))"
+  }
+
+  /// True when `provisionalTitle` quotes the transcript rather than the clock.
+  var hasTranscriptProvisionalTitle: Bool {
+    ConversationProcessingProgress.provisionalTitle(from: transcriptSegments) != nil
+  }
+
+  private static let provisionalTimeFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "h:mm a"
+    return f
+  }()
+
   /// The string a row/header should display in the title slot.
   var displayTitle: String {
     switch displayState {
     case .titled(let title): return title
-    case .processing: return "Processing…"
+    case .processing, .awaitingFirstOpen: return provisionalTitle
     case .locked: return "Locked"
     case .failed: return "Failed to process"
     case .untitledRecoverable, .untitledEmpty: return "Untitled"

@@ -9953,4 +9953,10 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'প্রস্তাবিত পরবর্তী পদক্ষেপ';
+
+  @override
+  String get couldNotLoadMemories => 'স্মৃতি লোড করা যায়নি';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'নলেজ গ্রাফ লোড করা যায়নি';
 }

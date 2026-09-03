@@ -7,6 +7,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
   # The exact-record handoff TasksPage consumes on arrival.
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/TaskNavigationRequestStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksViewModel+SearchAnalytics.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksSection.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/TasksEscapeHandling.swift

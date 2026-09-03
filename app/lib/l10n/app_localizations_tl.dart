@@ -10039,4 +10039,10 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Mga inirerekomendang susunod na hakbang';
+
+  @override
+  String get couldNotLoadMemories => 'Hindi ma-load ang mga alaala';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Hindi ma-load ang knowledge graph';
 }

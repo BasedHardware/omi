@@ -9890,4 +9890,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'الخطوات التالية الموصى بها';
+
+  @override
+  String get couldNotLoadMemories => 'تعذر تحميل الذكريات';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'تعذر تحميل الرسم البياني للمعرفة';
 }

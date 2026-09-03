@@ -9980,4 +9980,10 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get chatBlockRecommendedNextSteps => 'Рэкамендаваныя наступныя крокі';
+
+  @override
+  String get couldNotLoadMemories => 'Не ўдалося загрузіць успаміны';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Не ўдалося загрузіць граф ведаў';
 }
