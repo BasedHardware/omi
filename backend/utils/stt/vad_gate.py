@@ -639,6 +639,11 @@ class GatedSTTSocket(STTSocket):
     def death_reason(self) -> Optional[str]:
         return self._conn.death_reason
 
+    @property
+    def typed_death_reason(self) -> Optional[str]:
+        """Proxy the wrapped socket's typed rejection (None when untyped)."""
+        return getattr(self._conn, 'typed_death_reason', None)
+
     def _counted(self, audio: bytes) -> bytes:
         """Count frames that are not whole 16-bit samples, as the provider receives them.
 

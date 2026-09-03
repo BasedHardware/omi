@@ -341,10 +341,11 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       _populateGraph(data);
       _runLayoutSync();
     } catch (e) {
+      Logger.debug('Knowledge graph load failed: $e');
       if (!mounted) return;
       if (!silent) {
         setState(() {
-          _error = e.toString();
+          _error = context.l10n.couldNotLoadKnowledgeGraph;
         });
       }
     } finally {

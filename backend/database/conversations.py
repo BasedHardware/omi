@@ -898,7 +898,15 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
-    doc_ref.update(prepared_data)
+    try:
+        doc_ref.update(prepared_data)
+    except NotFound:
+        # The conversation was deleted between the existence read above and
+        # this commit. The contract of this function is to report a gone owner
+        # as False — not to raise — so callers like the pusher's private-cloud
+        # audio sync take their designed gone-owner path (stop syncing, release
+        # the audio budget) instead of logging an ERROR and retrying forever.
+        return False
     return True
 
 

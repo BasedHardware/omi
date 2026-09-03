@@ -14,8 +14,9 @@ from typing import Any, Callable, Dict, Final, List, Optional
 
 import websockets
 
-from config.stt_provider_policy import normalized_stt_language
+from config.stt_provider_policy import normalized_stt_language, soniox_accepts_language_hint
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
+from utils.observability.fallback import record_fallback
 from utils.stt.socket import STTSocket
 
 logger = logging.getLogger(__name__)
@@ -23,10 +24,54 @@ logger = logging.getLogger(__name__)
 SONIOX_SERVICE_NAME: Final = 'soniox'
 SONIOX_WS_URL: Final = os.getenv('SONIOX_WS_URL', 'wss://stt-rt.soniox.com/transcribe-websocket')
 SONIOX_MODEL: Final = os.getenv('SONIOX_MODEL', 'stt-rt-v5')
-# Soniox closes any socket that receives neither audio nor a keepalive for 20s.
+# Soniox closes any socket that receives neither audio nor keepalive for 20s.
 # VAD gating routinely holds audio back for longer than that, so idle sockets die
 # as 408 request_timeout unless we fill the gap ourselves.
 SONIOX_KEEPALIVE_SECONDS: Final = 10.0
+
+# Typed in-stream rejection reasons, mapped off the provider's own error frame
+# (``error_code`` + ``error_type``). Prod 2026-08-30/31 (backend-listen):
+# 400 invalid_request "No audio received" (~42/30m), 402
+# organization_balance_exhausted (~7/30m), 413 max_duration_reached (~3/30m)
+# all surfaced as one free-text ERROR signature, indistinguishable in metrics
+# and in the terminal-failure reason vocabulary.
+SONIOX_DEATH_IDLE_TIMEOUT: Final = 'soniox_idle_timeout'
+SONIOX_DEATH_ACCOUNT_STATE: Final = 'soniox_account_state'
+SONIOX_DEATH_ROTATION: Final = 'soniox_rotation'
+SONIOX_DEATH_INVALID_HINT: Final = 'soniox_invalid_hint'
+
+
+def soniox_death_reason(error_code: Any, error_type: Any, error_message: Any = None) -> str:
+    """Bound a Soniox in-stream error frame to a typed death reason.
+
+    The raw provider text stays on the death latch for logs; this mapping is
+    what the bounded terminal-failure vocabulary consumes, so a new provider
+    error shape degrades to ``connection_lost`` rather than growing a new
+    metric cardinality per message.
+    """
+    error = str(error_type or '').strip().lower()
+    if error == 'organization_balance_exhausted':
+        return SONIOX_DEATH_ACCOUNT_STATE
+    try:
+        code = int(error_code)
+    except (TypeError, ValueError):
+        return 'connection_lost'
+    if code == 400:
+        message = str(error_message or '').strip().lower()
+        if 'invalid language hint' in message:
+            # The provider rejected a ``language_hints`` entry outside its
+            # documented vocabulary. Config-shaped, not usage-shaped: this is
+            # not the idle watchdog, and reporting it as one hid a recurring
+            # connect-time death behind a WARNING (prod 2026-09-02/03).
+            return SONIOX_DEATH_INVALID_HINT
+        # "No audio received": the idle watchdog fired. The socket's keepalive
+        # covers the no-client-audio case; this shape arrives when VAD gating
+        # withheld real audio for the whole window.
+        return SONIOX_DEATH_IDLE_TIMEOUT
+    if code == 413:
+        # Documented rotation: open a new WebSocket. The failover path does.
+        return SONIOX_DEATH_ROTATION
+    return 'connection_lost'
 
 
 class SafeSonioxSocket(STTSocket):
@@ -53,6 +98,9 @@ class SafeSonioxSocket(STTSocket):
         self._dead = False
         self._closed = False
         self._death_reason: Optional[str] = None
+        # Typed, bounded death reason (e.g. SONIOX_DEATH_ACCOUNT_STATE) for the
+        # terminal-failure vocabulary; None until the socket dies.
+        self._typed_death_reason: Optional[str] = None
         self._lock = threading.Lock()
         self._send_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=2000)
         self._done_event = asyncio.Event()
@@ -70,11 +118,17 @@ class SafeSonioxSocket(STTSocket):
     def death_reason(self) -> Optional[str]:
         return self._death_reason
 
-    def _mark_dead(self, reason: str) -> None:
+    @property
+    def typed_death_reason(self) -> Optional[str]:
+        """Bounded reason for the terminal-failure vocabulary (None = untyped)."""
+        return self._typed_death_reason
+
+    def _mark_dead(self, reason: str, typed_reason: Optional[str] = None) -> None:
         with self._lock:
             if not self._dead:
                 self._dead = True
                 self._death_reason = reason
+                self._typed_death_reason = typed_reason
 
     def send(self, data: bytes) -> bool:
         with self._lock:
@@ -166,9 +220,22 @@ class SafeSonioxSocket(STTSocket):
                     continue
                 if msg.get('error_code'):
                     err = f"{msg.get('error_code')} {msg.get('error_type', '')} {msg.get('error_message', '')}".strip()
-                    logger.error(f'Soniox streaming error: {err}')
+                    typed = soniox_death_reason(msg.get('error_code'), msg.get('error_type'), msg.get('error_message'))
+                    if typed in (SONIOX_DEATH_ACCOUNT_STATE, SONIOX_DEATH_INVALID_HINT):
+                        # The provider evaluated the account (402) or the session
+                        # config (400 invalid language hint) and refused to
+                        # serve: our side of the fence owns the fix, so these
+                        # stay at ERROR for the on-call instead of hiding behind
+                        # the idle/rotation WARNING that hid this signature.
+                        logger.error(f'Soniox streaming error: {err}')
+                    else:
+                        # Idle-timeout and documented rotation are the
+                        # protocol answering how the session was used, not a
+                        # provider fault; failing to discriminate kept this the
+                        # top backend-listen error signature with no signal.
+                        logger.warning('Soniox stream closed: %s', err)
                     self._done_event.set()
-                    self._mark_dead(f'soniox error: {err}')
+                    self._mark_dead(f'soniox error: {err}', typed_reason=typed)
                     break
 
                 tokens: List[Any] = msg.get('tokens') or []
@@ -251,10 +318,35 @@ async def process_audio_soniox(
         'enable_speaker_diarization': True,
         'enable_language_identification': True,
     }
-    # 'multi' is auto-detect: send no hint and let identification do the work.
+    # Hints bias recognition; identification still detects every supported
+    # language without one. The provider validates ``language_hints`` against
+    # its documented vocabulary and answers ``400 invalid_request Invalid
+    # language hint`` — after the WebSocket upgrade already succeeded — for any
+    # entry outside it, killing the session at the config frame (prod
+    # backend-listen 2026-09-02/03). 'multi' is our auto-detect sentinel, not an
+    # ISO code, so it must send no hint; compare on the normalized base code so
+    # a capitalized sentinel or a region-tagged locale ('Multi', 'ja-JP') cannot
+    # smuggle a rejected entry past the raw-string guard.
     normalized = normalized_stt_language(language)
-    if normalized and language != 'multi':
-        config['language_hints'] = [normalized]
+    if normalized and normalized != 'multi':
+        if soniox_accepts_language_hint(normalized):
+            config['language_hints'] = [normalized]
+        else:
+            # Auto-detect serves every language the model supports, so the
+            # session stays live; this is a mode change (hinted -> identified)
+            # and must be visible to ops, not silently healed.
+            record_fallback(
+                component='stt_selection',
+                from_mode='soniox_language_hint',
+                to_mode='soniox_language_identification',
+                reason='capability_mismatch',
+                outcome='degraded',
+            )
+            logger.warning(
+                'Soniox language hint dropped: language=%s is outside the documented hint vocabulary; '
+                'falling back to language identification',
+                language,
+            )
 
     logger.info(f'Connecting to Soniox streaming sample_rate={sample_rate} language={language}')
     ws = await websockets.connect(SONIOX_WS_URL, ping_timeout=15, ping_interval=15)

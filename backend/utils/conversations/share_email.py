@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from database.auth import get_user_from_uid
+from utils.conversations.overview_markdown import overview_to_email_html
 from utils.share_links import build_share_url
 
 logger = logging.getLogger(__name__)
@@ -237,13 +238,13 @@ def build_summary_email(
 ) -> Dict[str, str]:
     """Subject + HTML body for the shared-summary email. Pure for tests."""
     subject = f'Meeting notes: {conversation_title}' if conversation_title else 'Meeting notes'
-    overview_html = '<br>'.join(_escape_html(line) for line in overview.splitlines()) if overview else ''
+    overview_html = overview_to_email_html(overview)
     html = (
         '<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;'
         'max-width:560px;margin:0 auto;color:#111">'
         f'<p>{_escape_html(sender_name)} shared notes from your conversation'
         f'{": <strong>" + _escape_html(conversation_title) + "</strong>" if conversation_title else ""}.</p>'
-        + (f'<p style="white-space:pre-wrap">{overview_html}</p>' if overview_html else '')
+        + (f'<div>{overview_html}</div>' if overview_html else '')
         + f'<p><a href="{_escape_html(share_url)}" '
         'style="display:inline-block;background:#111;color:#fff;text-decoration:none;'
         'padding:10px 18px;border-radius:8px">View the full notes</a></p>'

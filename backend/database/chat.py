@@ -97,6 +97,17 @@ def _prepare_message_for_read(message_data: Dict[str, Any], uid: str) -> Dict[st
     return message_data
 
 
+def decrypt_message_payload(message_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
+    """Public read-path decryption for one raw message document.
+
+    Callers outside this module (the feedback-report context hydrator) need the
+    same enhanced-protection handling `get_message` applies, but starting from a
+    raw snapshot dict they already hold. Exposed rather than reaching into the
+    private helper so the encryption contract has one owner.
+    """
+    return _prepare_message_for_read(message_data, uid)
+
+
 # *****************************
 # ********** CRUD *************
 # *****************************

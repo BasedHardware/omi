@@ -81,7 +81,7 @@ def _client_for(*, exists: bool, data: dict | None = None):
 
 def test_missing_hold_allows_deletion(monkeypatch):
     client = _client_for(exists=False)
-    monkeypatch.setattr(legal_holds, "get_firestore_client", lambda: client)
+    monkeypatch.setattr(legal_holds, "account_deletion_firestore_client", lambda **_kwargs: client)
 
     legal_holds.assert_account_deletion_permitted("uid1")
 

@@ -18,6 +18,7 @@ import 'widgets/memory_graph_page.dart';
 import 'widgets/memory_history_status_banner.dart';
 import 'widgets/memory_item.dart';
 import 'widgets/memory_management_sheet.dart';
+import 'widgets/memories_load_error.dart';
 
 class MemoriesPage extends StatefulWidget {
   const MemoriesPage({super.key});
@@ -338,33 +339,38 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                   child: MemoryHistoryStatusBanner(),
                                 ),
                               ),
-                            if (provider.filteredMemories.isEmpty)
+                            if (provider.showLoadError || provider.filteredMemories.isEmpty)
                               SliverFillRemaining(
-                                child: Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
-                                            ? context.l10n.noMemoriesYet
-                                            : provider.selectedCategories.isNotEmpty
-                                                ? provider.selectedCategories.contains(MemoryCategory.manual) &&
-                                                        provider.selectedCategories.length == 1
-                                                    ? context.l10n.noManualMemories
-                                                    : context.l10n.noMemoriesInCategories
-                                                : context.l10n.noMemoriesFound,
-                                        style: TextStyle(color: Colors.grey.shade400, fontSize: 18),
-                                      ),
-                                      if (provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty) ...[
-                                        const SizedBox(height: 8),
-                                        TextButton(
-                                          onPressed: () => showMemoryDialog(context, provider),
-                                          child: Text(context.l10n.addFirstMemory),
+                                child: MemoriesEmptyOrError(
+                                  showLoadError: provider.showLoadError,
+                                  onRetry: () => provider.loadMemories(),
+                                  emptyState: Center(
+                                    child: Column(
+                                      key: const Key('memories_empty_state'),
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
+                                              ? context.l10n.noMemoriesYet
+                                              : provider.selectedCategories.isNotEmpty
+                                                  ? provider.selectedCategories.contains(MemoryCategory.manual) &&
+                                                          provider.selectedCategories.length == 1
+                                                      ? context.l10n.noManualMemories
+                                                      : context.l10n.noMemoriesInCategories
+                                                  : context.l10n.noMemoriesFound,
+                                          style: TextStyle(color: Colors.grey.shade400, fontSize: 18),
                                         ),
+                                        if (provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty) ...[
+                                          const SizedBox(height: 8),
+                                          TextButton(
+                                            onPressed: () => showMemoryDialog(context, provider),
+                                            child: Text(context.l10n.addFirstMemory),
+                                          ),
+                                        ],
                                       ],
-                                    ],
+                                    ),
                                   ),
                                 ),
                               )
