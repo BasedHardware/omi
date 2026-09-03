@@ -338,6 +338,7 @@ SCHEMA_GROUPS = {
             'PricingOption',
             'SubscriptionPlan',
             'PhoneCallQuota',
+            'TranscriptionAllowanceSnapshot',
             'UserSubscriptionResponse',
             'UsageStats',
             'UsageHistoryPoint',
