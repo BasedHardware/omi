@@ -120,7 +120,7 @@ class Memory(BaseModel):
         description="Reasons this fact needs caution or review", default_factory=list
     )
     durability: Optional[str] = Field(description="Expected durability horizon for the fact", default=None)
-    subject_scope: Optional[str] = Field(default=None)
+    subject_scope: Optional[MemorySubjectScope] = Field(default=None)
     belief_class: Optional[str] = Field(default=None)
     half_life_days: Optional[float] = Field(default=None)
     valid_to: Optional[datetime] = Field(default=None)

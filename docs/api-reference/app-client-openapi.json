@@ -17579,13 +17579,12 @@
           "subject_scope": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/MemorySubjectScope"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Subject Scope"
+            ]
           },
           "tags": {
             "description": "The tags of the memory and learning",
