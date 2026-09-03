@@ -1,4 +1,7 @@
-"""Canonical module for ``utils.memory.v3.archive_visibility_readiness`` (WS-G8b)."""
+"""Canonical module for ``scripts.archive_visibility_readiness`` (WS-G8b).
+
+Moved from ``utils/memory/v3/`` — its only consumer is the one-shot readiness
+script ``scripts/p1_3_v3_archive_short_term_visibility_readiness.py``."""
 
 from __future__ import annotations
 

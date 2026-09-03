@@ -30,13 +30,6 @@ LEGACY_SEARCH_INVENTORY = [
         "required_filter_barrier": {"memory_schema_version": {"$exists": False}},
         "legacy_id_shape": "{uid}-{memory_id}",
     },
-    {
-        "function": "database.vector_db.search_memories_by_vector",
-        "namespace": SHARED_NAMESPACE,
-        "caller_examples": ["legacy semantic memory search"],
-        "required_filter_barrier": {"memory_schema_version": {"$exists": False}},
-        "legacy_id_shape": "{uid}-{memory_id}",
-    },
 ]
 
 MEMORY_METADATA_BARRIERS = {

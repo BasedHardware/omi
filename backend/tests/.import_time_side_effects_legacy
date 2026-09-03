@@ -24,7 +24,7 @@ backend/migrations/003_report_top_transcription_users.py
 backend/migrations/004_migrate_action_items_to_collection.py
 backend/migrations/005_backfill_memory_vectors.py
 backend/migrations/006_auto_set_transcription_mode.py
-backend/migrations/007_backfill_action_item_vectors.py
+backend/migrations/008_backfill_action_item_vectors.py
 backend/modal/job.py
 backend/pusher/main.py
 backend/scripts/chat/stream_test.py
