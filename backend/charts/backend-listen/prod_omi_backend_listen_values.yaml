@@ -134,7 +134,7 @@ env:
   - name: OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED
     value: "true"
   - name: CONVERSATION_NOTES_V2_ENABLED
-    value: "false"
+    value: "true"
   - name: MEETING_RECEIPT_RECONCILER_ENABLED
     value: "false"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED

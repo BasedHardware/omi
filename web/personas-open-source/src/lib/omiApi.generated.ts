@@ -2589,9 +2589,15 @@ export interface LegacyProactiveIntent {
   cold_start_sequence_terminal_state?: "completed" | "abandoned" | null;
   continuity_key: string;
   created_at: string;
+  dead_letter_reason?: string | null;
   delivered_at?: string | null;
   delivery_state?: "ready" | "pending_kernel_receipt" | "delivered";
+  fetch_count?: number;
   intent_id: string;
+  last_fetched_at?: string | null;
+  last_rejection_at?: string | null;
+  last_rejection_code?: string | null;
+  materialization_attempts?: number;
   materialization_receipt_id?: string | null;
   source: "daily_opener" | "capture_arrival" | "deferral_reraise" | "agent_judgment" | "cold_start_rich" | "cold_start_sparse";
   subject?: ChatFirstSubject | null;
@@ -2635,18 +2641,43 @@ export interface LocationContextConsentUpdate {
   enabled: boolean;
 }
 
+export interface MaterializableProactiveIntent {
+  account_generation: number;
+  blocks: Array<QuestionCardSpec | TaskCardSpec | GoalLinkSpec | CaptureLinkSpec | ConversationLinkSpec | MemoryLinkSpec>;
+  cold_start_sequence_terminal_receipt_id?: string | null;
+  cold_start_sequence_terminal_state?: "completed" | "abandoned" | null;
+  continuity_key: string;
+  created_at: string;
+  dead_letter_reason?: string | null;
+  delivered_at?: string | null;
+  delivery_state?: "ready" | "pending_kernel_receipt" | "delivered";
+  fetch_count?: number;
+  intent_id: string;
+  last_fetched_at?: string | null;
+  last_rejection_at?: string | null;
+  last_rejection_code?: string | null;
+  materialization_attempts?: number;
+  materialization_receipt_id?: string | null;
+  source: "daily_opener" | "capture_arrival" | "deferral_reraise" | "agent_judgment" | "cold_start_rich" | "cold_start_sparse";
+  subject?: ChatFirstSubject | null;
+}
+
 export interface MaterializePromptsRequest {
   cold_start_sequence_terminal_receipts?: Array<ColdStartSequenceTerminalReceipt>;
   control_generation: number;
+  deferrals?: Array<ProactiveMaterializationDeferral>;
   initial_page_loaded?: boolean;
   owner_fence: string;
   receipts?: Array<ProactiveMaterializationReceipt>;
+  rejections?: Array<ProactiveMaterializationRejection>;
   source_surface: "main_chat";
   window_foreground?: boolean;
 }
 
 export interface MaterializePromptsResponse {
-  intents?: Array<ProactiveIntent>;
+  intents?: Array<MaterializableProactiveIntent>;
+  receipt_outcomes?: Array<ProactiveMaterializationReceiptOutcome>;
+  rejection_outcomes?: Array<ProactiveMaterializationRejectionOutcome>;
 }
 
 export interface McpAddServerResponse {
@@ -3233,24 +3264,30 @@ export interface PrivateCloudSyncResponse {
   private_cloud_sync_enabled: boolean;
 }
 
-export interface ProactiveIntent {
-  account_generation: number;
-  blocks: Array<QuestionCardSpec | TaskCardSpec | GoalLinkSpec | CaptureLinkSpec | ConversationLinkSpec | MemoryLinkSpec>;
-  cold_start_sequence_terminal_receipt_id?: string | null;
-  cold_start_sequence_terminal_state?: "completed" | "abandoned" | null;
-  continuity_key: string;
-  created_at: string;
-  delivered_at?: string | null;
-  delivery_state?: "ready" | "pending_kernel_receipt" | "delivered";
+export interface ProactiveMaterializationDeferral {
+  code: "tail_question" | "streaming_tail";
   intent_id: string;
-  materialization_receipt_id?: string | null;
-  source: "daily_opener" | "capture_arrival" | "deferral_reraise" | "agent_judgment" | "cold_start_rich" | "cold_start_sparse";
-  subject?: ChatFirstSubject | null;
 }
 
 export interface ProactiveMaterializationReceipt {
   intent_id: string;
   receipt_id: string;
+}
+
+export interface ProactiveMaterializationReceiptOutcome {
+  intent_id: string;
+  outcome: "acknowledged" | "already_terminal" | "missing" | "conflict" | "generation_mismatch";
+}
+
+export interface ProactiveMaterializationRejection {
+  code: string;
+  intent_id: string;
+  message?: string | null;
+}
+
+export interface ProactiveMaterializationRejectionOutcome {
+  intent_id: string;
+  outcome: "recorded" | "absorbed" | "generation_mismatch" | "malformed" | "missing";
 }
 
 export interface ProactiveNotification {
@@ -3620,6 +3657,11 @@ export interface ShareTasksRequest {
   task_ids: Array<string>;
 }
 
+export interface SharedActionItem {
+  completed?: boolean;
+  description: string;
+}
+
 export interface SharedActionItemPreview {
   description: string;
   due_at?: string | null;
@@ -3629,6 +3671,11 @@ export interface SharedActionItemsResponse {
   count: number;
   sender_name: string;
   tasks: Array<SharedActionItemPreview>;
+}
+
+export interface SharedAppResult {
+  app_id: string | null;
+  content: string;
 }
 
 export interface SharedAssistantSettings {
@@ -3652,49 +3699,57 @@ export interface SharedChatMessagesResponse {
 }
 
 export interface SharedConversationResponse {
-  app_id?: string | null;
-  apps_results?: Array<AppResult>;
-  audio_files?: Array<AudioFile>;
-  calendar_event?: CalendarEventLink | null;
-  call_id?: string | null;
-  client_device_id?: string | null;
-  client_platform?: string | null;
-  conversation_audio?: ConversationAudio | null;
+  apps_results?: Array<SharedAppResult>;
   created_at: string;
-  data_protection_level?: string | null;
-  deferred?: boolean;
-  discarded?: boolean;
-  external_data?: Record<string, unknown> | null;
   finished_at: string | null;
-  folder_id?: string | null;
-  geolocation?: Geolocation | null;
   id: string;
-  imported?: boolean;
-  is_locked?: boolean;
   language?: string | null;
-  meeting_dedup_speech_s?: number | null;
-  meeting_duration_s?: number | null;
-  meeting_treatment_eligible?: boolean;
-  meeting_treatment_reason?: string | null;
-  people?: Array<Person>;
-  photos?: Array<ConversationPhoto>;
-  plugins_results?: Array<PluginResult>;
-  private_cloud_sync_enabled?: boolean;
-  processing_conversation_id?: string | null;
-  processing_memory_id?: string | null;
-  screenshot_sharing_enabled?: boolean;
+  people?: Array<SharedPerson>;
+  plugins_results?: Array<SharedPluginResult>;
   source?: ConversationSource | null;
-  starred?: boolean;
   started_at: string | null;
   status?: ConversationStatus | null;
-  structured: Structured;
-  suggested_summarization_apps?: Array<string>;
-  transcript_segments?: Array<TranscriptSegment>;
-  transcript_segments_compressed?: boolean | null;
-  updated_at?: string | null;
-  uses_custom_stt?: boolean;
+  structured: SharedStructured;
+  transcript_segments?: Array<SharedTranscriptSegment>;
   visibility?: ConversationVisibility;
-  [key: string]: unknown;
+}
+
+export interface SharedEvent {
+  created?: boolean;
+  description?: string;
+  duration?: number;
+  start: string;
+  title: string;
+}
+
+export interface SharedPerson {
+  id: string;
+  name: string;
+}
+
+export interface SharedPluginResult {
+  content: string;
+  plugin_id: string | null;
+}
+
+export interface SharedStructured {
+  action_items?: Array<SharedActionItem>;
+  category?: CategoryEnum;
+  emoji?: string;
+  events?: Array<SharedEvent>;
+  overview?: string;
+  title?: string;
+}
+
+export interface SharedTranscriptSegment {
+  end: number;
+  id?: string | null;
+  is_user: boolean;
+  person_id?: string | null;
+  speaker?: string | null;
+  speaker_id?: number | null;
+  start: number;
+  text: string;
 }
 
 export interface ShortlistEligibility {
@@ -5017,6 +5072,7 @@ export interface OmiApiSchemas {
   "LlmUsageResponse": LlmUsageResponse;
   "LocationContextConsentResponse": LocationContextConsentResponse;
   "LocationContextConsentUpdate": LocationContextConsentUpdate;
+  "MaterializableProactiveIntent": MaterializableProactiveIntent;
   "MaterializePromptsRequest": MaterializePromptsRequest;
   "MaterializePromptsResponse": MaterializePromptsResponse;
   "McpAddServerResponse": McpAddServerResponse;
@@ -5104,8 +5160,11 @@ export interface OmiApiSchemas {
   "PluginResult": PluginResult;
   "PricingOption": PricingOption;
   "PrivateCloudSyncResponse": PrivateCloudSyncResponse;
-  "ProactiveIntent": ProactiveIntent;
+  "ProactiveMaterializationDeferral": ProactiveMaterializationDeferral;
   "ProactiveMaterializationReceipt": ProactiveMaterializationReceipt;
+  "ProactiveMaterializationReceiptOutcome": ProactiveMaterializationReceiptOutcome;
+  "ProactiveMaterializationRejection": ProactiveMaterializationRejection;
+  "ProactiveMaterializationRejectionOutcome": ProactiveMaterializationRejectionOutcome;
   "ProactiveNotification": ProactiveNotification;
   "ProcessConversationRequest": ProcessConversationRequest;
   "ProgressExtractRequest": ProgressExtractRequest;
@@ -5162,12 +5221,19 @@ export interface OmiApiSchemas {
   "ShareRecipient": ShareRecipient;
   "ShareRecipientsResponse": ShareRecipientsResponse;
   "ShareTasksRequest": ShareTasksRequest;
+  "SharedActionItem": SharedActionItem;
   "SharedActionItemPreview": SharedActionItemPreview;
   "SharedActionItemsResponse": SharedActionItemsResponse;
+  "SharedAppResult": SharedAppResult;
   "SharedAssistantSettings": SharedAssistantSettings;
   "SharedChatMessage": SharedChatMessage;
   "SharedChatMessagesResponse": SharedChatMessagesResponse;
   "SharedConversationResponse": SharedConversationResponse;
+  "SharedEvent": SharedEvent;
+  "SharedPerson": SharedPerson;
+  "SharedPluginResult": SharedPluginResult;
+  "SharedStructured": SharedStructured;
+  "SharedTranscriptSegment": SharedTranscriptSegment;
   "ShortlistEligibility": ShortlistEligibility;
   "SimpleActionItem": SimpleActionItem;
   "SimpleChatMessage": SimpleChatMessage;

@@ -10781,8 +10781,6 @@
     "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
     "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
     "accountCutoverOpenStore": "Otevřít obchod",
-    "chatScopeToday": "Денес",
-    "chatScopeThisWeek": "Оваа недела",
     "chatScopeAbout": "За: {title}",
     "askAboutThisConversation": "Прашај за ова",
     "sendRawAudioToOmi": "Испраќај необработено аудио до Omi",
@@ -10801,5 +10799,6 @@
     "prerecordedTranscript": "Претходно снимено",
     "pendantRecordingSyncBlocked": "Pendant сè уште снима, па складираното аудио не може да се пренесе. Притиснете го копчето на Pendant за да го запрете снимањето, а потоа синхронизирајте повторно.",
     "pendantFullSyncBlocked": "Меморијата на Pendant е полна и тој сè уште е во режим на снимање, па зачуваното аудио не може да се пренесе. Притиснете го копчето на Pendant за да го запрете снимањето, а потоа синхронизирајте повторно.",
-    "conversationsNotCapturedCount": "Не е снимено ({count})"
+    "conversationsNotCapturedCount": "Не е снимено ({count})",
+    "transcriptionNoAudio": "Транскрипцијата не прима аудио"
 }

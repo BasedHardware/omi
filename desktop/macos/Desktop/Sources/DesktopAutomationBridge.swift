@@ -799,9 +799,10 @@ final class DesktopAutomationActionRegistry {
         "activated": activate ? "true" : "false",
       ]
     }
-    // The five cursor-free Home-stage drivers, together because they share a failure mode:
-    // see DesktopAutomationHomeStageActions.swift.
+    // Cursor-free Home-stage and first-use-popup drivers: see their own files for the shared failure mode.
     registerHomeStageActions()
+    registerActivationActions()
+    registerFirstUsePopupActions()
     register(
       name: "refresh_all_data",
       summary: "Refresh conversations, chat, tasks, and memories (same as Cmd+R)"
@@ -1499,6 +1500,12 @@ final class DesktopAutomationActionRegistry {
       PushToTalkManager.shared.beginPushToTalkForAutomation()
     }
 
+    register(
+      name: "ptt_quick_tap",
+      summary: "Mirror one quick tap of a modifier-only PTT key; two inside the double-tap window lock"
+    ) { _ in
+      PushToTalkManager.shared.quickTapPushToTalkForAutomation()
+    }
     register(
       name: "ptt_stop",
       summary: "Finalize the in-progress push-to-talk capture (mirrors a long-hold release)"

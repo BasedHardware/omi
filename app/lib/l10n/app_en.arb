@@ -11639,14 +11639,6 @@
     "@accountCutoverOpenStore": {
         "description": "Button that opens the app store for a required cutover upgrade"
     },
-    "chatScopeToday": "Today",
-    "@chatScopeToday": {
-        "description": "Chat timeframe scope chip for today"
-    },
-    "chatScopeThisWeek": "This week",
-    "@chatScopeThisWeek": {
-        "description": "Chat timeframe scope chip for this week"
-    },
     "chatScopeAbout": "About: {title}",
     "@chatScopeAbout": {
         "description": "Chat scope chip when asking about a specific conversation",
@@ -11744,5 +11736,13 @@
                 "type": "int"
             }
         }
+    },
+    "transcriptionNoAudio": "Transcription not receiving audio",
+    "@transcriptionNoAudio": {
+        "description": "Status when an active call transcription socket receives no audio frames"
+    },
+    "tapPlusToStartRecording": "Tap + to start recording",
+    "@tapPlusToStartRecording": {
+        "description": "Empty-home hint pointing at the + record button"
     }
 }

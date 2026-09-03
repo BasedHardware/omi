@@ -20,6 +20,12 @@ logger = logging.getLogger(__name__)
 LIVE_STT_FAILURE_CLOSE_CODE = 1011
 LIVE_STT_FAILURE_CLOSE_REASON = 'transcription_service_unavailable'
 
+
+# Chain depth is 3 (velma/soniox/deepgram); allow walking it once, not looping.
+# Shared by every live surface so a mid-session failover cannot loop a chain
+# forever (#12459, #12469).
+MAX_STT_FAILOVERS = 2
+
 _KNOWN_FAILURE_REASONS = frozenset(
     {
         'initialization_failed',

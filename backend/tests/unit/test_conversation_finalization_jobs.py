@@ -1472,6 +1472,51 @@ def test_renew_processing_lease_refreshes_only_a_live_processing_row():
     assert transaction.updates == [(processing, {'processing_admitted_at': now})]
 
 
+def test_reacquire_deferred_processing_claims_only_an_explicit_deferred_row():
+    transaction = _Transaction()
+    now = _now()
+    deferred = _Ref('deferred', {'status': 'processing', 'deferred': True})
+    already_claimed = _Ref('already-claimed', {'status': 'processing', 'deferred': False})
+
+    assert jobs._reacquire_deferred_processing_txn(transaction, deferred, now) is True
+    assert jobs._reacquire_deferred_processing_txn(transaction, already_claimed, now) is False
+    assert transaction.updates == [
+        (deferred, {'status': 'processing', 'deferred': False, 'processing_admitted_at': now})
+    ]
+
+
+def test_reacquire_deferred_processing_reopens_a_failed_retry_terminal():
+    transaction = _Transaction()
+    now = _now()
+    retryable = _Ref('retryable', {'status': 'completed', 'deferred': True})
+    discarded = _Ref('discarded', {'status': 'completed', 'deferred': True, 'discarded': True})
+    failed = _Ref('failed', {'status': 'failed', 'deferred': True})
+
+    assert jobs._reacquire_deferred_processing_txn(transaction, retryable, now) is True
+    assert jobs._reacquire_deferred_processing_txn(transaction, discarded, now) is False
+    assert jobs._reacquire_deferred_processing_txn(transaction, failed, now) is False
+    assert transaction.updates == [
+        (retryable, {'status': 'processing', 'deferred': False, 'processing_admitted_at': now})
+    ]
+
+
+def test_recover_deferred_processing_failure_atomically_rearms_retry():
+    transaction = _Transaction()
+    processing = _Ref('processing', {'status': 'processing', 'deferred': False})
+    completed = _Ref('completed', {'status': 'completed', 'deferred': False})
+    already_deferred = _Ref('already-deferred', {'status': 'processing', 'deferred': True})
+    discarded = _Ref('discarded', {'status': 'processing', 'deferred': False, 'discarded': True})
+
+    assert jobs._recover_deferred_processing_failure_txn(transaction, processing) is True
+    assert jobs._recover_deferred_processing_failure_txn(transaction, completed) is True
+    assert jobs._recover_deferred_processing_failure_txn(transaction, already_deferred) is False
+    assert jobs._recover_deferred_processing_failure_txn(transaction, discarded) is False
+    assert transaction.updates == [
+        (processing, {'status': 'completed', 'deferred': True}),
+        (completed, {'status': 'completed', 'deferred': True}),
+    ]
+
+
 def test_advance_cursor_succeeds_when_generation_matches():
     """CAS cursor advance: a writer holding the current generation commits and bumps it."""
     transaction = _Transaction()

@@ -7,6 +7,7 @@ import functools
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -312,11 +313,50 @@ def _java_runtime_present() -> bool:
         return False
 
 
+def _node_major_version() -> int | None:
+    try:
+        result = subprocess.run(
+            ["node", "--version"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10, text=True
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    match = re.match(r"v(\d+)", result.stdout.strip())
+    return int(match.group(1)) if match else None
+
+
+def _minimum_node_major_for_firebase_tools(repo_root: Path) -> int | None:
+    """Read the minimum Node major version pinned firebase-tools declares via `engines.node`.
+
+    package-lock.json is the source of truth for the resolved firebase-tools version (see
+    package.json); its `engines.node` range (e.g. ">=20.0.0 || >=22.0.0 || >=24.0.0") lists
+    the lowest major first, so the lowest `>=N` bound is the minimum this repo requires.
+    """
+    try:
+        data = json.loads((repo_root / "package-lock.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    node_range = data.get("packages", {}).get("node_modules/firebase-tools", {}).get("engines", {}).get("node")
+    if not node_range:
+        return None
+    majors = [int(major) for major in re.findall(r">=\s*(\d+)", node_range)]
+    return min(majors) if majors else None
+
+
 def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]]:
     missing: list[str] = []
     warnings: list[str] = []
     if not _which("node"):
         missing.append("node (required by Firebase emulator CLI)")
+    else:
+        node_major = _node_major_version()
+        min_major = _minimum_node_major_for_firebase_tools(cfg.repo_root)
+        if node_major is not None and min_major is not None and node_major < min_major:
+            missing.append(
+                f"node >= {min_major} (found v{node_major}; required by the pinned firebase-tools "
+                "version in package-lock.json)"
+            )
     if not (_which("firebase") or _which("npx")):
         missing.append(
             "firebase-tools CLI or npx (install with npm install, npm install -g firebase-tools, or use npx)"

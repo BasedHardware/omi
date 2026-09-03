@@ -791,6 +791,8 @@ export interface ResultMessage extends QueryScopedOutbound {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  /// Served model identities observed on this run's completions, deduplicated.
+  modelsUsed?: string[];
   artifacts?: SerializedArtifact[];
   completionDeltaArtifacts?: SerializedArtifact[];
 }
@@ -826,6 +828,19 @@ export interface RuntimeFailurePayload {
   recoveryAction?: "worker_recycled";
   recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
   retryDisposition?: "next_send";
+}
+
+/// One concrete model identity observed serving this turn's completions.
+/// `model` is ONLY the SERVED model from the provider's response stream (e.g.
+/// the gateway lane's resolved upstream, pi-ai's `responseModel`). A response
+/// that names no model produces NO event — the requested id is an alias and
+/// must never be presented as the served model (#11521). Deduplicated per
+/// turn by the adapter; `requestedModel` is context, not attribution.
+export interface ModelUsedMessage extends QueryScopedOutbound {
+  type: "model_used";
+  model: string;
+  requestedModel?: string;
+  provider?: string;
 }
 
 export interface ToolActivityMessage extends QueryScopedOutbound {
@@ -983,6 +998,8 @@ export interface ContextSnapshotProjection {
     status: string;
     origin: string;
     createdAtMs: number;
+    /** Text of what the user's screen showed when this turn was asked (historical). */
+    screenContext?: string;
   }>;
   sourceOutcomes: ContextSourceOutcomeProjection[];
   activeRuns: Array<{
@@ -1111,6 +1128,8 @@ export interface JournalOperationResultMessage extends OutboundEnvelope {
   suppressedByStreamingTail?: boolean;
   materializationStoppedByTail?: boolean;
   materializationReceipts?: Array<{ intentId: string; receiptId: string }>;
+  materializationRejections?: Array<{ intentId: string; code: string; message: string }>;
+  materializationDeferrals?: Array<{ intentId: string; code: "tail_question" | "streaming_tail" }>;
   coldStartSequenceTerminalReceipts?: Array<{
     sequenceId: string;
     receiptId: string;
@@ -1199,6 +1218,7 @@ export type OutboundMessage =
   | TextDeltaMessage
   | ToolUseMessage
   | ToolActivityMessage
+  | ModelUsedMessage
   | TurnActivityMessage
   | ToolResultDisplayMessage
   | ThinkingDeltaMessage
@@ -1240,6 +1260,7 @@ export type OutboundMessageDraft =
   | DraftEnvelope<TextDeltaMessage>
   | DraftEnvelope<ToolUseMessage>
   | DraftEnvelope<ToolActivityMessage>
+  | DraftEnvelope<ModelUsedMessage>
   | DraftEnvelope<TurnActivityMessage>
   | DraftEnvelope<ToolResultDisplayMessage>
   | DraftEnvelope<ThinkingDeltaMessage>

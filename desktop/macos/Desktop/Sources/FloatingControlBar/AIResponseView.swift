@@ -755,6 +755,9 @@ struct MessageMetadataPopover: View {
           }
         }
 
+        if !metadata.modelsSummary.isEmpty {
+          metadataRow(label: "Model", value: metadata.modelsSummary)
+        }
         metadataRow(label: "History", value: metadata.historySummary)
         metadataRow(label: "Offered", value: metadata.offeredToolsSummary)
         if !metadata.pathSummary.isEmpty {

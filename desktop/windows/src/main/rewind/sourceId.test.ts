@@ -78,6 +78,67 @@ describe('getPrimarySourceId', () => {
   })
 })
 
+describe('getRewindCaptureDiagnostics — desktopCapturer failure classification', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getPrimaryDisplay.mockReturnValue({ id: 2 })
+    getForegroundWindowRect.mockReturnValue({ rect: null, className: null, exePath: null })
+    getCursorScreenPoint.mockReturnValue({ x: 0, y: 0 })
+    getDisplayNearestPoint.mockReturnValue({ id: 2 })
+  })
+
+  it('reports available with no reason when sources resolve normally', async () => {
+    getSources.mockResolvedValue([source('screen:0:0', '2')])
+    const { getRewindCaptureDiagnostics } = await loadModule()
+
+    expect(await getRewindCaptureDiagnostics()).toEqual({
+      available: true,
+      reason: null,
+      likelyMissingLinuxPortal: false
+    })
+  })
+
+  it('does NOT throw/reject when desktopCapturer.getSources() fails — resolves to unavailable instead', async () => {
+    // Live bug: this used to reject out of the 'rewind:captureSourceId' IPC
+    // handler uncaught, and Rewind just never started with no UI signal at all.
+    getSources.mockRejectedValue(new Error('Failed to get sources.'))
+    const { getPrimarySourceId, getRewindCaptureSourceId, getRewindCaptureDiagnostics } =
+      await loadModule()
+
+    await expect(getPrimarySourceId()).resolves.toBeNull()
+    await expect(getRewindCaptureSourceId()).resolves.toBeNull()
+    expect(await getRewindCaptureDiagnostics()).toEqual({
+      available: false,
+      reason: 'Failed to get sources.',
+      likelyMissingLinuxPortal: process.platform === 'linux'
+    })
+  })
+
+  it('flags likelyMissingLinuxPortal only on linux', async () => {
+    getSources.mockRejectedValue(new Error('Failed to get sources.'))
+    const { getRewindCaptureDiagnostics } = await loadModule()
+    const original = process.platform
+    Object.defineProperty(process, 'platform', { value: 'linux' })
+    try {
+      expect((await getRewindCaptureDiagnostics()).likelyMissingLinuxPortal).toBe(true)
+    } finally {
+      Object.defineProperty(process, 'platform', { value: original })
+    }
+  })
+
+  it('does not flag likelyMissingLinuxPortal on win32', async () => {
+    getSources.mockRejectedValue(new Error('Failed to get sources.'))
+    const { getRewindCaptureDiagnostics } = await loadModule()
+    const original = process.platform
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+    try {
+      expect((await getRewindCaptureDiagnostics()).likelyMissingLinuxPortal).toBe(false)
+    } finally {
+      Object.defineProperty(process, 'platform', { value: original })
+    }
+  })
+})
+
 describe('prewarmPrimarySourceId', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -96,7 +157,8 @@ describe('prewarmPrimarySourceId', () => {
     getPrimaryDisplay.mockReturnValue({ id: 3 })
 
     const invalidate = on.mock.calls.find(([event]) => event === 'display-metrics-changed')?.[1] as
-      (() => void) | undefined
+      | (() => void)
+      | undefined
     expect(invalidate).toBeTypeOf('function')
     invalidate?.()
 

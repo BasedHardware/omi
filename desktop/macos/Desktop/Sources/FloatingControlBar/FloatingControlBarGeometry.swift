@@ -325,4 +325,73 @@ enum FloatingControlBarGeometry {
       placement: .pill(draggable: draggable, canonicalCompactFrame: compactSourceFrame)
     )
   }
+
+  static func unionSize(_ a: NSSize, _ b: NSSize) -> NSSize {
+    NSSize(width: max(a.width, b.width), height: max(a.height, b.height))
+  }
+
+  /// Closed-conversation chrome size. A mounted notification card wins over
+  /// listening/thinking island sizes (or the union if listening is larger).
+  static func collapsedSurfaceSize(
+    hasMountedNotification: Bool,
+    isVoiceListening: Bool,
+    isThinking: Bool,
+    notificationSize: NSSize,
+    listeningSize: NSSize,
+    thinkingSize: NSSize,
+    idleSize: NSSize
+  ) -> NSSize {
+    if hasMountedNotification {
+      var size = notificationSize
+      if isVoiceListening { size = unionSize(size, listeningSize) }
+      if isThinking { size = unionSize(size, thinkingSize) }
+      return size
+    }
+    if isVoiceListening { return listeningSize }
+    if isThinking { return thinkingSize }
+    return idleSize
+  }
+
+  static func windowResizeMinimumSize(
+    showingAIConversation: Bool,
+    hasMountedNotification: Bool,
+    isVoiceListening: Bool,
+    isHovering: Bool,
+    usesNotchIsland: Bool,
+    conversationWidth: CGFloat,
+    notificationSize: NSSize,
+    listeningWidth: CGFloat,
+    hoverWidth: CGFloat,
+    idleSize: NSSize
+  ) -> NSSize {
+    if showingAIConversation {
+      return NSSize(width: conversationWidth, height: idleSize.height)
+    }
+    if hasMountedNotification {
+      var size = notificationSize
+      if isVoiceListening {
+        size = unionSize(size, NSSize(width: listeningWidth, height: notificationSize.height))
+      }
+      return size
+    }
+    if isVoiceListening && !usesNotchIsland {
+      return NSSize(width: listeningWidth, height: idleSize.height)
+    }
+    if isHovering {
+      return NSSize(width: hoverWidth, height: idleSize.height)
+    }
+    return idleSize
+  }
+
+  /// Insight teasers collapse to one line unless the pointer is over the card
+  /// or Interject PTT is holding a reply against it.
+  static func interjectInsightTeaserLineLimit(
+    kindIsInsight: Bool,
+    isHovering: Bool,
+    interjectBarHovering: Bool,
+    interjectPTTHoldActive: Bool
+  ) -> Int {
+    guard kindIsInsight else { return 3 }
+    return (isHovering || interjectBarHovering || interjectPTTHoldActive) ? 6 : 1
+  }
 }

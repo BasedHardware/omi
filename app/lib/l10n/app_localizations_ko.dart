@@ -9680,12 +9680,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get accountCutoverOpenStore => '스토어 열기';
 
   @override
-  String get chatScopeToday => '오늘';
-
-  @override
-  String get chatScopeThisWeek => '이번 주';
-
-  @override
   String chatScopeAbout(String title) {
     return '$title에 대해';
   }
@@ -9752,4 +9746,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return '기록되지 않음 ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => '전사가 오디오를 받지 못하고 있습니다';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

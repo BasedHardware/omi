@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -19,6 +20,13 @@ void main() {
   setUp(() async {
     AnalyticsManager.resetForTesting();
     SharedPreferences.setMockInitialValues({});
+    PackageInfo.setMockInitialValues(
+      appName: 'Omi Test',
+      packageName: 'com.omi.test',
+      version: '1.0.0',
+      buildNumber: '1',
+      buildSignature: '',
+    );
     await SharedPreferencesUtil.init();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(permissionsChannel, (
       call,

@@ -227,12 +227,26 @@ class _FakeCollectionGroupQuery:
 
 
 class _FakeFirestoreClient:
-    def __init__(self, documents: list[dict[str, Any]]):
-        self._documents = documents
+    def __init__(self, documents: list[dict[str, Any]], dead_letters: list[dict[str, Any]] | None = None):
+        self._documents = {
+            report.INTENTS_COLLECTION: documents,
+            report.DEAD_LETTERS_COLLECTION: dead_letters or [],
+        }
 
     def collection_group(self, name: str) -> _FakeCollectionGroupQuery:
-        assert name == report.INTENTS_COLLECTION
-        return _FakeCollectionGroupQuery(self._documents)
+        return _FakeCollectionGroupQuery(self._documents[name])
+
+
+def test_collect_counts_terminal_records_from_dead_letter_collection():
+    delivered = _intent(delivery_state='delivered', created_at=NOW - timedelta(days=3))
+    dead_letter = _intent(delivery_state='dead_letter', created_at=NOW - timedelta(days=3))
+
+    result = report.collect(
+        None, None, 48, NOW, None, firestore_client=_FakeFirestoreClient([delivered], [dead_letter])
+    )
+
+    assert result['delivered'] == 1
+    assert result['dropped'] == 1
 
 
 def test_windowed_collect_excludes_a_drop_older_than_the_window():

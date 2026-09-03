@@ -9914,12 +9914,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Άνοιγμα καταστήματος';
 
   @override
-  String get chatScopeToday => 'Σήμερα';
-
-  @override
-  String get chatScopeThisWeek => 'Αυτή την εβδομάδα';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Σχετικά με: $title';
   }
@@ -9988,4 +9982,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Δεν καταγράφηκε ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Η μεταγραφή δεν λαμβάνει ήχο';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

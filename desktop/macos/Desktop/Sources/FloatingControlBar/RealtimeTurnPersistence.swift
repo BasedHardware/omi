@@ -54,32 +54,51 @@ struct RealtimeStreamingJournalProjection: Equatable {
   /// Pinned at admission so a mid-stream chat switch cannot redirect deltas
   /// or finalization to a different conversation surface.
   let admissionSurface: AgentSurfaceReference
+  /// Concrete model id of the realtime session answering this turn (e.g.
+  /// "gemini-3.1-flash-live-preview"), pinned at admission for the journaled
+  /// exchange's Response Context attribution.
+  let modelsUsed: [String]
+  /// Accepted screen observation for this turn, journaled on the user row (see MessageMetadata).
+  let screenContext: String?
 
-  init(ownerID: String, continuityKey: String, admissionSurface: AgentSurfaceReference) {
+  init(
+    ownerID: String, continuityKey: String, admissionSurface: AgentSurfaceReference,
+    modelsUsed: [String] = [], screenContext: String? = nil
+  ) {
     self.ownerID = ownerID
     self.continuityKey = continuityKey
     self.admissionSurface = admissionSurface
+    self.modelsUsed = modelsUsed
+    self.screenContext = screenContext
     userTurnID = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user")
     assistantTurnID = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "assistant")
   }
 
   func userMessage(text: String) -> ChatMessage {
-    ChatMessage(
+    var message = ChatMessage(
       id: userTurnID,
       clientTurnId: continuityKey,
       text: text,
       sender: .user
     )
+    if let screenContext, !screenContext.isEmpty {
+      message.metadata = MessageMetadata(screenContext: screenContext)
+    }
+    return message
   }
 
   func assistantMessage(text: String, isStreaming: Bool) -> ChatMessage {
-    ChatMessage(
+    var message = ChatMessage(
       id: assistantTurnID,
       clientTurnId: continuityKey,
       text: text,
       sender: .ai,
       isStreaming: isStreaming
     )
+    if !modelsUsed.isEmpty {
+      message.metadata = MessageMetadata(adapterId: "realtime", modelsUsed: modelsUsed)
+    }
+    return message
   }
 }
 

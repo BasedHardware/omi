@@ -50,7 +50,23 @@ enum DefaultsKey: String {
   /// budgets in `IntegrationNudgePolicy` are what keep that from being noise.
   case integrationNudgesEnabled = "integrationNudgesEnabled"
   case aiChatWorkingDirectory = "aiChatWorkingDirectory"
+  /// Presence-only marker: the user turned Launch at Login OFF in Settings on
+  /// a build that has this key. Absent means "no recorded decline" — the
+  /// default-on migration (`OmiApp.migrateLaunchAtLoginDefault`) enables once;
+  /// a decline made before this key existed is indistinguishable from a fresh
+  /// install and is re-enabled by that one shot. Present means the user's
+  /// choice wins and no migration ever re-enables it. Re-enabling from Settings
+  /// removes the marker. Never written `false`.
+  case launchAtLoginUserDeclined = "launchAtLoginUserDeclined"
   case hasCompletedOnboarding = "hasCompletedOnboarding"
+  /// Three-state marker for the one-time first-real-app tap-to-ask card
+  /// (`FirstRealAppCardState`): absent = this build has never looked at this
+  /// install, `pending` = a fresh install still owes the card, `consumed` = it
+  /// fired, or the install gate retired it for a user who was already onboarded
+  /// when this build arrived. A `Bool` cannot express the first state, and
+  /// conflating "never written" with `false` is the exact ambiguity that made
+  /// the launch-at-login V1 migration re-enable a setting the user turned off.
+  case firstRealAppCardState = "firstRealAppCardState"
   case onboardingStep = "onboardingStep"
   case onboardingFurthestStep = "onboardingFurthestStep"
   case onboardingMemoryImportOwnerUserId = "onboardingMemoryImportOwnerUserID"
@@ -174,6 +190,13 @@ struct ScopedDefaultsKey {
     Self(rawValue: "integrationNudgeBudget.v1.\(field).\(ownerID)")
   }
 
+  /// Owner-scoped id of the newest daily summary the owner has already been shown a notch card
+  /// for. Desktop receives no `daily_summary` push, so this is what keeps the announcement at
+  /// most once per summary, and per account on a shared Mac.
+  static func dailySummaryLastSeenID(ownerID: String) -> Self {
+    Self(rawValue: "dailySummary.lastSeenID.v1.\(ownerID)")
+  }
+
   static func importConnectorAvailabilityText(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
   }
@@ -212,6 +235,7 @@ extension UserDefaults {
   func bool(forKey key: DefaultsKey) -> Bool { bool(forKey: key.rawValue) }
   func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
   func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
+  func string(forKey key: ScopedDefaultsKey) -> String? { string(forKey: key.rawValue) }
   func data(forKey key: ScopedDefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: ScopedDefaultsKey) -> Bool { bool(forKey: key.rawValue) }
   func integer(forKey key: ScopedDefaultsKey) -> Int { integer(forKey: key.rawValue) }

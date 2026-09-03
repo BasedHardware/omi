@@ -10781,8 +10781,6 @@
     "accountCutoverMigrationInProgressMessage": "Ваш аккаунт мигрирует. Функции продукта приостановлены до завершения миграции.",
     "accountCutoverMigrationRollbackMessage": "Ваш аккаунт на обслуживании после отката миграции. Часть более новых данных может быть изолирована.",
     "accountCutoverOpenStore": "Открыть магазин",
-    "chatScopeToday": "Сёння",
-    "chatScopeThisWeek": "Гэты тыдзень",
     "chatScopeAbout": "Пра: {title}",
     "askAboutThisConversation": "Спытаць пра гэта",
     "sendRawAudioToOmi": "Адпраўляць неапрацаванае аўдыя ў Omi",
@@ -10801,5 +10799,6 @@
     "prerecordedTranscript": "Папярэдне запісанае",
     "pendantRecordingSyncBlocked": "Pendant усё яшчэ запісвае, таму захаваны гук нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а потым сінхранізуйце зноў.",
     "pendantFullSyncBlocked": "Памяць Pendant запоўнена, і ён усё яшчэ ў рэжыме запісу, таму захаванае аўдыя нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а затым сінхранізуйце зноў.",
-    "conversationsNotCapturedCount": "Не запісана ({count})"
+    "conversationsNotCapturedCount": "Не запісана ({count})",
+    "transcriptionNoAudio": "Транскрыпцыя не атрымлівае аўдыё"
 }

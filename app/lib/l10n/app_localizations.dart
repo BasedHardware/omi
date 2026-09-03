@@ -18339,18 +18339,6 @@ abstract class AppLocalizations {
   /// **'Open store'**
   String get accountCutoverOpenStore;
 
-  /// Chat timeframe scope chip for today
-  ///
-  /// In en, this message translates to:
-  /// **'Today'**
-  String get chatScopeToday;
-
-  /// Chat timeframe scope chip for this week
-  ///
-  /// In en, this message translates to:
-  /// **'This week'**
-  String get chatScopeThisWeek;
-
   /// Chat scope chip when asking about a specific conversation
   ///
   /// In en, this message translates to:
@@ -18464,6 +18452,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not captured ({count})'**
   String conversationsNotCapturedCount(int count);
+
+  /// Status when an active call transcription socket receives no audio frames
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription not receiving audio'**
+  String get transcriptionNoAudio;
+
+  /// Empty-home hint pointing at the + record button
+  ///
+  /// In en, this message translates to:
+  /// **'Tap + to start recording'**
+  String get tapPlusToStartRecording;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

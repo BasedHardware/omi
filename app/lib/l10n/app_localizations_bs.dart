@@ -9873,12 +9873,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
-  String get chatScopeToday => 'Danas';
-
-  @override
-  String get chatScopeThisWeek => 'Ove sedmice';
-
-  @override
   String chatScopeAbout(String title) {
     return 'O: $title';
   }
@@ -9947,4 +9941,10 @@ class AppLocalizationsBs extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nije snimljeno ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripcija ne prima audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }
