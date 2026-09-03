@@ -89,7 +89,83 @@ export async function searchSkills(query: string, workspace = process.env.OMI_WO
     : "No matching skills are available for this request.";
 }
 
-export async function loadSkillInstructions(name: string, workspace = process.env.OMI_WORKSPACE ?? ""): Promise<string> {
+/** A skill body split at markdown H2 (##) boundaries for progressive disclosure. */
+export interface SkillPart {
+  title: string;
+  content: string;
+}
+
+/** Cap for any single returned part, so one huge H2 section cannot flood the context. */
+export const SKILL_PART_CHAR_LIMIT = 16 * 1024;
+
+/**
+ * Split a skill body at markdown H2 (##) boundaries. Content before the first H2 becomes
+ * the "Overview" part. Fenced code blocks (``` or ~~~) are never split, even when a
+ * fenced line looks like a heading. Empty parts are dropped.
+ */
+export function splitSkillBody(body: string): SkillPart[] {
+  const parts: SkillPart[] = [];
+  let currentLines: string[] = [];
+  let currentTitle = "Overview";
+  let inFence = false;
+  const flush = () => {
+    const content = currentLines.join("\n").trim();
+    currentLines = [];
+    if (content) parts.push({ title: currentTitle, content });
+  };
+  for (const line of body.split(/\r?\n/)) {
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    const heading = inFence ? null : line.match(/^##\s+(.+?)\s*$/);
+    if (heading) {
+      flush();
+      currentTitle = heading[1];
+    } else {
+      currentLines.push(line);
+    }
+  }
+  flush();
+  return parts;
+}
+
+function splitSkillFrontmatter(content: string): { meta: Record<string, string>; body: string } {
+  const match = content.match(/^---\s*\n([\s\S]*?)\n---(?:\r?\n|$)/);
+  if (!match) return { meta: {}, body: content };
+  const meta: Record<string, string> = {};
+  for (const line of match[1].split(/\r?\n/)) {
+    const entry = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    if (entry) meta[entry[1]] = entry[2].trim().replace(/^["']|["']$/g, "");
+  }
+  return { meta, body: content.slice(match[0].length) };
+}
+
+function approximateSize(content: string): string {
+  const kb = content.length / 1024;
+  return kb >= 1 ? `~${kb.toFixed(1)} KB` : `~${content.length} chars`;
+}
+
+function capPartContent(part: SkillPart): string {
+  if (part.content.length <= SKILL_PART_CHAR_LIMIT) return part.content;
+  return (
+    `${part.content.slice(0, SKILL_PART_CHAR_LIMIT)}` +
+    `\n\n[Section '${part.title}' truncated at ${SKILL_PART_CHAR_LIMIT} of ${part.content.length} characters; this section has no smaller subdivisions to page through.]`
+  );
+}
+
+export interface LoadSkillOptions {
+  /** 1-based body section to read, or "all" to opt into the full body. */
+  part?: number | "all";
+}
+
+/**
+ * Progressive disclosure by default: metadata, a table of contents of the body's H2
+ * sections, and only the first section's content. `options.part` fetches one section
+ * (1-based) or "all" returns the entire file for callers that explicitly need it.
+ */
+export async function loadSkillInstructions(
+  name: string,
+  workspace = process.env.OMI_WORKSPACE ?? "",
+  options: LoadSkillOptions = {}
+): Promise<string> {
   const trimmedName = name.trim();
   if (!isSafeSkillName(trimmedName)) {
     return "Invalid skill name. Use a skill returned by the catalog or search_skills.";
@@ -101,10 +177,43 @@ export async function loadSkillInstructions(name: string, workspace = process.en
   }
 
   const content = await readFile(skill.path, "utf8");
+  // The dev-mode skill intentionally carries the workspace binding above its full body.
+  const workspacePrefix = content && trimmedName === "dev-mode" && workspace ? `Workspace: ${workspace}\n\n` : "";
 
-  if (content && trimmedName === "dev-mode" && workspace) {
-    return `Workspace: ${workspace}\n\n${content}`;
+  const { meta, body } = splitSkillFrontmatter(content);
+  const parts = splitSkillBody(body);
+
+  if (options.part === "all") {
+    return `${workspacePrefix}${content}`;
   }
 
-  return content;
+  if (typeof options.part === "number") {
+    const requested = Math.trunc(options.part);
+    if (!Number.isFinite(requested) || requested < 1 || requested > parts.length) {
+      return `Invalid part ${options.part} for skill '${trimmedName}'. It has ${parts.length} section(s); pass a part between 1 and ${parts.length}, or omit part for the overview.`;
+    }
+    const part = parts[requested - 1];
+    return `${workspacePrefix}[${trimmedName} — part ${requested}/${parts.length}: ${part.title}]\n${capPartContent(part)}`;
+  }
+
+  if (parts.length === 0) {
+    return `${workspacePrefix}${content}`.trimEnd();
+  }
+
+  const tableOfContents = parts
+    .map((part, index) => `${index + 1}. ${part.title} (${approximateSize(part.content)})`)
+    .join("\n");
+  const descriptionLine = meta.description ?? skill.description;
+  return [
+    `Skill: ${trimmedName}`,
+    descriptionLine ? `Description: ${descriptionLine}` : null,
+    "",
+    `Body sections (${parts.length}); load_skill(name: "${trimmedName}", part: <n>) reads one section, part: "all" reads everything:`,
+    tableOfContents,
+    "",
+    `${workspacePrefix}[${trimmedName} — part 1/${parts.length}: ${parts[0].title}]`,
+    capPartContent(parts[0]),
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
 }

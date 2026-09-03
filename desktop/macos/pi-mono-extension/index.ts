@@ -723,10 +723,13 @@ function loadSkillTool() {
   return defineTool({
     name: "load_skill",
     label: "Load Skill",
-    description: "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    description: "Load a relevant skill progressively: the first call returns metadata, the body's section table of contents, and only the first section's content; additional sections load one at a time with a part number.",
     promptSnippet: "load_skill - Load a relevant skill returned by the catalog or search_skills",
     parameters: Type.Object({
       name: Type.String({ description: "Skill name returned by the compact catalog or search_skills" }),
+      part: Type.Optional(
+        Type.Number({ description: "1-based body section to read. Omit for the overview, section list, and first section." })
+      ),
     }, { additionalProperties: false }),
     async execute(_toolCallId, params) {
       const name = String((params as { name?: unknown }).name ?? "").trim();
@@ -739,10 +742,12 @@ function loadSkillTool() {
           details: undefined,
         };
       }
+      const rawPart = (params as { part?: unknown }).part;
+      const part = rawPart === "all" ? "all" : typeof rawPart === "number" ? rawPart : undefined;
       return {
         content: [{
           type: "text" as const,
-          text: await loadSkillInstructions(name),
+          text: await loadSkillInstructions(name, process.env.OMI_WORKSPACE ?? "", part === undefined ? {} : { part }),
         }],
         details: undefined,
       };
