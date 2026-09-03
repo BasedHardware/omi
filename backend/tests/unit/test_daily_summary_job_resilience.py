@@ -18,6 +18,13 @@ from typing import Any, Dict, Iterator, List, Tuple
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
+# Imported for its side effect on import cost, not for its API: the job imports
+# learned_today lazily, so without this the pydantic model build inside
+# models.daily_summary_payload lands in the call phase of the test below and
+# trips the fast-unit CPU duration guard. Paying it at collection keeps the
+# guard measuring the test rather than a one-time import.
+import utils.memory.learned_today  # noqa: F401
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 

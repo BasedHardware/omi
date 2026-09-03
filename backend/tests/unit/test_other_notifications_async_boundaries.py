@@ -7,6 +7,12 @@ from typing import Any, Iterator
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
+# Imported for its cost, not its API. The job imports learned_today, which builds
+# the pydantic models in models.daily_summary_payload. Without this the build lands
+# inside the call phase of the fresh-module loads below and trips the fast-unit CPU
+# duration guard, which measures the call phase only.
+import utils.memory.learned_today  # noqa: F401
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
