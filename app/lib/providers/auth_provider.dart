@@ -158,11 +158,11 @@ class AuthenticationProvider extends BaseProvider {
         }
       } catch (e) {
         Logger.debug('OAuth Google sign in error: $e');
+        final authFailedMsg = globalNavigatorKey.currentContext?.l10n.authenticationFailed;
         AppSnackbar.showSnackbarError(
           Env.profile.usesFirebaseAuthEmulator
               ? 'Authentication failed: $e'
-              : (globalNavigatorKey.currentContext?.l10n.authenticationFailed ??
-                    'Authentication failed. Please try again.'),
+              : authFailedMsg ?? 'Authentication failed. Please try again.',
         );
       }
       setLoadingState(false);
