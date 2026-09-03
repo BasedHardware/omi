@@ -662,7 +662,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "think_deeper",
-    "description": "Take more time and use Omi's full answer capabilities before replying. ALWAYS call this tool before answering when the user says 'think carefully', 'think about this', 'go deep', 'reason it out', 'take your time', 'don't just guess', or 'what should I do', or otherwise asks for advice, tradeoffs, a multi-step plan, or reconsideration of a weak answer. A short, vague, or first-turn request still counts: call the tool with the question as given instead of answering or asking a clarifying question first. Also call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. If unsure whether deeper thought would improve the answer, call it. Skip only chit-chat, short confirmations, obvious stable facts, or a single fast realtime tool that fully answers the request. When current public facts and judgment are both needed, call web_search first and pass its result as context here. Call immediately without speaking a wait-line or answer first: the app acknowledges the delay as soon as the tool is accepted. Never describe internal model, tool, delegation, or routing choices, and never say the request is being sent elsewhere. When the result arrives, speak only its conclusion faithfully; do not add a delayed status line.",
+    "description": "Take more time and use Omi's full answer capabilities before replying. ALWAYS call this tool before answering when the user says 'think carefully', 'think about this', 'go deep', 'reason it out', 'take your time', 'don't just guess', or 'what should I do', or otherwise asks for advice, tradeoffs, a multi-step plan, or reconsideration of a weak answer. A short, vague, or first-turn request still counts: call the tool with the question as given instead of answering or asking a clarifying question first. For historical public research about how, when, or why a company, product, or person did something, or any public question requiring multiple sources, ALWAYS use two calls in this order: first web_search, then this tool with the original question and the complete web_search result in context. If no web_search result is present in this turn, call web_search instead of this tool first. Call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. If unsure whether deeper thought would improve the answer, call it. Skip only chit-chat, short confirmations, obvious stable facts, or one narrow current fact that a fast realtime tool fully answers, such as weather, a current price, or a score. Call immediately without speaking a wait-line or answer first: the app acknowledges the delay as soon as the tool is accepted. Never describe internal model, tool, delegation, or routing choices, and never say the request is being sent elsewhere. When the result arrives, speak only its conclusion faithfully; do not add a delayed status line.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -683,13 +683,21 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "web_search",
-    "description": "Search Omi's live public-web retrieval lane and receive a grounded answer to speak. You MUST call this tool for current public information such as weather, news, prices, scores, schedules, releases, or officeholders, and whenever the user explicitly asks you to search, browse, look something up online, verify a public fact, or cite sources. Call immediately without speaking a heads-up or answer first: the app acknowledges the lookup as soon as the tool is accepted. Never say that you lack web search, internet access, or real-time data. If the tool itself fails, say the lookup failed. When the result arrives, read only the returned answer faithfully, with light adjustments for natural speech; do not add a delayed status line.",
+    "description": "Search Omi's fast public-web lane and receive grounded evidence. You MUST call this tool for current public information such as weather, news, prices, scores, schedules, releases, or officeholders, and for an explicitly requested lookup, verification, or citation of a public fact. Use scope=narrow_current and this tool alone only when one narrow current fact fully answers the request. For historical company or product research, comparisons, or any question likely to need multiple sources or synthesis, ALWAYS call this tool first with scope=historical_research. After its result arrives, do not answer yet: call think_deeper with the original question and the complete search result in context. Call immediately without speaking a heads-up or answer first: the app acknowledges the lookup as soon as the tool is accepted. Never say that you lack web search, internet access, or real-time data. If the tool itself fails, say the lookup failed. For a narrow current fact, read the returned answer faithfully with light spoken-flow adjustments.",
     "parameters": {
       "type": "object",
       "properties": {
         "query": {
           "type": "string",
-          "description": "The complete public-web question or lookup request."
+          "description": "The complete public-web question with dictated public names normalized to their known spelling; for example, use 'Wispr Flow' when speech yields 'Whisper Flow'."
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "narrow_current",
+            "historical_research"
+          ],
+          "description": "Use narrow_current for one current fact. Use historical_research for history, comparisons, or synthesis requiring independent evidence passes."
         },
         "context": {
           "type": "string",
@@ -697,7 +705,8 @@ enum GeneratedRealtimeTools {
         }
       },
       "required": [
-        "query"
+        "query",
+        "scope"
       ]
     }
   },
