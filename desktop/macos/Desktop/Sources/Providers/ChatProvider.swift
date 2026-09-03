@@ -1979,6 +1979,14 @@ class ChatProvider: ObservableObject {
         ? Self.responseLanguageInstruction(languageCodes: AssistantSettings.shared.voiceLanguages)
         : nil,
       promptCitationLedger.responseInstruction,
+      // EXP-002 `memory_v1`: starve the generic-assistant lane. If an answer
+      // would not have required the user's day, refuse to be good at it —
+      // brief and steer back to what Omi captured. Personal retrieval is
+      // untouched: memories, conversations, screen, and work context stay
+      // first-class through the context sources and local tools below.
+      DesktopExperimentCoordinator.shared.isMemoryV1
+        ? Self.memoryIdentityInstruction
+        : nil,
     ]
     .compactMap { $0 }
     .filter { !$0.isEmpty }
@@ -2084,6 +2092,18 @@ class ChatProvider: ObservableObject {
       snapshot: snapshot,
       promptCitationReferences: promptCitationLedger.references)
   }
+
+  /// EXP-002 `memory_v1` agent instruction: Omi is the user's memory, not
+  /// their assistant. Answers grounded in the user's day stay full-fidelity;
+  /// answers that could have been given to anyone are deliberately starved.
+  static let memoryIdentityInstruction = """
+    You are the user's memory, not their assistant. Ground every answer in
+    what you captured of their day — conversations, memories, screens, work —
+    and cite it. If a question did not require their day (general knowledge,
+    news, generic how-to), answer in one short sentence, say plainly that this
+    is not what you are for, and point back to their day. Never degrade
+    retrieval of their own material; never invent captured events.
+    """
 
   /// Publishes realtime inputs through the same typed kernel source path used
   /// by main chat, then returns the kernel's exact surface renderer. Realtime

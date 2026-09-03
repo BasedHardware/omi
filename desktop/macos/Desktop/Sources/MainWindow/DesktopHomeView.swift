@@ -86,6 +86,8 @@ struct DesktopHomeView: View {
   @State private var automationPresentationReadinessGate =
     DesktopAutomationPresentationReadinessGate()
   @State private var chatFirstCapabilitySample = ChatFirstShellCapabilitySample()
+  /// EXP-002 arm state; the body gate holds the shell until it resolves.
+  @ObservedObject private var desktopExperiment = DesktopExperimentCoordinator.shared
 
   // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
   private static let heroLogoImage: NSImage? = {
@@ -328,10 +330,20 @@ struct DesktopHomeView: View {
       if shouldShowAuthEntryShell {
         authEntryShell
       } else if case .unresolved = chatFirstCapabilitySample.variant {
-        // Hold the legacy shell until the server-authoritative cohort settles.
         ChatFirstCapabilityLoadingView()
           .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "missing-owner") {
             await resolveChatFirstCapabilityIfNeeded()
+          }
+          .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "missing-owner") {
+            await resolveDesktopExperimentIfNeeded()
+          }
+      } else if desktopExperiment.phase == .pending {
+        // EXP-002: the arm resolves before the main shell paints, so
+        // treatment UI never renders ahead of its assignment. Enrollment
+        // (both arms, one server code path) completes inside this hold.
+        ChatFirstCapabilityLoadingView()
+          .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "missing-owner") {
+            await resolveDesktopExperimentIfNeeded()
           }
       } else {
         ZStack {
@@ -449,6 +461,9 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
       reconcileOnboardingCompletionOwner()
       chatFirstCapabilitySample.ownerDidChange(to: RuntimeOwnerIdentity.currentOwnerId())
+      // EXP-002: the previous owner's arm must not leak into the next
+      // owner's chrome; the body gate re-resolves from pending.
+      DesktopExperimentCoordinator.shared.ownerDidChange()
       // The provider's owner-bound gate rejects the previous sample for this
       // owner; no replacement sample is persisted or inferred locally.
       reportAutomationState()
@@ -1130,6 +1145,20 @@ struct DesktopHomeView: View {
       )
     )
     reportAutomationState()
+  }
+
+  /// EXP-002: resolve the identity-experiment arm for this owner before the
+  /// main shell paints. Non-production bundles use the local environment
+  /// override (never enrolled); the Beta bundle enrolls server-side
+  /// (idempotent); every other channel paints control. Failures resolve
+  /// control — a treatment arm is never applied unconfirmed.
+  private func resolveDesktopExperimentIfNeeded() async {
+    guard DesktopExperimentCoordinator.shared.phase == .pending else { return }
+    if AppBuild.isNonProduction {
+      DesktopExperimentCoordinator.shared.resolveFromLaunchEnvironment()
+      return
+    }
+    await DesktopExperimentCoordinator.shared.resolveForCurrentOwner()
   }
 
   private func navigateAfterOnboarding() {

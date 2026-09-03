@@ -17,7 +17,17 @@ enum ContextBucketsFeature {
   /// silently dropped it. Capture kept running with the bucket pipeline disabled, which
   /// is indistinguishable from the feature simply never firing. Dev bundles exist to
   /// exercise this pipeline, so they default to on and the variable now only turns it off.
+  ///
+  /// EXP-002: the `memory_v1` arm starves the director through this same
+  /// gate — quiet capture, postcard at night, no proactive interruptions.
+  /// This is the existing kill surface, not a new director; every other
+  /// arm (and every un-armed user) keeps the decision below unchanged.
   @MainActor static var isEnabled: Bool {
+    if let assignment = DesktopExperimentCoordinator.shared.assignment,
+      assignment.variant == DesktopExperiment.memoryV1Variant
+    {
+      return false
+    }
     if AppBuild.isNonProduction {
       return ProcessInfo.processInfo.environment[localQAOverrideName] != "0"
     }

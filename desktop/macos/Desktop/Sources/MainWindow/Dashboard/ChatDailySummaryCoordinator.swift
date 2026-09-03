@@ -92,6 +92,26 @@ final class ChatDailySummaryCoordinator: ObservableObject {
     AnalyticsManager.shared.trackDailySummary(.cardShown)
   }
 
+  // MARK: - EXP-002 postcard-first landing
+
+  /// True when the latest summary has not been landed on yet, and marks it
+  /// landed. The `memory_v1` arm opens the Chat surface on the postcard for
+  /// exactly those summaries — the night object — instead of the live edge;
+  /// every later open follows the bottom as usual. Uses its own latch so it
+  /// can never consume the notch announcement (or vice versa), and only
+  /// counts a summary whose overview has filled in, matching
+  /// `announceIfNew`'s "not consumed until actually shown" rule.
+  func consumeUnseenSummaryForPostcardLanding() -> Bool {
+    guard let record = store.latest,
+      ChatDailySummaryPresentation.cardBody(for: record.overview) != nil,
+      let owner = ownerID()
+    else { return false }
+    let key = ScopedDefaultsKey.dailySummaryPostcardLandedID(ownerID: owner)
+    guard defaults.string(forKey: key) != record.id else { return false }
+    defaults.set(record.id, forKey: key)
+    return true
+  }
+
   private static let defaultCardSink: CardSink = { ownerID, title, body in
     // Fenced to the owner the summary was fetched for, not whoever is current now.
     guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID) else {
