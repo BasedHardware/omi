@@ -2414,6 +2414,7 @@ class TasksViewModel: ObservableObject {
     guard generation == searchRequestGeneration, normalizedSearchQuery == query else { return }
     isSearching = false
     recomputeDisplayCaches()
+    SearchAnalytics.queryEntered(surface: .tasks, query: query, resultsCount: searchResults.count)
   }
 
   /// Whether we're currently in search mode (the only filtered mode left —
@@ -3446,7 +3447,7 @@ struct TasksPage: View {
         QuerySearchBar(
           text: $viewModel.searchText,
           accessibilityID: "tasks-search-field",
-          placeholder: "Search tasks…"
+          placeholder: "Search tasks…", searchSurface: .tasks
         )
 
         taskWorkspace
@@ -3856,7 +3857,7 @@ struct TasksPage: View {
       viewModel.editingTaskId = nil
       NSApp.keyWindow?.makeFirstResponder(nil)
     }
-    viewModel.keyboardSelectedTaskId = task.id
+    viewModel.selectTaskFromSearch(task)
   }
 
   private func cancelInlineCreate() {
