@@ -28,6 +28,11 @@ def clean_sources() -> dict[str, str]:
         CHECKER.MARKDOWN_FILE: (
             "struct OmiMarkdown { var body: some View { Text(text).textSelection(.disabled) } }\n"
         ),
+        CHECKER.SELECTION_FILE: (
+            "struct ChatSelectableProseText: NSViewRepresentable {\n"
+            "  func makeNSView(context: Context) -> NSTextView { ChatProseTextView() }\n"
+            "}\n"
+        ),
     }
 
 
@@ -60,6 +65,19 @@ class ChatSelectionBoundaryTests(unittest.TestCase):
         failures = CHECKER.check_sources(sources)
 
         self.assertTrue(any("explicitly disable" in failure for failure in failures))
+
+    def test_requires_the_selection_surface_to_stay_appkit(self) -> None:
+        """The remedy is an NSTextView owning its own selection. A SwiftUI
+        rewrite of this file would put SelectionOverlay back in the transcript
+        under a name the pattern check cannot see."""
+        sources = clean_sources()
+        sources[CHECKER.SELECTION_FILE] = (
+            "struct ChatSelectableProseText: View { var body: some View { Text(text) } }\n"
+        )
+
+        failures = CHECKER.check_sources(sources)
+
+        self.assertTrue(any("NSTextView" in failure for failure in failures))
 
     def test_rejects_missing_protected_source(self) -> None:
         sources = clean_sources()
