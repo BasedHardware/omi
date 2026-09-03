@@ -284,7 +284,7 @@ async def _checkpoint(cursor_key: str, target_hour: Optional[int], uid: Optional
 
 async def _get_users_for_daily_summary(
     timezones: List[str], target_hour: int
- ) -> Tuple[List[Tuple[str, List[str], Any]], Optional[BaseException], bool]:
+) -> Tuple[List[Tuple[str, List[str], Any]], Optional[BaseException], bool]:
     """Read one hour group's users.
 
     Returns ``(users, query_error, every_chunk_read)``. A dropped chunk is a
