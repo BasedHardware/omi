@@ -325,6 +325,7 @@ SCHEMA_GROUPS = {
             'DailySummaryUnresolvedQuestion',
             'DailySummaryDecisionMade',
             'DailySummaryKnowledgeNugget',
+            'LearnedMemoryRef',
             'DailySummaryDayStats',
             'DailySummaryLocationPin',
             'DailySummaryResponse',

@@ -72,6 +72,7 @@ from models.product_memory import (
     normalized_memory_content_key,
 )
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item
+from utils.memory.daily_memory_sweep_queue import ProcessOutcome, drain_sweep_uids
 from utils.memory.knowledge_ledger import (
     LedgerProvenance,
     LedgerWrite,
@@ -4820,18 +4821,11 @@ def run_daily_memory_sweep_scheduler(
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("now must be timezone-aware")
     bounded_uids = tuple(sorted({uid.strip() for uid in uid_inventory if uid.strip()}))[: max(1, min(400, max_users))]
+
     # Crash-recovery cleanup is a privacy lifecycle operation, not a rollout
     # decision. Run it before authority, kill-switch, and cohort gates so a
     # disabled/skipped account cannot retain transcript-derived pages forever.
-    for uid in bounded_uids:
-        try:
-            cleanup_expired_daily_memory_sweep_stages(uid, db_client=db_client, now=now)
-            cleanup_expired_memory_deletion_receipts(uid, db_client=db_client, now=now)
-        except Exception:
-            # Cleanup is fail-closed for each row; a transient janitor error
-            # must not open writes or alter the rollout result.
-            continue
-
+    drain_sweep_uids(bounded_uids, lambda uid: (cleanup_expired_daily_memory_sweep_stages(uid, db_client=db_client, now=now), cleanup_expired_memory_deletion_receipts(uid, db_client=db_client, now=now), ProcessOutcome.ack())[-1])  # fmt: skip
     resolved_authority = authority or daily_memory_sweep_authority_from_environment()
     if not resolved_authority.may_write:
         return DailySweepSchedulerSummary()
@@ -4849,7 +4843,9 @@ def run_daily_memory_sweep_scheduler(
     errors: List[str] = []
     completed_uids: List[str] = []
     failed_uids: List[str] = []
-    for uid in bounded_uids:
+
+    def process_one(uid: str) -> ProcessOutcome:
+        nonlocal attempted, committed_users, blocked_users, committed, idempotent, skipped
         attempted += 1
         try:
             # This callback is intentionally read-only.  A PostHog client can
@@ -4859,7 +4855,7 @@ def run_daily_memory_sweep_scheduler(
                 blocked_users += 1
                 failed_uids.append(uid)
                 errors.append(f"uid={uid}:cohort_unavailable")
-                continue
+                return ProcessOutcome.reject("cohort_unavailable", reason="cohort_unavailable")
             try:
                 enrolled = cohort_authorizer(uid, resolved_cohort.cohort_name)
             except TypeError:
@@ -4877,12 +4873,12 @@ def run_daily_memory_sweep_scheduler(
                 # decision and may advance the fair page cursor.
                 blocked_users += 1
                 completed_uids.append(uid)
-                continue
+                return ProcessOutcome.ack()
             if cohort_decision is not DailySweepCohortDecision.enabled:
                 blocked_users += 1
                 failed_uids.append(uid)
                 errors.append(f"uid={uid}:cohort_unavailable")
-                continue
+                return ProcessOutcome.reject("cohort_unavailable", reason="cohort_unavailable")
             control = ensure_canonical_apply_control_state(uid, db_client=db_client)
             if control.writer_mode is not WriterMode.ledger:
                 # An enrolled account that has not completed ledger cutover
@@ -4901,7 +4897,7 @@ def run_daily_memory_sweep_scheduler(
                 )
                 blocked_users += 1
                 completed_uids.append(uid)
-                continue
+                return ProcessOutcome.ack()
             timezone_name = str(timezone_resolver(uid) or "UTC")
             cursor = _read_cursor(db_client, uid, control)
             if cursor.last_completed_local_date is not None and cursor.timezone_name != timezone_name:
@@ -4916,7 +4912,7 @@ def run_daily_memory_sweep_scheduler(
             pending_dates = _pending_completed_dates(cursor, timezone_name=timezone_name, now=now)
             if not pending_dates:
                 completed_uids.append(uid)
-                continue
+                return ProcessOutcome.ack()
             packets: Dict[date, DailySweepInput] = {}
             for local_date in pending_dates:
                 transition_window = None
@@ -4967,14 +4963,18 @@ def run_daily_memory_sweep_scheduler(
             if output.status == "committed":
                 committed_users += 1
                 completed_uids.append(uid)
-            else:
-                blocked_users += 1
-                failed_uids.append(uid)
-                errors.append(f"uid={uid}:{output.blocked_reason or output.status}")
+                return ProcessOutcome.ack()
+            blocked_users += 1
+            failed_uids.append(uid)
+            errors.append(f"uid={uid}:{output.blocked_reason or output.status}")
+            return ProcessOutcome.reject(output.blocked_reason or output.status, reason="sweep_blocked")
         except Exception as exc:
             blocked_users += 1
             failed_uids.append(uid)
             errors.append(f"uid={uid}:{type(exc).__name__}")
+            return ProcessOutcome.reject(type(exc).__name__, reason="processor_exception")
+
+    drain_sweep_uids(bounded_uids, process_one)
     return DailySweepSchedulerSummary(
         attempted_users=attempted,
         committed_users=committed_users,

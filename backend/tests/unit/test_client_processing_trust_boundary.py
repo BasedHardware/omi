@@ -502,7 +502,6 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/conversations/process_conversation.py', '_terminal_persist_payload', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_normal_persist_payload', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_store_meeting_context', 'model_dump'),
-        DumpSite('utils/conversations/process_conversation.py', 'process_conversation', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', 'process_user_emotion', 'dict'),

@@ -75,6 +75,7 @@ from routers import (
     tools,
     metrics,
     fair_use_admin,
+    feedback_admin,
     staged_tasks,
     focus_sessions,
     advice,
@@ -120,10 +121,12 @@ from utils.executors import (
 )
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
+from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
 from services.conversation_finalization import reconcile_abandoned_byok_finalization_jobs
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_processing_conversations
+from database.durable_queue_age import publish_all_queue_oldest_ready_ages
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 from utils.other.local_storage import local_storage_root_from_env
 
@@ -202,6 +205,7 @@ app.include_router(agents.router)
 app.include_router(users.router)
 app.include_router(referrals.router)
 app.include_router(csat.router)
+app.include_router(feedback_admin.router)
 app.include_router(email_preferences.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
@@ -435,11 +439,16 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
                 logger.info(f"Periodic meeting-receipt reconciliation: {receipt_result}")
         except Exception as e:
             logger.error(f"Periodic meeting-receipt reconciliation failed: {e}")
+        try:
+            await run_blocking(db_executor, publish_all_queue_oldest_ready_ages)
+        except Exception as e:
+            logger.error(f"Periodic durable-queue age publish failed: {e}")
 
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_event():
     await drain_background_tasks(timeout=10.0)
+    await shutdown_managed_spend_ledger()
     await close_all_clients()
     close_posthog_control_plane()
     stop_metrics_sidecar_server()

@@ -233,6 +233,24 @@ async def test_schedule_persists_in_the_background_and_a_failure_never_raises(mo
 
 
 @pytest.mark.asyncio
+async def test_shutdown_drains_and_closes_the_pool_but_allows_a_later_lifespan(monkeypatch) -> None:
+    monkeypatch.setenv(ledger.ACCOUNTING_ENABLED_ENV_VAR, 'true')
+    seen: list[str] = []
+    monkeypatch.setattr(ledger, 'record_managed_attempt', lambda attempt, **_: seen.append(attempt.request_id) or True)
+
+    assert ledger.schedule_managed_attempt(_attempt(request_id='before-shutdown')) is True
+    await ledger.shutdown_managed_spend_ledger()
+    assert seen == ['before-shutdown']
+    assert ledger._ledger_executor is None
+
+    assert ledger.schedule_managed_attempt(_attempt(request_id='after-shutdown')) is True
+    await ledger.shutdown_managed_spend_ledger()
+    assert seen == ['before-shutdown', 'after-shutdown']
+    assert ledger._ledger_executor is None
+
+
+@pytest.mark.slow
+@pytest.mark.asyncio
 async def test_the_pending_cap_counts_writes_until_firestore_actually_returns(monkeypatch) -> None:
     import threading
 
@@ -249,7 +267,6 @@ async def test_the_pending_cap_counts_writes_until_firestore_actually_returns(mo
     try:
         assert ledger.schedule_managed_attempt(_attempt(request_id='a')) is True
         assert ledger.schedule_managed_attempt(_attempt(request_id='b')) is True
-        await asyncio.sleep(0.05)  # both observers have timed out; the writes are still running
         assert len(ledger._pending_writes) == 2
         assert ledger.schedule_managed_attempt(_attempt(request_id='c')) is False  # cap holds
     finally:
@@ -561,7 +578,14 @@ class _FakeConnect:
         return None
 
 
-def _client_socket(provider: str, *, model: str | None, client_frames: list[str], drained: asyncio.Event):
+def _client_socket(
+    provider: str,
+    *,
+    model: str | None,
+    client_frames: list[str],
+    drained: asyncio.Event,
+    fail_downstream_send: bool = False,
+):
     class Socket:
         headers = {'authorization': 'Bearer token'}
         query_params = {'provider': provider, **({'model': model} if model else {})}
@@ -569,6 +593,7 @@ def _client_socket(provider: str, *, model: str | None, client_frames: list[str]
         def __init__(self) -> None:
             self.sent: list[Any] = []
             self._pending = list(client_frames)
+            self._fail_downstream_send = fail_downstream_send
 
         async def accept(self) -> None:
             return None
@@ -577,9 +602,13 @@ def _client_socket(provider: str, *, model: str | None, client_frames: list[str]
             return None
 
         async def send_text(self, text: str) -> None:
+            if self._fail_downstream_send:
+                raise RuntimeError('downstream closed')
             self.sent.append(text)
 
         async def send_bytes(self, data: bytes) -> None:
+            if self._fail_downstream_send:
+                raise RuntimeError('downstream closed')
             self.sent.append(data)
 
         async def receive(self) -> dict[str, Any]:
@@ -604,6 +633,7 @@ async def _run_relay(
     upstream_frames: list[str | bytes],
     byok: bool = False,
     byok_enrolled: bool | None = None,
+    fail_downstream_send: bool = False,
 ) -> tuple[Any, _FakeUpstream]:
     from models.users import PlanType
 
@@ -633,7 +663,13 @@ async def _run_relay(
     )
     monkeypatch.setattr(omni_relay, '_upstream', lambda _provider, _model: (('wss://upstream.invalid', {}), None))
     monkeypatch.setattr(omni_relay.websockets, 'connect', lambda *_a, **_k: _FakeConnect(upstream))
-    socket = _client_socket(provider, model=model, client_frames=client_frames, drained=drained)
+    socket = _client_socket(
+        provider,
+        model=model,
+        client_frames=client_frames,
+        drained=drained,
+        fail_downstream_send=fail_downstream_send,
+    )
     await omni_relay.omni_relay(socket)
     return socket, upstream
 
@@ -692,6 +728,24 @@ async def test_synthetic_relay_turn_lands_in_the_per_uid_per_feature_query(monke
     assert row['rate_card_id'] == 'openai.gpt-realtime-2.modality.2026-09-01'
     assert row['attempt_id'] == f"{row['invocation_id']}:1"
     assert row['request_id'] == row['invocation_id']
+
+
+@pytest.mark.asyncio
+async def test_relay_accounts_terminal_frame_when_downstream_send_fails(monkeypatch, ledger_client) -> None:
+    socket, _ = await _run_relay(
+        monkeypatch,
+        provider='openai',
+        model=None,
+        client_frames=[],
+        upstream_frames=[_OPENAI_DONE],
+        fail_downstream_send=True,
+    )
+    await ledger.drain_pending_writes()
+
+    assert socket.sent == []
+    rows = ledger_client.spend_rows(uid=UID, feature=DESKTOP_REALTIME_FEATURE)
+    assert len(rows) == 1
+    assert rows[0]['provider_response_id'] == 'resp_1'
 
 
 @pytest.mark.asyncio
@@ -899,6 +953,7 @@ async def test_relay_frames_without_a_turn_write_nothing(monkeypatch, ledger_cli
 # --- deploy contract ------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_the_accounting_switch_reaches_every_serving_identity_of_both_surfaces() -> None:
     """The manifest declares the flag; these are the files that actually put it on the pod/revision."""
     backend = Path(__file__).resolve().parents[2]

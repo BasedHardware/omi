@@ -30,6 +30,7 @@ covers:
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingAnswerWriteGate.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/AnalyticsManager+OnboardingSteps.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/OnboardingOpenerComposer.swift
   - desktop/macos/Desktop/Sources/MainWindow/OnboardingOpenerView.swift

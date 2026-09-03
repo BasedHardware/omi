@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTime, formatDuration } from '@/lib/utils';
+import ReactMarkdown from 'react-markdown';
 import { TranscriptView } from './TranscriptView';
 import { AppSummaryCard } from './AppSummaryCard';
 import { GenerateSummaryButton } from './GenerateSummaryButton';
@@ -163,6 +164,17 @@ function ActionItemRow({ item }: { item: StructuredActionItem }) {
   );
 }
 
+const OVERVIEW_MARKDOWN_CLASS =
+  'text-text-secondary leading-relaxed text-lg prose max-w-none prose-invert prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-headings:text-text-primary prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-strong:text-text-primary first:prose-headings:mt-0';
+
+function OverviewMarkdown({ overview }: { overview: string }) {
+  return (
+    <div className={OVERVIEW_MARKDOWN_CLASS}>
+      <ReactMarkdown>{overview}</ReactMarkdown>
+    </div>
+  );
+}
+
 /**
  * Summary tab content with app summaries and optional location map
  */
@@ -176,7 +188,7 @@ interface SummaryTabProps {
   geolocation?: Geolocation | null;
 }
 
-function SummaryTab({
+export function SummaryTab({
   overview,
   category,
   conversationId,
@@ -242,7 +254,7 @@ function SummaryTab({
                     </span>
                   </div>
                 )}
-                <p className="text-text-secondary leading-relaxed text-lg">{overview}</p>
+                <OverviewMarkdown overview={overview} />
                 {geolocation.address && (
                   <div className="mt-4 flex items-start gap-2 text-sm text-text-tertiary">
                     <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -300,7 +312,7 @@ function SummaryTab({
               </span>
             </div>
           )}
-          <p className="text-text-secondary leading-relaxed text-lg">{overview}</p>
+          <OverviewMarkdown overview={overview} />
         </div>
       )}
 

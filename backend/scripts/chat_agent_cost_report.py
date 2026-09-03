@@ -276,14 +276,16 @@ def _usd(micro_usd: int) -> str:
 
 def render(totals: Totals, rates: Rates, feature: str, *, uid: str | None = None) -> str:
     """Render the report as plain text."""
+    scope = f'scope: uid={uid}' if uid is not None else None
     if totals.attempts == 0:
-        return f'No {feature} attempts found. Check the date range and that accounting is enabled.'
+        message = f'No {feature} attempts found. Check the date range and that accounting is enabled.'
+        return f'{scope}\n{message}' if scope is not None else message
 
     lines: list[str] = []
     span = f'{min(totals.days)}..{max(totals.days)}' if totals.days else 'unknown'
     lines.append(f'{feature} spend composition — {span} ({len(totals.days)} day(s))')
-    if uid is not None:
-        lines.append(f'scope: uid={uid}')
+    if scope is not None:
+        lines.append(scope)
     lines.append(f'rate card: {rates.rate_card_id}')
     lines.append('')
     lines.append(f'attempts: {totals.attempts:,}')

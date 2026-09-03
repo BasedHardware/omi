@@ -700,25 +700,41 @@ def _openai_outcome(response: Mapping[str, Any]) -> tuple[str, str]:
 def _openai_counts(usage: Mapping[str, Any]) -> dict[str, Any]:
     input_details = usage.get('input_token_details')
     output_details = usage.get('output_token_details')
-    split_reported = isinstance(input_details, Mapping) and isinstance(output_details, Mapping)
+    input_details_present = isinstance(input_details, Mapping)
+    output_details_present = isinstance(output_details, Mapping)
     input_details = _mapping(input_details)
     output_details = _mapping(output_details)
     text = _count(input_details, 'text_tokens')
     audio = _count(input_details, 'audio_tokens')
     image = _count(input_details, 'image_tokens')
+    input_detail_tokens = text + audio + image
     if text + audio + image == 0:
         text = _count(usage, 'input_tokens')
     output_text = _count(output_details, 'text_tokens')
     output_audio = _count(output_details, 'audio_tokens')
     reasoning = _count(output_details, 'reasoning_tokens')
+    output_detail_tokens = output_text + output_audio + reasoning
     if output_text + output_audio + reasoning == 0:
         output_text = _count(usage, 'output_tokens')
+    input_total = _count(usage, 'input_tokens')
+    output_total = _count(usage, 'output_tokens')
+    # An empty details object is not a provider-vouched split when the
+    # aggregate side contains tokens. Aggregate-only input/output must remain
+    # unpriced rather than being silently treated as text.
+    input_split = input_total == 0 or (input_details_present and input_detail_tokens > 0)
+    output_split = output_total == 0 or (output_details_present and output_detail_tokens > 0)
+    split_reported = input_split and output_split
     cached_total = _count(input_details, 'cached_tokens')
     cached_details = input_details.get('cached_tokens_details')
-    if isinstance(cached_details, Mapping):
-        cached_text = min(_count(cached_details, 'text_tokens'), text)
-        cached_audio = min(_count(cached_details, 'audio_tokens'), audio)
-        cached_image = min(_count(cached_details, 'image_tokens'), image)
+    cached_details_present = isinstance(cached_details, Mapping)
+    cached_details = _mapping(cached_details)
+    cached_detail_text = _count(cached_details, 'text_tokens')
+    cached_detail_audio = _count(cached_details, 'audio_tokens')
+    cached_detail_image = _count(cached_details, 'image_tokens')
+    if cached_details_present and cached_detail_text + cached_detail_audio + cached_detail_image > 0:
+        cached_text = min(cached_detail_text, text)
+        cached_audio = min(cached_detail_audio, audio)
+        cached_image = min(cached_detail_image, image)
         cached_split = True
     else:
         cached_text, cached_audio, cached_image = split_cached_across_modalities(
@@ -743,29 +759,41 @@ def _openai_counts(usage: Mapping[str, Any]) -> dict[str, Any]:
 def _gemini_turn(usage: Mapping[str, Any]) -> RealtimeTurnUsage:
     prompt_details = usage.get('promptTokensDetails')
     response_details = usage.get('responseTokensDetails')
-    prompt_text, prompt_audio, prompt_image = _gemini_modalities(prompt_details)
+    prompt_split = _gemini_modalities(prompt_details)
+    prompt_text, prompt_audio, prompt_image = prompt_split.text, prompt_split.audio, prompt_split.image
+    prompt_total = _count(usage, 'promptTokenCount')
     if prompt_text + prompt_audio + prompt_image == 0:
-        prompt_text = _count(usage, 'promptTokenCount')
-    output_text, output_audio, output_image = _gemini_modalities(response_details)
+        prompt_text = prompt_total
+    response_split = _gemini_modalities(response_details)
+    output_text, output_audio, output_image = response_split.text, response_split.audio, response_split.image
+    output_total = _count(usage, 'candidatesTokenCount') or _count(usage, 'responseTokenCount')
     output_text += output_image
     if output_text + output_audio == 0:
-        output_text = _count(usage, 'candidatesTokenCount') or _count(usage, 'responseTokenCount')
+        output_text = output_total
     reasoning = _count(usage, 'thoughtsTokenCount')
     tool_use = _count(usage, 'toolUsePromptTokenCount')
-    # The split is vouched for when every non-zero side came with details.
-    split_reported = (prompt_text + prompt_audio + prompt_image == 0 or isinstance(prompt_details, list)) and (
-        output_text + output_audio == 0 or isinstance(response_details, list)
+    # The split is vouched for only when every non-zero side has populated,
+    # recognized details. Empty lists and unknown modalities are not evidence.
+    prompt_side_split = (prompt_total == 0 and prompt_split.valid) or (
+        prompt_split.present and prompt_split.populated and prompt_split.valid
     )
+    output_side_split = (output_total == 0 and response_split.valid) or (
+        response_split.present and response_split.populated and response_split.valid
+    )
+    split_reported = prompt_side_split and output_side_split
     cache_details = usage.get('cacheTokensDetails')
     cached_total = _count(usage, 'cachedContentTokenCount')
-    cached_text, cached_audio, cached_image = _gemini_modalities(cache_details)
-    if isinstance(cache_details, list) and cached_text + cached_audio + cached_image > 0:
+    cache_split = _gemini_modalities(cache_details)
+    cached_text, cached_audio, cached_image = cache_split.text, cache_split.audio, cache_split.image
+    if cache_split.present and cache_split.populated and cache_split.valid:
         cached_split = True
     else:
         cached_text, cached_audio, cached_image = split_cached_across_modalities(
             cached_total, text=prompt_text, audio=prompt_audio, image=prompt_image
         )
-        cached_split = cached_total == 0 or _single_modality(prompt_text, prompt_audio, prompt_image)
+        cached_split = cache_split.valid and (
+            cached_total == 0 or _single_modality(prompt_text, prompt_audio, prompt_image)
+        )
     return RealtimeTurnUsage(
         provider=GEMINI_LIVE_PROVIDER,
         input_text_tokens=prompt_text,
@@ -810,24 +838,54 @@ def _gemini_add(pending: RealtimeTurnUsage | None, delta: RealtimeTurnUsage) -> 
     )
 
 
-def _gemini_modalities(details: object) -> tuple[int, int, int]:
-    """Split a ``*TokensDetails`` list into (text, audio, image-or-video) counts."""
+@dataclass(frozen=True)
+class _GeminiModalitySplit:
+    text: int = 0
+    audio: int = 0
+    image: int = 0
+    present: bool = False
+    populated: bool = False
+    valid: bool = True
+
+
+def _gemini_modalities(details: object) -> _GeminiModalitySplit:
+    """Split details while retaining whether every positive modality was recognized."""
     text = audio = image = 0
     if not isinstance(details, list):
-        return text, audio, image
+        return _GeminiModalitySplit()
+    populated = False
+    valid = True
     for entry in details:
         if not isinstance(entry, Mapping):
+            valid = False
             continue
         count = _count(entry, 'tokenCount')
         modality = entry.get('modality')
         modality = modality.upper() if isinstance(modality, str) else ''
-        if modality == 'AUDIO':
+        if count <= 0:
+            continue
+        if modality == 'TEXT':
+            text += count
+            populated = True
+        elif modality == 'AUDIO':
             audio += count
+            populated = True
         elif modality in {'IMAGE', 'VIDEO'}:
             image += count
+            populated = True
         else:
-            text += count
-    return text, audio, image
+            # Do not fold unknown provider modalities into text. The caller
+            # carries the aggregate count for observability but marks the
+            # turn unpriceable because the rate card is no longer provable.
+            valid = False
+    return _GeminiModalitySplit(
+        text=text,
+        audio=audio,
+        image=image,
+        present=True,
+        populated=populated,
+        valid=valid,
+    )
 
 
 def _single_modality(*counts: int) -> bool:

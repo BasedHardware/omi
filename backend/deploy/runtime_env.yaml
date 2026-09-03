@@ -85,6 +85,9 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             value: 'true'
             category: rollout
+          WAKE_WORD_ADJUDICATION_ENABLED:
+            value: 'true'
+            category: rollout
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
             value: http://parakeet.omiapi.com
@@ -451,6 +454,9 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_OCR_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
+            WAKE_WORD_ADJUDICATION_ENABLED:
               value: 'true'
               category: rollout
             OMI_LLM_GATEWAY_URL:
@@ -1306,6 +1312,9 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             value: 'false'
             category: rollout
+          WAKE_WORD_ADJUDICATION_ENABLED:
+            value: 'true'
+            category: rollout
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
             value: http://parakeet.omi.me
@@ -1602,6 +1611,9 @@ environments:
               category: rollout
             CONVERSATION_OCR_CONTEXT_ENABLED:
               value: 'false'
+              category: rollout
+            WAKE_WORD_ADJUDICATION_ENABLED:
+              value: 'true'
               category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
