@@ -352,3 +352,96 @@ final class HomeKnowsImpressionStore {
     return impression
   }
 }
+
+// MARK: - Harness handle
+
+/// The knows-list currently on screen, for non-production automation only.
+///
+/// `DashboardPage` composes the rows in a computed property and publishes them nowhere: the
+/// composition, the slots it left empty, and the ledger snapshot it was gated against all live for
+/// one `body` evaluation and are gone. A flow could therefore watch the hub render and still not
+/// read which rows it bound, which candidate it held back, or why — and could not open or dismiss
+/// one without the cursor.
+///
+/// This is that handle. Every closure is one of the page's own functions — `beginKnowsVisit`,
+/// `recordKnowsImpressions`, `openKnowsRow`, and the dismiss handler the row's ✕ invokes — so the
+/// bridge's `home_knows_*` actions are second *callers* of the rotation code and never a second
+/// rotation policy. A copied composer would keep agreeing with whatever the harness wrote into it
+/// long after the real one changed, and the whole point of the flow is that the two agree.
+///
+/// Gated: on a production bundle `register` does nothing and `mounted` is always nil, so nothing
+/// here is a shipped path.
+@MainActor
+enum HomeKnowsAutomationRegistry {
+  /// One composed row, projected to strings so the bridge never re-derives anything.
+  struct Row: Equatable {
+    let key: String
+    let kind: String
+    let text: String
+    let showsBefore: Int
+  }
+
+  struct EmptySlot: Equatable {
+    let slot: String
+    let reason: String
+  }
+
+  struct Snapshot {
+    let rows: [Row]
+    let emptySlots: [EmptySlot]
+    let canRotate: Bool
+    /// What the greeting's "N things need you" is counting, so a flow can prove the headline and
+    /// the list below it read the same ledger.
+    let openTaskCount: Int
+    let ledger: HomeKnowsImpressionLedger
+  }
+
+  /// The page's own functions, in the order one visit calls them.
+  struct Handle {
+    let token: UUID
+    let snapshot: @MainActor () -> Snapshot
+    let beginVisit: @MainActor () -> Void
+    let recordImpressions: @MainActor () -> Void
+    /// - Returns: false when the index is outside the rows currently on screen.
+    let open: @MainActor (Int) -> Bool
+    /// - Returns: false when the index is outside the rows, or when that row kind has no ✕
+    ///   (question rows are not dismissible).
+    let dismiss: @MainActor (Int) -> Bool
+  }
+
+  private(set) static var mounted: Handle?
+
+  static func register(_ handle: Handle) { register(handle, enabled: AppBuild.isNonProduction) }
+
+  /// The gate as a parameter, because `AppBuild.isNonProduction` reads `Bundle.main`, and under
+  /// `swift test` that is the test runner rather than an Omi bundle — so a test asserting the
+  /// production no-op would pass for the wrong reason and a test asserting the registration could
+  /// not run at all.
+  static func register(_ handle: Handle, enabled: Bool) {
+    guard enabled else { return }
+    mounted = handle
+  }
+
+  /// Token-checked: the hub list and the chat strip are two renderings of the same rows and can
+  /// overlap for a frame while the stage animates, and the outgoing one must not clear the handle
+  /// the incoming one just took.
+  static func unregister(token: UUID) {
+    guard mounted?.token == token else { return }
+    mounted = nil
+  }
+}
+
+extension HomeKnowsImpressionStore {
+  /// Drop every entry for the current owner and start a fresh visit.
+  ///
+  /// Harness-only, and called from exactly one place: the non-production `home_knows_reset` bridge
+  /// action. The ledger is `UserDefaults`-backed and deliberately outlives the app, so without
+  /// this a second run of `home-knows-rotation.yaml` on the same bundle would open on rows that
+  /// were already same-day-suppressed by the first — and would read a correct suppression as a
+  /// composer that had stopped producing rows. It writes through the same persistence the
+  /// mutations use rather than reaching around it.
+  func resetForAutomation() {
+    persistence.save(.empty)
+    beginVisit()
+  }
+}

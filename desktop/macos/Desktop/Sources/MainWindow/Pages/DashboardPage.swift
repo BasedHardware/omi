@@ -270,6 +270,9 @@ struct DashboardPage: View {
   @State private var knowsLedger = HomeKnowsImpressionLedger.empty
   /// Single mutation owner for that ledger — the view never writes it directly.
   private var knowsLedgerStore: HomeKnowsImpressionStore { .shared }
+  /// Identity of this page's automation handle, so a stage that is animating out cannot clear the
+  /// handle the one animating in just took. Non-production only; see `knowsAutomationHandle`.
+  @State private var knowsAutomationToken = UUID()
 
   private var selectedApp: OmiApp? {
     guard let appId = chatProvider.selectedAppId else { return nil }
@@ -1006,9 +1009,56 @@ struct DashboardPage: View {
       guard homeMode == .hub, !chatProvider.isSending, homeKnowsCanRotate else { return }
       knowsRotation += 1
     }
-    .onAppear { beginKnowsVisit() }
+    .onAppear {
+      beginKnowsVisit()
+      // Non-production only, and a no-op on a shipped bundle: this is how `home-knows-rotation.yaml`
+      // reaches the rows the hub actually composed. Registered from the hub list rather than the
+      // chat strip because the hub is where all four slots exist; the strip renders three
+      // (`rollingSuggestionCount`) and would report a truncation as a rotation.
+      HomeKnowsAutomationRegistry.register(knowsAutomationHandle)
+    }
+    .onDisappear { HomeKnowsAutomationRegistry.unregister(token: knowsAutomationToken) }
     .onChange(of: knowsImpressionSignature) { _, _ in recordKnowsImpressions() }
     .accessibilityIdentifier("home-knows-list")
+  }
+
+  /// The page's own knows-list functions, handed to the automation registry.
+  ///
+  /// Read and drive only — every closure forwards to the function the on-screen control calls, so
+  /// the bridge cannot compose a row, decide a suppression, or write the ledger on its own.
+  private var knowsAutomationHandle: HomeKnowsAutomationRegistry.Handle {
+    HomeKnowsAutomationRegistry.Handle(
+      token: knowsAutomationToken,
+      snapshot: {
+        let composition = homeKnowsComposition
+        return HomeKnowsAutomationRegistry.Snapshot(
+          rows: composition.rows.map {
+            HomeKnowsAutomationRegistry.Row(
+              key: $0.ledgerKey, kind: $0.kind.analyticsKind, text: $0.text, showsBefore: $0.showsBefore)
+          },
+          emptySlots: composition.emptySlots.map {
+            HomeKnowsAutomationRegistry.EmptySlot(slot: $0.slot.rawValue, reason: $0.reason.rawValue)
+          },
+          canRotate: composition.canRotate,
+          openTaskCount: homeOpenTaskCount,
+          ledger: knowsLedger)
+      },
+      beginVisit: { beginKnowsVisit() },
+      recordImpressions: { recordKnowsImpressions() },
+      open: { index in
+        let rows = homeKnowsRows
+        guard rows.indices.contains(index) else { return false }
+        openKnowsRow(rows[index])
+        return true
+      },
+      dismiss: { index in
+        let rows = homeKnowsRows
+        guard rows.indices.contains(index), let handler = knowsDismissHandler(for: rows[index]) else {
+          return false
+        }
+        handler(nil)
+        return true
+      })
   }
 
   /// Starts a visit to the knows-list: re-reads the ledger (so an account

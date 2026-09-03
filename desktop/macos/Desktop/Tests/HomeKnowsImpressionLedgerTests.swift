@@ -412,3 +412,131 @@ final class HomeKnowsImpressionDefaultsTests: XCTestCase {
     XCTAssertEqual(store.load(), .empty)
   }
 }
+
+// MARK: - Harness seams
+
+/// The two non-production seams `home-knows-rotation.yaml` reaches the list through.
+///
+/// Both are gated, and the gate is the thing worth pinning: a registry that stayed live on a
+/// shipped bundle would hold a strong-enough reference to a dismissed card's rows and would put a
+/// drive path for the reader's own list behind a name anything in-process could call.
+@MainActor
+final class HomeKnowsAutomationSeamTests: XCTestCase {
+  private func handle(token: UUID) -> HomeKnowsAutomationRegistry.Handle {
+    HomeKnowsAutomationRegistry.Handle(
+      token: token,
+      snapshot: {
+        HomeKnowsAutomationRegistry.Snapshot(
+          rows: [], emptySlots: [], canRotate: false, openTaskCount: 0, ledger: .empty)
+      },
+      beginVisit: {},
+      recordImpressions: {},
+      open: { _ in false },
+      dismiss: { _ in false })
+  }
+
+  override func tearDown() async throws {
+    if let mounted = HomeKnowsAutomationRegistry.mounted {
+      HomeKnowsAutomationRegistry.unregister(token: mounted.token)
+    }
+  }
+
+  /// On a production bundle the page registers and nothing happens.
+  func testRegistrationIsANoOpWhenDisabled() {
+    HomeKnowsAutomationRegistry.register(handle(token: UUID()), enabled: false)
+    XCTAssertNil(HomeKnowsAutomationRegistry.mounted)
+  }
+
+  func testRegistrationPublishesTheMountedList() {
+    let token = UUID()
+    HomeKnowsAutomationRegistry.register(handle(token: token), enabled: true)
+    XCTAssertEqual(HomeKnowsAutomationRegistry.mounted?.token, token)
+  }
+
+  /// The hub list and the chat strip render the same rows and overlap for a frame while the stage
+  /// animates: the one leaving must not clear the handle the one arriving just took.
+  func testUnregisteringAnOlderListLeavesTheCurrentOne() {
+    let outgoing = UUID()
+    let incoming = UUID()
+    HomeKnowsAutomationRegistry.register(handle(token: outgoing), enabled: true)
+    HomeKnowsAutomationRegistry.register(handle(token: incoming), enabled: true)
+
+    HomeKnowsAutomationRegistry.unregister(token: outgoing)
+    XCTAssertEqual(HomeKnowsAutomationRegistry.mounted?.token, incoming)
+
+    HomeKnowsAutomationRegistry.unregister(token: incoming)
+    XCTAssertNil(HomeKnowsAutomationRegistry.mounted)
+  }
+
+  /// What `home_knows_reset` buys the flow: the ledger outlives the app, so without a cleared
+  /// starting state the second run of the flow opens on rows the first run already suppressed.
+  func testResetForAutomationClearsTheLedgerAndStartsAFreshVisit() {
+    let persistence = HomeKnowsAutomationSeamTests.FakePersistence()
+    let store = HomeKnowsImpressionStore(
+      persistence: persistence, now: { HomeKnowsLedgerFixture.noon }, ownerID: { "owner-a" })
+    let hash = HomeKnowsRotationPolicy.contentHash(text: "Meet with Priya")
+    store.beginVisit()
+    XCTAssertEqual(store.recordShown(key: "task:t1", contentHash: hash)?.shows, 1)
+    XCTAssertNil(store.recordShown(key: "task:t1", contentHash: hash), "same visit")
+
+    store.resetForAutomation()
+
+    XCTAssertTrue(store.snapshot().entries.isEmpty)
+    // The de-duplication set is reset too, or the first visit after a reset would report nothing
+    // and the flow would read a silent list as a composer that had stopped producing rows.
+    XCTAssertEqual(store.recordShown(key: "task:t1", contentHash: hash)?.shows, 1)
+  }
+
+  private final class FakePersistence: HomeKnowsImpressionPersisting {
+    var ledger = HomeKnowsImpressionLedger.empty
+    func load() -> HomeKnowsImpressionLedger { ledger }
+    func save(_ ledger: HomeKnowsImpressionLedger) { self.ledger = ledger }
+  }
+}
+
+// MARK: - Telemetry seam
+
+/// `rotated_out_reason` is the rotation policy's verdict and is readable nowhere after the emit
+/// consumes it. The capture seam is how both a test and the automation bridge observe it at the
+/// boundary production writes it, rather than recomputing the reason and asserting their own work.
+@MainActor
+final class HomeKnowsTelemetrySeamTests: XCTestCase {
+  override func tearDown() async throws {
+    AnalyticsManager.homeKnowsTelemetryCaptureForTests = nil
+  }
+
+  func testRowShownCarriesItsKindSlotAndPriorShowCount() {
+    var captured: [(String, [String: Any])] = []
+    AnalyticsManager.homeKnowsTelemetryCaptureForTests = { name, props in captured.append((name, props)) }
+
+    AnalyticsManager.shared.trackHomeKnowsRowShown(kind: "task", slot: .pressingTask, showsBefore: 2)
+
+    XCTAssertEqual(captured.count, 1)
+    XCTAssertEqual(captured.first?.0, AnalyticsManager.homeKnowsRowEvent)
+    XCTAssertEqual(captured.first?.1["kind"] as? String, "task")
+    XCTAssertEqual(captured.first?.1["slot"] as? String, "pressing_task")
+    XCTAssertEqual(captured.first?.1["shows_before"] as? Int, 2)
+    XCTAssertNil(captured.first?.1["rotated_out_reason"], "a rendered row rotated nothing out")
+  }
+
+  func testEmptySlotCarriesTheRotationReason() {
+    var captured: [String: Any] = [:]
+    AnalyticsManager.homeKnowsTelemetryCaptureForTests = { _, props in captured = props }
+
+    AnalyticsManager.shared.trackHomeKnowsSlotEmpty(slot: .secondTask, reason: .dismissed)
+
+    XCTAssertEqual(captured["kind"] as? String, "empty")
+    XCTAssertEqual(captured["slot"] as? String, "second_task")
+    XCTAssertEqual(captured["rotated_out_reason"] as? String, "dismissed")
+    XCTAssertEqual(captured["shows_before"] as? Int, 0)
+  }
+
+  /// The property is a closed set because it is a PostHog dimension: an unbounded one would make
+  /// the breakdown unreadable and is the failure this enum exists to prevent.
+  func testEveryRotationReasonIsASnakeCaseRawValue() {
+    for reason in HomeKnowsRotationReason.allCases {
+      XCTAssertFalse(reason.rawValue.isEmpty)
+      XCTAssertEqual(reason.rawValue, reason.rawValue.lowercased())
+    }
+  }
+}
