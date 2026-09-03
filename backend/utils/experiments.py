@@ -51,6 +51,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
@@ -62,6 +64,9 @@ logger = logging.getLogger(__name__)
 ENROLLED_EVENT = 'Experiment Enrolled'
 CONTROL = 'control'
 TREATMENT = 'treatment'
+ArmSpec = tuple[str, float]
+"""One named arm: ``(name, weight)``. Weights are relative and need not sum to 1."""
+
 
 # A draw resolution of 10_000 makes splits expressible to a basis point, which
 # is finer than any split we can power at this volume, and keeps the bucket
@@ -96,8 +101,69 @@ def bucket_of(experiment_id: str, uid: str) -> int:
     return int.from_bytes(digest[:4], 'big') % _BUCKET_RESOLUTION
 
 
-def assigned_variant(experiment_id: str, uid: str, *, treatment_share: float = 0.5) -> str:
-    """Draw a variant. Pure, deterministic, and side-effect free."""
+def _normalized_arms(arms: Sequence[ArmSpec]) -> list[tuple[str, int]]:
+    """Validate an ordered arm list and return ``(name, bucket_bound)`` pairs.
+
+    The bound is the exclusive upper bucket for the arm on [0, 10000),
+    cumulative in list order. Integer bounds keep the draw exact and stable:
+    the same ordered registry always partitions the same buckets, so adding a
+    third arm later is a registry change, not a new enroll path.
+    """
+    items = list(arms)
+    if not items:
+        raise ValueError('arms must contain at least one arm')
+    seen: set[str] = set()
+    weights: list[float] = []
+    names: list[str] = []
+    for item in items:
+        if not isinstance(item, (tuple, list)) or len(item) != 2:
+            raise ValueError('each arm must be a (name, weight) pair')
+        name, weight = item
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError('arm names must be non-empty strings')
+        if name in seen:
+            raise ValueError(f'duplicate arm name: {name}')
+        if not isinstance(weight, (int, float)) or not math.isfinite(float(weight)) or weight <= 0:
+            raise ValueError(f'arm weight for {name!r} must be a positive finite number')
+        seen.add(name)
+        names.append(name)
+        weights.append(float(weight))
+    total = sum(weights)
+    bounds: list[tuple[str, int]] = []
+    cumulative = 0.0
+    for name, weight in zip(names, weights):
+        cumulative += weight
+        bound = round(cumulative / total * _BUCKET_RESOLUTION)
+        previous = bounds[-1][1] if bounds else 0
+        # Monotonic under adversarial rounding: every arm after the first
+        # keeps at least one bucket, and the last arm owns the remainder.
+        bounds.append((name, max(bound, previous + 1)))
+    return bounds
+
+
+def assigned_variant(
+    experiment_id: str,
+    uid: str,
+    *,
+    treatment_share: float = 0.5,
+    arms: Optional[Sequence[ArmSpec]] = None,
+) -> str:
+    """Draw a variant. Pure, deterministic, and side-effect free.
+
+    ``arms`` is the multi-arm form: an ordered list of ``(name, weight)``
+    pairs (e.g. ``(('control', 1), ('memory_v1', 1))``). Without it the
+    legacy binary ``control``/``treatment`` draw via ``treatment_share`` is
+    used unchanged — running experiments (EXP-001) must keep drawing the
+    exact variants they always have.
+    """
+    if arms is not None:
+        bucket = bucket_of(experiment_id, uid)
+        for name, bound in _normalized_arms(arms):
+            if bucket < bound:
+                return name
+        # Rounding can leave the final bound below the resolution; the last
+        # arm owns the remainder.
+        return _normalized_arms(arms)[-1][0]
     if not 0.0 <= treatment_share <= 1.0:
         raise ValueError('treatment_share must be within [0, 1]')
     return TREATMENT if bucket_of(experiment_id, uid) < round(treatment_share * _BUCKET_RESOLUTION) else CONTROL
@@ -126,6 +192,7 @@ def enroll(
     experiment_id: str,
     uid: str,
     treatment_share: float = 0.5,
+    arms: Optional[Sequence[ArmSpec]] = None,
     eligibility: Optional[Mapping[str, Any]] = None,
     source: str = '',
     firestore_client: Any | None = None,
@@ -153,7 +220,7 @@ def enroll(
     if already and already.get('variant'):
         return Enrollment(uid=uid, experiment_id=experiment_id, variant=str(already['variant']), newly_enrolled=False)
 
-    variant = assigned_variant(experiment_id, uid, treatment_share=treatment_share)
+    variant = assigned_variant(experiment_id, uid, treatment_share=treatment_share, arms=arms)
     record = {
         'uid': uid,
         'experiment_id': experiment_id,
