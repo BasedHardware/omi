@@ -2322,7 +2322,14 @@ class ChatProvider: ObservableObject {
     let resolvedMode: BridgeMode = (mode == .omiAI) ? .piMono : mode
     let newHarness = Self.harnessMode(for: resolvedMode)
     let previousHarness = activeBridgeHarness
-    guard newHarness != previousHarness else { return }
+    let previousBridgeMode = bridgeMode
+    // piMono and local share the same Node harness ("piMono") but configure
+    // different pi providers via environment variables baked in at process
+    // spawn time (see AgentRuntimeProcess.performStartProcess) — compare on
+    // the bridge-mode identity too, or switching piMono <-> local computes
+    // the same harness and silently no-ops, leaving the previous provider's
+    // subprocess (and its env vars) running.
+    guard newHarness != previousHarness || resolvedMode.rawValue != previousBridgeMode else { return }
     log("ChatProvider: Updating future-session profile from \(previousHarness) to \(resolvedMode.rawValue)")
     profilePreferenceChangeGeneration &+= 1
     let preferenceChange = profilePreferenceChangeGeneration
@@ -2334,6 +2341,21 @@ class ChatProvider: ObservableObject {
       checkClaudeConnectionStatus()
     }
     guard agentBridgeStarted else { return }
+    if newHarness == previousHarness {
+      // Same harness, different provider (piMono <-> local): the running
+      // process's env vars are stale, and no RPC can change them in place —
+      // only a full runtime restart picks up the new provider config.
+      do {
+        try await resolvedAgentClient().restart()
+        guard preferenceChange == profilePreferenceChangeGeneration else { return }
+        log("ChatProvider: Runtime restarted for provider change — \(resolvedMode.rawValue)")
+      } catch {
+        guard preferenceChange == profilePreferenceChangeGeneration else { return }
+        logError("Failed to restart runtime for provider change", error: error)
+        errorMessage = "Could not switch AI provider. Try again."
+      }
+      return
+    }
     do {
       guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: newHarness) else {
         throw BridgeError.agentError("Unknown AI runtime mode: \(newHarness)")
@@ -2353,6 +2375,24 @@ class ChatProvider: ObservableObject {
       guard preferenceChange == profilePreferenceChangeGeneration else { return }
       logError("Failed to configure future-session profile", error: error)
       errorMessage = "Could not update AI provider preference. Try again."
+    }
+  }
+
+  /// Restarts the shared runtime process so it picks up an edited local
+  /// provider base URL/model id. The harness bakes `OMI_PROVIDER` and the
+  /// local endpoint/model into its environment at spawn time (see
+  /// AgentRuntimeProcess.performStartProcess), so a plain @AppStorage write
+  /// to those keys is invisible to an already-running process — it needs an
+  /// explicit restart. No-ops if the user isn't currently on Local, or if no
+  /// bridge is running yet (the next start will read the fresh values).
+  func restartLocalBridgeIfActive() async {
+    guard bridgeMode == BridgeMode.local.rawValue, agentBridgeStarted else { return }
+    do {
+      try await resolvedAgentClient().restart()
+      log("ChatProvider: Restarted shared runtime with updated local model/endpoint")
+    } catch {
+      logError("Failed to restart shared runtime for local model change", error: error)
+      errorMessage = "Could not apply local model change. Try again."
     }
   }
 

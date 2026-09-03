@@ -368,6 +368,9 @@ struct SettingsContentView: View {
   @AppStorage("chatBridgeMode") var chatBridgeMode: String = "piMono"
   @AppStorage(AIProvider.localBaseURLKey) var localLLMBaseURL: String = AIProvider.defaultLocalBaseURL
   @AppStorage(AIProvider.localModelIDKey) var localLLMModelID: String = AIProvider.defaultLocalModelID
+  @State var localModelOptions: [String] = []
+  @State var isFetchingLocalModels = false
+  @State var localModelsFetchFailed = false
   @AppStorage("realtimeOmniProvider") var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
   @AppStorage("askModeEnabled") var askModeEnabled = false
   @AppStorage("aiChatWorkingDirectory") var aiChatWorkingDirectory: String = ""

@@ -174,19 +174,97 @@ extension SettingsContentView {
           .foregroundColor(Ink.secondary)
         TextField(AIProvider.defaultLocalBaseURL, text: $localLLMBaseURL)
           .textFieldStyle(.roundedBorder)
+          .onSubmit { fetchLocalModelOptions() }
       }
 
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-        Text("Model")
-          .scaledFont(size: OmiType.caption, weight: .medium)
+        HStack(spacing: 6) {
+          Text("Model")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(Ink.secondary)
+          if isFetchingLocalModels {
+            ProgressView()
+              .controlSize(.small)
+          }
+          Spacer()
+          Button {
+            fetchLocalModelOptions()
+          } label: {
+            Image(systemName: "arrow.clockwise")
+              .scaledFont(size: OmiType.caption)
+          }
+          .buttonStyle(.plain)
           .foregroundColor(Ink.secondary)
-        TextField(AIProvider.defaultLocalModelID, text: $localLLMModelID)
-          .textFieldStyle(.roundedBorder)
+          .help("Refresh the model list from the server")
+        }
+
+        if localModelOptions.isEmpty {
+          // No fetched list yet (not tried, still loading, or the server was
+          // unreachable) — fall back to manual entry so Local always works
+          // even when the server can't be reached from Settings.
+          TextField(AIProvider.defaultLocalModelID, text: $localLLMModelID)
+            .textFieldStyle(.roundedBorder)
+            .onChange(of: localLLMModelID) { _, _ in
+              Task { await chatProvider?.restartLocalBridgeIfActive() }
+            }
+          if localModelsFetchFailed {
+            Text("Couldn't reach the server to list models — enter the model id manually.")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+          }
+        } else {
+          Picker("", selection: $localLLMModelID) {
+            ForEach(localModelOptions, id: \.self) { modelId in
+              Text(modelId).tag(modelId)
+            }
+          }
+          .pickerStyle(.menu)
+          .labelsHidden()
+          .onChange(of: localLLMModelID) { _, _ in
+            Task { await chatProvider?.restartLocalBridgeIfActive() }
+          }
+        }
       }
 
       Text("An OpenAI-compatible endpoint (e.g. LM Studio, Ollama). Never routed through Omi's servers.")
         .scaledFont(size: OmiType.caption)
         .foregroundColor(Ink.secondary)
+    }
+    .task {
+      fetchLocalModelOptions()
+    }
+  }
+
+  /// Fetches the model list from the configured local endpoint and populates
+  /// `localModelOptions`. Falls back to manual text entry (leaves the list
+  /// empty) on any failure — the server may be asleep, off-network, or the
+  /// base URL may not be a real server yet, none of which should block Local
+  /// from being usable via manual model-id entry.
+  func fetchLocalModelOptions() {
+    guard !isFetchingLocalModels else { return }
+    isFetchingLocalModels = true
+    localModelsFetchFailed = false
+    let baseURL = localLLMBaseURL
+    let currentModelId = localLLMModelID
+    Task {
+      do {
+        var models = try await AIProvider.fetchLocalModels(baseURL: baseURL)
+        // Keep the currently configured model selectable even if the server's
+        // list doesn't (yet) include it — Picker needs a matching tag.
+        if !currentModelId.isEmpty && !models.contains(currentModelId) {
+          models.insert(currentModelId, at: 0)
+        }
+        await MainActor.run {
+          self.localModelOptions = models
+          self.isFetchingLocalModels = false
+        }
+      } catch {
+        await MainActor.run {
+          self.localModelOptions = []
+          self.isFetchingLocalModels = false
+          self.localModelsFetchFailed = true
+        }
+      }
     }
   }
 

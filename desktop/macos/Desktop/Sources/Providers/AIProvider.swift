@@ -105,4 +105,33 @@ struct AIProvider: Identifiable {
     let raw = UserDefaults.standard.string(forKey: selectedProviderRawValueKey) ?? AIProvider.piMono.bridgeModeRawValue
     return raw == AIProvider.local.bridgeModeRawValue ? "omi-local" : "omi"
   }
+
+  /// Decodes the standard OpenAI-compatible `GET /models` response shape.
+  struct LocalModelsResponse: Decodable {
+    struct Model: Decodable { let id: String }
+    let data: [Model]
+  }
+
+  /// Fetches the list of model ids an OpenAI-compatible local server (LM
+  /// Studio, Ollama, etc.) currently reports at `{baseURL}/models`.
+  ///
+  /// This is the only reliable source of truth for what's actually being
+  /// served — a name saved from a previous session (or copy-pasted from
+  /// somewhere else) is not proof a model still exists or is loaded.
+  /// Throws on any network, HTTP, or decode failure; callers should fall
+  /// back to manual text entry rather than block on this.
+  static func fetchLocalModels(baseURL: String) async throws -> [String] {
+    let normalized = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
+    guard let url = URL(string: "\(normalized)/models") else {
+      throw URLError(.badURL)
+    }
+    var request = URLRequest(url: url)
+    request.timeoutInterval = 5
+    let (data, response) = try await URLSession.shared.data(for: request)
+    guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+      throw URLError(.badServerResponse)
+    }
+    let decoded = try JSONDecoder().decode(LocalModelsResponse.self, from: data)
+    return decoded.data.map(\.id).sorted()
+  }
 }
