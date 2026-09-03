@@ -7,6 +7,7 @@ import functools
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -291,25 +292,36 @@ def _python_importable(module: str) -> bool:
     )
 
 
-def _java_runtime_present() -> bool:
-    """Report whether a usable JVM exists, not merely whether `java` is on PATH.
+# firebase-tools refuses to start the emulators on a JDK older than 21
+# ("firebase-tools no longer supports Java version before 21"), so the harness
+# rejects it at prereq time instead of failing firestore/auth health checks.
+FIREBASE_EMULATORS_MIN_JAVA_MAJOR = 21
+
+
+def _java_major_version() -> int | None:
+    """Major JDK version `java -version` reports, or None when unusable.
 
     macOS ships a stub at /usr/bin/java that is always present and exits 1 with
     "Unable to locate a Java Runtime" when no JDK is installed, so a PATH lookup
-    passes on every Mac. Running the binary is the only check that distinguishes
-    the stub from a real runtime.
+    passes on every Mac. Running the binary and parsing its version line is the
+    only check that distinguishes the stub from a real runtime — and reports the
+    version firebase-tools would otherwise reject only at emulator start.
     """
     if not _which("java"):
-        return False
+        return None
     try:
-        return (
-            subprocess.run(
-                ["java", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30
-            ).returncode
-            == 0
-        )
+        proc = subprocess.run(["java", "-version"], capture_output=True, text=True, timeout=30)
     except (OSError, subprocess.SubprocessError):
-        return False
+        return None
+    if proc.returncode != 0:
+        return None
+    match = re.search(r'version "([0-9][0-9._]*)', proc.stderr)
+    if not match:
+        return None
+    parts = match.group(1).split(".")  # "21.0.1" → 21; legacy "1.8.0_191" → 8
+    if parts[0] == "1" and len(parts) > 1:
+        return int(parts[1])
+    return int(parts[0])
 
 
 def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]]:
@@ -321,10 +333,17 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
         missing.append(
             "firebase-tools CLI or npx (install with npm install, npm install -g firebase-tools, or use npx)"
         )
-    if not _java_runtime_present():
+    java_major = _java_major_version()
+    if java_major is None:
         missing.append(
             "java runtime (required by the Firestore and Auth emulators; "
             "install one with `brew install --cask temurin` or from https://adoptium.net)"
+        )
+    elif java_major < FIREBASE_EMULATORS_MIN_JAVA_MAJOR:
+        missing.append(
+            f"java {java_major} is too old for the Firebase emulators (firebase-tools requires "
+            f"Java {FIREBASE_EMULATORS_MIN_JAVA_MAJOR}+; install e.g. `brew install openjdk@21` "
+            "and put it first on PATH)"
         )
     if not _which("redis-server"):
         missing.append("redis-server (required for local Redis on loopback)")

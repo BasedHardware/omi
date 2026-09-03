@@ -67,6 +67,10 @@ def test_real_check_lists_provider_credentials(monkeypatch: pytest.MonkeyPatch, 
     assert any("DEEPGRAM_API_KEY" in item for item in missing)
 
 
+def _fake_java(returncode: int, stderr: str = "") -> object:
+    return lambda *_args, **_kwargs: subprocess.CompletedProcess([], returncode, stderr=stderr)
+
+
 def test_java_stub_that_exits_nonzero_is_not_a_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     """macOS ships /usr/bin/java as a stub that is always on PATH but has no JVM behind it.
 
@@ -74,16 +78,25 @@ def test_java_stub_that_exits_nonzero_is_not_a_runtime(monkeypatch: pytest.Monke
     ~135s later as an unexplained firestore/auth health-check timeout.
     """
     monkeypatch.setattr(cli, "_which", lambda _name: "/usr/bin/java")
-    monkeypatch.setattr(cli.subprocess, "run", lambda *_args, **_kwargs: subprocess.CompletedProcess([], 1))
+    monkeypatch.setattr(cli.subprocess, "run", _fake_java(1))
 
-    assert cli._java_runtime_present() is False
+    assert cli._java_major_version() is None
 
 
-def test_java_present_when_the_binary_reports_a_version(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_java_reports_its_major_version(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "_which", lambda _name: "/usr/bin/java")
-    monkeypatch.setattr(cli.subprocess, "run", lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0))
+    monkeypatch.setattr(
+        cli.subprocess, "run", _fake_java(0, 'openjdk version "21.0.12.1" 2026-08-18\n')
+    )
 
-    assert cli._java_runtime_present() is True
+    assert cli._java_major_version() == 21
+
+
+def test_legacy_java_1_8_version_line_reports_major_8(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "_which", lambda _name: "/usr/bin/java")
+    monkeypatch.setattr(cli.subprocess, "run", _fake_java(0, 'java version "1.8.0_191"\n'))
+
+    assert cli._java_major_version() == 8
 
 
 def test_missing_java_runtime_is_reported_as_a_prerequisite(
@@ -91,12 +104,28 @@ def test_missing_java_runtime_is_reported_as_a_prerequisite(
 ) -> None:
     monkeypatch.setenv("PROVIDER_MODE", "offline")
     monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
-    monkeypatch.setattr(cli, "_java_runtime_present", lambda: False)
+    monkeypatch.setattr(cli, "_java_major_version", lambda: None)
     cfg = config.load_config(REPO_ROOT)
 
     missing, _warnings = cli.prerequisite_report(cfg)
 
     assert any("java runtime" in item for item in missing)
+
+
+def test_pre_21_java_is_reported_as_a_prerequisite(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """firebase-tools rejects JDKs before 21, so the harness must too — not at
+    emulator start (45s/90s health-check timeout) but in the prereq report.
+    """
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "_java_major_version", lambda: 17)
+    cfg = config.load_config(REPO_ROOT)
+
+    missing, _warnings = cli.prerequisite_report(cfg)
+
+    assert any("too old" in item and "17" in item and "Java 21" in item for item in missing)
 
 
 def test_npx_firebase_tools_does_not_wait_on_an_install_prompt(
