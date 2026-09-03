@@ -70,7 +70,11 @@ ensure_npm_deps "$DESKTOP_DIR/agent"
   # The full runtime suite is the authoritative gate. A hand-picked list left
   # new execution-policy, persistence, transport, and routing regressions
   # compiled but never executed in CI.
-  "$NODE22" node_modules/vitest/vitest.mjs run
+  extra_vitest_args=()
+  if [[ -n "${VITEST_MAX_WORKERS:-}" ]]; then
+    extra_vitest_args+=(--maxWorkers="$VITEST_MAX_WORKERS")
+  fi
+  "$NODE22" node_modules/vitest/vitest.mjs run "${extra_vitest_args[@]}"
 )
 
 ensure_npm_deps "$DESKTOP_DIR/pi-mono-extension"
