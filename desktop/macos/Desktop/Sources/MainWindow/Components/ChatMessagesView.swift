@@ -383,6 +383,10 @@ enum ChatTranscriptWindow {
   }
 }
 
+/// The coarse step at which `ChatMessagesView.rowViewport` republishes. The
+/// view is generic, so the constant lives here rather than as a static on it.
+private let chatRowViewportStep: CGFloat = 48
+
 /// Reusable chat messages scroll view extracted from ChatPage.
 /// Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat).
 struct ChatMessagesView<WelcomeContent: View>: View {
@@ -508,6 +512,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// deliberately does not observe the object; only the overlay subscribes, so
   /// scrolling does not re-evaluate every message row.
   @State private var transcriptGeometry = ChatTranscriptGeometry()
+  /// The viewport as the rows see it, for sizing their collapse budgets in
+  /// screens. Republished only when it moves by a coarse step: this is state on
+  /// the view, so every change re-evaluates the transcript, and a live resize
+  /// drag would otherwise do that on each frame.
+  @State private var rowViewport: CGSize = .zero
 
   // MARK: - Activity Below Indicator
 
@@ -555,7 +564,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         $0.size
       } action: { size in
         transcriptGeometry.setViewport(size, columnWidth: size.width)
+        if abs(rowViewport.height - size.height) >= chatRowViewportStep
+          || abs(rowViewport.width - size.width) >= chatRowViewportStep
+        {
+          rowViewport = size
+        }
       }
+      .environment(\.chatTranscriptViewport, rowViewport)
     }
   }
 

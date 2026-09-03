@@ -4,8 +4,67 @@ import SwiftUI
 
 /// Pure collapsed-body policy so the transcript's truncation contract can be
 /// covered without requiring a running SwiftUI window.
+///
+/// The budget is measured in viewports of rendered text, not characters. Five
+/// hundred characters was five lines: every real answer collapsed, and the
+/// reader clicked "Show more" under nearly everything they asked. A reply may
+/// now fill `viewportHeightsBeforeCollapse` screens before the transcript
+/// offers to fold it, and a reply that long starts folded — restored history
+/// should not be mostly one old answer.
 enum ChatBubbleTruncation {
-  static let threshold = 500
+  /// How many screens of prose a reply may take before it is offered collapsed.
+  static let viewportHeightsBeforeCollapse: CGFloat = 2
+  /// Stands in until the transcript has measured itself, and in tests.
+  static let fallbackViewportHeight: CGFloat = 720
+  static let fallbackColumnWidth: CGFloat = 640
+  /// A collapsed body is never shorter than this many lines, whatever the
+  /// window: a few lines and "Show more" is a teaser, not a message.
+  static let minimumLines = 12
+
+  /// What the collapsed body may hold, derived from the transcript's geometry.
+  struct Budget: Equatable {
+    /// Rendered lines the collapsed body may take.
+    let lines: Int
+    /// Characters one full line of prose holds at this width.
+    let charactersPerLine: Int
+
+    static let fallback = ChatBubbleTruncation.budget(
+      viewportHeight: fallbackViewportHeight, columnWidth: fallbackColumnWidth)
+  }
+
+  /// - Parameters:
+  ///   - viewportHeight: the transcript's visible height; `0` before it is measured.
+  ///   - columnWidth: the message column; `0` before it is measured.
+  ///   - fontScale: the reader's text-size preference, as the prose renders it.
+  static func budget(viewportHeight: CGFloat, columnWidth: CGFloat, fontScale: CGFloat = 1) -> Budget {
+    let fontSize = round(14 * max(fontScale, 0.5))
+    let lineHeight = fontSize * 1.25 + OmiMarkdownContent.chatLineSpacing(fontSize: fontSize)
+    let height = viewportHeight > 0 ? viewportHeight : fallbackViewportHeight
+    let width = columnWidth > 0 ? columnWidth : fallbackColumnWidth
+    // SF at text sizes averages about half an em per glyph, and prose wraps
+    // before the edge, so a line holds a bit less than the width allows.
+    let charactersPerLine = max(20, Int((width / (fontSize * 0.5)) * 0.85))
+    let lines = max(minimumLines, Int((height * viewportHeightsBeforeCollapse) / lineHeight))
+    return Budget(lines: lines, charactersPerLine: charactersPerLine)
+  }
+
+  /// Lines the text takes when wrapped at `charactersPerLine`: each source line
+  /// wraps on its own, and a blank one is the small gap between paragraphs.
+  static func estimatedLines(_ text: String, charactersPerLine: Int) -> Double {
+    text.split(separator: "\n", omittingEmptySubsequences: false).reduce(0) { total, line in
+      total + lineCost(line, charactersPerLine: charactersPerLine)
+    }
+  }
+
+  private static func lineCost(_ line: Substring, charactersPerLine: Int) -> Double {
+    let count = line.trimmingCharacters(in: .whitespaces).count
+    guard count > 0 else { return 0.35 }
+    return max(1, (Double(count) / Double(max(charactersPerLine, 1))).rounded(.up))
+  }
+
+  static func exceedsBudget(_ text: String, budget: Budget) -> Bool {
+    estimatedLines(text, charactersPerLine: budget.charactersPerLine) > Double(budget.lines)
+  }
 
   /// Whether an answer that has just finished streaming keeps its full body.
   ///
@@ -20,15 +79,57 @@ enum ChatBubbleTruncation {
     wasStreaming == true && isStreaming != true
   }
 
-  static func shouldTruncate(text: String, isStreaming: Bool, isExpanded: Bool) -> Bool {
-    !isStreaming && text.count > threshold && !isExpanded
+  static func shouldTruncate(
+    text: String, isStreaming: Bool, isExpanded: Bool, budget: Budget = .fallback
+  ) -> Bool {
+    !isStreaming && !isExpanded && exceedsBudget(text, budget: budget)
   }
 
-  static func displayText(_ text: String, isStreaming: Bool, isExpanded: Bool) -> String {
-    guard shouldTruncate(text: text, isStreaming: isStreaming, isExpanded: isExpanded) else {
-      return text
+  static func displayText(
+    _ text: String, isStreaming: Bool, isExpanded: Bool, budget: Budget = .fallback
+  ) -> String {
+    guard shouldTruncate(text: text, isStreaming: isStreaming, isExpanded: isExpanded, budget: budget)
+    else { return text }
+    return collapsedPrefix(text, budget: budget) + "…"
+  }
+
+  /// The first `budget.lines` rendered lines, cut at a source line where it can
+  /// be — mid-word cuts read as damage — and by characters only inside a single
+  /// paragraph too long to fit. A fence opened inside the kept prefix is closed
+  /// so the hidden remainder does not turn the ellipsis into code.
+  static func collapsedPrefix(_ text: String, budget: Budget) -> String {
+    var remaining = Double(budget.lines)
+    var kept = [Substring]()
+    var fenceOpen = false
+    for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+      let cost = lineCost(line, charactersPerLine: budget.charactersPerLine)
+      if cost > remaining {
+        let characters = Int(remaining.rounded(.down)) * budget.charactersPerLine
+        if characters > 0 { kept.append(line.prefix(characters)) }
+        break
+      }
+      remaining -= cost
+      if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") { fenceOpen.toggle() }
+      kept.append(line)
     }
-    return String(text.prefix(threshold)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+    var prefix = kept.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    if fenceOpen { prefix += "\n```\n" }
+    return prefix
+  }
+}
+
+// MARK: - Transcript viewport
+
+private struct ChatTranscriptViewportKey: EnvironmentKey {
+  static let defaultValue: CGSize = .zero
+}
+
+extension EnvironmentValues {
+  /// The visible size of the transcript a row is drawn in, so a row can size
+  /// its own collapse budget in screens. `.zero` until the transcript measures.
+  var chatTranscriptViewport: CGSize {
+    get { self[ChatTranscriptViewportKey.self] }
+    set { self[ChatTranscriptViewportKey.self] = newValue }
   }
 }
 

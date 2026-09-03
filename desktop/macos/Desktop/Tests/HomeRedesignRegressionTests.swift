@@ -630,14 +630,20 @@ final class ChatMessageTimestampFormatTests: XCTestCase {
 
 final class ChatBubbleLayoutRegressionTests: XCTestCase {
   func testCollapsedReplyKeepsAnEllipsisBeforeTheBelowMessageExpansionControl() {
-    let source = String(repeating: "reply ", count: 100)
-    let collapsed = ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: false)
+    let budget = ChatBubbleTruncation.Budget(lines: 12, charactersPerLine: 40)
+    let source = (1...40).map { "Line \($0) of a long reply that keeps going" }.joined(separator: "\n")
+    let collapsed = ChatBubbleTruncation.displayText(
+      source, isStreaming: false, isExpanded: false, budget: budget)
 
-    XCTAssertTrue(ChatBubbleTruncation.shouldTruncate(text: source, isStreaming: false, isExpanded: false))
+    XCTAssertTrue(
+      ChatBubbleTruncation.shouldTruncate(text: source, isStreaming: false, isExpanded: false, budget: budget))
     XCTAssertTrue(collapsed.hasSuffix("…"), "collapsed body must expose an ellipsis before Show more")
-    XCTAssertEqual(collapsed.count, ChatBubbleTruncation.threshold + 1)
+    XCTAssertTrue(collapsed.hasPrefix("Line 1 of"), "the start of the message stays visible")
+    XCTAssertLessThanOrEqual(
+      ChatBubbleTruncation.estimatedLines(String(collapsed.dropLast()), charactersPerLine: 40),
+      Double(budget.lines))
     XCTAssertEqual(
-      ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: true),
+      ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: true, budget: budget),
       source,
       "expanding must restore the complete reply"
     )
@@ -651,6 +657,77 @@ final class ChatBubbleLayoutRegressionTests: XCTestCase {
       ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: false),
       source
     )
+  }
+
+  /// Five hundred characters was five lines, and every real answer collapsed.
+  /// A reply may fill two screens before the transcript offers to fold it.
+  func testTwoScreensOfProseFitBeforeTheCollapseOffer() {
+    let budget = ChatBubbleTruncation.budget(viewportHeight: 720, columnWidth: 640)
+    // 720 pt of 14 pt type with the transcript's leading is about 32 lines a screen.
+    XCTAssertGreaterThanOrEqual(budget.lines, 60)
+    XCTAssertLessThanOrEqual(budget.lines, 72)
+    XCTAssertGreaterThanOrEqual(budget.charactersPerLine, 70)
+
+    let aboutOneScreen = String(repeating: "Prose that wraps naturally across the column. ", count: 50)
+    XCTAssertFalse(
+      ChatBubbleTruncation.shouldTruncate(
+        text: aboutOneScreen, isStreaming: false, isExpanded: false, budget: budget),
+      "a screen of prose is not collapsed")
+
+    let fiveScreens = String(repeating: aboutOneScreen + "\n\n", count: 5)
+    XCTAssertTrue(
+      ChatBubbleTruncation.shouldTruncate(
+        text: fiveScreens, isStreaming: false, isExpanded: false, budget: budget),
+      "five screens start collapsed")
+  }
+
+  func testABulletedReplyIsMeasuredInLinesNotCharacters() {
+    let budget = ChatBubbleTruncation.Budget(lines: 20, charactersPerLine: 80)
+    // 30 short bullets are 30 lines, though only 600 characters.
+    let bullets = (1...30).map { "- item \($0)" }.joined(separator: "\n")
+    XCTAssertTrue(ChatBubbleTruncation.exceedsBudget(bullets, budget: budget))
+    // The same character count in one paragraph is eight lines.
+    let paragraph = String(repeating: "x", count: 600)
+    XCTAssertFalse(ChatBubbleTruncation.exceedsBudget(paragraph, budget: budget))
+  }
+
+  func testACollapsedBodyCutsAtALineNotMidWord() {
+    let budget = ChatBubbleTruncation.Budget(lines: 3, charactersPerLine: 100)
+    let source = ["First line.", "Second line.", "Third line.", "Fourth line.", "Fifth line."]
+      .joined(separator: "\n")
+
+    XCTAssertEqual(
+      ChatBubbleTruncation.collapsedPrefix(source, budget: budget),
+      "First line.\nSecond line.\nThird line.")
+  }
+
+  func testACutInsideAFenceClosesTheFence() {
+    let budget = ChatBubbleTruncation.Budget(lines: 4, charactersPerLine: 80)
+    let source = "Intro\n```swift\nlet a = 1\nlet b = 2\nlet c = 3\nlet d = 4\n```\nAfter"
+    let collapsed = ChatBubbleTruncation.displayText(
+      source, isStreaming: false, isExpanded: false, budget: budget)
+
+    XCTAssertEqual(collapsed.components(separatedBy: "```").count - 1, 2, "the kept fence is closed")
+    XCTAssertTrue(collapsed.hasSuffix("…"))
+    XCTAssertFalse(collapsed.contains("let c"))
+  }
+
+  func testTheBudgetFollowsTheTranscriptsGeometry() {
+    let standard = ChatBubbleTruncation.budget(viewportHeight: 720, columnWidth: 640)
+    XCTAssertGreaterThan(
+      ChatBubbleTruncation.budget(viewportHeight: 1400, columnWidth: 640).lines, standard.lines,
+      "a taller transcript shows more before folding")
+    XCTAssertLessThan(
+      ChatBubbleTruncation.budget(viewportHeight: 720, columnWidth: 320).charactersPerLine,
+      standard.charactersPerLine,
+      "a narrower column wraps sooner")
+    XCTAssertLessThan(
+      ChatBubbleTruncation.budget(viewportHeight: 720, columnWidth: 640, fontScale: 1.5).lines,
+      standard.lines,
+      "larger type fits fewer lines in the same screens")
+    XCTAssertEqual(
+      ChatBubbleTruncation.budget(viewportHeight: 0, columnWidth: 0), ChatBubbleTruncation.Budget.fallback,
+      "an unmeasured transcript uses the fallback rather than collapsing everything")
   }
 
   /// An answer collapsing at the moment it settles is the one case truncation

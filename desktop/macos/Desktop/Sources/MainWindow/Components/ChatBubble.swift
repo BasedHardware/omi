@@ -131,8 +131,23 @@ struct ChatBubble: View {
     _lastSubmittedRating = State(initialValue: message.rating)
   }
 
-  /// Messages longer than this are truncated with a "Show more" button
-  private static let truncationThreshold = ChatBubbleTruncation.threshold
+  /// The transcript's visible size, so a long reply is folded in screens of
+  /// text rather than a fixed count of characters.
+  @Environment(\.chatTranscriptViewport) private var transcriptViewport
+  @Environment(\.fontScale) private var truncationFontScale
+
+  /// How much of this reply shows before "Show more": two screens of prose at
+  /// the column this row actually renders in.
+  private var truncationBudget: ChatBubbleTruncation.Budget {
+    let column =
+      transcriptViewport.width > 0
+      ? min(Self.messageColumnMaxWidth, transcriptViewport.width)
+      : Self.messageColumnMaxWidth
+    return ChatBubbleTruncation.budget(
+      viewportHeight: transcriptViewport.height,
+      columnWidth: column,
+      fontScale: truncationFontScale)
+  }
 
   /// Readable width shared by the bubble and its metadata row. Keeping this
   /// explicit lets the metadata row expand to the message column even when
@@ -144,7 +159,8 @@ struct ChatBubble: View {
     ChatBubbleTruncation.shouldTruncate(
       text: bubbleText,
       isStreaming: message.isStreaming,
-      isExpanded: isExpanded
+      isExpanded: isExpanded,
+      budget: truncationBudget
     )
   }
 
@@ -161,7 +177,8 @@ struct ChatBubble: View {
     ChatBubbleTruncation.displayText(
       bubbleText,
       isStreaming: message.isStreaming,
-      isExpanded: isExpanded
+      isExpanded: isExpanded,
+      budget: truncationBudget
     )
   }
 
@@ -489,7 +506,7 @@ struct ChatBubble: View {
 
   @ViewBuilder
   private var truncationControl: some View {
-    if backgroundAgentSummary == nil, bubbleText.count > Self.truncationThreshold {
+    if backgroundAgentSummary == nil, ChatBubbleTruncation.exceedsBudget(bubbleText, budget: truncationBudget) {
       if isExpanded {
         Button(action: { isExpanded.toggle() }) {
           Text("Show less")
