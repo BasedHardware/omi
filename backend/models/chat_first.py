@@ -132,6 +132,23 @@ ChatFirstBlockSpec = Annotated[
         CaptureLinkSpec,
         ConversationLinkSpec,
         MemoryLinkSpec,
+    ],
+    Field(discriminator='type'),
+]
+
+# What a client may ask the journal to accept, which is a superset of what the
+# server emits. ``memoryReviewCard`` is authored by the daily-summary card on the
+# client and journaled back; no proactive intent ever produces one. Keeping it out
+# of ``ChatFirstBlockSpec`` keeps it out of the materialization *response* schema,
+# where a new union branch is a breaking change for every released app client.
+ChatFirstJournalBlockSpec = Annotated[
+    Union[
+        QuestionCardSpec,
+        TaskCardSpec,
+        GoalLinkSpec,
+        CaptureLinkSpec,
+        ConversationLinkSpec,
+        MemoryLinkSpec,
         MemoryReviewCardSpec,
     ],
     Field(discriminator='type'),
@@ -149,7 +166,7 @@ class ChatFirstBlockValidationRequest(_StrictModel):
     owner_fence: StableId
     run_id: StableId
     attempt_id: StableId
-    blocks: list[ChatFirstBlockSpec] = Field(min_length=1, max_length=8)
+    blocks: list[ChatFirstJournalBlockSpec] = Field(min_length=1, max_length=8)
 
 
 class ChatFirstBlockValidationReceipt(_StrictModel):
@@ -442,7 +459,7 @@ class DeferralReceipt(_StrictModel):
     state: Literal['pending', 'released']
 
 
-def stable_block_id(*, uid: str, generation: int, block: ChatFirstBlockSpec) -> str:
+def stable_block_id(*, uid: str, generation: int, block: ChatFirstJournalBlockSpec) -> str:
     """Generate an opaque, retry-stable block ID without exposing block text."""
 
     canonical = block.model_dump_json(exclude_none=True)
@@ -454,6 +471,7 @@ __all__ = [
     'CaptureLinkSpec',
     'ConversationLinkSpec',
     'ChatFirstBlockSpec',
+    'ChatFirstJournalBlockSpec',
     'ChatFirstBlockValidationReceipt',
     'ChatFirstBlockValidationRequest',
     'ChatFirstSubject',

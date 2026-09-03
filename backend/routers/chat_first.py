@@ -24,6 +24,7 @@ from models.chat_first import (
     CaptureLinkSpec,
     ConversationLinkSpec,
     ChatFirstBlockSpec,
+    ChatFirstJournalBlockSpec,
     ChatFirstBlockValidationReceipt,
     ChatFirstBlockValidationRequest,
     ChatFirstSubject,
@@ -178,7 +179,7 @@ def _maybe_persist_cold_start(uid: str, *, control_generation: int, now: datetim
         logger.warning('chat_first_cold_start_prepare_failed uid=%s error=%s', sanitize_pii(uid), type(exc).__name__)
 
 
-def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
+def _entity_available(uid: str, block: ChatFirstJournalBlockSpec) -> bool:
     if isinstance(block, TaskCardSpec):
         task = action_items_db.get_action_item(uid, block.task_id)
         return bool(task and not task.get('is_locked', False))
