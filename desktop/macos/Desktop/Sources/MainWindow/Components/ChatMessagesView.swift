@@ -1262,14 +1262,25 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     }
   }
 
-  private func scrollToBottom(proxy: ScrollViewProxy) {
+  /// - Parameter animated: glide to the live edge rather than jump. The follow
+  ///   scroll during a stream is the animated case: each new line used to snap
+  ///   the viewport down a row at a time, and the snaps were most of what made
+  ///   streaming feel chunky. Restores and sends stay instant — a reader
+  ///   opening a transcript should not watch it scroll through history.
+  private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = false) {
     guard scrollMode == .followingBottom else { return }
     // Don't fight the user — skip if they're actively wheel/trackpad scrolling
     guard !userIsScrolling else { return }
     guard !messages.isEmpty else { return }
     transcriptGeometry.setFollowingLiveEdge(true)
     programmaticScroll.markProgrammaticScroll()
-    proxy.scrollTo("bottom-anchor", anchor: .bottom)
+    if animated, let animation = OmiMotion.gated(ChatScrollFollowThrottle.followAnimation) {
+      withAnimation(animation) {
+        proxy.scrollTo("bottom-anchor", anchor: .bottom)
+      }
+    } else {
+      proxy.scrollTo("bottom-anchor", anchor: .bottom)
+    }
   }
 
   /// Rate-limited version of scrollToBottom: at most one follow per
@@ -1287,13 +1298,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       return
     case .now:
       lastFollowScrollTime = now
-      scrollToBottom(proxy: proxy)
+      scrollToBottom(proxy: proxy, animated: true)
     case .schedule(let delay):
       hasQueuedFollowScroll = true
       let workItem = DispatchWorkItem { [self] in
         hasQueuedFollowScroll = false
         lastFollowScrollTime = ProcessInfo.processInfo.systemUptime
-        scrollToBottom(proxy: proxy)
+        scrollToBottom(proxy: proxy, animated: true)
       }
       scrollThrottleWorkItem = workItem
       DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)

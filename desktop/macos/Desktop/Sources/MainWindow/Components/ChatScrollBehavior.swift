@@ -83,6 +83,10 @@ enum ChatScrollFollowThrottle {
   /// falls behind, large enough that a token burst cannot saturate the main
   /// thread with `scrollTo` + layout.
   static let interval: TimeInterval = 0.08
+  /// The glide from one follow to the next. Shorter than `interval` so a
+  /// follow always lands before the next one starts, and never a spring: the
+  /// live edge has nothing to overshoot into.
+  static let followAnimation: Animation = .easeOut(duration: 0.16)
 
   enum Decision: Equatable {
     /// Run the scroll on this turn.
