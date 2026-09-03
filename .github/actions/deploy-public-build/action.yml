@@ -56,6 +56,7 @@ runs:
         set -euo pipefail
         contract=config/public-build-contract.json
         target='${{ inputs.target }}'
+        environment='${{ inputs.environment }}'
         target_json="$(jq -ce --arg target "$target" '.targets[$target]' "$contract")"
         output_string() {
           local key="$1"
@@ -70,7 +71,14 @@ runs:
           echo 'platforms<<EOF'
           jq -er '.deployment.platforms[]' <<<"$target_json"
           echo EOF
-          printf 'flags=%s\n' "$(jq -r '[.deployment.flags[]?] | join(" ")' <<<"$target_json")"
+          printf 'flags=%s\n' "$(
+            jq -r --arg env "$environment" '
+              .deployment.flags as $flags
+              | if ($flags | type) == "object" then [($flags[$env] // [])[]?] | join(" ")
+                else [$flags[]?] | join(" ")
+                end
+            ' <<<"$target_json"
+          )"
           echo 'runtime_secrets<<EOF'
           jq -r '.deployment.runtime_secrets | to_entries[]? | "\(.key)=\(.value)"' <<<"$target_json"
           echo EOF
@@ -79,6 +87,10 @@ runs:
           echo EOF
           printf 'remove_runtime_secrets=%s\n' "$(
             jq -r '(.deployment.remove_runtime_secrets // []) | if length == 0 then "" else "--remove-secrets=" + join(",") end' \
+              <<<"$target_json"
+          )"
+          printf 'remove_runtime_env_vars=%s\n' "$(
+            jq -r '(.deployment.remove_runtime_env_vars // []) | if length == 0 then "" else "--remove-env-vars=" + join(",") end' \
               <<<"$target_json"
           )"
           # preserve_runtime_secrets are validated by the runtime preflight. The
@@ -117,7 +129,8 @@ runs:
         python3 .github/scripts/preflight_public_build_runtime.py \
           --target "${{ inputs.target }}" \
           --project-id "${{ inputs.project_id }}" \
-          --github-output "$GITHUB_OUTPUT"
+          --github-output "$GITHUB_OUTPUT" \
+          --service-account "${{ inputs.service_account }}"
 
     - name: Fail closed for a production first create
       shell: bash
@@ -180,6 +193,7 @@ runs:
           ${{ inputs.subnet != '' && format('--subnet={0}', inputs.subnet) || '' }}
           ${{ inputs.network != '' && inputs.subnet != '' && '--vpc-egress=private-ranges-only' || '' }}
           ${{ steps.contract.outputs.remove_runtime_secrets }}
+          ${{ steps.contract.outputs.remove_runtime_env_vars }}
           ${{ steps.contract.outputs.flags }}
         env_vars: |-
           ${{ steps.contract.outputs.runtime_env_vars }}

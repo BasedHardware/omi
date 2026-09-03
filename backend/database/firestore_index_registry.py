@@ -962,6 +962,17 @@ ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('completed'), _asc('__name__')),
 )
 
+ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY = FirestoreQuerySpec(
+    identifier='action_items_canonical_completion_count',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('completed', 'in', 'canonical_values'),),
+    # Firestore's automatic single-field index serves this aggregation; keeping
+    # the query in the registry makes the production shape auditable without
+    # adding a redundant composite manifest entry.
+    index_fields=(_asc('completed'),),
+)
+
 ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY = FirestoreQuerySpec(
     identifier='action_items_completed_due_range',
     collection_group='action_items',
@@ -1024,6 +1035,24 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
         _asc('state'),
         _asc('subject.kind'),
         _asc('subject.id'),
+        _asc('__name__'),
+    ),
+)
+
+CHAT_FIRST_TRANSIENT_DEAD_LETTER_REPAIR_QUERY = FirestoreQuerySpec(
+    identifier='chat_first_transient_dead_letter_repair',
+    collection_group='chat_first_dead_letters',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('account_generation', '==', 'account_generation'),
+        FirestoreQueryFilter('requeue_count', '==', 'requeue_count'),
+        FirestoreQueryFilter('dead_letter_reason', 'in', 'dead_letter_reasons'),
+    ),
+    index_fields=(
+        _asc('account_generation'),
+        _asc('requeue_count'),
+        _asc('dead_letter_reason'),
+        _asc('last_fetched_at'),
         _asc('__name__'),
     ),
 )
@@ -1233,6 +1262,7 @@ DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY = FirestoreQuerySpec(
 )
 
 QUERY_SPECS = (
+    ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
     ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
     ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
     ACTION_ITEMS_CREATED_RANGE_QUERY,
@@ -1277,6 +1307,7 @@ QUERY_SPECS = (
     ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
+    CHAT_FIRST_TRANSIENT_DEAD_LETTER_REPAIR_QUERY,
     CURRENT_CHAT_SESSION_QUERY,
     CURRENT_CHAT_SESSION_ORDERED_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,

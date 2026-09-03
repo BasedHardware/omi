@@ -478,6 +478,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     // Initialize analytics (PostHog)
     AnalyticsManager.shared.initialize()
+    OnboardingRerunFlag.install()
     AnalyticsManager.shared.detectAndReportCrash()
     AnalyticsManager.shared.recoverMonitoringSessionIfNeeded()
     if let attempt = pendingUpdateRelaunch?.attempt {
@@ -545,6 +546,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // the process. The policy checks sign-in at decision time instead, and the
     // coordinator re-scopes its history on `runtimeOwnerDidChange`.
     IntegrationNudgeCoordinator.shared.start()
+    // The daily summary's day-change/wake cadence and its "new summary" notch card should not
+    // wait for the user to open Chat; arm them at launch like the other proactive coordinators.
+    Task { @MainActor in await ChatDailySummaryCoordinator.shared.activate() }
+
+    // Once per fresh install, after onboarding, the first real app the user
+    // opens gets the tap-to-ask card. Started here for the same reason as the
+    // line above — it installs its own observers and decides eligibility itself.
+    FirstRealAppCardCoordinator.shared.start()
 
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
@@ -1089,6 +1098,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     openMainAppWindow()
   }
 
+  /// Land on the chat with `draft` already in the composer, focused, and not
+  /// sent. The only "ask this" entry that leaves the send to the user; every
+  /// other prefill path auto-sends.
+  @MainActor func openMainAppChat(prefilledDraft draft: String) {
+    MainChatNavigationRequestStore.shared.request(draft: draft)
+    openMainAppWindow()
+  }
+
   /// Bring the main Omi window to the front, creating it if needed. Shared by
   /// the menu-bar "Open Omi" item, the auth callback, and the floating bar's
   /// "Continue in Omi" affordance. The Dock callback summons directly, while
@@ -1436,40 +1453,40 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     }
   }
 
-  /// One-time migration to enable launch at login for existing users
-  /// Only runs once, and only enables if user hasn't explicitly set a preference
+  /// One-time migration to enable launch at login for existing users.
+  ///
+  /// V2 (activation-first-48h): V1 ran once for the whole install base but could
+  /// not tell "the user turned it off" from "never registered", and its
+  /// `hasCompletedOnboarding` gate plus the onboarding seed (`false` on every
+  /// fresh install) left most new users with auto-start off. V2 re-evaluates
+  /// everyone once under `LaunchAtLoginPreference`: enable unless the user
+  /// explicitly declined in Settings. The decision is pure and unit-tested;
+  /// this wrapper only supplies the live defaults and the system call.
   private func migrateLaunchAtLoginDefault() {
-    let migrationKey = "didMigrateLaunchAtLoginV1"
-
-    // Skip if migration already done
-    guard !UserDefaults.standard.bool(forKey: migrationKey) else {
+    let decision = LaunchAtLoginPreference.migrationDecision(
+      defaults: UserDefaults.standard,
+      hasCompletedOnboarding: UserDefaults.standard.bool(forKey: .hasCompletedOnboarding))
+    guard decision.shouldRun else { return }
+    guard decision.shouldEnable else {
+      LaunchAtLoginPreference.markMigrationDone(defaults: UserDefaults.standard)
+      log("LaunchAtLogin migration V2: skipped (\(decision.reason))")
       return
     }
-
-    // Mark migration as done (do this first to ensure it only runs once)
-    UserDefaults.standard.set(true, forKey: migrationKey)
-
-    // Only enable for users who have completed onboarding (existing users)
-    // New users will get this enabled at the end of onboarding
-    let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
-    guard hasCompletedOnboarding else {
-      log("LaunchAtLogin migration: Skipped - user hasn't completed onboarding yet")
-      return
-    }
-
-    // Check current status - only enable if not already registered
-    // This respects users who may have explicitly disabled it via System Settings
     Task { @MainActor in
       let manager = LaunchAtLoginManager.shared
       if !manager.isEnabled {
         let success = manager.setEnabled(true)
-        log("LaunchAtLogin migration: Enabled for existing user (success: \(success))")
+        log("LaunchAtLogin migration V2: enabled for existing user (success: \(success))")
         if success {
-          AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "migration")
+          AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "migration_v2")
         }
+        // A failed registration (transient, or a non-production bundle that never
+        // registers) leaves the one shot open so the next launch retries.
+        guard success else { return }
       } else {
-        log("LaunchAtLogin migration: Already enabled, skipping")
+        log("LaunchAtLogin migration V2: already enabled, skipping")
       }
+      LaunchAtLoginPreference.markMigrationDone(defaults: UserDefaults.standard)
     }
   }
 

@@ -66,11 +66,41 @@ final class PushToTalkShortcutActivationTests: XCTestCase {
   }
 
   func testQuickModifierTapNeverStartsOrReleasesPTT() {
+    // A quick tap still starts no turn — an accidental brush of the modifier must
+    // never record. It is only reported as a quick tap so the double-tap detector
+    // can see it; on its own it does nothing.
     var gate = ModifierOnlyPTTActivationGate()
 
     XCTAssertEqual(gate.modifierStateChanged(isShortcutActive: true), .scheduleStart)
-    XCTAssertEqual(gate.modifierStateChanged(isShortcutActive: false), .cancelPendingStart)
+    XCTAssertEqual(
+      gate.modifierStateChanged(isShortcutActive: false), .cancelPendingStartAsQuickTap)
     XCTAssertFalse(gate.consumePendingStart())
+    XCTAssertFalse(gate.hasStartedTurn, "A quick tap must not leave a turn running.")
+  }
+
+  func testModifierHeldAsPartOfAChordIsNeverAQuickTap() {
+    // The modifier held for another shortcut (cmd-C and friends) is cancelled by the
+    // non-modifier key, so releasing it later stays a plain no-op and must never feed
+    // the double-tap detector.
+    var gate = ModifierOnlyPTTActivationGate()
+
+    XCTAssertEqual(gate.modifierStateChanged(isShortcutActive: true), .scheduleStart)
+    XCTAssertEqual(gate.nonModifierKeyPressed(), .cancelPendingStart)
+    XCTAssertEqual(gate.modifierStateChanged(isShortcutActive: false), .none)
+  }
+
+  func testRepeatedQuickTapsEachReportAQuickTapWithoutStartingATurn() {
+    // Two taps in a row are what locked mode is built on: each must be reported and
+    // neither may start a hold turn.
+    var gate = ModifierOnlyPTTActivationGate()
+
+    for _ in 0..<2 {
+      XCTAssertEqual(gate.modifierStateChanged(isShortcutActive: true), .scheduleStart)
+      XCTAssertEqual(
+        gate.modifierStateChanged(isShortcutActive: false), .cancelPendingStartAsQuickTap)
+    }
+    XCTAssertFalse(gate.hasStartedTurn)
+    XCTAssertFalse(gate.hasPendingStart)
   }
 
   func testTypingAfterIntentionalPTTStartDoesNotCancelActiveTurn() {

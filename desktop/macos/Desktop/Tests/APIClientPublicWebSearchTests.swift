@@ -39,7 +39,7 @@ private final class PublicWebSearchURLCapture: URLProtocol, @unchecked Sendable 
       return
     }
     let body =
-      #"{"choices":[{"message":{"content":"It is sunny and 80 degrees, according to the National Weather Service."}}]}"#
+      #"{"choices":[{"message":{"content":"It is sunny and 80 degrees, according to the National Weather Service."}}],"search_results":[{"title":"Founder launch account","url":"https://example.test/founder","snippet":"We launched the first desktop version six weeks after ending the hardware effort."}]}"#
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     client?.urlProtocol(self, didLoad: Data(body.utf8))
     client?.urlProtocolDidFinishLoading(self)
@@ -107,6 +107,31 @@ final class APIClientPublicWebSearchTests: XCTestCase {
       XCTAssertEqual(
         messages[0]["content"] as? String,
         "Search current New York weather and name the source.")
+    } catch {
+      await ownerFixture.restore()
+      throw error
+    }
+    await ownerFixture.restore()
+  }
+
+  func testHistoricalVoiceWebSearchCarriesStructuredSourceEvidence() async throws {
+    let ownerFixture = RuntimeOwnerAuthorityTestFixture()
+    await ownerFixture.establish(authOwnerID: "historical-web-owner")
+    do {
+      let configuration = URLSessionConfiguration.ephemeral
+      configuration.protocolClasses = [PublicWebSearchURLCapture.self]
+      let client = APIClient(session: URLSession(configuration: configuration))
+      await client.setTestAuthHeader("Bearer public-web-token")
+
+      let evidence = try await client.searchPublicWebForVoice(
+        query: "How long did the first desktop version take?",
+        expectedOwnerID: "historical-web-owner",
+        customBaseURL: "https://desktop.example.test",
+        includeSourceEvidence: true)
+
+      XCTAssertTrue(evidence.contains("Search-result evidence:"))
+      XCTAssertTrue(evidence.contains("Founder launch account"))
+      XCTAssertTrue(evidence.contains("six weeks after ending the hardware effort"))
     } catch {
       await ownerFixture.restore()
       throw error

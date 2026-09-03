@@ -267,7 +267,6 @@ final class FloatingGlassChromeTests: XCTestCase {
     "FloatingControlBar/FloatingControlBarWindow.swift",
     "FloatingControlBar/AgentPill.swift",
     "FloatingControlBar/AIResponseView.swift",
-    "FloatingControlBar/AskAIInputView.swift",
     "FloatingControlBar/NotchSystemControlsView.swift",
     "FloatingControlBar/NotchVoiceMorphMark.swift",
     "FloatingControlBar/FloatingControlBarReceiptCard.swift",
