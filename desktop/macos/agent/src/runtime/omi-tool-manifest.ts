@@ -1085,7 +1085,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     timeoutClass: "normal",
     executor: { kind: "nodeTool" },
     intendedForAgents: true,
-    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots."],
+    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots.", "Skills the user disabled in the desktop app are refused."],
     adapters: piAndStdio(),
   },
   {
@@ -1103,7 +1103,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     timeoutClass: "normal",
     executor: { kind: "nodeTool" },
     intendedForAgents: true,
-    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots."],
+    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots.", "Skills the user disabled in the desktop app never match."],
     adapters: piAndStdio(),
   },
   {

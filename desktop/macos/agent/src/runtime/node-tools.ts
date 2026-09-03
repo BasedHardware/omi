@@ -33,6 +33,27 @@ function skillDescription(content: string): string {
   return (description ?? firstBodyLine ?? "").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Skill names the user disabled in the desktop app, exported to the runtime as
+ * OMI_DISABLED_SKILLS (a JSON string array). Enforcement mirrors the Swift
+ * compact catalog: a disabled skill never matches a search and is refused by
+ * load, so the toggle is a real switch rather than advice.
+ */
+export function configuredDisabledSkills(raw = process.env.OMI_DISABLED_SKILLS ?? ""): Set<string> {
+  if (!raw.trim()) return new Set();
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(
+      parsed
+        .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+        .map((entry) => entry.trim())
+    );
+  } catch {
+    return new Set();
+  }
+}
+
 export async function discoverSkillCatalog(roots: readonly string[]): Promise<DiscoveredSkill[]> {
   const discovered = new Map<string, DiscoveredSkill>();
   for (const root of roots) {
@@ -64,11 +85,16 @@ export async function discoverSkillCatalog(roots: readonly string[]): Promise<Di
   return [...discovered.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
-export async function searchSkills(query: string, workspace = process.env.OMI_WORKSPACE ?? ""): Promise<string> {
+export async function searchSkills(
+  query: string,
+  workspace = process.env.OMI_WORKSPACE ?? "",
+  disabledSkills: ReadonlySet<string> = configuredDisabledSkills()
+): Promise<string> {
   const normalizedQuery = query.trim().toLocaleLowerCase();
   if (!normalizedQuery) return "Provide a keyword or short description of the user's request.";
   const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
   const matches = (await discoverSkillCatalog(configuredSkillRoots(workspace)))
+    .filter((skill) => !disabledSkills.has(skill.name))
     .map((skill) => {
       const name = skill.name.toLocaleLowerCase();
       const description = skill.description.toLocaleLowerCase();
@@ -154,12 +180,15 @@ function capPartContent(part: SkillPart): string {
 export interface LoadSkillOptions {
   /** 1-based body section to read, or "all" to opt into the full body. */
   part?: number | "all";
+  /** Skill names disabled by the user; defaults to OMI_DISABLED_SKILLS. */
+  disabledSkills?: ReadonlySet<string>;
 }
 
 /**
  * Progressive disclosure by default: metadata, a table of contents of the body's H2
  * sections, and only the first section's content. `options.part` fetches one section
  * (1-based) or "all" returns the entire file for callers that explicitly need it.
+ * Disabled skills are refused so the desktop toggle is enforced, not advisory.
  */
 export async function loadSkillInstructions(
   name: string,
@@ -171,9 +200,13 @@ export async function loadSkillInstructions(
     return "Invalid skill name. Use a skill returned by the catalog or search_skills.";
   }
 
+  const disabled = options.disabledSkills ?? configuredDisabledSkills();
   const skill = (await discoverSkillCatalog(configuredSkillRoots(workspace))).find((candidate) => candidate.name === trimmedName);
   if (!skill) {
     return `Skill '${trimmedName}' is not available. Search with search_skills before loading a skill outside the compact catalog.`;
+  }
+  if (disabled.has(trimmedName)) {
+    return `Skill '${trimmedName}' is disabled. Enable it in the desktop skill settings if the request needs it.`;
   }
 
   const content = await readFile(skill.path, "utf8");

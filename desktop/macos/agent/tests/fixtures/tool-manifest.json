@@ -3485,7 +3485,8 @@
     },
     "intendedForAgents": true,
     "runtimePreconditions": [
-      "Requires a local SKILL.md under the configured skill roots."
+      "Requires a local SKILL.md under the configured skill roots.",
+      "Skills the user disabled in the desktop app are refused."
     ],
     "adapters": {
       "pi-mono": {
@@ -3541,7 +3542,8 @@
     },
     "intendedForAgents": true,
     "runtimePreconditions": [
-      "Requires a local SKILL.md under the configured skill roots."
+      "Requires a local SKILL.md under the configured skill roots.",
+      "Skills the user disabled in the desktop app never match."
     ],
     "adapters": {
       "pi-mono": {

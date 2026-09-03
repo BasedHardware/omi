@@ -4,8 +4,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   SKILL_PART_CHAR_LIMIT,
+  configuredDisabledSkills,
   isSafeSkillName,
   loadSkillInstructions,
+  searchSkills,
   splitSkillBody,
 } from "../src/runtime/node-tools.js";
 
@@ -145,5 +147,60 @@ describe("load_skill progressive disclosure", () => {
       expect(result).toContain("truncated at");
       expect(result.length).toBeLessThan(SKILL_PART_CHAR_LIMIT + 600);
     });
+  });
+});
+
+describe("disabled skill enforcement", () => {
+  it("parses the OMI_DISABLED_SKILLS JSON export tolerantly", () => {
+    expect(configuredDisabledSkills("")).toEqual(new Set());
+    expect(configuredDisabledSkills("not json")).toEqual(new Set());
+    expect(configuredDisabledSkills("{}")).toEqual(new Set());
+    expect(configuredDisabledSkills('["a", " b ", 3, null]')).toEqual(new Set(["a", "b"]));
+  });
+
+  it("refuses a disabled skill with a clear error", async () => {
+    const root = await mkdtemp(join(tmpdir(), "omi-agent-disabled-"));
+    const skillName = `disabled-skill-${Math.random().toString(36).slice(2, 10)}`;
+    try {
+      await mkdir(join(root, ".claude", "skills", skillName), { recursive: true });
+      await writeFile(
+        join(root, ".claude", "skills", skillName, "SKILL.md"),
+        `---\nname: ${skillName}\ndescription: Disabled on purpose\n---\n\nsecret body`
+      );
+
+      const result = await loadSkillInstructions(skillName, root, { disabledSkills: new Set([skillName]) });
+      expect(result).toBe(
+        `Skill '${skillName}' is disabled. Enable it in the desktop skill settings if the request needs it.`
+      );
+      // Enabling the skill makes it loadable again.
+      const enabled = await loadSkillInstructions(skillName, root, { disabledSkills: new Set() });
+      expect(enabled).toContain("secret body");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("excludes disabled skills from search results", async () => {
+    const root = await mkdtemp(join(tmpdir(), "omi-agent-disabled-search-"));
+    const kept = `kept-skill-${Math.random().toString(36).slice(2, 10)}`;
+    const hidden = `hidden-skill-${Math.random().toString(36).slice(2, 10)}`;
+    try {
+      for (const skillName of [kept, hidden]) {
+        await mkdir(join(root, ".claude", "skills", skillName), { recursive: true });
+        await writeFile(
+          join(root, ".claude", "skills", skillName, "SKILL.md"),
+          `---\nname: ${skillName}\ndescription: unique-needle-${skillName}\n---\n\nbody`
+        );
+      }
+
+      const result = await searchSkills(`unique-needle-${hidden}`, root, new Set([hidden]));
+      expect(result).toBe("No matching skills are available for this request.");
+
+      const both = await searchSkills("unique-needle", root, new Set([hidden]));
+      expect(both).toContain(kept);
+      expect(both).not.toContain(hidden);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
