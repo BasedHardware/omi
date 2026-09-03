@@ -231,8 +231,7 @@ class DailySummary {
       unresolvedQuestions: generated.unresolvedQuestions?.map(UnresolvedQuestion.fromGenerated).toList() ?? [],
       decisionsMade: generated.decisionsMade?.map(DecisionMade.fromGenerated).toList() ?? [],
       knowledgeNuggets: generated.knowledgeNuggets?.map(KnowledgeNugget.fromGenerated).toList() ?? [],
-      memoriesLearned:
-          generated.memoriesLearned
+      memoriesLearned: generated.memoriesLearned
               ?.map(MemoryReviewItem.fromGenerated)
               .where((item) => item.memoryId.isNotEmpty && item.content.trim().isNotEmpty)
               .take(MemoryReviewCardBlock.maxItems)
