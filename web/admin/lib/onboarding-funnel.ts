@@ -5,13 +5,20 @@
 // PostHog event per exit:
 //
 //   - `Onboarding Step Completed` { step: 'promise'|'name'|…|'referral',
-//     index, elapsed_ms, skipped, permission?, granted? }
+//     index, elapsed_ms, skipped, exit_reason: 'answered'|'skipped'|'auto_granted',
+//     permission?, granted? }
 //   - `Onboarding Completed` (terminal; no `step` property)
 //
 // A step counts as "reached" regardless of whether `skipped` is true — same
 // semantics as the old `_Skipped` event-name variants, just carried in a
 // property instead of the event name. Permission auto-jumps (already granted)
 // also emit, so a pre-granted mic does not look like a funnel drop-off.
+//
+// `skipped` stays a boolean so existing funnel math still counts skippers as
+// having reached the step. It is true for both a user "Skip for now"
+// (`exit_reason=skipped`, `granted=false`) and a permission page the user
+// never saw (`exit_reason=auto_granted`, `granted=true`). Do not compute a
+// skip rate from `skipped` alone; filter on the closed `exit_reason` set.
 //
 // IF YOU RENAME, ADD, OR REMOVE A STEP IN SBOnboardingModel.swift, MIRROR IT HERE.
 //

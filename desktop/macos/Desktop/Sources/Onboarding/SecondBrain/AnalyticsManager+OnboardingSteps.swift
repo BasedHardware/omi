@@ -1,17 +1,28 @@
 import Foundation
 
 /// One event per live Second Brain onboarding step. Bounded dimensions only: the
-/// step's enum name, its index, dwell time, whether it was skipped, and — for the
-/// seven permission steps — which permission and whether it was granted. Never
-/// names, roles, page copy, or other free text.
+/// step's enum name, its index, dwell time, whether it was skipped, how it was
+/// exited, and — for the seven permission steps — which permission and whether
+/// it was granted. Never names, roles, page copy, or other free text.
 enum OnboardingStepTelemetry {
   static let eventName = "Onboarding Step Completed"
+
+  /// How the step was left. Closed set: a skip-rate on `skipped` cannot tell a
+  /// user "Skip for now" from a permission page the user never saw.
+  enum ExitReason: String, Equatable, CaseIterable {
+    /// The user completed the step (answered, granted, continued).
+    case answered
+    /// The user declined the step, or used skip-the-rest.
+    case skipped
+    /// `firstUnaskedStep` jumped this permission because it was already granted.
+    case autoGranted = "auto_granted"
+  }
 
   /// The allow-list this event may never grow past without a deliberate review.
   /// Asserted by the boundary test so a future emitter cannot attach a name,
   /// a role, or a page title.
   static let allowedKeys: Set<String> = [
-    "step", "index", "elapsed_ms", "skipped", "permission", "granted",
+    "step", "index", "elapsed_ms", "skipped", "exit_reason", "permission", "granted",
   ]
 
   static func payload(
@@ -19,6 +30,7 @@ enum OnboardingStepTelemetry {
     index: Int,
     elapsedMs: Int,
     skipped: Bool,
+    exitReason: ExitReason,
     permission: String?,
     granted: Bool?
   ) -> [String: Any] {
@@ -27,6 +39,7 @@ enum OnboardingStepTelemetry {
       "index": index,
       "elapsed_ms": max(0, elapsedMs),
       "skipped": skipped,
+      "exit_reason": exitReason.rawValue,
     ]
     if let permission { properties["permission"] = permission }
     if let granted { properties["granted"] = granted }
@@ -52,6 +65,7 @@ extension AnalyticsManager {
     index: Int,
     elapsedMs: Int,
     skipped: Bool,
+    exitReason: OnboardingStepTelemetry.ExitReason,
     permission: String?,
     granted: Bool?
   ) {
@@ -60,6 +74,7 @@ extension AnalyticsManager {
       index: index,
       elapsedMs: elapsedMs,
       skipped: skipped,
+      exitReason: exitReason,
       permission: permission,
       granted: granted)
     OnboardingStepTelemetry.captureForTests?(OnboardingStepTelemetry.eventName, properties)
@@ -82,6 +97,7 @@ extension SBOnboardingModel {
       index: step.rawValue,
       elapsedMs: Int(OnboardingStepTelemetry.now().timeIntervalSince(stepStartedAt) * 1_000),
       skipped: skipped,
+      exitReason: skipped ? .skipped : .answered,
       permission: permission,
       granted: granted)
   }
@@ -89,6 +105,8 @@ extension SBOnboardingModel {
   /// Permission steps `firstUnaskedStep` jumps because they are already granted
   /// still have to appear in the sequential funnel, or a pre-granted mic looks
   /// like a drop-off. Elapsed time is zero: the user never saw the page.
+  /// `skipped` stays true so existing funnel math still counts the step as
+  /// reached; `exit_reason` is `auto_granted` so a skip-rate does not.
   func recordJumpedPermissionSteps(from intended: Step, to landed: Step) {
     guard intended.rawValue < landed.rawValue else { return }
     for raw in intended.rawValue..<landed.rawValue {
@@ -100,6 +118,7 @@ extension SBOnboardingModel {
         index: jumped.rawValue,
         elapsedMs: 0,
         skipped: true,
+        exitReason: .autoGranted,
         permission: permission,
         granted: true)
     }

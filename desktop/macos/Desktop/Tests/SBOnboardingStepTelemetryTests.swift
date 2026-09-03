@@ -44,6 +44,7 @@ final class SBOnboardingStepTelemetryTests: XCTestCase {
       index: 0,
       elapsedMs: 1_250,
       skipped: false,
+      exitReason: .answered,
       permission: nil,
       granted: nil)
 
@@ -52,9 +53,10 @@ final class SBOnboardingStepTelemetryTests: XCTestCase {
     XCTAssertEqual(properties["index"] as? Int, 0)
     XCTAssertEqual(properties["elapsed_ms"] as? Int, 1_250)
     XCTAssertEqual(properties["skipped"] as? Bool, false)
+    XCTAssertEqual(properties["exit_reason"] as? String, "answered")
     XCTAssertNil(properties["permission"])
     XCTAssertNil(properties["granted"])
-    XCTAssertEqual(Set(properties.keys), ["step", "index", "elapsed_ms", "skipped"])
+    XCTAssertEqual(Set(properties.keys), ["step", "index", "elapsed_ms", "skipped", "exit_reason"])
   }
 
   func testPermissionStepPayloadCarriesWhichPermissionAndWhetherGranted() {
@@ -63,6 +65,7 @@ final class SBOnboardingStepTelemetryTests: XCTestCase {
       index: SBOnboardingModel.Step.mic.rawValue,
       elapsedMs: 400,
       skipped: true,
+      exitReason: .skipped,
       permission: "microphone",
       granted: false)
 
@@ -70,9 +73,40 @@ final class SBOnboardingStepTelemetryTests: XCTestCase {
     XCTAssertEqual(properties["index"] as? Int, SBOnboardingModel.Step.mic.rawValue)
     XCTAssertEqual(properties["elapsed_ms"] as? Int, 400)
     XCTAssertEqual(properties["skipped"] as? Bool, true)
+    XCTAssertEqual(properties["exit_reason"] as? String, "skipped")
     XCTAssertEqual(properties["permission"] as? String, "microphone")
     XCTAssertEqual(properties["granted"] as? Bool, false)
     XCTAssertEqual(Set(properties.keys), OnboardingStepTelemetry.allowedKeys)
+  }
+
+  func testExitReasonIsTheClosedSet() {
+    XCTAssertEqual(
+      OnboardingStepTelemetry.ExitReason.allCases.map(\.rawValue),
+      ["answered", "skipped", "auto_granted"])
+  }
+
+  /// Nothing an emitter passes may escape the allow-list — never a name, a role,
+  /// or a page title. Covers every closed exit, including auto-granted jumps.
+  func testEveryEmittedKeyIsOnTheAllowList() {
+    let samples: [[String: Any]] = [
+      OnboardingStepTelemetry.payload(
+        step: "promise", index: 0, elapsedMs: 1, skipped: false, exitReason: .answered,
+        permission: nil, granted: nil),
+      OnboardingStepTelemetry.payload(
+        step: "mic", index: 5, elapsedMs: 1, skipped: true, exitReason: .skipped,
+        permission: "microphone", granted: false),
+      OnboardingStepTelemetry.payload(
+        step: "mic", index: 5, elapsedMs: 0, skipped: true, exitReason: .autoGranted,
+        permission: "microphone", granted: true),
+    ]
+    XCTAssertFalse(samples.isEmpty)
+    for properties in samples {
+      for key in properties.keys {
+        XCTAssertTrue(
+          OnboardingStepTelemetry.allowedKeys.contains(key),
+          "\(key) is not an allowed dimension of \(OnboardingStepTelemetry.eventName)")
+      }
+    }
   }
 
   func testAdvanceFromAnOrdinaryStepEmitsThePinnedEvent() {
@@ -94,9 +128,10 @@ final class SBOnboardingStepTelemetryTests: XCTestCase {
     XCTAssertEqual(properties["index"] as? Int, 0)
     XCTAssertEqual(properties["elapsed_ms"] as? Int, 1_500)
     XCTAssertEqual(properties["skipped"] as? Bool, false)
+    XCTAssertEqual(properties["exit_reason"] as? String, "answered")
     XCTAssertNil(properties["permission"])
     XCTAssertNil(properties["granted"])
-    XCTAssertEqual(Set(properties.keys), ["step", "index", "elapsed_ms", "skipped"])
+    XCTAssertEqual(Set(properties.keys), ["step", "index", "elapsed_ms", "skipped", "exit_reason"])
     XCTAssertFalse(
       String(describing: properties).contains("Set me up"),
       "user answers must not reach analytics")
@@ -117,6 +152,7 @@ final class SBOnboardingStepTelemetryTests: XCTestCase {
     XCTAssertEqual(properties["step"] as? String, "mic")
     XCTAssertEqual(properties["index"] as? Int, SBOnboardingModel.Step.mic.rawValue)
     XCTAssertEqual(properties["skipped"] as? Bool, false)
+    XCTAssertEqual(properties["exit_reason"] as? String, "answered")
     XCTAssertEqual(properties["permission"] as? String, "microphone")
     XCTAssertEqual(properties["granted"] as? Bool, true)
     XCTAssertEqual(Set(properties.keys), OnboardingStepTelemetry.allowedKeys)
@@ -135,6 +171,7 @@ final class SBOnboardingStepTelemetryTests: XCTestCase {
     let properties = captured[0].1
     XCTAssertEqual(properties["step"] as? String, "mic")
     XCTAssertEqual(properties["skipped"] as? Bool, true)
+    XCTAssertEqual(properties["exit_reason"] as? String, "skipped")
     XCTAssertEqual(properties["permission"] as? String, "microphone")
     XCTAssertEqual(properties["granted"] as? Bool, false)
   }
@@ -151,6 +188,7 @@ final class SBOnboardingStepTelemetryTests: XCTestCase {
     XCTAssertEqual(captured[0].1["step"] as? String, "screenDemo")
     XCTAssertEqual(captured[0].1["index"] as? Int, SBOnboardingModel.Step.screenDemo.rawValue)
     XCTAssertEqual(captured[0].1["skipped"] as? Bool, false)
+    XCTAssertEqual(captured[0].1["exit_reason"] as? String, "answered")
   }
 
   func testGoBackDoesNotEmitAStepEvent() {
@@ -176,7 +214,27 @@ final class SBOnboardingStepTelemetryTests: XCTestCase {
     XCTAssertEqual(captured[0].0, "Onboarding Step Completed")
     XCTAssertEqual(captured[0].1["step"] as? String, "screenDemo")
     XCTAssertEqual(captured[0].1["skipped"] as? Bool, true)
+    XCTAssertEqual(captured[0].1["exit_reason"] as? String, "skipped")
     XCTAssertNil(captured[0].1["permission"])
+  }
+
+  func testAutoJumpedPermissionStepEmitsAutoGranted() {
+    startCapturing()
+    let model = makeModel()
+
+    model.recordJumpedPermissionSteps(from: .mic, to: .systemAudio)
+
+    XCTAssertEqual(captured.count, 1)
+    XCTAssertEqual(captured[0].0, "Onboarding Step Completed")
+    let properties = captured[0].1
+    XCTAssertEqual(properties["step"] as? String, "mic")
+    XCTAssertEqual(properties["index"] as? Int, SBOnboardingModel.Step.mic.rawValue)
+    XCTAssertEqual(properties["elapsed_ms"] as? Int, 0)
+    XCTAssertEqual(properties["skipped"] as? Bool, true)
+    XCTAssertEqual(properties["exit_reason"] as? String, "auto_granted")
+    XCTAssertEqual(properties["permission"] as? String, "microphone")
+    XCTAssertEqual(properties["granted"] as? Bool, true)
+    XCTAssertEqual(Set(properties.keys), OnboardingStepTelemetry.allowedKeys)
   }
 
   func testNegativeElapsedTimeIsClampedToZero() {
@@ -185,6 +243,7 @@ final class SBOnboardingStepTelemetryTests: XCTestCase {
       index: 1,
       elapsedMs: -12,
       skipped: false,
+      exitReason: .answered,
       permission: nil,
       granted: nil)
     XCTAssertEqual(properties["elapsed_ms"] as? Int, 0)
