@@ -174,6 +174,18 @@ def test_combined_alert_export_matches_every_split_source_rule():
         assert combined[uid] == split[uid], uid
 
 
+def test_durable_queue_oldest_ready_alert_pages_on_age_or_absent_gauge():
+    for rules in _all_rule_exports().values():
+        rule = rules['omi-queue-oldest-ready']
+        assert len(rule['uid']) < 40
+        expr = rule['data'][0]['model']['expr']
+        assert 'omi_queue_oldest_ready_age_seconds' in expr
+        assert 'absent(omi_queue_oldest_ready_age_seconds)' in expr
+        assert '21600' in expr
+        assert rule['noDataState'] == 'Alerting'
+        assert rule['labels']['alert_identity'] == 'omi-queue-oldest-ready'
+
+
 def test_grafana_alert_rules_have_safe_human_impact_metadata():
     """Every operator notification explains human impact without raw error output."""
     for export_name, rules in _all_rule_exports().items():

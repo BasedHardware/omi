@@ -352,6 +352,29 @@ def test_openai_response_done_without_token_details_carries_aggregates_but_is_un
     assert price_realtime_turn(turn, 'gpt-realtime-2') is None
 
 
+def test_openai_empty_token_details_with_aggregates_are_unpriced() -> None:
+    observer = RealtimeRelayObserver(OPENAI_REALTIME_PROVIDER)
+    turn = _only(
+        observer.observe_upstream_frame(
+            _frame(
+                _openai_done(
+                    usage={
+                        'input_tokens': 40,
+                        'output_tokens': 15,
+                        'input_token_details': {},
+                        'output_token_details': {},
+                    }
+                )
+            )
+        )
+    )
+
+    assert turn.input_text_tokens == 40
+    assert turn.output_text_tokens == 15
+    assert turn.modality_split_reported is False
+    assert turn.priceable is False
+
+
 def test_openai_reasoning_tokens_are_carried_and_priced_at_text_output_rate() -> None:
     observer = RealtimeRelayObserver(OPENAI_REALTIME_PROVIDER)
     turn = _only(
@@ -711,6 +734,47 @@ def test_gemini_video_modality_counts_as_image_input() -> None:
     assert turn.input_image_tokens == 15
     assert turn.input_text_tokens == 0
     assert turn.input_audio_tokens == 0
+
+
+def test_gemini_empty_details_with_aggregate_tokens_are_unpriced() -> None:
+    observer = RealtimeRelayObserver(GEMINI_LIVE_PROVIDER)
+    turn = _complete_gemini(
+        observer,
+        _gemini_server(
+            usage=_gemini_usage(
+                prompt_details=[],
+                response_details=[],
+                prompt_token_count=100,
+                candidates_token_count=40,
+            ),
+            turn_complete=True,
+        ),
+    )
+
+    assert turn.input_text_tokens == 100
+    assert turn.output_text_tokens == 40
+    assert turn.modality_split_reported is False
+    assert turn.priceable is False
+
+
+def test_gemini_unknown_positive_modality_is_unpriced() -> None:
+    observer = RealtimeRelayObserver(GEMINI_LIVE_PROVIDER)
+    turn = _complete_gemini(
+        observer,
+        _gemini_server(
+            usage=_gemini_usage(
+                prompt_details=[{'modality': 'UNKNOWN', 'tokenCount': 100}],
+                response_details=[{'modality': 'TEXT', 'tokenCount': 40}],
+            ),
+            turn_complete=True,
+        ),
+    )
+
+    assert turn.input_text_tokens == 0
+    assert turn.input_audio_tokens == 0
+    assert turn.input_image_tokens == 0
+    assert turn.modality_split_reported is False
+    assert turn.priceable is False
 
 
 def test_gemini_thoughts_and_tool_use_are_carried_and_tool_use_makes_turn_unpriceable() -> None:

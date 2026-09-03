@@ -1,10 +1,12 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/memories_wire.g.dart' as wire;
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 Future<Memory?> createMemoryServer(String content, String visibility, String category) async {
   var response = await makeApiCall(
@@ -33,14 +35,65 @@ Future<bool> updateMemoryVisibilityServer(String memoryId, String visibility) as
   return response.statusCode == 200;
 }
 
+/// Why a [GetMemoriesResult] is not a successful read.
+enum MemoriesFetchFailureReason { noResponse, httpError, decodeError }
+
 /// Result of [getMemories], carrying whether server-side device_scope was supported
 /// and whether the response was a partial page due to request-budget exhaustion.
+///
+/// [ok] is true only for a decoded 200. An empty [memories] list with [ok] false
+/// is a failed fetch, not "the account has no memories".
 class GetMemoriesResult {
   final List<Memory> memories;
   final bool deviceScopeSupported;
   final bool truncated;
+  final int? statusCode;
+  final MemoriesFetchFailureReason? failureReason;
 
-  const GetMemoriesResult(this.memories, this.deviceScopeSupported, {this.truncated = false});
+  const GetMemoriesResult(
+    this.memories,
+    this.deviceScopeSupported, {
+    this.truncated = false,
+    this.statusCode,
+    this.failureReason,
+  });
+
+  bool get ok => failureReason == null;
+}
+
+/// Maps a GET /v3/memories HTTP outcome onto [GetMemoriesResult].
+///
+/// The 400 + `thisDeviceOnly` legacy fallback lives in [getMemoriesResult]; this
+/// helper never treats that as success. A missing response, any other non-200,
+/// or a 200 that cannot be decoded is a failure. Failures keep
+/// [GetMemoriesResult.deviceScopeSupported] true so a 503 cannot be mistaken
+/// for "device_scope unsupported".
+@visibleForTesting
+GetMemoriesResult memoriesResultFromHttp({required int? statusCode, String? body, bool truncated = false}) {
+  if (statusCode == null) {
+    return const GetMemoriesResult([], true, failureReason: MemoriesFetchFailureReason.noResponse);
+  }
+  if (statusCode == 200) {
+    try {
+      return GetMemoriesResult(_decodeMemoriesResponse(body ?? ''), true, truncated: truncated, statusCode: 200);
+    } catch (_) {
+      return const GetMemoriesResult([], true, statusCode: 200, failureReason: MemoriesFetchFailureReason.decodeError);
+    }
+  }
+  return GetMemoriesResult(const [], true, statusCode: statusCode, failureReason: MemoriesFetchFailureReason.httpError);
+}
+
+void _reportMemoriesFetchFailure(GetMemoriesResult result) {
+  Logger.error('Failed to fetch memories: status=${result.statusCode} reason=${result.failureReason}');
+  if (result.failureReason == MemoriesFetchFailureReason.noResponse) return;
+  PlatformManager.instance.crashReporter.reportCrash(
+    Exception('Failed to fetch memories: ${result.statusCode} ${result.failureReason}'),
+    StackTrace.current,
+    userAttributes: {
+      'response_status_code': result.statusCode?.toString() ?? '',
+      'failure_reason': result.failureReason?.name ?? '',
+    },
+  );
 }
 
 List<Memory> _decodeMemoriesResponse(String body) {
@@ -55,29 +108,34 @@ Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bo
     url += '&device_scope=current';
   }
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-  if (response == null) {
-    return GetMemoriesResult([], !thisDeviceOnly);
-  }
-  if (response.statusCode == 200) {
-    try {
-      return GetMemoriesResult(
-        _decodeMemoriesResponse(response.body),
-        true,
-        truncated: isOmiListTruncated(response),
-      );
-    } catch (e) {
-      Logger.error('Failed to decode memories 200 response: $e');
-      return const GetMemoriesResult([], true);
-    }
-  }
   // Legacy memory users cannot use server-side device_scope; fetch all and
   // signal that local device filtering should be skipped to avoid hiding
   // legacy rows that have no primary_capture_device/capture_device_ids.
-  if (thisDeviceOnly && response.statusCode == 400) {
+  if (thisDeviceOnly && response != null && response.statusCode == 400) {
     final fallback = await getMemoriesResult(limit: limit, offset: offset);
-    return GetMemoriesResult(fallback.memories, false);
+    return GetMemoriesResult(
+      fallback.memories,
+      false,
+      truncated: fallback.truncated,
+      statusCode: fallback.statusCode,
+      failureReason: fallback.failureReason,
+    );
   }
-  return GetMemoriesResult([], !thisDeviceOnly);
+  if (response != null && response.statusCode != 200) {
+    Logger.debug('getMemories error ${response.statusCode} body=${response.body}');
+  }
+  final result = memoriesResultFromHttp(
+    statusCode: response?.statusCode,
+    body: response?.body,
+    truncated: isOmiListTruncated(response),
+  );
+  if (!result.ok) {
+    if (result.failureReason == MemoriesFetchFailureReason.decodeError) {
+      Logger.error('Failed to decode memories 200 response');
+    }
+    _reportMemoriesFetchFailure(result);
+  }
+  return result;
 }
 
 /// Convenience wrapper for callers that do not need the device_scope support flag.
@@ -175,10 +233,7 @@ Future<RevertMemoryResult> revertMemoryServer(String memoryId, String operationI
       return const RevertMemoryResult(persisted: false);
     }
     final authoritativeMemory = payload.memory == null ? null : Memory.fromGeneratedWireJson(payload.memory!.toJson());
-    return RevertMemoryResult(
-      persisted: authoritativeMemory != null,
-      authoritativeMemory: authoritativeMemory,
-    );
+    return RevertMemoryResult(persisted: authoritativeMemory != null, authoritativeMemory: authoritativeMemory);
   } catch (error) {
     Logger.warning('revertMemory response decode failed: $error');
     return const RevertMemoryResult(persisted: false);

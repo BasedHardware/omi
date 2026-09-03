@@ -59,6 +59,7 @@ struct ActivityHubTab: View {
             appState: appState,
             memoriesViewModel: memoriesViewModel,
             tasksStore: tasksStore,
+            searchSurface: .activity,
             onOpenConversation: onOpenConversation,
             onOpenMemory: onOpenMemory,
             onOpenBrainMap: onOpenBrainMap,
@@ -79,7 +80,8 @@ struct ActivityHubTab: View {
       text: $searchText,
       accessibilityID: "activity-search-field",
       placeholder: "Search activity…",
-      focus: nil
+      focus: nil,
+      searchSurface: .activity
     )
   }
 
