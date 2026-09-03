@@ -24,18 +24,23 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/MessageMetadata.swift
   - desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatFeedbackReasonPicker.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatFeedbackReason.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/StableChatCardHeader.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubbleSupport.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ToolActivityTimelineLayout.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
+  # Follow-up chip: tail parser, chip view, and question-origin attribution ride the same hermetic chat turn.
+  - desktop/macos/Desktop/Sources/Chat/ChatFollowUpTail.swift
+  - desktop/macos/Desktop/Sources/Chat/FollowUpChip.swift
+  - desktop/macos/Desktop/Sources/Analytics/AnalyticsManager+QuestionOrigin.swift
   - desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalEventHub.swift
   - desktop/macos/Desktop/Sources/Chat/KernelTurnJournal.swift
   - desktop/macos/Desktop/Sources/Chat/ChatMessageRatingPersistence.swift
-  - desktop/macos/Desktop/Sources/Chat/ChatRatingReason.swift
   - desktop/macos/Desktop/Sources/Chat/NegativeFeedbackRemediationFeature.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+MessageRating.swift
   - desktop/macos/Desktop/Sources/Chat/WritingToolsFix.swift

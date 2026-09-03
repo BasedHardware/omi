@@ -1090,6 +1090,22 @@ MESSAGES_BY_APP_ORDERED_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
 )
 
+# The daily feedback report scans one UTC day of negative ratings across every
+# surface: value == -1 ordered by created_at. Without this composite the job
+# 400s with FailedPrecondition on its very first run, which on a nightly cron
+# is a failure nobody sees until the report is already missing.
+NEGATIVE_FEEDBACK_EVENTS_QUERY = FirestoreQuerySpec(
+    identifier='feedback_events_negative_by_created_at',
+    collection_group='feedback_events',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('value', '==', 'value'),
+        FirestoreQueryFilter('created_at', '>=', 'start_at'),
+        FirestoreQueryFilter('created_at', '<', 'end_at'),
+    ),
+    index_fields=(_asc('value'), _asc('created_at'), _asc('__name__')),
+)
+
 MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
     identifier='conversation_finalization_jobs_meeting_receipts_due',
     collection_group='conversation_finalization_jobs',
@@ -1311,6 +1327,7 @@ QUERY_SPECS = (
     CURRENT_CHAT_SESSION_QUERY,
     CURRENT_CHAT_SESSION_ORDERED_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
+    NEGATIVE_FEEDBACK_EVENTS_QUERY,
     HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
     FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY,
     MESSAGES_BY_APP_ORDERED_QUERY,

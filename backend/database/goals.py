@@ -13,6 +13,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
 from database import _client
+from database.action_items_cache import bump_action_items_list_version
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.read_boundary import parse_snapshot_strict, parse_snapshots
 from models.goal import (
@@ -774,7 +775,12 @@ def transition_goal_lifecycle(
         )
         return result
 
-    return apply(transaction)
+    lifecycle_result = apply(transaction)
+    # A `detach` disposition clears goal_id on up to 450 action items, which
+    # changes what GET /v1/action-items returns. Invalidate the list cache here
+    # because this write does not go through database.action_items.
+    bump_action_items_list_version(uid)
+    return lifecycle_result
 
 
 def _append_goal_progress_event(

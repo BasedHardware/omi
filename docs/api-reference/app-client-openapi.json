@@ -9964,6 +9964,13 @@
             ],
             "title": "Locations"
           },
+          "memories_learned": {
+            "items": {
+              "$ref": "#/components/schemas/LearnedMemoryRef"
+            },
+            "title": "Memories Learned",
+            "type": "array"
+          },
           "overview": {
             "anyOf": [
               {
@@ -12457,6 +12464,23 @@
         ],
         "title": "FeedbackCreate",
         "type": "object"
+      },
+      "FeedbackReason": {
+        "description": "Structured reason for a thumbs-down.\n\nThe first five match the values the mobile client has always sent to\n`POST /v1/users/analytics/chat_message`; keeping them identical means the\nledger and the legacy `analytics` rows stay comparable. The remaining five\nare desktop-only reason chips for proactive-notification cards (focus,\ninsight, task, memory) — a distinct taxonomy from a chat answer's, added\nalongside the mobile five rather than folded into them so neither surface's\ncategories are diluted by the other's.",
+        "enum": [
+          "too_verbose",
+          "incorrect_or_hallucination",
+          "not_helpful_or_irrelevant",
+          "didnt_follow_instructions",
+          "other",
+          "not_about_me",
+          "already_done",
+          "wrong_facts",
+          "bad_timing",
+          "not_useful"
+        ],
+        "title": "FeedbackReason",
+        "type": "string"
       },
       "FeedbackRecord": {
         "additionalProperties": false,
@@ -15759,6 +15783,42 @@
           "edges"
         ],
         "title": "KnowledgeGraphResponse",
+        "type": "object"
+      },
+      "LearnedMemoryRef": {
+        "description": "One memory the day actually produced, addressed by its canonical id.\n\nThis is the identity `knowledge_nuggets` never had: a client can render a\nnative review card and vote or correct through the existing memory\nendpoints. Review state (`user_review`, `edited`) is deliberately absent —\nclients read it live from the memory so a vote on one device shows on the\nother.",
+        "properties": {
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "category": {
+            "default": "",
+            "title": "Category",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "memory_id": {
+            "title": "Memory Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memory_id",
+          "content"
+        ],
+        "title": "LearnedMemoryRef",
         "type": "object"
       },
       "LedgerMirrorAliasEnvelope": {
@@ -20595,6 +20655,18 @@
       },
       "RateMessageRequest": {
         "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
           "rating": {
             "anyOf": [
               {
@@ -20609,13 +20681,12 @@
           "reason": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/FeedbackReason"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Reason"
+            ]
           }
         },
         "title": "RateMessageRequest",

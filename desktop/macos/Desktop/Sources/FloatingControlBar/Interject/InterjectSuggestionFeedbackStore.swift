@@ -85,11 +85,11 @@ enum InterjectSuggestionFeedbackMutation {
   /// and falls back to the continuity UUID.
   static func recordFromChatRating(
     continuityKey: String?,
-    reason: String?,
+    reason: ChatFeedbackReason?,
     store: InterjectSuggestionFeedbackStore = .shared
   ) async {
     guard let continuityKey else { return }
-    let verb = ChatRatingReason(rawValue: reason ?? "")?.interjectVerb() ?? .falsePositive
+    let verb = reason?.interjectVerb() ?? .falsePositive
     let resolved = await MainActor.run {
       FloatingControlBarManager.shared.feedbackIdentity(
         forContinuityKey: continuityKey)

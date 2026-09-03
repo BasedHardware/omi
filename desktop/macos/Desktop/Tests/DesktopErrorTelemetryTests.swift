@@ -41,6 +41,65 @@ final class DesktopErrorTelemetryTests: XCTestCase {
     XCTAssertEqual(descriptor.errorCode, "other")
   }
 
+  func testOnboardingCallSitesProduceDistinguishableBoundedSites() {
+    let sound = DesktopErrorTelemetryDescriptor.make(
+      error: NSError(domain: "com.omi.onboarding", code: 1),
+      fileID: "Omi_Computer/Onboarding/Cinematic/OmiOnboardingSound.swift",
+      function: "startEngine()")
+    let chat = DesktopErrorTelemetryDescriptor.make(
+      error: NSError(domain: "com.omi.onboarding", code: 1),
+      fileID: "Omi_Computer/Onboarding/OnboardingChatView.swift",
+      function: "createGoalFromOnboardingInput()")
+
+    XCTAssertEqual(sound.area, "onboarding")
+    XCTAssertEqual(chat.area, "onboarding")
+    XCTAssertEqual(sound.site, "omionboardingsound.startengine")
+    XCTAssertEqual(chat.site, "onboardingchatview.creategoalfromonboardinginput")
+    XCTAssertNotEqual(sound.eventTitle, chat.eventTitle)
+    XCTAssertTrue(sound.eventTitle.contains(sound.site))
+    XCTAssertTrue(chat.eventTitle.contains(chat.site))
+    XCTAssertFalse(sound.site.contains("/"))
+    XCTAssertFalse(chat.site.contains("/"))
+    XCTAssertEqual(sound.errorType, "app")
+    XCTAssertEqual(sound.errorDomain, "app")
+  }
+
+  func testErrorSiteStripsPathsAndDoesNotCarryMessages() {
+    let message = "import failed for user \(UUID().uuidString) at /Users/omi/secret.json"
+    let descriptor = DesktopErrorTelemetryDescriptor.make(
+      error: NSError(
+        domain: NSPOSIXErrorDomain, code: 1,
+        userInfo: [
+          NSLocalizedDescriptionKey: message
+        ]),
+      fileID: "Omi_Computer/Onboarding/OnboardingPagedIntroCoordinator.swift",
+      function: "savePrimaryLanguage()")
+
+    XCTAssertEqual(descriptor.site, "onboardingpagedintrocoordinator.saveprimarylanguage")
+    XCTAssertFalse(descriptor.site.contains("Users"))
+    XCTAssertFalse(descriptor.site.contains("secret"))
+    XCTAssertFalse(descriptor.eventTitle.contains(message))
+    XCTAssertFalse(descriptor.eventTitle.contains("/Users"))
+    for field in [
+      descriptor.area, descriptor.failureClass, descriptor.phase, descriptor.errorType,
+      descriptor.errorDomain, descriptor.errorCode, descriptor.site,
+    ] {
+      XCTAssertFalse(field.contains("/"))
+      XCTAssertFalse(field.contains(message))
+    }
+  }
+
+  func testAppModuleSwiftErrorReportsBoundedTypeNameInsteadOfOther() {
+    let descriptor = DesktopErrorTelemetryDescriptor.make(
+      error: DesktopErrorTelemetryAppModuleProbe.fixture,
+      fileID: "Omi_Computer/Onboarding/OnboardingPagedIntroCoordinator.swift",
+      function: "saveOnboardingGoal()")
+
+    XCTAssertEqual(descriptor.errorType, "desktoperrortelemetryappmoduleprobe")
+    XCTAssertNotEqual(descriptor.errorType, "other")
+    XCTAssertFalse(descriptor.errorType.contains("."))
+  }
+
   func testStorageDiagnosticsExposeMeasurementsWithoutThePath() throws {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("storage-diagnostics-\(UUID().uuidString)", isDirectory: true)
