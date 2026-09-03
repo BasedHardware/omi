@@ -849,3 +849,42 @@ final class ChatCitationTests: XCTestCase {
     XCTAssertEqual(consumed.references.map(\.sourceID), ["conversation-20"])
   }
 }
+
+/// A rendered component is already the citation of the thing it draws.
+final class ChatCitationRenderedEntityTests: XCTestCase {
+  private let task = ChatCitationReference(
+    ordinal: 1, kind: .task, sourceID: "task-1", title: "Do YC application")
+  private let memory = ChatCitationReference(
+    ordinal: 2, kind: .memory, sourceID: "memory-9", title: "Prefers mornings")
+
+  func testTheSourceRailDropsEntitiesTheTurnAlreadyDraws() {
+    XCTAssertEqual(
+      ChatCitationMarkup.appendingSelectedSources(
+        to: "Here are your tasks.",
+        selectedReferences: [task],
+        renderedEntityIDs: ["task-1"]),
+      "Here are your tasks.",
+      "a task card opens the same task the marker would, and says what it is")
+  }
+
+  func testTheSourceRailStillCarriesWhatNothingDraws() {
+    XCTAssertEqual(
+      ChatCitationMarkup.appendingSelectedSources(
+        to: "Here are your tasks.",
+        selectedReferences: [task, memory],
+        renderedEntityIDs: ["task-1"]),
+      "Here are your tasks.\n\nSources: [2]",
+      "the memory has no component, so it keeps its marker")
+  }
+
+  func testRenderedEntitiesAreReadFromEveryComponentKind() {
+    let identifiers = ChatCitationMarkup.renderedEntityIDs(in: [
+      .taskCard(id: "b1", taskId: "task-1"),
+      .goalLink(id: "b2", goalId: "goal-1", summary: "Ship"),
+      .captureLink(id: "b3", conversationId: "conv-1", momentTimestampMs: nil, summary: "Call"),
+      .memoryLink(id: "b4", memoryId: "memory-9", summary: "Mornings"),
+      .text(id: "b5", text: "prose"),
+    ])
+    XCTAssertEqual(identifiers, ["task-1", "goal-1", "conv-1", "memory-9"])
+  }
+}

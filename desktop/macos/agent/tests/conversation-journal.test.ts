@@ -443,6 +443,39 @@ describe("kernel conversation journal", () => {
     fixture.store.close();
   });
 
+  it("keeps the cards the agent rendered when the surface replaces its blocks mid-turn", () => {
+    // Terminalization is not the only replace. The streaming projection pushes
+    // the surface's own block list several times a turn, and each one used to
+    // take the agent's cards with it — the append survived the commit and died
+    // to the very next update.
+    const fixture = newSurface("main_chat", "chat", "chat-first-survives-update");
+    const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-survives-update");
+    recordStreamingAssistantPlaceholder(fixture, "turn-chat-first-update");
+    appendChatFirstBlocksToProducingTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      blocks: [{ type: "taskCard", id: "cfb-task-1", taskId: "task-1" }],
+    });
+
+    const updated = updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-chat-first-update",
+      replaceContentBlocks: [
+        { type: "text", id: "turn-chat-first-update:terminal", text: "Here they are." },
+      ],
+      nowMs: 30,
+    });
+
+    expect(updated.contentBlocks).toEqual([
+      { type: "text", id: "turn-chat-first-update:terminal", text: "Here they are." },
+      { type: "taskCard", id: "cfb-task-1", taskId: "task-1" },
+    ]);
+    fixture.store.close();
+  });
+
   it("attaches only a ready local generated image to the producing Chat-first turn", () => {
     const fixture = newSurface("main_chat", "chat", "chat-first-evidence");
     const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-evidence");

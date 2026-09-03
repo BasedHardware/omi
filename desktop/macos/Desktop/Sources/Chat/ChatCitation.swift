@@ -443,13 +443,22 @@ enum ChatCitationMarkup {
 
   /// Rich blocks are an authoritative selection made by the model. If it omits inline markers
   /// after rendering those blocks, retain source discoverability as one compact inline fallback.
+  ///
+  /// `renderedEntityIDs` are the entities the turn already draws as their own
+  /// components. A rendered task card is a better citation of that task than
+  /// `[3]` is — it opens the same thing and says what it is — so a rail that
+  /// only repeats those ids is noise printed under the cards, and now that
+  /// components are a turn's whole answer rather than a garnish, it is noise on
+  /// every such turn.
   static func appendingSelectedSources(
     to text: String,
     selectedReferences: [ChatCitationReference],
     requestedSources: Bool = false,
-    retrievedReferences: [ChatCitationReference] = []
+    retrievedReferences: [ChatCitationReference] = [],
+    renderedEntityIDs: Set<String> = []
   ) -> String {
-    let fallback = selectedReferences.isEmpty && requestedSources ? retrievedReferences : selectedReferences
+    let selection = selectedReferences.isEmpty && requestedSources ? retrievedReferences : selectedReferences
+    let fallback = selection.filter { !renderedEntityIDs.contains($0.sourceID) }
     guard !fallback.isEmpty else { return text }
     let fallbackOrdinals = Set(fallback.map(\.ordinal))
     let hasResolvedNumericCitation = ordinals(in: text).contains { fallbackOrdinals.contains($0) }
@@ -458,6 +467,23 @@ enum ChatCitationMarkup {
     guard !hasResolvedNumericCitation, webReferences(in: text).isEmpty else { return text }
     let markers = fallback.prefix(8).map { "[\($0.ordinal)]" }.joined()
     return text + "\n\nSources: \(markers)"
+  }
+
+  /// The entities this turn already draws as components, by the id a citation
+  /// would carry for the same thing.
+  static func renderedEntityIDs(in blocks: [ChatContentBlock]) -> Set<String> {
+    var identifiers = Set<String>()
+    for block in blocks {
+      switch block {
+      case .taskCard(_, let taskId): identifiers.insert(taskId)
+      case .goalLink(_, let goalId, _): identifiers.insert(goalId)
+      case .captureLink(_, let conversationId, _, _): identifiers.insert(conversationId)
+      case .conversationLink(_, let conversationId, _, _): identifiers.insert(conversationId)
+      case .memoryLink(_, let memoryId, _): identifiers.insert(memoryId)
+      default: continue
+      }
+    }
+    return identifiers
   }
 
   private static func webReferences(in text: String) -> [ChatCitationReference] {
@@ -601,12 +627,14 @@ extension ChatMessage {
     retrievedReferences: [ChatCitationReference],
     fallbackText: String = ""
   ) {
+    let rendered = ChatCitationMarkup.renderedEntityIDs(in: contentBlocks)
     func apply(_ value: String) -> String {
       ChatCitationMarkup.appendingSelectedSources(
         to: value,
         selectedReferences: selectedReferences,
         requestedSources: requestedSources,
-        retrievedReferences: retrievedReferences)
+        retrievedReferences: retrievedReferences,
+        renderedEntityIDs: rendered)
     }
     if text.isEmpty {
       text = fallbackText
