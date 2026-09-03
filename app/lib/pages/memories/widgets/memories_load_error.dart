@@ -24,7 +24,11 @@ class MemoriesLoadError extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
-          TextButton(key: const Key('memories_load_retry'), onPressed: onRetry, child: Text(context.l10n.retry)),
+          TextButton(
+            key: const Key('memories_load_retry'),
+            onPressed: onRetry,
+            child: Text(context.l10n.retry),
+          ),
         ],
       ),
     );
@@ -37,7 +41,12 @@ class MemoriesEmptyOrError extends StatelessWidget {
   final VoidCallback onRetry;
   final Widget emptyState;
 
-  const MemoriesEmptyOrError({super.key, required this.showLoadError, required this.onRetry, required this.emptyState});
+  const MemoriesEmptyOrError({
+    super.key,
+    required this.showLoadError,
+    required this.onRetry,
+    required this.emptyState,
+  });
 
   @override
   Widget build(BuildContext context) {

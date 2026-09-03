@@ -15,7 +15,11 @@ class KnowledgeGraphApi {
   /// them into the returned string is caught by tests. They belong in debug
   /// logs only.
   @visibleForTesting
-  static String knowledgeGraphHttpUserMessage({required String action, int? statusCode, String? body}) {
+  static String knowledgeGraphHttpUserMessage({
+    required String action,
+    int? statusCode,
+    String? body,
+  }) {
     final _ = (statusCode, body);
     return "Couldn't $action knowledge graph";
   }

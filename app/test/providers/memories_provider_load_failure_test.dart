@@ -6,18 +6,22 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 
-GetMemoriesResult _failedFetch() =>
-    const GetMemoriesResult([], true, statusCode: 503, failureReason: MemoriesFetchFailureReason.httpError);
+GetMemoriesResult _failedFetch() => const GetMemoriesResult(
+      [],
+      true,
+      statusCode: 503,
+      failureReason: MemoriesFetchFailureReason.httpError,
+    );
 
 Memory _memory() => Memory(
-  id: 'mem-1',
-  uid: 'memories-load-failure-user',
-  content: 'A real memory',
-  category: MemoryCategory.manual,
-  createdAt: DateTime(2026, 8, 17),
-  updatedAt: DateTime(2026, 8, 17),
-  visibility: MemoryVisibility.private,
-);
+      id: 'mem-1',
+      uid: 'memories-load-failure-user',
+      content: 'A real memory',
+      category: MemoryCategory.manual,
+      createdAt: DateTime(2026, 8, 17),
+      updatedAt: DateTime(2026, 8, 17),
+      visibility: MemoryVisibility.private,
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
