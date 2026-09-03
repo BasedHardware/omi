@@ -13,6 +13,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
 from database import _client
+from database.action_items_cache import bump_action_items_list_version
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.read_boundary import parse_snapshot_strict, parse_snapshots
 from models.goal import (
@@ -39,7 +40,7 @@ TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
 TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
 MUTATION_RECEIPTS_COLLECTION = 'workflow_mutation_receipts'
 # Legacy test/call-site compatibility only; new persistence paths use _get_db().
-db = _client.db
+db = getattr(_client, 'data_plane_db', _client.db)
 
 
 class GoalStoreError(RuntimeError):
@@ -57,8 +58,8 @@ class GoalConflictError(GoalStoreError):
 def _get_db(firestore_client: Any = None) -> Any:
     if firestore_client is not None:
         return firestore_client
-    getter = getattr(_client, 'get_firestore_client', None)
-    return getter() if getter is not None else _client.db
+    getter = getattr(_client, 'get_data_plane_firestore_client', None)
+    return getter() if getter is not None else db
 
 
 def _goal_ref(uid: str, goal_id: str, *, firestore_client: Any = None):
@@ -774,7 +775,12 @@ def transition_goal_lifecycle(
         )
         return result
 
-    return apply(transaction)
+    lifecycle_result = apply(transaction)
+    # A `detach` disposition clears goal_id on up to 450 action items, which
+    # changes what GET /v1/action-items returns. Invalidate the list cache here
+    # because this write does not go through database.action_items.
+    bump_action_items_list_version(uid)
+    return lifecycle_result
 
 
 def _append_goal_progress_event(

@@ -26,7 +26,32 @@ private struct DesktopPublicWebSearchResponse: Decodable {
     let message: Message
   }
 
+  struct SearchResult: Decodable {
+    let title: String?
+    let url: String?
+    let snippet: String?
+  }
+
   let choices: [Choice]
+  let searchResults: [SearchResult]?
+
+  enum CodingKeys: String, CodingKey {
+    case choices
+    case searchResults = "search_results"
+  }
+
+  func evidenceText(answer: String) -> String {
+    let sources = (searchResults ?? []).prefix(8).compactMap { result -> String? in
+      let title = result.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let snippet = result.snippet?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      guard !title.isEmpty || !snippet.isEmpty else { return nil }
+      let boundedSnippet = String(snippet.prefix(700))
+      let source = title.isEmpty ? (result.url ?? "Public web source") : title
+      return "Source result — \(source): \(boundedSnippet)"
+    }
+    guard !sources.isEmpty else { return answer }
+    return ([answer, "Search-result evidence:"] + sources).joined(separator: "\n")
+  }
 }
 
 actor APIClient {
@@ -106,7 +131,8 @@ actor APIClient {
   func searchPublicWebForVoice(
     query: String,
     expectedOwnerID: String,
-    customBaseURL: String? = nil
+    customBaseURL: String? = nil,
+    includeSourceEvidence: Bool = false
   ) async throws -> String {
     let base = customBaseURL ?? rustBackendURL
     guard !base.isEmpty else { throw APIError.invalidResponse }
@@ -125,7 +151,7 @@ actor APIClient {
         .trimmingCharacters(in: .whitespacesAndNewlines),
       !answer.isEmpty
     else { throw APIError.invalidResponse }
-    return answer
+    return includeSourceEvidence ? response.evidenceText(answer: answer) : answer
   }
 
   // MARK: - HTTP Methods

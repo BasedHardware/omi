@@ -8,11 +8,13 @@ extension RealtimeHubController {
   /// True when a physical provider session exists (including warm-idle).
   var hasLiveVoiceSession: Bool { session != nil }
 
-  /// Adds completed background-agent context to the live conversation without
-  /// requesting a response. Returns false when no session is live so the
-  /// caller leaves the completion checkpoint unadvanced and retries later.
-  func injectBackgroundAgentCompletionContext(_ text: String) async -> Bool {
-    guard let session else { return false }
+  /// Adds background reference material only when the provider has a role that
+  /// cannot be confused with user speech. Callers distinguish retryable transport
+  /// failure from a provider that intentionally does not support mid-session context.
+  func injectBackgroundAgentCompletionContext(_ text: String) async
+    -> RealtimeBackgroundContextDeliveryResult
+  {
+    guard let session else { return .retry }
     return await session.sendBackgroundAgentContext(text)
   }
 

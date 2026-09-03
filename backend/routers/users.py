@@ -118,6 +118,8 @@ from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from models.notification_message import NotificationMessage
+from models.daily_summary_payload import LearnedMemoryRef
+from utils.memory.learned_today import memories_learned_for_summary, memory_review_card_block
 from utils.other import endpoints as auth
 from utils.other.storage import (
     delete_all_conversation_recordings,
@@ -312,6 +314,10 @@ class DailySummaryResponse(BaseModel):
     unresolved_questions: Optional[List[DailySummaryUnresolvedQuestion]] = None
     decisions_made: Optional[List[DailySummaryDecisionMade]] = None
     knowledge_nuggets: Optional[List[DailySummaryKnowledgeNugget]] = None
+    # Memories the day actually produced, addressed by canonical memory id, so a
+    # shell can render a native review card. Older summaries have no field;
+    # clients prefer this over `knowledge_nuggets` when it is non-empty.
+    memories_learned: List[LearnedMemoryRef] = Field(default_factory=list)
     locations: Optional[List[DailySummaryLocationPin]] = None
 
 
@@ -1583,6 +1589,24 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
     return {'status': 'ok'}
 
 
+def _memories_learned_payload(uid, conversations, start_date_utc, end_date_utc):
+    """Select the day's review items for a summary about to be generated.
+
+    The read lives here rather than inside generate_comprehensive_daily_summary:
+    that module is the LLM summary builder, and giving it a memory dependency
+    would put a Firestore read behind every caller and every test of it.
+    """
+    return [
+        ref.model_dump(mode='json')
+        for ref in memories_learned_for_summary(
+            uid,
+            conversation_ids=[c.id for c in conversations if not getattr(c, 'discarded', False)],
+            window_start=start_date_utc,
+            window_end=end_date_utc,
+        )
+    ]
+
+
 class TestDailySummaryRequest(BaseModel):
     date: Optional[str] = None  # YYYY-MM-DD format, defaults to today
 
@@ -1669,7 +1693,14 @@ def test_daily_summary(
     conversations = deserialize_conversations(conversations_data)
 
     # Generate summary (pass date range for fetching actual action items)
-    summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
+    summary_data = generate_comprehensive_daily_summary(
+        uid,
+        conversations,
+        date_str,
+        start_date_utc,
+        end_date_utc,
+        memories_learned=_memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
+    )
 
     # Store in database
     summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
@@ -1680,12 +1711,22 @@ def test_daily_summary(
     if len(summary_body) > 150:
         summary_body = summary_body[:147] + "..."
 
+    # Native review card for the memories this day produced. The message text is
+    # unchanged, so a client that does not know the block renders exactly what it
+    # rendered before; the block is omitted entirely when nothing qualifies.
+    review_block = memory_review_card_block(
+        summary_id,
+        date=date_str,
+        memories_learned=summary_data.get('memories_learned') or [],
+    )
+
     ai_message = NotificationMessage(
         text=summary_body,
         from_integration='false',
         type='day_summary',
         notification_type='daily_summary',
         navigate_to=f"/daily-summary/{summary_id}",
+        content_blocks=[review_block] if review_block else None,
     )
 
     send_notification(
@@ -1825,7 +1866,14 @@ def regenerate_daily_summary(
 
     conversations = deserialize_conversations(conversations_data)
 
-    summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
+    summary_data = generate_comprehensive_daily_summary(
+        uid,
+        conversations,
+        date_str,
+        start_date_utc,
+        end_date_utc,
+        memories_learned=_memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
+    )
     # Preserve fields readers care about that the generator silently resets:
     # - visibility: sharing state shouldn't toggle off on regenerate
     # - created_at: generator stamps a fresh utcnow(), but UI sorts/displays

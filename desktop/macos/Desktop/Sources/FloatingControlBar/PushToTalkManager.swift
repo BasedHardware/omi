@@ -110,6 +110,26 @@ struct PTTSilentMicRecoveryPolicy {
   }
 }
 
+/// Routes a shortcut press through the reveal decision. Both PTT entry points call this,
+/// so injecting `reveal`/`start` in a test exercises the shipping ordering rather than a
+/// restatement of it.
+///
+/// The bar used to swallow the very press that revealed it, which cost the start sound,
+/// the listening animation and — a double tap being two presses — locked mode. That bit
+/// every press on a second display, where following the cursor re-places the window so it
+/// is routinely not yet visible.
+enum PushToTalkBarRevealPolicy {
+  /// Reveals the bar when it is hidden, then *always* starts the turn.
+  static func startPress(
+    barVisible: Bool,
+    reveal: () -> Void,
+    start: () -> Void
+  ) {
+    if !barVisible { reveal() }
+    start()
+  }
+}
+
 /// Modifier-only shortcuts (Option, Fn, etc.) overlap with normal text editing:
 /// Option-arrow navigation and dead-key entry first emit `flagsChanged`, then a
 /// normal key-down. Do not let that first modifier event barge into an active
@@ -122,6 +142,11 @@ struct ModifierOnlyPTTActivationGate {
   enum Action: Equatable {
     case scheduleStart
     case cancelPendingStart
+    /// The modifier was released before the activation delay elapsed and no other
+    /// key was pressed with it: a deliberate quick tap. No turn was started (an
+    /// accidental brush of the modifier must stay inert), but the tap is real
+    /// input and is offered to the double-tap detector.
+    case cancelPendingStartAsQuickTap
     case releaseStartedTurn
     case none
   }
@@ -138,7 +163,7 @@ struct ModifierOnlyPTTActivationGate {
 
     if hasPendingStart {
       hasPendingStart = false
-      return .cancelPendingStart
+      return .cancelPendingStartAsQuickTap
     }
     guard hasStartedTurn else { return .none }
     hasStartedTurn = false
@@ -275,6 +300,8 @@ class PushToTalkManager: ObservableObject {
   // Double-tap detection
   private var lastOptionDownTime: TimeInterval = 0
   private var lastOptionUpTime: TimeInterval = 0
+  /// Uptime of the last modifier-only quick tap that did not start a turn.
+  private var lastModifierQuickTapTime: TimeInterval = 0
   private let doubleTapThreshold: TimeInterval = 0.4
   /// Longest hold that still counts as a tap and opens the tap-to-lock window.
   /// Read by the discard judgement's tests: a tap this short must always be a
@@ -547,6 +574,9 @@ class PushToTalkManager: ObservableObject {
       scheduleModifierOnlyShortcutStart()
     case .cancelPendingStart:
       cancelPendingModifierOnlyShortcutStart()
+    case .cancelPendingStartAsQuickTap:
+      cancelPendingModifierOnlyShortcutStart()
+      handleModifierOnlyQuickTap()
     case .releaseStartedTurn:
       handleShortcutUp()
     case .none:
@@ -567,6 +597,36 @@ class PushToTalkManager: ObservableObject {
       execute: workItem)
   }
 
+  /// A modifier-only shortcut released inside `modifierOnlyShortcutActivationDelay`
+  /// never starts a turn — that delay is what keeps an accidental brush of the
+  /// modifier (or the modifier held as part of another shortcut) from recording.
+  /// A *pair* of such taps is unambiguous intent, so it drives locked mode, and a
+  /// tap while already locked sends, matching "Tap again to send".
+  private func handleModifierOnlyQuickTap() {
+    guard ShortcutSettings.shared.doubleTapForLock else { return }
+    let now = ProcessInfo.processInfo.systemUptime
+    if phase == .lockedRecording {
+      lastModifierQuickTapTime = 0
+      finalize()
+      return
+    }
+    guard (now - lastModifierQuickTapTime) < doubleTapThreshold else {
+      // First tap: stay completely inert. Nothing records, nothing is shown.
+      lastModifierQuickTapTime = now
+      return
+    }
+    lastModifierQuickTapTime = 0
+    // Same reveal rule as a held press: the lock must happen even when the bar was not
+    // showing on this display yet, or the double tap is lost on a second monitor.
+    PushToTalkBarRevealPolicy.startPress(
+      barVisible: FloatingControlBarManager.shared.isVisible,
+      reveal: { FloatingControlBarManager.shared.show() },
+      start: {
+        log("PushToTalkManager: modifier-only double tap — entering locked listening")
+        self.enterLockedListening()
+      })
+  }
+
   private func cancelPendingModifierOnlyShortcutStart() {
     modifierOnlyShortcutStartWorkItem?.cancel()
     modifierOnlyShortcutStartWorkItem = nil
@@ -585,12 +645,13 @@ class PushToTalkManager: ObservableObject {
     // Let the first shortcut press reveal the compact bar instead of requiring it
     // to already be visible. This keeps onboarding step 3 quiet on entry while
     // still allowing the user to trigger the bar by pressing the key.
-    if !FloatingControlBarManager.shared.isVisible {
-      FloatingControlBarManager.shared.show()
-    }
-
-    guard FloatingControlBarManager.shared.isVisible else { return }
-    handleShortcutDown()
+    PushToTalkBarRevealPolicy.startPress(
+      barVisible: FloatingControlBarManager.shared.isVisible,
+      reveal: {
+        FloatingControlBarManager.shared.show()
+        log("PushToTalkManager: revealed the bar for this press — starting the turn")
+      },
+      start: { self.handleShortcutDown() })
   }
 
   private func handleShortcutDown() {
@@ -599,8 +660,13 @@ class PushToTalkManager: ObservableObject {
     switch phase {
     case .idle, .awaitingResponse, .awaitingTools, .awaitingJournal, .playing, .terminal, .none:
       // Check for double-tap: if last Option-up was recent, enter locked mode
-      if ShortcutSettings.shared.doubleTapForLock && (now - lastOptionUpTime) < doubleTapThreshold {
+      // A first tap can arrive either as a completed turn (`lastOptionUpTime`) or, on a
+      // modifier-only key, as a quick tap that never started one. Either counts, so a
+      // double tap locks even when the two taps differ in speed.
+      let recentFirstTap = max(lastOptionUpTime, lastModifierQuickTapTime)
+      if ShortcutSettings.shared.doubleTapForLock && (now - recentFirstTap) < doubleTapThreshold {
         lastOptionUpTime = 0
+        lastModifierQuickTapTime = 0
         enterLockedListening()
       } else {
         lastOptionDownTime = now
@@ -645,6 +711,7 @@ class PushToTalkManager: ObservableObject {
 
       if ShortcutSettings.shared.doubleTapForLock && holdDuration < Self.tapToLockMaxHoldDuration {
         lastOptionUpTime = now
+        lastModifierQuickTapTime = 0
         enterPendingLockDecision()
       } else {
         lastOptionUpTime = 0
@@ -980,6 +1047,19 @@ class PushToTalkManager: ObservableObject {
   /// which must end the turn with a hint rather than hang. No-op unless a capture is
   /// active.
   @discardableResult
+  /// Mirrors one *quick tap* of a modifier-only shortcut: the release lands inside
+  /// `modifierOnlyShortcutActivationDelay`, so no turn starts. Two of these inside the
+  /// double-tap window must lock, which is what the physical key does and what no other
+  /// automation entry point can express (`ptt_stop` mirrors a long-hold release).
+  func quickTapPushToTalkForAutomation() -> [String: String] {
+    ensureAutomationBarConfigured()
+    handleModifierOnlyQuickTap()
+    return [
+      "state": VoiceTurnCoordinator.phaseLabel(phase ?? .idle),
+      "locked": phase == .lockedRecording ? "true" : "false",
+    ]
+  }
+
   func endPushToTalkForAutomation() -> [String: String] {
     let wasActive = voiceTurnCoordinator.activeTurn?.phase.isRecording == true
     if wasActive { finalize() }

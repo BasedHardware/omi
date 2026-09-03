@@ -46,6 +46,8 @@ setattr(_fake_client_mod, 'db', MagicMock())
 setattr(_fake_client_mod, 'delete_collection_recursive', MagicMock())
 setattr(_fake_client_mod, 'document_id_from_seed', MagicMock())
 setattr(_fake_client_mod, 'get_firestore_client', MagicMock())
+setattr(_fake_client_mod, 'get_data_plane_firestore_client', MagicMock())
+setattr(_fake_client_mod, 'data_plane_db', getattr(_fake_client_mod, 'db'))
 _install_stub('database._client', _fake_client_mod)
 
 # Stub database.firestore_cache and database.redis_db since database/users.py
@@ -517,7 +519,7 @@ def test_get_pending_deletion_wipes_finds_stale_after_fresh_window():
     fake_db = types.SimpleNamespace()
     fake_db.collection = lambda name: fake_collection
 
-    with patch.object(users_db, 'db', fake_db):
+    with patch.object(users_db, 'account_deletion_collection', lambda **_kwargs: fake_collection):
         result = users_db.get_pending_deletion_wipes(limit=100, stale_after=stale_after)
 
     uids = [r['uid'] for r in result]
@@ -547,7 +549,7 @@ def test_get_pending_deletion_wipes_respects_limit_with_over_fetch():
     fake_db = types.SimpleNamespace()
     fake_db.collection = lambda name: fake_collection
 
-    with patch.object(users_db, 'db', fake_db):
+    with patch.object(users_db, 'account_deletion_collection', lambda **_kwargs: fake_collection):
         result = users_db.get_pending_deletion_wipes(limit=2, stale_after=stale_after)
 
     uids = {r['uid'] for r in result}
@@ -579,7 +581,7 @@ def test_get_pending_deletion_wipes_includes_stale_running():
     fake_db = types.SimpleNamespace()
     fake_db.collection = lambda name: fake_collection
 
-    with patch.object(users_db, 'db', fake_db):
+    with patch.object(users_db, 'account_deletion_collection', lambda **_kwargs: fake_collection):
         result = users_db.get_pending_deletion_wipes(limit=100)
 
     uids = [r['uid'] for r in result]

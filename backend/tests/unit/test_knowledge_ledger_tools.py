@@ -156,7 +156,7 @@ def test_read_current_playbook_applies_chat_visibility_and_ledger_semantics(monk
 def test_tools_are_owner_scoped_bounded_and_fail_closed(monkeypatch):
     import database._client as database_client
 
-    monkeypatch.setattr(database_client, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(database_client, "get_data_plane_firestore_client", lambda: "db")
     monkeypatch.setattr(
         tools,
         "search_current_knowledge",
@@ -268,7 +268,7 @@ def test_search_historical_facts_is_fact_only_owner_scoped_and_partial(monkeypat
                 next_offset=8,
             )
 
-    monkeypatch.setattr(database_client, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(database_client, "get_data_plane_firestore_client", lambda: "db")
     monkeypatch.setattr(tools, "MemoryService", FakeService)
 
     result = tools.search_historical_facts.invoke(
@@ -325,7 +325,7 @@ def test_historical_fact_renderer_hard_cap_preserves_both_disclosures():
 def test_search_historical_facts_rejects_unsearchable_and_oversized_requests(monkeypatch):
     import database._client as database_client
 
-    monkeypatch.setattr(database_client, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(database_client, "get_data_plane_firestore_client", lambda: "db")
     service = SimpleNamespace(search_ledger_history_page=MagicMock())
     service.search_ledger_history_page.side_effect = ValueError("historical ledger query must contain a token")
     monkeypatch.setattr(tools, "MemoryService", lambda *, db_client: service)
@@ -373,7 +373,7 @@ def test_search_historical_facts_requires_explicit_rejected_audit(monkeypatch):
                 next_offset=None,
             )
 
-    monkeypatch.setattr(database_client, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(database_client, "get_data_plane_firestore_client", lambda: "db")
     monkeypatch.setattr(tools, "MemoryService", FakeService)
 
     result = tools.search_historical_facts.invoke(
@@ -392,7 +392,7 @@ def test_tool_errors_do_not_echo_storage_details(monkeypatch):
     def unavailable():
         raise RuntimeError("private-project users/u1/memory_items")
 
-    monkeypatch.setattr(database_client, "get_firestore_client", unavailable)
+    monkeypatch.setattr(database_client, "get_data_plane_firestore_client", unavailable)
     config = {"configurable": {"user_id": "u1"}}
     assert tools.search_knowledge.invoke({"query": "release"}, config=config) == "Error searching current knowledge"
     assert tools.read_playbook.invoke({"memory_id": "mem_playbook"}, config=config) == "Playbook unavailable."
@@ -401,7 +401,7 @@ def test_tool_errors_do_not_echo_storage_details(monkeypatch):
 def test_read_playbook_bounds_malformed_stored_content(monkeypatch):
     import database._client as database_client
 
-    monkeypatch.setattr(database_client, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(database_client, "get_data_plane_firestore_client", lambda: "db")
     oversized = _playbook().model_copy(
         update={
             "content": "d" * (tools.MAX_PLAYBOOK_DESCRIPTION_CHARACTERS + 20),

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from database._client import get_firestore_client, run_transactional
+from database._client import get_data_plane_firestore_client, run_transactional
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.firestore_index_registry import FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY
 from database.read_boundary import parse_snapshot_strict
@@ -91,7 +91,7 @@ def _conversation_ref(client: Any, uid: str, conversation_id: str) -> Any:
 
 
 def initialize_first_open_work(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
-    client = firestore_client or get_firestore_client()
+    client = firestore_client or get_data_plane_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
 
     @firestore.transactional
@@ -137,7 +137,7 @@ def _live_effect(snapshot: Any, control: Optional[MemoryControlState], token: st
 def first_open_effect_is_authorized(
     uid: str, conversation_id: str, token: str, effect: str, *, firestore_client: Any = None
 ) -> bool:
-    client = firestore_client or get_firestore_client()
+    client = firestore_client or get_data_plane_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
 
     @firestore.transactional
@@ -159,7 +159,7 @@ def commit_first_open_conversation_patch(
 ) -> bool:
     if not patch:
         return False
-    client = firestore_client or get_firestore_client()
+    client = firestore_client or get_data_plane_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
 
     @firestore.transactional
@@ -185,7 +185,7 @@ def commit_first_open_app_result(
     """Persist an app result and its resumable receipt in one transaction."""
     if not app_id or not patch:
         return False
-    client = firestore_client or get_firestore_client()
+    client = firestore_client or get_data_plane_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
 
     @firestore.transactional
@@ -227,7 +227,7 @@ def complete_first_open_effect(
 ) -> bool:
     if effect not in FIRST_OPEN_EFFECTS:
         raise ValueError(f'unknown first-open effect: {effect}')
-    client = firestore_client or get_firestore_client()
+    client = firestore_client or get_data_plane_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
 
     @firestore.transactional
@@ -272,7 +272,7 @@ def complete_first_open_effect(
 def commit_first_open_folder_count(
     uid: str, conversation_id: str, token: str, folder_id: str, *, firestore_client: Any = None
 ) -> bool:
-    client = firestore_client or get_firestore_client()
+    client = firestore_client or get_data_plane_firestore_client()
     user = client.collection('users').document(uid)
     query = FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY.build(
         user.collection(CONVERSATIONS_COLLECTION),
@@ -305,7 +305,7 @@ def commit_first_open_app_usage(
     *,
     firestore_client: Any = None,
 ) -> bool:
-    client = firestore_client or get_firestore_client()
+    client = firestore_client or get_data_plane_firestore_client()
     conversation_ref = _conversation_ref(client, uid, conversation_id)
     plugin_ref = client.collection('plugins_data').document(app_id)
     usage_ref = client.collection('plugins').document(app_id).collection('usage_history').document(conversation_id)
@@ -359,7 +359,7 @@ def claim_first_open_work(
     now: Optional[datetime] = None,
     firestore_client: Any = None,
 ) -> Optional[str]:
-    client = firestore_client or get_firestore_client()
+    client = firestore_client or get_data_plane_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
     current_time = now or datetime.now(timezone.utc)
     token = str(uuid.uuid4())
@@ -413,7 +413,7 @@ def finish_first_open_work(
     firestore_client: Any = None,
 ) -> bool:
     del succeeded
-    client = firestore_client or get_firestore_client()
+    client = firestore_client or get_data_plane_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
 
     @firestore.transactional
