@@ -33,6 +33,7 @@
       "integrationConnectSucceeded": 2,
       "integrationDisconnected": 3,
       "memoriesPageCreateMemoryBtn": 2,
+      "memoryReviewAction": 2,
       "omiDoubleTap": 5,
       "onboardingStepCompleted": 11,
       "pageOpened": 31,
@@ -59,8 +60,9 @@
     "macos": {
       "appDetailViewed": 3,
       "chatFirst": 31,
-      "chatMessageSent": 8,
+      "chatMessageSent": 9,
       "conversationCreated": 2,
+      "conversationReprocessedDefault": 2,
       "desktopPromptAnswered": 2,
       "floatingBarAskOmiOpened": 3,
       "floatingBarPTTEnded": 7,
