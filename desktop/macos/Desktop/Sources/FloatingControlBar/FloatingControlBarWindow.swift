@@ -4059,13 +4059,25 @@ class FloatingControlBarManager {
     fromVoice: Bool = false,
     voiceTurnID: VoiceTurnID? = nil
   ) {
-    guard let window = window else { return }
-    guard let provider = activeFloatingProvider() else { return }
+    // A caller that armed a question origin (the follow-up chip, a card action)
+    // armed it for *this* send. Every return below is a send that never
+    // happened, so the arm has to go with it or it lands on the next question.
+    guard let window = window else {
+      AnalyticsManager.shared.questionOriginationAborted()
+      return
+    }
+    guard let provider = activeFloatingProvider() else {
+      AnalyticsManager.shared.questionOriginationAborted()
+      return
+    }
 
     if fromVoice {
       guard let voiceTurnID,
         VoiceTurnCoordinator.shared.requireCurrentOwner(for: voiceTurnID) != nil
-      else { return }
+      else {
+        AnalyticsManager.shared.questionOriginationAborted()
+        return
+      }
       chatCancellable?.cancel()
       chatCancellable = nil
       window.cancelInputHeightObserver()
@@ -5341,7 +5353,7 @@ class FloatingControlBarManager {
       // failed turn never carries a follow-up chip either: the chip is appended
       // only on the provider's accepted-answer path.
       barWindow.state.setLocalAnswerOverride(
-        ChatMessage(text: "Omi couldn't get an answer for that one.", sender: .ai)
+        ChatMessage(text: FloatingBarAnswerFailureCopy.emptyResponse, sender: .ai)
       )
     }
 

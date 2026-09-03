@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Corrects three features that are still unreleased and already described by the 20260902 fragments: the learned-memory review card, the follow-up chip, and knows-list rotation. The user-visible promises in those fragments are unchanged; this PR makes them true. The one behavior a user could have noticed, a failed voice query reading its own failure aloud, was introduced and fixed within the same unreleased window."
+}

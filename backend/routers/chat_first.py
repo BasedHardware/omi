@@ -24,6 +24,7 @@ from models.chat_first import (
     CaptureLinkSpec,
     ConversationLinkSpec,
     ChatFirstBlockSpec,
+    ChatFirstJournalBlockSpec,
     ChatFirstBlockValidationReceipt,
     ChatFirstBlockValidationRequest,
     ChatFirstSubject,
@@ -39,6 +40,7 @@ from models.chat_first import (
     ProactiveMaterializationRejectionOutcome,
     ProactiveMaterializationReceiptOutcome,
     MemoryLinkSpec,
+    MemoryReviewCardSpec,
     TaskCardSpec,
     stable_block_id,
 )
@@ -177,7 +179,7 @@ def _maybe_persist_cold_start(uid: str, *, control_generation: int, now: datetim
         logger.warning('chat_first_cold_start_prepare_failed uid=%s error=%s', sanitize_pii(uid), type(exc).__name__)
 
 
-def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
+def _entity_available(uid: str, block: ChatFirstJournalBlockSpec) -> bool:
     if isinstance(block, TaskCardSpec):
         task = action_items_db.get_action_item(uid, block.task_id)
         return bool(task and not task.get('is_locked', False))
@@ -208,6 +210,14 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
     if isinstance(block, MemoryLinkSpec):
         try:
             return bool(fetch_memory_dict(uid, block.memory_id, db_client=getattr(db_client_module, 'db', None)))
+        except HTTPException:
+            return False
+    if isinstance(block, MemoryReviewCardSpec):
+        # Every row is a claim the owner can accept or correct in place, so the
+        # card is only admissible if each one is a memory this account still owns.
+        client = getattr(db_client_module, 'db', None)
+        try:
+            return all(bool(fetch_memory_dict(uid, item.memory_id, db_client=client)) for item in block.items)
         except HTTPException:
             return False
     subject = block.subject

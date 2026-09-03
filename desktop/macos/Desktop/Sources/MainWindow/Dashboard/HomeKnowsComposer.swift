@@ -107,14 +107,45 @@ enum HomeKnowsListComposer {
 
   /// Open tasks the reader has not dismissed — the count the greeting's daily
   /// brief and composed tip are phrased around.
+  ///
+  /// Counted through the same eligibility predicate the rows are, so the
+  /// greeting cannot disagree with the list beneath it: the same duplicate ids
+  /// collapse, a long-dead past-due task is out of both, and a dismissal the
+  /// reader's own edit has since invalidated is back in both. Rotation state
+  /// (show cap, same-day) deliberately does not count — a task you have already
+  /// seen three times today still needs you.
   static func openTaskCount(
     _ tasks: [HomeKnowsTaskCandidate],
-    ledger: HomeKnowsImpressionLedger = .empty
+    ledger: HomeKnowsImpressionLedger = .empty,
+    now: Date = Date()
   ) -> Int {
-    tasks.filter { candidate in
-      guard candidate.isActive else { return false }
-      return ledger.entry(HomeKnowsRotationPolicy.taskKey(candidate.id))?.dismissedAt == nil
+    distinctTasks(tasks).filter { candidate in
+      let facts = taskFacts(candidate)
+      return HomeKnowsRotationPolicy.availability(
+        facts: facts, entry: ledger.entry(facts.key), now: now) == nil
     }.count
+  }
+
+  /// The task candidates a row could be built from, in the caller's own
+  /// priority order. Task ids repeat across the overdue/today/no-due-date
+  /// buckets the hub concatenates; a duplicate would collide as a ForEach ID
+  /// and be counted twice by the greeting.
+  private static func distinctTasks(_ tasks: [HomeKnowsTaskCandidate]) -> [HomeKnowsTaskCandidate] {
+    var seenTaskIDs = Set<String>()
+    return tasks.filter { candidate in
+      !candidate.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        && seenTaskIDs.insert(candidate.id).inserted
+    }
+  }
+
+  private static func taskFacts(_ candidate: HomeKnowsTaskCandidate) -> HomeKnowsCandidateFacts {
+    HomeKnowsCandidateFacts(
+      key: HomeKnowsRotationPolicy.taskKey(candidate.id),
+      contentHash: HomeKnowsRotationPolicy.contentHash(
+        text: candidate.text, updatedAt: candidate.updatedAt),
+      updatedAt: candidate.updatedAt,
+      dueAt: candidate.dueAt,
+      isActive: candidate.isActive)
   }
 
   static func compose(
@@ -127,27 +158,14 @@ enum HomeKnowsListComposer {
     calendar: Calendar = .current,
     rotation: Int = 0
   ) -> HomeKnowsComposition {
-    // Task ids repeat across the overdue/today/no-due-date buckets the hub
-    // concatenates; a duplicate would collide as a ForEach ID.
-    var seenTaskIDs = Set<String>()
+    // Unavailable tasks stay in the pool rather than being filtered out here:
+    // `pool` is what reports *why* a slot came up empty, and a pre-filtered
+    // dismissal would be indistinguishable from having no task at all.
     let taskCandidates =
-      tasks
-      .filter { candidate in
-        !candidate.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-          && seenTaskIDs.insert(candidate.id).inserted
-      }
+      distinctTasks(tasks)
       .enumerated()
       .map { index, candidate in
-        Scored(
-          element: candidate,
-          facts: HomeKnowsCandidateFacts(
-            key: HomeKnowsRotationPolicy.taskKey(candidate.id),
-            contentHash: HomeKnowsRotationPolicy.contentHash(
-              text: candidate.text, updatedAt: candidate.updatedAt),
-            updatedAt: candidate.updatedAt,
-            dueAt: candidate.dueAt,
-            isActive: candidate.isActive),
-          order: index)
+        Scored(element: candidate, facts: taskFacts(candidate), order: index)
       }
 
     let insightCandidates =

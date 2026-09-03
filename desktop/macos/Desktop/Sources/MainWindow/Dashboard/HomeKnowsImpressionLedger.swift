@@ -102,6 +102,29 @@ enum HomeKnowsRotationPolicy {
     return String(hash.compactMap { String(format: "%02x", $0) }.joined().prefix(16))
   }
 
+  /// Why this candidate is not something to surface at all right now, or `nil`
+  /// if it still is. Independent of how often it has been shown.
+  ///
+  /// Split out because two callers need exactly this much and no more: the
+  /// composer, which then layers the rotation rules on top, and the greeting's
+  /// open-task count, which must not shrink just because a row has already had
+  /// its three impressions today. One predicate is what keeps "3 things need
+  /// you" honest about the list underneath it.
+  static func availability(
+    facts: HomeKnowsCandidateFacts,
+    entry: HomeKnowsImpression?,
+    now: Date
+  ) -> HomeKnowsRotationReason? {
+    guard facts.isActive else { return .inactive }
+    if let dueAt = facts.dueAt, now.timeIntervalSince(dueAt) > stalePastDueGrace {
+      return .staleDueDate
+    }
+    // A changed underlying object is new information: it clears a dismissal and
+    // resets the show cap. That is the only way a dismissed row ever returns.
+    guard let entry, entry.contentHash == facts.contentHash else { return nil }
+    return entry.dismissedAt != nil ? .dismissed : nil
+  }
+
   /// Why this candidate must not take a slot right now, or `nil` if it may.
   ///
   /// - Parameter allowSameDayRepeat: set only when the slot has no other
@@ -113,15 +136,10 @@ enum HomeKnowsRotationPolicy {
     calendar: Calendar,
     allowSameDayRepeat: Bool
   ) -> HomeKnowsRotationReason? {
-    guard facts.isActive else { return .inactive }
-    if let dueAt = facts.dueAt, now.timeIntervalSince(dueAt) > stalePastDueGrace {
-      return .staleDueDate
-    }
-    guard let entry else { return nil }
-    // A changed underlying object is new information: it clears a dismissal and
-    // resets the show cap. That is the only way a dismissed row ever returns.
-    guard entry.contentHash == facts.contentHash else { return nil }
-    if entry.dismissedAt != nil { return .dismissed }
+    if let unavailable = availability(facts: facts, entry: entry, now: now) { return unavailable }
+    // Past this point the entry exists and still describes this exact content;
+    // anything else was already admitted by `availability`.
+    guard let entry, entry.contentHash == facts.contentHash else { return nil }
 
     if entry.lastOpenedAt == nil, entry.shows >= showCapCount {
       let lastShownAt = entry.lastShownAt ?? .distantPast
@@ -226,33 +244,57 @@ final class HomeKnowsImpressionStore {
 
   private let persistence: any HomeKnowsImpressionPersisting
   private let now: () -> Date
+  private let ownerID: () -> String?
   /// Row keys and slot names already reported during the current visit. One
   /// visit is one impression: the in-visit rotation timer re-renders the same
   /// row every few seconds and must not burn through the show cap.
   private var reportedThisVisit: Set<String> = []
+  /// The owner the keys above belong to. The ledger itself is owner-scoped at
+  /// every read and write, but this set is not — and a shared key (a suggested
+  /// question is keyed by its text) would silence the new owner's first
+  /// impression on a switch that leaves the dashboard mounted.
+  private var visitOwnerID: String?
 
   /// `persistence` defaults to owner-scoped `UserDefaults`. It is built inside
   /// the initializer rather than as a default argument because default argument
   /// expressions are evaluated outside this type's actor.
   init(
     persistence: (any HomeKnowsImpressionPersisting)? = nil,
-    now: @escaping () -> Date = Date.init
+    now: @escaping () -> Date = Date.init,
+    ownerID: (() -> String?)? = nil
   ) {
     self.persistence = persistence ?? HomeKnowsImpressionDefaults()
     self.now = now
+    self.ownerID = ownerID ?? { RuntimeOwnerIdentity.currentOwnerId() }
   }
 
   /// Reads through to storage so an account switch cannot be served a cached
   /// ledger from the previous owner.
-  func snapshot() -> HomeKnowsImpressionLedger { persistence.load() }
+  func snapshot() -> HomeKnowsImpressionLedger {
+    adoptCurrentOwner()
+    return persistence.load()
+  }
 
   /// Starts a new visit to the knows-list. Resets in-visit de-duplication.
-  func beginVisit() { reportedThisVisit.removeAll() }
+  func beginVisit() {
+    visitOwnerID = ownerID()
+    reportedThisVisit.removeAll()
+  }
+
+  /// An owner change is the start of a new visit whether or not the view was
+  /// rebuilt: the previous owner's keys describe another account's ledger.
+  private func adoptCurrentOwner() {
+    let current = ownerID()
+    guard current != visitOwnerID else { return }
+    visitOwnerID = current
+    reportedThisVisit.removeAll()
+  }
 
   /// Records a row as shown. Returns the updated impression, or `nil` when this
   /// row was already recorded during the current visit.
   @discardableResult
   func recordShown(key: String, contentHash: String) -> HomeKnowsImpression? {
+    adoptCurrentOwner()
     guard reportedThisVisit.insert(key).inserted else { return nil }
     return mutate(key: key) { impression in
       let contentChanged = impression.contentHash != contentHash
@@ -266,6 +308,10 @@ final class HomeKnowsImpressionStore {
         impression.firstShownAt = nil
         impression.dismissedAt = nil
       }
+      // A prior open belonged to the old text. Carrying it across exempted the
+      // new content from the show cap and the same-day rule for good — the one
+      // row in the ledger that could repeat itself indefinitely.
+      if contentChanged { impression.lastOpenedAt = nil }
       impression.shows += 1
       impression.firstShownAt = impression.firstShownAt ?? self.now()
       impression.lastShownAt = self.now()
@@ -292,7 +338,8 @@ final class HomeKnowsImpressionStore {
 
   /// True the first time this visit that an empty slot is worth reporting.
   func shouldReportEmptySlot(_ slot: String) -> Bool {
-    reportedThisVisit.insert("slot:\(slot)").inserted
+    adoptCurrentOwner()
+    return reportedThisVisit.insert("slot:\(slot)").inserted
   }
 
   @discardableResult
@@ -303,5 +350,98 @@ final class HomeKnowsImpressionStore {
     ledger.entries[key] = impression
     persistence.save(ledger)
     return impression
+  }
+}
+
+// MARK: - Harness handle
+
+/// The knows-list currently on screen, for non-production automation only.
+///
+/// `DashboardPage` composes the rows in a computed property and publishes them nowhere: the
+/// composition, the slots it left empty, and the ledger snapshot it was gated against all live for
+/// one `body` evaluation and are gone. A flow could therefore watch the hub render and still not
+/// read which rows it bound, which candidate it held back, or why — and could not open or dismiss
+/// one without the cursor.
+///
+/// This is that handle. Every closure is one of the page's own functions — `beginKnowsVisit`,
+/// `recordKnowsImpressions`, `openKnowsRow`, and the dismiss handler the row's ✕ invokes — so the
+/// bridge's `home_knows_*` actions are second *callers* of the rotation code and never a second
+/// rotation policy. A copied composer would keep agreeing with whatever the harness wrote into it
+/// long after the real one changed, and the whole point of the flow is that the two agree.
+///
+/// Gated: on a production bundle `register` does nothing and `mounted` is always nil, so nothing
+/// here is a shipped path.
+@MainActor
+enum HomeKnowsAutomationRegistry {
+  /// One composed row, projected to strings so the bridge never re-derives anything.
+  struct Row: Equatable {
+    let key: String
+    let kind: String
+    let text: String
+    let showsBefore: Int
+  }
+
+  struct EmptySlot: Equatable {
+    let slot: String
+    let reason: String
+  }
+
+  struct Snapshot {
+    let rows: [Row]
+    let emptySlots: [EmptySlot]
+    let canRotate: Bool
+    /// What the greeting's "N things need you" is counting, so a flow can prove the headline and
+    /// the list below it read the same ledger.
+    let openTaskCount: Int
+    let ledger: HomeKnowsImpressionLedger
+  }
+
+  /// The page's own functions, in the order one visit calls them.
+  struct Handle {
+    let token: UUID
+    let snapshot: @MainActor () -> Snapshot
+    let beginVisit: @MainActor () -> Void
+    let recordImpressions: @MainActor () -> Void
+    /// - Returns: false when the index is outside the rows currently on screen.
+    let open: @MainActor (Int) -> Bool
+    /// - Returns: false when the index is outside the rows, or when that row kind has no ✕
+    ///   (question rows are not dismissible).
+    let dismiss: @MainActor (Int) -> Bool
+  }
+
+  private(set) static var mounted: Handle?
+
+  static func register(_ handle: Handle) { register(handle, enabled: AppBuild.isNonProduction) }
+
+  /// The gate as a parameter, because `AppBuild.isNonProduction` reads `Bundle.main`, and under
+  /// `swift test` that is the test runner rather than an Omi bundle — so a test asserting the
+  /// production no-op would pass for the wrong reason and a test asserting the registration could
+  /// not run at all.
+  static func register(_ handle: Handle, enabled: Bool) {
+    guard enabled else { return }
+    mounted = handle
+  }
+
+  /// Token-checked: the hub list and the chat strip are two renderings of the same rows and can
+  /// overlap for a frame while the stage animates, and the outgoing one must not clear the handle
+  /// the incoming one just took.
+  static func unregister(token: UUID) {
+    guard mounted?.token == token else { return }
+    mounted = nil
+  }
+}
+
+extension HomeKnowsImpressionStore {
+  /// Drop every entry for the current owner and start a fresh visit.
+  ///
+  /// Harness-only, and called from exactly one place: the non-production `home_knows_reset` bridge
+  /// action. The ledger is `UserDefaults`-backed and deliberately outlives the app, so without
+  /// this a second run of `home-knows-rotation.yaml` on the same bundle would open on rows that
+  /// were already same-day-suppressed by the first — and would read a correct suppression as a
+  /// composer that had stopped producing rows. It writes through the same persistence the
+  /// mutations use rather than reaching around it.
+  func resetForAutomation() {
+    persistence.save(.empty)
+    beginVisit()
   }
 }

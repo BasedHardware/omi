@@ -122,7 +122,7 @@ from utils.notifications import send_notification, send_training_data_submitted_
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from models.notification_message import NotificationMessage
 from models.daily_summary_payload import LearnedMemoryRef
-from utils.memory.learned_today import memories_learned_for_summary, memory_review_card_block
+from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.other import endpoints as auth
 from utils.other.storage import (
     delete_all_conversation_recordings,
@@ -1632,19 +1632,15 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
 def _memories_learned_payload(uid, conversations, start_date_utc, end_date_utc):
     """Select the day's review items for a summary about to be generated.
 
-    The read lives here rather than inside generate_comprehensive_daily_summary:
-    that module is the LLM summary builder, and giving it a memory dependency
-    would put a Firestore read behind every caller and every test of it.
+    Thin adapter over the shared selection so this route and the scheduled job
+    cannot drift into two different definitions of "learned today".
     """
-    return [
-        ref.model_dump(mode='json')
-        for ref in memories_learned_for_summary(
-            uid,
-            conversation_ids=[c.id for c in conversations if not getattr(c, 'discarded', False)],
-            window_start=start_date_utc,
-            window_end=end_date_utc,
-        )
-    ]
+    return memories_learned_payload(
+        uid,
+        conversations,
+        window_start=start_date_utc,
+        window_end=end_date_utc,
+    )
 
 
 class TestDailySummaryRequest(BaseModel):
