@@ -24,6 +24,7 @@ from models.conversation import (
     ConversationFinalizationStatusResponse,
     ConversationMutationResponse,
     CreateConversationResponse,
+    DeleteActionItemRequest,
     MergeConversationsRequest,
     MergeConversationsResponse,
     SearchRequest,
@@ -1152,6 +1153,31 @@ def update_action_item_description(
                 action_items_db.update_action_item(uid, ai['id'], {'description': data.description})
     except Exception as e:
         logger.error(f'Failed to mirror action item description update: {e}')
+    return {"status": "Ok"}
+
+
+@router.delete(
+    "/v1/conversations/{conversation_id}/action-items",
+    response_model=ConversationStatusResponse,
+    tags=['conversations'],
+)
+def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)):
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = deserialize_conversation(conversation)
+    action_items = conversation.structured.action_items
+    updated_action_items = [item for item in action_items if not (item.description == data.description)]
+    conversations_db.update_conversation_action_items(
+        uid, conversation_id, [action_item.model_dump() for action_item in updated_action_items]
+    )
+
+    # Mirror deletion in the standalone action_items collection
+    try:
+        existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
+        for ai in existing_items:
+            if ai.get('description') == data.description:
+                action_items_db.delete_action_item(uid, ai['id'])
+    except Exception as e:
+        logger.error(f'Failed to mirror action item deletion: {e}')
     return {"status": "Ok"}
 
 

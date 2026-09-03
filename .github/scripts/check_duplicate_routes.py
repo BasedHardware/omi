@@ -10,7 +10,9 @@ Deterministic and hermetic: parses @<router>.<method>("path") decorators and
 APIRouter(prefix=...) definitions in backend/routers/, resolves mounts from the
 three service entrypoints (backend/main.py, backend/desktop_backend.py,
 backend/pusher/main.py), and fails if any (app, method, path) is registered more
-than once. stdlib-only.
+than once. KNOWN_DUPLICATES exempts duplicates whose shadowing semantics are
+load-bearing for shipped clients; each entry is an explicit mount-order decision
+with a named migration follow-up. stdlib-only.
 """
 import re
 import sys
@@ -25,6 +27,23 @@ ENTRYPOINTS = {
     "pusher": ROOT / "backend" / "pusher" / "main.py",
 }
 HTTP_METHODS = {"get", "post", "patch", "put", "delete", "websocket", "api_route"}
+
+# Duplicates whose shadowing semantics are load-bearing today. An entry is an
+# explicit mount-order decision backed by evidence, not a silent pass; keep this
+# set minimal and remove an entry once its client migration lands.
+# ("main", "delete", "/v1/conversations/{conversation_id}/action-items"): shipped
+#   Flutter clients send the description-body DELETE to the first-mounted
+#   conversations handler (app/lib/backend/http/api/conversations.dart sends
+#   {'completed', 'description'} and expects 204), so serving the path from the
+#   second-mounted action_items handler would turn a single-item swipe-delete
+#   into delete-all-items-for-conversation on already-shipped builds. Follow-up:
+#   migrate those callers to the per-item DELETE /v1/action-items/{id}, then
+#   dedupe this registration. Evidence:
+#   omi-knowledge-base/projects/monorepo-cleanup/evidence/
+#   2026-09-03-pr12697-highrisk-audit.md (FINDING B).
+KNOWN_DUPLICATES = {
+    ("main", "delete", "/v1/conversations/{conversation_id}/action-items"),
+}
 
 ROUTER_DEF = re.compile(r"(\w+)\s*=\s*APIRouter\(([^)]*)\)", re.S)
 PREFIX_KW = re.compile(r"prefix\s*=\s*['\"]([^'\"]+)['\"]")
@@ -110,7 +129,14 @@ def main() -> int:
             for method, path in module_routes.get(module, []):
                 registered[(app, method, path)].append(module)
 
-    duplicates = {k: v for k, v in registered.items() if len(set(v)) > 1}
+    duplicates = {
+        k: v for k, v in registered.items() if len(set(v)) > 1 and k not in KNOWN_DUPLICATES
+    }
+    exempted = sorted(k for k in registered if len(set(registered[k])) > 1 and k in KNOWN_DUPLICATES)
+    if exempted:
+        print("known duplicates exempted (load-bearing shadowing; see KNOWN_DUPLICATES):")
+        for app, method, path in exempted:
+            print(f"  [{app}] {method.upper()} {path}")
     if duplicates:
         print("FAIL: duplicate route registrations (first-mounted handler silently wins):")
         for (app, method, path), mods in sorted(duplicates.items()):

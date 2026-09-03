@@ -93,6 +93,22 @@ class DuplicateRouteCheckTest(unittest.TestCase):
             code = self._run()
         self.assertEqual(code, 0)
 
+    def test_known_duplicate_is_exempt(self):
+        # The real load-bearing duplicate: shipped Flutter clients depend on the
+        # first-mounted conversations handler, so an exact KNOWN_DUPLICATES match
+        # must pass (with an exemption note) instead of failing the check.
+        write(self.roots[0], "backend/routers/conv.py",
+              ROUTER_A.replace("/{id}/action-items", "/{conversation_id}/action-items"))
+        write(self.roots[0], "backend/routers/items.py",
+              ROUTER_B.replace("/{id}/action-items", "/{conversation_id}/action-items"))
+        import contextlib, io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = self._run()
+        self.assertEqual(code, 0)
+        self.assertIn("known duplicates exempted", buf.getvalue())
+        self.assertIn("DELETE /v1/conversations/{conversation_id}/action-items", buf.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
