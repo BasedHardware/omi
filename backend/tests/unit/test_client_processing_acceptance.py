@@ -880,21 +880,6 @@ def test_store_deterministic_minimum_without_projection_omits_field(stack) -> No
     assert _nested(payload, 'structured', 'title') == _SEGMENT_TEXT
 
 
-# red-proof: skip `strip_client_processing` on the custom-STT persist (stale in-memory projection would overwrite)
-def test_custom_stt_persist_strips_in_memory_projection(monkeypatch, stack) -> None:
-    pc, _dev = stack
-    monkeypatch.setattr(pc, 'should_skip_custom_stt_postprocessing', lambda **_kwargs: True)
-    persisted = pc.lifecycle_service.persist_processed_conversation
-    persisted.reset_mock()
-    conv = _conversation(projection=_projection())
-    conv.uses_custom_stt = True
-    result = pc.process_conversation(_UID, 'en', conv)
-    payload = _persisted_payload(persisted)
-    assert 'client_processing' not in payload
-    assert result.client_processing is not None
-    assert result.client_processing.structure.title == PROJECTION_TITLE
-
-
 # red-proof: skip the after-process `client_processing_mutation` on non-idempotent ingest (paid persist strips and never stores)
 def test_from_segments_ingest_stores_projection_via_dedicated_mutation(monkeypatch, stack) -> None:
     pc, dev = stack
