@@ -2107,7 +2107,8 @@ class ChatProvider: ObservableObject {
   func askChatLaneForSpokenAnswer(
     prompt: String,
     invocationID: String,
-    expectedOwnerID: String
+    expectedOwnerID: String,
+    imageData: Data? = nil
   ) async throws -> String {
     guard runtimeOwnerId == expectedOwnerID else { throw RealtimeChatLaneError.ownerChanged }
     guard canAcceptSend, realtimeChatLaneInvocationGate.begin(invocationID) else {
@@ -2147,6 +2148,7 @@ class ChatProvider: ObservableObject {
         session: kernelContext.session,
         surface: surface,
         mode: chatMode.rawValue,
+        imageData: imageData,
         expectedContext: kernelContext.snapshot.freshness,
         reasoningEffort: ChatTurnOwner.mainChat.reasoningEffort,
         onTextDelta: { _ in },
