@@ -1642,11 +1642,6 @@ export interface DeleteAccountRequest {
   reason_details?: string | null;
 }
 
-export interface DeleteActionItemRequest {
-  completed: boolean;
-  description: string;
-}
-
 export interface DeleteImportJobResponse {
   job_id: string;
   status: string;
@@ -4981,7 +4976,6 @@ export interface OmiApiSchemas {
   "DeferralCreateRequest": DeferralCreateRequest;
   "DeferralReceipt": DeferralReceipt;
   "DeleteAccountRequest": DeleteAccountRequest;
-  "DeleteActionItemRequest": DeleteActionItemRequest;
   "DeleteImportJobResponse": DeleteImportJobResponse;
   "DeleteKnowledgeGraphResponse": DeleteKnowledgeGraphResponse;
   "DeleteLimitlessConversationsResponse": DeleteLimitlessConversationsResponse;

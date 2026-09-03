@@ -817,6 +817,26 @@ checks:
     triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9454 weekly baseline health pulse parsing, JSONL record, and 30-day staleness detection"
+  - id: dead-code-ratchet
+    command: ["python3", ".github/scripts/check_dead_code.py"]
+    triggers: ["app/lib/**", "app/pubspec.yaml", "backend/utils/**", "backend/models/**", "backend/database/**", "backend/services/**", "backend/jobs/**", "desktop/macos/agent/**", "desktop/windows/src/**", ".github/scripts/check_dead_code.py", ".github/scripts/dead_code/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "57 unreachable Flutter files accumulated until a June 2026 security fix landed on unreachable code; import-graph reachability (flutter from main.dart, agent, windows entries, incl. dynamic import(), string-spawned .js/.mjs siblings, and the @renderer alias) plus zero-importer backend buckets now fail NEW dead code with a delete-or-allowlist-with-reason fix, and the committed baseline only shrinks"
+  - id: dead-code-ratchet-tests
+    command: ["python3", ".github/scripts/test_check_dead_code.py"]
+    triggers: [".github/scripts/check_dead_code.py", ".github/scripts/test_check_dead_code.py", ".github/scripts/dead_code/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the four area scanners, their trap edges (package-submodule imports, __main__ guards, mention demotion, dynamic import, spawned siblings, alias resolution), baseline round-trip, and allowlist schema must stay behaviorally covered"
+  - id: duplicate-route-ratchet
+    command: ["python3", ".github/scripts/check_duplicate_routes.py"]
+    triggers: ["backend/routers/**", "backend/main.py", "backend/desktop_backend.py", "backend/pusher/**", ".github/scripts/check_duplicate_routes.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "FC-shadowed-route-handler: DELETE /v1/conversations/{id}/action-items was registered in two routers and FastAPI first-match silently shadowed the richer handler (and its vector cleanup) while that handler's tests stayed green; this check diffs every (app, method, path) mounted by the three service entrypoints and fails on any duplicate registration"
+  - id: duplicate-route-ratchet-tests
+    command: ["python3", ".github/scripts/test_check_duplicate_routes.py"]
+    triggers: [".github/scripts/check_duplicate_routes.py", ".github/scripts/test_check_duplicate_routes.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hermetic fixture coverage for the duplicate-route scanner: shadowed duplicate fails with the colliding path, unique routes pass, same path on different apps is not a duplicate, api_route methods expand"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

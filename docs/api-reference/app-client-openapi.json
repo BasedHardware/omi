@@ -10504,24 +10504,6 @@
         "title": "DeleteAccountRequest",
         "type": "object"
       },
-      "DeleteActionItemRequest": {
-        "properties": {
-          "completed": {
-            "title": "Completed",
-            "type": "boolean"
-          },
-          "description": {
-            "title": "Description",
-            "type": "string"
-          }
-        },
-        "required": [
-          "description",
-          "completed"
-        ],
-        "title": "DeleteActionItemRequest",
-        "type": "object"
-      },
       "DeleteImportJobResponse": {
         "properties": {
           "job_id": {

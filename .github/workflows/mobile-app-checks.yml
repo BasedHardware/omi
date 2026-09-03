@@ -63,9 +63,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: app/.dart_tool/build
-          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}
           restore-keys: |
-            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}-
             ${{ runner.os }}-flutter-buildrunner-
 
       - name: Resolve Flutter dependencies
@@ -123,9 +123,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: app/.dart_tool/build
-          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}
           restore-keys: |
-            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}-
             ${{ runner.os }}-flutter-buildrunner-
 
       - name: Resolve Flutter dependencies
@@ -262,9 +262,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: app/.dart_tool/build
-          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}
           restore-keys: |
-            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}-
             ${{ runner.os }}-flutter-buildrunner-
 
       - name: Resolve Flutter dependencies

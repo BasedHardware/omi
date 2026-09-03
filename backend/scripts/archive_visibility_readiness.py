@@ -1,3 +1,5 @@
+# LIFECYCLE: one-time
+# DELETE-AFTER: INV-MEM-3
 """Canonical module for ``scripts.archive_visibility_readiness`` (WS-G8b).
 
 Moved from ``utils/memory/v3/`` — its only consumer is the one-shot readiness

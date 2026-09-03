@@ -1,0 +1,24 @@
+{
+  "entries": [
+    {
+      "path": "desktop/windows/src/main/agentKernel/toolInstructionCoverage.ts",
+      "reason": "intentional test infrastructure"
+    },
+    {
+      "path": "desktop/windows/src/main/codingAgent/acp.testkit.ts",
+      "reason": "intentional test infrastructure"
+    },
+    {
+      "path": "desktop/windows/src/main/codingAgent/fixtures/fakeAcpSubprocess.mjs",
+      "reason": "intentional test infrastructure"
+    },
+    {
+      "path": "desktop/windows/src/main/codingAgent/fixtures/fakeAcpAuthSubprocess.mjs",
+      "reason": "intentional test infrastructure"
+    },
+    {
+      "path": "desktop/windows/src/shared/agentControlTools.ts",
+      "reason": "test-only contract module (AGENT_CONTROL_TOOL_NAMES assertions); the live IPC handler is self-contained in src/main/ipc/agentControl.ts"
+    }
+  ]
+}
