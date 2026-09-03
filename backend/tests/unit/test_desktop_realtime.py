@@ -107,6 +107,20 @@ async def test_usage_clamps_negative_tokens_and_records_realtime_breakdown(monke
     assert args[2:] == (10, 5, 0, 15, 0.00044)
 
 
+def test_usage_cost_uses_the_server_issued_gemini_model(monkeypatch):
+    models = []
+
+    def cost(provider, model, turn):
+        models.append((provider, model))
+        return 0.25
+
+    monkeypatch.setattr(desktop_realtime, 'client_reported_cost_usd', cost)
+    report = desktop_realtime.UsageReport(provider='gemini', model='gemini-2.5-flash-native-audio-preview-12-2025')
+
+    assert desktop_realtime._usage_cost(report) == 0.25
+    assert models == [('gemini', 'models/gemini-3.1-flash-live-preview')]
+
+
 def test_realtime_writer_marks_full_provider_cost_complete(monkeypatch):
     recorded = {}
     monkeypatch.setattr(
