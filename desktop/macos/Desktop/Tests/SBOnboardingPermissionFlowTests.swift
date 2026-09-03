@@ -492,12 +492,10 @@ final class AppStatePermissionProbeTests: XCTestCase {
   /// The check-status tool must route the probe through `Task.detached`, the
   /// same rule `AppState.refreshAutomationPermission` already follows.
   func testChatPermissionStatusProbeNeverRunsOnTheMainActor() throws {
-    // omi-test-quality: source-inspection -- static contract: the probe's
-    // LaunchServices wait cannot be exercised hermetically; the isolation
-    // contract is the observable invariant.
     let url = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent().deletingLastPathComponent()
       .appendingPathComponent("Sources/Providers/ChatToolExecutor.swift")
+    // omi-test-quality: source-inspection -- static contract: the isolation boundary is not hermetically observable
     let src = try String(contentsOf: url, encoding: .utf8)
 
     guard
