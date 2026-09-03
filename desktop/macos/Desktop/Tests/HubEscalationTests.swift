@@ -84,7 +84,7 @@ final class HubEscalationTests: XCTestCase {
     let prompt = RealtimeHubTools.publicWebSearchPrompt(
       query: "What is the weather in New York right now?")
 
-    XCTAssertTrue(prompt.hasPrefix("Search the live public web before answering this request."))
+    XCTAssertTrue(prompt.hasPrefix("Search the live public web thoroughly before answering this request."))
     XCTAssertTrue(prompt.contains("weather in New York right now"))
     XCTAssertTrue(prompt.contains("one to four concise"))
     XCTAssertTrue(prompt.contains("Name the source"))
