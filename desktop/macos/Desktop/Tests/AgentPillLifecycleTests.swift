@@ -2018,6 +2018,42 @@ import XCTest
     XCTAssertTrue(source.contains("private static func framesEquivalent(_ lhs: NSRect, _ rhs: NSRect) -> Bool"))
   }
 
+  /// Replaces `testTypedSendDelegatesResponseSizingToWindow`, which was retired with
+  /// `AskAIInputView` when main's typed-send rewrite landed. That test was the only thing
+  /// pinning the quiet-answer latch, and the wake-word feature depends on it: a typed
+  /// question must present the response panel, while a wake-word answer stays in the notch.
+  ///
+  /// Everything pinned here lives in `FloatingControlBarWindow.swift` now, so this survives
+  /// the view-layer churn that killed the previous pin.
+  func testQuietAnswerLatchContractSurvivesTheTypedSendRewrite() throws {
+    let windowSource = try floatingControlBarWindowSource()
+
+    // Defaulting to true is what keeps an ordinary typed send presenting the panel.
+    XCTAssertTrue(windowSource.contains("func beginVisibleMainQuery("))
+    XCTAssertTrue(
+      windowSource.contains(
+        "_ message: String, fromVoice: Bool, animated: Bool = true, presentsSurface: Bool = true"))
+
+    // beginVisibleMainQuery may only ever *set* quiet. It runs twice per query, so clearing
+    // here would let the second call undo the first and reopen the panel mid-answer.
+    XCTAssertTrue(windowSource.contains("if !presentsSurface { state.answersQuietly = true }"))
+
+    // The one-shot latch: armed by the wake word, consumed by the visible path.
+    XCTAssertTrue(windowSource.contains("private static var suppressNextVisibleSurface = false"))
+    XCTAssertTrue(windowSource.contains("Self.suppressNextVisibleSurface = true"))
+    XCTAssertTrue(windowSource.contains("let presentsSurface = !Self.suppressNextVisibleSurface"))
+
+    // Every exit that abandons the query has to clear the latch, or an abandoned wake-word
+    // command quiets the next typed question instead. Two guard exits plus .voiceOnly.
+    XCTAssertEqual(windowSource.components(separatedBy: "Self.suppressNextVisibleSurface = false").count - 1, 3)
+
+    // A typed question is never quiet, whatever a preceding wake-word answer left behind.
+    // Both onSendQuery wirings must reset it — the default one installed at setup and the
+    // one re-wired in openAIInputWithQuery.
+    XCTAssertTrue(windowSource.contains("barWindow.state.answersQuietly = false"))
+    XCTAssertTrue(windowSource.contains("window.state.answersQuietly = false"))
+  }
+
   private func agentPillSource() throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
