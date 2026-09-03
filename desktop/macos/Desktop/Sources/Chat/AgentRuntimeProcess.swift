@@ -2578,6 +2578,16 @@ actor AgentRuntimeProcess {
       authorizationSnapshot,
       expectedAuthorityEpoch: admissionAuthorityEpoch)
     env = Self.childBackendRoutingEnvironment(baseEnvironment: env, rustBase: rustBase)
+    // EXP-002: the agent child starves generic public-web routing for the
+    // memory_v1 arm (pi-mono reads this once per turn). The arm resolves
+    // before the main shell paints and the runtime spawns lazily on first
+    // chat use, so the value is settled by the time a spawn can happen; the
+    // per-turn responseContext instruction remains authoritative regardless.
+    if let assignment = await MainActor.run(body: { DesktopExperimentCoordinator.shared.assignment }) {
+      env["OMI_EXPERIMENT_VARIANT"] = assignment.variant
+    } else {
+      env.removeValue(forKey: "OMI_EXPERIMENT_VARIANT")
+    }
     if rustBase.isEmpty && preferredAdapterId == .piMono {
       log("AgentRuntimeProcess: pi-mono start refused, OMI_DESKTOP_API_URL is not configured")
       throw BridgeError.bridgeScriptNotFound

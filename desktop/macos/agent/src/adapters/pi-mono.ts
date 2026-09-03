@@ -226,6 +226,13 @@ function resolveBundledExtension(): string {
 
 const PUBLIC_WEB_ROUTING_INSTRUCTION = "<omi_retrieval_policy>Web search is required and available for this fresh public request. Use a live public-web or search tool before answering. Base time-sensitive claims only on that lookup and identify the source. Never say, imply, or hedge that you lack internet, web-search, real-time-data, or tool access; if the lookup itself fails, state that the lookup failed instead. Do not use private Omi context unless the user explicitly asks for it.</omi_retrieval_policy>";
 
+// EXP-002 `memory_v1`: Omi is the user's memory, not their assistant. The arm
+// starves generic public-web routing — no turn may be flagged as requiring a
+// live web lookup, so the backend keeps the turn on the chat-agent lane
+// instead of swapping to the web-search lane. Personal retrieval is unaffected:
+// it flows through context sources and Omi tools, not this routing prefix.
+const MEMORY_IDENTITY_VARIANT = "memory_v1";
+
 const EXPLICIT_WEB_REQUESTS = [
   "search the web", "search web", "search the internet", "search online",
   "look it up online", "look this up online", "look that up online",
@@ -424,6 +431,10 @@ type PublicWebTurnState = {
 /// the instruction here guarantees public-web queries keep working for main
 /// agents and subagents while the backend fleet rolls forward independently.
 export function routePromptForPublicWeb(message: string): string {
+  // EXP-002 memory_v1: the arm never flags a turn for public-web routing.
+  if ((globalThis.process?.env?.OMI_EXPERIMENT_VARIANT ?? "").trim() === MEMORY_IDENTITY_VARIANT) {
+    return message;
+  }
   // The adapter receives the full rendered prompt, including inherited context
   // and prior turns. Inspect only the current user instruction when deciding
   // whether this particular turn requires a public-web lookup.

@@ -599,6 +599,7 @@ struct DashboardPage: View {
         },
         onOpenAgentRef: FloatingControlBarManager.shared.openAgentChatFromTimeline(ref:completion:),
         chatFirstRichBlockContext: chatFirstRichBlockContext,
+        postcardFirstLanding: DesktopExperimentCoordinator.shared.isMemoryV1,
         welcomeContent: { dashboardChatWelcome }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -751,6 +752,17 @@ struct DashboardPage: View {
 
     return VStack(spacing: 0) {
       Spacer(minLength: 0)
+
+      // EXP-002 `memory_v1`: the postcard is the home object on the hub —
+      // what happened, what Omi thinks is true, tap if wrong. Same store and
+      // card the Chat surface mounts; control and un-armed users see the hub
+      // unchanged.
+      if DesktopExperimentCoordinator.shared.isMemoryV1 {
+        HomeDailySummarySection(store: ChatDailySummaryCoordinator.shared.store)
+          .frame(width: columnWidth)
+          .padding(.bottom, OmiSpacing.xl)
+          .transition(.homeHubFade)
+      }
 
       homeHubHeadline
         .transition(.homeHubFade)
@@ -1155,6 +1167,7 @@ struct DashboardPage: View {
         chatFirstRichBlockContext: chatFirstRichBlockContext,
         verticalContentPadding: OmiSpacing.sm,
         trailingContentPadding: OmiSpacing.md,
+        postcardFirstLanding: DesktopExperimentCoordinator.shared.isMemoryV1,
         welcomeContent: { dashboardChatWelcome }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)

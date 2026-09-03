@@ -252,6 +252,43 @@ describe("PiMonoAdapter prompt correlation", () => {
     }
   });
 
+  it("EXP-002 memory_v1 never routes a turn onto the public web", () => {
+    const previous = process.env.OMI_EXPERIMENT_VARIANT;
+    process.env.OMI_EXPERIMENT_VARIANT = "memory_v1";
+    try {
+      for (const message of [
+        "Search the web for the latest SwiftUI changes.",
+        "What is the current weather in NYC?",
+        "google it",
+      ]) {
+        expect(routePromptForPublicWeb(message)).toBe(message);
+      }
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OMI_EXPERIMENT_VARIANT;
+      } else {
+        process.env.OMI_EXPERIMENT_VARIANT = previous;
+      }
+    }
+  });
+
+  it("EXP-002 control and un-armed turns keep the routing contract", () => {
+    const previous = process.env.OMI_EXPERIMENT_VARIANT;
+    process.env.OMI_EXPERIMENT_VARIANT = "control";
+    try {
+      expect(routePromptForPublicWeb("Search the web for the latest SwiftUI changes.")).toContain(
+        "<omi_retrieval_policy>"
+      );
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OMI_EXPERIMENT_VARIANT;
+      } else {
+        process.env.OMI_EXPERIMENT_VARIANT = previous;
+      }
+    }
+    expect(routePromptForPublicWeb("What did I do today?")).toBe("What did I do today?");
+  });
+
   it("keeps the trusted query separate from appended untrusted tool context", () => {
     const privateQueryWithToolContext = [
       "[Kernel Context Snapshot version=1 generation=2]",

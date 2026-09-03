@@ -1712,6 +1712,9 @@ build_launch_env_args() {
     if [ -n "${OMI_FORCE_MEETING_NOTE_SCREENSHOTS:-}" ]; then
         LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_MEETING_NOTE_SCREENSHOTS=$OMI_FORCE_MEETING_NOTE_SCREENSHOTS")
     fi
+    if [ -n "${OMI_FORCE_EXPERIMENT_VARIANT:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_EXPERIMENT_VARIANT=$OMI_FORCE_EXPERIMENT_VARIANT")
+    fi
     # Forward automation token overrides when the caller already pinned them
     # (e.g. desktop-core-harness.sh). Default token discovery prefers Darwin
     # user temp in harness clients, matching NSTemporaryDirectory().
