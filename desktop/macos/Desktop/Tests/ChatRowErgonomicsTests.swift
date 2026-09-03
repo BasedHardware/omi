@@ -77,6 +77,22 @@ final class ChatSelectableProseTests: XCTestCase {
     XCTAssertEqual(ChatSelectableProse.citationOrdinal(from: link), 1)
   }
 
+  /// Ordinals run to four digits, and the model also writes the kind alongside
+  /// them. Both used to fall outside a narrower pattern and render as dead text.
+  func testWideAndKindPrefixedMarkersAreLinkedToo() throws {
+    let wide = try attributed("You preferred the clearer direction. [5004]", citations: [5004])
+    XCTAssertEqual(
+      ChatSelectableProse.citationOrdinal(
+        from: try XCTUnwrap(try attribute(.link, of: wide, at: "[5004]") as? URL)),
+      5004)
+
+    let prefixed = try attributed("You prefer mornings. [memory 5023]", citations: [5023])
+    XCTAssertEqual(
+      ChatSelectableProse.citationOrdinal(
+        from: try XCTUnwrap(try attribute(.link, of: prefixed, at: "[memory 5023]") as? URL)),
+      5023)
+  }
+
   /// A bracketed number the turn has no source for is prose, not a control.
   func testAnUnknownBracketedNumberIsLeftAsWords() throws {
     let text = try attributed("Section [4] of the lease.", citations: [1])

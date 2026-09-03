@@ -217,6 +217,35 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       "transcript rows stop at x=\(painted) of \(viewportWidth), so a gutter is still reserved")
   }
 
+  /// Selection has to be in the mounted transcript, on both senders' rows.
+  /// The unit tests prove the attributed string; this proves the transcript
+  /// actually hosts the text view that owns a selection, which is the part a
+  /// wiring mistake would silently drop.
+  func testEveryMountedRowHostsSelectableText() throws {
+    let harness = try makeHarness(messageCount: 12)
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+
+    var leadingEdges = Set<CGFloat>()
+    var selectable = 0
+    func walk(_ view: NSView) {
+      if let text = view as? ChatProseTextView {
+        XCTAssertTrue(text.isSelectable, "a mounted row that cannot be selected is the old bug")
+        XCTAssertFalse(text.isEditable, "a transcript row is not a document")
+        leadingEdges.insert(text.convert(text.bounds, to: nil).origin.x)
+        selectable += 1
+      }
+      view.subviews.forEach(walk)
+    }
+    walk(harness.scrollView)
+
+    XCTAssertGreaterThan(selectable, 0, "the transcript mounted no selectable prose at all")
+    XCTAssertGreaterThan(
+      leadingEdges.count, 1,
+      "user and assistant rows start at different insets, so one inset means only one sender "
+        + "is selectable — which is exactly what the popover era looked like")
+  }
+
   func testRepeatedFastBurstsKeepTheMountedTranscriptResponsive() throws {
     let harness = try makeHarness(messageCount: 120)
     defer { harness.tearDown() }

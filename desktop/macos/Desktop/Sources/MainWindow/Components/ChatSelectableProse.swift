@@ -103,9 +103,16 @@ enum ChatSelectableProse {
   /// literal text (there is no link destination after it), so it is still here
   /// to find, and turning it into a link keeps it clickable *and* selectable —
   /// the chip button it replaces was neither.
+  ///
+  /// The pattern is the transcript's own, not a second copy of it: ordinals run
+  /// to four digits and the model also writes kind-prefixed markers like
+  /// `[memory 5023]`, both of which a hand-rolled `\[\d{1,3}\]` quietly left
+  /// as dead text.
   static func applyCitationLinks(to text: NSMutableAttributedString, ordinals: Set<Int>) {
     guard !ordinals.isEmpty else { return }
-    guard let pattern = try? NSRegularExpression(pattern: #"\[(\d{1,3})\]"#) else { return }
+    guard
+      let pattern = try? NSRegularExpression(pattern: ChatCitationMarkup.numericMarkerPattern)
+    else { return }
     let full = NSRange(location: 0, length: text.length)
     for match in pattern.matches(in: text.string, range: full).reversed() {
       guard match.numberOfRanges == 2,
