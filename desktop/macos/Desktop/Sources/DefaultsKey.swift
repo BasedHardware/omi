@@ -73,6 +73,10 @@ enum DefaultsKey: String {
   case onboardingHowDidYouHearSource = "onboardingHowDidYouHearSource"
   case onboardingRole = "onboardingRole"
   case onboardingJustCompleted = "onboardingJustCompleted"
+  /// Legacy onboarding ACP session id (pre-kernel `surface_conversations`).
+  case onboardingACPSessionId = "onboardingACPSessionId"
+  /// Legacy locally persisted onboarding chat messages; kernel journal owns this now.
+  case onboardingChatMessages = "onboardingChatMessages"
   case hasCompletedFileIndexing = "hasCompletedFileIndexing"
   case screenAnalysisEnabled = "screenAnalysisEnabled"
   case ratingPromptQuestionCount = "ratingPromptQuestionCount"

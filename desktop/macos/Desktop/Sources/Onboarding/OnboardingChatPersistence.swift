@@ -68,13 +68,13 @@ enum OnboardingChatPersistence {
   /// Clear all persisted onboarding data
   static func clear() {
     // Legacy onboarding ACP session id (pre-kernel surface_conversations)
-    UserDefaults.standard.removeObject(forKey: "onboardingACPSessionId")
+    UserDefaults.standard.removeObject(forKey: .onboardingACPSessionId)
     UserDefaults.standard.removeObject(forKey: midOnboardingKey)
     UserDefaults.standard.removeObject(forKey: explorationTextKey)
     UserDefaults.standard.removeObject(forKey: explorationCompletedKey)
     UserDefaults.standard.removeObject(forKey: toolCompletedKey)
     UserDefaults.standard.removeObject(forKey: goalCompletedKey)
     // Clean up legacy messages key if present
-    UserDefaults.standard.removeObject(forKey: "onboardingChatMessages")
+    UserDefaults.standard.removeObject(forKey: .onboardingChatMessages)
   }
 }
