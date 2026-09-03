@@ -4444,6 +4444,8 @@ class FloatingControlBarManager {
       let window
     else { return }
 
+    DesktopUsageDailyReporter.shared.recordProactiveCardActed()
+
     AnalyticsManager.shared.notificationClicked(
       notificationId: notification.id.uuidString,
       title: notification.title,
@@ -4556,6 +4558,7 @@ class FloatingControlBarManager {
       surface: "floating_bar",
       suggestionIdentity: notification.suggestionTelemetryIdentity
     )
+    DesktopUsageDailyReporter.shared.recordProactiveCardShown()
 
     // A persistent card (meeting summary share) stays until the user acts on
     // it — Copy/Send/close are its only exits, all of which route through
