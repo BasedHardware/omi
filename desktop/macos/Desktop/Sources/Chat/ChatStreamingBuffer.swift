@@ -13,7 +13,22 @@ final class ChatStreamingBuffer {
     }
   }
 
+  /// The raw, un-normalized text a streaming message has received so far.
+  ///
+  /// `normalizeText` is a *projection*, not an edit: it may legitimately withhold
+  /// text it cannot yet classify — the follow-up tail marker arrives split across
+  /// flushes, and the question after it must never appear in the transcript. Feeding
+  /// a projection its own previous output destroys the evidence it needs on the next
+  /// flush, so what was withheld once leaks token by token afterwards. The raw text
+  /// is therefore accumulated here and the projection is only ever *written to* the
+  /// message, never read back out of it.
+  private struct RawAccumulator {
+    var text: String = ""
+    var blocks: [String: String] = [:]
+  }
+
   private var pendingSegments: [PendingSegment] = []
+  private var rawAccumulators: [String: RawAccumulator] = [:]
   private var flushWorkItem: DispatchWorkItem?
   private let flushInterval: TimeInterval
 
@@ -36,11 +51,21 @@ final class ChatStreamingBuffer {
     flushWorkItem = nil
   }
 
+  /// Release the raw accumulator for a finished turn.
+  ///
+  /// Called when the authoritative terminal answer replaces the streamed text.
+  /// Without this the map grows for the life of the session, and a message id
+  /// that streams a second time would resume from the first turn's text.
+  func finishStreaming(messageId: String) {
+    rawAccumulators[messageId] = nil
+  }
+
   /// Drop only the buffered deltas for a revoked turn. A newer turn may already
   /// share this buffer, so cancelling or flushing the whole queue would either
   /// lose its tokens or apply the stopped turn's late output.
   func discardPendingSegments(messageId: String) {
     pendingSegments.removeAll { $0.messageId == messageId }
+    rawAccumulators[messageId] = nil
     if pendingSegments.isEmpty {
       cancelPendingFlush()
     }
@@ -145,20 +170,29 @@ final class ChatStreamingBuffer {
     to message: inout ChatMessage,
     normalizeText: (_ message: ChatMessage, _ text: String) -> String
   ) {
-    message.text = normalizeText(message, message.text + text)
+    // Seed from what the message already carries the first time this turn
+    // appends, so a message that was restored or resumed keeps its prefix.
+    var accumulator = rawAccumulators[message.id] ?? RawAccumulator(text: message.text)
+    accumulator.text += text
+    message.text = normalizeText(message, accumulator.text)
 
     if let lastBlockIndex = message.contentBlocks.indices.last,
       case .text(let blockId, let existing) = message.contentBlocks[lastBlockIndex]
     {
+      let rawBlock = (accumulator.blocks[blockId] ?? existing) + text
+      accumulator.blocks[blockId] = rawBlock
       message.contentBlocks[lastBlockIndex] = .text(
         id: blockId,
-        text: normalizeText(message, existing + text)
+        text: normalizeText(message, rawBlock)
       )
     } else {
+      let blockId = UUID().uuidString
+      accumulator.blocks[blockId] = text
       message.contentBlocks.append(
-        .text(id: UUID().uuidString, text: normalizeText(message, text))
+        .text(id: blockId, text: normalizeText(message, text))
       )
     }
+    rawAccumulators[message.id] = accumulator
   }
 
   private func appendThinkingSegment(_ text: String, to message: inout ChatMessage) {
