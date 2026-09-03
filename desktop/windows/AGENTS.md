@@ -25,8 +25,7 @@ ignored, breaking the pi-mono dependency-closure postinstall check
 (`scripts/verify-pimono-unpack.mjs`) with a confusing "closure package(s) do
 not resolve on disk" error. Use `npx pnpm@10 <command>` if your system pnpm
 is a different major version — don't downgrade a system-managed pnpm install
-for this alone.
-**Node version pin:** `>=22.19.0 <23` — `.nvmrc` sets it for `nvm use`; Node 24+ breaks vitest (jsdom localStorage shadow) — `pretest` calls `scripts/check-node-version.mjs`.
+for this alone. **Node pin:** `>=22.19.0 <23` (`.nvmrc`; Node 24+ breaks vitest jsdom — `pretest` calls `scripts/check-node-version.mjs`).
 
 ## Development Workflow
 
