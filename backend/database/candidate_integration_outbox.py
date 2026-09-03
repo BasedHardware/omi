@@ -9,7 +9,6 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import db
 from database.candidates import (
-    CANDIDATE_INTEGRATION_OUTBOX_COLLECTION,
     TASK_INTELLIGENCE_CONTROL_COLLECTION,
     TASK_INTELLIGENCE_CONTROL_DOCUMENT,
 )
@@ -17,6 +16,7 @@ from database.durable_queue import ProcessOutcome, QueuePolicy, decide_attempt, 
 from database.read_boundary import parse_snapshot_strict
 from models.task_intelligence import TaskWorkflowControl
 
+CANDIDATE_INTEGRATION_OUTBOX_COLLECTION = 'candidate_integration_outbox'
 CANDIDATE_INTEGRATION_POLICY = QueuePolicy(max_attempts=5, base_backoff_seconds=30, max_backoff_seconds=1800)
 
 
