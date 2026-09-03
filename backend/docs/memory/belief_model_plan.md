@@ -187,3 +187,86 @@ Consolidation into a gist that keeps source rows as evidence stays allowed.
 - Changing user `DELETE` into a soft hide — that remains the user-right tombstone.
 - Client UI chrome; API fields only.
 - Rewriting consolidation into a gist engine (allowed as-is if source rows remain).
+
+---
+
+## Implementation report
+
+Branch `feat/memory-belief-model`. Flag `MEMORY_BELIEF_MODEL_ENABLED`, unset = off.
+
+### What landed
+
+| SHA | Commit |
+| --- | --- |
+| `95c8b0126f` | `docs(memory): belief model implementation plan` |
+| `c390f26620` | `feat(memory): read-side currency, band, and half-life priors` |
+| `f95e2efd77` | `feat(memory): extractor subject scope, half-life, and meta split` |
+| `d2dc2d12ca` | `feat(memory): attach currency, band, and as_of on reads` |
+| `58422f46c4` | `feat(memory): evidence events and skip time-only forget` |
+| `8dbede3e58` | `fix(memory): keep resolved rows listed as history` |
+| `f9f09a6741` | `fix(memory): satisfy pyright on belief-model seams` |
+| `86f1c9c1e8` | `fix(memory): keep belief reads off the Gate F consolidation ratchet` |
+
+Rule 1: `utils/memory/belief_model.py` computes currency/band at read time. Priors derive from stored `half_life_days`, else `belief_class`, else `user_asserted` / category / tier. `/v3` overlay, chat `as_of`, JIT proactive bar.
+
+Rule 2–3: `utils/memory/belief_evidence.py` judges admission neighbors (`memory_conflict` LLM, structured `EvidenceEventJudgment`). Review True→restated, False→contradicted without supersede. Edit increments corroboration. User delete stays a tombstone.
+
+Time-only: `short_term_promotion.run_canonical_short_term_ttl_lifecycle` skips `reject_or_hide` when the flag is on. Consolidation prompt forbids archive/supersede on age alone.
+
+### What did not land
+
+- No `half_life_days` backfill (read-side prior).
+- No `MEMORY_BELIEF_MODEL_ENABLED=false` in `backend/deploy/runtime_env/_base.yaml`. Unset already fails closed to off; registering it is a deploy-knob follow-up (runtime-env tests would need updating).
+- Sweep gist `subject_scope=primary_user` defaults (`daily_memory_sweep.py`) unchanged. Classification is on the extraction write path only.
+- No adapter-level I/O test for `update_canonical_memory_review`; mapping is covered by `test_belief_evidence.py` (`patch_for_evidence_event`).
+- `run-unit-ci.sh --changed-files` selected 1030 files because `product_memory.py` / `memory_contracts.py` fan out. Full pytest of that set was not run; typecheck of the typed boundary was.
+
+### Deviations from the plan
+
+- **Stored `belief_class`.** Plan said “not stored.” Identity’s prior is null, which is indistinguishable from a missing `half_life_days` on a legacy row. Numeric `half_life_days` still wins.
+- **`resolved` does not set `status=superseded`.** That would hide the row from the default list. Currency with `valid_to` in the past is band=history; `/v3` still lists it.
+- **`last_evidenced_at` is `last_corroborated_at`.** No new stored field.
+- **Conversation named-date `valid_to`** is taken from MemoryDB `invalid_at` on the extraction write (that dump has no `valid_to`).
+- **`belief_view_for_record` does not spell `promotion`.** Gate F’s `consolidation_symbol` regex matches that substring under `utils/memory/*.py`. The audit-bag category is still read.
+- **Review(False)** lowers confidence and does not supersede. Replacement-text edits still go through the existing ledger correction path.
+
+### Tests
+
+`cd backend` then `BACKEND_UNIT_TEST_FILE_LIST=<list> bash test.sh` (`test.sh` ignores positional paths).
+
+| File | Result |
+| --- | --- |
+| `tests/unit/test_belief_model.py` | 21 passed |
+| `tests/unit/test_belief_evidence.py` | 8 passed |
+| `tests/unit/test_canonical_extraction_subject_wiring.py` | 10 passed |
+| `tests/unit/test_working_observations_extractor.py` | 22 passed |
+| `tests/unit/test_memory_api_contract.py` | 7 passed |
+| `tests/unit/test_memories_archive_and_read_contracts.py` | 11 passed |
+| `tests/unit/test_chat_memory_adapter.py` | 13 passed |
+| `tests/unit/test_jit_trigger_contract.py` | 27 passed |
+| `tests/unit/test_memory_read_api.py` | 13 passed |
+| `tests/unit/test_ws_b_short_term_lifecycle.py` | 14 passed |
+| `tests/unit/test_canonical_consolidation.py` | 64 passed |
+
+`backend/scripts/typecheck.sh`: 0 errors (after `f9f09a6741`; first `run-unit-ci.sh --changed-files` failed on 5 pyright errors in belief seams).
+
+`OMI_PR_BODY_FILE=/tmp/belief-pr-body.md make preflight`: **28 checks passed** in 561.84s (lane=local, base=`origin/main` `38d95fdca55e`). Bare `make preflight` fails without a PR: line-count ratchet and invariant/failure-class citations live in the PR body. Needed body fields:
+
+```
+INV-MEM-1
+INV-MEM-3
+INV-MEM-4
+INV-TASK-2
+Failure-Class: none
+Line-Count-Exception: backend/database/memory_apply_store.py | 2883 -> 2885 | Persist half_life_days / belief_class on create.
+Line-Count-Exception: backend/utils/conversations/process_conversation.py | 2628 -> 2648 | Flag-gated subject/horizon classification on extraction write.
+Line-Count-Exception: backend/utils/memory/canonical_consolidation.py | 2337 -> 2343 | Prompt: do not archive/supersede on age alone.
+Line-Count-Exception: backend/utils/memory/canonical_memory_adapter.py | 3593 -> 3669 | Admission/review evidence events and belief overlay on the existing mutation owner.
+Line-Count-Exception: backend/utils/memory/memory_service.py | 3949 -> 3951 | Attach public belief overlay on product search dicts.
+```
+
+### Open questions
+
+1. Should deploy compose pin `MEMORY_BELIEF_MODEL_ENABLED=false` explicitly?
+2. Should sweep gist rows classify `subject_scope` instead of defaulting `primary_user`?
+3. Is stored `belief_class` acceptable, or should identity’s durable null be encoded another way?
