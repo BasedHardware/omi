@@ -10,7 +10,6 @@ from typing import List, Optional, Dict, Any, Callable
 from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
-from google.cloud.firestore_v1.field_path import FieldPath
 
 import utils.other.hume as hume
 from models.audio_file import AudioFile
@@ -1706,6 +1705,10 @@ def _is_unbound_projection_field_path(key: str) -> bool:
     A key Firestore itself cannot parse is left alone: it is not a path to
     anything, and the write rejects it.
     """
+    # Imported here, not at module scope: several suites stub google.cloud.firestore_v1
+    # with a plain module, which makes a top-level submodule import fail at collection.
+    from google.cloud.firestore_v1.field_path import FieldPath
+
     try:
         parts = FieldPath.from_string(key).parts
     except (ValueError, TypeError, KeyError):
