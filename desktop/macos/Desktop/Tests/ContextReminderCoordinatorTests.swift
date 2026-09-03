@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class ContextReminderCoordinatorTests: XCTestCase {
-  private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
+  private let ownerFixture = RuntimeOwnerAuthorityTestFixture()
   private let start = Date(timeIntervalSince1970: 1_788_230_400)
   private let project = ContextReminderObservedContext(
     appName: "Xcode",
@@ -18,13 +18,11 @@ final class ContextReminderCoordinatorTests: XCTestCase {
     bucketID: nil)
 
   override func setUp() async throws {
-    ownerFixture = RuntimeOwnerAuthorityTestFixture()
     await ownerFixture.establish(authOwnerID: "owner-1")
   }
 
   override func tearDown() async throws {
     await ownerFixture.restore()
-    ownerFixture = nil
   }
 
   func testCreateBindsToInjectedContextAndObserveDeliversOncePerStay() async throws {

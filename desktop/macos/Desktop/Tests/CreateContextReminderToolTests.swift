@@ -3,16 +3,17 @@ import XCTest
 @testable import Omi_Computer
 
 final class CreateContextReminderToolTests: XCTestCase {
-  private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
+  private var ownerFixture: RuntimeOwnerAuthorityTestFixture?
 
   override func setUp() async throws {
     try await super.setUp()
-    ownerFixture = await RuntimeOwnerAuthorityTestFixture()
-    await ownerFixture.establish(authOwnerID: "context-reminder-tool-owner")
+    let fixture = await RuntimeOwnerAuthorityTestFixture()
+    await fixture.establish(authOwnerID: "context-reminder-tool-owner")
+    ownerFixture = fixture
   }
 
   override func tearDown() async throws {
-    await ownerFixture.restore()
+    await ownerFixture?.restore()
     ownerFixture = nil
     try await super.tearDown()
   }
