@@ -1458,6 +1458,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Get Action Items",
     description: "Retrieve user tasks from Omi backend. Filter by completion status or due date.",
     promptSnippet: "get_action_items - Retrieve tasks",
+    promptGuidelines: [
+      "If the user asked to see, review, pick from or work through their tasks, the tasks are the answer: render the few that matter as taskCard blocks with render_chat_blocks and say how many more there are. Never write them out as a numbered list — that list is exactly what the cards replace, and it cannot be ticked off.",
+      "If a task is only evidence for something you are answering in prose — how many are open, whether one exists, what a day contained — cite it inline and render nothing.",
+    ],
     latency: "fast network",
     inputSchema: schema({
       limit: { type: "number" },
