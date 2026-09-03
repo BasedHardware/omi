@@ -218,6 +218,48 @@ import XCTest
       XCTAssertEqual(buffered.pendingVideoFrameCount, 0)
     }
 
+    func testWarmGeminiFlushesBufferedScreenFrameWhenTheActivityWindowOpens() async {
+      // The PTT-down frame usually finishes encoding before activityStart. It must ride this
+      // turn (flushed at activityStart), not wait for a reconnect that never comes.
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .gemini, delegate: delegate)
+      session.markReadyForTesting()
+      _ = await session.inputLifecycleSnapshot()
+
+      session.sendVideoFrame(Data([9, 9]), mime: "image/jpeg")
+      let buffered = await session.inputLifecycleSnapshot()
+      XCTAssertEqual(buffered.pendingVideoFrameCount, 1, "no activity window yet: frame waits")
+
+      session.beginInputTurn()
+      let opened = await session.inputLifecycleSnapshot()
+      XCTAssertTrue(opened.activityOpen)
+      XCTAssertEqual(opened.pendingVideoFrameCount, 0, "activityStart flushes the frame into the turn")
+    }
+
+    func testGeminiCommitDropsAFrameThatMissedItsTurnWindow() async {
+      // A frame encoded after activityEnd belongs to a finished turn. It must never be
+      // carried into the next turn as a stale screen.
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .gemini, delegate: delegate)
+      session.markReadyForTesting()
+      session.beginInputTurn()
+      session.commitInputTurn()
+      _ = await session.inputLifecycleSnapshot()
+
+      let finishedTurn = VoiceTurnID()
+      session.sendVideoFrame(Data([7]), mime: "image/jpeg", turnID: finishedTurn)
+      let late = await session.inputLifecycleSnapshot()
+      XCTAssertEqual(late.pendingVideoFrameCount, 1)
+
+      session.beginInputTurn(turnID: VoiceTurnID(), responseID: VoiceResponseID("next"))
+      let next = await session.inputLifecycleSnapshot()
+      XCTAssertTrue(next.activityOpen)
+      XCTAssertEqual(next.pendingVideoFrameCount, 0, "a frame from a finished turn is dropped, not sent")
+      XCTAssertFalse(
+        session.sentVideoFramesForTesting.contains(Data([7]).base64EncodedString()),
+        "the earlier turn's screen never reaches the new turn")
+    }
+
     func testGeminiScreenshotToolResultCarriesPixelsInsideTheMatchingFunctionResponse() throws {
       let descriptor = RealtimeScreenEvidenceDescriptor(
         evidenceID: "evidence-1",

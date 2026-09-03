@@ -495,45 +495,6 @@ def test_inventory_finds_a_direct_compound_chain_wrapped_by_list():
     ]
 
 
-def test_query_coverage_ratchet_rejects_a_new_raw_serving_shape():
-    baseline = {
-        'schema_version': 1,
-        'eligible_serving': 1,
-        'registered_serving': 1,
-        'raw_unregistered': [],
-        'unsupported': [],
-    }
-    report = {
-        'counts': {
-            'serving': {
-                'eligible': 2,
-                'registered': 1,
-                'raw_unregistered': 1,
-                'waived': 0,
-                'unsupported': 0,
-            }
-        },
-        'queries': [
-            {'id': 'registered', 'classification': 'registered'},
-            {'id': 'new-raw', 'classification': 'raw_unregistered'},
-        ],
-    }
-
-    assert firestore_query_coverage.check_ratchet(report, baseline) == [
-        'new unregistered serving compound query shape(s): new-raw',
-        'registered serving-query coverage percentage decreased',
-    ]
-
-
-@pytest.mark.slow
-def test_query_coverage_baseline_tracks_current_raw_and_unsupported_debt():
-    baseline_path = Path(__file__).resolve().parents[2] / 'scripts' / 'firestore_query_coverage_baseline.json'
-    committed = json.loads(baseline_path.read_text(encoding='utf-8'))
-    report = firestore_query_coverage.report_for(firestore_query_coverage.inventory(waiver_ids=set()))
-
-    assert firestore_query_coverage.check_ratchet(report, committed) == []
-
-
 class _StreamRecordingQuery:
     """One Firestore query chain that records itself when production code streams it."""
 

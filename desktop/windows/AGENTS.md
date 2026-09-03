@@ -116,8 +116,9 @@ starting this from scratch.
 - `docs/conversation-sync.md` — offline-retry outbox design.
 - `docs/multi-worktree-dev.md` — parallel-worktree port/profile isolation, dev
   env var reference.
-- `docs/perf-invisible-wins.md`, `docs/perf-startup-burst-2026-07-19.md` —
-  perf investigation notes.
+- `docs/linux-screen-recording.md` — Rewind needs a Wayland desktop portal;
+  wlroots compositors (niri, Sway, Hyprland) often ship none configured.
+- `docs/perf-invisible-wins.md`, `docs/perf-startup-burst-2026-07-19.md` — perf notes.
 
 ## Changelog Entries
 

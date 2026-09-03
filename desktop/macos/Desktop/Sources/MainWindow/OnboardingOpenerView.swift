@@ -57,6 +57,11 @@ struct OnboardingOpenerView: View {
   private func startFromOpener(_ question: String) {
     PostOnboardingPromptSuggestions.consume()
     chatProvider.dismissOnboardingOpener()
+    if DayZeroChips.isDraftPrompt(question) {
+      // Prefill and focus; the user finishes the sentence and sends it themselves.
+      MainChatNavigationRequestStore.shared.request(draft: DayZeroChips.draftText(for: question))
+      return
+    }
     Task {
       await chatProvider.sendMainDraft(
         question,

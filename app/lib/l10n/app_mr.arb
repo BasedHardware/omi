@@ -10781,8 +10781,6 @@
     "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
     "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
     "accountCutoverOpenStore": "स्टोर खोलें",
-    "chatScopeToday": "आज",
-    "chatScopeThisWeek": "या आठवड्यात",
     "chatScopeAbout": "{title} विषयी",
     "askAboutThisConversation": "याबद्दल विचारा",
     "sendRawAudioToOmi": "Omi ला कच्चा ऑडिओ पाठवा",
@@ -10801,5 +10799,6 @@
     "prerecordedTranscript": "पूर्व-रेकॉर्डेड",
     "pendantRecordingSyncBlocked": "Pendant अजूनही रेकॉर्ड करत आहे, त्यामुळे साठवलेला ऑडिओ हस्तांतरित करता येत नाही. रेकॉर्डिंग थांबवण्यासाठी Pendant चे बटण दाबा, नंतर पुन्हा सिंक करा.",
     "pendantFullSyncBlocked": "Pendant चे स्टोरेज भरले आहे आणि ते अजूनही रेकॉर्डिंग मोडमध्ये आहे, त्यामुळे साठवलेला ऑडिओ हस्तांतरित करता येत नाही. रेकॉर्डिंग थांबवण्यासाठी Pendant चे बटण दाबा, नंतर पुन्हा सिंक करा.",
-    "conversationsNotCapturedCount": "रेकॉर्ड झाले नाही ({count})"
+    "conversationsNotCapturedCount": "रेकॉर्ड झाले नाही ({count})",
+    "transcriptionNoAudio": "ट्रान्सक्रिप्शन ऑडिओ घेत नाही"
 }

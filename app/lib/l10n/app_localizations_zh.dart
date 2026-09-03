@@ -9661,12 +9661,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accountCutoverOpenStore => '打开应用商店';
 
   @override
-  String get chatScopeToday => '今天';
-
-  @override
-  String get chatScopeThisWeek => '本周';
-
-  @override
   String chatScopeAbout(String title) {
     return '关于：$title';
   }
@@ -9730,4 +9724,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return '未记录 ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => '转录未接收到音频';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

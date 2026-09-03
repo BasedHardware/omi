@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ctypes
 import importlib.util
+import json
 import os
 from pathlib import Path
 import shutil
@@ -12,6 +13,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import types
 import unittest
 from unittest import mock
@@ -152,6 +154,91 @@ class OutputFlushTests(unittest.TestCase):
         wait.assert_not_called()
 
 
+class AtomicJsonTests(unittest.TestCase):
+    def test_windows_retries_a_transient_replace_sharing_violation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "status.json"
+            original_replace = runner.os.replace
+            calls = 0
+
+            def replace_after_transient_failure(source: Path, destination: Path) -> None:
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise PermissionError("destination is open")
+                original_replace(source, destination)
+
+            with (
+                mock.patch.object(runner, "IS_WINDOWS", True),
+                mock.patch.object(
+                    runner.os,
+                    "replace",
+                    side_effect=replace_after_transient_failure,
+                ),
+                mock.patch.object(runner.time, "sleep") as sleep,
+            ):
+                runner.atomic_json(path, {"phase": "passed"})
+
+        self.assertEqual(calls, 2)
+        sleep.assert_called_once_with(runner.WINDOWS_ATOMIC_REPLACE_RETRY_SECONDS)
+
+    def test_non_windows_permission_error_is_not_retried(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "status.json"
+            with (
+                mock.patch.object(runner, "IS_WINDOWS", False),
+                mock.patch.object(
+                    runner.os,
+                    "replace",
+                    side_effect=PermissionError("denied"),
+                ) as replace,
+                mock.patch.object(runner.time, "sleep") as sleep,
+            ):
+                with self.assertRaises(PermissionError):
+                    runner.atomic_json(path, {"phase": "failed"})
+
+        replace.assert_called_once()
+        sleep.assert_not_called()
+
+    @unittest.skipUnless(os.name == "nt", "native Windows file-sharing contract")
+    def test_windows_waits_for_a_reader_to_release_the_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "status.json"
+            path.write_text('{"phase": "running"}\n', encoding="utf-8")
+            reader_ready = threading.Event()
+            release_reader = threading.Event()
+
+            def hold_reader() -> None:
+                with path.open(encoding="utf-8"):
+                    reader_ready.set()
+                    release_reader.wait(timeout=0.2)
+
+            reader = threading.Thread(target=hold_reader)
+            reader.start()
+            self.assertTrue(
+                reader_ready.wait(timeout=5),
+                "reader did not open the status file",
+            )
+            original_sleep = runner.time.sleep
+            try:
+                with mock.patch.object(
+                    runner.time,
+                    "sleep",
+                    wraps=original_sleep,
+                ) as sleep:
+                    runner.atomic_json(path, {"phase": "passed"})
+            finally:
+                release_reader.set()
+                reader.join(timeout=5)
+
+            self.assertFalse(reader.is_alive(), "reader did not release the status file")
+            self.assertGreaterEqual(sleep.call_count, 1)
+            self.assertEqual(
+                json.loads(path.read_text(encoding="utf-8")),
+                {"phase": "passed"},
+            )
+
+
 class SignalChildTests(unittest.TestCase):
     def test_posix_signals_the_whole_child_process_group(self) -> None:
         child = FakeChild()
@@ -234,6 +321,12 @@ class ProcessExistsTests(unittest.TestCase):
     def test_live_and_dead_pids(self) -> None:
         self.assertTrue(runner.process_exists(os.getpid()))
         self.assertFalse(runner.process_exists(0))
+
+    @unittest.skipUnless(os.name == "nt", "native Windows liveness contract")
+    def test_process_that_exits_with_still_active_status_is_not_alive(self) -> None:
+        child = subprocess.Popen([sys.executable, "-c", "raise SystemExit(259)"])
+        self.assertEqual(child.wait(), 259)
+        self.assertFalse(runner.process_exists(child.pid))
 
     @unittest.skipUnless(os.name == "nt", "native Windows liveness contract")
     def test_windows_liveness_probe_does_not_terminate_the_target(self) -> None:
@@ -486,7 +579,7 @@ class LaunchContractTests(unittest.TestCase):
         self.assertIn(r"bad:\xa1", completed.stdout)
 
     @unittest.skipUnless(os.name == "nt", "native Windows Git encoding contract")
-    def test_runner_handles_utf8_git_worktree_path_without_utf8_mode(self) -> None:
+    def test_runner_emits_utf8_from_unicode_checkout_without_utf8_mode(self) -> None:
         git = shutil.which("git")
         self.assertIsNotNone(git)
 
@@ -501,7 +594,7 @@ class LaunchContractTests(unittest.TestCase):
             )
             env = os.environ.copy()
             env["PYTHONUTF8"] = "0"
-            env["PYTHONIOENCODING"] = "utf-8"
+            env.pop("PYTHONIOENCODING", None)
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -511,7 +604,7 @@ class LaunchContractTests(unittest.TestCase):
                     "--",
                     sys.executable,
                     "-c",
-                    "print('unicode-path-ok')",
+                    "print('\\u8def\\u5f84\\U0001f680')",
                 ],
                 cwd=root,
                 env=env,
@@ -520,17 +613,20 @@ class LaunchContractTests(unittest.TestCase):
                 encoding="utf-8",
                 check=False,
             )
+            log = (root / ".git/omi-preflight/unicode-path/preflight.log").read_text(encoding="utf-8")
 
         self.assertEqual(completed.returncode, 0, completed.stdout)
-        self.assertIn("unicode-path-ok", completed.stdout)
+        self.assertIn("路径🚀", completed.stdout)
+        self.assertEqual(log, "路径🚀\n")
 
     @unittest.skipUnless(os.name == "nt", "native Windows Git encoding contract")
-    def test_pr_preflight_handles_utf8_git_worktree_path_without_utf8_mode(self) -> None:
+    def test_pr_preflight_emits_utf8_from_unicode_branch_without_utf8_mode(self) -> None:
         git = shutil.which("git")
         self.assertIsNotNone(git)
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "repo-\u96ea"
+            unicode_branch = "分支-🚀"
             root.mkdir()
             subprocess.run(
                 [git, "init", "--quiet"],
@@ -555,9 +651,10 @@ class LaunchContractTests(unittest.TestCase):
                 check=True,
                 capture_output=True,
             )
+            subprocess.run([git, "branch", unicode_branch], cwd=root, check=True, capture_output=True)
             env = os.environ.copy()
             env["PYTHONUTF8"] = "0"
-            env["PYTHONIOENCODING"] = "utf-8"
+            env.pop("PYTHONIOENCODING", None)
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -565,7 +662,7 @@ class LaunchContractTests(unittest.TestCase):
                     "--base",
                     "HEAD",
                     "--head",
-                    "HEAD",
+                    unicode_branch,
                     "--list",
                 ],
                 cwd=root,
@@ -578,6 +675,7 @@ class LaunchContractTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stdout)
         self.assertIn("PR preflight:", completed.stdout)
+        self.assertIn(f"head={unicode_branch}", completed.stdout)
 
 
 if __name__ == "__main__":

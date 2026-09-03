@@ -701,16 +701,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
               ),
             ),
-            title: Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 8.0),
-                child: Text(
-                  _getTabTitle(context, selectedTab),
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
+            // No title: the tab bar below already names the active view, so a
+            // header label only crowds the row with the back button and actions.
+            // _getTabTitle still backs the `active_tab` search analytics property.
             titleSpacing: 0,
             actions: [
               Consumer<ConversationDetailProvider>(

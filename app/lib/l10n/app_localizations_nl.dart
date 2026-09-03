@@ -9872,12 +9872,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Store openen';
 
   @override
-  String get chatScopeToday => 'Vandaag';
-
-  @override
-  String get chatScopeThisWeek => 'Deze week';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Over: $title';
   }
@@ -9945,4 +9939,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Niet opgenomen ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transcriptie ontvangt geen audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

@@ -3216,8 +3216,6 @@
     "accountCutoverMigrationInProgressMessage": "Tu cuenta se está migrando. Las funciones del producto están en pausa hasta que termine la migración.",
     "accountCutoverMigrationRollbackMessage": "Tu cuenta está en mantenimiento tras una reversión de migración. Algunos datos más recientes pueden quedar retenidos.",
     "accountCutoverOpenStore": "Abrir tienda",
-    "chatScopeToday": "Hoy",
-    "chatScopeThisWeek": "Esta semana",
     "chatScopeAbout": "Sobre: {title}",
     "askAboutThisConversation": "Preguntar sobre esto",
     "sendRawAudioToOmi": "Enviar audio sin procesar a Omi",
@@ -3236,5 +3234,6 @@
     "prerecordedTranscript": "Pregrabado",
     "pendantRecordingSyncBlocked": "Tu Pendant sigue grabando, por lo que su audio almacenado no se puede transferir. Pulsa el botón del Pendant para detener la grabación y vuelve a sincronizar.",
     "pendantFullSyncBlocked": "El almacenamiento de tu Pendant está lleno y sigue en modo de grabación, por lo que su audio almacenado no se puede transferir. Pulsa el botón del Pendant para detener la grabación y vuelve a sincronizar.",
-    "conversationsNotCapturedCount": "No capturado ({count})"
+    "conversationsNotCapturedCount": "No capturado ({count})",
+    "transcriptionNoAudio": "La transcripción no recibe audio"
 }

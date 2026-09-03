@@ -1958,6 +1958,7 @@ class ChatProvider: ObservableObject {
     }
     let responseContext = [
       systemPromptSuffix?.trimmingCharacters(in: .whitespacesAndNewlines),
+      ThreeDoorsDemoPage.activeModelNote?.trimmingCharacters(in: .whitespacesAndNewlines),
       AssistantSettings.shared.hasExplicitVoiceLanguages
         ? Self.responseLanguageInstruction(languageCodes: AssistantSettings.shared.voiceLanguages)
         : nil,
@@ -5869,7 +5870,8 @@ class ChatProvider: ObservableObject {
       AssistantSettings.shared.audioRecordingMode == .always ? .always : .meetingsOnly
     let baseStarters = HomeSuggestionComposer.compose(
       personalized: HomeSuggestionsStore.shared.personalizedQuestions,
-      onboarding: PostOnboardingPromptSuggestions.suggestions())
+      onboarding: PostOnboardingPromptSuggestions.suggestions(),
+      dayZero: .live())
 
     onboardingOpener = OnboardingOpenerComposer.compose(
       name: name, mode: mode, meetings: [], now: Date(), baseStarters: baseStarters)
@@ -7055,7 +7057,6 @@ class ChatProvider: ObservableObject {
       currentError = nil
       errorMessage = nil
       await runtime.unregisterClient(clientId: probeClientID)
-
       var detail = automationMainChatSnapshot(limit: 20)
       detail["owner_a"] = ownerA
       detail["owner_b"] = trimmedOwnerB

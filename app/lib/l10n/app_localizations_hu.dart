@@ -9885,12 +9885,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get accountCutoverOpenStore => 'Áruház megnyitása';
 
   @override
-  String get chatScopeToday => 'Ma';
-
-  @override
-  String get chatScopeThisWeek => 'Ezen a héten';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Erről: $title';
   }
@@ -9959,4 +9953,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nincs rögzítve ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Az átírás nem kap hangot';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

@@ -9892,12 +9892,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get accountCutoverOpenStore => 'Deschide magazinul';
 
   @override
-  String get chatScopeToday => 'Astăzi';
-
-  @override
-  String get chatScopeThisWeek => 'Săptămâna aceasta';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Despre: $title';
   }
@@ -9965,4 +9959,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Neînregistrat ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transcrierea nu primește audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

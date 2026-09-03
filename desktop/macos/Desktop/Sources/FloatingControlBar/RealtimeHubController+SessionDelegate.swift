@@ -134,8 +134,6 @@ extension RealtimeHubController {
     }
     toolEffectIdentityByTransportKey.removeValue(forKey: key)
     let output = Self.panelAwareOutput(output, forTool: name)
-    DesktopDiagnosticsManager.shared.finishVoiceToolLatency(
-      key: key, toolName: name, provider: providerTag, resultBytes: output.utf8.count)
     let turnID = VoiceTurnID(identity.generation)
     let deferredScreenProtocol =
       name == HubTool.screenshot.rawValue
@@ -160,12 +158,14 @@ extension RealtimeHubController {
       provider: effectiveProvider,
       name: name,
       output: output)
-    if providerResult.wasOversized {
+    DesktopDiagnosticsManager.shared.finishVoiceToolLatency(
+      key: key, toolName: name, provider: providerTag, resultBytes: providerResult.originalByteCount)
+    if providerResult.wasTruncated {
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "realtime_hub",
         from: "tool_result_full",
-        to: "tool_result_error",
-        reason: "capability_mismatch",
+        to: "tool_result_bounded_projection",
+        reason: "provider_budget",
         outcome: .degraded,
         extra: [
           "tool": name,
@@ -173,6 +173,13 @@ extension RealtimeHubController {
           "provider_bytes": providerResult.output.utf8.count,
           "user_visible": true,
         ])
+    }
+    if providerResult.wasOversized && !providerResult.hasCanonicalEnvelope {
+      log(
+        "RealtimeHub[\(providerTag)]: INVARIANT VIOLATION unprojected tool result \(name) "
+          + "original_bytes=\(providerResult.originalByteCount) provider_bytes=\(providerResult.output.utf8.count) "
+          + "limit=\(RealtimeProviderToolResultPolicy.maximumByteCount)"
+      )
     }
     log(
       "RealtimeHub[\(providerTag)]: tool result \(name) raw_bytes=\(providerResult.originalByteCount) "
@@ -1241,8 +1248,12 @@ extension RealtimeHubController {
       case .emptyAnswer: reason = "empty_answer"
       case .accepted: reason = "evidence_state_changed"
       }
-      if case .awaitingReport = screenGroundingState {
-        rejectScreenEvidence(screenEvidence?.descriptor, reason: reason)
+      if case .awaitingReport(let receipt) = screenGroundingState {
+        // The receipt's frozen descriptor — not the controller's turn-scoped `screenEvidence`,
+        // which a follow-up locked-session turn may have already cleared — is what proves an
+        // image was captured. Passing nil here would misroute a stale or contradictory report
+        // (a failure about evidence that WAS captured) into the recoverable exit.
+        rejectScreenEvidence(receipt.descriptor, reason: reason)
       } else {
         // A report that races ahead of the screenshot result is rejected to the provider but
         // never cached or redeemed. The original screenshot call may still complete normally.
@@ -1252,6 +1263,7 @@ extension RealtimeHubController {
     }
     screenGroundingState = .accepted(receipt)
     logScreenEvidence(stage: "report_accepted", evidence: receipt.descriptor, callID: callID)
+    if !turnIdempotencyKey.isEmpty { screenContextByContinuityKey[turnIdempotencyKey] = observation }
     return acceptScreenEvidenceReport(
       receipt.protocolToken,
       reportCallID: VoiceToolCallID(callID),
@@ -1784,5 +1796,4 @@ extension RealtimeHubController {
   func clearResponseGlowIfRealtimeAudioIdle() {
     responseGlowGate.scheduleIdleClear()
   }
-
 }

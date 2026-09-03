@@ -178,6 +178,10 @@ class SummaryPipelineMode(str, Enum):
     reachable purely by flag misconfiguration.
     """
 
+    # Retire 2026-09-29: legacy path survives only a four-week prod bake of notes v2
+    # (prod-on 2026-09-01). After that date a follow-up PR deletes LEGACY_APP_PRIMARY,
+    # the legacy writers, and CONVERSATION_NOTES_V2_ENABLED itself — v2 becomes the
+    # only path. Do not build on this mode.
     LEGACY_APP_PRIMARY = 'legacy_app_primary'
     NOTES_V2_APPS_OPT_IN = 'notes_v2_primary_apps_opt_in'
 

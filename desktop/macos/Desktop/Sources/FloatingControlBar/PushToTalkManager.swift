@@ -92,6 +92,11 @@ struct ModifierOnlyPTTActivationGate {
   enum Action: Equatable {
     case scheduleStart
     case cancelPendingStart
+    /// The modifier was released before the activation delay elapsed and no other
+    /// key was pressed with it: a deliberate quick tap. No turn was started (an
+    /// accidental brush of the modifier must stay inert), but the tap is real
+    /// input and is offered to the double-tap detector.
+    case cancelPendingStartAsQuickTap
     case releaseStartedTurn
     case none
   }
@@ -108,7 +113,7 @@ struct ModifierOnlyPTTActivationGate {
 
     if hasPendingStart {
       hasPendingStart = false
-      return .cancelPendingStart
+      return .cancelPendingStartAsQuickTap
     }
     guard hasStartedTurn else { return .none }
     hasStartedTurn = false
@@ -245,6 +250,8 @@ class PushToTalkManager: ObservableObject {
   // Double-tap detection
   private var lastOptionDownTime: TimeInterval = 0
   private var lastOptionUpTime: TimeInterval = 0
+  /// Uptime of the last modifier-only quick tap that did not start a turn.
+  private var lastModifierQuickTapTime: TimeInterval = 0
   private let doubleTapThreshold: TimeInterval = 0.4
   private let tapToLockMaxHoldDuration: TimeInterval = 0.22
 
@@ -279,6 +286,18 @@ class PushToTalkManager: ObservableObject {
   private var hasMicPermission: Bool = false
   private var isCurrentSessionFollowUp = false
   private var currentContextSnapshot: PTTContextSnapshot?
+
+  /// OCR text of this turn's pre-overlay frame, waiting briefly for the in-flight OCR when the
+  /// realtime model escalates before it finished. Nil when no turn is capturing.
+  func visibleScreenText(timeout: TimeInterval) async -> String? {
+    let deadline = Date().addingTimeInterval(timeout)
+    while currentVoiceTurnID != nil {
+      if let snapshot = currentContextSnapshot { return snapshot.visibleText }
+      if Date() >= deadline { return nil }
+      try? await Task.sleep(nanoseconds: 100_000_000)
+    }
+    return nil
+  }
   private var contextCaptureTask: Task<Void, Never>?
 
   // Batch mode: accumulate raw audio for post-recording transcription
@@ -501,6 +520,9 @@ class PushToTalkManager: ObservableObject {
       scheduleModifierOnlyShortcutStart()
     case .cancelPendingStart:
       cancelPendingModifierOnlyShortcutStart()
+    case .cancelPendingStartAsQuickTap:
+      cancelPendingModifierOnlyShortcutStart()
+      handleModifierOnlyQuickTap()
     case .releaseStartedTurn:
       handleShortcutUp()
     case .none:
@@ -519,6 +541,33 @@ class PushToTalkManager: ObservableObject {
     DispatchQueue.main.asyncAfter(
       deadline: .now() + Self.modifierOnlyShortcutActivationDelay,
       execute: workItem)
+  }
+
+  /// A modifier-only shortcut released inside `modifierOnlyShortcutActivationDelay`
+  /// never starts a turn — that delay is what keeps an accidental brush of the
+  /// modifier (or the modifier held as part of another shortcut) from recording.
+  /// A *pair* of such taps is unambiguous intent, so it drives locked mode, and a
+  /// tap while already locked sends, matching "Tap again to send".
+  private func handleModifierOnlyQuickTap() {
+    guard ShortcutSettings.shared.doubleTapForLock else { return }
+    let now = ProcessInfo.processInfo.systemUptime
+    if phase == .lockedRecording {
+      lastModifierQuickTapTime = 0
+      finalize()
+      return
+    }
+    guard (now - lastModifierQuickTapTime) < doubleTapThreshold else {
+      // First tap: stay completely inert. Nothing records, nothing is shown.
+      lastModifierQuickTapTime = now
+      return
+    }
+    lastModifierQuickTapTime = 0
+    if !FloatingControlBarManager.shared.isVisible {
+      FloatingControlBarManager.shared.show()
+    }
+    guard FloatingControlBarManager.shared.isVisible else { return }
+    log("PushToTalkManager: modifier-only double tap — entering locked listening")
+    enterLockedListening()
   }
 
   private func cancelPendingModifierOnlyShortcutStart() {
@@ -553,8 +602,13 @@ class PushToTalkManager: ObservableObject {
     switch phase {
     case .idle, .awaitingResponse, .awaitingTools, .awaitingJournal, .playing, .terminal, .none:
       // Check for double-tap: if last Option-up was recent, enter locked mode
-      if ShortcutSettings.shared.doubleTapForLock && (now - lastOptionUpTime) < doubleTapThreshold {
+      // A first tap can arrive either as a completed turn (`lastOptionUpTime`) or, on a
+      // modifier-only key, as a quick tap that never started one. Either counts, so a
+      // double tap locks even when the two taps differ in speed.
+      let recentFirstTap = max(lastOptionUpTime, lastModifierQuickTapTime)
+      if ShortcutSettings.shared.doubleTapForLock && (now - recentFirstTap) < doubleTapThreshold {
         lastOptionUpTime = 0
+        lastModifierQuickTapTime = 0
         enterLockedListening()
       } else {
         lastOptionDownTime = now
@@ -587,6 +641,7 @@ class PushToTalkManager: ObservableObject {
 
       if ShortcutSettings.shared.doubleTapForLock && holdDuration < tapToLockMaxHoldDuration {
         lastOptionUpTime = now
+        lastModifierQuickTapTime = 0
         enterPendingLockDecision()
       } else {
         lastOptionUpTime = 0
@@ -913,6 +968,19 @@ class PushToTalkManager: ObservableObject {
   /// which must end the turn with a hint rather than hang. No-op unless a capture is
   /// active.
   @discardableResult
+  /// Mirrors one *quick tap* of a modifier-only shortcut: the release lands inside
+  /// `modifierOnlyShortcutActivationDelay`, so no turn starts. Two of these inside the
+  /// double-tap window must lock, which is what the physical key does and what no other
+  /// automation entry point can express (`ptt_stop` mirrors a long-hold release).
+  func quickTapPushToTalkForAutomation() -> [String: String] {
+    ensureAutomationBarConfigured()
+    handleModifierOnlyQuickTap()
+    return [
+      "state": VoiceTurnCoordinator.phaseLabel(phase ?? .idle),
+      "locked": phase == .lockedRecording ? "true" : "false",
+    ]
+  }
+
   func endPushToTalkForAutomation() -> [String: String] {
     let wasActive = voiceTurnCoordinator.activeTurn?.phase.isRecording == true
     if wasActive { finalize() }

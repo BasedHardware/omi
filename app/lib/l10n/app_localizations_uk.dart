@@ -9867,12 +9867,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get accountCutoverOpenStore => 'Відкрити магазин';
 
   @override
-  String get chatScopeToday => 'Сьогодні';
-
-  @override
-  String get chatScopeThisWeek => 'Цього тижня';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Про: $title';
   }
@@ -9940,4 +9934,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Не записано ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Транскрипція не отримує аудіо';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

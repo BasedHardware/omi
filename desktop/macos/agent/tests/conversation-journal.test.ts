@@ -14,6 +14,8 @@ import {
   beginBackendReconcile,
   beginBackendReconcilesForOwner,
   clearJournalConversation,
+  chatFirstMaterializationDeferrals,
+  chatFirstWireRejectionMessage,
   classifyBackendTurnResultDisposition,
   drainBackendConversationDeleteOutbox,
   drainBackendTurnOutbox,
@@ -242,6 +244,102 @@ describe("kernel conversation journal", () => {
     fixture.store.close();
   });
 
+  it("poison item contract: one bad item never blocks the rest and returns a typed rejection", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-poison-isolation");
+    const batch = materializeChatFirstIntents(fixture.store, [
+      {
+        ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 9,
+        intentId: "intent-poison", continuityKey: "intent-poison", source: "capture_arrival",
+        blocks: [{ type: "notARealBlock" }], nowMs: 100,
+      },
+      {
+        ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 9,
+        intentId: "intent-after-poison", continuityKey: "intent-after-poison", source: "capture_arrival",
+        blocks: [{ type: "captureLink", conversation_id: "capture-2", summary: "Capture" }], nowMs: 101,
+      },
+    ]);
+
+    expect(batch.stoppedByTail).toBe(false);
+    expect(batch.results[0]).toMatchObject({
+      accepted: false, rejected: true, rejectionCode: "invalid_intent", turn: null, receipt: null,
+    });
+    expect(batch.results[1]).toMatchObject({ accepted: true, rejected: false, turn: { role: "assistant" } });
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(1);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM chat_first_materialization_receipts").count).toBe(1);
+    fixture.store.close();
+  });
+
+  it("generation validation failures remain transient typed kernel rejections", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-generation-transient");
+    const batch = materializeChatFirstIntents(fixture.store, [{
+      ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: -1,
+      intentId: "intent-stale-generation", continuityKey: "intent-stale-generation", source: "capture_arrival",
+      blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }], nowMs: 100,
+    }]);
+
+    expect(batch.results[0]).toMatchObject({
+      rejected: true,
+      rejectionCode: "kernel_materialization_failed",
+      rejectionMessage: "Chat-first materialization requires a valid control generation",
+    });
+    fixture.store.close();
+  });
+
+  it("wire rejection messages are bounded before leaving the kernel", () => {
+    expect(chatFirstWireRejectionMessage(new Error("x".repeat(500)))).toHaveLength(300);
+  });
+
+  it("shares the stable chat-first turn identity vector with the backend", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-shared-vector");
+    const result = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 7,
+      intentId: "intent-shared-vector", continuityKey: "shared-vector", source: "capture_arrival",
+      blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }], nowMs: 100,
+    });
+    expect(result.turn?.turnId).toBe("turn_cfi_df211fb1b31c4b849c6bb6b2");
+    fixture.store.close();
+  });
+
+  it("adopts an imported stable chat-first turn and records its receipt by identity", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-import-adoption");
+    const intentId = "intent-imported-elsewhere";
+    const stableTurnId = `turn_cfi_${createHash("sha256").update(intentId).digest("hex").slice(0, 24)}`;
+    const imported = importRemoteJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      remoteId: "remote-imported-intent",
+      canonicalTurnId: stableTurnId,
+      role: "assistant",
+      surfaceKind: "main_chat",
+      content: "",
+      contentBlocks: [{ type: "captureLink", id: "remote-block", conversationId: "capture-1", summary: "Capture" }],
+      metadataJson: JSON.stringify({ chatFirstIntentId: intentId }),
+      createdAtMs: 90,
+      nowMs: 91,
+      source: "backend_reconcile",
+    });
+
+    const materialized = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 9,
+      intentId,
+      continuityKey: intentId,
+      source: "capture_arrival",
+      blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Different local payload" }],
+      nowMs: 100,
+    });
+
+    expect(imported.turn).toMatchObject({ turnId: stableTurnId, origin: "backend_import" });
+    expect(materialized).toMatchObject({
+      accepted: true, duplicate: true, rejected: false,
+      turn: { turnId: stableTurnId, origin: "backend_import" },
+      receipt: { intentId },
+    });
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(1);
+    fixture.store.close();
+  });
+
   it("suppresses a materialization batch behind a streaming assistant tail", () => {
     const fixture = newSurface("main_chat", "chat", "chat-first-streaming-tail");
     recordStreamingAssistantPlaceholder(fixture, "streaming-tail");
@@ -251,8 +349,15 @@ describe("kernel conversation journal", () => {
       blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }], nowMs: 100,
     }]);
     expect(batch).toMatchObject({ stoppedByTail: true, results: [{
-      accepted: false, suppressedByStreamingTail: true, turn: null,
+      accepted: false, rejected: false, suppressedByStreamingTail: true, turn: null,
     }] });
+    expect(chatFirstMaterializationDeferrals(
+      [{ intentId: "intent-late" }, { intentId: "intent-after-streaming-item" }],
+      batch,
+    )).toEqual([
+      { intentId: "intent-late", code: "streaming_tail" },
+      { intentId: "intent-after-streaming-item", code: "tail_question" },
+    ]);
     fixture.store.close();
   });
 

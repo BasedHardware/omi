@@ -409,7 +409,11 @@ extension RealtimeHubController {
     let instructions = RealtimeHubTools.systemInstruction(
       kernelContext: topLevelContext.rendered,
       kernelSemanticGuidance: topLevelContext.semanticGuidance,
-      userLanguages: AssistantSettings.shared.voiceBaseLanguages)
+      userLanguages: AssistantSettings.shared.voiceBaseLanguages,
+      onboardingDemoContext: RealtimeHubTools.activeOnboardingDemoContext(),
+      // Only Gemini receives the PTT-down frame as in-turn video (see
+      // `attachTurnScreenFrameIfNeeded`); no other session may be told an image always arrives.
+      turnScreenFrameAttached: provider == .gemini)
     let s = RealtimeHubSession(
       provider: provider,
       auth: auth,
@@ -913,7 +917,8 @@ extension RealtimeHubController {
             continuityKey: idempotencyKey,
             assistantContentBlocks: panelBlocks,
             assistantStatus: journalStatus,
-            terminalReason: terminalReason)
+            terminalReason: terminalReason,
+            userScreenContext: self.screenContextByContinuityKey[idempotencyKey])
           guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
           if accepted { return true }
           if attempt == 0 { try? await Task.sleep(nanoseconds: 250_000_000) }
@@ -945,7 +950,6 @@ extension RealtimeHubController {
         self.legacyVoiceJournalImportedOwners.insert(ownerID)
         return
       }
-
       var importedKeys = Set<String>()
       for entry in candidates {
         guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { break }
@@ -963,7 +967,6 @@ extension RealtimeHubController {
         guard accepted else { break }
         importedKeys.insert(entry.idempotencyKey)
       }
-
       self.legacyVoiceJournalImportStore.acknowledge(
         ownerID: ownerID, idempotencyKeys: importedKeys)
       if self.legacyVoiceJournalImportStore.nextBatch(ownerID: ownerID)?.isEmpty == true {

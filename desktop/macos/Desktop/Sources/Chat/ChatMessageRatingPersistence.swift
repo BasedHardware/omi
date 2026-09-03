@@ -22,12 +22,20 @@ enum ChatMessageRatingPersistence: Equatable {
 
 /// Last-write-wins queue of ratings that must wait for journal sync.
 struct ChatMessageRatingQueue: Equatable {
-  private var pending: [String: Int?] = [:]
+  struct Entry: Equatable {
+    let rating: Int?
+    /// Telemetry dimension carried with the rating so a queued floating-bar
+    /// thumb still reports source=voice after sync (it must never silently
+    /// default back to text at flush time).
+    let surface: String
+  }
+
+  private var pending: [String: Entry] = [:]
 
   var isEmpty: Bool { pending.isEmpty }
 
-  mutating func enqueue(messageId: String, rating: Int?) {
-    pending.updateValue(rating, forKey: messageId)
+  mutating func enqueue(messageId: String, rating: Int?, surface: String = "text") {
+    pending.updateValue(Entry(rating: rating, surface: surface), forKey: messageId)
   }
 
   mutating func cancel(messageId: String) {
@@ -52,10 +60,12 @@ struct ChatMessageRatingQueue: Equatable {
   /// message whose `id` is the kernel `turnId`, while the original id survives
   /// only as `clientTurnId`. Match on either so the rating survives the remap,
   /// and PATCH with the projected (remote) id so the backend row is found.
-  mutating func drain(using messages: [ChatMessage]) -> [(messageId: String, rating: Int?)] {
-    var persist: [(messageId: String, rating: Int?)] = []
+  mutating func drain(
+    using messages: [ChatMessage]
+  ) -> [(messageId: String, rating: Int?, surface: String)] {
+    var persist: [(messageId: String, rating: Int?, surface: String)] = []
     let snapshot = pending
-    for (messageId, rating) in snapshot {
+    for (messageId, entry) in snapshot {
       guard let message = messages.first(where: { $0.id == messageId || $0.clientTurnId == messageId }) else {
         pending.removeValue(forKey: messageId)
         continue
@@ -63,7 +73,7 @@ struct ChatMessageRatingQueue: Equatable {
       switch ChatMessageRatingPersistence.of(message) {
       case .persistNow:
         pending.removeValue(forKey: messageId)
-        persist.append((message.id, rating))
+        persist.append((message.id, entry.rating, entry.surface))
       case .localOnly:
         pending.removeValue(forKey: messageId)
       case .waitForSync:
