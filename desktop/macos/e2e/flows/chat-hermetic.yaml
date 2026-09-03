@@ -44,6 +44,12 @@ covers:
   # renders from and S10 drives `FollowUpChipTap`, the send its button performs.
   - desktop/macos/Desktop/Sources/Chat/FollowUpChip.swift
   - desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift
+  # Deliberately no entry for ChatStreamingBuffer, even though S6's tail streams
+  # through it. Its defect class is display-only — the authoritative terminal
+  # answer overwrites the streamed text — so every assertion available after
+  # `wait_main_chat_idle` passes whether or not the projection leaked the
+  # question mid-stream. Covering it needs an assertion *during* streaming,
+  # which no typed step can express today.
   - desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalEventHub.swift
