@@ -162,7 +162,7 @@ class AuthenticationProvider extends BaseProvider {
           Env.profile.usesFirebaseAuthEmulator
               ? 'Authentication failed: $e'
               : (globalNavigatorKey.currentContext?.l10n.authenticationFailed ??
-                     'Authentication failed. Please try again.'),
+                    'Authentication failed. Please try again.'),
         );
       }
       setLoadingState(false);
