@@ -135,16 +135,17 @@ void main() {
     // ChatFollowUpChip draws the question, so a prose copy would either say the
     // same words twice or — when the block is too malformed to render a card —
     // leave a heading standing over nothing.
-    final reviewOnly = ServerMessage.fromJson(
-      _fcmDaySummaryData(text: '', contentBlocks: [_reviewBlock]),
-    );
+    final reviewOnly = ServerMessage.fromJson(_fcmDaySummaryData(text: '', contentBlocks: [_reviewBlock]));
     expect(reviewOnly.text, '');
     expect(reviewOnly.memoryReviewCard, isNotNull);
 
     final malformedReviewOnly = ServerMessage.fromJson(
-      _fcmDaySummaryData(text: '', contentBlocks: [
-        {'type': 'memoryReviewCard', 'id': 'summary-9:memories', 'items': []},
-      ]),
+      _fcmDaySummaryData(
+        text: '',
+        contentBlocks: [
+          {'type': 'memoryReviewCard', 'id': 'summary-9:memories', 'items': []},
+        ],
+      ),
     );
     expect(malformedReviewOnly.memoryReviewCard, isNull);
     expect(malformedReviewOnly.text, '');
