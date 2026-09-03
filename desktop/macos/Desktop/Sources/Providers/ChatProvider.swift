@@ -349,9 +349,16 @@ enum ChatContentBlock: Identifiable {
     recommendedActionItems: [ConversationLinkActionItem]
   )
   case memoryLink(id: String, memoryId: String, summary: String)
+  /// The memories one day actually produced, each row correctable in place.
+  /// Review state is deliberately absent: it is read live from the memory, so a vote on the phone
+  /// shows on the Mac and the block never becomes a second copy of the verdict.
+  case memoryReviewCard(id: String, summaryId: String, date: String, items: [MemoryReviewItem])
   /// Answer-level provenance. Unlike a rich link card, this is rendered at the matching inline
   /// numeric marker and is otherwise invisible in the transcript.
   case citation(id: String, reference: ChatCitationReference)
+  /// One grounded next question, rendered as a tappable chip under the answer.
+  /// Tapping it sends the question as a new user turn in the same lane.
+  case followUp(id: String, text: String)
   case agentSpawn(
     id: String,
     pillId: UUID?,
@@ -384,7 +391,9 @@ enum ChatContentBlock: Identifiable {
     case .captureLink(let id, _, _, _): return id
     case .conversationLink(let id, _, _, _): return id
     case .memoryLink(let id, _, _): return id
+    case .memoryReviewCard(let id, _, _, _): return id
     case .citation(let id, _): return id
+    case .followUp(let id, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
     }
@@ -838,6 +847,13 @@ extension ChatContentBlock {
       let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? nil : trimmed
     case .citation:
+      return nil
+    // A copied answer is what Omi said, not the control offering the next turn.
+    case .followUp:
+      return nil
+    // Same rule for the review card: it is three controls over memories that already exist, not
+    // prose the reader would expect to find in a copied answer.
+    case .memoryReviewCard:
       return nil
     case .agentSpawn(_, _, _, _, let title, let objective, _):
       let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -5420,10 +5436,14 @@ class ChatProvider: ObservableObject {
           toolName: "get_work_context"
         )
       }
+      // The grounded closing question is lifted off the authoritative answer
+      // before anything else reads it, so the chip's words are delivered once —
+      // as a block — and never also sit in the prose.
+      let (answerText, followUpQuestion) = ChatFollowUpTail.split(queryResult.text)
       if messages.contains(where: { $0.id == aiMessageId }) {
         messageText = await finalizeAssistantMessageCitations(
           messageId: aiMessageId,
-          queryText: queryResult.text,
+          queryText: answerText,
           selectedReferences: toolCitationSnapshot.selectedReferences,
           requestedSources: ChatCitationMarkup.explicitlyRequestsSources(effectivePrompt),
           terminalCitationReferences: terminalCitationReferences)
@@ -5447,6 +5467,18 @@ class ChatProvider: ObservableObject {
             terminalStatus: .completed,
             scheduleJournal: false
           )
+          if ChatFollowUpTail.shouldAttach(
+            question: followUpQuestion,
+            visibleText: messages[index].text,
+            failed: false
+          ), let question = followUpQuestion,
+            !messages[index].contentBlocks.contains(where: {
+              if case .followUp = $0 { return true } else { return false }
+            })
+          {
+            messages[index].contentBlocks.append(
+              .followUp(id: ChatFollowUpTail.blockID(messageID: aiMessageId), text: question))
+          }
         }
       } else {
         // The assistant row this turn owns is gone from the transcript while
@@ -5454,7 +5486,7 @@ class ChatProvider: ObservableObject {
         // get here; a transcript reset that failed to revoke the turn lands
         // here too, and then reports a `completed` the user never saw. Name the
         // condition, not one guessed cause.
-        messageText = queryResult.text
+        messageText = answerText
         log(
           "ChatProvider: assistant row \(aiMessageId) missing at completion "
             + "(generation \(sendGen)); response not visible in the transcript"
@@ -6191,6 +6223,16 @@ class ChatProvider: ObservableObject {
     }
   }
 
+  /// What a streaming assistant message shows right now.
+  ///
+  /// The grounded follow-up tail streams in like any other token, so without
+  /// stripping it here the chip's words appear in the prose first and are
+  /// removed only when the turn finalizes. Composed with sentence spacing
+  /// because both are projections of the same accumulated text.
+  static func normalizeStreamingAssistantText(_ text: String) -> String {
+    normalizeAssistantSentenceSpacing(ChatFollowUpTail.strippingPendingTail(text))
+  }
+
   /// Normalize missing spaces after sentence punctuation in assistant messages.
   /// Example: "Hello.World" -> "Hello. World", "Great!Lets go" -> "Great! Lets go"
   ///
@@ -6265,7 +6307,7 @@ class ChatProvider: ObservableObject {
   private func flushStreamingBuffer() {
     streamingBuffer.flush(messages: &messages) { message, text in
       if message.sender == .ai {
-        return Self.normalizeAssistantSentenceSpacing(text)
+        return Self.normalizeStreamingAssistantText(text)
       }
       return text
     }
@@ -6297,7 +6339,7 @@ class ChatProvider: ObservableObject {
         messages: &messages,
         normalizeText: { message, text in
           if message.sender == .ai {
-            return Self.normalizeAssistantSentenceSpacing(text)
+            return Self.normalizeStreamingAssistantText(text)
           }
           return text
         }
@@ -6325,7 +6367,7 @@ class ChatProvider: ObservableObject {
         messages: &messages,
         normalizeText: { message, text in
           if message.sender == .ai {
-            return Self.normalizeAssistantSentenceSpacing(text)
+            return Self.normalizeStreamingAssistantText(text)
           }
           return text
         }
@@ -6617,7 +6659,7 @@ class ChatProvider: ObservableObject {
       messages: &messages,
       normalizeText: { message, text in
         if message.sender == .ai {
-          return Self.normalizeAssistantSentenceSpacing(text)
+          return Self.normalizeStreamingAssistantText(text)
         }
         return text
       }
