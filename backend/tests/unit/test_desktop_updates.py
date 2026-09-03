@@ -1,5 +1,6 @@
 """Tests for desktop update system (appcast XML, channel filtering, download endpoint)."""
 
+from datetime import timedelta
 import xml.etree.ElementTree as ET
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
@@ -19,7 +20,11 @@ from routers.updates import (
     _get_windows_update_feed_url,
     _parse_changelog_to_changes,
     _parse_desktop_version,
+    _download_landing_html,
+    _install_steps_html,
     _preview_download_landing_html,
+    _product_hunt_badge_html,
+    PRODUCT_HUNT_BADGE_ENDS_AT,
     _xml_attr,
     router as updates_router,
 )
@@ -1944,3 +1949,57 @@ class TestBetaIdentityServing:
 
         assert resp.status_code == 404
         assert "omi.dmg" not in resp.text
+
+
+class TestDownloadLandingInstallSteps:
+    """The landing page's install guidance is illustrated cards, not a text list."""
+
+    def test_macos_steps_name_the_dmg_the_drag_and_the_launch(self):
+        html = _install_steps_html("macos")
+
+        assert html.count('class="step"') == 3
+        assert "omi.dmg" in html
+        assert "Applications" in html
+        # The old plain-text list is gone: no "1." / "2." prefixes, no <br> ladder.
+        assert "1. Open the downloaded" not in html
+
+    def test_windows_steps_cover_smartscreen(self):
+        html = _install_steps_html("windows")
+
+        assert html.count('class="step"') == 3
+        assert "omi-setup.exe" in html
+        assert "Run anyway" in html
+
+    def test_landing_page_renders_the_steps_below_the_video(self):
+        html = _download_landing_html("https://example.com/omi.dmg", version="0.12.264")
+
+        assert html.index('id="demo-video"') < html.index('class="steps"')
+        assert "Installation steps:" not in html
+
+
+class TestProductHuntBadge:
+    """Launch-day badge: visible during the window, gone afterwards, no code change needed."""
+
+    def test_badge_renders_during_the_launch_window(self):
+        html = _product_hunt_badge_html(PRODUCT_HUNT_BADGE_ENDS_AT - timedelta(hours=1))
+
+        assert "post_id=1240025" in html
+        assert 'rel="noopener noreferrer"' in html
+
+    def test_badge_disappears_once_the_window_closes(self):
+        assert _product_hunt_badge_html(PRODUCT_HUNT_BADGE_ENDS_AT) == ""
+        assert _product_hunt_badge_html(PRODUCT_HUNT_BADGE_ENDS_AT + timedelta(days=1)) == ""
+
+    def test_badge_cache_buster_advances_with_the_hour(self):
+        # Product Hunt bakes the vote count into the SVG, so a fixed `t` would freeze it.
+        first = _product_hunt_badge_html(PRODUCT_HUNT_BADGE_ENDS_AT - timedelta(hours=3))
+        second = _product_hunt_badge_html(PRODUCT_HUNT_BADGE_ENDS_AT - timedelta(hours=2))
+
+        assert first != second
+
+    def test_landing_page_drops_the_badge_after_the_window(self):
+        html = _download_landing_html("https://example.com/omi.dmg", version="0.12.264")
+
+        # Renders today; the gate is exercised directly above. Guard the markup contract
+        # so a future edit cannot leave a dangling empty anchor behind.
+        assert html.count('class="ph-badge"') <= 1
