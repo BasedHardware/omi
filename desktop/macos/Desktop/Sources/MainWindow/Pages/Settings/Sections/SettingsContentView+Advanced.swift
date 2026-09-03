@@ -239,6 +239,10 @@ extension SettingsContentView {
             }
           }
 
+          if chatBridgeMode == "local" {
+            localProviderFields
+          }
+
           if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
             GlassSeparator()
 

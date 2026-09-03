@@ -478,6 +478,9 @@ export class PiMonoAdapter implements HarnessAdapter {
   readonly name = "pi-mono";
 
   private config: PiMonoConfig;
+  /** Provider name pi is launched with / addressed via set_model. Defaults to
+   *  "omi" (Rust-backend-routed, requires a Firebase auth token). */
+  private provider: string;
   private process: ChildProcess | null = null;
   private readline: ReadlineInterface | null = null;
   private sessions: Map<
@@ -558,6 +561,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
   constructor(config: PiMonoConfig, piPath?: string, extensionPath?: string) {
     this.config = config;
+    this.provider = config.provider || "omi";
     this.sessionPrefix = `pi-worker-${PiMonoAdapter.nextAdapterInstanceId++}`;
     this.piPath = piPath || process.env.PI_MONO_PATH || resolveBundledPi();
     this.extensionPath =
@@ -577,9 +581,9 @@ export class PiMonoAdapter implements HarnessAdapter {
       "-e",
       this.extensionPath,
       "--provider",
-      "omi",
+      this.provider,
       "--model",
-      "omi-sonnet",
+      this.config.model || "omi-sonnet",
     ];
     // Pi has no set_system_prompt RPC — system prompt must be baked at spawn
     // time via the --system-prompt CLI flag. To change it, restart the process.
@@ -734,7 +738,16 @@ export class PiMonoAdapter implements HarnessAdapter {
   }
 
   async createSession(opts: SessionOpts): Promise<string> {
-    const mapped = opts.model ? mapModel(opts.model) : undefined;
+    // The "omi" provider serves multiple models (omi-sonnet/omi-opus) and
+    // callers address them via Claude-style ids that mapModel() aliases.
+    // A local provider serves exactly one model — the one it was configured
+    // with — so any requested model is ignored in favor of that fixed id.
+    const mapped =
+      this.provider === "omi"
+        ? opts.model
+          ? mapModel(opts.model)
+          : undefined
+        : this.config.model;
     await this.setExecutionRole(opts.executionRole ?? "coordinator");
 
     const admittedWorkingDirectory = resolve(opts.cwd);
@@ -767,11 +780,11 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     await this.start();
 
-    // Set model if specified (map claude-* → omi-*)
+    // Set model if specified (map claude-* → omi-*, or fixed local model id)
     if (mapped) {
       this.sendCommand({
         type: "set_model",
-        provider: "omi",
+        provider: this.provider,
         modelId: mapped,
       });
     }
@@ -997,14 +1010,17 @@ export class PiMonoAdapter implements HarnessAdapter {
   }
 
   async setModel(sessionId: string, model: string): Promise<void> {
-    const mapped = mapModel(model);
+    // A local provider serves exactly one model — ignore the requested model
+    // id and keep targeting the configured local model.
+    const mapped =
+      this.provider === "omi" ? mapModel(model) : this.config.model ?? model;
     const session = this.sessions.get(sessionId);
     if (session) {
       session.model = mapped;
     }
     this.sendCommand({
       type: "set_model",
-      provider: "omi",
+      provider: this.provider,
       modelId: mapped,
     });
   }

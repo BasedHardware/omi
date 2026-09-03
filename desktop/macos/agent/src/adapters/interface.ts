@@ -14,6 +14,12 @@ export interface HarnessConfig {
   /** Omi API base URL for pi-mono provider */
   omiApiBaseUrl?: string;
   /** Firebase auth token for Omi API authentication */
+  /** pi provider name to launch. Defaults to "omi" (routed through the Rust
+   *  backend with per-request credentials). "omi-local" talks directly to a
+   *  user-configured OpenAI-compatible endpoint and uses no Omi credentials. */
+  provider?: string;
+  /** Model id to request from `provider`. Defaults to "omi-sonnet" for "omi". */
+  model?: string;
 }
 
 /**

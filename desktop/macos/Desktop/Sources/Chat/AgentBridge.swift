@@ -625,6 +625,19 @@ actor AgentBridge {
 
   let harnessMode: String
 
+  /// Which pi provider the "piMono" harness should be configured with: "omi"
+  /// (routed through the Rust backend, requires Firebase auth) or "omi-local"
+  /// (talks directly to a user-configured OpenAI-compatible endpoint, no
+  /// auth, no Rust backend, no cost logging). Meaningless for "acp".
+  ///
+  /// Read-through to the app-global provider selection in Settings, not a
+  /// stored per-bridge field — there is no per-session override. The shared
+  /// `AgentRuntimeProcess` reads the same global config when it launches the
+  /// harness process, so this and the actually-running process always agree.
+  var providerMode: String {
+    AIProvider.currentProviderMode
+  }
+
   let clientId = UUID().uuidString
   let runtime: AgentRuntimeProcess
   private var registered = false
@@ -652,6 +665,14 @@ actor AgentBridge {
 
   private var isPiMonoHarness: Bool {
     AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue
+  }
+
+  /// Whether this run requires the managed Omi credential (Firebase ID
+  /// token). True only for the "omi" provider on the piMono harness — the
+  /// "omi-local" provider shares that harness but talks to a user-configured
+  /// endpoint and must never be blocked on, or fetch, a Firebase token.
+  private var requiresManagedPiMonoCredentials: Bool {
+    isPiMonoHarness && providerMode == "omi"
   }
 
   private func captureAuthorization(
@@ -816,7 +837,7 @@ actor AgentBridge {
       isNonProduction: AppBuild.isNonProduction,
       hermeticFaultModelToken: hermeticFaultModelToken)
     let requiresPiMonoCredentials = AgentRuntimeCredentialPolicy.shouldRequirePiMonoCredentials(
-      preferredAdapterIsPiMono: isPiMonoHarness,
+      preferredAdapterIsPiMono: requiresManagedPiMonoCredentials,
       requestedCredentials: requiresCredentials,
       isNonProduction: AppBuild.isNonProduction,
       hermeticFaultModelToken: hermeticFaultModelToken)
@@ -941,7 +962,7 @@ actor AgentBridge {
       isNonProduction: AppBuild.isNonProduction,
       hermeticFaultModelToken: hermeticFaultModelToken)
     let requiresPiMonoCredentials = AgentRuntimeCredentialPolicy.shouldRequirePiMonoCredentials(
-      preferredAdapterIsPiMono: isPiMonoHarness,
+      preferredAdapterIsPiMono: requiresManagedPiMonoCredentials,
       requestedCredentials: true,
       isNonProduction: AppBuild.isNonProduction,
       hermeticFaultModelToken: hermeticFaultModelToken)
@@ -1602,7 +1623,11 @@ actor AgentBridge {
       throw BridgeError.requestAlreadyActive
     }
 
-    let usesManagedCloud = session.profile.credentialScope == .managedCloud
+    // Local sessions share the piMono adapter/credentialScope with "omi" —
+    // gate on providerMode too, or a local session would still hit Omi's
+    // quota check and the Firebase-token retry path below despite never
+    // authenticating to Omi in the first place.
+    let usesManagedCloud = session.profile.credentialScope == .managedCloud && providerMode == "omi"
     if usesManagedCloud {
       // Refresh before the cached verdict is applied, not after it: a blocking
       // snapshot must never be the reason it is itself never re-fetched. When
@@ -2031,6 +2056,8 @@ enum BridgeError: LocalizedError {
   case agentRuntimeFailure(AgentRuntimeFailure)
   case quotaExceeded(plan: String, unit: String, used: Double, limit: Double?, resetAtUnix: Int?)
   case authMissing
+  /// Local provider selected but its base URL / model id aren't configured yet.
+  case localConfigMissing
 
   var isContextSnapshotProjectionMismatch: Bool {
     let exactCode = "context_snapshot_projection_mismatch"
@@ -2127,6 +2154,8 @@ enum BridgeError: LocalizedError {
       return "Please sign in to use AI chat."
     case .agentRuntimeFailure(let failure):
       return failure.displayMessage
+    case .localConfigMissing:
+      return "Set up your local model's address in Settings first."
     case .agentError(let msg):
       return Self.userFacingAgentErrorMessage(msg)
     case .quotaExceeded(let plan, let unit, let used, let limit, _):

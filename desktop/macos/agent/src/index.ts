@@ -1652,6 +1652,12 @@ async function main(): Promise<void> {
   const defaultAdapterId = adapterIdForHarnessMode(defaultHarnessMode);
   logErr(`Default harness mode: ${defaultHarnessMode}`);
 
+  // Provider selection: "omi" (default) routes through the Rust backend and
+  // requires Firebase auth below. "omi-local" talks directly to a
+  // user-configured OpenAI-compatible endpoint (see pi-mono-extension) and
+  // never authenticates to Omi at all.
+  const provider = process.env.OMI_PROVIDER || "omi";
+
   // 1. Start Unix socket for omi-tools relay
   omiToolsPipePath = await startOmiToolsRelay();
   logErr("omi-tools relay started");
@@ -1706,12 +1712,17 @@ async function main(): Promise<void> {
     await Promise.all([...localAcpAdapters].map((adapter) => adapter.stop()));
   };
   const ensurePiMonoAdapter = async (): Promise<boolean> => {
-    if (process.env.OMI_MODEL_CREDENTIALS !== "on_demand") return false;
+    // The "omi" provider acquires credentials per model request; without the
+    // on-demand marker it cannot authenticate. Local providers talk directly
+    // to a user-configured endpoint and never use Omi credentials.
+    if (provider === "omi" && process.env.OMI_MODEL_CREDENTIALS !== "on_demand") return false;
     piMonoClasses ??= await import("./adapters/pi-mono.js");
     if (!registry.has("pi-mono")) {
       registry.register("pi-mono", () => {
         const harness = new piMonoClasses!.PiMonoAdapter({
           omiApiBaseUrl: process.env.OMI_API_BASE_URL,
+          provider,
+          model: provider === "omi" ? undefined : process.env.OMI_LOCAL_MODEL_ID,
           onDisposed: () => piMonoAdapters.delete(harness),
         });
         piMonoAdapters.add(harness);
@@ -1740,7 +1751,10 @@ async function main(): Promise<void> {
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
   if (!piMonoAvailable && defaultAdapterId === "pi-mono" && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY !== "1") {
-    const msg = "pi-mono mode requires on-demand model credentials; refusing to start";
+    const msg =
+      provider === "omi"
+        ? "pi-mono mode requires on-demand model credentials; refusing to start"
+        : "pi-mono mode failed to start local provider; refusing to start";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
