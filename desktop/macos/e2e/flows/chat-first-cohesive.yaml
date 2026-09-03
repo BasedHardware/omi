@@ -44,7 +44,7 @@ covers:
   # covers that mount and teardown; the selectable text view's own behaviour
   # (selectable, not editable, one view across rebuilds) is asserted
   # hermetically in ChatSelectableTextSurfaceTests, not here.
-  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatSelectableTextPopover.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatSelectableProse.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/StableChatCardHeader.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatConversationReferencePill.swift
   # S8 drives the Tasks-page closure, including its bounded attempt/terminal telemetry.
