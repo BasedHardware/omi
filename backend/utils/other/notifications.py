@@ -602,8 +602,20 @@ async def _send_bulk_summary_notification(
     target_hour: Optional[int] = None,
     cursor_key: Optional[str] = None,
 ) -> bool:
-    """Send one hour group's summaries while preserving the job's budget and checkpoint."""
+    """Send one hour group's summaries. Returns True if the whole group was served.
+
+    Isolation is per user, not per batch: a provider error, a context overflow,
+    or a wedged call is recorded against that uid and the remaining users in the
+    same batch still complete. A user who exceeds the per-user budget is
+    abandoned (a worker thread cannot be cancelled) rather than allowed to hold
+    the batch barrier for the rest of the run.
+
+    That per-user budget now covers the backfill walk as well as the current day,
+    so a user with holes can spend up to
+    ``1 + _DAILY_SUMMARY_BACKFILL_GENERATE_CAP`` generations inside one timeout.
+    """
     counters = stats if stats is not None else DailySummaryJobStats()
+
     for i in range(0, len(users), _BATCH_SIZE):
         if deadline is not None and monotonic() >= deadline:
             counters.skipped_for_budget += len(users) - i
