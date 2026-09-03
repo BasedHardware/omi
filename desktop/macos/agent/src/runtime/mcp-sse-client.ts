@@ -6,6 +6,12 @@
  * writes every reply to, and a POST endpoint the server names in its first
  * `endpoint` event. POSTing a request to the stream URL — what a Streamable
  * HTTP client does — is a 404, so these servers need their own client.
+ *
+ * The stream is also the transport's only reply channel, so a drop used to
+ * fail the server for the rest of the session with nothing in chat the wiser.
+ * A drop is now repaired with bounded backoff (see
+ * DEFAULT_SSE_RECONNECT_DELAYS_MS) before the server is marked down with an
+ * error that reaches the model.
  */
 
 import { McpClient, MCP_CLIENT_INFO, MCP_PROTOCOL_VERSION } from "./mcp-client.js";
@@ -20,6 +26,14 @@ interface JsonRpcMessage {
 
 /** How long to wait for the server to name its POST endpoint before giving up. */
 const ENDPOINT_TIMEOUT_MS = 10_000;
+
+/**
+ * Backoff before each reconnect attempt after a live stream drops. Three
+ * tries — roughly 21s worst case — covers a server restart or a proxy blip;
+ * past that the server is marked down with a clear error instead of the
+ * session silently losing it forever. Injectable so tests run fast.
+ */
+export const DEFAULT_SSE_RECONNECT_DELAYS_MS: readonly number[] = [1_000, 5_000, 15_000];
 
 /**
  * Cap on a single unterminated frame. A 200 response that streams something
@@ -46,15 +60,30 @@ export class McpSseClient extends McpClient {
   private readonly abort = new AbortController();
   private postURL: string | undefined;
   private requestId = 0;
-  private opened: Promise<void> | null = null;
+  private ready: Promise<void> | null = null;
+
+  /**
+   * What a request actually waits on: the live stream's endpoint. Replaced by
+   * the monitor on the first connect and on every drop, so requests issued
+   * while a drop is being repaired wait for the repair instead of failing
+   * against the dead stream — bounded by the caller's own timeout.
+   */
+  private gate: Promise<void> = Promise.resolve();
+  private gateReady: () => void = () => {};
+  private gateFailed: (error: Error) => void = () => {};
+  /** The consume loop of the currently-live stream; resolves when it ends. */
+  private currentRun: Promise<void> = Promise.resolve();
   private initialized: Promise<void> | null = null;
+  private readonly reconnectDelaysMs: readonly number[];
 
   constructor(
     private readonly url: string,
     private readonly configuredHeaders: Readonly<Record<string, string>> = {},
     private readonly fetchImpl: typeof fetch = fetch,
+    reconnectDelaysMs: readonly number[] = DEFAULT_SSE_RECONNECT_DELAYS_MS,
   ) {
     super();
+    this.reconnectDelaysMs = reconnectDelaysMs;
   }
 
   /// The server's configured headers verbatim; an Authorization value carries its own scheme.
@@ -64,6 +93,9 @@ export class McpSseClient extends McpClient {
 
   dispose(): void {
     this.abort.abort();
+    // A request parked on the gate — waiting for a first endpoint or for a
+    // repair — must fail now, not wait out the backoff.
+    this.gateFailed(new Error("MCP client disposed"));
     this.failAll(new Error("MCP client disposed"));
   }
 
@@ -73,43 +105,122 @@ export class McpSseClient extends McpClient {
   }
 
   /**
-   * Opens the event stream and resolves once the server has named its POST
-   * endpoint. The stream itself keeps being read for the life of the client.
+   * Waits until a stream with a POST endpoint is live (or rejects once the
+   * server is marked down).
    */
   private open(): Promise<void> {
-    this.opened ??= settled(new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error("MCP server never sent an SSE endpoint event")),
-        ENDPOINT_TIMEOUT_MS,
-      );
-      timer.unref?.();
-      const settle = (error?: Error) => {
-        clearTimeout(timer);
-        error ? reject(error) : resolve();
-      };
+    this.ready ??= settled(this.connectAndMonitor());
+    return this.gate;
+  }
 
-      this.fetchImpl(this.url, {
-        method: "GET",
-        headers: { Accept: "text/event-stream", ...this.authHeaders() },
-        signal: this.abort.signal,
-      })
-        .then(async (response) => {
-          if (!response.ok) {
-            throw new Error(`MCP server responded ${response.status} opening the event stream`);
-          }
-          if (!response.body) throw new Error("MCP server returned an empty event stream");
-          await this.consume(response.body, settle);
-          // The stream ended: no further reply can arrive on it.
-          settle(new Error("MCP event stream closed"));
-          this.failAll(new Error("MCP event stream closed"));
-        })
-        .catch((err: unknown) => {
-          const error = err instanceof Error ? err : new Error(String(err));
-          settle(error);
-          this.failAll(error);
-        });
-    }));
-    return this.opened;
+  private replaceGate(): void {
+    this.gate = new Promise<void>((resolve, reject) => {
+      this.gateReady = resolve;
+      this.gateFailed = reject;
+    });
+    // A gate with no awaiting request — the client disposed mid-repair — must
+    // not become an unhandled rejection; real awaiters still see the error.
+    this.gate.catch(() => {});
+  }
+
+  /** One GET plus the wait for the endpoint event; leaves the stream being read. */
+  private async connectStream(): Promise<void> {
+    const response = await this.fetchImpl(this.url, {
+      method: "GET",
+      headers: { Accept: "text/event-stream", ...this.authHeaders() },
+      signal: this.abort.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`MCP server responded ${response.status} opening the event stream`);
+    }
+    if (!response.body) throw new Error("MCP server returned an empty event stream");
+    let endpointSettled: (error?: Error) => void;
+    let endpointDone = false;
+    const endpoint = new Promise<void>((resolve, reject) => {
+      endpointSettled = (error?: Error) => {
+        endpointDone = true;
+        if (error) reject(error);
+        else resolve();
+      };
+    });
+    const timer = setTimeout(
+      () => endpointSettled(new Error("MCP server never sent an SSE endpoint event")),
+      ENDPOINT_TIMEOUT_MS,
+    );
+    timer.unref?.();
+    // Starts immediately; `currentRun` ends when this stream does. A stream
+    // that ends before naming an endpoint must still settle the wait —
+    // otherwise this connect would hang past its own timeout.
+    this.currentRun = this.consume(response.body, endpointSettled!).finally(() => {
+      clearTimeout(timer);
+      if (!endpointDone) {
+        endpointSettled(new Error("MCP event stream closed before the server named an endpoint"));
+      }
+    });
+    await endpoint;
+  }
+
+  /** Connect, then repair the stream with bounded backoff every time it drops. */
+  private async connectAndMonitor(): Promise<void> {
+    this.replaceGate();
+    await this.connectStream();
+    this.gateReady();
+    for (;;) {
+      try {
+        await this.currentRun;
+      } catch {
+        // A consume error is a stream drop like any other.
+      }
+      if (this.abort.signal.aborted) return;
+      // In-flight requests can no longer be answered on the dead stream.
+      this.failAll(new Error("MCP event stream closed"));
+      // New requests wait for the repair instead of racing the dead stream.
+      this.replaceGate();
+      try {
+        await this.reconnectWithBackoff();
+        this.gateReady();
+      } catch (err) {
+        this.gateFailed(err instanceof Error ? err : new Error(String(err)));
+        // Exhausted: this rejects `ready`, marking the server down for the
+        // session with the reconnect error on every future request.
+        throw err;
+      }
+    }
+  }
+
+  private async reconnectWithBackoff(): Promise<void> {
+    let lastError: Error | undefined;
+    for (const delay of this.reconnectDelaysMs) {
+      await this.sleep(delay);
+      if (this.abort.signal.aborted) return;
+      try {
+        await this.connectStream();
+        process.stderr.write(`[mcp-sse] ${this.url}: event stream restored\n`);
+        return;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+      }
+    }
+    throw new Error(
+      `MCP event stream dropped and ${this.reconnectDelaysMs.length} reconnect attempts failed ` +
+        `(last error: ${lastError?.message ?? "unknown"}); the server is down for this session`,
+    );
+  }
+
+  /** Abort-aware sleep: dispose() must not wait out a backoff window. */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(resolve, ms);
+      timer.unref?.();
+      this.abort.signal.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+    });
   }
 
   /** Reads SSE frames off the stream, routing each `message` to its waiter. */
