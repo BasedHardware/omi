@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import timezone
 from typing import Any, Collection, Dict, List, Optional, cast
 
-from database._client import db as default_db_client
+from database._client import data_plane_db as default_db_client
 from database.memory_vector_metadata import canonical_memory_provider_id
 from database.legal_holds import external_write_fence
 from models.knowledge_ledger_search import (
@@ -293,7 +293,8 @@ def upsert_atom_keyword_doc(item: MemoryItem, *, db_client: Any = None) -> bool:
     if not is_indexable_long_term_atom(item):
         return False
     try:
-        with external_write_fence(item.uid, firestore_client=db_client):
+        client = db_client if db_client is not None else default_db_client
+        with external_write_fence(item.uid, firestore_client=client):
             ensure_memories_collection()
             if item.ledger_schema_version == "knowledge_ledger.v1":
                 ensure_ledger_keyword_schema()

@@ -151,8 +151,10 @@ def conversations_db():
 
     database_client = ModuleType("database._client")
     database_client.db = firestore
+    database_client.data_plane_db = firestore
     database_client.delete_collection_recursive = MagicMock()
     database_client.get_firestore_client = MagicMock()
+    database_client.get_data_plane_firestore_client = lambda: firestore
     database_client.run_transactional = MagicMock()
     firestore_read_metrics = ModuleType("database.firestore_read_metrics")
     firestore_read_metrics.FirestoreReadOutcome = SimpleNamespace(HIT="hit", MISS="miss")
