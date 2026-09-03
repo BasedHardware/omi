@@ -178,6 +178,10 @@ class _FrozenDatetime(datetime):
 def store(monkeypatch) -> _Store:
     store = _Store()
     monkeypatch.setattr(llm_usage_db, 'datetime', _FrozenDatetime)
+    # The relay's admission reads resolve "this month" through user_usage too,
+    # so freeze it alongside the writers or the seeded 2026-09-01 buckets are
+    # only visible in September.
+    monkeypatch.setattr(user_usage_db, 'datetime', _FrozenDatetime)
     monkeypatch.setattr(desktop_realtime, 'get_customer_firestore_client', lambda: store)
     return store
 

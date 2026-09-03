@@ -52,6 +52,7 @@ final class ThreeDoorsDemoPageTests: XCTestCase {
     let here = URL(fileURLWithPath: #filePath)
     let template = here.deletingLastPathComponent().deletingLastPathComponent()
       .appendingPathComponent("Sources/Resources/\(ThreeDoorsDemoPage.fileName)")
+    // omi-test-quality: source-inspection -- static contract: the demo page is a shipped HTML template resource with no runtime seam, so its markup is checked as the file the app serves
     let html = try String(contentsOf: template, encoding: .utf8)
     for phrase in [
       "I have keys but open no locks", "Which planet has a day longer than its year", "last word of the first riddle",
@@ -68,6 +69,7 @@ final class ThreeDoorsDemoPageTests: XCTestCase {
     let here = URL(fileURLWithPath: #filePath)
     let template = here.deletingLastPathComponent().deletingLastPathComponent()
       .appendingPathComponent("Sources/Resources/\(ThreeDoorsDemoPage.fileName)")
+    // omi-test-quality: source-inspection -- static contract: the demo page is a shipped HTML template resource with no runtime seam, so its markup is checked as the file the app serves
     let html = try String(contentsOf: template, encoding: .utf8)
     XCTAssertTrue(html.contains(ThreeDoorsDemoPage.templateKeyMarkup))
     XCTAssertTrue(html.contains(ThreeDoorsDemoPage.templateReturnMarkup))

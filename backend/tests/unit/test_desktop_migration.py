@@ -169,6 +169,9 @@ models_users_stub.LOCATION_CONTEXT_PURPOSE = "city_context"
 
 _stub_package("utils")
 _stub_package("utils.other")
+_stub_package("utils.observability")
+fallback_stub = _stub_module("utils.observability.fallback")
+fallback_stub.record_fallback = MagicMock()
 utils_sub_stub = _stub_module("utils.subscription")
 utils_sub_stub.get_default_basic_subscription = MagicMock()
 utils_enc_stub = _stub_module("utils.encryption")
