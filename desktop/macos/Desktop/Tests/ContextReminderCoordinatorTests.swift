@@ -18,7 +18,6 @@ final class ContextReminderCoordinatorTests: XCTestCase {
     bucketID: nil)
 
   override func setUp() async throws {
-    try await super.setUp()
     ownerFixture = RuntimeOwnerAuthorityTestFixture()
     await ownerFixture.establish(authOwnerID: "owner-1")
   }
@@ -26,7 +25,6 @@ final class ContextReminderCoordinatorTests: XCTestCase {
   override func tearDown() async throws {
     await ownerFixture.restore()
     ownerFixture = nil
-    try await super.tearDown()
   }
 
   func testCreateBindsToInjectedContextAndObserveDeliversOncePerStay() async throws {
