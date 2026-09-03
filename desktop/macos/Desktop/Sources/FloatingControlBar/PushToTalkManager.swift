@@ -80,14 +80,6 @@ struct PTTSilentMicRecoveryPolicy {
   }
 }
 
-/// Modifier-only shortcuts (Option, Fn, etc.) overlap with normal text editing:
-/// Option-arrow navigation and dead-key entry first emit `flagsChanged`, then a
-/// normal key-down. Do not let that first modifier event barge into an active
-/// spoken reply before the accompanying editing key arrives.
-///
-/// The gate deliberately has no timing policy. `PushToTalkManager` supplies the
-/// short hold delay, while this model makes the admission/cancellation contract
-/// deterministic and independently testable.
 /// Routes a shortcut press through the reveal decision. Both PTT entry points call this,
 /// so injecting `reveal`/`start` in a test exercises the shipping ordering rather than a
 /// restatement of it.
@@ -108,6 +100,14 @@ enum PushToTalkBarRevealPolicy {
   }
 }
 
+/// Modifier-only shortcuts (Option, Fn, etc.) overlap with normal text editing:
+/// Option-arrow navigation and dead-key entry first emit `flagsChanged`, then a
+/// normal key-down. Do not let that first modifier event barge into an active
+/// spoken reply before the accompanying editing key arrives.
+///
+/// The gate deliberately has no timing policy. `PushToTalkManager` supplies the
+/// short hold delay, while this model makes the admission/cancellation contract
+/// deterministic and independently testable.
 struct ModifierOnlyPTTActivationGate {
   enum Action: Equatable {
     case scheduleStart
