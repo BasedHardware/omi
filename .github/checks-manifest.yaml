@@ -819,9 +819,9 @@ checks:
     reason: "#9454 weekly baseline health pulse parsing, JSONL record, and 30-day staleness detection"
   - id: dead-code-ratchet
     command: ["python3", ".github/scripts/check_dead_code.py"]
-    triggers: ["app/lib/**", "app/pubspec.yaml", "backend/utils/**", "backend/models/**", "backend/database/**", "backend/services/**", "backend/jobs/**", "desktop/macos/agent/**", "desktop/windows/src/**", ".github/scripts/check_dead_code.py", ".github/scripts/dead_code/**", ".github/checks-manifest.yaml"]
+    triggers: ["app/lib/**", "app/pubspec.yaml", "backend/**/*.py", "desktop/macos/agent/**", "desktop/windows/src/**", ".github/scripts/check_dead_code.py", ".github/scripts/dead_code/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "57 unreachable Flutter files accumulated until a June 2026 security fix landed on unreachable code; import-graph reachability (flutter from main.dart, agent, windows entries, incl. dynamic import(), string-spawned .js/.mjs siblings, and the @renderer alias) plus zero-importer backend buckets now fail NEW dead code with a delete-or-allowlist-with-reason fix, and the committed baseline only shrinks"
+    reason: "57 unreachable Flutter files accumulated until a June 2026 security fix landed on unreachable code; import-graph reachability (flutter from main.dart, agent, windows entries, incl. dynamic import(), string-spawned .js/.mjs siblings, and the @renderer alias) plus zero-importer backend buckets now fail NEW dead code with a delete-or-allowlist-with-reason fix, and the committed baseline only shrinks. Backend triggers are all of backend/**/*.py because scan_backend reads every non-test backend .py as an import source and mention text — the older five-lib-prefix list let routers/scripts/main.py edits create dead code without tripping the ratchet"
   - id: dead-code-ratchet-tests
     command: ["python3", ".github/scripts/test_check_dead_code.py"]
     triggers: [".github/scripts/check_dead_code.py", ".github/scripts/test_check_dead_code.py", ".github/scripts/dead_code/**", ".github/checks-manifest.yaml"]
