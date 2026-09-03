@@ -72,6 +72,7 @@ from utils.memory.canonical_required_processing import (
     list_pending_required_processing_items,
 )
 from utils.memory.decision_path_telemetry import emit_memory_promotion_decision, emit_memory_promotion_failure
+from utils.memory.belief_model import belief_model_enabled
 from utils.memory.rejected_memory_feedback import (
     RejectedMemoryFeedback,
     get_recent_rejected_memory_feedback,
@@ -1048,6 +1049,11 @@ def build_consolidation_llm_messages(context: ConsolidationContext) -> list[Any]
         format_instructions=parser.get_format_instructions(),
         restricted_sensitivity_labels=", ".join(sorted(RESTRICTED_SENSITIVITY_LABELS)),
     )
+    if belief_model_enabled():
+        prefix += (
+            "\n- Do not archive or supersede a row because of age or elapsed time alone. "
+            "Only a restatement, contradiction, or resolution is evidence.\n"
+        )
     suffix = f"Batch JSON:\n{format_consolidation_llm_context(context)}"
     block: Dict[str, Any] = {"type": "text", "text": prefix}
     if has_cacheable_prefix(prefix):

@@ -1564,6 +1564,20 @@ def write_canonical_extraction_memory(
             MemoryProcessingState(item.processing_state.value),
         )
 
+    if belief_model_enabled() and item is not None:
+        from utils.memory.belief_evidence import admit_claim_against_neighbors
+
+        try:
+            admit_claim_against_neighbors(
+                uid,
+                committed_id,
+                item.content or data.get("content") or "",
+                db_client=client,
+                new_user_asserted=bool(item.user_asserted),
+            )
+        except Exception:
+            logger.warning("belief evidence admission skipped memory_id=%s", committed_id, exc_info=False)
+
     return committed_id
 
 
@@ -2223,6 +2237,10 @@ def replace_conversation_sourced_memories(
         reason="conversation_reprocess_retract",
         preserve_source_replacement_receipts=True,
     )
+    if belief_model_enabled() and result.committed_memory_ids:
+        from utils.memory.belief_evidence import admit_committed_claims
+
+        admit_committed_claims(uid, result.committed_memory_ids, items, db_client=client)
     return {
         "retracted_memory_ids": result.retracted_memory_ids,
         "committed_memory_ids": result.committed_memory_ids,
@@ -2578,6 +2596,14 @@ def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, d
                 "promotion_audit": promotion,
                 "expires_at": default_short_term_expiry(now),
                 "kg_extracted": False,
+                **(
+                    {
+                        "last_corroborated_at": now,
+                        "corroboration_count": int(item.corroboration_count or 0) + 1,
+                    }
+                    if belief_model_enabled()
+                    else {}
+                ),
             },
         )
 
@@ -2697,7 +2723,7 @@ def update_canonical_memory_visibility(
 def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_client: Any = None) -> MemoryItem:
     client = db_client if db_client is not None else default_db_client
 
-    def build_patch(item: MemoryItem, _now: datetime) -> Tuple[Payload, Payload]:
+    def build_patch(item: MemoryItem, now: datetime) -> Tuple[Payload, Payload]:
         promotion = dict(item.promotion or {})
         promotion["reviewed"] = True
         promotion["user_review"] = value
@@ -2709,7 +2735,22 @@ def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_
         patch_updates: Payload = {"promotion_audit": promotion}
         if not value:
             patch_updates["kg_extracted"] = False
-        return {}, patch_updates
+        logical_updates: Payload = {}
+        if belief_model_enabled():
+            from utils.memory.belief_evidence import EvidenceEventJudgment, EvidenceEventKind, patch_for_evidence_event
+
+            event = EvidenceEventKind.restated if value else EvidenceEventKind.contradicted
+            patch = patch_for_evidence_event(
+                item,
+                EvidenceEventJudgment(event=event, target_memory_id=memory_id, rationale="explicit user review"),
+                pointer="user_review",
+                now=now,
+                new_is_as_authoritative=False if not value else True,
+            )
+            if patch is not None:
+                logical_updates, event_extra = patch
+                patch_updates.update(event_extra)
+        return logical_updates, patch_updates
 
     previous, updated = _apply_canonical_user_mutation(
         uid,
