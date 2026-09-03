@@ -334,7 +334,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   let isLoadingInitial: Bool
   let app: OmiApp?
   let onLoadMore: () async -> Void
-  let onRate: (String, Int?) -> Void
+  let onRate: (String, Int?, ChatFeedbackReason?) -> Void
   var onCitationTap: ((Citation) -> Void)? = nil
   var onOpenInlineCitation: ((ChatCitationReference) -> Void)? = nil
   var sessionsLoadError: String? = nil
@@ -379,6 +379,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   var timelineTrailingInset: CGFloat = 0
   /// Narrow sidebars (task chat) keep the rail off so it cannot sit on the text.
   var enablesPromptTimeline: Bool = true
+  /// Draws the daily summary above the transcript. On for the main chat in both shells — it is the
+  /// surface the app opens on, and the summary is a read the user should meet without navigating
+  /// to it. Task chat opts out: that thread is about one task, not about the day.
+  var showsDailySummary: Bool = true
   @ViewBuilder var welcomeContent: () -> WelcomeContent
 
   // MARK: - Scroll State
@@ -387,6 +391,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// switch this to `.freeScrolling` — only physical user input (wheel/trackpad,
   /// mouse, or keyboard scroll-navigation).
   @State private var scrollMode: ChatScrollMode = .followingBottom
+  /// Whether the daily summary card is currently allowed above the thread.
+  /// See `admitDailySummaryIfFollowing` (INV-CHAT-2).
+  @State private var dailySummaryAdmitted = false
+  @ObservedObject private var dailySummaryStore: HomeDailySummaryStore = ChatDailySummaryCoordinator.shared.store
   /// Throttle token for scrollToBottom — prevents the streaming + scroll
   /// detection feedback loop from saturating the main thread.
   @State private var scrollThrottleWorkItem: DispatchWorkItem?
@@ -398,7 +406,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Set immediately by the scroll wheel monitor to win the race against
   /// throttled programmatic scrolls during streaming.
   @State private var userIsScrolling = false
-  @State private var userScrollEndWorkItem: DispatchWorkItem?
   /// Tracks work items for delayed initial bottom scrolls so they can be
   /// canceled on user scroll or disappear.
   @State private var initialScrollWorkItems: [DispatchWorkItem] = []
@@ -559,6 +566,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // important optimization here.
       VStack(spacing: OmiSpacing.lg) {
         loadMoreButton
+        // Chrome, above the thread — not a message. It renders once, at the top, whether or not
+        // the transcript has rows, and it records no turn (INV-CHAT-1).
+        if showsDailySummary, dailySummaryAdmitted {
+          ChatDailySummaryCard()
+        }
         messageContent
       }
       // **The transcript owns the assistant mark's gutter, not its host.** The
@@ -616,6 +628,16 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       guard wasLoading, !isLoading, !messages.isEmpty else { return }
       handleInitialRestore(proxy: proxy)
     }
+    // MARK: - Daily summary admission (INV-CHAT-2)
+    // The summary is chrome above the thread and arrives asynchronously. Content
+    // inserted above the viewport shifts everything below it, so it is admitted
+    // only while the transcript follows the live edge (then re-followed), and a
+    // reader who has scrolled away meets it on their next return to the bottom.
+    .modifier(
+      DailySummaryAdmissionObserver(
+        summaryID: dailySummaryStore.latest?.id, scrollMode: scrollMode,
+        admit: { admitDailySummaryIfFollowing(proxy: proxy) })
+    )
     // MARK: - React to streaming text changes
     .onChange(of: messages.last?.text) { _, _ in
       handleLiveContentChange(proxy: proxy)
@@ -751,6 +773,23 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         hasActivityBelow = true
       }
     }
+  }
+
+  /// Admit the daily summary card above the thread only when doing so cannot
+  /// move the reader: the transcript is following the live edge (so the
+  /// re-follow below lands it back at the bottom) or is empty. Once admitted it
+  /// stays; a summary that disappears (owner change) withdraws it.
+  private func admitDailySummaryIfFollowing(proxy: ScrollViewProxy) {
+    guard showsDailySummary else { return }
+    guard dailySummaryStore.latest != nil else {
+      dailySummaryAdmitted = false
+      return
+    }
+    guard !dailySummaryAdmitted else { return }
+    guard scrollMode == .followingBottom || messages.isEmpty else { return }
+    dailySummaryAdmitted = true
+    guard !messages.isEmpty, !isLoadingInitial else { return }
+    handleLiveContentChange(proxy: proxy)
   }
 
   private func handleLiveContentChange(proxy: ScrollViewProxy) {
@@ -890,7 +929,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     }
   }
 
-  /// Cancels all pending scheduled scrolls (throttle, initial, user-scroll-end).
+  /// Cancels all pending scheduled scrolls (throttle and initial placement).
   private func cancelAllPendingScrolls() {
     scrollThrottleWorkItem?.cancel()
     scrollThrottleWorkItem = nil
@@ -900,8 +939,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // when it changes: this runs on every scroll event, and an unconditional
     // `@State` write there is a body invalidation per event.
     if hasQueuedFollowScroll { hasQueuedFollowScroll = false }
-    userScrollEndWorkItem?.cancel()
-    userScrollEndWorkItem = nil
     for item in initialScrollWorkItems {
       item.cancel()
     }
@@ -989,8 +1026,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           // Every Omi reply carries the identity mark — limiting it to the
           // newest reply left older answers looking unattributed.
           showsOmiMark: message.sender == .ai,
-          onRate: { rating in
-            onRate(message.id, rating)
+          onRate: { rating, reason in
+            onRate(message.id, rating, reason)
           },
           onCitationTap: { citation in
             onCitationTap?(citation)
@@ -1068,24 +1105,16 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         transcriptGeometry.setFollowingLiveEdge(false)
         transcriptGeometry.releaseSelection()
         cancelPendingScrollsForUserInteraction()
-        let endWork = DispatchWorkItem {
-          userIsScrolling = false
-        }
-        userScrollEndWorkItem = endWork
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
+      } onUserScrollEnded: {
+        userIsScrolling = false
       } onScrollSettledAtBottom: {
         // The detector reports a settle only once the input that produced it
         // genuinely finished: AppKit's `didEndLiveScroll` for wheel/trackpad
         // (momentum included), or the bounded timer for keyboard and scrollbar
         // input. Both are stronger evidence than the wall-clock
-        // `userIsScrolling` latch, which exists only to stop programmatic
-        // scrolls fighting a gesture still in flight. Consulting the latch here
-        // made this resume unreachable: `didEndLiveScroll` delivers on the very
-        // next main-thread turn, ~0.3s before the latch clears, so a reader who
-        // returned to the live edge could never resume live following.
-        userScrollEndWorkItem?.cancel()
-        userScrollEndWorkItem = nil
-        userIsScrolling = false
+        // `userIsScrolling` state, which the detector's native end-of-input
+        // callback releases immediately before this bottom-only callback.
+        // A separate timer here let reader ownership expire during long input.
         guard
           ChatScrollLiveEdge.canResumeFollowing(
             source: .settledUserScroll,
@@ -1188,4 +1217,19 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 /// from the escaping work items that retry across layout turns.
 private final class RestoreOnce: @unchecked Sendable {
   var applied = false
+}
+
+/// The three observations that admit the daily summary card, folded into one
+/// modifier so the transcript's already-long modifier chain stays type-checkable.
+private struct DailySummaryAdmissionObserver: ViewModifier {
+  let summaryID: String?
+  let scrollMode: ChatScrollMode
+  let admit: () -> Void
+
+  func body(content: Content) -> some View {
+    content
+      .onAppear(perform: admit)
+      .onChange(of: summaryID) { _, _ in admit() }
+      .onChange(of: scrollMode) { _, _ in admit() }
+  }
 }

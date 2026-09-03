@@ -3233,8 +3233,6 @@
     "accountCutoverMigrationInProgressMessage": "Din konto migreres. Produktfunktioner er sat på pause, indtil migreringen er færdig.",
     "accountCutoverMigrationRollbackMessage": "Din konto er under vedligeholdelse efter en migrerings-rollback. Nyere data kan være isoleret.",
     "accountCutoverOpenStore": "Åbn butik",
-    "chatScopeToday": "I dag",
-    "chatScopeThisWeek": "Denne uge",
     "chatScopeAbout": "Om: {title}",
     "askAboutThisConversation": "Spørg om dette",
     "sendRawAudioToOmi": "Send rå lyd til Omi",
@@ -3253,5 +3251,8 @@
     "prerecordedTranscript": "Forudoptaget",
     "pendantRecordingSyncBlocked": "Din Pendant optager stadig, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser igen.",
     "pendantFullSyncBlocked": "Din Pendants lager er fuldt, og den er stadig i optagetilstand, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser derefter igen.",
-    "conversationsNotCapturedCount": "Ikke optaget ({count})"
+    "conversationsNotCapturedCount": "Ikke optaget ({count})",
+    "transcriptionNoAudio": "Transskription modtager ikke lyd",
+    "couldNotLoadMemories": "Kunne ikke indlæse minder",
+    "couldNotLoadKnowledgeGraph": "Kunne ikke indlæse vidensgrafen"
 }

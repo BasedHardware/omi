@@ -1,6 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import { structuredTurnFallbackText } from "./content-block-fallback.js";
 import { conversationTurnFromRow } from "./conversation-turns.js";
+import {
+  adoptOnIdentity,
+  decideAttempt,
+  DEFERRAL_OUTBOX_POLICY,
+  JOURNAL_OUTBOX_POLICY,
+  oldestReadyCreatedAtMs,
+} from "./durable-queue.js";
 import { generateAgentId } from "./sqlite-store.js";
 import type {
   AgentStore,
@@ -191,6 +198,9 @@ export interface MaterializeChatFirstIntentInput {
 export interface ChatFirstIntentMaterializationResult {
   accepted: boolean;
   duplicate: boolean;
+  rejected: boolean;
+  rejectionCode: string | null;
+  rejectionMessage: string | null;
   suppressedByTailQuestion: boolean;
   suppressedByStreamingTail: boolean;
   turn: ConversationTurn | null;
@@ -198,13 +208,38 @@ export interface ChatFirstIntentMaterializationResult {
 }
 
 /**
- * One ordered server batch becomes one kernel transaction. The server owns
- * creation order; the kernel owns whether the current transcript tail admits
- * the next intent and records the only visible rows.
+ * The server owns creation order; the kernel gives each item its own fault
+ * domain while preserving tail suppression across the ordered batch.
  */
 export interface ChatFirstIntentsMaterializationResult {
   results: ChatFirstIntentMaterializationResult[];
   stoppedByTail: boolean;
+}
+
+export function chatFirstMaterializationDeferrals(
+  inputs: readonly Pick<MaterializeChatFirstIntentInput, "intentId">[],
+  result: ChatFirstIntentsMaterializationResult,
+): Array<{ intentId: string; code: "tail_question" | "streaming_tail" }> {
+  if (!result.stoppedByTail) return [];
+  return inputs.flatMap((input, index) => {
+    const candidate = result.results[index];
+    if (candidate?.accepted || candidate?.rejected) return [];
+    return [{
+      intentId: input.intentId,
+      code: candidate?.suppressedByStreamingTail ? "streaming_tail" : "tail_question",
+    }];
+  });
+}
+
+class ChatFirstMaterializationError extends Error {
+  constructor(readonly code: "invalid_intent" | "identity_conflict" | "kernel_materialization_failed", message: string) {
+    super(message);
+    this.name = "ChatFirstMaterializationError";
+  }
+}
+
+export function chatFirstWireRejectionMessage(error: unknown): string {
+  return (error instanceof Error ? error.message : "Unknown chat-first materialization failure").slice(0, 300);
 }
 
 export interface RepairOrphanedJournalTurnsInput {
@@ -1055,7 +1090,10 @@ function materializeChatFirstIntentInTransaction(
   const intentId = nonEmpty(input.intentId, "chat-first intent ID");
   const continuityKey = nonEmpty(input.continuityKey, "chat-first intent continuity key");
   if (!Number.isSafeInteger(input.controlGeneration) || input.controlGeneration < 0) {
-    throw new Error("Chat-first materialization requires a valid control generation");
+    throw new ChatFirstMaterializationError(
+      "kernel_materialization_failed",
+      "Chat-first materialization requires a valid control generation",
+    );
   }
   if (![
     "daily_opener",
@@ -1067,7 +1105,15 @@ function materializeChatFirstIntentInTransaction(
   ].includes(input.source)) {
     throw new Error("Chat-first materialization source is invalid");
   }
-  const blocks = chatFirstIntentBlocks(intentId, input.controlGeneration, input.source, input.blocks);
+  let blocks: ConversationContentBlock[];
+  try {
+    blocks = chatFirstIntentBlocks(intentId, input.controlGeneration, input.source, input.blocks);
+  } catch (error) {
+    throw new ChatFirstMaterializationError(
+      "invalid_intent",
+      error instanceof Error ? error.message : "Chat-first intent is invalid",
+    );
+  }
   const turnId = stableChatFirstIntentTurnID(intentId);
   const receiptId = stableChatFirstMaterializationReceiptID(intentId, continuityKey);
 
@@ -1078,6 +1124,7 @@ function materializeChatFirstIntentInTransaction(
     [intentId],
   );
   if (existingReceipt) {
+    adoptOnIdentity(intentId, intentId);
     if (
       String(existingReceipt.owner_id) !== input.ownerId
       || String(existingReceipt.conversation_id) !== input.conversationId
@@ -1085,14 +1132,50 @@ function materializeChatFirstIntentInTransaction(
       || String(existingReceipt.receipt_id) !== receiptId
       || String(existingReceipt.turn_id) !== turnId
     ) {
-      throw new Error("Chat-first intent ID was reused with different receipt identity");
+      throw new ChatFirstMaterializationError(
+        "identity_conflict", "Chat-first intent ID was reused with different receipt identity",
+      );
     }
     return {
       accepted: true,
       duplicate: true,
+      rejected: false,
+      rejectionCode: null,
+      rejectionMessage: null,
       suppressedByTailQuestion: false,
       suppressedByStreamingTail: false,
       turn: requireJournalTurn(store, input.conversationId, turnId),
+      receipt: { intentId, receiptId },
+    };
+  }
+
+  // Chat-first identity is the stable turn ID, not the importing client's
+  // origin or producer. A second device may already have committed this turn
+  // and the backend reconciler may have imported it before its receipt landed.
+  // Adopt that canonical row without weakening ordinary producer/payload
+  // collision checks in recordJournalTurn.
+  const existingTurn = findJournalTurnById(store, turnId);
+  if (existingTurn) {
+    if (existingTurn.conversationId !== input.conversationId) {
+      throw new ChatFirstMaterializationError(
+        "identity_conflict", "Chat-first stable turn ID belongs to a different conversation",
+      );
+    }
+    store.execute(
+      `INSERT INTO chat_first_materialization_receipts(
+         intent_id, owner_id, conversation_id, control_generation, receipt_id, turn_id, created_at_ms
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [intentId, input.ownerId, input.conversationId, input.controlGeneration, receiptId, turnId, now],
+    );
+    return {
+      accepted: true,
+      duplicate: true,
+      rejected: false,
+      rejectionCode: null,
+      rejectionMessage: null,
+      suppressedByTailQuestion: false,
+      suppressedByStreamingTail: false,
+      turn: existingTurn,
       receipt: { intentId, receiptId },
     };
   }
@@ -1102,6 +1185,9 @@ function materializeChatFirstIntentInTransaction(
     return {
       accepted: false,
       duplicate: false,
+      rejected: false,
+      rejectionCode: null,
+      rejectionMessage: null,
       suppressedByTailQuestion: tail.unansweredQuestion,
       suppressedByStreamingTail: tail.streaming,
       turn: null,
@@ -1138,6 +1224,9 @@ function materializeChatFirstIntentInTransaction(
   return {
     accepted: true,
     duplicate: recorded.duplicate,
+    rejected: false,
+    rejectionCode: null,
+    rejectionMessage: null,
     suppressedByTailQuestion: false,
     suppressedByStreamingTail: false,
     turn: recorded.turn,
@@ -1159,23 +1248,39 @@ export function materializeChatFirstIntents(
   if (inputs.length < 1 || inputs.length > 8) {
     throw new Error("Chat-first materialization batch requires one to eight intents");
   }
-  return store.withTransaction(() => {
-    const results: ChatFirstIntentMaterializationResult[] = [];
-    for (const input of inputs) {
-      const result = materializeChatFirstIntentInTransaction(store, input);
-      results.push(result);
-      // Do not submit an additional intent after a current tail suppresses the
-      // batch, or after this intent itself becomes the new unanswered tail.
-      if (
-        result.suppressedByTailQuestion
-        || result.suppressedByStreamingTail
-        || materializationTailState(store, input.conversationId).unansweredQuestion
-      ) {
-        return { results, stoppedByTail: true };
-      }
+  const results: ChatFirstIntentMaterializationResult[] = [];
+  for (const input of inputs) {
+    let result: ChatFirstIntentMaterializationResult;
+    try {
+      result = store.withTransaction(() => materializeChatFirstIntentInTransaction(store, input));
+    } catch (error) {
+      const message = chatFirstWireRejectionMessage(error);
+      result = {
+        accepted: false,
+        duplicate: false,
+        rejected: true,
+        rejectionCode: error instanceof ChatFirstMaterializationError
+          ? error.code
+          : "kernel_materialization_failed",
+        rejectionMessage: message,
+        suppressedByTailQuestion: false,
+        suppressedByStreamingTail: false,
+        turn: null,
+        receipt: null,
+      };
     }
-    return { results, stoppedByTail: false };
-  });
+    results.push(result);
+    // Rejections are parked independently and never stop later items. A real
+    // transcript tail remains an intentional batch deferral.
+    if (
+      result.suppressedByTailQuestion
+      || result.suppressedByStreamingTail
+      || (result.accepted && materializationTailState(store, input.conversationId).unansweredQuestion)
+    ) {
+      return { results, stoppedByTail: true };
+    }
+  }
+  return { results, stoppedByTail: false };
 }
 
 /** Receipts remain pending locally until Swift receives a successful server acknowledgement. */
@@ -1326,13 +1431,27 @@ export function settleChatFirstDeferralOutbox(
         [now, now, input.continuityKey],
       );
     } else {
-      const retryable = !input.errorCode?.endsWith("_4xx") && attempts < 5;
+      const errorText = boundedOutboxError(input.errorCode);
+      const outcome = input.errorCode?.endsWith("_4xx")
+        ? { kind: "reject" as const, errorText, reason: errorText }
+        : { kind: "retry" as const, errorText, reason: errorText };
+      const decision = decideAttempt({
+        attemptCount: attempts,
+        outcome,
+        policy: DEFERRAL_OUTBOX_POLICY,
+        nowMs: now,
+      });
       store.execute(
         `UPDATE chat_first_deferral_outbox
          SET status = ?, available_at_ms = ?, lease_expires_at_ms = NULL,
              last_error_code = ?, updated_at_ms = ? WHERE continuity_key = ?`,
-        [retryable ? "retrying" : "failed", retryable ? now + Math.min(30_000, attempts * 1_000) : now,
-          boundedOutboxError(input.errorCode), now, input.continuityKey],
+        [
+          decision.terminal ? "failed" : "retrying",
+          decision.retryAtMs ?? now,
+          decision.errorText,
+          now,
+          input.continuityKey,
+        ],
       );
     }
     return true;
@@ -2941,11 +3060,21 @@ export function drainBackendTurnOutbox(
         // stall that persists across restarts because the row is durable).
         // Parking to 'failed' excludes it from future selection; a later
         // `updateJournalTurn` re-stamps the hash and re-arms it to 'pending'.
+        const decision = decideAttempt({
+          attemptCount: Math.max(currentOutbox.attemptCount, 1),
+          outcome: {
+            kind: "reject",
+            errorText: OUTBOX_CANONICAL_HASH_MISMATCH_CODE,
+            reason: "malformed",
+          },
+          policy: JOURNAL_OUTBOX_POLICY,
+          nowMs: now,
+        });
         store.execute(
           `UPDATE backend_turn_outbox
            SET status = 'failed', last_error_code = ?, lease_expires_at_ms = NULL, updated_at_ms = ?
            WHERE turn_id = ?`,
-          [OUTBOX_CANONICAL_HASH_MISMATCH_CODE, now, turnId],
+          [decision.errorText, now, turnId],
         );
         quarantined.push(turnId);
         continue;
@@ -3206,16 +3335,27 @@ export function getJournalObservability(
     `SELECT status, COUNT(*) AS count FROM backend_turn_outbox${deliveryWhere} GROUP BY status`,
     input.ownerId ? [input.ownerId] : [],
   );
+  const ownerFilter = input.ownerId ? " AND owner_id = ?" : "";
+  const oldestParams = input.ownerId ? [input.ownerId, input.ownerId, input.ownerId] : [];
   const oldest = store.getOptionalRow(
-    `SELECT MIN(created_at_ms) AS oldest
-     FROM backend_turn_outbox
-     WHERE status IN ('pending', 'delivering', 'retrying')${input.ownerId ? " AND owner_id = ?" : ""}`,
-    input.ownerId ? [input.ownerId] : [],
+    `SELECT MIN(created_at_ms) AS oldest FROM (
+       SELECT created_at_ms FROM backend_turn_outbox
+       WHERE status IN ('pending', 'delivering', 'retrying')${ownerFilter}
+       UNION ALL
+       SELECT created_at_ms FROM backend_conversation_delete_outbox
+       WHERE status IN ('pending', 'delivering', 'retrying')${ownerFilter}
+       UNION ALL
+       SELECT created_at_ms FROM chat_first_deferral_outbox
+       WHERE status IN ('pending', 'delivering', 'retrying')${ownerFilter}
+     )`,
+    oldestParams,
   );
   return {
     turnStatusCounts: countRows<ConversationTurnStatus>(turnRows),
     deliveryStatusCounts: countRows<BackendTurnOutboxStatus>(deliveryRows),
-    oldestPendingDeliveryCreatedAtMs: oldest?.oldest == null ? null : Number(oldest.oldest),
+    oldestPendingDeliveryCreatedAtMs: oldestReadyCreatedAtMs(
+      oldest?.oldest == null ? [] : [Number(oldest.oldest)],
+    ),
   };
 }
 
@@ -3868,13 +4008,11 @@ function enqueueChatFirstDeferral(
   };
   const payloadHash = sha256(stableJson(payload));
   const existing = store.getOptionalRow(
-    "SELECT payload_hash FROM chat_first_deferral_outbox WHERE continuity_key = ?",
+    "SELECT continuity_key FROM chat_first_deferral_outbox WHERE continuity_key = ?",
     [input.continuityKey],
   );
   if (existing) {
-    if (String(existing.payload_hash) !== payloadHash) {
-      throw new Error("Question deferral continuity key was reused with different content");
-    }
+    adoptOnIdentity(String(existing.continuity_key), input.continuityKey);
     return;
   }
   store.execute(

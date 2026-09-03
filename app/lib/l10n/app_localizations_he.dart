@@ -9767,12 +9767,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get accountCutoverOpenStore => 'פתחו חנות';
 
   @override
-  String get chatScopeToday => 'היום';
-
-  @override
-  String get chatScopeThisWeek => 'השבוע הזה';
-
-  @override
   String chatScopeAbout(String title) {
     return 'אודות: $title';
   }
@@ -9839,4 +9833,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'לא הוקלט ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'התמליל אינו מקבל שמע';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'לא ניתן לטעון את הזיכרונות';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'לא ניתן לטעון את גרף הידע';
 }

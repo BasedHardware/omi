@@ -239,12 +239,13 @@ enum KnowledgeLedgerTriggerWatchlistRuntime {
       // safely proves no-match. An unevaluable or quarantined entry leaves
       // planned authority unresolved and must not purchase another lane.
       nextLane = .none
-    } else if sortedEntries.isEmpty {
-      // A complete empty watchlist is suppress, not ambient spend. Ambient is
-      // the cheap fallback after standing triggers miss, not a default when
-      // the user has none.
-      nextLane = .none
     } else {
+      // A complete watchlist with no match — including a complete *empty*
+      // watchlist — hands off to the ambient lane. Owner decision 2026-09-01:
+      // suppressing empty watchlists (#12452) left every JIT-admitted account
+      // without a standing trigger with zero proactive output, while the
+      // legacy director was bypassed. Ambient spend stays bounded by
+      // JITAmbientPacingPolicy and the server-authoritative daily budgets.
       nextLane = .ambientFallback
     }
     return KnowledgeLedgerTriggerRuntimeResult(

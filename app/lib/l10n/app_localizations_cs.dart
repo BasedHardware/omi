@@ -9846,12 +9846,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
-  String get chatScopeToday => 'Dnes';
-
-  @override
-  String get chatScopeThisWeek => 'Tento týden';
-
-  @override
   String chatScopeAbout(String title) {
     return 'O: $title';
   }
@@ -9919,4 +9913,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nezaznamenáno ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripce nepřijímá zvuk';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Nepodařilo se načíst vzpomínky';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nepodařilo se načíst graf znalostí';
 }

@@ -764,6 +764,21 @@ extension SBOnboardingModel {
   /// the notch, which spins while Omi is thinking.
   func startScreenDemo() {
     screenDemoDone = false
+    threeDoorsOpened = false
+    ThreeDoorsDemoPage.activeModelNote = ThreeDoorsDemoPage.modelNote
+    openDoorsObserver = NotificationCenter.default.addObserver(
+      forName: .onboardingOpenDoorsRequested, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.openThreeDoorsPage() }
+    }
+    doorsCompletedObserver = NotificationCenter.default.addObserver(
+      forName: .onboardingDoorsCompleted, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        guard let self, self.step == .screenDemo else { return }
+        self.screenDemoDone = true
+      }
+    }
     screenDemoPTTReady = false
     screenDemoPTTUnavailable = false
     FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
@@ -821,6 +836,39 @@ extension SBOnboardingModel {
     FloatingControlBarManager.shared.showForOnboardingDemo()
   }
 
+  /// Open the bundled three-doors page in the default browser. Only ever user-initiated, from the
+  /// step's "Open the doors" button, so the person reads the instructions before the page appears.
+  func openThreeDoorsPage() {
+    guard let url = ThreeDoorsDemoPage.url(pttTokens: voiceChordTokens) else {
+      log("SBOnboarding: three-doors page missing from bundle; demo step shows without it")
+      return
+    }
+    threeDoorsOpened = true
+    startScreenHistoryCaptureForDemo()
+    NSWorkspace.shared.open(url)
+  }
+
+  /// Rewind normally starts from the home view, i.e. only after onboarding completes. The third
+  /// door asks about text that has scrolled off screen, which only screen history can answer, so
+  /// the demo needs capture running from the moment the doors open. Same gates as the home view:
+  /// the setting the user chose at the screen step, Screen Recording actually granted, keys loaded.
+  func startScreenHistoryCaptureForDemo() {
+    let plugin = ProactiveAssistantsPlugin.shared
+    guard AssistantSettings.shared.screenAnalysisEnabled, !plugin.isMonitoring else { return }
+    guard APIKeyService.keysAvailable else {
+      log("SBOnboarding: screen history capture deferred for the demo; API keys not loaded yet")
+      return
+    }
+    plugin.refreshScreenRecordingPermission()
+    guard plugin.hasScreenRecordingPermission else {
+      log("SBOnboarding: screen history capture not started for the demo; Screen Recording not granted")
+      return
+    }
+    plugin.startMonitoring { success, error in
+      log("SBOnboarding: screen history capture for the demo \(success ? "started" : "failed: \(error ?? "unknown")")")
+    }
+  }
+
   private func resetFloatingBarConversation() {
     guard let bar = FloatingControlBarManager.shared.barState else { return }
     bar.showingAIConversation = false
@@ -830,6 +878,11 @@ extension SBOnboardingModel {
   }
 
   func teardownVoiceDemo() {
+    ThreeDoorsDemoPage.activeModelNote = nil
+    if let openDoorsObserver { NotificationCenter.default.removeObserver(openDoorsObserver) }
+    openDoorsObserver = nil
+    if let doorsCompletedObserver { NotificationCenter.default.removeObserver(doorsCompletedObserver) }
+    doorsCompletedObserver = nil
     screenDemoSetupTask?.cancel()
     screenDemoSetupTask = nil
     voiceTimeout?.cancel()

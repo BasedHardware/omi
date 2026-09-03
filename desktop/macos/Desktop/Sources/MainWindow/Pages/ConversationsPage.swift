@@ -326,10 +326,22 @@ struct ConversationsPage: View {
         .padding(.horizontal, OmiSpacing.xxl)
         .padding(.top, OmiSpacing.md)
         .padding(.bottom, OmiSpacing.md)
+        .transition(.opacity)
+      } else if appState.isFinalizingCapture {
+        // The Live card's slot stays occupied while the capture becomes a
+        // row, so the meeting lands in place instead of vanishing and
+        // reappearing further down.
+        ConversationsSavingCaptureCard()
+          .padding(.horizontal, OmiSpacing.xxl)
+          .padding(.top, OmiSpacing.md)
+          .padding(.bottom, OmiSpacing.md)
+          .transition(.opacity)
       }
 
       conversationListSection
     }
+    .omiAnimation(.easeInOut(duration: 0.25), value: appState.isLiveCapturing)
+    .omiAnimation(.easeInOut(duration: 0.25), value: appState.isFinalizingCapture)
 
     if embedded {
       content

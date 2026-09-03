@@ -26,7 +26,16 @@ SEED_IDS = {path.stem for path in SEED_DIRECTORY.glob("*.json")}
 # pre-commit or pre-push hook, GIT_DIR and core.hooksPath point at the real
 # checkout, so an unisolated `git init`/`git config`/`git add .` in a temp
 # directory writes to the repository under test.
-GIT_ISOLATION = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
+GIT_ISOLATION = [
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "commit.gpgsign=false",
+    "-c",
+    "maintenance.auto=false",
+    "-c",
+    "gc.auto=0",
+]
 
 
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:

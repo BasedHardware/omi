@@ -53,11 +53,18 @@ final class MessageMetadataTests: XCTestCase {
   }
 
   func testResponseContextPopoverDoesNotClaimAServedModelOrPromptBody() throws {
-    // omi-test-quality: source-inspection -- static contract: Response Context must not restore Model, Full System Prompt, XML prompt-count parsers, or untrusted token/cost usage.
+    // omi-test-quality: source-inspection -- static contract: Response Context must not restore
+    // Full System Prompt, XML prompt-count parsers, or untrusted token/cost usage. The Model row
+    // returned in #12331-follow-up by Nik's direction, but ONLY bound to `modelsSummary` — the
+    // response-OBSERVED served identities (chunk.model from the provider stream; verified live:
+    // the managed gateway lane serves and reports "gpt-5.6-luna") — never the request alias that
+    // #11521 removed as dishonest.
     let popover = try String(contentsOfFile: popoverSourcePath(), encoding: .utf8)
     XCTAssertFalse(popover.contains("Full System Prompt"))
     XCTAssertFalse(popover.contains("Context in Prompt"))
-    XCTAssertFalse(popover.contains("metadata.model"))
+    XCTAssertTrue(popover.contains("metadata.modelsSummary"))
+    XCTAssertFalse(popover.contains("metadata.adapterModel"))
+    XCTAssertFalse(popover.contains("requestedModel"))
     XCTAssertFalse(popover.contains("memoriesCount"))
     XCTAssertFalse(popover.contains("metadata.tokenSummary"))
     XCTAssertFalse(popover.contains("metadata.costSummary"))
@@ -152,5 +159,65 @@ final class MessageMetadataTests: XCTestCase {
       .appendingPathComponent("Sources")
       .appendingPathComponent(relative)
       .path
+  }
+}
+
+/// Served-model attribution: the Response Context "Model" row must reflect the
+/// models observed on the turn's completions, and a journaled voice turn must
+/// round-trip its attribution through the kernel metadata so the (i) survives
+/// surfaces that never run ChatProvider's typed finalize path.
+@MainActor
+final class MessageMetadataModelAttributionTests: XCTestCase {
+  func testModelsSummaryJoinsObservedIdentities() {
+    XCTAssertEqual(MessageMetadata(modelsUsed: ["gpt-5.6-luna"]).modelsSummary, "gpt-5.6-luna")
+    XCTAssertEqual(
+      MessageMetadata(modelsUsed: ["gpt-5.6-luna", "claude-sonnet-4-6"]).modelsSummary,
+      "gpt-5.6-luna, claude-sonnet-4-6")
+    XCTAssertEqual(MessageMetadata().modelsSummary, "")
+  }
+
+  func testJournalWritePersistsModelsAndChatMessageRestoresThem() throws {
+    var message = ChatMessage(
+      id: "turn-a", clientTurnId: "ck-1", text: "answer", sender: .ai)
+    message.metadata = MessageMetadata(
+      adapterId: "realtime", modelsUsed: ["gemini-3.1-flash-live-preview"])
+    let write = message.journalWrite(
+      origin: "realtime_voice", status: .completed,
+      continuityKey: "ck-1", messageSource: "realtime_voice")
+
+    let object =
+      try JSONSerialization.jsonObject(with: Data(write.metadataJSON.utf8)) as? [String: Any]
+    XCTAssertEqual(object?["modelsUsed"] as? [String], ["gemini-3.1-flash-live-preview"])
+
+    let turn = try XCTUnwrap(
+      KernelJournalTurn(
+        dictionary: [
+          "turnId": "turn-a",
+          "role": "assistant",
+          "origin": "realtime_voice",
+          "status": "completed",
+          "content": "answer",
+          "metadataJson": write.metadataJSON,
+          "createdAtMs": 1,
+        ],
+        surfaceFallback: AgentSurfaceReference(
+          surfaceKind: "main_chat", externalRefKind: "", externalRefId: ""),
+        conversationGenerationFallback: 1,
+        generationBaseTurnSeqFallback: 0
+      ))
+    let restored = turn.chatMessage()
+    XCTAssertEqual(restored.metadata?.modelsUsed, ["gemini-3.1-flash-live-preview"])
+    XCTAssertEqual(restored.metadata?.adapterId, "realtime")
+  }
+
+  /// A voice projection pins the answering session's model at admission.
+  func testVoiceProjectionAssistantMessageCarriesModel() {
+    let projection = RealtimeStreamingJournalProjection(
+      ownerID: "owner", continuityKey: "ck-2",
+      admissionSurface: AgentSurfaceReference(
+        surfaceKind: "main_chat", externalRefKind: "", externalRefId: ""),
+      modelsUsed: ["gemini-3.1-flash-live-preview"])
+    let message = projection.assistantMessage(text: "hi", isStreaming: true)
+    XCTAssertEqual(message.metadata?.modelsUsed, ["gemini-3.1-flash-live-preview"])
   }
 }

@@ -230,6 +230,12 @@ final class ScreenContextTelemetryTests: XCTestCase {
     XCTAssertTrue(snapshot.keywords.contains("Omi"))
     XCTAssertTrue(snapshot.keywords.contains("Codex"))
     XCTAssertFalse(snapshot.keywords.contains("Cursor"))
+    // The think_deeper fallback reads the same frame's text; an empty OCR result stays nil.
+    XCTAssertEqual(snapshot.visibleText, "Codex is open on the current screen")
+    XCTAssertNil(
+      PTTContextVocabularyProvider.snapshot(
+        capturedAt: Date(), settingsVocabulary: [], immediateOCRText: ""
+      ).visibleText)
   }
 
   func testPTTDoesNotCreateAnAmbientScreenContextSideChannel() throws {

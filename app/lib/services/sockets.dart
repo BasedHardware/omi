@@ -20,6 +20,7 @@ abstract class ISocketService {
     required String language,
     bool force = false,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
   });
@@ -57,6 +58,7 @@ class SocketServicePool extends ISocketService {
     required String language,
     bool force = false,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
   }) async {
@@ -70,7 +72,8 @@ class SocketServicePool extends ISocketService {
           _socket?.sampleRate == sampleRate &&
           _socket?.state == SocketServiceState.connected &&
           _socket?.sttConfigId == sttConfigId &&
-          _socket?.geolocation?.time == geolocation?.time) {
+          _socket?.geolocation?.time == geolocation?.time &&
+          _socket?.clientConversationId == clientConversationId) {
         Logger.debug("Reusing existing socket connection");
         return _socket;
       }
@@ -90,6 +93,7 @@ class SocketServicePool extends ISocketService {
           customSttConfig,
           source: source,
           geolocation: geolocation,
+          clientConversationId: clientConversationId,
         );
       } else {
         _socket = TranscriptSocketServiceFactory.createDefault(
@@ -99,6 +103,7 @@ class SocketServicePool extends ISocketService {
           source: source,
           sttConfigId: sttConfigId,
           geolocation: geolocation,
+          clientConversationId: clientConversationId,
         );
       }
 
@@ -120,6 +125,7 @@ class SocketServicePool extends ISocketService {
     required String language,
     bool force = false,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
   }) async {
@@ -132,6 +138,7 @@ class SocketServicePool extends ISocketService {
       language: language,
       force: force,
       source: source,
+      clientConversationId: clientConversationId,
       customSttConfig: customSttConfig,
       geolocation: geolocation,
     );

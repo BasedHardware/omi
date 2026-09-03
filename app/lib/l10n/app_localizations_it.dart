@@ -9902,12 +9902,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get accountCutoverOpenStore => 'Apri store';
 
   @override
-  String get chatScopeToday => 'Oggi';
-
-  @override
-  String get chatScopeThisWeek => 'Questa settimana';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Informazioni su: $title';
   }
@@ -9975,4 +9969,16 @@ class AppLocalizationsIt extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Non registrato ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'La trascrizione non riceve audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Impossibile caricare i ricordi';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Impossibile caricare il grafo della conoscenza';
 }

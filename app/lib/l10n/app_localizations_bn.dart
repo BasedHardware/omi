@@ -9850,12 +9850,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
-  String get chatScopeToday => 'আজ';
-
-  @override
-  String get chatScopeThisWeek => 'এই সপ্তাহ';
-
-  @override
   String chatScopeAbout(String title) {
     return '$title সম্পর্কে';
   }
@@ -9923,4 +9917,16 @@ class AppLocalizationsBn extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'রেকর্ড করা হয়নি ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'ট্রান্সক্রিপশন অডিও গ্রহণ করছে না';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'স্মৃতি লোড করা যায়নি';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'নলেজ গ্রাফ লোড করা যায়নি';
 }

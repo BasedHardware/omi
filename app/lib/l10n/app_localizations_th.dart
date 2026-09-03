@@ -9789,12 +9789,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get accountCutoverOpenStore => 'เปิดสโตร์';
 
   @override
-  String get chatScopeToday => 'วันนี้';
-
-  @override
-  String get chatScopeThisWeek => 'สัปดาห์นี้';
-
-  @override
   String chatScopeAbout(String title) {
     return 'เกี่ยวกับ: $title';
   }
@@ -9861,4 +9855,16 @@ class AppLocalizationsTh extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'ไม่ได้บันทึก ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'การถอดเสียงไม่ได้รับเสียง';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'ไม่สามารถโหลดความทรงจำได้';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'ไม่สามารถโหลดกราฟความรู้ได้';
 }

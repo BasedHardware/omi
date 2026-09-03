@@ -603,6 +603,82 @@ final class FloatingBarGeometryTests: XCTestCase {
         acceptsMouseHit: { _ in true }),
       "an ordered-out panel must never retain event ownership")
   }
+
+  func testMountedNotificationWinsOverListeningIsland() {
+    let notification = NSSize(width: 508, height: 194)
+    let listening = NSSize(width: 351, height: 58)
+    let idle = NSSize(width: 40, height: 14)
+    let size = FloatingControlBarGeometry.collapsedSurfaceSize(
+      hasMountedNotification: true,
+      isVoiceListening: true,
+      isThinking: false,
+      notificationSize: notification,
+      listeningSize: listening,
+      thinkingSize: listening,
+      idleSize: idle
+    )
+    XCTAssertGreaterThanOrEqual(size.width, notification.width)
+    XCTAssertGreaterThanOrEqual(size.height, notification.height)
+    XCTAssertNotEqual(size, listening)
+  }
+
+  func testPTTReleaseWithMountedCardDoesNotCollapseToListeningIsland() {
+    let notification = NSSize(width: 508, height: 194)
+    let listening = NSSize(width: 351, height: 58)
+    let afterHold = FloatingControlBarGeometry.collapsedSurfaceSize(
+      hasMountedNotification: true,
+      isVoiceListening: true,
+      isThinking: true,
+      notificationSize: notification,
+      listeningSize: listening,
+      thinkingSize: NSSize(width: 351, height: 58),
+      idleSize: NSSize(width: 40, height: 14)
+    )
+    XCTAssertGreaterThanOrEqual(afterHold.width, 508)
+    XCTAssertGreaterThanOrEqual(afterHold.height, 194)
+  }
+
+  func testWindowResizeKeepsNotificationMinimumWhileListening() {
+    let notification = NSSize(width: 508, height: 194)
+    let minimum = FloatingControlBarGeometry.windowResizeMinimumSize(
+      showingAIConversation: false,
+      hasMountedNotification: true,
+      isVoiceListening: true,
+      isHovering: false,
+      usesNotchIsland: true,
+      conversationWidth: 382,
+      notificationSize: notification,
+      listeningWidth: 351,
+      hoverWidth: 224,
+      idleSize: NSSize(width: 40, height: 14)
+    )
+    XCTAssertGreaterThanOrEqual(minimum.width, 508)
+    XCTAssertGreaterThanOrEqual(minimum.height, 194)
+  }
+
+  func testInsightTeaserStaysExpandedDuringInterjectPTTHold() {
+    XCTAssertEqual(
+      FloatingControlBarGeometry.interjectInsightTeaserLineLimit(
+        kindIsInsight: true,
+        isHovering: false,
+        interjectBarHovering: false,
+        interjectPTTHoldActive: true),
+      6)
+    XCTAssertEqual(
+      FloatingControlBarGeometry.interjectInsightTeaserLineLimit(
+        kindIsInsight: true,
+        isHovering: false,
+        interjectBarHovering: false,
+        interjectPTTHoldActive: false),
+      1)
+    XCTAssertEqual(
+      FloatingControlBarGeometry.interjectInsightTeaserLineLimit(
+        kindIsInsight: false,
+        isHovering: false,
+        interjectBarHovering: false,
+        interjectPTTHoldActive: true),
+      3)
+  }
 }
 
 // MARK: - Notch top re-anchoring

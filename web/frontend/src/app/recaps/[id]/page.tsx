@@ -1,4 +1,5 @@
 import envConfig from '@/src/constants/envConfig';
+import { markdownToPlainText } from '@/src/lib/markdown-to-plain-text.mjs';
 import { Metadata, ResolvingMetadata } from 'next';
 import { notFound } from 'next/navigation';
 import { ParamsTypes } from '@/src/types/params.types';
@@ -81,7 +82,7 @@ export async function generateMetadata(
   const recap = await getSharedRecap(params.id);
 
   const title = recap ? `${recap.day_emoji} ${recap.headline}` : 'Daily Recap';
-  const description = recap?.overview ?? 'A daily recap from Omi.';
+  const description = markdownToPlainText(recap?.overview) || 'A daily recap from Omi.';
 
   return {
     title,

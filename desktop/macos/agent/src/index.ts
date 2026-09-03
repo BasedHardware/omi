@@ -96,6 +96,7 @@ import {
   isAcpProviderAuthFailure,
 } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
+import { backendOutboxRetryAtMs } from "./runtime/durable-queue.js";
 import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
@@ -140,6 +141,7 @@ import {
   applyBackendReconcilePage,
   beginBackendReconcilesForOwner,
   clearJournalConversation,
+  chatFirstMaterializationDeferrals,
   classifyBackendTurnResultDisposition,
   drainBackendConversationDeleteOutbox,
   drainBackendTurnOutbox,
@@ -385,6 +387,8 @@ function relayResultIdentity(
       runId: invocation.runId,
       attemptId: invocation.attemptId,
       toolName: invocation.canonicalToolName,
+      surfaceKind: invocation.surfaceKind,
+      purpose: invocation.originatingUserText,
     };
   }
   // Capability rejection occurs before a kernel-owned invocation exists. It
@@ -411,6 +415,13 @@ function finalizeRelayResult(
     outcome,
     kernel: runtimeKernel,
     artifactRoot: agentArtifactsDir(),
+    onDegraded: (record) => {
+      // Projecting a large-but-successful result down to its model budget is
+      // the intended path here, not an error. logErr keeps the write pipe-safe
+      // (a destroyed stderr during shutdown must not throw) and off the
+      // error-level stream.
+      logErr(`fallback area=tool_result_projection outcome=degraded ${JSON.stringify(record)}`);
+    },
   });
 }
 
@@ -537,6 +548,21 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
       writeFinalizedRelayToolResult(pending.client, pending.callId, result);
     } catch (error) {
       logErr(`Rejected authorized tool execution result invocation=${msg.invocationId}: ${error}`);
+      pendingToolCalls.delete(key);
+      clearTimeout(pending.timeout);
+      const failure = finalizeRelayResult(
+        pending.callId,
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: "tool_result_finalization_failed",
+            message: "The authorized tool result could not be finalized.",
+          },
+        }),
+        pending.invocation,
+        "failed",
+      );
+      writeFinalizedRelayToolResult(pending.client, pending.callId, failure);
     }
     return;
   }
@@ -581,6 +607,32 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
       });
     } catch (error) {
       logErr(`Rejected external authorized tool result invocation=${msg.invocationId}: ${error}`);
+      pendingExternalToolCalls.delete(key);
+      clearTimeout(external.timeout);
+      const failure = finalizeRelayResult(
+        external.request.requestId,
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: "tool_result_finalization_failed",
+            message: "The authorized tool result could not be finalized.",
+          },
+        }),
+        external.invocation,
+        "failed",
+      );
+      send({
+        type: "external_surface_tool_result",
+        requestId: external.request.requestId,
+        clientId: external.request.clientId,
+        ownerId: external.invocation.ownerId,
+        sessionId: external.invocation.sessionId,
+        runId: external.invocation.runId,
+        attemptId: external.invocation.attemptId,
+        invocationId: external.invocation.invocationId,
+        ok: true,
+        result: failure,
+      });
     }
     return;
   }
@@ -982,6 +1034,8 @@ function startOmiToolsRelay(): Promise<string> {
                           runId: authorized.runId,
                           attemptId: authorized.attemptId,
                           toolName: authorized.canonicalToolName,
+                          surfaceKind: authorized.surfaceKind,
+                          purpose: authorized.originatingUserText,
                         },
                         getOwnerId: establishedOwnerId,
                         executionLease,
@@ -2326,6 +2380,8 @@ async function main(): Promise<void> {
                     runId: authorized.runId,
                     attemptId: authorized.attemptId,
                     toolName: authorized.canonicalToolName,
+                    surfaceKind: authorized.surfaceKind,
+                    purpose: authorized.originatingUserText,
                   },
                   getOwnerId: establishedOwnerId,
                   executionLease,
@@ -3099,6 +3155,12 @@ async function main(): Promise<void> {
             suppressedByStreamingTail: result.results.some((candidate) => candidate.suppressedByStreamingTail),
             materializationStoppedByTail: result.stoppedByTail,
             materializationReceipts: result.results.flatMap((candidate) => candidate.receipt ? [candidate.receipt] : []),
+            materializationRejections: result.results.flatMap((candidate, index) => candidate.rejected ? [{
+              intentId: intents[index]!.intentId,
+              code: candidate.rejectionCode ?? "kernel_materialization_failed",
+              message: candidate.rejectionMessage ?? "Chat-first intent materialization failed",
+            }] : []),
+            materializationDeferrals: chatFirstMaterializationDeferrals(intents, result),
           });
           if (committedTurns.length > 0) {
             for (const turn of committedTurns) for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {
@@ -3525,19 +3587,11 @@ async function main(): Promise<void> {
             conversationGeneration: result.conversationGeneration,
             payloadHash: result.payloadHash,
             errorCode: result.errorCode ?? "backend_sync_failed",
-            retryAtMs: result.attemptCount < 5
-              && [
-                "backend_sync_failed",
-                "backend_sync_owner_changed",
-                "backend_sync_http_retryable",
-                "network_unavailable",
-                "timeout",
-                "connection_lost",
-              ].includes(
-                result.errorCode ?? "backend_sync_failed",
-              )
-              ? Date.now() + Math.min(60_000, 1_000 * 2 ** result.attemptCount)
-              : undefined,
+            retryAtMs: backendOutboxRetryAtMs({
+              attemptCount: result.attemptCount,
+              errorCode: result.errorCode ?? "backend_sync_failed",
+              nowMs: Date.now(),
+            }),
           });
         }
         pumpJournalOutbox();
@@ -3576,17 +3630,11 @@ async function main(): Promise<void> {
             deliveryGeneration: result.deliveryGeneration,
             payloadHash: result.payloadHash,
             errorCode,
-            retryAtMs: result.attemptCount < 5
-              && [
-                "backend_delete_failed",
-                "backend_sync_owner_changed",
-                "backend_sync_http_retryable",
-                "network_unavailable",
-                "timeout",
-                "connection_lost",
-              ].includes(errorCode)
-              ? Date.now() + Math.min(60_000, 1_000 * 2 ** result.attemptCount)
-              : undefined,
+            retryAtMs: backendOutboxRetryAtMs({
+              attemptCount: result.attemptCount,
+              errorCode,
+              nowMs: Date.now(),
+            }),
           });
         }
         pumpJournalOutbox();

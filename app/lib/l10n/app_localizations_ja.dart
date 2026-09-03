@@ -9679,12 +9679,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get accountCutoverOpenStore => 'ストアを開く';
 
   @override
-  String get chatScopeToday => '今日';
-
-  @override
-  String get chatScopeThisWeek => '今週';
-
-  @override
   String chatScopeAbout(String title) {
     return '$titleについて';
   }
@@ -9749,4 +9743,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return '未記録 ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => '文字起こしが音声を受信していません';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => '記憶を読み込めませんでした';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'ナレッジグラフを読み込めませんでした';
 }

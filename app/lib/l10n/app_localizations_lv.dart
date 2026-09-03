@@ -9868,12 +9868,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otwórz sklep';
 
   @override
-  String get chatScopeToday => 'Šodien';
-
-  @override
-  String get chatScopeThisWeek => 'Šonedēļ';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Par: $title';
   }
@@ -9942,4 +9936,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nav ierakstīts ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripcija nesaņem audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Neizdevās ielādēt atmiņas';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Neizdevās ielādēt zināšanu grafu';
 }

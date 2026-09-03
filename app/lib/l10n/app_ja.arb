@@ -3191,8 +3191,6 @@
     "accountCutoverMigrationInProgressMessage": "アカウントを移行中です。移行が完了するまでプロダクト機能は一時停止されます。",
     "accountCutoverMigrationRollbackMessage": "移行のロールバック後、アカウントはメンテナンス中です。新しいデータの一部が孤立している可能性があります。",
     "accountCutoverOpenStore": "ストアを開く",
-    "chatScopeToday": "今日",
-    "chatScopeThisWeek": "今週",
     "chatScopeAbout": "{title}について",
     "askAboutThisConversation": "これについて尋ねる",
     "sendRawAudioToOmi": "未処理の音声を Omi に送信",
@@ -3211,5 +3209,8 @@
     "prerecordedTranscript": "事前録音",
     "pendantRecordingSyncBlocked": "Pendantはまだ録音中のため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。",
     "pendantFullSyncBlocked": "Pendantのストレージが満杯で、まだ録音モードのままのため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。",
-    "conversationsNotCapturedCount": "未記録 ({count})"
+    "conversationsNotCapturedCount": "未記録 ({count})",
+    "transcriptionNoAudio": "文字起こしが音声を受信していません",
+    "couldNotLoadMemories": "記憶を読み込めませんでした",
+    "couldNotLoadKnowledgeGraph": "ナレッジグラフを読み込めませんでした"
 }

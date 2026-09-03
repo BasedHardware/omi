@@ -50,6 +50,7 @@ from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.other import endpoints as auth
+from utils.retrieval.tools.perplexity_tools import WEB_SEARCH_RETRIEVAL_APPENDIX
 from utils.subscription import enforce_desktop_chat_quota
 
 _MAX_BODY_BYTES = 16 * 1024 * 1024
@@ -254,9 +255,15 @@ _MANAGED_CHAT_ALIASES = {
 # Non-conversational desktop callers (the automation planner and the local-agent
 # loop) ask for a single-shot structured completion, not a chat turn. They select
 # the structured lane explicitly so they never inherit chat-agent routing.
+# Legacy Haiku specialist aliases used the company Anthropic key on this
+# router; remap them onto the same structured lane so leftover fielded clients
+# stop billing direct Haiku. Kill-switch / BYOK still resolve Haiku via
+# _MODEL_ROUTES when gateway_mode is off.
 _MANAGED_STRUCTURED_ALIASES = {
     'omi-structured',
     CHAT_STRUCTURED_AUTO_LANE_ID,
+    'claude-haiku-4-5-20251001',
+    'claude-haiku-4-5',
 }
 WEB_SEARCH_AUTO_LANE_ID = feature_auto_lane_id('web_search')
 _MAX_TOKENS = 16_384
@@ -278,14 +285,14 @@ def _managed_lane_id(body: Mapping[str, object]) -> str:
 
 
 def _uses_managed_chat_agent(body: Mapping[str, object]) -> bool:
-    """Route managed conversational traffic to Luna, but preserve specialist calls.
+    """Route managed desktop traffic onto gateway lanes.
 
     Desktop conversational traffic uses the managed Luna chat agent for Sonnet
-    and leftover Opus aliases plus explicit auto/Luna lane ids. Extraction jobs
-    still use Haiku; those legacy Anthropic calls must not inherit the chat-agent
-    personality/system prompt or have their requested model rewritten to Luna.
-    An omitted model uses the managed chat-agent default; an explicit unknown
-    model fails closed in the normal request validation path.
+    and leftover Opus aliases plus explicit auto/Luna lane ids. Legacy Haiku
+    extraction aliases join the structured lane so they do not inherit the
+    chat-agent personality or keep using the company Anthropic key. An omitted
+    model uses the managed chat-agent default; an explicit unknown model fails
+    closed in the normal request validation path.
     """
     if 'model' not in body:
         return True
@@ -459,6 +466,31 @@ def _with_public_web_routing_instruction(messages: list[dict[str, object]]) -> l
             )
             return updated
     return [{'role': 'system', 'content': _PUBLIC_WEB_ROUTING_INSTRUCTION}, *updated]
+
+
+def _append_web_search_retrieval_appendix(messages: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Append the fixed primary-source retrieval hint to the last user message.
+
+    The managed web-search lane sends the raw client question to sonar-pro,
+    which retrieves what the query describes — product-history questions stop
+    at the vendor marketing site (live RCA 2026-09-02). The same appendix the
+    agentic tool's hop-2 uses redirects retrieval at founder interviews,
+    Product Hunt launch posts, and postmortems. Idempotent.
+    """
+    updated = [dict(message) for message in messages]
+    for message in reversed(updated):
+        if message.get('role') != 'user':
+            continue
+        content = message.get('content')
+        if isinstance(content, str):
+            if WEB_SEARCH_RETRIEVAL_APPENDIX not in content:
+                message['content'] = f'{content}{WEB_SEARCH_RETRIEVAL_APPENDIX}'
+        elif isinstance(content, list) and not any(
+            isinstance(block, Mapping) and block.get('text') == WEB_SEARCH_RETRIEVAL_APPENDIX for block in content
+        ):
+            message['content'] = [*content, {'type': 'text', 'text': WEB_SEARCH_RETRIEVAL_APPENDIX}]
+        return updated
+    return updated
 
 
 def _carries_private_tool_output(messages: object) -> bool:
@@ -660,7 +692,7 @@ def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LAN
         # are a live lookup, not a client-tool continuation.
         result.pop('tools', None)
         result.pop('tool_choice', None)
-        result['messages'] = _with_public_web_routing_instruction(translated)
+        result['messages'] = _append_web_search_retrieval_appendix(_with_public_web_routing_instruction(translated))
     return result
 
 
@@ -790,7 +822,7 @@ def _request(
     if choice is not None and result.get('tools'):
         result['tool_choice'] = choice
     result['cache_control'] = dict(_PROMPT_CACHE_CONTROL)
-    return model, result
+    return cast(str, result['model']), result  # response.model = SERVED model, never the alias
 
 
 def _usage_field(usage: object, field: str) -> int:

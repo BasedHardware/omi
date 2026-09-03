@@ -1,11 +1,13 @@
 """Candidate lifecycle orchestration and post-commit integration policy."""
 
 import asyncio
+from datetime import datetime, timezone
 from typing import Optional, Protocol
 
 import database.action_items as action_items_db
 import database.candidates as candidates_db
 import database.workstreams as workstreams_db
+from database.durable_queue import OutcomeKind, ProcessOutcome, drain_isolated, oldest_ready_age_seconds
 from models.candidate import (
     CandidateAction,
     CandidateCreate,
@@ -15,6 +17,7 @@ from models.candidate import (
     CandidateSubjectKind,
 )
 from utils.executors import postprocess_executor, submit_with_context
+from utils.durable_queue_metrics import observe_oldest_ready_age
 from utils.observability.fallback import record_fallback
 from utils.task_sync import auto_sync_action_item
 from utils.task_intelligence import task_links
@@ -69,6 +72,7 @@ def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, acc
             account_generation=account_generation,
             lease_token=lease_token,
             succeeded=False,
+            error_text='task_not_found',
         )
         record_fallback(
             component='other',
@@ -89,6 +93,7 @@ def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, acc
                 account_generation=account_generation,
                 lease_token=lease_token,
                 succeeded=False,
+                error_text='integration_exception',
             )
             record_fallback(
                 component='other',
@@ -111,6 +116,7 @@ def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, acc
             account_generation=account_generation,
             lease_token=lease_token,
             succeeded=succeeded,
+            error_text=None if succeeded else 'integration_not_synced',
         )
         if not succeeded:
             record_fallback(
@@ -126,24 +132,32 @@ def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, acc
 
 
 def drain_candidate_integrations(uid: str, *, account_generation: int, limit: int = 100) -> int:
-    scheduled = 0
-    for item in candidates_db.list_candidate_integration_dispatches(
+    items = candidates_db.list_candidate_integration_dispatches(
         uid,
         account_generation=account_generation,
         limit=limit,
-    ):
+    )
+    created_ats = [item.get('created_at') for item in items if isinstance(item.get('created_at'), datetime)]
+    observe_oldest_ready_age(
+        'candidate_integration_outbox',
+        oldest_ready_age_seconds(created_ats, now=datetime.now(timezone.utc)),
+    )
+
+    def process_one(item: dict) -> ProcessOutcome:
         candidate_id = item.get('candidate_id')
         task_id = item.get('task_id')
-        if isinstance(candidate_id, str) and isinstance(task_id, str):
-            scheduled += int(
-                _dispatch_task_integration(
-                    uid,
-                    candidate_id,
-                    task_id,
-                    account_generation=account_generation,
-                )
-            )
-    return scheduled
+        if not isinstance(candidate_id, str) or not isinstance(task_id, str):
+            return ProcessOutcome.reject('malformed integration outbox item', reason='malformed')
+        scheduled = _dispatch_task_integration(
+            uid,
+            candidate_id,
+            task_id,
+            account_generation=account_generation,
+        )
+        return ProcessOutcome.ack() if scheduled else ProcessOutcome.retry('not_scheduled', reason='not_scheduled')
+
+    results = drain_isolated(items, process_one)
+    return sum(1 for result in results if result.outcome.kind == OutcomeKind.ACK)
 
 
 def accept_candidate(uid: str, candidate_id: str, *, account_generation: int) -> CandidateResolutionReceipt:

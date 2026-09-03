@@ -9841,12 +9841,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get accountCutoverOpenStore => 'Mở cửa hàng';
 
   @override
-  String get chatScopeToday => 'Hôm nay';
-
-  @override
-  String get chatScopeThisWeek => 'Tuần này';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Về: $title';
   }
@@ -9913,4 +9907,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Không được ghi âm ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Bản ghi âm không nhận được âm thanh';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Không thể tải ký ức';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Không thể tải đồ thị tri thức';
 }

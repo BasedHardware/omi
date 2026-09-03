@@ -9787,12 +9787,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get accountCutoverOpenStore => 'فتح المتجر';
 
   @override
-  String get chatScopeToday => 'اليوم';
-
-  @override
-  String get chatScopeThisWeek => 'هذا الأسبوع';
-
-  @override
   String chatScopeAbout(String title) {
     return 'عن: $title';
   }
@@ -9860,4 +9854,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'لم يتم التسجيل ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'النسخ لا يستلم الصوت';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'تعذر تحميل الذكريات';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'تعذر تحميل الرسم البياني للمعرفة';
 }

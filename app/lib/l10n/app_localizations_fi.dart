@@ -9845,12 +9845,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get accountCutoverOpenStore => 'Avaa kauppa';
 
   @override
-  String get chatScopeToday => 'Tänään';
-
-  @override
-  String get chatScopeThisWeek => 'Tällä viikolla';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Aihe: $title';
   }
@@ -9919,4 +9913,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Ei tallennettu ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkriptio ei vastaanota ääntä';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Muistoja ei voitu ladata';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Tietograafia ei voitu ladata';
 }

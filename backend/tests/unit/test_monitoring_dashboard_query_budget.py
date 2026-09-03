@@ -106,3 +106,43 @@ def test_collapsed_rows_nest_their_panels():
         "a row marked collapsed but with no nested panels leaves its panels as queried siblings — the "
         "collapse hides nothing and first paint still pays for them:\n  " + "\n  ".join(empty)
     )
+
+
+PTT_JOURNEY = 'journey="realtime_voice"'
+PTT_SCRAPE_JOB = 'job="cloud-run-application-metrics"'
+
+
+def _ptt_exprs(doc):
+    found = []
+    for panel in _iter_panels(doc.get("panels", [])):
+        for target in panel.get("targets", []):
+            expr = target.get("expr") or ""
+            if PTT_JOURNEY in expr:
+                found.append((panel.get("title"), panel.get("type"), expr))
+    return found
+
+
+def test_ptt_timeseries_are_scoped_to_cloud_run_application_metrics():
+    """Zero-init cartesian children on listen/pusher/gateway must not enter PTT graphs.
+
+    Live 24h traffic for realtime_voice is only on cloud-run-application-metrics.
+    rate() on idle zero-init series spikes on scrape/reset and draws phantom
+    desktop_linux / incomplete_attempt / unknown lines. The job filter is the
+    load-bearing honesty fix; grouping by outcome|issue_class|client_kind stays.
+    """
+
+    missing = []
+    seen_timeseries = 0
+    for title, panel_type, expr in _ptt_exprs(dashboard()):
+        if panel_type == TIMESERIES:
+            seen_timeseries += 1
+        if PTT_SCRAPE_JOB not in expr:
+            missing.append(f"{title!r} ({panel_type}): {expr}")
+    assert seen_timeseries >= 3, (
+        "expected the PTT outcome / issue_class / client_kind timeseries; "
+        f"found {seen_timeseries} realtime_voice timeseries"
+    )
+    assert missing == [], (
+        "PTT PromQL must restrict selectors to the Cloud Run scrape job so "
+        "listen/pusher/gateway zero-init children cannot appear:\n  " + "\n  ".join(missing)
+    )

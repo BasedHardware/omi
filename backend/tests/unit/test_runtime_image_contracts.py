@@ -40,6 +40,60 @@ def test_registered_runtime_image_sources_are_closed(contracts_module):
     assert contracts_module.check_source_closures(contracts_module.load_contracts()) == []
 
 
+def test_source_copy_skips_local_openapi_venv(contracts_module, tmp_path):
+    source = tmp_path / 'backend'
+    source.mkdir()
+    (source / 'main.py').write_text('ok\n', encoding='utf-8')
+    venv = source / '.openapi-venv'
+    venv.mkdir()
+    (venv / 'payload').write_text('huge\n', encoding='utf-8')
+    dest = tmp_path / 'staged'
+    contracts_module._copy_source(source, dest)
+    assert (dest / 'main.py').is_file()
+    assert not (dest / '.openapi-venv').exists()
+
+
+def _contract_with_dockerfile(contracts_module, tmp_path, dockerfile_text):
+    dockerfile = tmp_path / 'Dockerfile'
+    dockerfile.write_text(dockerfile_text, encoding='utf-8')
+    return replace(_contract(contracts_module, 'pusher'), dockerfile=dockerfile)
+
+
+def test_final_stage_rejects_copy_removed_in_a_later_layer(contracts_module, tmp_path):
+    contract = _contract_with_dockerfile(
+        contracts_module,
+        tmp_path,
+        'FROM python AS builder\n'
+        'RUN mkdir -p /tmp/wheels\n'
+        'FROM python\n'
+        'COPY --from=builder /tmp/wheels /tmp/wheels\n'
+        'RUN pip install /tmp/wheels/*.whl && rm -rf /tmp/wheels\n',
+    )
+
+    errors = contracts_module.final_stage_layer_errors(contract)
+
+    assert len(errors) == 1
+    assert 'remain in the image manifest' in errors[0]
+
+
+def test_final_stage_rejects_install_shadowed_by_late_venv_copy(contracts_module, tmp_path):
+    contract = _contract_with_dockerfile(
+        contracts_module,
+        tmp_path,
+        'FROM python AS builder\n'
+        'RUN python -m venv /opt/venv\n'
+        'FROM python\n'
+        'ENV PATH="/opt/venv/bin:$PATH"\n'
+        'RUN pip install /tmp/package.whl\n'
+        'COPY --from=builder /opt/venv /opt/venv\n',
+    )
+
+    errors = contracts_module.final_stage_layer_errors(contract)
+
+    assert len(errors) == 1
+    assert 'install is shadowed at runtime' in errors[0]
+
+
 def test_registered_runtime_image_workflows_smoke_their_declared_dockerfile(contracts_module):
     assert contracts_module.workflow_contract_errors(contracts_module.load_contracts()) == []
 

@@ -9837,12 +9837,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accountCutoverOpenStore => 'Open store';
 
   @override
-  String get chatScopeToday => 'Today';
-
-  @override
-  String get chatScopeThisWeek => 'This week';
-
-  @override
   String chatScopeAbout(String title) {
     return 'About: $title';
   }
@@ -9909,4 +9903,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Not captured ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transcription not receiving audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Couldn\'t load memories';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Couldn\'t load knowledge graph';
 }

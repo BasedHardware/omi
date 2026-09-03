@@ -2728,6 +2728,121 @@ routes:
         state: active
       owner: backend
   - route_type: http
+    method: GET
+    path: /v1/admin/feedback/reports
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - admin_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: internal_task
+      visibility: admin
+      data_domain: chat
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/admin/feedback/reports/{report_date}
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - admin_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: internal_task
+      visibility: admin
+      data_domain: chat
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/admin/feedback/reports/{report_date}/generate
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - admin_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: sync_job
+      surface: internal_task
+      visibility: admin
+      data_domain: chat
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/admin/feedback/reports/generate-yesterday
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - admin_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: sync_job
+      surface: internal_task
+      visibility: admin
+      data_domain: chat
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/admin/feedback/events/{event_id}/context
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - admin_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: internal_task
+      visibility: admin
+      data_domain: chat
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
     method: POST
     path: /v1/conversations/{conversation_id}/mutations
     policy:

@@ -34,12 +34,15 @@ from enum import Enum
 from dataclasses import dataclass, field
 import atexit
 import importlib
+import logging
 import os
 import re
 import threading
 from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple, cast
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+logger = logging.getLogger(__name__)
 
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud import firestore
@@ -58,7 +61,7 @@ from database.firestore_index_registry import (
 )
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import cleanup_expired_memory_deletion_receipts
-from models.memory_apply import MemoryControlState
+from models.memory_apply import MemoryControlState, WriterMode
 from models.memory_contracts import deterministic_contract_id
 from models.product_memory import (
     LedgerWriteReason,
@@ -69,6 +72,7 @@ from models.product_memory import (
     normalized_memory_content_key,
 )
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item
+from utils.memory.daily_memory_sweep_queue import ProcessOutcome, drain_sweep_uids
 from utils.memory.knowledge_ledger import (
     LedgerProvenance,
     LedgerWrite,
@@ -105,6 +109,12 @@ MAX_ONBOARDING_SCAN_PAGES = 16
 MAX_ONBOARDING_INPUT_CHARACTERS = 24_000
 MAX_ONBOARDING_RECEIPT_KEYS = 4_096
 MAX_LEGACY_COMPAT_OCCUPANTS = 64
+# The compatibility occupant proof pages through the complete cohort; a real
+# long-tenured account holds hundreds of active unslotted facts per subject,
+# so completeness must come from draining a cursor, not from one bounded page.
+# The ceiling still fails closed on a pathological cohort.
+LEGACY_COMPAT_OCCUPANT_PAGE_SIZE = 300
+MAX_LEGACY_COMPAT_OCCUPANT_SCAN = 5000
 MODEL_COST_PER_1K_INPUT_CHARACTERS_USD = 0.002
 ONBOARDING_CONSUMED_STATE_PATH = "memory_control/daily_memory_sweep_onboarding"
 ONBOARDING_PERMANENT_RECEIPT_PREFIX = "onboarding_source_"
@@ -2606,13 +2616,26 @@ def _find_active_slot_or_subject(
                 field_filter_factory=FieldFilter,
             )
             # Legacy rows predate ``normalized_content_key``.  Prove the
-            # complete bounded compatibility cohort before deciding that no
-            # duplicate exists; two rows is not a safe global cap for a user
-            # who accumulated several historical unslotted facts.
-            snapshots = list(legacy_query.limit(MAX_LEGACY_COMPAT_OCCUPANTS + 1).stream())
+            # complete compatibility cohort before deciding that no duplicate
+            # exists. One bounded page is not that proof: a long-tenured
+            # account holds far more than 64 active unslotted facts per
+            # subject, and the old single-page cap made every such account's
+            # sweep day fail closed forever (dev, hourly, since 2026-08-30).
+            # Drain the cursor in bounded pages instead; the scan ceiling
+            # below still fails closed on a pathological cohort.
+            snapshots = []
+            cursor_query = legacy_query
+            while True:
+                page = list(cursor_query.limit(LEGACY_COMPAT_OCCUPANT_PAGE_SIZE).stream())
+                snapshots.extend(page)
+                if len(snapshots) > MAX_LEGACY_COMPAT_OCCUPANT_SCAN:
+                    break
+                if len(page) < LEGACY_COMPAT_OCCUPANT_PAGE_SIZE:
+                    break
+                cursor_query = legacy_query.start_after(page[-1])
     except Exception as exc:
         raise SweepAuthoritativeQueryUnavailable("canonical occupant query failed") from exc
-    proof_limit = MAX_LEGACY_COMPAT_OCCUPANTS if used_legacy_compatibility else MAX_AUTHORITATIVE_OCCUPANTS
+    proof_limit = MAX_LEGACY_COMPAT_OCCUPANT_SCAN if used_legacy_compatibility else MAX_AUTHORITATIVE_OCCUPANTS
     if len(snapshots) > proof_limit:
         raise SweepAuthoritativeQueryUnavailable("canonical occupant query exceeded proof budget")
     items: List[MemoryItem] = []
@@ -4798,17 +4821,16 @@ def run_daily_memory_sweep_scheduler(
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("now must be timezone-aware")
     bounded_uids = tuple(sorted({uid.strip() for uid in uid_inventory if uid.strip()}))[: max(1, min(400, max_users))]
+
     # Crash-recovery cleanup is a privacy lifecycle operation, not a rollout
     # decision. Run it before authority, kill-switch, and cohort gates so a
     # disabled/skipped account cannot retain transcript-derived pages forever.
-    for uid in bounded_uids:
-        try:
-            cleanup_expired_daily_memory_sweep_stages(uid, db_client=db_client, now=now)
-            cleanup_expired_memory_deletion_receipts(uid, db_client=db_client, now=now)
-        except Exception:
-            # Cleanup is fail-closed for each row; a transient janitor error
-            # must not open writes or alter the rollout result.
-            continue
+    def cleanup_one(uid: str) -> ProcessOutcome:
+        cleanup_expired_daily_memory_sweep_stages(uid, db_client=db_client, now=now)
+        cleanup_expired_memory_deletion_receipts(uid, db_client=db_client, now=now)
+        return ProcessOutcome.ack()
+
+    drain_sweep_uids(bounded_uids, cleanup_one)
 
     resolved_authority = authority or daily_memory_sweep_authority_from_environment()
     if not resolved_authority.may_write:
@@ -4862,6 +4884,24 @@ def run_daily_memory_sweep_scheduler(
                 errors.append(f"uid={uid}:cohort_unavailable")
                 continue
             control = ensure_canonical_apply_control_state(uid, db_client=db_client)
+            if control.writer_mode is not WriterMode.ledger:
+                # An enrolled account that has not completed ledger cutover
+                # cannot commit ordinary ledger writes (require_writer_admitted
+                # refuses them in compatibility mode), so claiming its day only
+                # burns receipt leases and fails the whole hourly job with
+                # WriterAdmissionError. Pre-drain is an expected rollout state:
+                # skip quietly and retry after the maintenance drain moves the
+                # account to ledger mode. The account's day cursor does not
+                # advance, so no day is lost — pending days catch up in
+                # bounded windows once the account drains.
+                logger.info(
+                    "daily-memory-sweep skipping uid=%s: writer_mode=%s awaits ledger cutover",
+                    uid,
+                    control.writer_mode.value,
+                )
+                blocked_users += 1
+                completed_uids.append(uid)
+                continue
             timezone_name = str(timezone_resolver(uid) or "UTC")
             cursor = _read_cursor(db_client, uid, control)
             if cursor.last_completed_local_date is not None and cursor.timezone_name != timezone_name:

@@ -9877,12 +9877,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get accountCutoverOpenStore => 'Открыть магазин';
 
   @override
-  String get chatScopeToday => 'Сёння';
-
-  @override
-  String get chatScopeThisWeek => 'Гэты тыдзень';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Пра: $title';
   }
@@ -9950,4 +9944,16 @@ class AppLocalizationsBe extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Не запісана ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Транскрыпцыя не атрымлівае аўдыё';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Не ўдалося загрузіць успаміны';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Не ўдалося загрузіць граф ведаў';
 }

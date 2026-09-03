@@ -28,6 +28,31 @@ import XCTest
       }
     }
 
+    func testScreenObservationTravelsInUserRowMetadata() throws {
+      // Regression: "what was the last word of the first riddle?" failed because what Omi saw on
+      // the earlier turn lived only in a dropped tool observation. The user row now carries it.
+      let projection = RealtimeStreamingJournalProjection(
+        ownerID: "owner", continuityKey: "voice:abc",
+        admissionSurface: AgentSurfaceReference(surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "x"),
+        screenContext: "Browser shows a riddle: I have keys but open no locks ... never go inside.")
+      let write = projection.userMessage(text: "what's the answer?").journalWrite(
+        origin: "realtime_voice", status: .completed, continuityKey: "voice:abc", messageSource: "realtime_voice")
+      let metadata = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: Data(write.metadataJSON.utf8)) as? [String: Any])
+      XCTAssertEqual(
+        metadata["screen_context"] as? String,
+        "Browser shows a riddle: I have keys but open no locks ... never go inside.")
+      XCTAssertEqual(write.role, "user")
+
+      let plain = RealtimeStreamingJournalProjection(
+        ownerID: "owner", continuityKey: "voice:def",
+        admissionSurface: AgentSurfaceReference(surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "x"))
+      let plainWrite = plain.userMessage(text: "hi").journalWrite(origin: "realtime_voice", status: .completed)
+      let plainMetadata = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: Data(plainWrite.metadataJSON.utf8)) as? [String: Any])
+      XCTAssertNil(plainMetadata["screen_context"])
+    }
+
     func testTerminalReasonTravelsInAssistantRowMetadata() throws {
       // Status alone cannot separate a legitimate barge-in from a hard failure;
       // the reason is what makes the truncation-cause split measurable.

@@ -3250,8 +3250,6 @@
     "accountCutoverMigrationInProgressMessage": "Votre compte est en cours de migration. Les fonctionnalités produit sont en pause jusqu'à la fin de la migration.",
     "accountCutoverMigrationRollbackMessage": "Votre compte est en maintenance après un retour arrière de migration. Certaines données plus récentes peuvent être isolées.",
     "accountCutoverOpenStore": "Ouvrir le store",
-    "chatScopeToday": "Aujourd’hui",
-    "chatScopeThisWeek": "Cette semaine",
     "chatScopeAbout": "À propos de : {title}",
     "askAboutThisConversation": "Demander à ce sujet",
     "sendRawAudioToOmi": "Envoyer l'audio brut à Omi",
@@ -3270,5 +3268,8 @@
     "prerecordedTranscript": "Préenregistré",
     "pendantRecordingSyncBlocked": "Votre Pendant est encore en train d'enregistrer, son audio stocké ne peut donc pas être transféré. Appuyez sur le bouton du Pendant pour arrêter l'enregistrement, puis synchronisez à nouveau.",
     "pendantFullSyncBlocked": "Le stockage de votre Pendant est plein et il est encore en mode enregistrement, son audio stocké ne peut donc pas être transféré. Appuyez sur le bouton du Pendant pour arrêter l'enregistrement, puis synchronisez à nouveau.",
-    "conversationsNotCapturedCount": "Non capturé ({count})"
+    "conversationsNotCapturedCount": "Non capturé ({count})",
+    "transcriptionNoAudio": "La transcription ne reçoit pas d'audio",
+    "couldNotLoadMemories": "Impossible de charger les souvenirs",
+    "couldNotLoadKnowledgeGraph": "Impossible de charger le graphe de connaissances"
 }

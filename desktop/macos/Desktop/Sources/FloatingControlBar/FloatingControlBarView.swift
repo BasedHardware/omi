@@ -84,7 +84,7 @@ struct FloatingControlBarView: View {
   var onCloseAI: () -> Void
   var onEscape: () -> Void
   var onClearVisibleConversation: () -> Void
-  var onRate: ((String, Int?) -> Void)?
+  var onRate: ((String, Int?, ChatFeedbackReason?) -> Void)?
   var onShareLink: (() async -> String?)?
 
   @State private var isHovering = false
@@ -95,7 +95,6 @@ struct FloatingControlBarView: View {
   @State private var notchSwitcherProgress: CGFloat = 0
   /// Last reported text-editor height so inputViewHeight can be recomputed
   /// when the pill list changes while the input is open. (Cubic P2.)
-  @State private var lastInputEditorHeight: CGFloat = 0
   private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)
   private var isChatChromePinned: Bool {
     NotchChromeLayout.isChatPinned(
@@ -585,6 +584,10 @@ struct FloatingControlBarView: View {
       let entry = IntegrationNudgeCatalog.entry(telemetryID: telemetryID)
     {
       IntegrationNudgeCard(notification: notification, entry: entry, triggerID: triggerID)
+    } else if notification.assistantId == FirstRealAppCardCoordinator.assistantID,
+      case .askOmiPrefilled(let prompt)? = notification.action
+    {
+      FirstRealAppCard(notification: notification, prompt: prompt)
     } else {
       notificationView(notification)
     }
@@ -998,8 +1001,11 @@ struct FloatingControlBarView: View {
         }
         .zIndex(1)
       } else {
+        // `.mainInput` has no composer: the notch never takes typed text. The surface still exists
+        // for the agent-pills header; the body under it is empty.
         mainConversationContainer {
-          aiInputView
+          Color.clear
+            .frame(height: 0)
             .id("input")
         }
         .zIndex(1)
@@ -1613,11 +1619,15 @@ struct FloatingControlBarView: View {
           .lineLimit(1)
       }
 
-      if state.isVoiceLocked && state.pttHintText.isEmpty {
-        Image(systemName: "lock.fill")
-          .scaledFont(size: OmiType.micro, weight: .bold)
+      // Locked mode is a mode the user has to be able to see at a glance: a bare glyph
+      // read as decoration, and gating it on an empty hint hid it for most of the turn.
+      // Restores the pre-2b416572c0 badge, always shown while locked.
+      if state.isVoiceLocked {
+        Text("LOCKED")
+          .scaledFont(size: 10, weight: .bold)
           .foregroundColor(.orange)
-          .frame(width: 18, height: 18)
+          .padding(.horizontal, 6)
+          .padding(.vertical, 2)
           .background(Color.orange.opacity(0.2))
           .cornerRadius(4)
       }
@@ -1625,74 +1635,25 @@ struct FloatingControlBarView: View {
   }
 
   private func interjectInsightTeaserLimit(_ notification: FloatingBarNotification) -> Int {
-    guard InterjectFeature.isEnabled, notification.kind == .insight else { return 3 }
-    return (isHovering || state.interjectBarHovering) ? 6 : 1
-  }
-
-  private var aiInputView: some View {
-    AskAIInputView(
-      userInput: Binding(
-        get: { state.aiInputText },
-        set: { state.aiInputText = $0 }
-      ),
-      canClearVisibleConversation: false,
-      onSend: { message in
-        (window as? FloatingControlBarWindow)?
-          .beginVisibleMainQuery(message, fromVoice: false, animated: true)
-        onSendQuery(message)
-      },
-      onClearVisibleConversation: onClearVisibleConversation,
-      onEscape: onEscape,
-      onHeightChange: { [self] height in
-        lastInputEditorHeight = height
-        recomputeUnifiedInputHeight()
-      }
+    FloatingControlBarGeometry.interjectInsightTeaserLineLimit(
+      kindIsInsight: InterjectFeature.isEnabled && notification.kind == .insight,
+      isHovering: isHovering,
+      interjectBarHovering: state.interjectBarHovering,
+      interjectPTTHoldActive: state.interjectReplyingToTitle != nil
     )
-    .onChange(of: agentPills.pills.count) {
-      // The agent-pills header budget depends on whether pills exist, so
-      // recompute the input height when the pill list changes while the
-      // input/chat view is open. Without this the budget goes stale and
-      // causes clipping or extra empty space. (Cubic P2.)
-      recomputeUnifiedInputHeight()
-    }
-    .transition(
-      .asymmetric(
-        insertion: .move(edge: .top).combined(with: .opacity),
-        removal: .move(edge: .top).combined(with: .opacity)
-      ))
-  }
-
-  /// Recompute inputViewHeight from the last known editor height and the
-  /// current agent-pills presence. Called on editor height change and on
-  /// pill-list change so the shared expanded surface budget never goes stale.
-  private func recomputeUnifiedInputHeight() {
-    // Guard against stale zero editor height: the editor has not reported
-    // its size yet (or was just re-created after a surface switch), so
-    // recomputing now would shrink the window and clip input/send
-    // controls. Fall back to the minimum content height so the panel
-    // keeps a usable size until a real height arrives. (Cubic P2.)
-    let height =
-      lastInputEditorHeight > 0
-      ? lastInputEditorHeight
-      : FloatingControlBarWindow.notchInputPanelMinimumContentHeight
-    let topBand =
-      (state.usesNotchIsland || state.showingAIConversation)
-      ? notchChromeHeight
-      : FloatingControlBarWindow.pillSurfaceTopPadding
-    let statusBanner =
-      showingPTTStatusBanner
-      ? FloatingControlBarWindow.pttStatusBannerBudget
-      : 0
-    let baseHeight = topBand + statusBanner + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
-    let headerBudget =
-      !agentPills.pills.isEmpty
-      ? FloatingControlBarWindow.notchChatHeaderVerticalBudget
-      : 0
-    state.inputViewHeight = baseHeight + headerBudget
   }
 
   private var floatingChatProvider: ChatProvider? {
     FloatingControlBarManager.shared.sharedFloatingProvider
+  }
+
+  /// The chip's secondary hint names the shortcut actually bound, and is absent
+  /// when push-to-talk is off — a hint for a disabled gesture is a wrong hint.
+  @MainActor static func followUpVoiceHint(settings: ShortcutSettings = ShortcutSettings.shared) -> String? {
+    guard settings.pttEnabled else { return nil }
+    let tokens = settings.pttShortcut.displayTokens
+    guard let token = tokens.first, !token.isEmpty else { return nil }
+    return "or hold \(token) to ask aloud"
   }
 
   private var aiResponseView: some View {
@@ -1723,7 +1684,12 @@ struct FloatingControlBarView: View {
       },
       onOpenAgentRef: { ref, completion in
         openAgentInChat(ref: ref, completion: completion)
-      }
+      },
+      onAskFollowUp: { question in
+        AnalyticsManager.shared.questionOriginating(.followUp)
+        FloatingControlBarManager.shared.openAIInputWithQuery(question)
+      },
+      followUpVoiceHint: Self.followUpVoiceHint()
     )
     .transition(
       .asymmetric(
@@ -2228,8 +2194,11 @@ private struct AgentMainChatView: View {
           case .discoveryCard(_, let title, let summary, let fullText):
             DiscoveryCard(title: title, summary: summary, fullText: fullText)
               .frame(maxWidth: .infinity, alignment: .leading)
-          // Rich controls are main-chat-only; floating/notch stays passive.
-          case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
+          // Rich controls are main-chat-only; floating/notch stays passive. The
+          // follow-up chip belongs to the answer surface, not this agent-pill
+          // transcript, which has no lane to send the next turn on.
+          case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
+            .followUp, .memoryReviewCard:
             EmptyView()
           case .agentSpawn(
             _, let pillId, let sessionId, let runId, let title, let objective, let provider

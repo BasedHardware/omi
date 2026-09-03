@@ -207,6 +207,12 @@ class PostHogManager {
     return PostHogSDK.shared.getFeatureFlag(flag)
   }
 
+  /// Get the JSON payload configured on a feature flag
+  func getFeatureFlagPayload(_ flag: String) -> Any? {
+    guard isInitialized else { return nil }
+    return PostHogSDK.shared.getFeatureFlagResult(flag)?.payload
+  }
+
   /// The SDK's own flag-delivery signal (posted on the main queue after the
   /// initial preload and after every reload) — re-exported so observers get a
   /// compile-checked symbol instead of a raw notification-name string.
@@ -510,6 +516,28 @@ extension PostHogManager {
     track(
       "Memory Created",
       properties: Self.conversationCreatedProperties(source: source, durationSeconds: durationSeconds)
+    )
+  }
+
+  static func conversationProcessingProperties(elapsedSeconds: Int, outcome: String?) -> [String: Any] {
+    var properties: [String: Any] = ["elapsed_seconds": max(0, elapsedSeconds)]
+    if let outcome {
+      properties["outcome"] = outcome
+    }
+    return properties
+  }
+
+  func conversationProcessingCompleted(conversationId _: String, elapsedSeconds: Int, outcome: String) {
+    track(
+      "Conversation Processing Completed",
+      properties: Self.conversationProcessingProperties(elapsedSeconds: elapsedSeconds, outcome: outcome)
+    )
+  }
+
+  func conversationProcessingStalled(conversationId _: String, elapsedSeconds: Int) {
+    track(
+      "Conversation Processing Stalled",
+      properties: Self.conversationProcessingProperties(elapsedSeconds: elapsedSeconds, outcome: nil)
     )
   }
 

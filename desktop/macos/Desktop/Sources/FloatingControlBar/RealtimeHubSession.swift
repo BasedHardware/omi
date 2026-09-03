@@ -55,6 +55,12 @@ enum RealtimeHubBargeInStrategy: Equatable {
   case freshSession
 }
 
+enum RealtimeBackgroundContextDeliveryResult: Equatable, Sendable {
+  case delivered
+  case retry
+  case unsupported
+}
+
 #if DEBUG
   struct RealtimeHubInputLifecycleSnapshot: Equatable {
     let isOpen: Bool
@@ -140,7 +146,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   private var pendingAudio: [Data] = []
   /// Screen frames awaiting an open socket (base64, mime) — flushed into the turn in
   /// markReady. A cold first turn would otherwise drop the frame before connect.
-  private var pendingVideo: [(b64: String, mime: String)] = []
+  private var pendingVideo: [(b64: String, mime: String, turnID: VoiceTurnID?)] = []
   /// Headless-test text awaiting a provider-acceptable input window.
   private var pendingTextInputs: [(text: String, logLabel: String)] = []
   /// Per-turn Interject / trusted instruction. OpenAI applies it on the next
@@ -407,6 +413,9 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       }
     }
 
+    /// Base64 payloads of every screen frame actually written to the wire (test seam).
+    private(set) var sentVideoFramesForTesting: [String] = []
+
     func markReadyForTesting() {
       q.async { [weak self] in
         self?.acceptsTestingTransport = true
@@ -448,21 +457,25 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   /// a frame sent here becomes part of the user's speech turn, so the model has the screen
   /// when it answers. This is the ONLY image delivery this model accepts — a separate
   /// image-only turn (after the speech turn closed) is rejected with close 1007.
-  func sendVideoFrame(_ image: Data, mime: String, allowClosedActivityWindow: Bool = false) {
+  func sendVideoFrame(
+    _ image: Data, mime: String, turnID: VoiceTurnID? = nil, allowClosedActivityWindow: Bool = false
+  ) {
     guard provider == .gemini else { return }
     let b64 = image.base64EncodedString()
     q.async { [weak self] in
       guard let self else { return }
       // Buffer until the socket is open AND a turn is active, then flush in markReady.
       // A cold first turn dumps audio + this frame before connect (~300ms); without
-      // buffering the frame is dropped and the model answers blind.
+      // buffering the frame is dropped and the model answers blind. A buffered frame is
+      // tagged with its PTT turn so a later activityStart can only flush its own screen.
       guard self.isOpen, self.activityOpen || allowClosedActivityWindow else {
-        self.pendingVideo.append((b64, mime))
+        self.pendingVideo.append((b64, mime, turnID))
         log("\(self.tag): screen frame buffered until open (\(image.count) bytes)")
         return
       }
       let phase = self.activityOpen ? "in-turn" : "after-activity-end"
       log("\(self.tag): screen frame sent \(phase) (\(image.count) bytes)")
+      self.recordSentVideoFrame(b64)
       self.send(json: ["realtimeInput": ["video": ["data": b64, "mimeType": mime]]])
     }
   }
@@ -491,26 +504,38 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     await sendTextInput(text, logLabel: "test text input")
   }
 
-  /// True when the session can accept injected (non-PTT) context *right now*.
-  /// Evaluated on `q`. OpenAI accepts on any open socket; Gemini needs an open
-  /// speech-activity window (opened per turn by `beginInputTurn`).
-  private var canAcceptInjectedContext: Bool {
-    isOpen && (provider == .openai || activityOpen)
-  }
-
   /// Silently appends completed background-agent context to the conversation.
   /// No response is requested — the model uses it on its next turn.
   ///
-  /// Unlike ordinary PTT text input this does NOT buffer: the caller advances an
-  /// exactly-once kernel checkpoint on a `true` return, so `true` must mean
-  /// "confirmed delivered," never "buffered" (a buffered item is dropped by
-  /// `stopOnQueue`/`abandonInputTurn` — an acked-but-lost completion). When the
-  /// session can't accept context yet it returns `false` and the checkpoint
-  /// stays unadvanced; the delivery service retries when the session next
-  /// becomes ready (`hubDidOpenInputWindow`). When it can, `true` follows the
-  /// provider send's completion, not a fire-and-forget enqueue.
-  func sendBackgroundAgentContext(_ text: String) async -> Bool {
-    await sendConfirmedContext(text)
+  /// OpenAI has a real mid-session system-message role, so background reference
+  /// material cannot become a competing user request. Gemini Live exposes no
+  /// equivalent after setup: its realtime text shares the user's activity stream
+  /// and modality ordering is explicitly not guaranteed. Sending there can steal
+  /// the next spoken turn, so Gemini returns `unsupported` without writing bytes.
+  /// The completion/card remains available through its canonical UI/tool surface.
+  func sendBackgroundAgentContext(_ text: String) async -> RealtimeBackgroundContextDeliveryResult {
+    await withCheckedContinuation { continuation in
+      q.async { [weak self] in
+        guard let self, self.isOpen else {
+          continuation.resume(returning: .retry)
+          return
+        }
+        guard self.provider == .openai else {
+          DesktopDiagnosticsManager.shared.recordFallback(
+            area: "realtime_hub",
+            from: "gemini_background_context",
+            to: "canonical_tool_or_card",
+            reason: "capability_mismatch",
+            outcome: .degraded,
+            extra: ["user_visible": false])
+          continuation.resume(returning: .unsupported)
+          return
+        }
+        self.send(json: self.openAIBackgroundContextWire(text)) { error in
+          continuation.resume(returning: error == nil ? .delivered : .retry)
+        }
+      }
+    }
   }
 
   /// Same confirmed, non-buffering contract as `sendBackgroundAgentContext`.
@@ -543,20 +568,6 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     q.async { [weak self] in
       self?.pendingTrustedTurnInstruction = nil
       self?.flushedTrustedTurnInstruction = nil
-    }
-  }
-
-  private func sendConfirmedContext(_ text: String) async -> Bool {
-    await withCheckedContinuation { continuation in
-      q.async { [weak self] in
-        guard let self, self.canAcceptInjectedContext else {
-          continuation.resume(returning: false)
-          return
-        }
-        self.send(json: self.textInputWire(text)) { error in
-          continuation.resume(returning: error == nil)
-        }
-      }
     }
   }
 
@@ -700,9 +711,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     }
   }
 
-  /// Per-provider wire form of a user text-input message. Shared by the buffered
-  /// PTT path (`sendTextInputNow`) and the confirmed, non-buffering background
-  /// path (`sendBackgroundAgentContext`).
+  /// Per-provider wire form of an actual user text-input message.
   private func textInputWire(_ text: String) -> [String: Any] {
     switch provider {
     case .gemini:
@@ -717,6 +726,17 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         ],
       ]
     }
+  }
+
+  private func openAIBackgroundContextWire(_ text: String) -> [String: Any] {
+    [
+      "type": "conversation.item.create",
+      "item": [
+        "type": "message",
+        "role": "system",
+        "content": [["type": "input_text", "text": text]],
+      ],
+    ]
   }
 
   private func sendTextInputNow(_ text: String, logLabel: String) {
@@ -767,6 +787,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       if self.isOpen {
         self.send(json: ["realtimeInput": ["activityStart": [:]]])
         self.flushPendingAudioIfReady()
+        self.flushPendingVideoIntoTurn()
         self.flushPendingTextInputs()
         // Flush a parked trusted instruction inside this window, before a
         // pending commit can close it. Interject's MainActor retry is too late
@@ -800,10 +821,39 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     }
   }
 
+  /// A PTT-down frame is only meaningful inside the turn it was captured for. Send it while
+  /// the activity window is open; a frame that missed its window is dropped at commit so it
+  /// can never ride the next turn as a stale screen.
+  private func recordSentVideoFrame(_ b64: String) {
+    #if DEBUG
+      sentVideoFramesForTesting.append(b64)
+    #endif
+  }
+
+  private func flushPendingVideoIntoTurn() {
+    guard provider == .gemini, activityOpen else { return }
+    let currentTurn = activeEventIdentity?.turnID
+    for v in pendingVideo {
+      guard v.turnID == nil || currentTurn == nil || v.turnID == currentTurn else {
+        log("\(tag): dropped screen frame from an earlier turn")
+        continue
+      }
+      recordSentVideoFrame(v.b64)
+      send(json: ["realtimeInput": ["video": ["data": v.b64, "mimeType": v.mime]]])
+      log("\(tag): screen frame flushed into turn")
+    }
+    pendingVideo.removeAll()
+  }
+
   private func commitInputTurnNow() {
     flushPendingAudioIfReady()
+    flushPendingVideoIntoTurn()
     flushPendingTextInputs()
     flushTrustedTurnInstructionIfPossible()
+    if !pendingVideo.isEmpty {
+      log("\(tag): dropped \(pendingVideo.count) screen frame(s) that missed the turn window")
+      pendingVideo.removeAll()
+    }
     log("\(tag): turn committed")
     switch provider {
     case .openai:
@@ -974,10 +1024,19 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     output: String,
     screenEvidence: RealtimeScreenEvidenceAttachment?
   ) -> [String: Any] {
+    var responseBody: [String: Any] = ["result": output]
+    if name == HubTool.thinkDeeper.rawValue,
+      let spokenAnswer = canonicalSpokenAnswer(from: output)
+    {
+      responseBody["spoken_answer"] = spokenAnswer
+      responseBody["delivery_instruction"] =
+        "Speak only spoken_answer, faithfully and in its existing language. Do not add, translate, "
+        + "or continue any earlier topic, and do not append a follow-up question."
+    }
     var functionResponse: [String: Any] = [
       "id": callId,
       "name": name,
-      "response": ["result": output],
+      "response": responseBody,
     ]
     if let screenEvidence {
       let displayName = "live-screenshot.jpg"
@@ -997,6 +1056,16 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       ]
     }
     return ["toolResponse": ["functionResponses": [functionResponse]]]
+  }
+
+  private static func canonicalSpokenAnswer(from output: String) -> String? {
+    guard
+      let payload = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any]
+    else { return nil }
+    let direct = payload["text"] as? String
+    let nested = (payload["providerResult"] as? [String: Any])?["text"] as? String
+    let answer = (direct ?? nested)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    return answer?.isEmpty == false ? answer : nil
   }
 
   // OpenAI: ask for a response with the given modality (audio for spoken turns).
@@ -1174,11 +1243,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     flushPendingTextInputs()
     flushPendingAudioIfReady()
     // Flush any screen frame INTO the turn (after activityStart + audio, before commit).
-    for v in pendingVideo {
-      send(json: ["realtimeInput": ["video": ["data": v.b64, "mimeType": v.mime]]])
-      log("\(tag): screen frame flushed into turn")
-    }
-    pendingVideo.removeAll()
+    flushPendingVideoIntoTurn()
     flushPendingTextInputs()
     if pendingCommit, provider == .openai || activityOpen {
       pendingCommit = false

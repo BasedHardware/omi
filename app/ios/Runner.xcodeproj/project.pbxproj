@@ -40,6 +40,7 @@
 		42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */; };
 		42BABFB92F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */; };
 		42BABFC12F2A81B100E78A3C /* OmiAudioLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */; };
+		42BABFD12F2A82AA00E78A3C /* OmiAudioEventCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFD02F2A82AA00E78A3C /* OmiAudioEventCoalescer.swift */; };
 		42BABFC32F2A81B100E78A3C /* OmiCallError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC42F2A81B100E78A3C /* OmiCallError.swift */; };
 		42BABFC52F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */; };
 		42BABFC72F2A81B100E78A3C /* OmiCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */; };
@@ -117,6 +118,7 @@
 		CB6580ED5AD268A053F41EB7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 585D7D8307721A4D6595AA27 /* Assets.xcassets */; };
 		CD15410D0ED1D611F4A1B596 /* LimitlessBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D5 /* LimitlessBatchAudioWriter.swift */; };
 		CE56DAB4D69CB113C7F955F9 /* OmiAudioLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */; };
+		CE56DAB5D69CB113C7F955FA /* OmiAudioEventCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFD02F2A82AA00E78A3C /* OmiAudioEventCoalescer.swift */; };
 		CE7B938264FB7372447F8E21 /* prodLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = ACE7BEFB9654B6DF5B9E1790 /* prodLaunchScreen.storyboard */; };
 		CF0FE6152D61FDC10072C10D /* Custom.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF0FE6142D61FDC10072C10D /* Custom.xcconfig */; };
 		CF2F518D2EC08EA60025B331 /* Base.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF2F518C2EC08EA60025B331 /* Base.xcconfig */; };
@@ -129,6 +131,7 @@
 		EF12345678901234567890EF /* WifiNetworkPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FG12345678901234567890FG /* WifiNetworkPlugin.swift */; };
 		F8D0037DFD95E0FA0591D087 /* PhoneMicSessionConfigurator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD05 /* PhoneMicSessionConfigurator.swift */; };
 		FAD7504969BE8B6F6D8D0BD1 /* devLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */; };
+		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -212,6 +215,7 @@
 		42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiRecordingAudioDevice.swift; sourceTree = "<group>"; };
 		42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiPhoneCallsPlugin.swift; sourceTree = "<group>"; };
 		42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiAudioLock.swift; sourceTree = "<group>"; };
+		42BABFD02F2A82AA00E78A3C /* OmiAudioEventCoalescer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiAudioEventCoalescer.swift; sourceTree = "<group>"; };
 		42BABFC42F2A81B100E78A3C /* OmiCallError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiCallError.swift; sourceTree = "<group>"; };
 		42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiCallCoordinatorProtocol.swift; sourceTree = "<group>"; };
 		42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiCallCoordinator.swift; sourceTree = "<group>"; };
@@ -285,6 +289,7 @@
 		EDFF6508A941E8259906DDE2 /* Pods-Runner.debug-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-dev.xcconfig"; sourceTree = "<group>"; };
 		EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; name = devLaunchScreen.storyboard; path = Runner/devLaunchScreen.storyboard; sourceTree = "<group>"; };
 		FG12345678901234567890FG /* WifiNetworkPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WifiNetworkPlugin.swift; sourceTree = "<group>"; };
+		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -317,6 +322,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */,
 				42A7BA4C2E788F0100138969 /* WatchConnectivity.framework in Frameworks */,
 				9A25BD940EC94B21766CB950 /* Pods_Runner.framework in Frameworks */,
 			);
@@ -365,6 +371,7 @@
 		42BABFC02F2A81B100E78A3C /* PhoneCalls */ = {
 			isa = PBXGroup;
 			children = (
+				42BABFD02F2A82AA00E78A3C /* OmiAudioEventCoalescer.swift */,
 				42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */,
 				42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */,
 				42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */,
@@ -408,6 +415,7 @@
 		9740EEB11CF90186004384FC /* Flutter */ = {
 			isa = PBXGroup;
 			children = (
+				78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */,
 				CF2F518C2EC08EA60025B331 /* Base.xcconfig */,
 				3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */,
 				9740EEB21CF90195004384FC /* Debug.xcconfig */,
@@ -612,6 +620,9 @@
 			productType = "com.apple.product-type.app-extension";
 		};
 		97C146ED1CF9000F007C117D /* Runner */ = {
+			packageProductDependencies = (
+				78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */,
+			);
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
 			buildPhases = (
@@ -668,6 +679,7 @@
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
 			packageReferences = (
+				781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage" */,
 				8728540C6BEE8F267DB063FD /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -954,6 +966,7 @@
 				EF12345678901234567890EF /* WifiNetworkPlugin.swift in Sources */,
 				42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */,
 				42BABFB92F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift in Sources */,
+				42BABFD12F2A82AA00E78A3C /* OmiAudioEventCoalescer.swift in Sources */,
 				42BABFC12F2A81B100E78A3C /* OmiAudioLock.swift in Sources */,
 				42BABFC52F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift in Sources */,
 				42BABFC72F2A81B100E78A3C /* OmiCallCoordinator.swift in Sources */,
@@ -999,6 +1012,7 @@
 				BDE0AA99F4F81A7E0A6EA05E /* WifiNetworkPlugin.swift in Sources */,
 				0FAD7A181CD39245DCFA718A /* OmiRecordingAudioDevice.swift in Sources */,
 				2B99FAF9526FEECCB4348D72 /* OmiPhoneCallsPlugin.swift in Sources */,
+				CE56DAB5D69CB113C7F955FA /* OmiAudioEventCoalescer.swift in Sources */,
 				CE56DAB4D69CB113C7F955F9 /* OmiAudioLock.swift in Sources */,
 				9A26EFBA2ABCE6C441ADBE8E /* OmiCallCoordinatorProtocol.swift in Sources */,
 				7361ED343F303C57EF2931A2 /* OmiCallCoordinator.swift in Sources */,
@@ -3102,7 +3116,17 @@
 			package = 8728540C6BEE8F267DB063FD /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
 			productName = MWDATCore;
 		};
+		78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FlutterGeneratedPluginSwiftPackage;
+		};
 /* End XCSwiftPackageProductDependency section */
+/* Begin XCLocalSwiftPackageReference section */
+		781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage;
+		};
+/* End XCLocalSwiftPackageReference section */
 	};
 	rootObject = 97C146E61CF9000F007C117D /* Project object */;
 }

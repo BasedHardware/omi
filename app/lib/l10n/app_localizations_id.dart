@@ -9855,12 +9855,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get accountCutoverOpenStore => 'Buka toko';
 
   @override
-  String get chatScopeToday => 'Hari ini';
-
-  @override
-  String get chatScopeThisWeek => 'Minggu ini';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Tentang: $title';
   }
@@ -9929,4 +9923,16 @@ class AppLocalizationsId extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Tidak direkam ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripsi tidak menerima audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Tidak dapat memuat kenangan';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Tidak dapat memuat graf pengetahuan';
 }

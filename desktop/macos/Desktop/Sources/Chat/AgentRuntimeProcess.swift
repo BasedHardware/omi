@@ -2,8 +2,7 @@ import Foundation
 import OmiSupport
 
 extension Notification.Name {
-  /// Posted on MainActor after the runtime handshake makes direct control
-  /// tools admissible. Carries no owner id or request content.
+  /// Posted on MainActor after the runtime handshake makes direct control tools admissible.
   static let agentRuntimeDidBecomeReady = Notification.Name("com.omi.desktop.agentRuntimeDidBecomeReady")
 }
 
@@ -3696,8 +3695,9 @@ actor AgentRuntimeProcess {
         suppressedByStreamingTail: message.payload["suppressedByStreamingTail"] as? Bool ?? false,
         materializationStoppedByTail: message.payload["materializationStoppedByTail"] as? Bool ?? false,
         materializationReceipts: Self.chatFirstMaterializationReceipts(
-          from: message.payload["materializationReceipts"]
-        ),
+          from: message.payload["materializationReceipts"]),
+        materializationRejections: Self.chatFirstRejections(from: message.payload["materializationRejections"]),
+        materializationDeferrals: Self.chatFirstDeferrals(from: message.payload["materializationDeferrals"]),
         coldStartSequenceTerminalReceipts: Self.chatFirstColdStartSequenceTerminalReceipts(
           from: message.payload["coldStartSequenceTerminalReceipts"]
         ),
@@ -3987,7 +3987,7 @@ actor AgentRuntimeProcess {
         journalRequest.continuation.resume(throwing: BridgeError.authMissing)
         return
       }
-      log("AgentRuntimeProcess: journal operation failed (code-only)")
+      log(Self.chatFirstJournalFailureLog(failure: failure, payload: message.payload, raw: raw))
       journalRequest.continuation.resume(
         throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
       )
@@ -4021,32 +4021,6 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: agent error (raw): \(raw)")
     }
     request.continuation.resume(throwing: bridgeError)
-  }
-
-  private func queryResult(from message: RuntimeMessage) -> AgentBridge.QueryResult {
-    let payload = message.payload
-    let omiSessionId = payload["sessionId"] as? String ?? ""
-    let adapterSessionId = payload["adapterSessionId"] as? String
-    return AgentBridge.QueryResult(
-      text: payload["text"] as? String ?? "",
-      costUsd: payload["costUsd"] as? Double ?? 0,
-      omiSessionId: omiSessionId,
-      runId: payload["runId"] as? String ?? "",
-      attemptId: payload["attemptId"] as? String ?? "",
-      adapterSessionId: adapterSessionId,
-      terminalStatus: payload["terminalStatus"] as? String,
-      failure: AgentRuntimeFailure.parse(from: payload["failure"]),
-      inputTokens: payload["inputTokens"] as? Int ?? 0,
-      outputTokens: payload["outputTokens"] as? Int ?? 0,
-      cacheReadTokens: payload["cacheReadTokens"] as? Int ?? 0,
-      cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0,
-      artifacts: AgentArtifactProjection.parseList(
-        fromJSONArray: payload["artifacts"] as? [[String: Any]] ?? []
-      ),
-      completionDeltaArtifacts: AgentArtifactProjection.parseList(
-        fromJSONArray: payload["completionDeltaArtifacts"] as? [[String: Any]] ?? []
-      )
-    )
   }
 
   @discardableResult

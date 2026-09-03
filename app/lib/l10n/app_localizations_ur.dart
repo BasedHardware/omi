@@ -9857,12 +9857,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get accountCutoverOpenStore => 'فتح المتجر';
 
   @override
-  String get chatScopeToday => 'آج';
-
-  @override
-  String get chatScopeThisWeek => 'اس ہفتے';
-
-  @override
   String chatScopeAbout(String title) {
     return '$title کے بارے میں';
   }
@@ -9930,4 +9924,16 @@ class AppLocalizationsUr extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'ریکارڈ نہیں ہوا ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'ٹرانسکرپشن آڈیو وصول نہیں کر رہی';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'یادیں لوڈ نہیں ہو سکیں';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'نالج گراف لوڈ نہیں ہو سکا';
 }

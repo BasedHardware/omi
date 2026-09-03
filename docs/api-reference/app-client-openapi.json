@@ -10127,6 +10127,13 @@
             ],
             "title": "Locations"
           },
+          "memories_learned": {
+            "items": {
+              "$ref": "#/components/schemas/LearnedMemoryRef"
+            },
+            "title": "Memories Learned",
+            "type": "array"
+          },
           "overview": {
             "anyOf": [
               {
@@ -12620,6 +12627,18 @@
         ],
         "title": "FeedbackCreate",
         "type": "object"
+      },
+      "FeedbackReason": {
+        "description": "Structured reason for a thumbs-down.\n\nThese five match the values the mobile client has always sent to\n`POST /v1/users/analytics/chat_message`; keeping them identical means the\nledger and the legacy `analytics` rows stay comparable.",
+        "enum": [
+          "too_verbose",
+          "incorrect_or_hallucination",
+          "not_helpful_or_irrelevant",
+          "didnt_follow_instructions",
+          "other"
+        ],
+        "title": "FeedbackReason",
+        "type": "string"
       },
       "FeedbackRecord": {
         "additionalProperties": false,
@@ -15924,6 +15943,42 @@
         "title": "KnowledgeGraphResponse",
         "type": "object"
       },
+      "LearnedMemoryRef": {
+        "description": "One memory the day actually produced, addressed by its canonical id.\n\nThis is the identity `knowledge_nuggets` never had: a client can render a\nnative review card and vote or correct through the existing memory\nendpoints. Review state (`user_review`, `edited`) is deliberately absent —\nclients read it live from the memory so a vote on one device shows on the\nother.",
+        "properties": {
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "category": {
+            "default": "",
+            "title": "Category",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "memory_id": {
+            "title": "Memory Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memory_id",
+          "content"
+        ],
+        "title": "LearnedMemoryRef",
+        "type": "object"
+      },
       "LedgerMirrorAliasEnvelope": {
         "additionalProperties": false,
         "properties": {
@@ -16302,6 +16357,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "dead_letter_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dead Letter Reason"
+          },
           "delivered_at": {
             "anyOf": [
               {
@@ -16324,12 +16390,59 @@
             "title": "Delivery State",
             "type": "string"
           },
+          "fetch_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Fetch Count",
+            "type": "integer"
+          },
           "intent_id": {
             "maxLength": 128,
             "minLength": 1,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Intent Id",
             "type": "string"
+          },
+          "last_fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fetched At"
+          },
+          "last_rejection_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Rejection At"
+          },
+          "last_rejection_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Rejection Code"
+          },
+          "materialization_attempts": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Materialization Attempts",
+            "type": "integer"
           },
           "materialization_receipt_id": {
             "anyOf": [
@@ -16543,6 +16656,236 @@
         "title": "LocationContextConsentUpdate",
         "type": "object"
       },
+      "MaterializableProactiveIntent": {
+        "additionalProperties": false,
+        "description": "Wire-safe intent state; terminal dead letters never leave the store.",
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "blocks": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "captureLink": "#/components/schemas/CaptureLinkSpec",
+                  "conversationLink": "#/components/schemas/ConversationLinkSpec",
+                  "goalLink": "#/components/schemas/GoalLinkSpec",
+                  "memoryLink": "#/components/schemas/MemoryLinkSpec",
+                  "questionCard": "#/components/schemas/QuestionCardSpec",
+                  "taskCard": "#/components/schemas/TaskCardSpec"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/QuestionCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/TaskCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/GoalLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/CaptureLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/ConversationLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/MemoryLinkSpec"
+                }
+              ]
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "cold_start_sequence_terminal_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal Receipt Id"
+          },
+          "cold_start_sequence_terminal_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "completed",
+                  "abandoned"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal State"
+          },
+          "continuity_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Continuity Key",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dead_letter_reason": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[a-z0-9_:.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dead Letter Reason"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "delivery_state": {
+            "default": "ready",
+            "enum": [
+              "ready",
+              "pending_kernel_receipt",
+              "delivered"
+            ],
+            "title": "Delivery State",
+            "type": "string"
+          },
+          "fetch_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Fetch Count",
+            "type": "integer"
+          },
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "last_fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fetched At"
+          },
+          "last_rejection_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Rejection At"
+          },
+          "last_rejection_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z0-9_]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Rejection Code"
+          },
+          "materialization_attempts": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Materialization Attempts",
+            "type": "integer"
+          },
+          "materialization_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materialization Receipt Id"
+          },
+          "source": {
+            "enum": [
+              "daily_opener",
+              "capture_arrival",
+              "deferral_reraise",
+              "agent_judgment",
+              "cold_start_rich",
+              "cold_start_sparse"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatFirstSubject"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "intent_id",
+          "continuity_key",
+          "account_generation",
+          "source",
+          "blocks",
+          "created_at"
+        ],
+        "title": "MaterializableProactiveIntent",
+        "type": "object"
+      },
       "MaterializePromptsRequest": {
         "additionalProperties": false,
         "properties": {
@@ -16558,6 +16901,14 @@
             "minimum": 0.0,
             "title": "Control Generation",
             "type": "integer"
+          },
+          "deferrals": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationDeferral"
+            },
+            "maxItems": 16,
+            "title": "Deferrals",
+            "type": "array"
           },
           "initial_page_loaded": {
             "default": false,
@@ -16577,6 +16928,14 @@
             },
             "maxItems": 16,
             "title": "Receipts",
+            "type": "array"
+          },
+          "rejections": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationRejection"
+            },
+            "maxItems": 16,
+            "title": "Rejections",
             "type": "array"
           },
           "source_surface": {
@@ -16603,9 +16962,23 @@
         "properties": {
           "intents": {
             "items": {
-              "$ref": "#/components/schemas/ProactiveIntent"
+              "$ref": "#/components/schemas/MaterializableProactiveIntent"
             },
             "title": "Intents",
+            "type": "array"
+          },
+          "receipt_outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationReceiptOutcome"
+            },
+            "title": "Receipt Outcomes",
+            "type": "array"
+          },
+          "rejection_outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationRejectionOutcome"
+            },
+            "title": "Rejection Outcomes",
             "type": "array"
           }
         },
@@ -20002,115 +20375,16 @@
         "title": "PrivateCloudSyncResponse",
         "type": "object"
       },
-      "ProactiveIntent": {
+      "ProactiveMaterializationDeferral": {
         "additionalProperties": false,
-        "description": "A server-side instruction, not a Chat transcript row.\n\nThe local desktop kernel is the sole writer of the visible assistant turn.\nThis record remains deliverable until that kernel has committed and\nacknowledged its stable ``intent_id``; cold-start intents make that\nexplicit as ``pending_kernel_receipt``.",
+        "description": "A fetched intent the kernel intentionally left behind a transcript tail.",
         "properties": {
-          "account_generation": {
-            "minimum": 0.0,
-            "title": "Account Generation",
-            "type": "integer"
-          },
-          "blocks": {
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "captureLink": "#/components/schemas/CaptureLinkSpec",
-                  "conversationLink": "#/components/schemas/ConversationLinkSpec",
-                  "goalLink": "#/components/schemas/GoalLinkSpec",
-                  "memoryLink": "#/components/schemas/MemoryLinkSpec",
-                  "questionCard": "#/components/schemas/QuestionCardSpec",
-                  "taskCard": "#/components/schemas/TaskCardSpec"
-                },
-                "propertyName": "type"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/QuestionCardSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/TaskCardSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/GoalLinkSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/CaptureLinkSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/ConversationLinkSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/MemoryLinkSpec"
-                }
-              ]
-            },
-            "maxItems": 8,
-            "minItems": 1,
-            "title": "Blocks",
-            "type": "array"
-          },
-          "cold_start_sequence_terminal_receipt_id": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "minLength": 1,
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cold Start Sequence Terminal Receipt Id"
-          },
-          "cold_start_sequence_terminal_state": {
-            "anyOf": [
-              {
-                "enum": [
-                  "completed",
-                  "abandoned"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cold Start Sequence Terminal State"
-          },
-          "continuity_key": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-            "title": "Continuity Key",
-            "type": "string"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "delivered_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Delivered At"
-          },
-          "delivery_state": {
-            "default": "ready",
+          "code": {
             "enum": [
-              "ready",
-              "pending_kernel_receipt",
-              "delivered"
+              "tail_question",
+              "streaming_tail"
             ],
-            "title": "Delivery State",
+            "title": "Code",
             "type": "string"
           },
           "intent_id": {
@@ -20119,53 +20393,13 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Intent Id",
             "type": "string"
-          },
-          "materialization_receipt_id": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "minLength": 1,
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Materialization Receipt Id"
-          },
-          "source": {
-            "enum": [
-              "daily_opener",
-              "capture_arrival",
-              "deferral_reraise",
-              "agent_judgment",
-              "cold_start_rich",
-              "cold_start_sparse"
-            ],
-            "title": "Source",
-            "type": "string"
-          },
-          "subject": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ChatFirstSubject"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "required": [
           "intent_id",
-          "continuity_key",
-          "account_generation",
-          "source",
-          "blocks",
-          "created_at"
+          "code"
         ],
-        "title": "ProactiveIntent",
+        "title": "ProactiveMaterializationDeferral",
         "type": "object"
       },
       "ProactiveMaterializationReceipt": {
@@ -20192,6 +20426,102 @@
           "receipt_id"
         ],
         "title": "ProactiveMaterializationReceipt",
+        "type": "object"
+      },
+      "ProactiveMaterializationReceiptOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "acknowledged",
+              "already_terminal",
+              "missing",
+              "conflict",
+              "generation_mismatch"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "outcome"
+        ],
+        "title": "ProactiveMaterializationReceiptOutcome",
+        "type": "object"
+      },
+      "ProactiveMaterializationRejection": {
+        "additionalProperties": false,
+        "description": "Content-free typed rejection emitted by the local kernel.",
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9_]+$",
+            "title": "Code",
+            "type": "string"
+          },
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "required": [
+          "intent_id",
+          "code"
+        ],
+        "title": "ProactiveMaterializationRejection",
+        "type": "object"
+      },
+      "ProactiveMaterializationRejectionOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "recorded",
+              "absorbed",
+              "generation_mismatch",
+              "malformed",
+              "missing"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "outcome"
+        ],
+        "title": "ProactiveMaterializationRejectionOutcome",
         "type": "object"
       },
       "ProactiveNotification": {
@@ -20483,6 +20813,18 @@
       },
       "RateMessageRequest": {
         "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
           "rating": {
             "anyOf": [
               {
@@ -20493,6 +20835,16 @@
               }
             ],
             "title": "Rating"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedbackReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "RateMessageRequest",
@@ -22263,6 +22615,25 @@
         "title": "ShareTasksRequest",
         "type": "object"
       },
+      "SharedActionItem": {
+        "description": "Public share projection of an action item.",
+        "properties": {
+          "completed": {
+            "default": false,
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "SharedActionItem",
+        "type": "object"
+      },
       "SharedActionItemPreview": {
         "properties": {
           "description": {
@@ -22312,6 +22683,31 @@
           "count"
         ],
         "title": "SharedActionItemsResponse",
+        "type": "object"
+      },
+      "SharedAppResult": {
+        "properties": {
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "app_id",
+          "content"
+        ],
+        "title": "SharedAppResult",
         "type": "object"
       },
       "SharedAssistantSettings": {
@@ -22425,126 +22821,19 @@
         "type": "object"
       },
       "SharedConversationResponse": {
-        "additionalProperties": true,
+        "description": "Public unauthenticated shared-conversation payload. Only declared fields are returned.",
         "properties": {
-          "app_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "App Id"
-          },
           "apps_results": {
-            "default": [],
             "items": {
-              "$ref": "#/components/schemas/AppResult"
+              "$ref": "#/components/schemas/SharedAppResult"
             },
             "title": "Apps Results",
             "type": "array"
-          },
-          "audio_files": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/AudioFile"
-            },
-            "title": "Audio Files",
-            "type": "array"
-          },
-          "calendar_event": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/CalendarEventLink"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "call_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Twilio call SID for phone call conversations",
-            "title": "Call Id"
-          },
-          "client_device_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Device Id"
-          },
-          "client_platform": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Platform"
-          },
-          "conversation_audio": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ConversationAudio"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
-          },
-          "data_protection_level": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data Protection Level"
-          },
-          "deferred": {
-            "default": false,
-            "title": "Deferred",
-            "type": "boolean"
-          },
-          "discarded": {
-            "default": false,
-            "title": "Discarded",
-            "type": "boolean"
-          },
-          "external_data": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "External Data"
           },
           "finished_at": {
             "anyOf": [
@@ -22558,41 +22847,9 @@
             ],
             "title": "Finished At"
           },
-          "folder_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "ID of the folder this conversation belongs to",
-            "title": "Folder Id"
-          },
-          "geolocation": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Geolocation"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "id": {
             "title": "Id",
             "type": "string"
-          },
-          "imported": {
-            "default": false,
-            "title": "Imported",
-            "type": "boolean"
-          },
-          "is_locked": {
-            "default": false,
-            "title": "Is Locked",
-            "type": "boolean"
           },
           "language": {
             "anyOf": [
@@ -22605,99 +22862,19 @@
             ],
             "title": "Language"
           },
-          "meeting_dedup_speech_s": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Meeting Dedup Speech S"
-          },
-          "meeting_duration_s": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Meeting Duration S"
-          },
-          "meeting_treatment_eligible": {
-            "default": false,
-            "title": "Meeting Treatment Eligible",
-            "type": "boolean"
-          },
-          "meeting_treatment_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Meeting Treatment Reason"
-          },
           "people": {
-            "default": [],
             "items": {
-              "$ref": "#/components/schemas/Person"
+              "$ref": "#/components/schemas/SharedPerson"
             },
             "title": "People",
             "type": "array"
           },
-          "photos": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/ConversationPhoto"
-            },
-            "title": "Photos",
-            "type": "array"
-          },
           "plugins_results": {
-            "default": [],
             "items": {
-              "$ref": "#/components/schemas/PluginResult"
+              "$ref": "#/components/schemas/SharedPluginResult"
             },
             "title": "Plugins Results",
             "type": "array"
-          },
-          "private_cloud_sync_enabled": {
-            "default": false,
-            "title": "Private Cloud Sync Enabled",
-            "type": "boolean"
-          },
-          "processing_conversation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Processing Conversation Id"
-          },
-          "processing_memory_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Processing Memory Id"
-          },
-          "screenshot_sharing_enabled": {
-            "default": true,
-            "title": "Screenshot Sharing Enabled",
-            "type": "boolean"
           },
           "source": {
             "anyOf": [
@@ -22709,11 +22886,6 @@
               }
             ],
             "default": "omi"
-          },
-          "starred": {
-            "default": false,
-            "title": "Starred",
-            "type": "boolean"
           },
           "started_at": {
             "anyOf": [
@@ -22739,52 +22911,14 @@
             "default": "completed"
           },
           "structured": {
-            "$ref": "#/components/schemas/Structured"
-          },
-          "suggested_summarization_apps": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Suggested Summarization Apps",
-            "type": "array"
+            "$ref": "#/components/schemas/SharedStructured"
           },
           "transcript_segments": {
-            "default": [],
             "items": {
-              "$ref": "#/components/schemas/TranscriptSegment"
+              "$ref": "#/components/schemas/SharedTranscriptSegment"
             },
             "title": "Transcript Segments",
             "type": "array"
-          },
-          "transcript_segments_compressed": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": false,
-            "title": "Transcript Segments Compressed"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          },
-          "uses_custom_stt": {
-            "default": false,
-            "title": "Uses Custom Stt",
-            "type": "boolean"
           },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
@@ -22799,6 +22933,199 @@
           "structured"
         ],
         "title": "SharedConversationResponse",
+        "type": "object"
+      },
+      "SharedEvent": {
+        "description": "Public share projection of a structured event.",
+        "properties": {
+          "created": {
+            "default": false,
+            "title": "Created",
+            "type": "boolean"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "duration": {
+            "default": 30,
+            "title": "Duration",
+            "type": "integer"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "start"
+        ],
+        "title": "SharedEvent",
+        "type": "object"
+      },
+      "SharedPerson": {
+        "description": "Speaker-label projection for a shared conversation.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "SharedPerson",
+        "type": "object"
+      },
+      "SharedPluginResult": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "plugin_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Id"
+          }
+        },
+        "required": [
+          "plugin_id",
+          "content"
+        ],
+        "title": "SharedPluginResult",
+        "type": "object"
+      },
+      "SharedStructured": {
+        "description": "Public share projection of conversation structure.",
+        "properties": {
+          "action_items": {
+            "items": {
+              "$ref": "#/components/schemas/SharedActionItem"
+            },
+            "title": "Action Items",
+            "type": "array"
+          },
+          "category": {
+            "$ref": "#/components/schemas/CategoryEnum",
+            "default": "other"
+          },
+          "emoji": {
+            "default": "🧠",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/SharedEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "overview": {
+            "default": "",
+            "title": "Overview",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "SharedStructured",
+        "type": "object"
+      },
+      "SharedTranscriptSegment": {
+        "description": "Public share projection of a transcript turn.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "number"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "is_user": {
+            "title": "Is User",
+            "type": "boolean"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "SPEAKER_00",
+            "title": "Speaker"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "start": {
+            "title": "Start",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "is_user",
+          "start",
+          "end"
+        ],
+        "title": "SharedTranscriptSegment",
         "type": "object"
       },
       "ShortlistEligibility": {

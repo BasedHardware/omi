@@ -169,6 +169,15 @@ def notification_harness() -> Iterator[SimpleNamespace]:
         'utils.notifications': notifications,
         'utils.webhooks': _module('utils.webhooks', day_summary_webhook=MagicMock()),
         'utils.executors': executors,
+        'database.durable_queue': _module(
+            'database.durable_queue',
+            ProcessOutcome=SimpleNamespace(ack=lambda: SimpleNamespace(kind='ack')),
+            drain_isolated_async=MagicMock(),
+        ),
+        'utils.durable_queue_metrics': _module(
+            'utils.durable_queue_metrics',
+            observe_oldest_ready_age=lambda *_args, **_kwargs: None,
+        ),
     }
 
     with stub_modules(stubs):

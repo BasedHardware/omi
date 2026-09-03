@@ -20,6 +20,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
+import 'package:omi/pages/chat/widgets/chat_followup_chip.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -34,6 +35,8 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
 import 'chart_message_widget.dart';
 import 'package:omi/widgets/components/chat_evidence_card.dart';
+import 'package:omi/widgets/components/memory_review_card.dart';
+import 'package:omi/utils/share_sheet.dart';
 import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
@@ -324,17 +327,32 @@ Widget buildMessageWidget(
   }
 
   final evidence = visibleSupplementalEvidence(message);
-  if (evidence == null) return messageWidget;
+  // Native content blocks. Both are additive chrome: an absent or malformed
+  // block leaves the answer exactly as it renders today.
+  final reviewCard = showTypingIndicator ? null : message.memoryReviewCard;
+  final followUp = showTypingIndicator ? null : message.followUpQuestion;
+  if (evidence == null && reviewCard == null && followUp == null) return messageWidget;
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisSize: MainAxisSize.min,
     children: [
       messageWidget,
-      const SizedBox(height: 8),
-      // The released mobile surface has no trusted evidence navigator yet.
-      // Keep cards non-actionable until one is supplied; arbitrary URI fields
-      // can never become an external action.
-      ChatEvidenceReferenceList(envelope: evidence),
+      if (reviewCard != null) ...[
+        const SizedBox(height: 12),
+        MemoryReviewCard(
+          items: reviewCard.items,
+          source: MemoryReviewSource.chatBlock,
+          impressionKey: reviewCard.id.isNotEmpty ? reviewCard.id : message.id,
+        ),
+      ],
+      if (evidence != null) ...[
+        const SizedBox(height: 8),
+        // The released mobile surface has no trusted evidence navigator yet.
+        // Keep cards non-actionable until one is supplied; arbitrary URI fields
+        // can never become an external action.
+        ChatEvidenceReferenceList(envelope: evidence),
+      ],
+      if (followUp != null) ...[const SizedBox(height: 8), ChatFollowUpChip(question: followUp, onSend: sendMessage)],
     ],
   );
 }
@@ -624,7 +642,13 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                           widget.onAskOmi?.call(text);
                         }, selectedText: selectedText);
                       },
-                      child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                      // Force full available width: SelectionArea + MarkdownBody
+                      // otherwise size to the text's minimum intrinsic width, which
+                      // collapses the message to ~1 word per line on iOS.
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                      ),
                     );
                   },
                 ),
@@ -1229,7 +1253,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8, left: 4),
+      padding: const EdgeInsets.only(left: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1244,11 +1268,6 @@ class _MessageActionBarState extends State<MessageActionBar> {
                 properties: {'message': widget.messageText},
               );
 
-              // Implicit positive feedback - user copied the message (silent, no UI change)
-              if (_selectedNps == null) {
-                widget.setMessageNps?.call(1, reason: 'user_copied_message');
-              }
-
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1262,7 +1281,6 @@ class _MessageActionBarState extends State<MessageActionBar> {
               }
             },
           ),
-          const SizedBox(width: 20),
           // Thumbs up button
           _buildActionButton(
             icon: _selectedNps == 1 ? FontAwesomeIcons.solidThumbsUp : FontAwesomeIcons.thumbsUp,
@@ -1275,7 +1293,6 @@ class _MessageActionBarState extends State<MessageActionBar> {
               widget.setMessageNps?.call(_selectedNps ?? 0);
             },
           ),
-          const SizedBox(width: 20),
           // Thumbs down button
           _buildActionButton(
             icon: _selectedNps == -1 ? FontAwesomeIcons.solidThumbsDown : FontAwesomeIcons.thumbsDown,
@@ -1294,23 +1311,17 @@ class _MessageActionBarState extends State<MessageActionBar> {
               }
             },
           ),
-          const SizedBox(width: 20),
           // Share button
           _buildActionButton(
             icon: FontAwesomeIcons.share,
             onTap: () async {
               if (widget.messageText.isEmpty) return;
               HapticFeedback.lightImpact();
-              await Share.share(widget.messageText);
+              await Share.share(widget.messageText, sharePositionOrigin: shareSheetOrigin());
               PlatformManager.instance.analytics.track(
                 'Chat Message Shared',
                 properties: {'message': widget.messageText},
               );
-
-              // Implicit positive feedback - user shared the message (silent, no UI change)
-              if (_selectedNps == null) {
-                widget.setMessageNps?.call(1, reason: 'user_shared_message');
-              }
             },
           ),
         ],
@@ -1319,13 +1330,19 @@ class _MessageActionBarState extends State<MessageActionBar> {
   }
 
   Widget _buildActionButton({required FaIconData icon, required VoidCallback onTap, bool isSelected = false}) {
+    // The 14pt glyph alone is far below the 44pt tap minimum; pad the hit area
+    // (34x38) so finger taps on copy/share actually land. Visual pitch is kept
+    // by dropping the 20pt gaps between buttons in favour of this padding.
     return InkWell(
       splashColor: Colors.transparent,
       focusColor: Colors.transparent,
       hoverColor: Colors.transparent,
       highlightColor: Colors.transparent,
       onTap: onTap,
-      child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade600, size: 14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade600, size: 14),
+      ),
     );
   }
 }

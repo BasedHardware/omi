@@ -637,9 +637,18 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     leaseID expectedLeaseID: VoiceLeaseID? = nil,
     armNextResponse: Bool = false
   ) -> Bool {
-    if let expectedLeaseID, activePTTLease?.id != expectedLeaseID {
-      log("FloatingBarVoicePlaybackService: ignored stale playback stop lease=\(expectedLeaseID)")
+    switch VoiceOutputHandoffPolicy.playbackStopAdmission(
+      activeLease: activePTTLease,
+      requestedLeaseID: expectedLeaseID,
+      activeTurnID: VoiceTurnCoordinator.shared.activeTurnID
+    ) {
+    case .stale:
+      log("FloatingBarVoicePlaybackService: ignored stale playback stop lease=\(expectedLeaseID?.description ?? "nil")")
       return false
+    case .alreadyComplete:
+      return true
+    case .apply:
+      break
     }
     if let currentResponseID {
       interruptedResponseID = currentResponseID
@@ -680,6 +689,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       }
       audioPlayer = player
       activePlayerFallbackText = fallbackText
+      if let lease = activePTTLease {
+        _ = VoiceTurnCoordinator.shared.noteOutputProgress(lease)
+      }
       if let acknowledgement = activeRealtimeSlowToolAcknowledgement,
         activePTTLease?.lane == .deterministicAgentAck
       {
@@ -1107,6 +1119,14 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
           return "\(title). \(output)"
         case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
           .citation:
+          return nil
+        // The chip is a control, not narration. Speaking it would turn a
+        // tappable next step into an answer that ends by asking out loud.
+        case .followUp:
+          return nil
+        // Nor is the review card: reading three stored memories aloud would narrate the card's
+        // controls instead of the answer.
+        case .memoryReviewCard:
           return nil
         case .toolCall, .thinking:
           return nil

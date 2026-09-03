@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, List, Optional, TypedDict, TypeVar, cast
 from pinecone import Pinecone
 
 from database import projection_repair
-from database._client import db as default_db_client
+from database._client import data_plane_db as default_db_client
 from database.legal_holds import external_write_fence
 from database.memory_vector_metadata import (
     build_archive_memory_vector_filter,
@@ -920,7 +920,9 @@ def delete_screen_activity_vectors(uid: str, ids: List[str]) -> None:
     if index is None:
         return
     vector_ids = [f'{uid}-sa-{sid}' for sid in ids]
-    index.delete(ids=vector_ids, namespace=SCREEN_ACTIVITY_NAMESPACE)
+    # Chunk to stay within Pinecone's per-delete id limit (1,000).
+    for i in range(0, len(vector_ids), 1000):
+        index.delete(ids=vector_ids[i : i + 1000], namespace=SCREEN_ACTIVITY_NAMESPACE)
 
 
 # ==========================================

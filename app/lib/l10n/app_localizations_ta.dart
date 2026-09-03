@@ -9914,12 +9914,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
-  String get chatScopeToday => 'இன்று';
-
-  @override
-  String get chatScopeThisWeek => 'இந்த வாரம்';
-
-  @override
   String chatScopeAbout(String title) {
     return '$title பற்றி';
   }
@@ -9988,4 +9982,16 @@ class AppLocalizationsTa extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'பதிவு செய்யப்படவில்லை ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'நகலெடுப்பு ஆடியோவைப் பெறவில்லை';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'நினைவுகளை ஏற்ற முடியவில்லை';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'அறிவு வரைபடத்தை ஏற்ற முடியவில்லை';
 }

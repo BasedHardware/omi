@@ -16,6 +16,9 @@ enum ProactiveNotificationKind: String, Equatable, CaseIterable {
     // Director "suggest" decisions are generic tips, which the user-facing taxonomy
     // files under Insight; `.suggestion` is reserved for the focus-nudge assistant.
     case "suggest": return .insight
+    // The JIT ambient lane's focus nudge replaces the legacy focus-nudge assistant
+    // and keeps its badge and Settings toggle.
+    case "focus_nudge": return .suggestion
     case "insight": return .insight
     case "task_candidate": return .task
     case "resurface": return .resurface

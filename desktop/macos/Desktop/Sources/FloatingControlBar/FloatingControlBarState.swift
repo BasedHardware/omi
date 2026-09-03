@@ -233,6 +233,11 @@ enum FloatingBarNotificationAction: Equatable {
   /// the conversation to share and the calendar-detected recipients a
   /// one-click "Send to …" email would go to (empty = no send button).
   case meetingSummaryShare(conversationID: String, recipients: [ConversationShareRecipient])
+  /// Open the main chat with `prompt` already in the composer, focused and
+  /// **not sent**. Raised by the first-real-app card, whose whole purpose is to
+  /// turn a dead-end notch card into the user's first question — they still
+  /// press return, so the question stays theirs.
+  case askOmiPrefilled(prompt: String)
 }
 
 /// A custom in-app notification rendered directly below the floating bar.
@@ -912,7 +917,9 @@ extension ChatContentBlock {
     case .captureLink(let id, _, _, _): return "c:\(id)"
     case .conversationLink(let id, _, _, _): return "v:\(id)"
     case .memoryLink(let id, _, _): return "m:\(id)"
+    case .memoryReviewCard(let id, _, _, let items): return "mr:\(id):\(items.count)"
     case .citation(let id, let reference): return "r:\(id):\(reference.ordinal)"
+    case .followUp(let id, let text): return "f:\(id):\(text.count)"
     case .agentSpawn(let id, let pillId, _, _, _, _, _): return "s:\(id):\(pillId?.uuidString ?? "")"
     case .agentCompletion(let id, let pillId, _, _, _, _, _, _): return "a:\(id):\(pillId?.uuidString ?? "")"
     }

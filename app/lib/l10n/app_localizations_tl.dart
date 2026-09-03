@@ -9935,12 +9935,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Buka toko';
 
   @override
-  String get chatScopeToday => 'Ngayon';
-
-  @override
-  String get chatScopeThisWeek => 'Ngayong linggo';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Tungkol sa: $title';
   }
@@ -10009,4 +10003,16 @@ class AppLocalizationsTl extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Hindi na-record ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Hindi tumatanggap ng audio ang transkripsyon';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Hindi ma-load ang mga alaala';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Hindi ma-load ang knowledge graph';
 }

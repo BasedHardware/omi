@@ -1057,7 +1057,7 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("returns a typed failure when a 620 KiB session listing cannot persist its full output", async () => {
+  it("keeps a 620 KiB session listing successful when artifact persistence is unavailable", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const surfaceContextSentinel = "UNSAVED_CONTEXT_SENTINEL".repeat(26_000);
     const result = await kernel.executeRun({
@@ -1072,23 +1072,32 @@ describe("agent control tools", () => {
     vi.spyOn(kernel, "persistArtifact").mockImplementation(() => {
       throw new Error("deterministic artifact persistence failure");
     });
+    const degraded = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 
     const raw = await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
       ownerId: "owner",
     });
-    const failed = parseToolResult(raw);
+    const projected = parseToolResult(raw);
 
     expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(8 * 1024);
     expect(raw).not.toContain("UNSAVED_CONTEXT_SENTINEL");
-    expect(failed).toMatchObject({
-      ok: false,
-      error: { code: "tool_result_exceeded_provider_budget" },
+    expect(projected).toMatchObject({
+      ok: true,
       toolResultEnvelope: {
-        status: "failed",
-        truncated: false,
-        fullOutputRef: null,
+        status: "succeeded",
+        truncated: true,
+        fullOutputRef: "artifact:unavailable",
       },
     });
+    // The degraded record is a pipe-safe operational stderr line, not
+    // error-level console output.
+    expect(degraded.mock.calls.some(([chunk]) => {
+      const line = String(chunk);
+      return line.includes("area=tool_result_projection")
+        && line.includes("outcome=degraded")
+        && !line.includes("UNSAVED_CONTEXT_SENTINEL");
+    })).toBe(true);
+    degraded.mockRestore();
     store.close();
   });
 
@@ -1227,6 +1236,45 @@ describe("agent control tools", () => {
         fullOutputRef: expect.stringMatching(/^artifact:/),
       },
     });
+    store.close();
+  });
+
+  it("reports direct-control artifact persistence failure with the original byte count", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const sentinel = "DIRECT_PERSIST_FAILURE_SENTINEL".repeat(26_000);
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: sentinel }),
+    });
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({ prompt: "direct persistence failure", surfaceContextJson: sentinel }),
+      result.run.runId,
+    ]);
+    vi.spyOn(kernel, "persistArtifact").mockImplementation(() => {
+      throw new Error("deterministic direct-control persistence failure");
+    });
+
+    const raw = await handleAgentControlToolCall(
+      { ...ownerContext(kernel), trustedUserControl: true },
+      "get_agent_run",
+      { ownerId: "owner", runId: result.run.runId },
+    );
+    const failed = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(128 * 1024);
+    expect(failed).toMatchObject({
+      ok: false,
+      error: {
+        code: "tool_output_persist_failed",
+        originalBytes: expect.any(Number),
+      },
+      toolResultEnvelope: {
+        status: "failed",
+        truncated: false,
+        fullOutputRef: null,
+      },
+    });
+    expect(failed.error.originalBytes).toBeGreaterThan(128 * 1024);
     store.close();
   });
 

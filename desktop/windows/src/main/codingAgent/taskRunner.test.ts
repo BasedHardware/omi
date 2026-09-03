@@ -32,6 +32,8 @@ type FakeScript = {
   failOpen?: boolean
   /** Text deltas to stream before resolving. */
   stream?: string[]
+  /** Emit the internal main-chat hosted-dispatch boundary. */
+  emitHostedBoundary?: boolean
   /** Throw from executeAttempt after streaming (post-output failure). */
   failAfterStream?: boolean
   /** Throw this exact error from executeAttempt before any output. */
@@ -65,6 +67,7 @@ function fakeAdapter(adapterId: ProductionAdapterId, script: FakeScript): Runtim
       signal: AbortSignal
     ): Promise<AdapterAttemptResult> => {
       if (script.failWithError) throw script.failWithError
+      if (script.emitHostedBoundary) sink({ type: 'hosted_request_started' })
       for (const text of script.stream ?? []) {
         sink({ type: 'text_delta', text })
       }
@@ -126,7 +129,7 @@ describe('runCodingAgentTask', () => {
 
   it('runs the named agent and streams its output', async () => {
     activate('acp', 'openclaw')
-    script({ openclaw: { stream: ['done ', 'and dusted'] } })
+    script({ openclaw: { stream: ['done ', 'and dusted'], emitHostedBoundary: true } })
     const events: CodingAgentEvent[] = []
 
     const result = await runCodingAgentTask(
@@ -141,6 +144,7 @@ describe('runCodingAgentTask', () => {
       fallback: false
     })
     expect(events.filter((e) => e.type === 'text_delta')).toHaveLength(2)
+    expect(events.map((event) => event.type)).not.toContain('hosted_request_started')
   })
 
   it('falls back to the next connected agent when the first fails before producing output', async () => {
