@@ -35,14 +35,37 @@ router = APIRouter()
 ADMIN_KEY = os.getenv('ADMIN_KEY', '')
 
 
-def _verify_admin_key(x_admin_key: str = Header(..., alias='X-Admin-Key')) -> str:
-    """Constant-time admin key check. Returns a short hash for audit logging."""
+def _verify_admin_key(
+    x_admin_key: str = Header(..., alias='X-Admin-Key'),
+    x_admin_user: Optional[str] = Header(default=None, alias='X-Admin-User'),
+) -> str:
+    """Constant-time admin key check. Returns the identity to log.
+
+    `ADMIN_KEY` is one shared secret, so its hash identifies the *deployment*,
+    not the person — an audit line carrying only that cannot say which admin
+    read a user's chat, which is the whole point of auditing this route.
+    admin.omi.me therefore forwards the caller's Firebase uid as `X-Admin-User`
+    alongside the key, server-side, after it has already verified that uid
+    against `adminData/{uid}`. The uid is untrusted on its own (anything
+    holding the key could set it) but it is not a second gate — it is the
+    attribution that makes an authorized read traceable to a person.
+    """
     if not ADMIN_KEY or not hmac.compare_digest(x_admin_key, ADMIN_KEY):
         raise HTTPException(status_code=403, detail='Invalid admin key')
-    return f'admin:{hashlib.sha256(x_admin_key.encode()).hexdigest()[:8]}'
+    key_id = hashlib.sha256(x_admin_key.encode()).hexdigest()[:8]
+    if x_admin_user:
+        return f'admin:{key_id}/{x_admin_user[:64]}'
+    return f'admin:{key_id}/unattributed'
 
 
 def _parse_date(value: str) -> date_cls:
+    """Parse a report date, rejecting anything that is not a real date.
+
+    Returns the `date` rather than the caller's string on purpose: report
+    documents are keyed by canonical `YYYY-MM-DD`, and `strptime` happily
+    accepts unpadded `2026-9-1`. Looking a report up by the raw input would
+    then 404 against a report that exists. Callers use `.isoformat()`.
+    """
     try:
         return datetime.strptime(value, '%Y-%m-%d').date()
     except ValueError:
@@ -74,10 +97,10 @@ def get_feedback_report(
     admin_id: str = Depends(_verify_admin_key),
 ):
     """One day's report: counts plus pointer windows. Carries no message text."""
-    _parse_date(report_date)
-    report = feedback_db.get_report(report_date)
+    day = _parse_date(report_date).isoformat()
+    report = feedback_db.get_report(day)
     if report is None:
-        raise HTTPException(status_code=404, detail=f'No feedback report for {report_date}')
+        raise HTTPException(status_code=404, detail=f'No feedback report for {day}')
     return report
 
 
@@ -148,8 +171,7 @@ def get_feedback_event_context(
 
     pointer = None
     if report_date:
-        _parse_date(report_date)
-        report = feedback_db.get_report(report_date)
+        report = feedback_db.get_report(_parse_date(report_date).isoformat())
         if report:
             pointer = next((e.context for e in report.entries if e.event.id == event_id), None)
 

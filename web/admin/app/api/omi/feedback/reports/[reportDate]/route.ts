@@ -20,7 +20,7 @@ export async function GET(
 
   const { reportDate } = await params;
   try {
-    return NextResponse.json(await getReport(reportDate));
+    return NextResponse.json(await getReport(authResult.uid, reportDate));
   } catch (error) {
     const status = error instanceof FeedbackApiError ? error.status : 502;
     // A 404 here is normal: a day whose cron has not run yet has no report.
@@ -45,7 +45,7 @@ export async function POST(
 
   const { reportDate } = await params;
   try {
-    return NextResponse.json(await generateReport(reportDate));
+    return NextResponse.json(await generateReport(authResult.uid, reportDate));
   } catch (error) {
     const status = error instanceof FeedbackApiError ? error.status : 502;
     console.error("Feedback report generate error:", error);

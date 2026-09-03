@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,10 +45,12 @@ type ContextTurn = {
 
 type ContextPointer = {
   event_id: string;
+  target_kind: string;
   turns: ContextTurn[];
   follow_up_count: number;
   follow_up_window_seconds: number;
   truncated_before: boolean;
+  truncated_after: boolean;
   resolution_error?: string | null;
 };
 
@@ -133,6 +135,31 @@ function CountRow({
   );
 }
 
+/**
+ * What the window actually says about this thumbs-down.
+ *
+ * "The user stopped here" is a claim about the user's behaviour, and it is only
+ * true when we successfully looked for follow-up turns and found none. It is
+ * wrong for a summary or memory rating (there is no turn stream to follow up
+ * in) and wrong when the window could not be resolved at all — in both cases
+ * the honest answer is that we do not know, not that the user gave up.
+ */
+function followUpSummary(entry: ReportEntry): string {
+  const { context } = entry;
+  if (context.target_kind !== "chat_message") {
+    return "No conversation window — this rating is on a single artifact.";
+  }
+  if (context.resolution_error) {
+    return "Follow-up unknown — the conversation window could not be resolved.";
+  }
+  if (context.follow_up_count > 0) {
+    const minutes = Math.round(context.follow_up_window_seconds / 60);
+    return `${context.follow_up_count} follow-up turn(s) within ${minutes} min`;
+  }
+  const minutes = Math.round(context.follow_up_window_seconds / 60);
+  return `No follow-up within ${minutes} min — the user stopped here.`;
+}
+
 function EntryCard({
   entry,
   reportDate,
@@ -205,14 +232,9 @@ function EntryCard({
           </CardDescription>
         )}
         <div className="pt-1 text-xs text-muted-foreground">
-          {entry.context.follow_up_count > 0
-            ? `${
-                entry.context.follow_up_count
-              } follow-up turn(s) within ${Math.round(
-                entry.context.follow_up_window_seconds / 60
-              )} min`
-            : "No follow-up within the window — the user stopped here."}
+          {followUpSummary(entry)}
           {entry.context.truncated_before && " · earlier turns truncated"}
+          {entry.context.truncated_after && " · later turns truncated"}
           {entry.context.resolution_error &&
             ` · context unavailable (${entry.context.resolution_error})`}
           {event.prompt_name &&
@@ -293,14 +315,24 @@ export default function FeedbackPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Which date the newest in-flight load is for. A day with hundreds of
+  // entries can still be in flight when the user picks another date; without
+  // this the slower response wins the race and paints the previous day's
+  // report under the newly selected date, with nothing on screen saying so.
+  const latestRequest = useRef(0);
+
   const load = useCallback(
     async (target: string) => {
+      const requestId = ++latestRequest.current;
+      const isCurrent = () => latestRequest.current === requestId;
+
       setLoading(true);
       setError(null);
       try {
         const res = await fetchWithAuth(
           `/api/omi/feedback/reports/${encodeURIComponent(target)}`
         );
+        if (!isCurrent()) return;
         if (res.status === 404) {
           setReport(null);
           setError(
@@ -314,12 +346,15 @@ export default function FeedbackPage() {
             body?.error || `Failed to load report (${res.status})`
           );
         }
-        setReport(await res.json());
+        const body = await res.json();
+        if (!isCurrent()) return;
+        setReport(body);
       } catch (e) {
+        if (!isCurrent()) return;
         setReport(null);
         setError(e instanceof Error ? e.message : "Failed to load report");
       } finally {
-        setLoading(false);
+        if (isCurrent()) setLoading(false);
       }
     },
     [fetchWithAuth]

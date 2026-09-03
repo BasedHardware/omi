@@ -25,11 +25,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from database._client import db
+from database._client import get_firestore_client
 from database.firestore_index_registry import NEGATIVE_FEEDBACK_EVENTS_QUERY
 from database.read_boundary import parse_snapshot_or_none, parse_snapshots
 from models.feedback import (
     FeedbackEvent,
+    FeedbackReason,
     FeedbackReport,
     FeedbackReportEntry,
     FeedbackSurface,
@@ -61,6 +62,41 @@ MAX_REPORT_ENTRIES = 500
 # without letting a runaway day read unboundedly.
 RAW_FETCH_LIMIT = MAX_REPORT_ENTRIES * 4
 
+# Firestore rejects any document over 1 MiB, so the entry cap alone is not a
+# safe bound: 500 entries each carrying a full 21-turn pointer window runs to
+# roughly 2 MiB, and the write fails outright — a heavy feedback day would
+# produce *no* report, which is exactly the day you want one. The generator
+# therefore stops adding entries at this serialized-byte budget and marks the
+# report truncated. The headroom below 1 MiB absorbs Firestore's own encoding
+# overhead, which is larger than the JSON we measure.
+MAX_REPORT_DOCUMENT_BYTES = 800 * 1024
+
+
+# The only rating values the ledger can interpret. `analytics` has always
+# accepted any int on the legacy query-param endpoint, but a row the report
+# query can never match (`value == -1`) and that `FeedbackEvent` may not parse
+# is worse than no row: it looks like recorded feedback and behaves like a leak.
+_VALID_VALUES = frozenset({-1, 0, 1})
+
+
+def _normalized_reason(reason: Optional[str]) -> Optional[str]:
+    """Keep `reason` only when it is one the report can bucket.
+
+    `POST /v1/users/analytics/chat_message` takes `reason` as a free-form query
+    string, so a typo or a client sending a new value reaches this far. Writing
+    it through would make the whole row unreadable later: `FeedbackEvent` parses
+    `reason` as an enum, the read boundary drops rows that fail to parse, and
+    the thumbs-down would silently vanish from the report. Dropping just the
+    bad field keeps the rating, which is the part we cannot reconstruct.
+    """
+    if not reason:
+        return None
+    try:
+        return FeedbackReason(reason).value
+    except ValueError:
+        logger.warning(f'Discarding unrecognized feedback reason {reason!r}; recording the rating without it.')
+        return None
+
 
 def record_feedback_event(
     uid: str,
@@ -86,6 +122,17 @@ def record_feedback_event(
     already persists the rating to its own store first, so a dropped ledger row
     costs us a report line, not the user's feedback.
     """
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        logger.warning(f'Refusing feedback event with non-integer value {value!r} (surface={surface.value}).')
+        return None
+    if value not in _VALID_VALUES:
+        logger.warning(f'Refusing feedback event with out-of-range value {value} (surface={surface.value}).')
+        return None
+
+    reason = _normalized_reason(reason)
+
     event_id = str(uuid.uuid4())
     record: Dict[str, Any] = {
         'id': event_id,
@@ -93,7 +140,7 @@ def record_feedback_event(
         'surface': surface.value,
         'target_kind': target_kind.value,
         'target_id': target_id,
-        'value': int(value),
+        'value': value,
         'created_at': datetime.now(timezone.utc),
     }
     if reason:
@@ -118,7 +165,7 @@ def record_feedback_event(
         record['prompt_commit'] = prompt_commit
 
     try:
-        db.collection(FEEDBACK_EVENTS_COLLECTION).document(event_id).set(record)
+        get_firestore_client().collection(FEEDBACK_EVENTS_COLLECTION).document(event_id).set(record)
         return event_id
     except Exception as e:
         # The comment may hold user text, so log the shape and never the row.
@@ -127,7 +174,7 @@ def record_feedback_event(
 
 
 def get_feedback_event(event_id: str) -> Optional[FeedbackEvent]:
-    doc = db.collection(FEEDBACK_EVENTS_COLLECTION).document(event_id).get()
+    doc = get_firestore_client().collection(FEEDBACK_EVENTS_COLLECTION).document(event_id).get()
     return parse_snapshot_or_none(FeedbackEvent, doc)
 
 
@@ -144,7 +191,7 @@ def list_negative_events(
     # top-level import would make merely importing this module fail there.
     from google.cloud.firestore_v1 import FieldFilter
 
-    collection = db.collection(FEEDBACK_EVENTS_COLLECTION)
+    collection = get_firestore_client().collection(FEEDBACK_EVENTS_COLLECTION)
     query = NEGATIVE_FEEDBACK_EVENTS_QUERY.build(
         collection,
         {'value': -1, 'start_at': start_at, 'end_at': end_at},
@@ -158,11 +205,11 @@ def list_negative_events(
 
 def save_report(report: FeedbackReport) -> None:
     payload = report.model_dump(mode='json')
-    db.collection(FEEDBACK_REPORTS_COLLECTION).document(report.date).set(payload)
+    get_firestore_client().collection(FEEDBACK_REPORTS_COLLECTION).document(report.date).set(payload)
 
 
 def get_report(date: str) -> Optional[FeedbackReport]:
-    doc = db.collection(FEEDBACK_REPORTS_COLLECTION).document(date).get()
+    doc = get_firestore_client().collection(FEEDBACK_REPORTS_COLLECTION).document(date).get()
     return parse_snapshot_or_none(FeedbackReport, doc)
 
 
@@ -171,7 +218,8 @@ def list_report_dates(limit: int = 30) -> List[str]:
     ordering by document id is the same as ordering by date."""
     try:
         docs = (
-            db.collection(FEEDBACK_REPORTS_COLLECTION)
+            get_firestore_client()
+            .collection(FEEDBACK_REPORTS_COLLECTION)
             .order_by(_DOCUMENT_ID_FIELD, direction='DESCENDING')
             .limit(limit)
             .stream()

@@ -126,6 +126,11 @@ class FeedbackContextPointer(BaseModel):
     follow_up_window_seconds: int = 0
     truncated_before: bool = False
     """True when the session had more preceding turns than the cap allowed."""
+    truncated_after: bool = False
+    """True when more turns followed inside the window than the cap allowed.
+
+    The window promises *every* follow-up within its five minutes, so a silent
+    cut would misreport a busy retry burst as a short one."""
     resolution_error: Optional[str] = None
     """Set when the window could not be built (deleted message, etc.)."""
 
@@ -148,7 +153,9 @@ class FeedbackReport(BaseModel):
     counts_by_platform: dict[str, int] = {}
     entries: List[FeedbackReportEntry] = []
     truncated: bool = False
-    """True when more negative events existed than the entry cap allowed."""
+    """True when the day held more negative events than this report carries —
+    because the entry cap, the raw-row fetch bound, or the Firestore document
+    size budget cut it short. `total_negative` still counts the whole day."""
 
 
 class FeedbackContextTurnText(BaseModel):
@@ -170,4 +177,7 @@ class FeedbackContextHydrated(BaseModel):
     target_id: str
     turns: List[FeedbackContextTurnText] = []
     unavailable: List[str] = []
-    """Message ids that could not be read back (deleted since the report ran)."""
+    """Message ids that could not be read back: deleted since the report ran, or
+    still encrypted because the decrypt did not succeed. Listing the id is the
+    honest answer — showing a ciphertext blob as if it were the user's words is
+    not."""

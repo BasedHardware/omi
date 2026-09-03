@@ -47,9 +47,16 @@ Three gates, all of which must pass:
 3. **GCP** — reading the raw collections directly requires Firestore access in
    the project.
 
-A user's own Firebase token reaches none of these endpoints. Every call to the
-context (decrypt) endpoint is logged with the event id and a hash of the admin
-key, so reads of user conversations are attributable after the fact.
+A user's own Firebase token reaches none of these endpoints.
+
+Every call to the context (decrypt) endpoint is logged with the event id, a
+hash of the admin key, and the **Firebase uid of the admin who asked**, which
+admin.omi.me forwards server-side as `X-Admin-User` after checking it against
+`adminData/{uid}`. The key hash alone identifies only the deployment — it is
+one shared secret — so it could never say *which* admin read a user's chat.
+A read that arrives without the uid header logs as `unattributed`; that is not
+an error (the key is still the gate) but it means someone called the backend
+directly rather than through the dashboard, which is worth noticing.
 
 ## The window
 
@@ -114,13 +121,36 @@ date.
 
 ## Known limits
 
-- **Report cap.** One report is one Firestore document (1 MiB), so it holds at
-  most `MAX_REPORT_ENTRIES` (500) entries, read from at most `RAW_FETCH_LIMIT`
-  (2000) ledger rows. Hitting *either* bound sets `truncated: true` rather than
-  silently showing a partial day. The two limits differ because one thumbs-down
-  can write several ledger rows that collapse to one entry, so judging the cap
-  only on collapsed entries would let a day overrun the fetch and still look
-  complete.
+- **Report cap.** One report is one Firestore document, and Firestore rejects
+  any document over 1 MiB outright. Three bounds keep it under that, and
+  crossing *any* of them sets `truncated: true` rather than silently showing a
+  partial day:
+  - `MAX_REPORT_ENTRIES` (500) — entries carried.
+  - `RAW_FETCH_LIMIT` (2000) — ledger rows read. Larger than the entry cap
+    because one thumbs-down can write several rows that collapse to one entry,
+    so judging only on collapsed entries would let a day overrun the fetch and
+    still look complete.
+  - `MAX_REPORT_DOCUMENT_BYTES` (800 KiB) — serialized size. The entry count
+    alone is not a safe bound: 500 entries each carrying a full 21-turn window
+    runs to roughly 2 MiB and the write fails, so a heavy feedback day would
+    produce *no* report at all. The job measures as it goes and stops.
+  When the byte budget cuts a report short, `counts_by_surface`,
+  `counts_by_reason` and `total_negative` still describe the **whole** day —
+  only the per-event context windows are dropped. The distribution is the part
+  you act on; the transcripts are the part you can regenerate or look up.
+- **Follow-up cap.** A window carries at most 10 turns before and 10 after. A
+  burst of retries past that sets `truncated_after` on the pointer, since the
+  window otherwise promises *every* turn inside its five minutes.
+- **Unknown session.** A rated message with no `chat_session_id` gets no
+  "before" window at all (`resolution_error: preceding_turns_session_unknown`).
+  Keeping the time filter without the session filter would return the previous
+  ten messages from any conversation and present them as the setup for this
+  answer, which is worse than showing nothing.
+- **Undecryptable turns.** `utils.encryption.decrypt` returns its *input* when
+  decryption fails, so a failed decrypt raises nothing and yields base64
+  ciphertext typed as a string. The hydrator compares against the stored value
+  and lists such turns in `unavailable` instead of rendering the blob as if it
+  were the user's words.
 - **Deleted messages.** A conversation deleted between the nightly run and a
   reviewer's read comes back in `unavailable` rather than as a gap.
 - **No history before deploy.** The ledger starts empty; the first report covers

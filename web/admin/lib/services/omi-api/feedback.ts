@@ -24,6 +24,7 @@ export class FeedbackApiError extends Error {
 
 async function feedbackApi<T>(
   endpoint: string,
+  adminUid: string,
   init: RequestInit = {}
 ): Promise<T> {
   const adminKey = process.env.OMI_API_SECRET_KEY;
@@ -42,6 +43,11 @@ async function feedbackApi<T>(
     headers: {
       "Content-Type": "application/json",
       "X-Admin-Key": adminKey,
+      // Who is asking. The key is shared across the deployment, so it alone
+      // cannot tell the backend's audit log which admin read a user's chat.
+      // This uid has already been checked against `adminData/{uid}` by the
+      // route handler; it travels server-side only.
+      "X-Admin-User": adminUid,
       ...init.headers,
     },
     cache: "no-store",
@@ -95,6 +101,7 @@ export type FeedbackContextPointer = {
   follow_up_count: number;
   follow_up_window_seconds: number;
   truncated_before: boolean;
+  truncated_after: boolean;
   resolution_error?: string | null;
 };
 
@@ -126,24 +133,36 @@ export type FeedbackContextHydrated = {
   unavailable: string[];
 };
 
-export function listReportDates(limit = 30): Promise<{ dates: string[] }> {
-  return feedbackApi(`/v1/admin/feedback/reports?limit=${limit}`);
+export function listReportDates(
+  adminUid: string,
+  limit = 30
+): Promise<{ dates: string[] }> {
+  return feedbackApi(`/v1/admin/feedback/reports?limit=${limit}`, adminUid);
 }
 
-export function getReport(date: string): Promise<FeedbackReport> {
-  return feedbackApi(`/v1/admin/feedback/reports/${encodeURIComponent(date)}`);
+export function getReport(
+  adminUid: string,
+  date: string
+): Promise<FeedbackReport> {
+  return feedbackApi(
+    `/v1/admin/feedback/reports/${encodeURIComponent(date)}`,
+    adminUid
+  );
 }
 
 export function generateReport(
+  adminUid: string,
   date: string
 ): Promise<{ date: string; total_negative: number; truncated: boolean }> {
   return feedbackApi(
     `/v1/admin/feedback/reports/${encodeURIComponent(date)}/generate`,
+    adminUid,
     { method: "POST" }
   );
 }
 
 export function getEventContext(
+  adminUid: string,
   eventId: string,
   reportDate?: string
 ): Promise<FeedbackContextHydrated> {
@@ -151,6 +170,7 @@ export function getEventContext(
     ? `?report_date=${encodeURIComponent(reportDate)}`
     : "";
   return feedbackApi(
-    `/v1/admin/feedback/events/${encodeURIComponent(eventId)}/context${query}`
+    `/v1/admin/feedback/events/${encodeURIComponent(eventId)}/context${query}`,
+    adminUid
   );
 }

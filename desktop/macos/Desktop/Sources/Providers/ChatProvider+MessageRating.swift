@@ -74,9 +74,36 @@ extension ChatProvider {
     }
   }
 
+  /// Write a rating to the backend, serialized against any other write for the
+  /// same message.
+  ///
+  /// A reasoned thumbs-down produces two writes — the bare rating on tap, then
+  /// the rating carrying the reason — and the backend persists each with a full
+  /// document `set`. Left concurrent, the bare write can land second and erase
+  /// the reason the user just picked, which is the one part of the interaction
+  /// we asked them for. Chaining per message makes the last write the last
+  /// *sent*, which is the order the user actually acted in.
   func persistMessageRating(
     _ messageId: String, rating: Int?, surface: String = "text",
     reason: ChatFeedbackReason? = nil, expectedOwner: String? = nil
+  ) async {
+    let previous = messageRatingWriteChain[messageId]
+    let task = Task { @MainActor [weak self] in
+      await previous?.value
+      await self?.sendMessageRating(
+        messageId, rating: rating, surface: surface, reason: reason,
+        expectedOwner: expectedOwner)
+    }
+    messageRatingWriteChain[messageId] = task
+    await task.value
+    if messageRatingWriteChain[messageId] == task {
+      messageRatingWriteChain[messageId] = nil
+    }
+  }
+
+  private func sendMessageRating(
+    _ messageId: String, rating: Int?, surface: String,
+    reason: ChatFeedbackReason?, expectedOwner: String?
   ) async {
     // Owner fence: if an auth change happened between the flush drain and this
     // call, the rating belongs to the previous account and must not be written

@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(Math.max(Number.isNaN(parsed) ? 30 : parsed, 1), 90);
 
   try {
-    return NextResponse.json(await listReportDates(limit));
+    return NextResponse.json(await listReportDates(authResult.uid, limit));
   } catch (error) {
     const status = error instanceof FeedbackApiError ? error.status : 502;
     console.error("Feedback report list error:", error);

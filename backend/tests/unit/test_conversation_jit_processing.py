@@ -140,8 +140,12 @@ def _jit_module():
 def _validate_message_conversation(value: dict):
     # models/chat.py imports models.feedback for the rating enum. The fixture
     # installs `models` as an empty package, so load the real (dependency-free)
-    # feedback module first or that import cannot resolve.
-    if "models.feedback" not in sys.modules:
+    # feedback module first or that import cannot resolve. It is removed again
+    # below: leaving it behind would outlive the `models` stub it hangs off,
+    # and a later test installing its own `models` package would inherit a
+    # stale submodule it never asked for.
+    installed_feedback = "models.feedback" not in sys.modules
+    if installed_feedback:
         feedback_spec = importlib.util.spec_from_file_location("models.feedback", BACKEND_DIR / "models/feedback.py")
         assert feedback_spec is not None and feedback_spec.loader is not None
         feedback_module = importlib.util.module_from_spec(feedback_spec)
@@ -158,6 +162,8 @@ def _validate_message_conversation(value: dict):
         return module.MessageConversation.model_validate(value)
     finally:
         sys.modules.pop(module_name, None)
+        if installed_feedback:
+            sys.modules.pop("models.feedback", None)
 
 
 def test_retrieval_is_summary_only_until_explicit_evidence_hydration(conversation_tools_module) -> None:

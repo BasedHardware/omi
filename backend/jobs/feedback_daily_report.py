@@ -9,6 +9,7 @@ contains no plaintext conversation. Reviewers get the text from the admin
 context endpoint, which decrypts one event at a time.
 """
 
+import json
 import logging
 from datetime import date as date_cls, datetime, time, timedelta, timezone
 from typing import Optional
@@ -35,22 +36,48 @@ def previous_utc_day(now: Optional[datetime] = None) -> date_cls:
     return (reference.astimezone(timezone.utc) - timedelta(days=1)).date()
 
 
+def _is_more_informative(candidate: FeedbackEvent, incumbent: FeedbackEvent) -> bool:
+    """Should `candidate` replace `incumbent` as the entry for one artifact?
+
+    Every event here is a thumbs-down on the same target, so the question is
+    only which row carries the most information. A row with a reason always
+    wins over one without.
+
+    Plain last-wins is not safe: the client sends the bare rating on tap and the
+    reasoned rating when the user picks a chip, as two independent requests that
+    can be written out of order. Ordering by arrival would then let the bare row
+    land last and silently discard the reason the user actually gave — the whole
+    point of asking. Ranking by information content is order-independent, so the
+    reason survives however the two requests race.
+    """
+    candidate_rank = (candidate.reason is not None, bool(candidate.comment))
+    incumbent_rank = (incumbent.reason is not None, bool(incumbent.comment))
+    if candidate_rank != incumbent_rank:
+        return candidate_rank > incumbent_rank
+    return candidate.created_at >= incumbent.created_at
+
+
 def _collapse_per_target(events: list[FeedbackEvent]) -> list[FeedbackEvent]:
-    """One entry per rated artifact, keeping the last event for it that day.
+    """One entry per rated artifact, keeping its most informative event.
 
     The ledger is append-only, so a single thumbs-down can produce more than
     one row: the macOS client sends the rating the instant the user taps, then
     sends it again carrying the reason once they pick one. Toggling a rating
     off and on again does the same. A report that showed each row would
     double-count exactly the feedback that has the most information attached.
-
-    Last-wins is what makes this correct rather than merely tidy: events arrive
-    oldest-first, and the later row is the one carrying the reason.
     """
-    latest: dict[tuple[str, str, str], FeedbackEvent] = {}
+    best: dict[tuple[str, str, str], FeedbackEvent] = {}
     for event in events:
-        latest[(event.uid, event.target_kind.value, event.target_id)] = event
-    return sorted(latest.values(), key=lambda e: e.created_at)
+        key = (event.uid, event.target_kind.value, event.target_id)
+        incumbent = best.get(key)
+        if incumbent is None or _is_more_informative(event, incumbent):
+            best[key] = event
+    return sorted(best.values(), key=lambda e: e.created_at)
+
+
+def _entry_bytes(entry: FeedbackReportEntry) -> int:
+    """Serialized size of one entry, as the stored JSON measures it."""
+    return len(json.dumps(entry.model_dump(mode='json'), default=str).encode('utf-8'))
 
 
 def generate_report(day: date_cls) -> FeedbackReport:
@@ -76,13 +103,16 @@ def generate_report(day: date_cls) -> FeedbackReport:
             f'{len(raw_events)} raw row(s) fetched (limit {raw_limit}), '
             f'{len(events)} entries after collapse (cap {cap}).'
         )
-        events = events[:cap]
 
     entries: list[FeedbackReportEntry] = []
     counts_by_surface: dict[str, int] = {}
     counts_by_reason: dict[str, int] = {}
     counts_by_platform: dict[str, int] = {}
 
+    # Counts cover every collapsed event the day produced; `entries` carry only
+    # as many context windows as fit the document. Splitting them this way means
+    # a heavy day still reports its true reason and surface distribution — the
+    # part you act on — and loses only the per-event transcripts beyond the cap.
     for event in events:
         surface = event.surface.value
         counts_by_surface[surface] = counts_by_surface.get(surface, 0) + 1
@@ -96,6 +126,10 @@ def generate_report(day: date_cls) -> FeedbackReport:
         platform = event.platform or 'unknown'
         counts_by_platform[platform] = counts_by_platform.get(platform, 0) + 1
 
+    budget = feedback_db.MAX_REPORT_DOCUMENT_BYTES
+    used = 0
+
+    for event in events[:cap]:
         try:
             context = resolve_context(
                 event.uid,
@@ -114,12 +148,30 @@ def generate_report(day: date_cls) -> FeedbackReport:
                 resolution_error='resolution_failed',
             )
         context.event_id = event.id
-        entries.append(FeedbackReportEntry(event=event, context=context))
+        entry = FeedbackReportEntry(event=event, context=context)
+
+        # Firestore rejects the whole document over 1 MiB, so measure as we go
+        # rather than discovering it at `save_report` and losing the entire day.
+        used += _entry_bytes(entry)
+        # `entries` guards the first one: a single window wider than the whole
+        # budget would otherwise write an empty report, which tells a reviewer
+        # nothing and looks identical to a quiet day.
+        if used > budget and entries:
+            truncated = True
+            logger.warning(
+                f'Feedback report {day.isoformat()}: stopped at {len(entries)} of '
+                f'{len(events)} entries — document budget {budget} bytes reached.'
+            )
+            break
+        entries.append(entry)
+
+    if len(events) > cap:
+        truncated = True
 
     return FeedbackReport(
         date=day.isoformat(),
         generated_at=datetime.now(timezone.utc),
-        total_negative=len(entries),
+        total_negative=len(events),
         counts_by_surface=counts_by_surface,
         counts_by_reason=counts_by_reason,
         counts_by_platform=counts_by_platform,
@@ -135,6 +187,8 @@ def run(day: Optional[date_cls] = None) -> FeedbackReport:
     feedback_db.save_report(report)
     logger.info(
         f'Feedback report {report.date}: {report.total_negative} thumbs-down '
-        f'across {len(report.counts_by_surface)} surface(s).'
+        f'across {len(report.counts_by_surface)} surface(s); '
+        f'{len(report.entries)} with context'
+        f'{" (truncated)" if report.truncated else ""}.'
     )
     return report

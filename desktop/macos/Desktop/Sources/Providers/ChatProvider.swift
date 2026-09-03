@@ -1274,6 +1274,16 @@ class ChatProvider: ObservableObject {
   private let journalWriteCoordinator = ChatJournalWriteCoordinator()
   private var journalOwnerByMessageID: [String: String] = [:]
   var pendingMessageRatings = ChatMessageRatingQueue()
+
+  /// The in-flight rating write for each message, so the next one can chain
+  /// behind it instead of racing it.
+  ///
+  /// A thumbs-down sends twice by design: the bare rating the instant the user
+  /// taps (so walking away still counts), then the same rating carrying the
+  /// reason once they pick a chip. Those are two independent PATCHes, and the
+  /// backend stores the rating with `.set()` — so if the bare one lands second
+  /// it overwrites the reason the user just gave with nothing.
+  var messageRatingWriteChain: [String: Task<Void, Never>] = [:]
   var persistMessageRatingHandler: ((String, Int?) async throws -> Void)?
   private var journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
   private var agentBridgeStarted = false
@@ -1780,6 +1790,7 @@ class ChatProvider: ObservableObject {
     journalWriteCoordinator.cancelAll()
     journalOwnerByMessageID.removeAll()
     pendingMessageRatings.removeAll()
+    messageRatingWriteChain.removeAll()
     journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
     // A ChatErrorCard belongs to the session that produced it. Retaining an
     // auth-required card after a successful account switch incorrectly asks
@@ -3788,6 +3799,7 @@ class ChatProvider: ObservableObject {
     guard surface == mainChatSurfaceReference() else { return }
     messages = []
     pendingMessageRatings.removeAll()
+    messageRatingWriteChain.removeAll()
     resetMessagesPagination()
   }
 
