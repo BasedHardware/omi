@@ -167,9 +167,10 @@ class Memory(BaseModel):
         for f in memories:
             content = getattr(f, 'content', '')
             created_at = getattr(f, 'created_at', None)
-            # Include created_at if available (for MemoryDB objects)
-            if isinstance(created_at, datetime):
-                date_str = created_at.strftime('%Y-%m-%d %H:%M:%S UTC')
+            as_of = getattr(f, 'as_of', None)
+            stamp = as_of if isinstance(as_of, datetime) else created_at
+            if isinstance(stamp, datetime):
+                date_str = stamp.strftime('%Y-%m-%d %H:%M:%S UTC')
                 result += f"- {content} ({date_str})\n"
             else:
                 result += f"- {content}\n"

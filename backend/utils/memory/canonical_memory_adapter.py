@@ -30,6 +30,8 @@ from utils.memory.canonical_visibility_filter import filter_canonical_default_vi
 from utils.memory.belief_model import (
     belief_model_enabled,
     horizon_from_extraction,
+    public_belief_overlay,
+    public_belief_overlay_json,
     subject_scope_from_extraction,
 )
 from database.memory_collections import MemoryCollections
@@ -384,6 +386,7 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         arguments=_bounded_memory_arguments(item.arguments),
         intent_backed=item.intent_backed,
         write_reason=item.write_reason,
+        **public_belief_overlay(item, now=datetime.now(timezone.utc)),
     )
 
 
@@ -928,6 +931,7 @@ def search_canonical_memories(
                 "date": memory.updated_at.isoformat(),
                 "visibility": memory.visibility,
                 "is_locked": memory.is_locked,
+                **public_belief_overlay_json(memory, now=datetime.now(timezone.utc)),
             }
             for memory in memories[:capped_limit]
         ]
@@ -1043,6 +1047,7 @@ def search_canonical_memories(
                 "curation_weight": item.curation_weight,
                 "intent_backed": item.intent_backed,
                 "write_reason": item.write_reason.value if item.write_reason else None,
+                **public_belief_overlay_json(item, now=datetime.now(timezone.utc)),
             }
         )
     return results

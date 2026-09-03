@@ -248,3 +248,63 @@ def passes_proactive_bar(
         and is_user_subject(subject_scope)
         and not is_contradicted(superseded_by=superseded_by, confidence=confidence)
     )
+
+
+def _enum_value(value: object) -> Optional[str]:
+    if value is None:
+        return None
+    raw = getattr(value, "value", value)
+    return raw if isinstance(raw, str) else None
+
+
+def belief_view_for_record(item: object, *, now: datetime) -> BeliefView:
+    """Read-side view from a MemoryItem or MemoryDB-shaped record. No I/O."""
+    promotion = getattr(item, "promotion", None) or {}
+    promotion_category = promotion.get("category") if isinstance(promotion, Mapping) else None
+    captured_at = getattr(item, "captured_at", None) or getattr(item, "created_at")
+    return belief_view(
+        captured_at=captured_at,
+        now=now,
+        stored_half_life_days=getattr(item, "half_life_days", None),
+        last_corroborated_at=getattr(item, "last_corroborated_at", None),
+        valid_to=getattr(item, "valid_to", None) or getattr(item, "invalid_at", None),
+        user_asserted=bool(getattr(item, "user_asserted", False) or getattr(item, "manually_added", False)),
+        belief_class=getattr(item, "belief_class", None),
+        kind=_enum_value(getattr(item, "kind", None)),
+        category=(
+            promotion_category if isinstance(promotion_category, str) else _enum_value(getattr(item, "category", None))
+        ),
+        tier=_enum_value(getattr(item, "tier", None)) or _enum_value(getattr(item, "memory_tier", None)),
+    )
+
+
+def record_passes_proactive_bar(item: object, *, now: datetime) -> bool:
+    scope = getattr(item, "subject_scope", None)
+    return passes_proactive_bar(
+        belief_view_for_record(item, now=now),
+        subject_scope=_enum_value(scope) or (scope if isinstance(scope, str) else None),
+        superseded_by=getattr(item, "superseded_by", None),
+        confidence=getattr(item, "confidence", None),
+    )
+
+
+def public_belief_overlay(item: object, *, now: datetime) -> dict[str, object]:
+    """Additive read fields. Empty when the flag is off so payloads stay identical."""
+    if not belief_model_enabled():
+        return {}
+    view = belief_view_for_record(item, now=now)
+    return {
+        "currency": view.currency,
+        "currency_band": view.band.value,
+        "as_of": view.as_of,
+        "half_life_days": view.half_life_days,
+        "belief_class": getattr(item, "belief_class", None),
+    }
+
+
+def public_belief_overlay_json(item: object, *, now: datetime) -> dict[str, object]:
+    overlay = public_belief_overlay(item, now=now)
+    as_of = overlay.get("as_of")
+    if isinstance(as_of, datetime):
+        overlay = {**overlay, "as_of": as_of.isoformat()}
+    return overlay

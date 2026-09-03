@@ -214,3 +214,48 @@ def test_horizon_from_extraction_honors_user_asserted_and_overrides():
     assert horizon_from_extraction(belief_class="episodic") == ("episodic", 7.0)
     assert horizon_from_extraction(belief_class="plan", half_life_days_override=7) == ("plan", 7)
     assert horizon_from_extraction(belief_class="unknown") == ("state", 30.0)
+
+
+def test_public_overlay_is_empty_when_flag_off(monkeypatch):
+    from types import SimpleNamespace
+
+    from utils.memory.belief_model import public_belief_overlay
+
+    monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED", raising=False)
+    record = SimpleNamespace(
+        captured_at=CAPTURED,
+        half_life_days=30,
+        last_corroborated_at=None,
+        valid_to=None,
+        user_asserted=False,
+        belief_class="state",
+        kind="fact",
+        category=None,
+        tier="short_term",
+        subject_scope="primary_user",
+    )
+    assert public_belief_overlay(record, now=NOW) == {}
+
+
+def test_public_overlay_includes_band_and_as_of_when_flag_on(monkeypatch):
+    from types import SimpleNamespace
+
+    from utils.memory.belief_model import CurrencyBand, public_belief_overlay
+
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    record = SimpleNamespace(
+        captured_at=CAPTURED,
+        half_life_days=30,
+        last_corroborated_at=None,
+        valid_to=None,
+        user_asserted=False,
+        belief_class="state",
+        kind="fact",
+        category=None,
+        tier="short_term",
+        subject_scope="primary_user",
+    )
+    overlay = public_belief_overlay(record, now=NOW)
+    assert overlay["currency_band"] == CurrencyBand.fading.value
+    assert overlay["as_of"] == CAPTURED
+    assert overlay["half_life_days"] == 30
