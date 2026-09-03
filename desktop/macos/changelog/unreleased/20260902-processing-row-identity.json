@@ -1,3 +1,0 @@
-{
-  "change": "Conversations that are still being summarized now show their first transcript line instead of \"Processing…\", tell you when processing is taking longer than usual or looks stuck, offer Reprocess right on the row, and land in place when a recording ends"
-}
