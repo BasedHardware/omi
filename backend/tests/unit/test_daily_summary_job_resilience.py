@@ -207,7 +207,9 @@ def test_failing_hour_group_does_not_abort_the_remaining_groups() -> None:
         notification_db.get_users_for_daily_summary = read_users
         notifications._send_summary_notification = lambda user: served.append(user[0])
 
-        assert asyncio.run(notifications.send_daily_summary_notification()) is None
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert outcome.ok is False
+        assert 'firestore unavailable' in (outcome.error_text or '')
         assert served == ['uid-00', 'uid-01', 'uid-02'], 'hour 22 must still be served after hour 21 failed'
 
 
@@ -362,7 +364,8 @@ def test_job_survives_a_redis_outage_end_to_end() -> None:
         served: List[str] = []
         notifications._send_summary_notification = lambda user: served.append(user[0])
 
-        assert asyncio.run(notifications.send_daily_summary_notification()) is None
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert outcome.ok is True
         assert len(served) == 3, 'losing the checkpoint costs a re-walk, never a summary'
 
 

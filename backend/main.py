@@ -125,6 +125,7 @@ from services.conversation_finalization import reconcile_abandoned_byok_finaliza
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_processing_conversations
+from database.durable_queue_age import publish_all_queue_oldest_ready_ages
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 from utils.other.local_storage import local_storage_root_from_env
 
@@ -437,6 +438,10 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
                 logger.info(f"Periodic meeting-receipt reconciliation: {receipt_result}")
         except Exception as e:
             logger.error(f"Periodic meeting-receipt reconciliation failed: {e}")
+        try:
+            await run_blocking(db_executor, publish_all_queue_oldest_ready_ages)
+        except Exception as e:
+            logger.error(f"Periodic durable-queue age publish failed: {e}")
 
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring

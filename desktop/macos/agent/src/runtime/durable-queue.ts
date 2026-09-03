@@ -110,22 +110,6 @@ export function adoptOnIdentity(existingId: string | null | undefined, itemId: s
   return { adopted: true };
 }
 
-export function readySortKey(input: {
-  priority?: number;
-  availableAt?: number | string;
-  createdAt?: number | string;
-  itemId?: string;
-  enablePriority?: boolean;
-}): unknown[] {
-  const availableAt = input.availableAt ?? 0;
-  const createdAt = input.createdAt ?? 0;
-  const itemId = input.itemId ?? "";
-  if (input.enablePriority) {
-    return [input.priority ?? 0, availableAt, createdAt, itemId];
-  }
-  return [availableAt, createdAt, itemId];
-}
-
 export function oldestReadyCreatedAtMs(createdAtMs: Array<number | null | undefined>): number | null {
   let oldest: number | null = null;
   for (const value of createdAtMs) {

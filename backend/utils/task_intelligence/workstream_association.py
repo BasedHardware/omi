@@ -4,12 +4,11 @@ import hashlib
 import json
 import logging
 from collections.abc import Callable, Iterable
-from datetime import datetime, timezone
 from typing import Any, Optional, Protocol, cast
 
 import database.recurrence_inbox as recurrence_inbox_db
 import database.workstreams as workstreams_db
-from database.durable_queue import ProcessOutcome, drain_isolated, oldest_ready_age_seconds
+from database.durable_queue import ProcessOutcome, drain_isolated
 from database.vector_db import (
     delete_workstream_association_vector,
     query_workstream_association_candidates,
@@ -36,7 +35,6 @@ from models.workstream_association import (
     RecurrenceInboxReceipt,
     RecurrenceOutcomeKind,
 )
-from utils.durable_queue_metrics import observe_oldest_ready_age
 from utils.llm.gateway_client import invoke_chat_structured_gateway
 from utils.metrics import TASK_WORKSTREAM_ASSOCIATION_TOTAL
 from utils.observability.fallback import record_fallback
@@ -391,13 +389,6 @@ def drain_recurrence_inbox_for_maintenance(
             return ProcessOutcome.retry(type(exc).__name__, reason='retryable')
 
     drain_isolated(receipts, process_one)
-    observe_oldest_ready_age(
-        'task_recurrence_inbox',
-        oldest_ready_age_seconds(
-            [receipt.created_at for receipt in receipts],
-            now=datetime.now(timezone.utc),
-        ),
-    )
     return created
 
 
