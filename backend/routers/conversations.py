@@ -72,9 +72,11 @@ from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
+from database.legal_holds import DestructiveOperationInProgress
 from utils.memory.memory_service import MemoryService
 from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
+from utils.other.account_gate_http import account_gate_busy_http_exception
 from utils import byok
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
@@ -1222,6 +1224,11 @@ def delete_conversation(
                     status_code=503,
                     detail='Conversation memory retraction is busy, please retry',
                 ) from error
+            except DestructiveOperationInProgress as error:
+                # Concurrent single-memory deletes (and sibling conversation
+                # deletes) share the account-wide exclusive gate. Surface that
+                # as a retryable 409 instead of an opaque 500.
+                raise account_gate_busy_http_exception() from error
 
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)

@@ -78,3 +78,16 @@ def test_exhausted_replacement_conflict_maps_to_retryable_503_before_any_delete(
     assert (
         "delete_conversation_and_frame_evidence" in body.split("except ConversationReplacementConflictError")[1]
     ), "conversation and frame-evidence deletion must stay in the post-retract success path"
+
+
+def test_gate_contention_maps_to_409_with_retry_after():
+    """Static checker: importing routers.conversations is too heavy for unit isolation.
+
+    Concurrent account-gated deletes used to escape as 500. The retract path
+    must map DestructiveOperationInProgress to the shared 409 helper.
+    """
+    body = _delete_conversation_source()
+    assert "DestructiveOperationInProgress" in body
+    assert "account_gate_busy_http_exception" in body
+    after_retract = body.split("memory_service.retract_conversation_memories", 1)[1]
+    assert "account_gate_busy_http_exception" in after_retract.split("delete_conversation_screen_frames")[0]
