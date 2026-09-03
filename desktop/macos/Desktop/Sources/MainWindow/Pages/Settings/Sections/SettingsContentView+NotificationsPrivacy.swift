@@ -46,11 +46,15 @@ extension SettingsContentView {
               Menu {
                 // Knowingly duplicated from `NotificationService.snoozeDurations`, and not
                 // guarded by a test: `testOfferedDurationsAreSaneAndAscending` checks that
-                // constant alone, so these three can drift from it silently. The obvious fix
-                // — a ForEach over the constant — was tried and reverted: this file feeds the
-                // release-mode whole-module compile, which already burns ~51 min of a 60 min
-                // job cap, and the added ViewBuilder work tipped the job over. Change both
-                // places together until that job has margin to spare.
+                // constant alone, so these three can drift from it silently. Change both
+                // places together.
+                //
+                // A ForEach over the constant was tried and reverted after the release-mode
+                // whole-module compile hit its 60 min job cap. The revert then ran 56m55s
+                // with a compile-identical tree, against 51m on the head before it — so the
+                // ForEach was not the cause; that lane is simply running at ~95% of its cap
+                // and drifting up. Restoring it is safe on the merits and still a bad bet
+                // until the lane has margin.
                 Button("For 1 hour") { applyNotificationSnooze(60 * 60) }
                 Button("For 4 hours") { applyNotificationSnooze(4 * 60 * 60) }
                 Button("For 8 hours") { applyNotificationSnooze(8 * 60 * 60) }
