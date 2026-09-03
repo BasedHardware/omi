@@ -262,12 +262,16 @@ async def omni_relay(websocket: WebSocket):
 
             async def upstream_to_client():
                 async for message in upstream:
-                    if isinstance(message, (bytes, bytearray)):
-                        await websocket.send_bytes(message)
-                    else:
-                        await websocket.send_text(message)
-                    # Forward first, account second: the client never waits on us.
-                    account_upstream_frame(message)
+                    try:
+                        if isinstance(message, (bytes, bytearray)):
+                            await websocket.send_bytes(message)
+                        else:
+                            await websocket.send_text(message)
+                    finally:
+                        # Forward first, account second: the client never waits
+                        # on us, but a failed downstream send must not discard a
+                        # provider terminal frame from the ledger.
+                        account_upstream_frame(message)
 
             t1 = asyncio.create_task(client_to_upstream(), name=f"ws:{uid}:omni_c2u")
             t2 = asyncio.create_task(upstream_to_client(), name=f"ws:{uid}:omni_u2c")
