@@ -293,8 +293,7 @@ def upsert_atom_keyword_doc(item: MemoryItem, *, db_client: Any = None) -> bool:
     if not is_indexable_long_term_atom(item):
         return False
     try:
-        client = db_client if db_client is not None else default_db_client
-        with external_write_fence(item.uid, firestore_client=client):
+        with external_write_fence(item.uid, firestore_client=db_client):
             ensure_memories_collection()
             if item.ledger_schema_version == "knowledge_ledger.v1":
                 ensure_ledger_keyword_schema()
