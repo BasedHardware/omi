@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Mapping, Optional
 
+from utils.memory.decision_path_telemetry import classify_model_about
+
 MEMORY_BELIEF_MODEL_ENABLED_ENV = "MEMORY_BELIEF_MODEL_ENABLED"
 
 # Named classes the extractor uses. Priors are days; None means no decay.
@@ -111,7 +113,6 @@ KNOWN_SUBJECT_SCOPES = frozenset(
         "media_screen",
     }
 )
-_USER_ABOUT_LABELS = frozenset({"the user", "user", "primary user", "me"})
 
 
 def subject_scope_from_extraction(
@@ -119,21 +120,19 @@ def subject_scope_from_extraction(
     extracted_scope: Optional[str] = None,
     attribution: Optional[str] = None,
     about: Optional[str] = None,
+    user_name: Optional[str] = None,
+    speaker_label: Optional[str] = None,
 ) -> str:
-    """Classify subject. Never invent primary_user from an empty/unknown label."""
+    """Classify conversation-extracted subjects. media_screen comes only from the extractor."""
     scope = (extracted_scope or "").strip().lower()
     if scope in KNOWN_SUBJECT_SCOPES:
         return scope
+    if classify_model_about(about, user_name=user_name, speaker_label=speaker_label) == "primary_user":
+        return "primary_user"
     if attribution == "user":
         return "primary_user"
     if attribution == "third_party":
         return "third_party"
-    about_norm = " ".join((about or "").casefold().split())
-    if about_norm in _USER_ABOUT_LABELS:
-        return "primary_user"
-    media_tokens = ("youtube", "video", "movie", "screen", "article", "podcast", "tweet", "game")
-    if any(token in about_norm for token in media_tokens):
-        return "media_screen"
     return "third_party"
 
 

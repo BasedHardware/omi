@@ -201,10 +201,15 @@ def test_subject_scope_never_defaults_unknown_to_the_user():
     assert subject_scope_from_extraction(attribution="user") == "primary_user"
     assert subject_scope_from_extraction(attribution="third_party") == "third_party"
     assert subject_scope_from_extraction(about="the user") == "primary_user"
-    assert subject_scope_from_extraction(about="YouTube video") == "media_screen"
+    assert subject_scope_from_extraction(about="YouTube video") == "third_party"
     assert subject_scope_from_extraction(about="Sarah") == "third_party"
     assert subject_scope_from_extraction() == "third_party"
     assert subject_scope_from_extraction(extracted_scope="media_screen") == "media_screen"
+    assert subject_scope_from_extraction(about="David", user_name="David Zheng") == "primary_user"
+    assert subject_scope_from_extraction(about="david", user_name="David Zheng") == "primary_user"
+    assert (
+        subject_scope_from_extraction(about="Sam", attribution="third_party", user_name="David Zheng") == "third_party"
+    )
 
 
 def test_horizon_from_extraction_honors_user_asserted_and_overrides():

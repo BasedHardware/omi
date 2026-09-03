@@ -1423,6 +1423,8 @@ def _extract_memories_canonical(
                     extracted_scope=candidate.subject_scope,
                     attribution=subject_attribution.value,
                     about=candidate.about,
+                    user_name=user_name,
+                    speaker_label=candidate.speaker_label,
                 )
                 resolved_class, resolved_half_life = horizon_from_extraction(
                     belief_class=candidate.belief_class,

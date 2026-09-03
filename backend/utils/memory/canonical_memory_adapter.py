@@ -1172,6 +1172,20 @@ def _user_asserted_from_payload(data: Dict[str, Any]) -> bool:
     return bool(data.get("user_asserted"))
 
 
+def _conversation_extracted_claim(data: Dict[str, Any]) -> bool:
+    """True only for conversation capture. Manual/API/integration writes skip the classifier."""
+    if _user_asserted_from_payload(data):
+        return False
+    if data.get("conversation_id"):
+        return True
+    for raw in data.get("evidence") or []:
+        if isinstance(raw, dict) and (raw.get("source_type") or "") == "conversation":
+            return True
+        if getattr(raw, "source_type", None) == "conversation":
+            return True
+    return False
+
+
 def _product_metadata_from_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     metadata: Dict[str, Any] = {}
     category = data.get("category")
@@ -1364,13 +1378,18 @@ def _canonical_extraction_apply_write(
         if "valid_to" not in patch_payload and data.get("invalid_at") is not None:
             patch_payload["valid_to"] = data["invalid_at"]
         if "subject_scope" not in patch_payload:
-            attribution = data.get("subject_attribution")
-            attribution_value = getattr(attribution, "value", attribution)
-            patch_payload["subject_scope"] = subject_scope_from_extraction(
-                extracted_scope=data.get("subject_scope"),
-                attribution=str(attribution_value or ""),
-                about=data.get("about"),
-            )
+            if _conversation_extracted_claim(data):
+                attribution = data.get("subject_attribution")
+                attribution_value = getattr(attribution, "value", attribution)
+                user_name = data.get("user_name")
+                patch_payload["subject_scope"] = subject_scope_from_extraction(
+                    extracted_scope=data.get("subject_scope"),
+                    attribution=str(attribution_value or ""),
+                    about=data.get("about"),
+                    user_name=user_name if isinstance(user_name, str) else None,
+                )
+            else:
+                patch_payload["subject_scope"] = "primary_user"
         if "belief_class" not in patch_payload:
             resolved_class, resolved_half_life = horizon_from_extraction(
                 belief_class=data.get("belief_class"),
