@@ -131,10 +131,11 @@ def test_legacy_priors_from_class_category_tier():
     assert derive_half_life_days(belief_class="meta_residue") == 1
     assert derive_half_life_days(belief_class="meta_standing") is None
     assert derive_half_life_days(kind="document") is None
-    assert derive_half_life_days(category="system", tier="long_term") == 180
-    assert derive_half_life_days(category="interesting", tier="short_term") == 7
     assert derive_half_life_days(tier="short_term") == 30
-    assert derive_half_life_days(tier="long_term") == 30
+    assert derive_half_life_days(category="interesting", tier="short_term") == 30
+    assert derive_half_life_days(tier="long_term") is None
+    assert derive_half_life_days(category="system", tier="long_term") is None
+    assert derive_half_life_days(tier="archive") is None
 
 
 def test_last_evidenced_defaults_to_captured_at():
@@ -219,7 +220,7 @@ def test_horizon_from_extraction_honors_user_asserted_and_overrides():
 def test_record_view_reads_category_from_item_audit_bag():
     from types import SimpleNamespace
 
-    from utils.memory.belief_model import HALF_LIFE_DAYS_BY_CLASS, belief_view_for_record
+    from utils.memory.belief_model import belief_view_for_record
 
     record = SimpleNamespace(
         captured_at=CAPTURED,
@@ -234,7 +235,7 @@ def test_record_view_reads_category_from_item_audit_bag():
         tier="long_term",
     )
     view = belief_view_for_record(record, now=NOW)
-    assert view.half_life_days == HALF_LIFE_DAYS_BY_CLASS["preference"]
+    assert view.half_life_days is None
 
 
 def test_public_overlay_is_empty_when_flag_off(monkeypatch):

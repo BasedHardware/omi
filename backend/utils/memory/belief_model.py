@@ -79,7 +79,8 @@ def derive_half_life_days(
     tier: Optional[str] = None,
 ) -> Optional[float]:
     """Numeric stored half-life wins. ``belief_class`` supplies the class prior
-    (including null = no decay). Legacy rows have neither; derive from category/tier.
+    (including null = no decay). Legacy rows have neither: short_term uses the
+    state prior, long_term/archive stay durable until backfill classifies them.
     """
     if stored_half_life_days is not None:
         if stored_half_life_days <= 0:
@@ -93,13 +94,11 @@ def derive_half_life_days(
         return HALF_LIFE_DAYS_BY_CLASS[belief_class]
     if kind in {"document", "trigger"}:
         return None
-    if category == "manual" or (category == "system" and tier == "long_term"):
-        return HALF_LIFE_DAYS_BY_CLASS["preference"]
-    if tier == "short_term" and category == "interesting":
-        return HALF_LIFE_DAYS_BY_CLASS["episodic"]
+    # category is not a class; keep the argument so existing callers stay valid.
+    _ = category
     if tier == "short_term":
         return HALF_LIFE_DAYS_BY_CLASS["state"]
-    return HALF_LIFE_DAYS_BY_CLASS["state"]
+    return None
 
 
 USER_SUBJECT_SCOPES = frozenset({"primary_user"})
