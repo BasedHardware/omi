@@ -79,16 +79,16 @@ void main() {
     final memoriesProvider = MemoriesProvider(
       fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
           GetMemoriesResult([
-        Memory(
-          id: 'mem-1',
-          uid: 'summary-user',
-          content: 'Prefers async standups',
-          category: MemoryCategory.system,
-          createdAt: DateTime.utc(2026, 7, 15),
-          updatedAt: DateTime.utc(2026, 7, 15),
-          visibility: MemoryVisibility.private,
-        ),
-      ], true),
+            Memory(
+              id: 'mem-1',
+              uid: 'summary-user',
+              content: 'Prefers async standups',
+              category: MemoryCategory.system,
+              createdAt: DateTime.utc(2026, 7, 15),
+              updatedAt: DateTime.utc(2026, 7, 15),
+              visibility: MemoryVisibility.private,
+            ),
+          ], true),
       fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
           const GetLedgerHistoryResult([], supported: true),
       reviewMemoryRequest: (id, value) async => true,
@@ -148,7 +148,8 @@ DailySummary _summary({
     stats: DayStats(totalConversations: 1, totalDurationMinutes: 30),
     memoriesLearned: memoriesLearned,
     knowledgeNuggets: knowledgeNuggets,
-    locations: locations ??
+    locations:
+        locations ??
         [
           LocationPin(latitude: 37.7749, longitude: -122.4194, address: 'Home, San Francisco', time: '08:00'),
           LocationPin(latitude: 37.7849, longitude: -122.4094, address: 'Office, San Francisco', time: '10:00'),
