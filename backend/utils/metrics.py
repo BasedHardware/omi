@@ -543,6 +543,34 @@ PUSHER_READY.set(1)
 PUSHER_DRAIN_IN_PROGRESS.set(0)
 
 
+# GET /v1/action-items read-cost controls (see database/action_items_cache.py).
+# `action_items_list` was 48.8% of every billable Firestore document read before
+# the 12/min per-uid cap shipped (#12258); the residual cost is a small number of
+# large-backlog accounts re-reading a full backlog on every allowed poll. These
+# two counters are how a deploy proves the remaining reads went away, rather than
+# inferring it from the billing export a week later.
+OMI_ACTION_ITEMS_LIST_THROTTLED_TOTAL = Counter(
+    'omi_action_items_list_throttled_total',
+    'GET /v1/action-items requests rejected with 429 by a list ceiling',
+    ['client', 'policy'],
+)
+
+OMI_ACTION_ITEMS_LIST_CACHE_TOTAL = Counter(
+    'omi_action_items_list_cache_total',
+    'GET /v1/action-items list responses by cache outcome (a hit or not_modified reads zero Firestore documents)',
+    ['outcome'],
+)
+
+
+def record_action_items_list_throttled(*, client: str, policy: str) -> None:
+    OMI_ACTION_ITEMS_LIST_THROTTLED_TOTAL.labels(client=client, policy=policy).inc()
+
+
+def record_action_items_list_cache(outcome: str) -> None:
+    """outcome: hit | not_modified | miss | bypass | unavailable."""
+    OMI_ACTION_ITEMS_LIST_CACHE_TOTAL.labels(outcome=outcome).inc()
+
+
 def metrics_response() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 

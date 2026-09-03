@@ -3269,5 +3269,7 @@
     "pendantRecordingSyncBlocked": "Pendant wciąż nagrywa, więc zapisany dźwięk nie może zostać przesłany. Naciśnij przycisk Pendanta, aby zatrzymać nagrywanie, a następnie zsynchronizuj ponownie.",
     "pendantFullSyncBlocked": "Pamięć Pendanta jest pełna i wciąż jest on w trybie nagrywania, więc zapisanego dźwięku nie można przenieść. Naciśnij przycisk Pendanta, aby zatrzymać nagrywanie, a następnie zsynchronizuj ponownie.",
     "conversationsNotCapturedCount": "Nie nagrano ({count})",
-    "transcriptionNoAudio": "Transkrypcja nie odbiera dźwięku"
+    "transcriptionNoAudio": "Transkrypcja nie odbiera dźwięku",
+    "couldNotLoadMemories": "Nie udało się wczytać wspomnień",
+    "couldNotLoadKnowledgeGraph": "Nie udało się wczytać grafu wiedzy"
 }

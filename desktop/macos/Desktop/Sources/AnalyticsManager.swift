@@ -916,9 +916,13 @@ class AnalyticsManager {
     PostHogManager.shared.track("chat_session_deleted", properties: [:])
   }
 
-  func messageRated(rating: Int) {
+  func messageRated(rating: Int, surface: String = "text") {
     let ratingString = rating == 1 ? "thumbs_up" : "thumbs_down"
-    PostHogManager.shared.track("message_rated", properties: ["rating": ratingString])
+    // `source` splits the admin thumbs-ratio chart: "text" = main-window
+    // chat, "voice" = floating-bar responses. Events before this dimension
+    // existed chart as the combined series only.
+    PostHogManager.shared.track(
+      "message_rated", properties: ["rating": ratingString, "source": surface])
   }
 
   func initialMessageGenerated(hasApp: Bool) {

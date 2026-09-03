@@ -1,4 +1,5 @@
 import 'package:omi/backend/schema/gen/users_wire.g.dart' as wire;
+import 'package:omi/backend/schema/memory_review.dart';
 // Phase 4.1 — none of these classes typedef to their GeneratedDailySummary* types.
 // The generated fields are all nullable (String?/bool?/int?/double?) while these
 // classes coerce them to non-null with defaults (?? '', ?? 'medium', ?? false,
@@ -173,6 +174,11 @@ class DailySummary {
   final List<DecisionMade> decisionsMade; // Max 3
   final List<KnowledgeNugget> knowledgeNuggets; // Max 3
 
+  /// Memories this day actually produced, with identity so the owner can
+  /// confirm, drop, or correct them. Unlike [knowledgeNuggets] (LLM prose),
+  /// each entry points at a real memory row. Max 3.
+  final List<MemoryReviewItem> memoriesLearned;
+
   // Locations
   final List<LocationPin> locations;
 
@@ -189,6 +195,7 @@ class DailySummary {
     this.unresolvedQuestions = const [],
     this.decisionsMade = const [],
     this.knowledgeNuggets = const [],
+    this.memoriesLearned = const [],
     this.locations = const [],
   });
 
@@ -224,6 +231,13 @@ class DailySummary {
       unresolvedQuestions: generated.unresolvedQuestions?.map(UnresolvedQuestion.fromGenerated).toList() ?? [],
       decisionsMade: generated.decisionsMade?.map(DecisionMade.fromGenerated).toList() ?? [],
       knowledgeNuggets: generated.knowledgeNuggets?.map(KnowledgeNugget.fromGenerated).toList() ?? [],
+      memoriesLearned:
+          generated.memoriesLearned
+              ?.map(MemoryReviewItem.fromGenerated)
+              .where((item) => item.memoryId.isNotEmpty && item.content.trim().isNotEmpty)
+              .take(MemoryReviewCardBlock.maxItems)
+              .toList() ??
+          [],
       locations: generated.locations?.map(LocationPin.fromGenerated).toList() ?? [],
     );
   }

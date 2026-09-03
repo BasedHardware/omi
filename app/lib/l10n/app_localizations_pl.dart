@@ -9948,4 +9948,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Nie udało się wczytać wspomnień';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nie udało się wczytać grafu wiedzy';
 }

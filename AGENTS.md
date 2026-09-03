@@ -77,7 +77,7 @@ The unit of work is the violated contract, not only the line where the symptom a
 - Make individual commits per feature or testable surface, not per file or unrelated bulk changes.
 - If push fails (remote ahead): `git pull --rebase && git push`.
 - **PR size is reported, not bounded** (`pr-scope` manifest check — advisory annotations, never blocks): 1,500+ changed production-source lines warns; 3,000+ cites the audited history of missed regressions. Split only when the pieces are independently verifiable; otherwise give the one PR proportional review depth.
-- **RELEASE command:** branch from `main`, individual commits, push, open PR, merge without squash, switch back to `main` and pull. **RELEASEWITHBACKEND:** RELEASE + `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
+- **RELEASE command:** branch from `main`, individual commits, push, open PR, merge without squash, switch back to `main` and pull. **RELEASEWITHBACKEND:** `gh workflow run gcp_backend.yml -f environment=prod -f release_sha=<SHA>`.
 
 ## Issues
 
@@ -130,7 +130,7 @@ Click at coordinates: `cliclick c:X,Y`. Mac screenshots: `screencapture -x /tmp/
 ## Deploys & Release Pipelines
 
 - Desktop (hourly candidate → signed-smoke Beta → manual Stable): `desktop/macos/AGENTS.md` → Release Pipeline.
-- Backend: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`. Runtime env contract: `backend/AGENTS.md` → Service Map.
+- Backend: `gcp_backend.yml` is main stack (`environment`, `release_sha`, `release_version`, `mode`, `deploy_targets`; no `branch`). Prod `release_sha` needs first-attempt Release Eligibility. desktop-backend: `desktop_backend_prod.yml` (`release_sha`, confirm `deploy-desktop-backend-prod`, reason).
 - Firmware (Omi CV1): `omi/firmware/AGENTS.md`.
 
 **Every gated surface has a break-glass hatch. A broken gate is never a reason to be stuck.** Each records a tracking issue; repeated use means the gate is the defect.
