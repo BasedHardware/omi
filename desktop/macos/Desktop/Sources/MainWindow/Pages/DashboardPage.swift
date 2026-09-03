@@ -1043,7 +1043,9 @@ struct DashboardPage: View {
         slot: slot(for: row, in: composition),
         showsBefore: max(0, impression.shows - 1))
     }
-    for empty in composition.emptySlots {
+    // An empty slot only cost the reader a row when the rail came up short of
+    // what it can show; the chat strip never renders a fourth slot at all.
+    for empty in composition.emptySlots.prefix(max(0, visibleRows - composition.rows.count)) {
       guard knowsLedgerStore.shouldReportEmptySlot(empty.slot.rawValue) else { continue }
       AnalyticsManager.shared.trackHomeKnowsSlotEmpty(slot: empty.slot, reason: empty.reason)
     }
@@ -1061,8 +1063,6 @@ struct DashboardPage: View {
   }
 
   private func openKnowsRow(_ row: HomeKnowsRow) {
-    knowsLedger.entries[row.ledgerKey] = knowsLedgerStore.recordOpened(
-      key: row.ledgerKey, contentHash: row.contentHash)
     switch row.kind {
     case .task(let id):
       if let task = (viewModel.overdueTasks + viewModel.todaysTasks + viewModel.recentTasks)
@@ -1072,19 +1072,29 @@ struct DashboardPage: View {
       }
       navigate(to: .tasks)
     case .insight(let id):
+      // Nothing opens when the recommendation is gone, and an open is recorded
+      // only once one happened: a row counted as opened is exempt from the show
+      // cap and the same-day rule for good.
       guard let recommendation = intelligenceStore.recommendations.first(where: { $0.id == id })
       else { return }
       Task {
-        if await openRecommendation(recommendation) {
-          await intelligenceStore.recordPrimaryAction(recommendation)
-        }
+        guard await openRecommendation(recommendation) else { return }
+        recordKnowsOpened(row)
+        await intelligenceStore.recordPrimaryAction(recommendation)
       }
+      return
     case .question:
       // Prefill the ask bar so you can glance it over and edit before sending,
       // rather than firing the suggestion blindly.
       chatProvider.draftText = row.text
       homeAskFieldFocused = true
     }
+    recordKnowsOpened(row)
+  }
+
+  private func recordKnowsOpened(_ row: HomeKnowsRow) {
+    knowsLedger.entries[row.ledgerKey] = knowsLedgerStore.recordOpened(
+      key: row.ledgerKey, contentHash: row.contentHash)
   }
 
   private func knowsDismissHandler(for row: HomeKnowsRow) -> ((OmiAPI.TaskIntelligenceFeedbackReason?) -> Void)? {

@@ -66,6 +66,36 @@ final class MemoryReviewCardTests: XCTestCase {
     XCTAssertEqual(record.memoriesLearned.map(\.memoryID), ["mem_3"])
   }
 
+  /// One entry of the wrong shape is one row lost, not the whole section: the rest of the array
+  /// decodes independently around it.
+  func testOneMalformedLearnedEntryDoesNotDiscardTheValidRowsBesideIt() throws {
+    let record = try decodeRecord(
+      """
+      {
+        "id": "ds_1",
+        "memories_learned": [
+          { "memory_id": 17, "content": "id is a number" },
+          "not an object at all",
+          { "memory_id": "mem_2", "content": "Keeps a Wednesday release train." }
+        ]
+      }
+      """)
+    XCTAssertEqual(record.memoriesLearned.map(\.memoryID), ["mem_2"])
+  }
+
+  /// A blank-but-present id passes an emptiness check and produces a row whose ✓ / ✗ / Fix would
+  /// address no memory at all.
+  func testAWhitespaceOnlyMemoryIDIsNotAReviewRow() throws {
+    let record = try decodeRecord(
+      #"{"id": "ds_1", "memories_learned": [{"memory_id": "  ", "content": "Real content."}]}"#)
+    XCTAssertTrue(record.memoriesLearned.isEmpty)
+
+    let summary = DailySummaryRecord(
+      id: "ds_1", date: "2026-09-01", headline: nil, overview: nil,
+      memoriesLearned: [DailySummaryRecord.LearnedMemory(memoryID: " ", content: "Real content.")])
+    XCTAssertTrue(ChatDailySummaryCard.memoriesLearned(in: summary).isEmpty)
+  }
+
   func testRecordSurvivesAMemoriesLearnedFieldOfTheWrongShape() throws {
     let record = try decodeRecord(#"{"id": "ds_1", "headline": "Still here", "memories_learned": "nope"}"#)
     XCTAssertEqual(record.headline, "Still here")
@@ -95,6 +125,25 @@ final class MemoryReviewCardTests: XCTestCase {
       id: "ds_2", date: "2026-09-01", headline: "Quiet", overview: nil,
       memoriesLearned: [DailySummaryRecord.LearnedMemory(memoryID: "mem_1", content: "   ")])
     XCTAssertTrue(ChatDailySummaryCard.memoriesLearned(in: blank).isEmpty)
+  }
+
+  /// The section captures its rows when it is built, so a summary regenerated under the same id
+  /// must not reuse the old one: new memories would never appear and corrected ones would keep the
+  /// text the record no longer contains.
+  func testTheReviewSectionIsRebuiltWhenARegeneratedSummaryChangesItsRows() {
+    let first = [MemoryReviewItem(memoryID: "mem_1", content: "Prefers async standups.")]
+    let corrected = [MemoryReviewItem(memoryID: "mem_1", content: "Prefers written standups.")]
+    let added = first + [MemoryReviewItem(memoryID: "mem_2", content: "Ships on Wednesdays.")]
+
+    let identity = ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_1", items: first)
+    XCTAssertEqual(
+      identity, ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_1", items: first))
+    XCTAssertNotEqual(
+      identity, ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_1", items: corrected))
+    XCTAssertNotEqual(
+      identity, ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_1", items: added))
+    XCTAssertNotEqual(
+      identity, ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_2", items: first))
   }
 
   func testCategoryLabelIsBoundedButNeverInvented() {
@@ -339,6 +388,31 @@ final class MemoryReviewCardTests: XCTestCase {
       .none)
   }
 
+  // MARK: - Live read
+
+  /// A failed mirror read used to burn the once-per-mount flag: every row then read as unreviewed
+  /// for as long as the card stayed mounted, indistinguishable from a day nobody voted on.
+  @MainActor
+  func testAFailedLiveReadIsRetriedInsteadOfSettlingEveryRowAsUnreviewed() async {
+    let reader = FlakyStateReader()
+    let item = MemoryReviewItem(memoryID: "mem_1", content: "Prefers async standups.")
+    let store = MemoryReviewCardStore(
+      items: [item], source: .dailySummaryChat, mutator: UnusedMutator(), stateReader: reader)
+
+    await store.loadLiveStateIfNeeded()
+    XCTAssertEqual(reader.reads, 1)
+    XCTAssertEqual(store.row("mem_1").displayed, .none)
+
+    reader.result = ["mem_1": .accepted]
+    await store.loadLiveStateIfNeeded()
+    XCTAssertEqual(reader.reads, 2)
+    XCTAssertEqual(store.row("mem_1").displayed, .accepted)
+
+    // Once it has succeeded the section stops reading: it is chrome, not a poller.
+    await store.loadLiveStateIfNeeded()
+    XCTAssertEqual(reader.reads, 2)
+  }
+
   // MARK: - Telemetry shape
 
   func testTelemetryCategoryStaysBounded() {
@@ -349,6 +423,26 @@ final class MemoryReviewCardTests: XCTestCase {
   }
 
   // MARK: - Helpers
+
+  /// Fails until it is given a result, so "the read failed" and "nobody has voted" are two
+  /// different observable outcomes rather than the same empty dictionary.
+  private final class FlakyStateReader: MemoryReviewStateReading, @unchecked Sendable {
+    struct ReadFailed: Error {}
+
+    var result: [String: MemoryReviewVerdict]?
+    private(set) var reads = 0
+
+    func verdicts(for items: [MemoryReviewItem]) async throws -> [String: MemoryReviewVerdict] {
+      reads += 1
+      guard let result else { throw ReadFailed() }
+      return result
+    }
+  }
+
+  private struct UnusedMutator: MemoryReviewMutating {
+    func review(memoryID: String, keep: Bool) async throws {}
+    func edit(memoryID: String, content: String) async throws {}
+  }
 
   private func memory(content: String, review: Bool?) -> ServerMemory {
     ServerMemory(

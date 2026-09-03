@@ -186,7 +186,11 @@ final class HomeKnowsImpressionStoreTests: XCTestCase {
 
     let persistence = FakePersistence()
     var clock = HomeKnowsLedgerFixture.noon
-    lazy var store = HomeKnowsImpressionStore(persistence: persistence, now: { self.clock })
+    /// Injected so an account switch is a value in the test rather than a
+    /// mutation of the process-wide defaults.
+    var owner: String? = "owner-a"
+    lazy var store = HomeKnowsImpressionStore(
+      persistence: persistence, now: { self.clock }, ownerID: { self.owner })
     let hash = HomeKnowsRotationPolicy.contentHash(text: "Meet with Priya")
   }
 
@@ -259,6 +263,38 @@ final class HomeKnowsImpressionStoreTests: XCTestCase {
     XCTAssertEqual(entry?.shows, 1)
     XCTAssertNil(entry?.dismissedAt)
     XCTAssertEqual(entry?.contentHash, edited)
+  }
+
+  /// A prior open belongs to the text that was open. Carrying it onto changed
+  /// content left the row exempt from the show cap and the same-day rule for
+  /// good — the one entry that could repeat itself indefinitely.
+  @MainActor
+  func testChangedContentAlsoClearsAnEarlierOpen() {
+    let harness = Harness()
+    harness.store.beginVisit()
+    harness.store.recordOpened(key: "task:t1", contentHash: harness.hash)
+    XCTAssertNotNil(harness.store.snapshot().entry("task:t1")?.lastOpenedAt)
+
+    let edited = HomeKnowsRotationPolicy.contentHash(text: "Meet with Priya about Q3")
+    harness.store.beginVisit()
+    XCTAssertNil(harness.store.recordShown(key: "task:t1", contentHash: edited)?.lastOpenedAt)
+  }
+
+  /// The ledger is owner-scoped at every read and write, but the once-per-visit
+  /// de-duplication set is not: a question row is keyed by its text, so the
+  /// previous owner's key would silence the new owner's first impression.
+  @MainActor
+  func testAnAccountSwitchStartsAFreshVisit() {
+    let harness = Harness()
+    harness.store.beginVisit()
+    XCTAssertEqual(harness.store.recordShown(key: "question:q1", contentHash: harness.hash)?.shows, 1)
+    XCTAssertNil(harness.store.recordShown(key: "question:q1", contentHash: harness.hash))
+    XCTAssertTrue(harness.store.shouldReportEmptySlot("tip"))
+    XCTAssertFalse(harness.store.shouldReportEmptySlot("tip"))
+
+    harness.owner = "owner-b"
+    XCTAssertEqual(harness.store.recordShown(key: "question:q1", contentHash: harness.hash)?.shows, 2)
+    XCTAssertTrue(harness.store.shouldReportEmptySlot("tip"))
   }
 
   @MainActor

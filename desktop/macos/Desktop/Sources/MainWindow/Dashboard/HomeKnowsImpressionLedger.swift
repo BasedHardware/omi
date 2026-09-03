@@ -102,6 +102,29 @@ enum HomeKnowsRotationPolicy {
     return String(hash.compactMap { String(format: "%02x", $0) }.joined().prefix(16))
   }
 
+  /// Why this candidate is not something to surface at all right now, or `nil`
+  /// if it still is. Independent of how often it has been shown.
+  ///
+  /// Split out because two callers need exactly this much and no more: the
+  /// composer, which then layers the rotation rules on top, and the greeting's
+  /// open-task count, which must not shrink just because a row has already had
+  /// its three impressions today. One predicate is what keeps "3 things need
+  /// you" honest about the list underneath it.
+  static func availability(
+    facts: HomeKnowsCandidateFacts,
+    entry: HomeKnowsImpression?,
+    now: Date
+  ) -> HomeKnowsRotationReason? {
+    guard facts.isActive else { return .inactive }
+    if let dueAt = facts.dueAt, now.timeIntervalSince(dueAt) > stalePastDueGrace {
+      return .staleDueDate
+    }
+    // A changed underlying object is new information: it clears a dismissal and
+    // resets the show cap. That is the only way a dismissed row ever returns.
+    guard let entry, entry.contentHash == facts.contentHash else { return nil }
+    return entry.dismissedAt != nil ? .dismissed : nil
+  }
+
   /// Why this candidate must not take a slot right now, or `nil` if it may.
   ///
   /// - Parameter allowSameDayRepeat: set only when the slot has no other
@@ -113,15 +136,10 @@ enum HomeKnowsRotationPolicy {
     calendar: Calendar,
     allowSameDayRepeat: Bool
   ) -> HomeKnowsRotationReason? {
-    guard facts.isActive else { return .inactive }
-    if let dueAt = facts.dueAt, now.timeIntervalSince(dueAt) > stalePastDueGrace {
-      return .staleDueDate
-    }
-    guard let entry else { return nil }
-    // A changed underlying object is new information: it clears a dismissal and
-    // resets the show cap. That is the only way a dismissed row ever returns.
-    guard entry.contentHash == facts.contentHash else { return nil }
-    if entry.dismissedAt != nil { return .dismissed }
+    if let unavailable = availability(facts: facts, entry: entry, now: now) { return unavailable }
+    // Past this point the entry exists and still describes this exact content;
+    // anything else was already admitted by `availability`.
+    guard let entry, entry.contentHash == facts.contentHash else { return nil }
 
     if entry.lastOpenedAt == nil, entry.shows >= showCapCount {
       let lastShownAt = entry.lastShownAt ?? .distantPast
@@ -226,33 +244,57 @@ final class HomeKnowsImpressionStore {
 
   private let persistence: any HomeKnowsImpressionPersisting
   private let now: () -> Date
+  private let ownerID: () -> String?
   /// Row keys and slot names already reported during the current visit. One
   /// visit is one impression: the in-visit rotation timer re-renders the same
   /// row every few seconds and must not burn through the show cap.
   private var reportedThisVisit: Set<String> = []
+  /// The owner the keys above belong to. The ledger itself is owner-scoped at
+  /// every read and write, but this set is not — and a shared key (a suggested
+  /// question is keyed by its text) would silence the new owner's first
+  /// impression on a switch that leaves the dashboard mounted.
+  private var visitOwnerID: String?
 
   /// `persistence` defaults to owner-scoped `UserDefaults`. It is built inside
   /// the initializer rather than as a default argument because default argument
   /// expressions are evaluated outside this type's actor.
   init(
     persistence: (any HomeKnowsImpressionPersisting)? = nil,
-    now: @escaping () -> Date = Date.init
+    now: @escaping () -> Date = Date.init,
+    ownerID: (() -> String?)? = nil
   ) {
     self.persistence = persistence ?? HomeKnowsImpressionDefaults()
     self.now = now
+    self.ownerID = ownerID ?? { RuntimeOwnerIdentity.currentOwnerId() }
   }
 
   /// Reads through to storage so an account switch cannot be served a cached
   /// ledger from the previous owner.
-  func snapshot() -> HomeKnowsImpressionLedger { persistence.load() }
+  func snapshot() -> HomeKnowsImpressionLedger {
+    adoptCurrentOwner()
+    return persistence.load()
+  }
 
   /// Starts a new visit to the knows-list. Resets in-visit de-duplication.
-  func beginVisit() { reportedThisVisit.removeAll() }
+  func beginVisit() {
+    visitOwnerID = ownerID()
+    reportedThisVisit.removeAll()
+  }
+
+  /// An owner change is the start of a new visit whether or not the view was
+  /// rebuilt: the previous owner's keys describe another account's ledger.
+  private func adoptCurrentOwner() {
+    let current = ownerID()
+    guard current != visitOwnerID else { return }
+    visitOwnerID = current
+    reportedThisVisit.removeAll()
+  }
 
   /// Records a row as shown. Returns the updated impression, or `nil` when this
   /// row was already recorded during the current visit.
   @discardableResult
   func recordShown(key: String, contentHash: String) -> HomeKnowsImpression? {
+    adoptCurrentOwner()
     guard reportedThisVisit.insert(key).inserted else { return nil }
     return mutate(key: key) { impression in
       let contentChanged = impression.contentHash != contentHash
@@ -266,6 +308,10 @@ final class HomeKnowsImpressionStore {
         impression.firstShownAt = nil
         impression.dismissedAt = nil
       }
+      // A prior open belonged to the old text. Carrying it across exempted the
+      // new content from the show cap and the same-day rule for good — the one
+      // row in the ledger that could repeat itself indefinitely.
+      if contentChanged { impression.lastOpenedAt = nil }
       impression.shows += 1
       impression.firstShownAt = impression.firstShownAt ?? self.now()
       impression.lastShownAt = self.now()
@@ -292,7 +338,8 @@ final class HomeKnowsImpressionStore {
 
   /// True the first time this visit that an empty slot is worth reporting.
   func shouldReportEmptySlot(_ slot: String) -> Bool {
-    reportedThisVisit.insert("slot:\(slot)").inserted
+    adoptCurrentOwner()
+    return reportedThisVisit.insert("slot:\(slot)").inserted
   }
 
   @discardableResult
