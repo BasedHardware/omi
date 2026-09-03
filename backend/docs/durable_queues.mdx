@@ -112,9 +112,11 @@ substrate for the six properties. Remaining exceptions, called out because they
 must not change product semantics:
 
 - `conversation_finalization_jobs` keeps its Firestore document shape, BYOK
-  `blocked_byok`, and `reconcile_after_at` semantics. Attempt/DL/age/isolation
-  go through the substrate in `utils/pusher_finalization.py` and
-  `services/conversation_finalization.py`.
+  `blocked_byok`, and `reconcile_after_at` semantics. Age is published as
+  `omi_queue_oldest_ready_age_seconds` from the finalization service. The async
+  pusher helper keeps its existing Cloud Tasks attempt fence so it does not
+  import `database.durable_queue` (the async-blocker gate treats `database.*`
+  calls as blocking I/O).
 - `chat_first_proactive_intents` already isolated per item in PR #12556; this
   change observes `omi_queue_oldest_ready_age_seconds` from the materialize
   route rather than growing `chat_first_intents.py`.
