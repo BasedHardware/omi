@@ -139,6 +139,15 @@ jobs:
           test -f "$file"
           bucket="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['bucket'])" "$file")"
           project="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['project'])" "$file")"
+          case "$RESOLVED_ENVIRONMENT" in
+            development) expected_bucket='omi-dev-private-cloud-sync' ;;
+            prod) expected_bucket='omi-private-cloud-sync' ;;
+            *) echo "Invalid environment: $RESOLVED_ENVIRONMENT."; exit 1 ;;
+          esac
+          if [[ "$bucket" != "$expected_bucket" ]]; then
+            echo "Lifecycle file bucket $bucket does not match the expected $RESOLVED_ENVIRONMENT bucket $expected_bucket."
+            exit 1
+          fi
           if [[ "$project" != "${{ vars.GCP_PROJECT_ID }}" ]]; then
             echo "Lifecycle file project $project does not match the environment project ${{ vars.GCP_PROJECT_ID }}."
             exit 1
@@ -160,7 +169,7 @@ jobs:
         run: |
           set -euo pipefail
           gcloud storage buckets describe "gs://${{ steps.select.outputs.bucket }}" \
-            --project="${{ steps.select.outputs.project }}" --format=json > before.json
+            --project="${{ steps.select.outputs.project }}" --raw --format=json > before.json
           gcloud storage buckets notifications list "gs://${{ steps.select.outputs.bucket }}" \
             --project="${{ steps.select.outputs.project }}" --format=json > notifications.json
           python3 -c "import json;print(json.dumps(json.load(open('before.json')).get('lifecycle', {}), indent=2))"
@@ -169,7 +178,13 @@ jobs:
         run: |
           set -euo pipefail
           extra=()
-          if [[ "$LIFECYCLE_VARIANT" == "rollback" ]]; then extra+=(--allow-rule-removal); fi
+          if [[ "$LIFECYCLE_VARIANT" == "rollback" ]]; then
+            # Scoped removal: only rules the apply variant declared (the Coldline
+            # rule) may be dropped; a later live rule still blocks the rollback.
+            apply_file="backend/deploy/storage-lifecycle/${RESOLVED_ENVIRONMENT}.json"
+            test -f "$apply_file"
+            extra+=(--allow-rule-removal-of "$apply_file")
+          fi
           python3 backend/scripts/validate_storage_lifecycle.py \
             --desired "${{ steps.select.outputs.file }}" \
             --live before.json \
@@ -188,7 +203,7 @@ jobs:
         run: |
           set -euo pipefail
           gcloud storage buckets describe "gs://${{ steps.select.outputs.bucket }}" \
-            --project="${{ steps.select.outputs.project }}" --format=json > after.json
+            --project="${{ steps.select.outputs.project }}" --raw --format=json > after.json
           python3 backend/scripts/validate_storage_lifecycle.py \
             --desired "${{ steps.select.outputs.file }}" --live after.json --expect-applied
 

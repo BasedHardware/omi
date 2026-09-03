@@ -10,7 +10,10 @@ The load-bearing facts this guards:
 * ``gcloud storage buckets update --lifecycle-file`` **replaces** the whole
   lifecycle config, so a desired file that forgets a live rule silently deletes
   that rule. Without ``--allow-rule-removal`` this validator refuses any desired
-  file that drops a rule present in the live describe.
+  file that drops a rule present in the live describe. Rollback is narrower:
+  ``--allow-rule-removal-of <apply document>`` permits dropping only rules that
+  the apply variant declared (the Coldline rule); any other live rule still
+  blocks. ``--allow-rule-removal`` remains as an explicit operator override.
 * No ``Delete`` action may ever reach ``chunks/``. An unscoped Delete rule counts
   as reaching it.
 * Every ``SetStorageClass`` rule must be prefix-scoped to exactly ``chunks/``.
@@ -75,7 +78,7 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
         action = rule.get("action") if isinstance(rule.get("action"), Mapping) else {}
         condition = rule.get("condition") if isinstance(rule.get("condition"), Mapping) else {}
         action_type = action.get("type")
-        if action_type not in ALLOWED_ACTIONS:
+        if not isinstance(action_type, str) or action_type not in ALLOWED_ACTIONS:
             errors.append(f"desired rule {index} has unsupported action {action_type!r}")
             continue
         if condition.get("isLive") is False or any(key in condition for key in NONCURRENT_CONDITION_KEYS):
@@ -118,9 +121,14 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
                     f"got {prefixes!r}"
                 )
             source_classes = condition.get("matchesStorageClass")
-            if source_classes is not None and not set(source_classes).issubset(ALLOWED_SOURCE_CLASSES):
+            classes_ok = (
+                isinstance(source_classes, list)
+                and all(isinstance(c, str) for c in source_classes)
+                and sorted(source_classes) == sorted(ALLOWED_SOURCE_CLASSES)
+            )
+            if not classes_ok:
                 errors.append(
-                    f"desired rule {index} matchesStorageClass must be a subset of "
+                    f"desired rule {index} matchesStorageClass must be exactly "
                     f"{sorted(ALLOWED_SOURCE_CLASSES)}, got {source_classes!r}"
                 )
 
@@ -138,6 +146,7 @@ def validate_against_live(
     live: Mapping[str, Any],
     allow_rule_removal: bool = False,
     expect_applied: bool = False,
+    allow_rule_removal_of: Sequence[Mapping[str, Any]] | None = None,
 ) -> list[str]:
     errors: list[str] = []
     live_name = str(live.get("name") or "").strip()
@@ -152,13 +161,24 @@ def validate_against_live(
     desired_rules = _rules(desired)
     live_rules = _rules(live)
     if not allow_rule_removal:
+        # Scoped removal (rollback): only rules the apply variant declared may
+        # be dropped; a later live rule the apply never contained still blocks.
+        droppable: Sequence[Any] = (
+            desired_rules if allow_rule_removal_of is None else desired_rules + list(allow_rule_removal_of)
+        )
         for rule in live_rules:
-            if rule not in desired_rules:
-                errors.append(
-                    "desired document drops a rule that is live on the bucket "
-                    f"({json.dumps(rule, sort_keys=True)}); --lifecycle-file replaces the whole config, "
-                    "so this would delete it. Re-declare it or pass --allow-rule-removal."
-                )
+            if rule in droppable:
+                continue
+            hint = (
+                "Re-declare it or pass --allow-rule-removal."
+                if allow_rule_removal_of is None
+                else "Re-declare it, or restrict removal to rules the apply variant declared."
+            )
+            errors.append(
+                "desired document drops a rule that is live on the bucket "
+                f"({json.dumps(rule, sort_keys=True)}); --lifecycle-file replaces the whole config, "
+                f"so this would delete it. {hint}"
+            )
     if expect_applied:
         missing = [r for r in desired_rules if r not in live_rules]
         extra = [r for r in live_rules if r not in desired_rules]
@@ -190,10 +210,18 @@ def main() -> int:
     parser.add_argument("--notifications", type=Path, default=None)
     parser.add_argument("--expect-applied", action="store_true")
     parser.add_argument("--allow-rule-removal", action="store_true")
+    parser.add_argument(
+        "--allow-rule-removal-of",
+        type=Path,
+        default=None,
+        help="Scoped removal (rollback): allow dropping only rules declared in this apply document",
+    )
     parser.add_argument("--source-only", action="store_true")
     args = parser.parse_args()
 
     errors: list[str] = []
+    if args.allow_rule_removal and args.allow_rule_removal_of is not None:
+        errors.append("--allow-rule-removal and --allow-rule-removal-of are mutually exclusive")
     try:
         desired = _read_json(args.desired)
     except (OSError, json.JSONDecodeError) as exc:
@@ -205,9 +233,26 @@ def main() -> int:
     errors.extend(validate_desired_document(desired))
 
     if args.source_only:
-        if args.live or args.notifications or args.expect_applied:
+        if (
+            args.live
+            or args.notifications
+            or args.expect_applied
+            or args.allow_rule_removal
+            or args.allow_rule_removal_of is not None
+        ):
             errors.append("--source-only cannot claim live bucket validation")
     else:
+        allow_rule_removal_of: Sequence[Mapping[str, Any]] | None = None
+        if args.allow_rule_removal_of is not None:
+            try:
+                apply_document = _read_json(args.allow_rule_removal_of)
+            except (OSError, json.JSONDecodeError) as exc:
+                errors.append(f"could not read allow-rule-removal-of document: {exc}")
+            else:
+                if isinstance(apply_document, Mapping):
+                    allow_rule_removal_of = _rules(apply_document)
+                else:
+                    errors.append("allow-rule-removal-of document must be a JSON object")
         if args.live is None:
             errors.append("a live describe document is required outside --source-only mode")
         else:
@@ -223,6 +268,7 @@ def main() -> int:
                             live,
                             allow_rule_removal=args.allow_rule_removal,
                             expect_applied=args.expect_applied,
+                            allow_rule_removal_of=allow_rule_removal_of,
                         )
                     )
                 else:

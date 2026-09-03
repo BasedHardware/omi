@@ -13,6 +13,7 @@ noncurrent-version (`isLive: false`) rule.
 
 Rollback: dispatch the workflow with `lifecycle_variant=rollback`. That stops
 further transitions; objects already moved stay Coldline (reverting the class
-needs a rewrite job).
+needs a rewrite job). Rollback may drop only the rules the apply variant
+declared — any other live rule blocks it until re-declared.
 
 Plan and evidence: `omi-knowledge-base/projects/gcp-cost-efficiency/evidence/2026-09-02-coldline-rollout-plan.md`.
