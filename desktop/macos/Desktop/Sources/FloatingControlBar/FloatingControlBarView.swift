@@ -1619,11 +1619,15 @@ struct FloatingControlBarView: View {
           .lineLimit(1)
       }
 
-      if state.isVoiceLocked && state.pttHintText.isEmpty {
-        Image(systemName: "lock.fill")
-          .scaledFont(size: OmiType.micro, weight: .bold)
+      // Locked mode is a mode the user has to be able to see at a glance: a bare glyph
+      // read as decoration, and gating it on an empty hint hid it for most of the turn.
+      // Restores the pre-2b416572c0 badge, always shown while locked.
+      if state.isVoiceLocked {
+        Text("LOCKED")
+          .scaledFont(size: 10, weight: .bold)
           .foregroundColor(.orange)
-          .frame(width: 18, height: 18)
+          .padding(.horizontal, 6)
+          .padding(.vertical, 2)
           .background(Color.orange.opacity(0.2))
           .cornerRadius(4)
       }

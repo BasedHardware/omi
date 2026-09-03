@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
-import { posthogResults } from "@/lib/posthog";
+import { getDb } from "@/lib/firebase/admin";
 
 export const dynamic = "force-dynamic";
 
-// macOS thumbs up/down on assistant responses (`message_rated`, always
-// filtered to $os_name = 'macOS'). The positive share is ONE number per
-// bucket: thumbs_up / (thumbs_up + thumbs_down) * 100.
+// macOS thumbs positive share, computed from the chat DB itself: every rated
+// message doc (users/*/messages, rating in {1,-1}) joined to its own journal
+// metadata. This replaces the earlier PostHog-event version because events
+// carry no message id — the DB join classifies ALL history, not just events
+// from tagged builds (Nik, 2026-09-02).
 //
-// `source` splits text (main-window chat) from voice (floating-bar
-// responses); events recorded before the dimension shipped count only toward
-// the combined "all" series.
+// Desktop messages are the ones with a `message_source` of desktop_chat
+// (text) or realtime_voice (voice); mobile ratings (message_source null) are
+// excluded — this board is macOS. Thumbs on proactive-notification cards
+// (journal continuityKey prefixed "notification:" — memory/insight/
+// suggestion/task/goal/etc.) rate the notification, not a general Omi
+// answer, and are excluded from every series.
 type RatioPoint = {
   date: string;
   all: number | null;
@@ -18,6 +23,13 @@ type RatioPoint = {
   voice: number | null;
   upAll: number;
   downAll: number;
+};
+
+export type RatedMessageRow = {
+  createdAt: string; // ISO
+  rating: 1 | -1;
+  messageSource: string | null;
+  continuityKey: string | null;
 };
 
 function ratio(up: number, down: number): number | null {
@@ -31,43 +43,35 @@ function mondayKey(ymd: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function computeMessageRatings(days: number) {
-  const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
-  const projectId = process.env.POSTHOG_PROJECT_ID;
-  const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(
-    /\/$/,
-    "",
-  );
-  if (!apiKey || !projectId) {
-    throw new Error("PostHog credentials not configured");
-  }
+function nycDay(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-CA", {
+    timeZone: "America/New_York",
+  });
+}
 
-  const rows = (await posthogResults(
-    host,
-    projectId,
-    apiKey,
-    `
-      SELECT
-        toDate(toTimeZone(timestamp, 'America/New_York')) AS day,
-        coalesce(toString(properties.source), 'legacy') AS src,
-        countIf(properties.rating = 'thumbs_up') AS up,
-        countIf(properties.rating = 'thumbs_down') AS down
-      FROM events
-      WHERE event = 'message_rated'
-        AND properties.$os_name = 'macOS'
-        AND timestamp >= now() - INTERVAL ${days} DAY
-      GROUP BY day, src
-      ORDER BY day
-    `,
-  )) as any[];
+const DESKTOP_SOURCES: Record<string, "text" | "voice"> = {
+  desktop_chat: "text",
+  realtime_voice: "voice",
+};
 
+export function classifyRatedMessage(
+  row: RatedMessageRow
+): "text" | "voice" | "notification" | "mobile" {
+  if (row.continuityKey?.startsWith("notification:")) return "notification";
+  const lane = row.messageSource ? DESKTOP_SOURCES[row.messageSource] : null;
+  return lane ?? "mobile";
+}
+
+export function aggregateRatedMessages(rows: RatedMessageRow[]) {
   type Bucket = { up: Record<string, number>; down: Record<string, number> };
   const byDay = new Map<string, Bucket>();
-  for (const [day, src, up, down] of rows ?? []) {
-    const key = String(day).slice(0, 10);
+  for (const row of rows) {
+    const lane = classifyRatedMessage(row);
+    if (lane === "notification" || lane === "mobile") continue;
+    const key = nycDay(row.createdAt);
     const bucket = byDay.get(key) ?? { up: {}, down: {} };
-    bucket.up[src] = (bucket.up[src] ?? 0) + Number(up);
-    bucket.down[src] = (bucket.down[src] ?? 0) + Number(down);
+    const side = row.rating === 1 ? bucket.up : bucket.down;
+    side[lane] = (side[lane] ?? 0) + 1;
     byDay.set(key, bucket);
   }
 
@@ -94,9 +98,9 @@ export async function computeMessageRatings(days: number) {
     const week = mondayKey(day);
     const acc = byWeek.get(week) ?? { up: {}, down: {} };
     for (const [k, v] of Object.entries(bucket.up))
-      acc.up[k] = (acc.up[k] ?? 0) + (v as number);
+      acc.up[k] = (acc.up[k] ?? 0) + v;
     for (const [k, v] of Object.entries(bucket.down))
-      acc.down[k] = (acc.down[k] ?? 0) + (v as number);
+      acc.down[k] = (acc.down[k] ?? 0) + v;
     byWeek.set(week, acc);
   });
   const weekly = Array.from(byWeek.entries())
@@ -112,7 +116,45 @@ export async function computeMessageRatings(days: number) {
     ratio: p.all,
   }));
 
-  return { days, data, daily, weekly };
+  return { data, daily, weekly };
+}
+
+async function fetchRatedMessages(days: number): Promise<RatedMessageRow[]> {
+  const db = getDb();
+  const since = new Date(Date.now() - days * 86_400_000);
+  // Needs the collection-group composite index on (rating, created_at) —
+  // created 2026-09-02 on prod.
+  const snap = await db
+    .collectionGroup("messages")
+    .where("rating", "in", [1, -1])
+    .where("created_at", ">=", since)
+    .get();
+  return snap.docs.map((doc) => {
+    const d = doc.data();
+    let continuityKey: string | null = null;
+    if (typeof d.metadata === "string" && d.metadata) {
+      try {
+        continuityKey = JSON.parse(d.metadata)?.continuityKey ?? null;
+      } catch {
+        // unreadable journal metadata → treated as a plain message
+      }
+    }
+    const createdAt =
+      typeof d.created_at?.toDate === "function"
+        ? d.created_at.toDate().toISOString()
+        : new Date(d.created_at).toISOString();
+    return {
+      createdAt,
+      rating: d.rating,
+      messageSource: d.message_source ?? null,
+      continuityKey,
+    };
+  });
+}
+
+export async function computeMessageRatings(days: number) {
+  const rows = await fetchRatedMessages(days);
+  return { days, ...aggregateRatedMessages(rows) };
 }
 
 export async function GET(request: NextRequest) {
@@ -122,14 +164,14 @@ export async function GET(request: NextRequest) {
   try {
     const days = Math.min(
       parseInt(request.nextUrl.searchParams.get("days") || "30", 10) || 30,
-      180,
+      180
     );
     return NextResponse.json(await computeMessageRatings(days));
   } catch (error: any) {
     console.error("Message ratings error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to fetch message ratings" },
-      { status: 502 },
+      { status: 502 }
     );
   }
 }

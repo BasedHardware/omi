@@ -2,6 +2,28 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.270",
+      "date": "2026-09-03",
+      "changes": [
+        "Double-tap for Locked Mode works again on modifier-only push-to-talk keys; a single accidental tap still does nothing"
+      ]
+    },
+    {
+      "version": "0.12.269",
+      "date": "2026-09-02",
+      "changes": [
+        "Thumbs on proactive notification cards (focus, insights, tasks, memories) are now tracked separately from ratings of regular Omi answers."
+      ]
+    },
+    {
+      "version": "0.12.268",
+      "date": "2026-09-02",
+      "changes": [
+        "Thumbs up/down on responses now records whether it was a chat or a voice reply, powering the team quality dashboards.",
+        "Onboarding permission steps now lead with the Allow action; the way past a permission is a quieter text link beneath it rather than a second button of equal weight"
+      ]
+    },
+    {
       "version": "0.12.267",
       "date": "2026-09-02",
       "changes": [

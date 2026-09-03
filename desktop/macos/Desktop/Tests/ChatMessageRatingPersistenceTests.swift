@@ -102,6 +102,55 @@ final class ChatMessageRatingPersistenceTests: XCTestCase {
     XCTAssertTrue(queue.isEmpty)
   }
 
+  func testProactiveNotificationRatingResolvesToNotificationSurface() {
+    // A thumb on a proactive-notification message (focus/insight/task/memory
+    // card in the transcript) rates the notification, not a general Omi
+    // answer — it must report source="notification" so the admin response
+    // quality % can exclude it, no matter which surface the caller passed.
+    let notification = ChatMessage(
+      id: "n1",
+      clientTurnId: ChatContinuityInvariants.proactiveNotificationContinuityKey(
+        id: UUID(), kind: .insight),
+      text: "You seem distracted.",
+      sender: .ai,
+      isSynced: true)
+    XCTAssertEqual(
+      ChatProvider.ratingSurface(for: notification, requested: "text"), "notification")
+    XCTAssertEqual(
+      ChatProvider.ratingSurface(for: notification, requested: "voice"), "notification")
+
+    let answer = ChatMessage(id: "a1", text: "Done.", sender: .ai, isSynced: true)
+    XCTAssertEqual(ChatProvider.ratingSurface(for: answer, requested: "text"), "text")
+    XCTAssertEqual(ChatProvider.ratingSurface(for: nil, requested: "voice"), "voice")
+  }
+
+  func testUnsyncedProactiveRatingKeepsNotificationSurfaceThroughFlush() async {
+    // Real deferred path: a thumb on an UNSYNCED proactive-notification
+    // message goes rateMessage → queue → post-sync drain. The resolved
+    // "notification" surface must be what drains — not the caller's "text".
+    let provider = ChatProvider()
+    let messageId = "proactive-live"
+    let unsynced = ChatMessage(
+      id: messageId,
+      clientTurnId: ChatContinuityInvariants.proactiveNotificationContinuityKey(
+        id: UUID(), kind: .task),
+      text: "You said you'd email Alex today.",
+      sender: .ai,
+      isStreaming: false,
+      isSynced: false,
+      journalStatus: .completed)
+    provider.messages = [unsynced]
+
+    await provider.rateMessage(messageId, rating: -1, surface: "text")
+    XCTAssertTrue(provider.pendingMessageRatings.contains(messageId))
+
+    provider.messages[0].isSynced = true
+    let ready = provider.pendingMessageRatings.drain(using: provider.messages)
+    XCTAssertEqual(ready.count, 1)
+    XCTAssertEqual(ready.first?.surface, "notification")
+    XCTAssertEqual(ready.first?.rating, -1)
+  }
+
   func testQueueDropsFailedJournalWithoutPersist() {
     var queue = ChatMessageRatingQueue()
     queue.enqueue(messageId: "m1", rating: 1)
