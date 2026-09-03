@@ -644,12 +644,14 @@ extension RealtimeHubController {
     case .thinkDeeper:
       let query = (command.input["query"] as? String) ?? turnTranscript
       let toolContext = (command.input["context"] as? String) ?? ""
+      let thinkingLevel = RealtimeHubTools.EscalationThinkingLevel.fromToolInput(command.input["thinking"])
       return await escalateToHigherModel(
         query,
         toolContext: toolContext,
+        thinkingLevel: thinkingLevel,
+        invocationTurnID: invocation.turnID,
         invocationID: command.invocationID,
-        ownerID: command.ownerID,
-        turnID: invocation.turnID)
+        ownerID: command.ownerID)
 
     case .webSearch:
       let scope = RealtimePublicWebSearchScope(toolValue: command.input["scope"])

@@ -161,7 +161,8 @@ struct MemoryHubPage: View {
           QuerySearchBar(
             text: $brainMapSearchText,
             accessibilityID: "brain-map-search-field",
-            placeholder: "Search your entities…"
+            placeholder: "Search your entities…",
+            searchSurface: .brainMap
           )
         },
         content: { brainMapDestination }

@@ -23,6 +23,7 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
+import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
@@ -137,8 +138,7 @@ class _NullSocketCaptureProvider extends CaptureProvider {
     String? source,
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
-  }) async =>
-      null;
+  }) async => null;
 }
 
 class _CountingSocketCaptureProvider extends CaptureProvider {
@@ -231,7 +231,7 @@ class _FakeBatchMicRecorder implements IMicRecorderService {
 
 class _IdentifiedSocketService extends TranscriptSegmentSocketService {
   _IdentifiedSocketService(this.id, this.onSubscribed)
-      : super.withSocket(16000, BleAudioCodec.pcm16, 'en', _TrackingSocket());
+    : super.withSocket(16000, BleAudioCodec.pcm16, 'en', _TrackingSocket());
 
   final int id;
   final void Function(int id) onSubscribed;
@@ -372,9 +372,9 @@ void main() {
     final provider = CaptureProvider(conversationLocationCapture: locationCapture);
 
     await provider.streamDeviceRecording().timeout(
-          const Duration(seconds: 2),
-          onTimeout: () => fail('streamDeviceRecording blocked on location capture'),
-        );
+      const Duration(seconds: 2),
+      onTimeout: () => fail('streamDeviceRecording blocked on location capture'),
+    );
     expect(locationCapture.calls, 1);
     locationCapture.complete();
     provider.dispose();
@@ -391,9 +391,9 @@ void main() {
     );
 
     await provider.startPhoneMicBatchForTesting().timeout(
-          const Duration(seconds: 2),
-          onTimeout: () => fail('phone batch start blocked on location capture'),
-        );
+      const Duration(seconds: 2),
+      onTimeout: () => fail('phone batch start blocked on location capture'),
+    );
 
     expect(micRecorder.startBatchCalls, 1);
     expect(provider.recordingState, RecordingState.record);
@@ -411,11 +411,41 @@ void main() {
 
   test('homepage no-device streamDeviceRecording is check-only', () async {
     final locationCapture = _CountingConversationLocationCapture();
-    final provider = CaptureProvider(conversationLocationCapture: locationCapture);
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-check-only',
+    );
+    final provider = CaptureProvider(conversationLocationCapture: locationCapture, recordingTelemetry: telemetry);
 
     await provider.streamDeviceRecording();
     expect(locationCapture.calls, 1);
     expect(locationCapture.promptIfDeniedArgs, [false]);
+    expect(events, isEmpty, reason: 'a no-device homepage entry must not emit Recording Start Failed');
+    expect(telemetry.recordingId, isNull);
+    provider.dispose();
+  });
+
+  test('failed device streamDeviceRecording emits capture_unavailable', () async {
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-device-fail',
+    );
+    // Batch mode skips the transcription socket, so this stays hermetic: a
+    // device is requested, but no BLE connection exists, so start cannot
+    // reach deviceRecord.
+    SharedPreferencesUtil().batchModeEnabled = true;
+    addTearDown(() => SharedPreferencesUtil().batchModeEnabled = false);
+    final provider = CaptureProvider(recordingTelemetry: telemetry);
+
+    await provider.streamDeviceRecording(
+      device: _device(id: 'omi-1', type: DeviceType.omi),
+    );
+
+    expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
+    expect(events.single.properties['failure_class'], 'capture_unavailable');
+    expect(events.single.properties['recording_id'], 'recording-device-fail');
     provider.dispose();
   });
 
@@ -1550,12 +1580,11 @@ void main() {
       _GatedSocketCaptureProvider provider, {
       BleAudioCodec codec = BleAudioCodec.pcm16,
       int sampleRate = 16000,
-    }) =>
-        provider.changeAudioRecordProfile(
-          audioCodec: codec,
-          sampleRate: sampleRate,
-          source: ConversationSource.phone.name,
-        );
+    }) => provider.changeAudioRecordProfile(
+      audioCodec: codec,
+      sampleRate: sampleRate,
+      source: ConversationSource.phone.name,
+    );
 
     test('drops a reconnect attempt while one is still in flight', () async {
       final provider = _GatedSocketCaptureProvider();

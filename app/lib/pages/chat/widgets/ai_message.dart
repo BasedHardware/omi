@@ -20,6 +20,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
+import 'package:omi/pages/chat/widgets/chat_followup_chip.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -34,6 +35,7 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
 import 'chart_message_widget.dart';
 import 'package:omi/widgets/components/chat_evidence_card.dart';
+import 'package:omi/widgets/components/memory_review_card.dart';
 import 'package:omi/utils/share_sheet.dart';
 import 'markdown_message_widget.dart';
 
@@ -62,7 +64,8 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
   final appProvider = Provider.of<AppProvider>(context, listen: false);
   final messageProvider = Provider.of<MessageProvider>(context, listen: false);
   // Check both public apps and user's installed chat apps (includes private MCP apps)
-  final app = appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
+  final app =
+      appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
       messageProvider.chatApps.firstWhereOrNull((a) => a.id == appId);
 
   if (app != null) {
@@ -325,17 +328,32 @@ Widget buildMessageWidget(
   }
 
   final evidence = visibleSupplementalEvidence(message);
-  if (evidence == null) return messageWidget;
+  // Native content blocks. Both are additive chrome: an absent or malformed
+  // block leaves the answer exactly as it renders today.
+  final reviewCard = showTypingIndicator ? null : message.memoryReviewCard;
+  final followUp = showTypingIndicator ? null : message.followUpQuestion;
+  if (evidence == null && reviewCard == null && followUp == null) return messageWidget;
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisSize: MainAxisSize.min,
     children: [
       messageWidget,
-      const SizedBox(height: 8),
-      // The released mobile surface has no trusted evidence navigator yet.
-      // Keep cards non-actionable until one is supplied; arbitrary URI fields
-      // can never become an external action.
-      ChatEvidenceReferenceList(envelope: evidence),
+      if (reviewCard != null) ...[
+        const SizedBox(height: 12),
+        MemoryReviewCard(
+          items: reviewCard.items,
+          source: MemoryReviewSource.chatBlock,
+          impressionKey: reviewCard.id.isNotEmpty ? reviewCard.id : message.id,
+        ),
+      ],
+      if (evidence != null) ...[
+        const SizedBox(height: 8),
+        // The released mobile surface has no trusted evidence navigator yet.
+        // Keep cards non-actionable until one is supplied; arbitrary URI fields
+        // can never become an external action.
+        ChatEvidenceReferenceList(envelope: evidence),
+      ],
+      if (followUp != null) ...[const SizedBox(height: 8), ChatFollowUpChip(question: followUp, onSend: sendMessage)],
     ],
   );
 }
@@ -829,28 +847,28 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                 ),
               )
             : widget.showTypingIndicator
-                ? const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
-                  )
-                : Builder(
-                    builder: (context) {
-                      String? selectedText;
-                      return SelectionArea(
-                        onSelectionChanged: (SelectedContent? selectedContent) {
-                          selectedText = selectedContent?.plainText;
-                        },
-                        contextMenuBuilder: (context, selectableRegionState) {
-                          return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
-                            widget.onAskOmi?.call(text);
-                          }, selectedText: selectedText);
-                        },
-                        child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
-                      );
+            ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
+              )
+            : Builder(
+                builder: (context) {
+                  String? selectedText;
+                  return SelectionArea(
+                    onSelectionChanged: (SelectedContent? selectedContent) {
+                      selectedText = selectedContent?.plainText;
                     },
-                  ),
+                    contextMenuBuilder: (context, selectableRegionState) {
+                      return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
+                        widget.onAskOmi?.call(text);
+                      }, selectedText: selectedText);
+                    },
+                    child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                  );
+                },
+              ),
         if (widget.messageText.isNotEmpty && widget.messageText != '...' && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,

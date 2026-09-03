@@ -58,9 +58,8 @@ class _Collection:
 
 def _patch_db(monkeypatch, by_status=None, doc_ref=None):
     collection = _Collection(by_status or {}, doc_ref or MagicMock())
-    fake = MagicMock()
-    fake.collection.return_value = collection
-    monkeypatch.setattr(users, 'db', fake)
+    monkeypatch.setattr(users, 'account_deletion_collection', lambda **_kwargs: collection)
+    monkeypatch.setattr(users, 'account_deletion_document', lambda uid, **_kwargs: collection.document(uid))
 
 
 def _failed(uid, *, minutes_ago, attempts=None):

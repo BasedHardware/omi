@@ -969,6 +969,7 @@ class MemoriesViewModel: ObservableObject {
     guard isCurrentScope(token) else { return }
     isSearching = false
     recomputeFilteredMemories()
+    SearchAnalytics.queryEntered(surface: .memories, query: query, resultsCount: searchResults.count)
   }
 
   // MARK: - API Actions
@@ -1952,7 +1953,7 @@ struct MemoriesPage: View {
           QuerySearchBar(
             text: $viewModel.searchText,
             accessibilityID: "memories-search-field",
-            placeholder: "Search memories…"
+            placeholder: "Search memories…", searchSurface: .memories
           )
         },
         content: { pageContent }
@@ -2168,7 +2169,7 @@ struct MemoriesPage: View {
     OmiSearchField(
       placeholder: "Search memories",
       text: $viewModel.searchText,
-      isLoading: viewModel.isSearching || viewModel.isLoadingFiltered
+      isLoading: viewModel.isSearching || viewModel.isLoadingFiltered, searchSurface: .memories
     )
   }
 
@@ -2637,9 +2638,7 @@ struct MemoriesPage: View {
           ForEach(viewModel.filteredMemories) { memory in
             MemoryCardView(
               memory: memory,
-              onTap: {
-                viewModel.selectedMemory = memory
-              },
+              onTap: { viewModel.openMemoryFromSearch(memory) },
               verdict: viewModel.reviewVerdicts[memory.id]
                 ?? (memory.reviewed ? memory.userReview : nil),
               onReview: { keep in

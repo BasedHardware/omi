@@ -195,6 +195,9 @@ struct ConversationListView: View {
     .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
     .padding(.top, PagePanelVerticalRhythm.contentGap)
     .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
+    // Keyed on identity only: a finished capture slides into the list as one
+    // row change rather than a repaint, and field updates stay animation-free.
+    .omiAnimation(.easeInOut(duration: 0.25), value: conversations.map(\.id))
   }
 
   private var conversationList: some View {

@@ -145,6 +145,30 @@ describe("omi tool manifest", () => {
     expect(screenshot?.executor).toEqual({ kind: "swiftTool", executorName: "realtimeHub" });
   });
 
+  it("keeps think_deeper on exactly two thinking levels with a normal default", () => {
+    const thinkDeeper = omiToolManifest.find((tool) => tool.name === "think_deeper");
+
+    const thinking = thinkDeeper?.inputSchema.properties.thinking as Record<string, unknown>;
+    expect(thinking?.type).toBe("string");
+    expect(thinking?.enum).toEqual(["normal", "heavy"]);
+    expect(thinking?.default).toBe("normal");
+    expect(thinkDeeper?.inputSchema.required).toEqual(["query"]);
+
+    const overrideThinking = thinkDeeper?.voice?.schemaOverride?.properties.thinking as Record<
+      string,
+      unknown
+    >;
+    expect(overrideThinking?.enum).toEqual(["normal", "heavy"]);
+    expect(overrideThinking?.default).toBe("normal");
+    expect(String(overrideThinking?.description)).toContain("high reasoning");
+
+    // The realtime card must tell the PTT model when to pick heavy and that
+    // viewed screenshots are forwarded automatically.
+    const description = String(thinkDeeper?.voice?.realtimeDescription);
+    expect(description).toContain("thinking='heavy'");
+    expect(description).toContain("forwarded to the thinking agent automatically");
+  });
+
   it("keeps current-screen evidence live and work context historical", () => {
     const workContext = toolsForAdapter("pi-mono").find((tool) => tool.name === "get_work_context");
     const captureScreen = toolsForAdapter("pi-mono").find((tool) => tool.name === "capture_screen");

@@ -18,6 +18,7 @@ class FirestoreReadFamily(StrEnum):
     LISTEN_MONTHLY_USAGE = 'listen_monthly_usage'
     ALL_TIME_USAGE = 'all_time_usage'
     CHAT_QUOTA_MONTHLY_USAGE = 'chat_quota_monthly_usage'
+    RELAY_RESPONSE_MONTHLY_COUNT = 'relay_response_monthly_count'
 
 
 class FirestoreReadMode(StrEnum):
