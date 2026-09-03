@@ -477,8 +477,6 @@ class ServerMessage {
 
   static const _followUpTypes = {'followUp', 'follow_up'};
 
-
-
   /// Typed projection of [contentBlocks], decoded once per message.
   ///
   /// The raw list stays authoritative on the wire (see [toJson]); this is the
