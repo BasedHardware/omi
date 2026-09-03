@@ -31,6 +31,7 @@ from utils.metrics import (
     LISTEN_FINALIZATION_RETRIES_TOTAL,
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL,
 )
+from utils.durable_queue_metrics import observe_oldest_ready_age
 from utils.observability.fallback import record_fallback
 from utils.conversations.meeting_receipt import (
     record_and_persist_finalized_meeting_receipt,
@@ -457,6 +458,7 @@ def _publish_job_metrics(*, firestore_client: Any = None) -> None:
         logger.exception('listen finalization metrics query failed')
         return
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS.set(float(summary['oldest_nonterminal_age_seconds']))
+    observe_oldest_ready_age('conversation_finalization_jobs', summary['oldest_nonterminal_age_seconds'])
     for state in ('accepted', 'success', 'failure', 'stale', 'nonterminal', 'blocked_byok', 'terminal_unknown'):
         LISTEN_FINALIZATION_DURABLE_JOBS.labels(state=state).set(float(summary[state]))
     for status in ('queued', 'leased', 'blocked_byok', 'dead_letter'):

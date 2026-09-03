@@ -269,6 +269,76 @@ describe("kernel conversation journal", () => {
     fixture.store.close();
   });
 
+  it("deferral poison reaches failed within the attempt budget without blocking a later claim", () => {
+    const fixture = newSurface("main_chat", "chat", "deferral-poison-budget");
+    recordTerminalQuestion(fixture, "turn-question", [
+      { optionId: "later", label: "Ask me later", preparedAnswer: "Ask me again later.", defer: true },
+    ]);
+    recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "question-1",
+      optionId: "later",
+      controlGeneration: 11,
+      nowMs: 200,
+    });
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      const [claim] = drainChatFirstDeferralOutbox(fixture.store, {
+        ownerId: fixture.ownerId,
+        nowMs: 200 + attempt * 60_000,
+      });
+      expect(claim).toBeDefined();
+      expect(settleChatFirstDeferralOutbox(fixture.store, {
+        ownerId: fixture.ownerId,
+        continuityKey: claim.continuityKey,
+        deliveryGeneration: claim.deliveryGeneration,
+        payloadHash: claim.payloadHash,
+        ok: false,
+        errorCode: "canonical hash mismatch",
+        nowMs: 201 + attempt * 60_000,
+      })).toBe(true);
+    }
+    const row = fixture.store.getRow(
+      "SELECT status, last_error_code, attempt_count FROM chat_first_deferral_outbox",
+    );
+    expect(row).toMatchObject({
+      status: "failed",
+      last_error_code: "canonical hash mismatch",
+      attempt_count: 5,
+    });
+    expect(drainChatFirstDeferralOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: 200 + 6 * 60_000,
+    })).toEqual([]);
+    fixture.store.close();
+  });
+
+  it("adopts a duplicate deferral by continuity key instead of raising", () => {
+    const fixture = newSurface("main_chat", "chat", "deferral-adopt-identity");
+    recordTerminalQuestion(fixture, "turn-question", [
+      { optionId: "later", label: "Ask me later", preparedAnswer: "Ask me again later.", defer: true },
+    ]);
+    const first = recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "question-1",
+      optionId: "later",
+      controlGeneration: 11,
+      nowMs: 200,
+    });
+    const second = recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "question-1",
+      optionId: "later",
+      controlGeneration: 11,
+      nowMs: 201,
+    });
+    expect(second.continuityKey).toBe(first.continuityKey);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM chat_first_deferral_outbox").count).toBe(1);
+    fixture.store.close();
+  });
+
   it("generation validation failures remain transient typed kernel rejections", () => {
     const fixture = newSurface("main_chat", "chat", "chat-first-generation-transient");
     const batch = materializeChatFirstIntents(fixture.store, [{
