@@ -2,6 +2,62 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.271",
+      "date": "2026-09-03",
+      "changes": [
+        "Voice answers now carry the exact current-screen image into deeper thinking, keep unrelated background results out of your next question, and use deeper research for company and product history"
+      ]
+    },
+    {
+      "version": "0.12.270",
+      "date": "2026-09-03",
+      "changes": [
+        "Double-tap for Locked Mode works again on modifier-only push-to-talk keys; a single accidental tap still does nothing"
+      ]
+    },
+    {
+      "version": "0.12.269",
+      "date": "2026-09-02",
+      "changes": [
+        "Thumbs on proactive notification cards (focus, insights, tasks, memories) are now tracked separately from ratings of regular Omi answers."
+      ]
+    },
+    {
+      "version": "0.12.268",
+      "date": "2026-09-02",
+      "changes": [
+        "Thumbs up/down on responses now records whether it was a chat or a voice reply, powering the team quality dashboards.",
+        "Onboarding permission steps now lead with the Allow action; the way past a permission is a quieter text link beneath it rather than a second button of equal weight"
+      ]
+    },
+    {
+      "version": "0.12.267",
+      "date": "2026-09-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.266",
+      "date": "2026-09-02",
+      "changes": [
+        "Your daily summary now appears at the top of Chat — the day's headline, stats, highlights, and action items, with a one-tap follow-up question",
+        "The first app you open after setup now gets a notch card that opens Ask Omi with a question about your screen already typed",
+        "When Omi can't see your screen during a voice question, it now explains why — Screen Recording isn't granted, was granted after Omi launched and needs a reopen, or the screen just wasn't available — instead of flatly saying it couldn't verify the current screen."
+      ]
+    },
+    {
+      "version": "0.12.265",
+      "date": "2026-09-02",
+      "changes": [
+        "Fixed large voice-tool results so useful summaries load successfully and can be inspected in more detail.",
+        "Fixed meeting notes and daily opener cards getting stuck behind an undeliverable Chat item",
+        "Redesigned the first-use popup: pick what to try first (a game, design feedback, a post, shopping) and Try it now opens that site",
+        "The first-use popup previews are back to the drawn pages, with the site name larger at the top",
+        "Omi can ask users who never got going to walk through onboarding again on their next launch"
+      ]
+    },
+    {
       "version": "0.12.260",
       "date": "2026-09-02",
       "changes": [

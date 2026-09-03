@@ -1415,6 +1415,32 @@
       ]
     },
     {
+      "collectionGroup": "chat_first_dead_letters",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "account_generation",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requeue_count",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dead_letter_reason",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "last_fetched_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "chat_sessions",
       "queryScope": "COLLECTION",
       "fields": [

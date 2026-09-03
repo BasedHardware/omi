@@ -65,7 +65,11 @@ def test_materialization_v1_suppresses_conversation_links_while_v2_returns_them(
         }
     )
     response = MaterializePromptsResponse(intents=[intent])
-    monkeypatch.setattr(chat_first_router, '_materialize_prompts', lambda request, uid: response)
+    monkeypatch.setattr(
+        chat_first_router,
+        '_materialize_prompts',
+        lambda request, uid, *, exclude_block_types=None: response,
+    )
     request = MaterializePromptsRequest(
         source_surface='main_chat',
         control_generation=7,
@@ -74,6 +78,19 @@ def test_materialization_v1_suppresses_conversation_links_while_v2_returns_them(
 
     assert chat_first_router.materialize_prompts_v1(request, 'user-1').intents == []
     assert chat_first_router.materialize_prompts(request, 'user-1') == response
+
+
+def test_v1_materialization_request_still_validates_without_rejections():
+    request = MaterializePromptsRequest.model_validate(
+        {
+            'source_surface': 'main_chat',
+            'control_generation': 7,
+            'owner_fence': 'user-1',
+        }
+    )
+
+    assert request.rejections == []
+    assert request.receipts == []
 
 
 def test_chat_first_validate_admits_canonical_blocks_with_retry_stable_ids(monkeypatch):

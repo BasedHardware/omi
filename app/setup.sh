@@ -202,6 +202,51 @@ function setup_app_env() {
   fi
 }
 
+function validate_flutter_profile_arg() {
+  local expected_profile="$1"
+  shift
+  local arg requested_profile profile_arg_count=0
+  for arg in "$@"; do
+    if [[ "$arg" == --dart-define=OMI_APP_PROFILE=* ]]; then
+      profile_arg_count=$((profile_arg_count + 1))
+      requested_profile="${arg#--dart-define=OMI_APP_PROFILE=}"
+      if [[ "$requested_profile" != "$expected_profile" ]]; then
+        echo "ERROR: this flavor requires OMI_APP_PROFILE=$expected_profile, got '$requested_profile'." >&2
+        return 1
+      fi
+    fi
+  done
+  if [[ "$profile_arg_count" -gt 1 ]]; then
+    echo "ERROR: pass OMI_APP_PROFILE only once; the wrapper supplies the required value." >&2
+    return 1
+  fi
+}
+
+function prepare_mobile_build_env() {
+  local flavor="$1"
+  local configured_api_base_url="${2:-}"
+  local profile api_base_url
+  case "$flavor" in
+    dev)
+      profile='local_dev'
+      api_base_url="$LOCAL_API_BASE_URL"
+      ;;
+    prod)
+      profile='mobile_beta'
+      api_base_url="$BETA_API_BASE_URL"
+      ;;
+    *)
+      echo "ERROR: unsupported mobile flavor '$flavor' (expected dev or prod)." >&2
+      return 1
+      ;;
+  esac
+  if [[ "$flavor" == 'dev' && -n "$configured_api_base_url" ]]; then
+    api_base_url="$configured_api_base_url"
+  fi
+  setup_app_env "$profile" "$api_base_url" || return 1
+  scripts/validate_mobile_build_config.sh --flavor "$flavor" --profile "$profile" || return 1
+}
+
 # #######################
 # Set up Android Keystore
 # #######################
@@ -217,11 +262,19 @@ function run_build_android() {
   local profile='local_dev'
   local api_base_url="$ANDROID_LOCAL_API_BASE_URL"
   local emulator_host="$ANDROID_DEV_HOST"
-  if [[ "$flavor" == "prod" ]]; then
-    profile='mobile_beta'
-    api_base_url="$BETA_API_BASE_URL"
-    emulator_host=''
-  fi
+  case "$flavor" in
+    dev) ;;
+    prod)
+      profile='mobile_beta'
+      api_base_url="$BETA_API_BASE_URL"
+      emulator_host=''
+      ;;
+    *)
+      echo "ERROR: unsupported mobile flavor '$flavor' (expected dev or prod)." >&2
+      return 1
+      ;;
+  esac
+  prepare_mobile_build_env "$flavor" "$api_base_url"
   local flutter_args=(
     --flavor "$flavor"
     "--dart-define=OMI_APP_PROFILE=$profile"
@@ -372,6 +425,30 @@ function _ios_device_is_physical() {
 function run_build_ios() {
   local flavor="${1:-dev}"
   shift || true
+  local profile='local_dev'
+  local api_base_url="$LOCAL_API_BASE_URL"
+  case "$flavor" in
+    dev) ;;
+    prod)
+      profile='mobile_beta'
+      api_base_url="$BETA_API_BASE_URL"
+      ;;
+    *)
+      echo "ERROR: unsupported mobile flavor '$flavor' (expected dev or prod)." >&2
+      return 1
+      ;;
+  esac
+  validate_flutter_profile_arg "$profile" "$@" || return 1
+  prepare_mobile_build_env "$flavor" "$api_base_url" || return 1
+  local flutter_args=("--dart-define=OMI_APP_PROFILE=$profile")
+  local arg
+  for arg in "$@"; do
+    # The wrapper owns this invariant and injects exactly one profile define.
+    if [[ "$arg" == --dart-define=OMI_APP_PROFILE=* ]]; then
+      continue
+    fi
+    flutter_args+=("$arg")
+  done
   check_ios_prerequisites || return 1
   local device_id
   device_id=$(select_ios_device) || return 1
@@ -385,7 +462,7 @@ function run_build_ios() {
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \
     && dart run build_runner build \
-    && flutter run --flavor "$flavor" -d "$device_id" "$@"
+    && flutter run --flavor "$flavor" -d "$device_id" "${flutter_args[@]}"
 }
 
 
@@ -397,18 +474,17 @@ case "${1}" in
         echo "ios beta requires FIREBASE_SERVICE_ACCOUNT_KEY so the production Firebase app config can be generated." >&2
         exit 1
       fi
-      setup_firebase \
+      prepare_mobile_build_env prod \
+        && setup_firebase \
         && setup_firebase_with_service_account_ios \
         && generate_ios_custom_config Prod omi-beta \
-        && setup_app_env mobile_beta \
         && run_build_ios prod --dart-define=OMI_APP_PROFILE=mobile_beta
     else
-      setup_firebase \
+      prepare_mobile_build_env dev \
+        && setup_firebase \
         && bash scripts/generate_ios_dev_info_plist.sh \
         && generate_ios_custom_config Dev omi-dev \
-        && setup_app_env local_dev \
         && run_build_ios dev \
-          --dart-define=OMI_APP_PROFILE=local_dev \
           --dart-define=OMI_API_BASE_URL="$LOCAL_API_BASE_URL" \
           --dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST="$LOCAL_DEV_HOST"
     fi
@@ -419,15 +495,15 @@ case "${1}" in
         echo "android beta requires FIREBASE_SERVICE_ACCOUNT_KEY so the production Firebase app config can be generated." >&2
         exit 1
       fi
-      setup_keystore_android \
+      prepare_mobile_build_env prod \
+        && setup_keystore_android \
         && setup_firebase \
         && setup_firebase_with_service_account_android \
-        && setup_app_env mobile_beta "$BETA_API_BASE_URL" \
         && run_build_android prod
     else
-      setup_keystore_android \
+      prepare_mobile_build_env dev \
+        && setup_keystore_android \
         && setup_firebase \
-        && setup_app_env local_dev "$ANDROID_LOCAL_API_BASE_URL" \
         && run_build_android dev
     fi
     ;;
