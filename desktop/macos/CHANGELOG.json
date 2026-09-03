@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.281",
+      "date": "2026-09-03",
+      "changes": [
+        "Daily summaries now include time watched and proactive moments from the Mac app"
+      ]
+    },
+    {
       "version": "0.12.280",
       "date": "2026-09-03",
       "changes": [
