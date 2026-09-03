@@ -9902,4 +9902,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'Kunne ikke indlæse minder';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Kunne ikke indlæse vidensgrafen';
 }

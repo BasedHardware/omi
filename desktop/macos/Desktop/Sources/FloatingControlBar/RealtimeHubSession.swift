@@ -55,6 +55,12 @@ enum RealtimeHubBargeInStrategy: Equatable {
   case freshSession
 }
 
+enum RealtimeBackgroundContextDeliveryResult: Equatable, Sendable {
+  case delivered
+  case retry
+  case unsupported
+}
+
 #if DEBUG
   struct RealtimeHubInputLifecycleSnapshot: Equatable {
     let isOpen: Bool
@@ -516,16 +522,35 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   /// Silently appends completed background-agent context to the conversation.
   /// No response is requested — the model uses it on its next turn.
   ///
-  /// Unlike ordinary PTT text input this does NOT buffer: the caller advances an
-  /// exactly-once kernel checkpoint on a `true` return, so `true` must mean
-  /// "confirmed delivered," never "buffered" (a buffered item is dropped by
-  /// `stopOnQueue`/`abandonInputTurn` — an acked-but-lost completion). When the
-  /// session can't accept context yet it returns `false` and the checkpoint
-  /// stays unadvanced; the delivery service retries when the session next
-  /// becomes ready (`hubDidOpenInputWindow`). When it can, `true` follows the
-  /// provider send's completion, not a fire-and-forget enqueue.
-  func sendBackgroundAgentContext(_ text: String) async -> Bool {
-    await sendConfirmedContext(text)
+  /// OpenAI has a real mid-session system-message role, so background reference
+  /// material cannot become a competing user request. Gemini Live exposes no
+  /// equivalent after setup: its realtime text shares the user's activity stream
+  /// and modality ordering is explicitly not guaranteed. Sending there can steal
+  /// the next spoken turn, so Gemini returns `unsupported` without writing bytes.
+  /// The completion/card remains available through its canonical UI/tool surface.
+  func sendBackgroundAgentContext(_ text: String) async -> RealtimeBackgroundContextDeliveryResult {
+    await withCheckedContinuation { continuation in
+      q.async { [weak self] in
+        guard let self, self.isOpen else {
+          continuation.resume(returning: .retry)
+          return
+        }
+        guard self.provider == .openai else {
+          DesktopDiagnosticsManager.shared.recordFallback(
+            area: "realtime_hub",
+            from: "gemini_background_context",
+            to: "canonical_tool_or_card",
+            reason: "capability_mismatch",
+            outcome: .degraded,
+            extra: ["user_visible": false])
+          continuation.resume(returning: .unsupported)
+          return
+        }
+        self.send(json: self.openAIBackgroundContextWire(text)) { error in
+          continuation.resume(returning: error == nil ? .delivered : .retry)
+        }
+      }
+    }
   }
 
   /// Same confirmed, non-buffering contract as `sendBackgroundAgentContext`.
@@ -558,20 +583,6 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     q.async { [weak self] in
       self?.pendingTrustedTurnInstruction = nil
       self?.flushedTrustedTurnInstruction = nil
-    }
-  }
-
-  private func sendConfirmedContext(_ text: String) async -> Bool {
-    await withCheckedContinuation { continuation in
-      q.async { [weak self] in
-        guard let self, self.canAcceptInjectedContext else {
-          continuation.resume(returning: false)
-          return
-        }
-        self.send(json: self.textInputWire(text)) { error in
-          continuation.resume(returning: error == nil)
-        }
-      }
     }
   }
 
@@ -715,9 +726,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     }
   }
 
-  /// Per-provider wire form of a user text-input message. Shared by the buffered
-  /// PTT path (`sendTextInputNow`) and the confirmed, non-buffering background
-  /// path (`sendBackgroundAgentContext`).
+  /// Per-provider wire form of an actual user text-input message.
   private func textInputWire(_ text: String) -> [String: Any] {
     switch provider {
     case .gemini:
@@ -732,6 +741,17 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         ],
       ]
     }
+  }
+
+  private func openAIBackgroundContextWire(_ text: String) -> [String: Any] {
+    [
+      "type": "conversation.item.create",
+      "item": [
+        "type": "message",
+        "role": "system",
+        "content": [["type": "input_text", "text": text]],
+      ],
+    ]
   }
 
   private func sendTextInputNow(_ text: String, logLabel: String) {
@@ -1019,10 +1039,19 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     output: String,
     screenEvidence: RealtimeScreenEvidenceAttachment?
   ) -> [String: Any] {
+    var responseBody: [String: Any] = ["result": output]
+    if name == HubTool.thinkDeeper.rawValue,
+      let spokenAnswer = canonicalSpokenAnswer(from: output)
+    {
+      responseBody["spoken_answer"] = spokenAnswer
+      responseBody["delivery_instruction"] =
+        "Speak only spoken_answer, faithfully and in its existing language. Do not add, translate, "
+        + "or continue any earlier topic, and do not append a follow-up question."
+    }
     var functionResponse: [String: Any] = [
       "id": callId,
       "name": name,
-      "response": ["result": output],
+      "response": responseBody,
     ]
     if let screenEvidence {
       let displayName = "live-screenshot.jpg"
@@ -1042,6 +1071,16 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       ]
     }
     return ["toolResponse": ["functionResponses": [functionResponse]]]
+  }
+
+  private static func canonicalSpokenAnswer(from output: String) -> String? {
+    guard
+      let payload = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any]
+    else { return nil }
+    let direct = payload["text"] as? String
+    let nested = (payload["providerResult"] as? [String: Any])?["text"] as? String
+    let answer = (direct ?? nested)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    return answer?.isEmpty == false ? answer : nil
   }
 
   // OpenAI: ask for a response with the given modality (audio for spoken turns).

@@ -50,6 +50,8 @@ When debugging issues for a specific user, check Sentry dashboard for crashes an
 ### Fallback / resilience telemetry
 Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.recordFallback(area:from:to:reason:outcome:)` (PostHog `desktop_health_event` / `fallback_triggered`) or Rust `fallback::record_fallback`. Same field contract as root `AGENTS.md` → Fallback / resilience telemetry. Do not invent new health-event enum cases or product “Recording Error” events for successful heals (`outcome=recovered`).
 
+Gemini Live has no safe mid-session system role. Background agent/card text stays on its canonical tool or visible UI surface and must never use Gemini's realtime user-input wire.
+
 ## Repository
 - This is the `desktop/macos/` subfolder of the **OMI monorepo** (`BasedHardware/omi`)
 - macOS Swift app lives here; its shared Python desktop backend lives under `../../backend`

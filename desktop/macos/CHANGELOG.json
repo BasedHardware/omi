@@ -2,6 +2,60 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.274",
+      "date": "2026-09-03",
+      "changes": [
+        "Fixed the Permissions page reporting Automation as \"Not Granted\" when it was already granted in System Settings"
+      ]
+    },
+    {
+      "version": "0.12.273",
+      "date": "2026-09-03",
+      "changes": [
+        "Added a Things I learned today section to the daily summary in Chat where you can confirm, drop, or fix what Omi picked up",
+        "Added a tappable follow-up question under grounded chat and floating-bar answers, never on failed turns",
+        "Fixed the Home suggestions list repeating the same tasks and tips day after day; rows you have seen or dismissed now rotate out",
+        "Conversations that are still being summarized now show their first transcript line instead of \"Processing…\", tell you when processing is taking longer than usual or looks stuck, offer Reprocess right on the row, and land in place when a recording ends"
+      ]
+    },
+    {
+      "version": "0.12.272",
+      "date": "2026-09-03",
+      "changes": [
+        "Notification cards in the notch no longer shrink to a narrow strip when you hold the push-to-talk shortcut to reply to them.",
+        "Push-to-talk on a second display now plays the start sound and shows the listening animation on the first press instead of the second"
+      ]
+    },
+    {
+      "version": "0.12.271",
+      "date": "2026-09-03",
+      "changes": [
+        "Voice answers now carry the exact current-screen image into deeper thinking, keep unrelated background results out of your next question, and use deeper research for company and product history"
+      ]
+    },
+    {
+      "version": "0.12.270",
+      "date": "2026-09-03",
+      "changes": [
+        "Double-tap for Locked Mode works again on modifier-only push-to-talk keys; a single accidental tap still does nothing"
+      ]
+    },
+    {
+      "version": "0.12.269",
+      "date": "2026-09-02",
+      "changes": [
+        "Thumbs on proactive notification cards (focus, insights, tasks, memories) are now tracked separately from ratings of regular Omi answers."
+      ]
+    },
+    {
+      "version": "0.12.268",
+      "date": "2026-09-02",
+      "changes": [
+        "Thumbs up/down on responses now records whether it was a chat or a voice reply, powering the team quality dashboards.",
+        "Onboarding permission steps now lead with the Allow action; the way past a permission is a quieter text link beneath it rather than a second button of equal weight"
+      ]
+    },
+    {
       "version": "0.12.267",
       "date": "2026-09-02",
       "changes": [

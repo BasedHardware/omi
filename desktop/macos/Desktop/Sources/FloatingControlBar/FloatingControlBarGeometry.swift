@@ -330,6 +330,32 @@ enum FloatingControlBarGeometry {
     NSSize(width: max(a.width, b.width), height: max(a.height, b.height))
   }
 
+  /// A mounted notification card owns the closed surface. Every transient
+  /// island state — PTT listening, thinking, the too-short/mic-error status
+  /// banner — may only *grow* that surface, never replace it.
+  ///
+  /// The bug this exists to prevent: the card stays mounted while the user
+  /// holds the reply shortcut against it (Interject), so any resize that
+  /// substitutes the bare voice-island size crushes a 508pt card into a
+  /// ~270pt notch lobe and the copy re-wraps to three truncated words. Height
+  /// is the card's own plus `additionalHeight` — whatever the transient state
+  /// stacks alongside the card (the status banner row) — because the island's
+  /// chrome band is already counted inside the card size. `transientSize` is
+  /// the no-card surface and already carries that budget itself, so
+  /// `additionalHeight` applies only when a card is mounted.
+  static func notificationPreservingSurfaceSize(
+    transientSize: NSSize,
+    hasMountedNotification: Bool,
+    notificationSize: NSSize,
+    additionalHeight: CGFloat = 0
+  ) -> NSSize {
+    guard hasMountedNotification else { return transientSize }
+    return NSSize(
+      width: max(notificationSize.width, transientSize.width),
+      height: notificationSize.height + additionalHeight
+    )
+  }
+
   /// Closed-conversation chrome size. A mounted notification card wins over
   /// listening/thinking island sizes (or the union if listening is larger).
   static func collapsedSurfaceSize(

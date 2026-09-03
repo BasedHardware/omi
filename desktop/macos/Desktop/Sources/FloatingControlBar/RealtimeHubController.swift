@@ -109,6 +109,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// through `RealtimeHubContinuityRestore` + `RealtimeTurnJournalAuthority`.
   var acceptedSpawnJournalReceiptByContinuityKey: [String: AcceptedSpawnJournalReceipt] = [:]
   var screenContextByContinuityKey: [String: String] = [:]  // accepted screen observation per voice turn
+  /// Exact public-web output owned by the current voice turn. The realtime model may summarize
+  /// tool output when constructing think_deeper arguments, so the host carries the source evidence.
+  var turnPublicWebEvidence: RealtimePublicWebEvidenceReceipt?
   /// One bounded same-turn recovery after a failed spawn. The first failure
   /// returns typed guidance to the provider; a repeat closes the turn.
   var spawnFailureContinuationPolicy = RealtimeSpawnFailureContinuationPolicy()
@@ -457,6 +460,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     testProviderTranscriptOverride = nil
     wakeWordInputTranscript = nil
     acceptedSpawnJournalReceiptByContinuityKey.removeAll()
+    turnPublicWebEvidence = nil
     prefetchedVoiceContext = ""
     prefetchedVoiceContextSessionID = ""
     prefetchedVoiceContextFreshnessIdentity = ""

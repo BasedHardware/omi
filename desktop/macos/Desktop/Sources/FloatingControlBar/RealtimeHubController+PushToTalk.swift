@@ -53,6 +53,7 @@ extension RealtimeHubController {
     lastExternalToolName = ""
     lastExternalToolErrorCode = ""
     turnIdempotencyKey = "voice:\(turnID.rawValue.uuidString.lowercased())"
+    turnPublicWebEvidence = nil
     resetScreenGrounding(for: turnID)
     if let interruptedTurnTask, !supersedesPendingReplacement {
       if !providerResponseInFlight || session?.bargeInStrategy != .freshSession {

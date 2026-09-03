@@ -5,7 +5,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterator
 
-from testing.import_isolation import load_module_fresh, stub_modules
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -39,6 +39,9 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
         },
     )
     stubs = {
+        # utils.memory.learned_today -> models.memories -> database._client pulls
+        # the Firestore SDK into the import graph; the job never touches it here.
+        'database._client': AutoMockModule('database._client'),
         'database.conversations': _module('database.conversations', get_conversations=lambda *_args, **_kwargs: []),
         'database.notifications': notification_db,
         'database.redis_db': _module('database.redis_db', try_acquire_daily_summary_lock=lambda *_args: True),

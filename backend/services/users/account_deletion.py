@@ -76,7 +76,7 @@ def _historical_memory_ids(uid: str) -> list[str]:
 def _delete_memory_maintenance_registry(uid: str) -> None:
     """Remove the content-free global inventory marker during account wipe."""
 
-    delete_canonical_memory_maintenance_registry_entry(uid, db_client=database_client.db)
+    delete_canonical_memory_maintenance_registry_entry(uid, db_client=database_client.get_data_plane_firestore_client())
 
 
 def delete_account_credentials(uid: str) -> None:
@@ -213,7 +213,9 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         logger.error(f'delete_account purge frame request pixels failed for {uid}: {sanitize(str(e))}')
 
     try:
-        canonical_result = purge_canonical_derived_user_data(uid)
+        canonical_result = purge_canonical_derived_user_data(
+            uid, db_client=database_client.get_data_plane_firestore_client()
+        )
         vector_ids = canonical_result.get('vector_ids', [])
         if isinstance(vector_ids, list):
             result['vectors_deleted'] += len(cast(list[object], vector_ids))
@@ -304,7 +306,6 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
             uid,
             kind='account_deletion',
             token=deletion_gate_token,
-            firestore_client=database_client.db,
         )
         deletion_gate_acquired = True
         # Transition to ``running`` so the reconciler can distinguish a
@@ -356,7 +357,6 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
                     kind='account_deletion',
                     token=deletion_gate_token,
                     outcome='failed',
-                    firestore_client=database_client.db,
                 )
             except Exception as gate_err:
                 # An uncertain running gate intentionally remains fail-closed;
@@ -397,7 +397,6 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
                 kind='account_deletion',
                 token=deletion_gate_token,
                 outcome='completed',
-                firestore_client=database_client.db,
             )
         except Exception as e:
             logger.error(f'delete_account legal-hold gate completion failed for {uid}: {sanitize(str(e))}')

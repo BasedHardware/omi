@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:collection/collection.dart';
 import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
+import 'package:omi/backend/schema/memory_review.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
 import 'package:uuid/uuid.dart';
 
@@ -275,10 +276,14 @@ class ServerMessage {
   }
 
   static ServerMessage fromGeneratedWireJson(Map<String, dynamic> json) {
-    // Evidence is deliberately fail-soft UI chrome. Decode it through the
-    // bounded compatibility parser below instead of letting the strict
-    // generated DTO reject an otherwise valid text answer.
-    final generatedJson = Map<String, dynamic>.from(json)..remove('evidence');
+    // Evidence and content blocks are deliberately fail-soft UI chrome. Decode
+    // them through the bounded compatibility parsers below instead of letting
+    // the strict generated DTO reject an otherwise valid text answer — an FCM
+    // push carries `content_blocks` as JSON text, which the generated
+    // `List<Map>` reader rejects outright.
+    final generatedJson = Map<String, dynamic>.from(json)
+      ..remove('evidence')
+      ..remove('content_blocks');
     final generated = wire.GeneratedMessage.fromJson(generatedJson);
     final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
     return ServerMessage.fromGenerated(
@@ -290,7 +295,9 @@ class ServerMessage {
   }
 
   static ServerMessage fromResponseJson(Map<String, dynamic> json) {
-    final generatedJson = Map<String, dynamic>.from(json)..remove('evidence');
+    final generatedJson = Map<String, dynamic>.from(json)
+      ..remove('evidence')
+      ..remove('content_blocks');
     final generated = wire.GeneratedResponseMessage.fromJson(generatedJson);
     final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
     return ServerMessage.fromGeneratedResponse(
@@ -419,8 +426,13 @@ class ServerMessage {
   }
 
   static List<Map<String, dynamic>> _decodeContentBlocks(dynamic firstClass, String? metadata) {
-    final direct = _mapList(firstClass);
-    if (direct.isNotEmpty || firstClass is List) return direct;
+    // FCM data payloads are Dict[str, str], so a push (the only transport that
+    // carries a `day_summary` message today) delivers `content_blocks` as JSON
+    // text. Decode it here so both transports have one decoder; anything
+    // malformed degrades to "no blocks", never to a lost message.
+    final firstClassValue = firstClass is String ? _tryDecodeJson(firstClass) : firstClass;
+    final direct = _mapList(firstClassValue);
+    if (direct.isNotEmpty || firstClassValue is List) return direct;
     if (metadata == null || metadata.isEmpty) return const [];
     try {
       final decoded = jsonDecode(metadata);
@@ -434,6 +446,37 @@ class ServerMessage {
     if (value is! List) return const [];
     return value.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList(growable: false);
   }
+
+  static Object? _tryDecodeJson(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    try {
+      return jsonDecode(trimmed);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// The `memoryReviewCard` block for this message, when it carries a usable one.
+  MemoryReviewCardBlock? get memoryReviewCard {
+    for (final block in contentBlocks) {
+      final card = MemoryReviewCardBlock.tryFromBlock(block);
+      if (card != null) return card;
+    }
+    return null;
+  }
+
+  /// The one grounded follow-up question the answer invites, when present.
+  String? get followUpQuestion {
+    for (final block in contentBlocks) {
+      if (!_followUpTypes.contains(block['type'])) continue;
+      final text = block['text'];
+      if (text is String && text.trim().isNotEmpty) return text.trim();
+    }
+    return null;
+  }
+
+  static const _followUpTypes = {'followUp', 'follow_up'};
 
   static const _desktopChatChromeTypes = {
     'goalLink',
@@ -503,6 +546,12 @@ class ServerMessage {
       case 'questionCard':
       case 'question_card':
         return value('text').isEmpty ? 'Question' : value('text');
+      case 'memoryReviewCard':
+      case 'memory_review_card':
+        return 'Things I learned today';
+      case 'followUp':
+      case 'follow_up':
+        return value('text');
       case 'taskCard':
       case 'task_card':
         return 'Task';

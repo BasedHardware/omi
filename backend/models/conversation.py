@@ -293,10 +293,10 @@ class Conversation(BaseModel):
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
     # True when this conversation was transcribed on a third-party (custom STT)
-    # provider, so no Omi transcription credits were consumed. The durable marker
-    # lets post-processing decide whether Omi-paid LLM work (structure, summaries,
-    # memories, action items) should run at all: a custom-STT user without their
-    # own LLM BYOK key must not rack up unbounded Omi LLM cost.
+    # provider, so no Omi transcription credits were consumed. Provenance only:
+    # post-processing does not gate on it — custom-STT conversations get the same
+    # Omi-paid enrichment as any other. The marker keeps custom-STT spend
+    # queryable, and feeds the isolated fair-use lane (#7690).
     uses_custom_stt: bool = False
 
     structured: Structured

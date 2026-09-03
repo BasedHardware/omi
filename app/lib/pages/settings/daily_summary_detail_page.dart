@@ -18,6 +18,8 @@ import 'package:omi/utils/daily_summary_journey.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/share_links.dart';
+import 'package:omi/utils/share_sheet.dart';
+import 'package:omi/widgets/components/memory_review_card.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
@@ -111,7 +113,9 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       }
       PlatformManager.instance.analytics.dailySummaryShared(summaryId: widget.summaryId, date: summary.date);
       final url = recapShareUrl(widget.summaryId);
-      await SharePlus.instance.share(ShareParams(uri: Uri.parse(url), subject: summary.headline));
+      await SharePlus.instance.share(
+        ShareParams(uri: Uri.parse(url), subject: summary.headline, sharePositionOrigin: shareSheetOrigin()),
+      );
     } finally {
       if (mounted) setState(() => _isSharing = false);
     }
@@ -350,6 +354,10 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                 if (summary.decisionsMade.isNotEmpty) ...[
                   const SizedBox(height: 32),
                   _buildDecisionsMadeSection(summary),
+                ],
+                if (summary.memoriesLearned.isNotEmpty) ...[
+                  const SizedBox(height: 32),
+                  _buildMemoriesLearnedSection(summary),
                 ],
                 if (summary.knowledgeNuggets.isNotEmpty) ...[
                   const SizedBox(height: 32),
@@ -782,6 +790,17 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           );
         }),
       ],
+    );
+  }
+
+  /// The same review rows the day-summary chat card shows, so a verdict cast
+  /// in either place lands on the same memory. Placed before the LLM-prose
+  /// learnings, which stay exactly as they were.
+  Widget _buildMemoriesLearnedSection(DailySummary summary) {
+    return MemoryReviewCard(
+      items: summary.memoriesLearned,
+      source: MemoryReviewSource.dailySummaryDetail,
+      impressionKey: summary.id.isNotEmpty ? summary.id : widget.summaryId,
     );
   }
 

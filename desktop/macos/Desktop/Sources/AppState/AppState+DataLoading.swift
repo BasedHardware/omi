@@ -17,6 +17,9 @@ extension AppState {
   /// the cached projection immediately and quietly replaces it with server truth.
   func loadConversations() async {
     await conversationRepository.load(query: currentConversationQuery)
+    // Every capture-stop path ends here; the Saving card has held the Live
+    // card's slot until this load could show the conversation as a row.
+    isFinalizingCapture = false
     NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
   }
 
