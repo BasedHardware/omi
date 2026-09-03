@@ -164,7 +164,7 @@ async def enroll_desktop_experiment(
     flag_enabled = await _experiment_flag_enabled(uid)
 
     try:
-        client = _assignments_client()
+        client = await run_blocking(db_executor, _assignments_client)
     except Exception:
         logger.exception(
             'desktop experiment enrollment plane unavailable experiment_id=%s uid_present=%s',
