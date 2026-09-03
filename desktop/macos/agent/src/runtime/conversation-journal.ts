@@ -2,7 +2,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { structuredTurnFallbackText } from "./content-block-fallback.js";
 import { conversationTurnFromRow } from "./conversation-turns.js";
 import {
-  adoptOnIdentity,
   decideAttempt,
   DEFERRAL_OUTBOX_POLICY,
   drainIsolated,
@@ -4015,12 +4014,10 @@ export function enqueueChatFirstDeferral(
     "SELECT continuity_key FROM chat_first_deferral_outbox WHERE continuity_key = ?",
     [input.continuityKey],
   );
+  // Identity-keyed adopt: a reused continuity_key keeps the first payload.
+  // The helper would compare the same key to itself after this SELECT.
   if (existing) {
-    const decision = adoptOnIdentity(
-      existing ? String(existing.continuity_key) : null,
-      input.continuityKey,
-    );
-    if (decision.adopted) return;
+    return;
   }
   store.execute(
     `INSERT INTO chat_first_deferral_outbox(

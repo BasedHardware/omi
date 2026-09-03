@@ -63,6 +63,15 @@ def test_omi_queue_names_match_age_samplers() -> None:
     assert set(OMI_QUEUE_NAMES) == set(QUEUE_AGE_SAMPLERS)
 
 
+def test_omi_queue_family_is_not_labels_touched_at_import() -> None:
+    source = (REPO / 'backend/utils/metrics.py').read_text(encoding='utf-8')
+    assert 'OMI_QUEUE_OLDEST_READY_AGE_SECONDS.labels' not in source
+    from utils.metrics import generate_latest
+
+    exported = generate_latest().decode()
+    assert 'omi_queue_oldest_ready_age_seconds{' not in exported
+
+
 def test_only_the_periodic_publisher_observes_the_gauge() -> None:
     publisher = (REPO / GAUGE_PUBLISHER).read_text(encoding='utf-8')
     assert 'def observe_oldest_ready_age' in publisher

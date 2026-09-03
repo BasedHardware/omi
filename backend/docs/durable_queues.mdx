@@ -46,7 +46,7 @@ its own SELECT/lease/retry copy.
 |---|---|---|---|---|---|---|---|
 | `backend_turn_outbox` | `conversation-journal.ts`, `sqlite-store.ts` | Y — hash-mismatch quarantines the row | Y — 5 attempts, `failed` is the DL | Y — `turn_id` PK, `ON CONFLICT DO NOTHING` | N — FIFO | Y — `getJournalObservability().oldestPendingDeliveryCreatedAtMs` | P — stale HTTP results absorbed as superseded |
 | `backend_conversation_delete_outbox` | `conversation-journal.ts`, `sqlite-store.ts` | P — lease is per row; a throw aborts the pump batch | Y — 5 attempts | Y — `operation_id`; duplicate insert can raise on UNIQUE | N | N | Y |
-| `chat_first_deferral_outbox` | `conversation-journal.ts`, `sqlite-store.ts` | Y | Y — 5 attempts, non-retry on `*_4xx` | P — `continuity_key` PK; payload-hash mismatch throws | N | N | Y |
+| `chat_first_deferral_outbox` | `conversation-journal.ts`, `sqlite-store.ts` | Y | Y — 5 attempts, non-retry on `*_4xx` | Y — `continuity_key` PK; reused key keeps the first payload | N | N | Y |
 | `chat_first_materialization_receipts` | `conversation-journal.ts`, `sqlite-store.ts` | Y — not a drain queue; per-intent txn | N — receipts are not retried | P — `intent_id` PK; identity mismatch throws rather than adopt | N | N | Y |
 | `chat_first_cold_start_sequence_receipts` | `conversation-journal.ts`, `sqlite-store.ts` | Y | N | Y — `(sequence_id, owner_id)` | N | N | Y |
 
@@ -139,7 +139,7 @@ Remaining exceptions, called out because they must not change product semantics:
 - Daily-summary hour groups are ephemeral (no durable row). One hour-group
   failure never aborts later hours; `send_daily_summary_notification` returns
   a typed non-success outcome when any hour rejects, including per-user send
-  failures.
+  failures and an hour whose every timezone-chunk read failed.
 - Daily-sweep cleanup **and** the #12533 per-UID process loop drain through
   `drain_sweep_uids` in `daily_memory_sweep_queue.py`.
 - Kernel SQLite outboxes publish oldest-ready age through

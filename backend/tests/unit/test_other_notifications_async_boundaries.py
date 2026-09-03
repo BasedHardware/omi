@@ -175,6 +175,24 @@ def test_daily_summary_db_failure_remains_fail_soft() -> None:
         assert 'firestore unavailable' in (outcome.error_text or '')
 
 
+def test_daily_summary_all_chunks_failed_is_a_typed_hour_reject() -> None:
+    """Two timezone chunks, both raising, must not ACK the hour as an empty success."""
+    with _loaded_other_notifications() as (notifications, notification_db):
+        timezones = [f'tz-{index}' for index in range(31)]
+        notifications._get_timezones_grouped_by_hour = lambda: {8: timezones}
+        calls: list[int] = []
+
+        def fail_every_chunk(chunk: list[str], _target_hour: int) -> list[Any]:
+            calls.append(len(chunk))
+            raise RuntimeError('all chunks unavailable')
+
+        notification_db.get_users_for_daily_summary = fail_every_chunk
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert calls == [30, 1]
+        assert outcome.ok is False
+        assert 'all chunks unavailable' in (outcome.error_text or '')
+
+
 def test_daily_summary_poison_hour_does_not_block_later_hours() -> None:
     with _loaded_other_notifications() as (notifications, notification_db):
         processed: list[int] = []
