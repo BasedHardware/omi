@@ -35,6 +35,7 @@ class MemoriesProvider extends ChangeNotifier {
   bool _deviceScopeSupported = true;
   bool _ledgerHistorySupported = false;
   bool _ledgerHistoryTruncated = false;
+  bool _loadFailed = false;
   Future<void>? _clientDeviceInitialization;
   List<Tuple2<MemoryCategory, int>> categories = [];
   MemoryCategory? selectedCategory;
@@ -79,6 +80,8 @@ class MemoriesProvider extends ChangeNotifier {
   int get pendingMemoriesCount => SharedPreferencesUtil().pendingMemories.length;
   bool get ledgerHistorySupported => _ledgerHistorySupported;
   bool get ledgerHistoryTruncated => _ledgerHistoryTruncated;
+  bool get loadFailed => _loadFailed;
+  bool get showLoadError => _loadFailed && _memories.isEmpty;
 
   bool isRevertingMemory(String memoryId) => _revertingMemoryIds.contains(memoryId);
 
@@ -346,6 +349,12 @@ class MemoriesProvider extends ChangeNotifier {
       if (generation != _sessionGeneration || loadSequence != _loadSequence) {
         return;
       }
+      if (!result.ok) {
+        _loadFailed = true;
+        _loading = false;
+        notifyListeners();
+        return;
+      }
       deviceScopeSupported = result.deviceScopeSupported;
       all.addAll(result.memories);
       // A truncated page is an honest partial response with no resumable cursor;
@@ -407,6 +416,7 @@ class MemoriesProvider extends ChangeNotifier {
     _deviceScopeSupported = deviceScopeSupported;
     _ledgerHistorySupported = ledgerHistorySupported;
     _ledgerHistoryTruncated = ledgerHistoryTruncated;
+    _loadFailed = false;
 
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;

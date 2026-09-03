@@ -9839,4 +9839,10 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => 'לא ניתן לטעון את הזיכרונות';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'לא ניתן לטעון את גרף הידע';
 }

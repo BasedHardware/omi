@@ -9749,4 +9749,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get couldNotLoadMemories => '記憶を読み込めませんでした';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'ナレッジグラフを読み込めませんでした';
 }
