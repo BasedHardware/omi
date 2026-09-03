@@ -1,4 +1,3 @@
-import importlib.util
 import asyncio
 import threading
 from contextlib import contextmanager
@@ -9,17 +8,6 @@ from typing import Any, Iterator
 from testing.import_isolation import load_module_fresh, stub_modules
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-
-
-def _load_durable_queue() -> ModuleType:
-    spec = importlib.util.spec_from_file_location(
-        'database.durable_queue',
-        BACKEND_DIR / 'database' / 'durable_queue.py',
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def _module(name: str, **attributes: Any) -> ModuleType:
@@ -81,10 +69,13 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
             get_daily_summary_by_date=lambda *_args: None,
             create_daily_summary=lambda *_args: 'summary-id',
         ),
-        'database.durable_queue': _load_durable_queue(),
     }
 
     with stub_modules(stubs):
+        load_module_fresh(
+            'database.durable_queue',
+            str(BACKEND_DIR / 'database' / 'durable_queue.py'),
+        )
         notifications = load_module_fresh(
             'utils.other.notifications',
             str(BACKEND_DIR / 'utils' / 'other' / 'notifications.py'),
