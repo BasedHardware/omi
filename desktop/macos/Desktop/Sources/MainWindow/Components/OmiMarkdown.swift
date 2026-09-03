@@ -22,10 +22,13 @@ import OmiTheme
 /// transcript loading, scrolling, window resizing and parent-state updates.
 /// `.github/scripts/check_chat_selection_boundary.py` enforces this.
 ///
-/// Chat bubbles retain whole-message copy actions, code blocks and tables keep
-/// their focused copy controls, and a reader who needs to drag a date out of an
-/// answer opens `ChatSelectableTextPopover` — a separate, non-live surface that
-/// never mounts inside the transcript.
+/// A reader who needs to drag a date out of an answer no longer opens a popover
+/// beside the row: `appKitProseSelection` draws that prose through
+/// `ChatSelectableProse` instead, where one `NSTextView` owns one selection and
+/// installs no overlay for a rebuild to thrash. That is not an opt-in to the
+/// paragraph above — it is the other half of it, and the boundary check guards
+/// both files. Chat bubbles keep their whole-message copy action, and code
+/// blocks and tables keep their own focused copy controls.
 struct OmiMarkdown: View {
   enum Style: Equatable {
     case assistant
