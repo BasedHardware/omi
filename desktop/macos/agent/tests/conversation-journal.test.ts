@@ -400,6 +400,49 @@ describe("kernel conversation journal", () => {
     fixture.store.close();
   });
 
+  it("keeps the cards the agent rendered when the surface terminalizes its own projection", () => {
+    // The live failure this pins: `render_chat_blocks` appended three task
+    // cards, the tool answered `ok`, and about three seconds later the turn
+    // terminalized with the projection Swift built from the adapter stream —
+    // text and tool calls, and no card, because the append was a journal
+    // mutation the surface never saw. The replace then deleted all three.
+    const fixture = newSurface("main_chat", "chat", "chat-first-survives-terminal");
+    const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-survives-terminal");
+    recordStreamingAssistantPlaceholder(fixture, "turn-chat-first-survives");
+    const cards: ConversationContentBlock[] = [
+      { type: "taskCard", id: "cfb-task-1", taskId: "task-1" },
+      { type: "goalLink", id: "cfb-goal-1", goalId: "goal-1", summary: "Ship the desktop beta" },
+      { type: "memoryLink", id: "cfb-memory-1", memoryId: "memory-1", summary: "Prefers morning reviews" },
+    ];
+    appendChatFirstBlocksToProducingTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      blocks: cards,
+    });
+
+    fixture.store.execute("UPDATE runs SET status = 'succeeded' WHERE run_id = ?", [run.runId]);
+    fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [attempt.attemptId]);
+    const surfaceProjection: ConversationContentBlock[] = [
+      { type: "text", id: "turn-chat-first-survives:terminal", text: "Here are your three most urgent tasks." },
+    ];
+    const terminalized = terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-chat-first-survives",
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      disposition: "accept",
+      content: "Here are your three most urgent tasks.",
+      replaceContentBlocks: surfaceProjection,
+      nowMs: 20,
+    });
+
+    expect(terminalized.contentBlocks).toEqual([...surfaceProjection, ...cards]);
+    fixture.store.close();
+  });
+
   it("attaches only a ready local generated image to the producing Chat-first turn", () => {
     const fixture = newSurface("main_chat", "chat", "chat-first-evidence");
     const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-evidence");

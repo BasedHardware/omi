@@ -965,6 +965,7 @@ struct DesktopHomeView: View {
         ownerIsStillCurrent: false
       )
       _ = viewModelContainer.chatProvider.configureChatFirstMainChatCapability(nil)
+      log("DesktopHomeView: chat-first capability off — no owner or authorization snapshot at sample time")
       AnalyticsManager.shared.chatFirst(
         .capabilityResolution(
           outcome: .unavailable,
@@ -1032,6 +1033,9 @@ struct DesktopHomeView: View {
         errorClass: capabilityErrorClass
       )
     )
+    log(
+      "DesktopHomeView: chat-first capability resolved outcome=\(capabilityOutcome) "
+        + "generation=\(projection.map { String($0.controlGeneration) } ?? "none")")
     reportAutomationState()
   }
 

@@ -1897,6 +1897,12 @@ class ChatProvider: ObservableObject {
       for: surface,
       ownerID: ownerID
     )
+    if surface.surfaceKind == "main_chat" {
+      log(
+        "ChatProvider: resolving main_chat session chatFirstCapability="
+          + (projection == nil ? "absent" : "present")
+          + " gateConfigured=\(chatFirstMainChatProjectionGate.isConfigured(for: ownerID))")
+    }
     let session = try await resolvedAgentClient().resolveSurfaceSession(
       surface,
       creationProfile: creationProfile,
