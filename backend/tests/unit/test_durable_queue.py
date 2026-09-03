@@ -15,6 +15,8 @@ from database.durable_queue import (
     ready_sort_key,
     redrive_patch,
 )
+from utils.durable_queue_metrics import observe_oldest_ready_age
+from utils.memory.daily_memory_sweep_queue import drain_sweep_uids
 
 NOW = datetime(2026, 9, 3, 12, tzinfo=timezone.utc)
 POLICY = QueuePolicy(max_attempts=3, base_backoff_seconds=1, max_backoff_seconds=8)
@@ -107,8 +109,6 @@ def test_failures_are_never_acked():
 
 
 def test_daily_sweep_poison_uid_does_not_block_the_uid_behind_it():
-    from utils.memory.daily_memory_sweep_queue import drain_sweep_uids
-
     processed: list[str] = []
 
     def process(uid: str) -> ProcessOutcome:
@@ -123,8 +123,6 @@ def test_daily_sweep_poison_uid_does_not_block_the_uid_behind_it():
 
 
 def test_daily_sweep_age_gauge_reflects_oldest_ready_item():
-    from utils.durable_queue_metrics import observe_oldest_ready_age
-
     age = oldest_ready_age_seconds([NOW - timedelta(hours=2), NOW - timedelta(minutes=3)], now=NOW)
     observe_oldest_ready_age('daily_memory_sweep', age)
     assert age == pytest.approx(2 * 3600)
