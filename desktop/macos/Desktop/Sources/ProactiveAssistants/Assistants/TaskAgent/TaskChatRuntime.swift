@@ -277,7 +277,7 @@ enum TaskChatRuntime {
       (
         .workspace,
         workspacePath.isEmpty ? .empty : .available,
-        workspacePath.isEmpty ? [:] : ["workingDirectory": workspacePath]
+        await taskWorkspaceContext(workspacePath: workspacePath, adapterId: routing.adapterId)
       ),
       (
         .surface,
@@ -330,6 +330,24 @@ enum TaskChatRuntime {
       onAuthRequired: onAuthRequired,
       onAuthSuccess: onAuthSuccess
     )
+  }
+
+  /// Task chat has skill tools but no ChatProvider instance to index skills for
+  /// them, so the run carries the same compact catalog main chat injects —
+  /// unless the resolved lane owns its own skills source (the ACP plugin).
+  nonisolated static func taskWorkspaceContext(
+    workspacePath: String,
+    adapterId: String
+  ) async -> [String: Any] {
+    guard !workspacePath.isEmpty else { return [:] }
+    var payload: [String: Any] = ["workingDirectory": workspacePath]
+    guard ChatProvider.shouldInjectSkillCatalog(adapterId: adapterId) else { return payload }
+    // The projection is dictionary-valued (never Sendable), so it crosses the
+    // detachment boundary boxed, exactly like the tool-input payloads above.
+    payload["skillCatalog"] = await Task.detached(priority: .utility) {
+      TaskToolInputBox(ChatProvider.skillCatalogProjectionFromDisk(workspace: workspacePath))
+    }.value.value
+    return payload
   }
 
   nonisolated static func queryRouting(

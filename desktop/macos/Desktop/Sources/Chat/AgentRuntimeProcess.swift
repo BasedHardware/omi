@@ -2673,6 +2673,16 @@ actor AgentRuntimeProcess {
     // both per session, so a file change is enough to apply. The OAuth refresh is unawaited:
     // a stale token costs one server a 401 (fail-open) and applies from the next session.
     env["OMI_USER_SKILLS_DIR"] = LocalSkillsStore.rootURL.path
+    // The disabled toggle must bind the tools too, not just the prompt catalog:
+    // load_skill/search_skills refuse names on this list.
+    if let disabledSkillsEnv = ChatProvider.disabledSkillsRuntimeEnvValue() {
+      env["OMI_DISABLED_SKILLS"] = disabledSkillsEnv
+    } else {
+      env.removeValue(forKey: "OMI_DISABLED_SKILLS")
+    }
+    // Skills dropped by hand never run the UI save path, so the ACP lane's
+    // plugin gate would silently miss them; write the manifest before spawn.
+    LocalSkillsStore.ensurePluginManifestIfSkillsExist()
     env["OMI_LOCAL_MCP_FILE"] = LocalMcpStore.fileURL.path
     Task { await LocalMcpStore.refreshExpiredTokens() }
 

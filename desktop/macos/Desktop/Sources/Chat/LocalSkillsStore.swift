@@ -32,6 +32,13 @@ enum LocalSkillsStore {
 
   static var skillsDirURL: URL { rootURL.appendingPathComponent("skills", isDirectory: true) }
 
+  /// The ACP lane loads `~/.omi` as a local Claude plugin only when this manifest
+  /// exists — it is the gate the runtime itself applies (user-extensions.ts).
+  static var pluginManifestURL: URL {
+    rootURL.appendingPathComponent(".claude-plugin", isDirectory: true)
+      .appendingPathComponent("plugin.json")
+  }
+
   /// Lowercase alphanumerics joined by single hyphens, max 64 chars — the
   /// identity rule for skill folders and MCP server names alike.
   static func slugify(_ name: String) -> String {
@@ -153,11 +160,17 @@ enum LocalSkillsStore {
   /// a `.claude-plugin/plugin.json` manifest at the root.
   static func ensurePluginManifest() {
     let fm = FileManager.default
-    let manifestDir = rootURL.appendingPathComponent(".claude-plugin", isDirectory: true)
-    let manifest = manifestDir.appendingPathComponent("plugin.json")
-    guard !fm.fileExists(atPath: manifest.path) else { return }
-    try? fm.createDirectory(at: manifestDir, withIntermediateDirectories: true)
-    try? Data(#"{"name": "omi-user-skills", "version": "1.0.0"}"#.utf8).write(to: manifest, options: .atomic)
+    guard !fm.fileExists(atPath: pluginManifestURL.path) else { return }
+    try? fm.createDirectory(at: pluginManifestURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try? Data(#"{"name": "omi-user-skills", "version": "1.0.0"}"#.utf8).write(to: pluginManifestURL, options: .atomic)
+  }
+
+  /// Runtime-spawn safety net: skills dropped by hand never run the UI save path,
+  /// so without this the ACP lane would silently miss them. A no-op until the
+  /// user actually has a skills folder.
+  static func ensurePluginManifestIfSkillsExist() {
+    guard FileManager.default.fileExists(atPath: skillsDirURL.path) else { return }
+    ensurePluginManifest()
   }
 
   private static func notifyChanged() {

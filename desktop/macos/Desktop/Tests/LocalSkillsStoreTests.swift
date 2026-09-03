@@ -36,6 +36,33 @@ final class LocalSkillsStoreTests: XCTestCase {
         atPath: tempRoot.appendingPathComponent(".claude-plugin/plugin.json").path))
   }
 
+  /// The ACP lane gates the user-skills plugin on `.claude-plugin/plugin.json`,
+  /// which the UI save path writes. A folder dropped in by hand never runs that
+  /// path, so the runtime-spawn safety net must cover it — and must not create
+  /// dotfiles for users with no skills at all.
+  func testSpawnSafetyNetWritesPluginManifestOnlyWhenSkillsExist() throws {
+    let skillsDir = tempRoot.appendingPathComponent("skills", isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: skillsDir.appendingPathComponent("hand-dropped"), withIntermediateDirectories: true)
+    try Data("---\nname: hand-dropped\ndescription: d\n---\nBody.".utf8)
+      .write(to: skillsDir.appendingPathComponent("hand-dropped/SKILL.md"))
+
+    LocalSkillsStore.ensurePluginManifestIfSkillsExist()
+    XCTAssertTrue(FileManager.default.fileExists(atPath: LocalSkillsStore.pluginManifestURL.path))
+
+    // A machine with a ~/.omi but no skills folder stays untouched.
+    let emptyRoot = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-skills-empty-\(UUID().uuidString)")
+    LocalSkillsStore.rootURLOverride = emptyRoot
+    defer {
+      LocalSkillsStore.rootURLOverride = tempRoot
+      try? FileManager.default.removeItem(at: emptyRoot)
+    }
+    LocalSkillsStore.ensurePluginManifestIfSkillsExist()
+    XCTAssertFalse(FileManager.default.fileExists(atPath: LocalSkillsStore.pluginManifestURL.path))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: emptyRoot.path))
+  }
+
   func testSavePreservesAuthorFrontmatterAndOwnsNameDescription() throws {
     let md = "---\nname: old-name\ndescription: Old desc\nlicense: MIT\n---\nBody text here."
     let slug = try LocalSkillsStore.saveSkill(title: "My Skill", markdown: md)
