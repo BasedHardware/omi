@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import List, Dict, Any, Union, Optional
+from typing import Annotated, List, Dict, Any, Union, Optional
 import os
 import asyncio
 
 import pytz
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from database import (
     conversations as conversations_db,
@@ -292,6 +292,10 @@ class DailySummaryDayStats(BaseModel):
     total_conversations: Optional[int] = None
     total_duration_minutes: Optional[int] = None
     action_items_count: Optional[int] = None
+    memories_created: Optional[int] = None
+    action_items_created: Optional[int] = None
+    watching_minutes: Optional[int] = None
+    proactive_moments: Optional[int] = None
 
 
 class DailySummaryLocationPin(BaseModel):
@@ -1778,6 +1782,81 @@ def test_daily_summary(
 
 
 # Daily Summaries API
+
+
+DesktopUsageSeconds = Annotated[int, Field(strict=True, ge=0, le=86400)]
+DesktopUsageCount = Annotated[int, Field(strict=True, ge=0, le=10000)]
+
+
+class DesktopDailyUsageRequest(BaseModel):
+    date: str
+    timezone: str
+    client_device_id: str = Field(min_length=1, max_length=200)
+    watching_seconds: DesktopUsageSeconds
+    listening_seconds: DesktopUsageSeconds
+    proactive_cards_shown: DesktopUsageCount
+    proactive_cards_acted: DesktopUsageCount
+    ptt_turns: DesktopUsageCount
+
+    @field_validator('date')
+    @classmethod
+    def validate_date_format(cls, value: str) -> str:
+        try:
+            parsed = datetime.strptime(value, '%Y-%m-%d').date()
+        except ValueError as exc:
+            raise ValueError('date must be a real date in YYYY-MM-DD format') from exc
+        if parsed.strftime('%Y-%m-%d') != value:
+            raise ValueError('date must be a real date in YYYY-MM-DD format')
+        return value
+
+    @field_validator('timezone')
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        try:
+            pytz.timezone(value)
+        except pytz.UnknownTimeZoneError as exc:
+            raise ValueError('timezone must be a valid IANA timezone') from exc
+        return value
+
+    @field_validator('client_device_id')
+    @classmethod
+    def validate_client_device_id(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError('client_device_id cannot be blank')
+        return value
+
+    @model_validator(mode='after')
+    def validate_date_window(self):
+        target_date = datetime.strptime(self.date, '%Y-%m-%d').date()
+        local_today = datetime.now(pytz.timezone(self.timezone)).date()
+        if abs((target_date - local_today).days) > 2:
+            raise ValueError('date must be within 2 days of today in the supplied timezone')
+        return self
+
+
+class DesktopDailyUsageResponse(BaseModel):
+    ok: bool
+
+
+@router.post('/v1/users/desktop-usage/daily', tags=['v1'], response_model=DesktopDailyUsageResponse)
+def record_desktop_daily_usage(
+    data: DesktopDailyUsageRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'users:desktop_usage_daily')),
+):
+    daily_summaries_db.upsert_desktop_daily_usage(
+        uid,
+        data.date,
+        data.timezone,
+        data.client_device_id,
+        {
+            'watching_seconds': data.watching_seconds,
+            'listening_seconds': data.listening_seconds,
+            'proactive_cards_shown': data.proactive_cards_shown,
+            'proactive_cards_acted': data.proactive_cards_acted,
+            'ptt_turns': data.ptt_turns,
+        },
+    )
+    return {'ok': True}
 
 
 @router.get('/v1/users/daily-summaries', tags=['v1'], response_model=DailySummariesResponse)
