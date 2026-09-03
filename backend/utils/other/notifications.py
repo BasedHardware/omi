@@ -495,7 +495,7 @@ def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
 
 def _deliver_current_day_summary(uid, date_str: str, summary_data: dict, tokens) -> None:
     """Push + webhook for a newly generated *current* day. Backfilled days never call this."""
-    summary_id = summary_data.get('id')
+    summary_id = str(summary_data.get('id') or '')
     daily_summary_title = f"{summary_data.get('day_emoji', '📅')} {summary_data.get('headline', 'Your Daily Summary')}"
     summary_body = str(summary_data.get('overview') or 'Tap to see your daily summary')
 
