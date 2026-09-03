@@ -83,6 +83,7 @@ final class DesktopUsageDailyReporter {
   private var lastDateKey: String?
   private var retryAttempts: [String: Int] = [:]
   private var retryAfter: [String: Date] = [:]
+  private var testingAssumeAuthorized = false
   private var started = false
   nonisolated(unsafe) private var ownerObserver: NSObjectProtocol?
   private var boundOwnerID: String?
@@ -178,6 +179,22 @@ final class DesktopUsageDailyReporter {
 
   func snapshotForTesting() -> DesktopUsageAccumulator { accumulator }
 
+  func assumeAuthorizedForTesting() {
+    testingAssumeAuthorized = true
+  }
+
+  func uploadDirtyRecordsForTesting() async {
+    await uploadDirtyRecords()
+  }
+
+  func retryAttemptsForTesting(_ dateKey: String) -> Int {
+    retryAttempts[dateKey, default: 0]
+  }
+
+  func retryAfterForTesting(_ dateKey: String) -> Date? {
+    retryAfter[dateKey]
+  }
+
   private func sampleNow() {
     sample(watching: isWatching(), listening: isListening(), at: now())
   }
@@ -207,19 +224,29 @@ final class DesktopUsageDailyReporter {
   }
 
   private func upload(dateKey: String) async {
-    guard let payload = accumulator.records[dateKey], let boundOwnerID,
-      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: boundOwnerID),
-      RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
-    else {
+    guard let payload = accumulator.records[dateKey], let boundOwnerID else { return }
+    let authorization: RuntimeOwnerAuthorizationSnapshot?
+    if testingAssumeAuthorized {
+      authorization = nil
+    } else if let captured = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+      expectedOwnerID: boundOwnerID),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(captured)
+    {
+      authorization = captured
+    } else {
       log("DesktopUsageDailyReporter: owner authorization changed before usage upload")
       return
     }
     if let retry = retryAfter[dateKey], retry > now() { return }
     do {
       try await uploadPayload(payload)
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization), self.boundOwnerID == boundOwnerID else {
-        log("DesktopUsageDailyReporter: owner authorization changed during usage upload")
-        return
+      if !testingAssumeAuthorized {
+        guard let authorization, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization),
+          self.boundOwnerID == boundOwnerID
+        else {
+          log("DesktopUsageDailyReporter: owner authorization changed during usage upload")
+          return
+        }
       }
       if accumulator.records[dateKey] == payload {
         accumulator.markUploaded(dateKey)
