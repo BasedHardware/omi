@@ -1,6 +1,7 @@
 import json
 import logging
 import struct
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi.websockets import WebSocket, WebSocketDisconnect
@@ -15,6 +16,7 @@ from utils.conversations.finalizer import (
     ConversationFinalizationError,
     finalize_persisted_conversation,
 )
+from utils.durable_queue_policy import ProcessOutcome, QueuePolicy, decide_attempt
 from utils.executors import db_executor, run_blocking
 from utils.observability.journeys import (
     record_capture_finalization_terminal,
@@ -25,6 +27,15 @@ logger = logging.getLogger('routers.pusher')
 
 FINALIZATION_RESULT_PROTOCOL_LEGACY = 1
 FINALIZATION_RESULT_PROTOCOL_V2 = 2
+
+
+def _finalization_attempt_decision(attempt_count: int, *, reason: str):
+    return decide_attempt(
+        attempt_count=max(attempt_count, 1),
+        outcome=ProcessOutcome.retry(reason, reason=reason),
+        policy=QueuePolicy(max_attempts=get_listen_finalization_tasks_max_attempts()),
+        now=datetime.now(timezone.utc),
+    )
 
 
 async def process_conversation_task(
@@ -83,7 +94,7 @@ async def process_conversation_task(
         """
         if job_id is None or generation is None or lease_epoch is None:
             return False
-        terminal = attempt_count >= get_listen_finalization_tasks_max_attempts()
+        terminal = _finalization_attempt_decision(attempt_count, reason=failure_code).terminal
         try:
             if terminal:
                 marked_dead_letter = await run_blocking(
@@ -184,7 +195,7 @@ async def process_conversation_task(
             finalization_job_id=job_id,
             dispatch_generation=generation,
             lease_epoch=lease_epoch,
-            final_attempt=attempt_count >= get_listen_finalization_tasks_max_attempts(),
+            final_attempt=_finalization_attempt_decision(attempt_count, reason='finalization_preflight').terminal,
         )
 
         if disposition == ConversationFinalizationDisposition.fenced:

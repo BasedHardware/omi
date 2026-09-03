@@ -28,7 +28,6 @@ from jobs.short_term_lifecycle_worker import (
     process_short_term_lifecycle_item,
 )
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
-from utils.durable_queue_metrics import observe_oldest_ready_age
 from utils.memory.atom_keyword_index import delete_atom_keyword_doc, sync_atom_keyword_index_for_item
 from models.memory_apply import MemoryControlState
 from utils.memory.canonical_consolidation import (
@@ -184,7 +183,6 @@ def _drain_canonical_outbox(
             side_effects=side_effects,
             now=now,
         )
-        observe_oldest_ready_age('memory_outbox', summary.get('oldest_ready_age_seconds'))
         aggregate["ticks"] += 1
         for key in (
             "leased_count",

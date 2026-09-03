@@ -15,7 +15,6 @@ import database.notifications as notification_db
 from database.redis_db import try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
-from utils.durable_queue_metrics import observe_oldest_ready_age
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.memory.learned_today import memory_review_card_block
@@ -108,6 +107,12 @@ class DailySummaryJobStats:
         )
 
 
+@dataclass(frozen=True)
+class DailySummaryCronOutcome:
+    ok: bool
+    error_text: Optional[str] = None
+
+
 def should_run_job() -> bool:
     """
     Check if the notification cron job should run.
@@ -122,10 +127,12 @@ async def start_cron_job() -> None:
     """
     logger.info(f'start_cron_job at UTC hour {datetime.now(pytz.utc).hour}')
     await send_daily_notification()
-    await send_daily_summary_notification()
+    summary_outcome = await send_daily_summary_notification()
+    if not summary_outcome.ok:
+        logger.error('Daily summary cron run failed: %s', summary_outcome.error_text)
 
 
-async def send_daily_summary_notification() -> None:
+async def send_daily_summary_notification() -> DailySummaryCronOutcome:
     """
     Send daily summary notifications to users based on their local hour preference.
 
@@ -153,7 +160,7 @@ async def send_daily_summary_notification() -> None:
         timezones_by_hour = _get_timezones_grouped_by_hour()
     except Exception as e:
         logger.error(f"Error grouping daily summary timezones: {e}")
-        return None
+        return DailySummaryCronOutcome(ok=False, error_text=str(e))
 
     cursor = await run_blocking(db_executor, summary_budget.read_job_cursor, cursor_key)
     resume_hour = summary_budget.cursor_hour(cursor)
@@ -199,6 +206,8 @@ async def send_daily_summary_notification() -> None:
         resume_uid = None
 
         logger.info(f"Sending daily summary to {len(ordered_users)} users at local hour {target_hour}")
+        failed_before = stats.failed
+        timed_out_before = stats.timed_out
         finished_group = await _send_bulk_summary_notification(
             ordered_users, deadline=deadline, stats=stats, target_hour=target_hour, cursor_key=cursor_key
         )
@@ -206,25 +215,35 @@ async def send_daily_summary_notification() -> None:
             completed_all = False
             stop_processing = True
             return ProcessOutcome.retry('daily summary group budget exhausted', reason='timeout')
+        hour_send_failures = (stats.failed - failed_before) + (stats.timed_out - timed_out_before)
+        if hour_send_failures:
+            return ProcessOutcome.reject(
+                f'{hour_send_failures} user send(s) failed at hour {target_hour}',
+                reason='hour_send_failed',
+            )
         return ProcessOutcome.ack()
 
     groups = [(hour, timezones_by_hour[hour]) for hour in ordered_hours]
     results = await drain_isolated_async(groups, process_hour)
-    observe_oldest_ready_age('daily_summary_hour_groups', 0.0)
-    for result in results:
-        if result.outcome.kind != ProcessOutcome.ack().kind:
-            logger.error(
-                "Daily summary hour group failed hour=%s reason=%s error=%s",
-                result.item[0],
-                result.outcome.reason,
-                result.outcome.error_text,
-            )
+    failures = [result for result in results if result.outcome.kind != ProcessOutcome.ack().kind]
+    for result in failures:
+        logger.error(
+            "Daily summary hour group failed hour=%s reason=%s error=%s",
+            result.item[0],
+            result.outcome.reason,
+            result.outcome.error_text,
+        )
 
     if completed_all:
         await run_blocking(db_executor, summary_budget.clear_job_cursor, cursor_key)
 
     logger.info('daily_summary_job_summary complete=%s %s', completed_all, stats.as_log())
-    return None
+    if failures:
+        return DailySummaryCronOutcome(
+            ok=False,
+            error_text='; '.join(result.outcome.error_text or 'hour_failed' for result in failures),
+        )
+    return DailySummaryCronOutcome(ok=True)
 
 
 def _resume_user(users: List[Tuple[Any, ...]], resume_uid: Optional[str]) -> Optional[Tuple[Any, ...]]:

@@ -199,8 +199,8 @@ LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
 )
 
 # Durable-queue substrate age. Every replica publishes the same Firestore-derived
-# value for a given queue name; aggregate with max(), never sum(). Zero-initialize
-# the closed queue set so an idle process exports every series.
+# value for a given queue name; aggregate with max(), never sum(). Do not
+# zero-initialize: absent() means the periodic publisher has not run.
 OMI_QUEUE_OLDEST_READY_AGE_SECONDS = Gauge(
     'omi_queue_oldest_ready_age_seconds',
     'Age in seconds of the oldest ready durable-queue item; replicated per process, ' 'aggregate with max() not sum()',
@@ -219,8 +219,6 @@ OMI_QUEUE_NAMES = (
     'frame_deletion_outbox',
     'projection_repairs',
 )
-for _queue_name in OMI_QUEUE_NAMES:
-    OMI_QUEUE_OLDEST_READY_AGE_SECONDS.labels(queue=_queue_name)
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',
