@@ -26,8 +26,11 @@ enum CuaMcpRegistration {
     try CuaStdioShim.install(token: token)
   }
 
+  /// The gate's own removal, which is the one path allowed to drop this entry
+  /// from mcp.json: the generic `LocalMcpStore.removeServer` refuses built-in
+  /// names so a user's Remove cannot delete the server the gate manages.
   static func unregister() {
-    LocalMcpStore.removeServer(name: serverName)
+    LocalMcpStore.removeBuiltInServer(name: serverName)
     CuaStdioShim.uninstall()
   }
 

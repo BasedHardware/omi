@@ -81,4 +81,17 @@ final class CuaMcpRegistrationTests: XCTestCase {
 
     XCTAssertEqual(LocalMcpStore.listServers().map(\.name), ["playwright"])
   }
+
+  /// The built-in entry presents as a server but is not user data: a generic
+  /// removal — the sheet's Remove, or any code treating mcp.json as user-owned —
+  /// must leave it in place, while the gate's own unregister still removes it.
+  func testBuiltInEntrySurvivesGenericRemoval() throws {
+    try CuaMcpRegistration.register(token: "tok-123")
+
+    LocalMcpStore.removeServer(name: CuaMcpRegistration.serverName)
+    XCTAssertTrue(CuaMcpRegistration.isRegistered(token: "tok-123"))
+
+    CuaMcpRegistration.unregister()
+    XCTAssertNil(LocalMcpStore.readAllServers()[CuaMcpRegistration.serverName])
+  }
 }
