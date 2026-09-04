@@ -36,6 +36,8 @@ import {
   __registerUserMcpToolsForTest,
   __resetOmiPipeForTest,
   __resetUserMcpForTest,
+  startMcpDiscoveries,
+  MCP_STDIO_START_CONCURRENCY,
   omiRequestIdFromRelayContext,
   omiReasoningEffortFromRelayContext,
   omiBuiltInToolPolicyFromRelayContext,
@@ -2517,6 +2519,51 @@ test("registerUserMcpTools: the first turn is not blocked by a slow server, whic
     if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+// A stdio server start is a child process spawn (often npx with a cold
+// download); a large config used to fire every spawn in the same instant.
+test("startMcpDiscoveries: bounds concurrent stdio starts; remote starts are not queued behind the pool", async () => {
+  const entries = [
+    ...Array.from({ length: 20 }, (_, i) => ({ name: `stdio-${i}`, kind: "stdio" as const })),
+    { name: "remote-0", kind: "remote" as const },
+  ];
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const started: string[] = [];
+  const start = async (entry: { name: string; kind: "stdio" | "remote" }) => {
+    started.push(entry.name);
+    if (entry.kind === "stdio") {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      inFlight -= 1;
+    }
+  };
+
+  const probes = startMcpDiscoveries(entries, start);
+  await Promise.all(probes);
+
+  assert.equal(started.length, 21, "every server is started exactly once");
+  assert.equal(
+    maxInFlight,
+    MCP_STDIO_START_CONCURRENCY,
+    `stdio starts must saturate exactly at the bound, saw ${maxInFlight}`,
+  );
+  // The remote start runs immediately, not behind the stdio pool.
+  assert.equal(started.indexOf("remote-0"), 8, "remote start must not wait for a stdio slot");
+
+  // Registration wiring: the proxies must drain through the bounded helper.
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const registrationBody = source.slice(
+    source.indexOf("async function registerUserMcpTools"),
+    source.indexOf("export async function __registerUserMcpToolsForTest"),
+  );
+  assert.ok(
+    registrationBody.includes("startMcpDiscoveries(mcpServers, startMcpDiscovery)"),
+    "registerUserMcpTools must start discoveries through the bounded pool",
+  );
+  assert.doesNotMatch(registrationBody, /mcpServers\.map\(\(entry\) => startMcpDiscovery/);
 });
 
 // A description registered while a server is still connecting can never be

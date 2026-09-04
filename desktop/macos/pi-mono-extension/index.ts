@@ -868,6 +868,8 @@ interface McpServerEntry {
   readonly client: McpClient;
   /** 30s for stdio (a first `npx <package>` run downloads it), 10s remote. */
   readonly discoveryBudgetMs: number;
+  /** stdio servers spawn a child process at start; remote ones open a connection. */
+  readonly kind: "stdio" | "remote";
   status: McpServerStatus;
   error?: string;
   tools: McpRemoteTool[];
@@ -936,6 +938,44 @@ function createMcpClient(server: UserMcpServer): McpClient {
   return server.type === "sse"
     ? new McpSseClient(server.url, headers)
     : new McpHttpClient(server.url, headers);
+}
+
+/**
+ * At most this many stdio servers start at once. Every stdio start is a child
+ * process — often `npx`, which may download a package first — and a large
+ * config used to fire all of those spawns in the same instant. Remote servers
+ * (http/sse) open lightweight connections and deliberately stay unbounded; only
+ * the process-spawning lane shares the bound.
+ */
+export const MCP_STDIO_START_CONCURRENCY = 8;
+
+/**
+ * Start discovery for every entry, returning the promises for the caller to
+ * race against the first-turn budget. stdio entries share the concurrency
+ * bound above — a worker pool claims the next entry as each discovery
+ * settles — while remote entries start immediately. Never rejects: the start
+ * function is responsible for its own error handling.
+ */
+export function startMcpDiscoveries<T extends { kind: "stdio" | "remote" }>(
+  entries: readonly T[],
+  start: (entry: T) => Promise<void>,
+): Promise<unknown>[] {
+  const stdio = entries.filter((entry) => entry.kind === "stdio");
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(MCP_STDIO_START_CONCURRENCY, stdio.length) },
+    async () => {
+      // The event loop is single-threaded, so claiming the next index before
+      // the first await cannot race another worker.
+      while (cursor < stdio.length) {
+        await start(stdio[cursor++]);
+      }
+    },
+  );
+  return [
+    ...workers,
+    ...entries.filter((entry) => entry.kind !== "stdio").map((entry) => start(entry)),
+  ];
 }
 
 /**
@@ -1237,12 +1277,13 @@ async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
     name: config.name,
     client: createMcpClient(config),
     discoveryBudgetMs: isStdioServer(config) ? 30_000 : 10_000,
+    kind: isStdioServer(config) ? "stdio" : "remote",
     status: "connecting",
     tools: [],
     prompts: [],
   }));
-  // All servers connect concurrently; each is bounded by its own budget.
-  const probes = mcpServers.map((entry) => startMcpDiscovery(entry));
+  // stdio spawns share the bounded start pool; remote connects are unbounded.
+  const probes = startMcpDiscoveries(mcpServers, startMcpDiscovery);
   await Promise.race([Promise.allSettled(probes), sleep(firstTurnBudgetMs())]);
   pi.registerTool(mcpToolsInfoTool());
   pi.registerTool(mcpCallTool());
