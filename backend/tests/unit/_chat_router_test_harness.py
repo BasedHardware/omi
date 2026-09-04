@@ -282,7 +282,10 @@ def wire_common_stubs(install) -> SimpleNamespace:
     limiter.read_wav_duration_ms = MagicMock(return_value=1000)
     limiter.try_consume_budget = MagicMock(return_value=(True, 1000, 7199000))
     limiter.check_budget = MagicMock(return_value=(True, 0, 7200000))
+    limiter.try_reserve_session_budget = MagicMock(return_value=(True, 120000, 120000, 7080000))
+    limiter.settle_reserved_duration = MagicMock()
     limiter.record_actual_duration = MagicMock()
+    limiter.MAX_SESSION_DURATION_S = 120
 
     multipart = install('multipart', ModuleType('multipart'))
     multipart.__version__ = '0.0.20'
