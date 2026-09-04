@@ -13,6 +13,9 @@ struct ChatQuotaBanner: Equatable {
   let threshold: Int
   let title: String
   let message: String
+  /// The count in six words, for the banner's single compact line: the full
+  /// `message` lives in the accessibility label and the plan page.
+  let summary: String
   /// Usage as a whole percent of the allowance, clamped to 100 — the meter's
   /// fill. A banner is only ever raised at a threshold, so this is never
   /// below the smallest one.
@@ -47,6 +50,7 @@ struct ChatQuotaBanner: Equatable {
       message: message(
         threshold: threshold, isBillingOverage: overage, quota: quota, used: used, limit: limit,
         now: now),
+      summary: summary(quota: quota, used: used, limit: limit),
       // Floor, not round: the meter must never read full before the allowance
       // actually is (99.8% is not "at your limit").
       percent: min(100, Int(percent)),
@@ -68,6 +72,15 @@ struct ChatQuotaBanner: Equatable {
   private static func title(threshold: Int, isBillingOverage: Bool) -> String {
     guard threshold >= 100 else { return "Almost at your monthly limit" }
     return isBillingOverage ? "Now billing overage" : "Monthly limit reached"
+  }
+
+  private static func summary(quota: APIClient.ChatUsageQuota, used: Double, limit: Double)
+    -> String
+  {
+    if quota.unit == "cost_usd" {
+      return String(format: "$%.0f of $%.0f used", used, limit)
+    }
+    return "\(Int(used)) of \(Int(limit)) used"
   }
 
   private static func message(

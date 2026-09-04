@@ -3,17 +3,21 @@ import SwiftUI
 
 /// The chat-quota warning card that sits directly above the composer.
 ///
-/// A sibling of `ChatErrorCard`'s idiom — tinted wash, tinted hairline, an
-/// icon badge, one CTA pill — tuned down from an error to a warning: the
-/// severity lives in one hue and the meter, not in a raised voice. At 90% the
-/// glyph is an outlined triangle; at the allowance it fills, and only on a
-/// hard-capped plan, where sends are actually refused, does it borrow the
-/// error red. `PageGlass.warning` and not a hand-mixed yellow — this is the
-/// palette's "something to do about it, not yet an error" tone.
+/// One quiet line in `ChatErrorCard`'s idiom — tinted wash, tinted hairline,
+/// severity glyph, one CTA pill — so the warning costs the composer a single
+/// row and never pushes the conversation around. Severity lives in one hue:
+/// outline orange at 90%, filled orange at the allowance, and only a
+/// hard-capped plan, where sends are actually refused, borrows the error red.
+/// `PageGlass.warning` and not a hand-mixed yellow — the palette's "something
+/// to do about it, not yet an error" tone.
 struct ChatQuotaBannerView: View {
   let banner: ChatQuotaBanner
   let onViewPlan: () -> Void
   let onDismiss: () -> Void
+
+  /// The inline meter's fixed track width. Narrow enough to stay decoration,
+  /// wide enough that 90% vs 100% is legible at a glance.
+  private let meterWidth: CGFloat = 72
 
   /// Mounted directly above a composer. Both desktop shells show the same
   /// warning on the same surface (INV-NAV-1), so the wiring lives here once
@@ -54,30 +58,31 @@ struct ChatQuotaBannerView: View {
   }
 
   var body: some View {
-    HStack(alignment: .center, spacing: OmiSpacing.md) {
+    // One line: what happened, the count, the meter inline, and the two
+    // actions. The full detail (plan name, reset date, overage copy) stays a
+    // glance away on the plan page, where "View plan" lands.
+    HStack(alignment: .center, spacing: OmiSpacing.sm) {
       Image(systemName: severityGlyph)
-        .scaledFont(size: OmiType.subheading)
+        .scaledFont(size: OmiType.body, weight: .semibold)
         .foregroundColor(severityColor)
-        .frame(width: 30, height: 30)
-        .background(Circle().fill(severityColor.opacity(0.14)))
         .accessibilityHidden(true)
 
-      // Title, detail and meter read top to bottom as one object: what
-      // happened, the numbers, and how far along it is. The text column must
-      // stay readable — a warning the user cannot finish reading is not a
-      // warning.
-      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+      HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.xs) {
         Text(banner.title)
           .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(Ink.primary)
-        Text(banner.message)
+          .lineLimit(1)
+        Text(banner.summary)
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-        meter
+          .lineLimit(1)
       }
-      .multilineTextAlignment(.leading)
-      .frame(maxWidth: .infinity, alignment: .leading)
+      .layoutPriority(1)
+
+      meter
+        .frame(width: meterWidth)
+
+      Spacer(minLength: OmiSpacing.md)
 
       Button(action: onViewPlan) {
         Text("View plan")
@@ -89,8 +94,6 @@ struct ChatQuotaBannerView: View {
         Image(systemName: "xmark")
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
-          .frame(width: 22, height: 22)
-          .background(Circle().fill(Ink.rowFill))
       }
       .buttonStyle(.plain)
       .help("Dismiss")
@@ -98,13 +101,15 @@ struct ChatQuotaBannerView: View {
       .accessibilityIdentifier("chat-quota-banner-dismiss")
     }
     .padding(.horizontal, OmiSpacing.md)
-    .padding(.vertical, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
     .background(Ink.rowFill)
     .overlay(
       RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
         .strokeBorder(severityColor.opacity(0.35), lineWidth: 1)
     )
     .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel("\(banner.title). \(banner.message)")
     .accessibilityIdentifier("chat-quota-banner")
   }
 
@@ -121,26 +126,19 @@ struct ChatQuotaBannerView: View {
     banner.threshold >= 100 ? "exclamationmark.triangle.fill" : "exclamationmark.triangle"
   }
 
-  /// The allowance meter: a hairline track with the used share filled. The
-  /// glanceable fact prose cannot be — how close the end is. Decorative to
-  /// accessibility, which the message already covers in words.
+  /// The allowance meter, inline: a hairline track with the used share filled.
+  /// The glanceable fact prose cannot be — how close the end is. Decorative to
+  /// accessibility, which the banner label carries in words.
   private var meter: some View {
-    GeometryReader { space in
-      ZStack(alignment: .leading) {
-        Capsule(style: .continuous).fill(Ink.rowFillHover)
+    Capsule(style: .continuous)
+      .fill(Ink.rowFillHover)
+      .overlay(alignment: .leading) {
         Capsule(style: .continuous)
           .fill(severityColor)
-          .frame(width: fillWidth(in: space.size.width))
+          // A nonzero reading stays a visible nub; a zero one is empty.
+          .frame(width: meterWidth * CGFloat(max(banner.percent > 0 ? 3 : 0, banner.percent)) / 100)
       }
-    }
-    .frame(height: 4)
-    .accessibilityHidden(true)
-  }
-
-  private func fillWidth(in trackWidth: CGFloat) -> CGFloat {
-    guard trackWidth > 0 else { return 0 }
-    // A nonzero reading stays a visible nub; a zero one is genuinely empty.
-    let fraction = max(banner.percent > 0 ? 0.02 : 0, Double(banner.percent) / 100)
-    return trackWidth * CGFloat(fraction)
+      .frame(height: 4)
+      .accessibilityHidden(true)
   }
 }

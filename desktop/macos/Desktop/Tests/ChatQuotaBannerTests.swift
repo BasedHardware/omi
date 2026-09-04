@@ -130,6 +130,13 @@ final class ChatQuotaBannerTests: XCTestCase {
     XCTAssertEqual(try banner(used: 900)?.percent, 100)
   }
 
+  func testSummaryIsTheCompactCountForTheSingleLineBanner() throws {
+    XCTAssertEqual(try banner(used: 475)?.summary, "475 of 500 used")
+    // Dollar plans meter the same line in the unit the plan bills in.
+    let cost = try banner(used: 370, limit: 400, plan: "Architect", unit: "cost_usd")
+    XCTAssertEqual(try XCTUnwrap(cost).summary, "$370 of $400 used")
+  }
+
   func testMissingOverageFieldReadsAsHardCap() throws {
     // A server predating `is_overage_plan` must not promise overage billing.
     let shown = try XCTUnwrap(try banner(used: 500, isOveragePlan: nil))
