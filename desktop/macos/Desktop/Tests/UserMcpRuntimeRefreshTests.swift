@@ -259,6 +259,36 @@ final class UserMcpRuntimeRefreshTests: XCTestCase {
     XCTAssertEqual(respawns.current, 2, "and then it settles — no loop")
   }
 
+  /// Task chat drives the shared runtime directly and never runs
+  /// ChatProvider.ensureBridgeStarted, so its own boundary must consume the
+  /// deferred change — exactly the seam `TaskChatRuntime.sharedBridge` calls.
+  @MainActor
+  func testTaskChatBoundaryConsumesDeferredChange() async throws {
+    let respawns = Counter()
+    let started = Box(false)
+    UserMcpRuntimeRefresh.shared.bindRuntime(
+      isTurnActive: { false },
+      isRuntimeStarted: { started.value },
+      respawn: { respawns.increment() })
+    defer {
+      // Neutral defaults; the app rebinds from ChatProvider.init.
+      UserMcpRuntimeRefresh.shared.bindRuntime(
+        isTurnActive: { false },
+        isRuntimeStarted: { false },
+        respawn: { throw BridgeError.stopped })
+    }
+
+    // The change is deferred mid-turn, then the debounced idle cycle keeps it
+    // pending while nothing is warm.
+    UserMcpRuntimeRefresh.shared.changeDetected()
+    await UserMcpRuntimeRefresh.shared.awaitDebouncedCycleForTesting()
+    XCTAssertEqual(respawns.current, 0)
+
+    started.value = true
+    await TaskChatRuntime.applyPendingUserMcpChangeAtTurnBoundary()
+    XCTAssertEqual(respawns.current, 1, "a task-chat run applies the deferred change before runtime work")
+  }
+
   @MainActor
   func testRefusedRespawnRetriesAtTheNextTurnBoundary() async throws {
     enum RespawnRefused: Error { case requestsActive }

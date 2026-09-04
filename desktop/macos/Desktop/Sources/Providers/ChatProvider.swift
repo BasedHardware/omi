@@ -1403,17 +1403,6 @@ class ChatProvider: ObservableObject {
   private var userSkillsObserver: AnyCancellable?
   private var userMcpObserver: AnyCancellable?
 
-  /// Applies ~/.omi/mcp.json changes to the shared runtime — debounced and
-  /// never mid-turn. The pi-mono extension registers its MCP proxy tools once
-  /// per process spawn, so unlike skills a file change needs a respawn.
-  private lazy var userMcpRuntimeRefresh = UserMcpRuntimeRefresh(
-    isTurnActive: { [weak self] in self?.isSending ?? false },
-    isRuntimeStarted: { [weak self] in self?.agentBridgeStarted ?? false },
-    respawn: { [weak self] in
-      guard let self else { return }
-      try await self.respawnBridgeForUserMcpChange()
-    })
-
   // MARK: - Streaming Buffer
   /// Accumulates text and thinking deltas during streaming and flushes them to
   /// the published messages array in batches, reducing SwiftUI re-render frequency.
@@ -1606,14 +1595,27 @@ class ChatProvider: ObservableObject {
         }
       }
 
+    // Applies ~/.omi/mcp.json changes to the shared runtime — debounced and
+    // never mid-turn. The pi-mono extension registers its MCP proxy tools once
+    // per process spawn, so unlike skills a file change needs a respawn. The
+    // coordinator is process-wide (task chat consumes it at its own boundary)
+    // and is bound here to this provider's bridge state.
+    UserMcpRuntimeRefresh.shared.bindRuntime(
+      isTurnActive: { [weak self] in self?.isSending ?? false },
+      isRuntimeStarted: { [weak self] in self?.agentBridgeStarted ?? false },
+      respawn: { [weak self] in
+        guard let self else { throw BridgeError.stopped }
+        try await self.respawnBridgeForUserMcpChange()
+      })
+
     // A server was added, removed, or re-authed in ~/.omi/mcp.json. The runtime
     // reads the file once per process spawn, so the shared bridge respawns
     // (debounced, never mid-turn — see UserMcpRuntimeRefresh).
     userMcpObserver = NotificationCenter.default.publisher(for: .omiUserMcpDidChange)
       .receive(on: DispatchQueue.main)
-      .sink { [weak self] _ in
+      .sink { _ in
         Task { @MainActor in
-          self?.userMcpRuntimeRefresh.changeDetected()
+          UserMcpRuntimeRefresh.shared.changeDetected()
         }
       }
 
@@ -1737,7 +1739,8 @@ class ChatProvider: ObservableObject {
     // Apply a pending ~/.omi/mcp.json change here — the safe point between
     // turns: this turn has issued no runtime work yet, and the runtime's
     // restart still refuses while some other surface's requests are active.
-    await userMcpRuntimeRefresh.applyAtTurnBoundary()
+    // Task chat applies the same pending state at its own boundary.
+    await UserMcpRuntimeRefresh.shared.applyAtTurnBoundary()
     guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
       await presentBridgeStartupFailure(
         BridgeError.authMissing, authoritativeGeneration: authoritativeGeneration)
