@@ -1,4 +1,0 @@
-{
-  "kind": "none",
-  "reason": "Fences the local-inference adapter against HTTP redirects and stops the runtime retrying refused requests. The runtime is not wired into finalization yet (S11), so no shipped behavior changes."
-}

@@ -1,6 +1,0 @@
-{
-  "changes": [
-    "Push-to-talk replies you fully heard are no longer repeated or re-corrected on later, unrelated questions",
-    "Voice transcripts no longer duplicate Omi's own spoken replies picked up by the microphone"
-  ]
-}
