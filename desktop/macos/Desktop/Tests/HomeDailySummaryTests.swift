@@ -42,6 +42,49 @@ final class HomeDailySummaryTests: XCTestCase {
     XCTAssertNil(decoded.summaries.first?.stats)
   }
 
+  /// The sections only the dedicated recap page renders, with the conversation links the page
+  /// deep-links through. Keys are the backend's snake_case wire names
+  /// (`backend/routers/users.py` `DailySummaryResponse`), which mobile's
+  /// `daily_summary.dart` mirrors.
+  func testDecodesRecapPageSectionsAndTheirConversationLinks() throws {
+    let json = """
+      {"summaries": [{
+        "id": "ds_2", "date": "2026-09-02", "headline": "h", "overview": "o",
+        "highlights": [{"topic": "t", "emoji": "📈", "summary": "s",
+                        "conversation_ids": ["c1", "c2"]}],
+        "action_items": [{"description": "d", "priority": "high",
+                          "source_conversation_id": "c3", "completed": true}],
+        "unresolved_questions": [{"question": "q?", "conversation_id": "c4"}],
+        "decisions_made": [{"decision": "ship it", "conversation_id": "c5"}],
+        "knowledge_nuggets": [{"insight": "learned i", "conversation_id": "c6"}]
+      }]}
+      """
+    let decoded = try JSONDecoder().decode(DailySummariesListResponse.self, from: Data(json.utf8))
+    let record = try XCTUnwrap(decoded.summaries.first)
+    XCTAssertEqual(record.highlights?.first?.conversationIds, ["c1", "c2"])
+    XCTAssertEqual(record.actionItems?.first?.sourceConversationId, "c3")
+    XCTAssertEqual(record.actionItems?.first?.completed, true)
+    XCTAssertEqual(record.unresolvedQuestions?.first?.question, "q?")
+    XCTAssertEqual(record.unresolvedQuestions?.first?.conversationId, "c4")
+    XCTAssertEqual(record.decisionsMade?.first?.decision, "ship it")
+    XCTAssertEqual(record.decisionsMade?.first?.conversationId, "c5")
+    XCTAssertEqual(record.knowledgeNuggets?.first?.insight, "learned i")
+    XCTAssertEqual(record.knowledgeNuggets?.first?.conversationId, "c6")
+  }
+
+  /// Every new section must stay optional: a record from before the backend grew them (or from a
+  /// backend that never grows them) decodes to nil sections, not a dropped summary.
+  func testRecapPageSectionsStayAbsentForOlderBackends() throws {
+    let json = #"{"summaries": [{"id": "ds_1", "date": "2026-09-01", "headline": "x"}]}"#
+    let decoded = try JSONDecoder().decode(DailySummariesListResponse.self, from: Data(json.utf8))
+    let record = try XCTUnwrap(decoded.summaries.first)
+    XCTAssertNil(record.unresolvedQuestions)
+    XCTAssertNil(record.decisionsMade)
+    XCTAssertNil(record.knowledgeNuggets)
+    XCTAssertNil(record.highlights?.first?.conversationIds)
+    XCTAssertNil(record.actionItems?.first?.sourceConversationId)
+  }
+
   // MARK: stats row
 
   func testChipsSkipMissingAndZeroStatsAndKeepFixedOrder() {
