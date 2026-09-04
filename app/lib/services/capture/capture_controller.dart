@@ -1829,9 +1829,7 @@ class CaptureController extends ChangeNotifier
     // a missing pendant is not a failed start.
     final deviceRequested = device != null || _recordingDevice != null;
     if (deviceRequested) {
-      _recordingTelemetry.prepare(
-        source: SharedPreferencesUtil().batchModeEnabled ? 'pendant_batch' : 'pendant_live',
-      );
+      _recordingTelemetry.prepare(source: SharedPreferencesUtil().batchModeEnabled ? 'pendant_batch' : 'pendant_live');
     }
 
     bool wasPaused = _isPaused;

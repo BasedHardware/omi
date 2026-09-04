@@ -166,6 +166,12 @@ struct ScopedDefaultsKey {
     Self(rawValue: "trial_nudge.v1.\(kind).\(ownerHash)")
   }
 
+  /// Dismissed chat-quota warnings. Entries carry their own billing cycle, so
+  /// the set expires on its own instead of needing a sweep.
+  static func chatQuotaBannerDismissals(ownerHash: String) -> Self {
+    Self(rawValue: "chat_quota_banner_dismissals.v1.\(ownerHash)")
+  }
+
   static func tasksFullSyncCompleted(ownerID: String) -> Self {
     Self(rawValue: "tasksFullSyncCompleted_v9_\(ownerID)")
   }
