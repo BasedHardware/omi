@@ -217,6 +217,20 @@ test('a retry inside the live session keeps showing saved rows on failure', asyn
   reads.unmount();
 });
 
+test('reset retires rows before a software-plane refresh', async () => {
+  readsMock.mockResolvedValueOnce(successOutcomes(['Old plane row']));
+  const reads = await renderReads({enabled: true});
+  expect(reads.latest().reads).toHaveLength(1);
+
+  ReactTestRenderer.act(() => {
+    reads.latest().resetReads();
+  });
+  expect(reads.latest().reads).toEqual([]);
+  expect(reads.latest().readOutcomes).toBeNull();
+  expect(reads.latest().readsPhase).toBe('initial-loading');
+  reads.unmount();
+});
+
 test('an older superseded refresh cannot overwrite a newer refresh', async () => {
   let resolveOlder!: (value: DesktopReadOutcomes) => void;
   readsMock.mockImplementationOnce(

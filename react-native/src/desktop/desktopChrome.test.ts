@@ -138,7 +138,7 @@ test('chat transport errors surface only for ready sessions', () => {
   );
 });
 
-test('software plane defaults to production until Advanced is flipped', () => {
+test('a valid stamped origin defaults fresh installs to the new plane', () => {
   expect(parseSoftwarePlane(undefined)).toBe('old');
   expect(parseSoftwarePlane('old')).toBe('old');
   expect(parseSoftwarePlane('new')).toBe('new');
@@ -148,13 +148,13 @@ test('software plane defaults to production until Advanced is flipped', () => {
       path: '/v1/chat-messages',
       v5BackendUrl: workerOrigin,
     }),
-  ).toEqual({ok: true, origin: CLOUD_BACKEND_ORIGIN});
+  ).toEqual({ok: true, origin: workerOrigin});
   expect(
     resolveNativeRequestOrigin({
       path: '/v1/device-sessions',
       v5BackendUrl: workerOrigin,
     }),
-  ).toEqual({ok: true, origin: CLOUD_BACKEND_ORIGIN});
+  ).toEqual({ok: true, origin: workerOrigin});
   expect(
     resolveNativeRequestOrigin({
       path: '/v1/conversations',

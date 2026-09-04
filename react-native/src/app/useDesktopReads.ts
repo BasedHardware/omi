@@ -31,6 +31,14 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
   // follows — including the merge source that "saved data" phases read from.
   const refreshSeqRef = useRef(0);
 
+  const resetReads = useCallback(() => {
+    refreshSeqRef.current += 1;
+    readOutcomesRef.current = null;
+    homeReadsLoadedRef.current = false;
+    setReadOutcomes(null);
+    setReadsPhase('initial-loading');
+  }, []);
+
   // Cloud reads only run for a ready session. Signed-out and probing Macs
   // never hit /v1/conversations|memories|tasks, so their 401/unconfigured
   // failures cannot poison readsPhase for the session that signs in next.
@@ -141,15 +149,11 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       // unavailable banner. Bumping the sequence also retires any refresh
       // still in flight from the session that just left, so its late rows
       // cannot seed the next session's "saved data" merge source.
-      refreshSeqRef.current += 1;
-      readOutcomesRef.current = null;
-      homeReadsLoadedRef.current = false;
-      setReadOutcomes(null);
-      setReadsPhase('initial-loading');
+      resetReads();
       return;
     }
     refreshReads(true).catch(() => undefined);
-  }, [enabled, refreshReads]);
+  }, [enabled, refreshReads, resetReads]);
 
   const reads = useMemo(() => {
     if (readOutcomes === null) {
@@ -179,6 +183,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     readOutcomes,
     reads,
     readsPhase,
+    resetReads,
     refreshReads,
   };
 }

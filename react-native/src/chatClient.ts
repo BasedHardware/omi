@@ -1,4 +1,9 @@
 import type {NativeHttpResponse, OmiBackend} from './omiNative';
+import {
+  parseChatGenerationEventStream,
+  wireToChatAdmissionEnvelope,
+  wireToChatHistoryEnvelope,
+} from '@omi-core/adapters-platform/dist/chat';
 
 export type ChatMessage = {
   id: string;
@@ -16,11 +21,13 @@ export type ChatHistoryPage = {
   olderCursor: string | null;
   hasOlder: boolean;
 };
-type HistoryEnvelope = {
-  messages: ChatMessage[];
-  page: {olderCursor: string | null; hasOlder: boolean};
+type ParsedChatMessage = NonNullable<
+  ReturnType<typeof wireToChatHistoryEnvelope>
+>['messages'][number];
+type AdmissionEnvelope = {
+  message: ChatMessage;
+  generation: {id: string};
 };
-type AdmissionEnvelope = {message: ChatMessage; generation: {id: string}};
 type TerminalFrame =
   | {kind: 'done'; message: ChatMessage}
   | {kind: 'cancelled'; message: ChatMessage | null}
@@ -124,15 +131,24 @@ export function createLocalChatMessage(
   };
 }
 
-function parseObject(body: string | null): Record<string, unknown> {
+function parseJson(body: string | null): unknown {
   if (body === null) {
     throw new Error('Backend returned an empty response');
   }
-  const value: unknown = JSON.parse(body);
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Backend returned an invalid response');
+  return JSON.parse(body) as unknown;
+}
+
+function desktopChatMessage(message: ParsedChatMessage): ChatMessage {
+  if (message.sender !== 'human' && message.sender !== 'ai') {
+    throw new Error('Chat message sender is unsupported');
   }
-  return value as Record<string, unknown>;
+  return {
+    id: message.id,
+    text: message.text,
+    sender: message.sender,
+    createdAt: message.createdAt,
+    generationOutcome: message.generationOutcome,
+  };
 }
 
 export async function loadChatHistory(
@@ -172,21 +188,12 @@ async function loadChatHistoryPage(
   if (response.status !== 200) {
     throwBackendError(response);
   }
-  const envelope = parseObject(response.body) as HistoryEnvelope;
-  if (
-    !Array.isArray(envelope.messages) ||
-    envelope.page === undefined ||
-    typeof envelope.page.hasOlder !== 'boolean' ||
-    !(
-      envelope.page.olderCursor === null ||
-      typeof envelope.page.olderCursor === 'string'
-    ) ||
-    envelope.page.hasOlder !== (envelope.page.olderCursor !== null)
-  ) {
+  const envelope = wireToChatHistoryEnvelope(parseJson(response.body));
+  if (envelope === null) {
     throw new Error('Chat history is malformed');
   }
   return {
-    messages: envelope.messages,
+    messages: envelope.messages.map(desktopChatMessage),
     olderCursor: envelope.page.olderCursor,
     hasOlder: envelope.page.hasOlder,
   };
@@ -242,10 +249,14 @@ export async function sendChatMessage(
   if (response.status !== 200 && response.status !== 201) {
     throwBackendError(response);
   }
-  const admission = parseObject(response.body) as AdmissionEnvelope;
-  if (typeof admission.generation?.id !== 'string') {
+  const wireAdmission = wireToChatAdmissionEnvelope(parseJson(response.body));
+  if (wireAdmission === null) {
     throw new Error('Chat admission is malformed');
   }
+  const admission: AdmissionEnvelope = {
+    message: desktopChatMessage(wireAdmission.message),
+    generation: wireAdmission.generation,
+  };
   onGenerationStarted?.(admission.generation.id);
   let terminal: TerminalFrame;
   try {
@@ -286,6 +297,20 @@ export async function sendChatMessage(
         generationOutcome: 'failed',
         generationId: admission.generation.id,
         generationRetryable: terminal.error.retryable,
+      },
+    };
+  }
+  if (terminal.kind === 'cancelled' && terminal.message === null) {
+    return {
+      human: admission.message,
+      assistant: {
+        id: `generation:${admission.generation.id}`,
+        text: '',
+        sender: 'ai',
+        createdAt: admission.message.createdAt,
+        generationOutcome: 'cancelled',
+        generationId: admission.generation.id,
+        localOnly: true,
       },
     };
   }
@@ -378,23 +403,24 @@ function throwBackendError(response: NativeHttpResponse): never {
 }
 
 export function parseTerminal(raw: string): TerminalFrame {
-  const blocks = raw.split(/\r?\n\r?\n/).filter(Boolean);
-  for (let index = blocks.length - 1; index >= 0; index -= 1) {
-    const data = blocks[index]
-      .split(/\r?\n/)
-      .filter(line => line.startsWith('data:'))
-      .map(line => line.slice(5).trimStart())
-      .join('\n');
-    if (data === '') {
-      continue;
+  const frames = parseChatGenerationEventStream(raw);
+  if (frames === null) {
+    throw new Error('Generation stream is malformed');
+  }
+  for (let index = frames.length - 1; index >= 0; index -= 1) {
+    const frame = frames[index];
+    if (frame.kind === 'done') {
+      return {kind: 'done', message: desktopChatMessage(frame.message)};
     }
-    const frame = JSON.parse(data) as {kind?: string};
-    if (
-      frame.kind === 'done' ||
-      frame.kind === 'cancelled' ||
-      frame.kind === 'failed'
-    ) {
-      return frame as TerminalFrame;
+    if (frame.kind === 'cancelled') {
+      return {
+        kind: 'cancelled',
+        message:
+          frame.message === null ? null : desktopChatMessage(frame.message),
+      };
+    }
+    if (frame.kind === 'failed') {
+      return {kind: 'failed', error: frame.error};
     }
   }
   throw new Error('Generation ended without a terminal frame');
