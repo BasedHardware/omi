@@ -36,6 +36,11 @@ def git_init(root: Path) -> None:
     subprocess.run(["git", "init", "-q", str(root)], check=True, capture_output=True)
 
 
+def git_stage_all(root: Path) -> None:
+    """Track everything git does not ignore, so 'tracked' assertions mean it."""
+    subprocess.run(["git", "-C", str(root), "add", "-A"], check=True, capture_output=True)
+
+
 def write(root: Path, rel: str, content: str) -> None:
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -240,6 +245,7 @@ class DeadCodeRatchetTests(unittest.TestCase):
         # A file under an ignored *directory*: `ls-files --directory` collapses the
         # directory to one entry, so this matches through an ancestor.
         write(self.root, "app/lib/build_output/generated_widget.dart", "class GeneratedWidget {}\n")
+        git_stage_all(self.root)
 
         scan = scan_flutter(self.root)
 
@@ -252,11 +258,35 @@ class DeadCodeRatchetTests(unittest.TestCase):
         git_init(self.root)
         write(self.root, ".gitignore", "/backend/utils/local_secrets.py\n")
         write(self.root, "backend/utils/local_secrets.py", "TOKEN = 'x'\n")
+        git_stage_all(self.root)
 
         scan = scan_backend(self.root)
 
         self.assertNotIn("backend/utils/local_secrets.py", scan.dead)
         self.assertIn(DEAD_BY_AREA["backend"], scan.dead)
+
+    def test_gitignored_typescript_file_is_not_reported_dead(self) -> None:
+        """scan_ts is shared by the agent and windows areas, so it needs its own case."""
+        git_init(self.root)
+        write(self.root, ".gitignore", "/desktop/macos/agent/src/runtime/localOnly.ts\n")
+        write(self.root, "desktop/macos/agent/src/runtime/localOnly.ts", "export const localOnly = 1;\n")
+        git_stage_all(self.root)
+
+        scan = scan_agent(self.root)
+
+        self.assertNotIn("desktop/macos/agent/src/runtime/localOnly.ts", scan.dead)
+        self.assertIn(DEAD_BY_AREA["agent"], scan.dead)
+
+    def test_gitignored_flutter_entry_fails_closed(self) -> None:
+        """Reachability is seeded from the entry, so an ignored entry must error."""
+        git_init(self.root)
+        write(self.root, ".gitignore", "/app/lib/main.dart\n")
+        git_stage_all(self.root)
+
+        scan = scan_flutter(self.root)
+
+        self.assertIn("gitignored", scan.error or "")
+        self.assertEqual((), scan.dead)
 
     def test_scan_outside_a_git_repo_is_unchanged(self) -> None:
         """git cannot answer here, so the pure-filesystem behaviour must stand."""

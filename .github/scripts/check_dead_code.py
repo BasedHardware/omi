@@ -109,10 +109,13 @@ def _git_ignored_paths(root: Path) -> set[Path]:
             ],
             capture_output=True,
             text=True,
+            # A filename whose bytes are invalid for the locale must degrade to the
+            # filesystem fallback, not raise out of a checker that has to keep running.
+            errors="surrogateescape",
             timeout=60,
             check=True,
         )
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError, UnicodeError):
         return set()
     return {(root / entry).resolve() for entry in completed.stdout.split("\0") if entry}
 
@@ -159,6 +162,11 @@ def scan_flutter(root: Path) -> AreaScan:
     if not entry.is_file():
         return AreaScan("flutter", error=f"flutter entry {FLUTTER_LIB_REL}/{FLUTTER_ENTRY} is missing; nothing to anchor reachability")
     is_ignored = _ignore_predicate(root)
+    if is_ignored(entry):
+        # Reachability is seeded from this entry below. Excluding it from `files`
+        # while still walking from it would strand every other file and report
+        # the whole area dead, so fail closed the way a missing entry does.
+        return AreaScan("flutter", error=f"flutter entry {FLUTTER_LIB_REL}/{FLUTTER_ENTRY} is gitignored; nothing to anchor reachability")
     files: dict[str, Path] = {}
     for path in lib.rglob("*.dart"):
         rel = path.relative_to(lib).as_posix()
