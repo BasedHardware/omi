@@ -83,6 +83,64 @@ final class LocalSkillsStoreTests: XCTestCase {
     XCTAssertTrue(LocalSkillsStore.listSkills().isEmpty)
   }
 
+  // MARK: - Disabled-slug upkeep
+
+  /// Saves and restores the real defaults key so the suite never leaks toggle
+  /// state into (or inherits it from) another test.
+  private func withDisabledSkillsDefaults<T>(_ body: () throws -> T) rethrows -> T {
+    let defaults = UserDefaults.standard
+    let original = defaults.string(forKey: DefaultsKey.disabledSkillsJSON.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.disabledSkillsJSON.rawValue)
+    defer {
+      if let original {
+        defaults.set(original, forKey: DefaultsKey.disabledSkillsJSON.rawValue)
+      } else {
+        defaults.removeObject(forKey: DefaultsKey.disabledSkillsJSON.rawValue)
+      }
+    }
+    return try body()
+  }
+
+  /// The disabled set holds slugs: a rename that left the old slug behind
+  /// would silently re-enable the renamed skill and let dead entries pile up.
+  func testRenameRekeysDisabledSlug() throws {
+    try withDisabledSkillsDefaults {
+      let original = try LocalSkillsStore.saveSkill(title: "First Name", markdown: "does things")
+      LocalSkillsStore.setDisabledSkillNames([original])
+
+      let renamed = try LocalSkillsStore.saveSkill(
+        title: "Second Name", markdown: "does things", replacingSlug: original)
+
+      XCTAssertEqual(
+        LocalSkillsStore.disabledSkillNames(),
+        [renamed],
+        "the renamed skill stays disabled under its new slug and the old entry is gone")
+    }
+  }
+
+  func testDeletePrunesDisabledSlug() throws {
+    try withDisabledSkillsDefaults {
+      let slug = try LocalSkillsStore.saveSkill(title: "Doomed", markdown: "x")
+      LocalSkillsStore.setDisabledSkillNames([slug, "still-here"])
+
+      LocalSkillsStore.deleteSkill(slug: slug)
+
+      XCTAssertEqual(
+        LocalSkillsStore.disabledSkillNames(), ["still-here"],
+        "deleting a disabled skill removes its entry and leaves others alone")
+    }
+  }
+
+  func testRenameOfEnabledSkillLeavesDisabledSetUntouched() throws {
+    try withDisabledSkillsDefaults {
+      let original = try LocalSkillsStore.saveSkill(title: "First Name", markdown: "does things")
+      _ = try LocalSkillsStore.saveSkill(
+        title: "Second Name", markdown: "does things", replacingSlug: original)
+
+      XCTAssertTrue(LocalSkillsStore.disabledSkillNames().isEmpty)
+    }
+  }
+
   /// A catalog skill's SKILL.md references its siblings by relative path, so the folder is the
   /// unit: nested files keep their layout, and a reinstall replaces the folder rather than
   /// layering new files over whatever the last one left.

@@ -100,6 +100,7 @@ enum LocalSkillsStore {
     // A rename leaves the old folder behind; remove it so the catalog has one entry.
     if let replacingSlug, replacingSlug != slug {
       try? fm.removeItem(at: skillsDirURL.appendingPathComponent(replacingSlug))
+      rekeyDisabledSlug(from: replacingSlug, to: slug)
     }
     ensurePluginManifest()
     notifyChanged()
@@ -153,7 +154,49 @@ enum LocalSkillsStore {
 
   static func deleteSkill(slug: String) {
     try? FileManager.default.removeItem(at: skillsDirURL.appendingPathComponent(slug))
+    // The disabled set holds slugs; deleting a disabled skill would otherwise
+    // leave a dead entry behind forever.
+    var names = disabledSkillNames()
+    if names.remove(slug) != nil {
+      setDisabledSkillNames(names)
+    }
     notifyChanged()
+  }
+
+  // MARK: - Disabled skills
+
+  /// The set of slugs the user disabled in Settings, stored as a JSON array in
+  /// `DefaultsKey.disabledSkillsJSON`. Owned here because the slug is this
+  /// store's identity: rename and delete must keep the set in step. ChatProvider
+  /// reads the toggle through this same parse, so the catalog, the task-chat
+  /// projection, and the runtime's `OMI_DISABLED_SKILLS` env all agree.
+  static func disabledSkillNames() -> Set<String> {
+    guard let raw = UserDefaults.standard.string(forKey: DefaultsKey.disabledSkillsJSON),
+      let data = raw.data(using: .utf8),
+      let names = try? JSONDecoder().decode([String].self, from: data)
+    else {
+      return []  // Default: nothing disabled = all enabled
+    }
+    return Set(names)
+  }
+
+  static func setDisabledSkillNames(_ names: Set<String>) {
+    // Sorted so the persisted JSON is stable for a given set.
+    if let data = try? JSONEncoder().encode(names.sorted()),
+      let json = String(data: data, encoding: .utf8)
+    {
+      UserDefaults.standard.set(json, forKey: DefaultsKey.disabledSkillsJSON)
+    }
+  }
+
+  /// Rename bookkeeping for the disable toggle: the set holds slugs, so
+  /// leaving the old slug behind would silently re-enable the renamed skill
+  /// and let dead entries accumulate.
+  private static func rekeyDisabledSlug(from oldSlug: String, to newSlug: String) {
+    var names = disabledSkillNames()
+    guard names.remove(oldSlug) != nil else { return }
+    names.insert(newSlug)
+    setDisabledSkillNames(names)
   }
 
   /// The ACP lane loads this directory as a local Claude plugin, which requires
