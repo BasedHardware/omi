@@ -55,19 +55,75 @@ driven through; each transport supplies `rpc` and the handshake:
 `initialize` capabilities are recorded, so a server is never asked for prompts
 it does not publish. `tools/list` and `prompts/list` are walked to the last
 page, bounded by a page budget and by treating a repeated cursor as the end.
-Prompts register as tools (`mcp_<server>_prompt_<name>`) because this chat has
-no slash-command surface; a prompt's required arguments become the tool's.
 
 Tool results are rendered as text: non-text blocks are *named*, never inlined —
 an image block used to leave the join empty and fall through to
 `JSON.stringify(result)`, which put its whole base64 payload in the context.
 `structuredContent` answers when a tool returns data and no prose.
 
-**Not supported:** `notifications/tools/list_changed`. Acting on it means
-replacing a live tool set and pi's extension API has `registerTool` with no
-counterpart; config and tools are read per session, so changes land on the next
-one. Elicitation, sampling and roots are likewise unimplemented — the client
-declares no capabilities of its own.
+### Progressive disclosure (pi-mono lane only)
+
+The ACP lane hands servers to the Claude Code harness at `session/new`; the
+harness manages its own tools and caching, so nothing in this section applies
+to it. On the pi-mono lane, servers are **not** registered tool-by-tool — a
+user with a handful of servers would put hundreds of verbatim descriptions and
+JSON schemas into the default tools payload before the model expressed any
+interest in one of them. Exactly two proxy tools are registered instead:
+
+- `mcp_tools_info` — discovery. The stable, sorted index of server names and
+  tool names (plus each server's one-line description from its `initialize`
+  `instructions`/`title`, and its live status) is embedded in the proxy
+  tools' descriptions, so identifying a candidate needs no extra turn.
+  Calling it — with no arguments, with `server`, or with `server` + `tool` —
+  returns the live index, full descriptions and JSON input schemas for one
+  server, or a single tool's contract.
+- `mcp_call` — dispatch. Runs a server's tool by its **real** names and
+  returns the result content faithfully, with readable errors for an unknown
+  server or tool, a server that is still connecting, and a server that is
+  unavailable.
+
+There is no `mcp_<server>_<tool>` mangling and no collision-suffix race: the
+model passes real names. A server's published prompts fold into the same
+pattern — listed by `mcp_tools_info`, dispatched by `mcp_call` — because this
+chat has no slash-command surface to offer them through. Everything a server
+returns is untrusted tool-result data: it is handed back as tool output,
+never interpolated into system instructions.
+
+`notifications/tools/list_changed` is still not acted on; pi's extension API
+has `registerTool` with no counterpart, and config and tools are read per
+session, so changes land on the next one. Elicitation, sampling and roots
+are likewise unimplemented — the client declares no capabilities of its own.
+
+### Spawning and lifecycle
+
+A stdio server is spawned on a small **allowlist environment** — `PATH`,
+`HOME`, `TMPDIR`, `USER`, `LOGNAME`, `SHELL`, `LANG`, with Homebrew and
+system fallback PATH entries so `npx` and `python3` resolve even when the app
+was launched from the GUI with a bare PATH. It never inherits the runtime's
+full environment, which carries `OMI_AUTH_TOKEN`, `OMI_BRIDGE_PIPE`, BYOK
+provider keys, and Firebase credentials. The server's own `env` entries from
+mcp.json are applied on top and may extend or override the allowlist — it is
+the user's server.
+
+An SSE server's event stream is its only reply channel, and a drop used to
+fail the server for the rest of the session silently. A drop is now repaired
+with bounded backoff (3 attempts at 1s, 5s, 15s); requests issued while the
+repair is in flight wait for it (bounded by the call's own timeout), and a
+server whose attempts are exhausted is marked down with a clear "server is
+down for this session" error that surfaces through `mcp_tools_info` and
+`mcp_call`.
+
+Registration is **deterministic** and **non-blocking for the first turn**.
+Servers are sorted by name and their tools and prompts by name before
+anything is built, so the tools payload is stable across launches. All
+servers connect concurrently at spawn under their own budgets (10s remote,
+30s stdio for a first `npx <package>` download), but those budgets are
+connection timeouts, not prompt-blocking gates: the turn path waits at most
+a short global budget (`OMI_MCP_FIRST_TURN_BUDGET_MS`, default 3s), and
+servers still connecting keep connecting in the background — pi's
+`registerTool` cannot revise a description after the fact, but the proxies
+read live state, so a late server becomes callable without re-registration
+and the index reports `connecting` / `unavailable` per server.
 
 ## Marketplace
 
@@ -128,7 +184,7 @@ Local commands are resolved against a PATH that includes Homebrew and
 not launched, because `npx` installs on first run and a status badge must not
 have that side effect. A local server therefore reads "Ready" (its command
 exists), never a claim that it is serving tools; the authoritative tool count
-lives in the runtime, which already logs `registered N tools`.
+lives in the runtime, which logs `discovered N tools, M prompts` per server.
 
 ## Skills
 
@@ -148,8 +204,8 @@ authoring the skill rather than claiming a file already is one.
 
 | Lane | MCP servers | Skills |
 |---|---|---|
-| ACP | `buildMcpServers()` (stdio and `type: "http"` shapes) | `plugins` option |
-| pi-mono | registered in `pi-mono-extension` at startup, awaited before the first prompt, via `McpHttpClient` / `McpStdioClient` (5s http cap per server, 30s stdio cap for npx cold starts) | native catalog (`PI_CODING_AGENT_DIR` = `~/.omi`), `search_skills` / `load_skill`, and the compact catalog in `ChatProvider.loadClaudeConfigFromDisk` |
+| ACP | `buildMcpServers()` (stdio and `type: "http"` shapes), handed to the harness at `session/new` — harness-managed, no progressive disclosure | `plugins` option |
+| pi-mono | progressive disclosure via the `mcp_tools_info` / `mcp_call` proxy tools, registered in `pi-mono-extension` at startup over `McpHttpClient` / `McpSseClient` / `McpStdioClient` (10s http cap per server, 30s stdio cap for npx cold starts), non-blocking for the first prompt behind a short global budget | native catalog (`PI_CODING_AGENT_DIR` = `~/.omi`), `search_skills` / `load_skill`, and the compact catalog in `ChatProvider.loadClaudeConfigFromDisk` |
 
 ## Failure behavior
 

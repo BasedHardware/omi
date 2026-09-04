@@ -1,3 +1,3 @@
 {
-  "change": "MCP servers work on both transports, their published prompts are usable in chat, long tool lists are no longer truncated, and installing a skill brings its scripts and references instead of just the instructions"
+  "change": "MCP servers work on both transports, chat discovers their tools through a compact sorted index instead of hundreds of tool definitions, published prompts stay usable, local servers spawn with a minimal environment instead of Omi's full process env, and dropped SSE servers reconnect before giving up \u2014 and installing a skill brings its scripts and references instead of just the instructions"
 }
