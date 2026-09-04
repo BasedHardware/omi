@@ -249,6 +249,13 @@ extension APIClient {
     return response.summaries
   }
 
+  /// One recap by id. The recap route persists identity only, so the page it
+  /// opens re-reads the record by id — a relaunch onto the route re-fetches
+  /// rather than restoring stale text.
+  func getDailySummary(id: String) async throws -> DailySummaryRecord {
+    try await get("v1/users/daily-summaries/\(id)")
+  }
+
   /// Generate (or return) a recap for a local calendar date. No push is sent.
   func createDailySummary(date: String) async throws -> DailySummaryRecord {
     struct Body: Encodable { let date: String }

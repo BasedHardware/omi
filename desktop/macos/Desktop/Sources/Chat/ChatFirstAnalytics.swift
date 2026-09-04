@@ -12,6 +12,7 @@ enum ChatFirstAnalyticsEvent: Equatable, Sendable {
     case goals
     case memories
     case more
+    case dailyRecap = "daily-recap"
   }
 
   enum RouteOrigin: String, CaseIterable, Sendable {

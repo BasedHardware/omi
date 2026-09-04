@@ -308,6 +308,8 @@ steps:
     ax.activate:
       identifier: chat-daily-recap-pill
     timeout_seconds: 10
+    wait:
+      state.visibleChatFirstRoute: daily-recap
 
   - id: S22c
     name: The recap page is mounted in its sheet

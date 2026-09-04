@@ -21,7 +21,6 @@ struct ChatDailyRecapPill: View {
   /// Injected so the staleness label is deterministic in tests.
   private let now: () -> Date
 
-  @State private var presentedRecord: DailySummaryRecord?
   @State private var reportedSummaryID: String?
 
   init(
@@ -54,7 +53,9 @@ struct ChatDailyRecapPill: View {
       ? "\(ChatDailySummaryPresentation.staleLabel(for: summary.date, now: now())) · \(headline)"
       : headline
     return Button {
-      presentedRecord = summary
+      // Identity only: the page re-reads the record from the shared store or the API.
+      ChatFirstShellNavigation.shared.openDailyRecap(
+        DailyRecapRouteRef(recordID: summary.id, date: summary.date ?? ""))
       AnalyticsManager.shared.trackDailySummary(.expanded)
     } label: {
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
@@ -95,13 +96,6 @@ struct ChatDailyRecapPill: View {
     .buttonStyle(.plain)
     .accessibilityIdentifier("chat-daily-recap-pill")
     .accessibilityLabel(Text("Open the daily recap"))
-    .sheet(item: $presentedRecord) { record in
-      DailyRecapPage(
-        record: record,
-        onOpenConversation: {
-          ChatFirstShellNavigation.shared.open(conversation: $0)
-        })
-    }
   }
 
   private func reportShown(_ summary: DailySummaryRecord) {

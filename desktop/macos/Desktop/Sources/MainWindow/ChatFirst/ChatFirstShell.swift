@@ -182,6 +182,10 @@ struct ChatFirstShell: View {
       moreDestination(page)
         .accessibilityIdentifier("chat-first-route-more-\(page.stableName)")
         .onAppear { navigation.markRouteVisible(.more(page)) }
+    case .dailyRecap(let ref):
+      DailyRecapPage(ref: ref, navigation: navigation)
+        .accessibilityIdentifier("chat-first-route-daily-recap")
+        .onAppear { navigation.markRouteVisible(navigation.route) }
     }
   }
 
@@ -275,6 +279,10 @@ struct ChatFirstShell: View {
           navigation.selectPrimary(route)
         case .more(let page):
           navigation.selectMore(page)
+        case .dailyRecap:
+          // Not reachable — `route(forTopBarIndex:)` never returns a recap —
+          // and a recap is not a top-bar destination even if it were.
+          return
         }
       }
     )
@@ -351,7 +359,7 @@ enum ChatFirstPageGlassLanePolicy {
       return false
     case .tasks, .more(.apps):
       return false
-    case .goals, .more(.permissions), .more(.settings):
+    case .goals, .more(.permissions), .more(.settings), .dailyRecap:
       return true
     }
   }
@@ -658,7 +666,7 @@ private struct ChatFirstRestoredTasksHost: View {
 enum ChatFirstModernNavigationPolicy {
   static func topBarIndex(for route: ChatFirstRoute) -> Int {
     switch route {
-    case .chat, .goals: return SidebarNavItem.dashboard.rawValue
+    case .chat, .goals, .dailyRecap: return SidebarNavItem.dashboard.rawValue
     case .conversations, .memories: return SidebarNavItem.conversations.rawValue
     case .tasks: return SidebarNavItem.tasks.rawValue
     case .more(let page):

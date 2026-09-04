@@ -34,6 +34,36 @@ enum ChatDailySummaryPresentation {
     calendar: Calendar = .current,
     locale: Locale = .current
   ) -> String? {
+    dateLabel(
+      for: date, now: now, calendar: calendar, locale: locale,
+      olderFormat: "EEE MMM d")
+  }
+
+  /// The dedicated recap page's eyebrow: "Today" / "Yesterday" / the full weekday and date
+  /// ("Wednesday, September 3"). Same arithmetic as `dateLabel`, one format wider — the page is
+  /// the full record, so its date names the day instead of abbreviating it.
+  static func pageDateLabel(
+    for date: String?,
+    now: Date,
+    calendar: Calendar = .current,
+    locale: Locale = .current
+  ) -> String? {
+    dateLabel(
+      for: date, now: now, calendar: calendar, locale: locale,
+      olderFormat: "EEEE, MMMM d")
+  }
+
+  /// The shared day-difference arithmetic behind both labels. The difference is counted in whole
+  /// calendar days, so a summary written just before midnight is still "Yesterday" the next
+  /// morning regardless of DST, and a month boundary is just another day boundary. The older-day
+  /// format is the only thing the two callers disagree on.
+  private static func dateLabel(
+    for date: String?,
+    now: Date,
+    calendar: Calendar,
+    locale: Locale,
+    olderFormat: String
+  ) -> String? {
     guard let day = day(from: date, calendar: calendar) else { return nil }
     let today = calendar.startOfDay(for: now)
     let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: day), to: today).day
@@ -47,7 +77,7 @@ enum ChatDailySummaryPresentation {
       // renders the previous evening.
       formatter.timeZone = calendar.timeZone
       formatter.locale = locale
-      formatter.setLocalizedDateFormatFromTemplate("EEE MMM d")
+      formatter.setLocalizedDateFormatFromTemplate(olderFormat)
       return formatter.string(from: day)
     }
   }

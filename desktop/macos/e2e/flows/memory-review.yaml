@@ -101,6 +101,8 @@ steps:
     ax.activate:
       identifier: chat-daily-recap-pill
     timeout_seconds: 10
+    wait:
+      state.visibleChatFirstRoute: daily-recap
 
   - id: S7
     name: The page's section bound three rows, unreviewed, with their categories

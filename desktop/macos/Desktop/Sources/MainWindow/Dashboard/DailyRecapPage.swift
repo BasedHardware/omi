@@ -1,142 +1,214 @@
 import OmiTheme
 import SwiftUI
 
-/// The day's recap, whole: date and headline, the overview, the stats, and every section with its
-/// conversation links and its actions.
+/// The day's recap, whole: the headline, the overview, the stats, and every section with its
+/// conversation links and its actions — a full-page destination, not a sheet and not a banner.
 ///
-/// This is the one surface where recap badges and buttons live. The Chat pill and the Activity day
-/// are doorways — title and summary only, by design — and both present this page as a sheet. A
-/// sheet rather than a `ChatFirstRoute`: route values persist across launches and are gated to
-/// primary destinations, while a recap is a transient read over whichever surface produced it, not
-/// a place the shell should restore into. Mobile's `daily_summary_detail_page.dart` is the
-/// reference; macOS deliberately gets no recap *list* page.
+/// It is hosted by the Chat-first shell on the glass page lane like the other full pages, opened
+/// from the two surfaces that show a recap (the Chat transcript's in-history row and the Activity
+/// day). The route carries identity only (`DailyRecapRouteRef`), so this page re-reads the record:
+/// shared store first, then the API by id. A relaunch onto the persisted route re-fetches, and a
+/// record that has since disappeared degrades to an honest "gone" state instead of stale text.
 struct DailyRecapPage: View {
-  /// The record on screen. Regeneration replaces it in place; the shared store is updated first so
-  /// the surface that opened this sheet re-renders from the same data.
-  @State private var current: DailySummaryRecord
-  /// Hands a validated conversation to the surface that opened the page. The Chat shell passes its
-  /// typed deep link (`ChatFirstShellNavigation.open(conversation:)`); the Activity spine passes
-  /// the same `onOpenConversation` its rows use, so a recap link can never open a second detail
-  /// owner beside the hub's own.
-  private let onOpenConversation: (ServerConversation) -> Void
-  @Environment(\.dismiss) private var dismiss
+  private let ref: DailyRecapRouteRef
+  @ObservedObject private var navigation: ChatFirstShellNavigation
 
+  @State private var current: DailySummaryRecord?
+  @State private var isFetching = false
+  @State private var failedToLoad = false
   @State private var isRegenerating = false
   @State private var regenerateError: String?
   @State private var isOpeningLink = false
   @State private var failedLinkID: String?
 
-  init(record: DailySummaryRecord, onOpenConversation: @escaping (ServerConversation) -> Void) {
-    self._current = State(initialValue: record)
-    self.onOpenConversation = onOpenConversation
+  init(ref: DailyRecapRouteRef, navigation: ChatFirstShellNavigation) {
+    self.ref = ref
+    self.navigation = navigation
   }
 
   var body: some View {
     VStack(spacing: 0) {
-      headerBar
+      topBar
       Divider()
         .overlay(Ink.separator)
-      ScrollView {
-        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          overview
-          if let stats = current.stats {
-            HomeDailySummaryStatsRow(stats: stats)
-          }
-          highlightsSection
-          tasksSection
-          unresolvedQuestionsSection
-          decisionsSection
-          memoriesLearnedSection
-          learningsSection
-          if let failedLinkID {
-            Text("Couldn't open that conversation.")
-              .scaledFont(size: OmiType.caption)
-              .foregroundStyle(Ink.errorRed)
-              .accessibilityIdentifier("daily-recap-open-failed")
-              // The id is only a change key; the message never shows it.
-              .id(failedLinkID)
-          }
-        }
-        .padding(OmiSpacing.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
+      if let current {
+        pageBody(current)
+      } else if failedToLoad {
+        unavailable
+      } else {
+        loading
       }
     }
-    .frame(minWidth: 480, idealWidth: 560, minHeight: 440, idealHeight: 600)
-    .omiAnimation(.easeOut(duration: 0.2), value: current.id)
     .accessibilityIdentifier("daily-recap-page")
+    .task { await loadIfEmpty() }
   }
 
-  // MARK: - Header
+  // MARK: - Top bar
 
-  private var headerBar: some View {
-    HStack(alignment: .top, spacing: OmiSpacing.md) {
-      VStack(alignment: .leading, spacing: 2) {
-        if let label = ChatDailySummaryPresentation.dateLabel(for: current.date, now: Date()) {
-          Text(label)
-            .scaledFont(size: OmiType.micro, weight: .semibold)
-            .foregroundStyle(HomePalette.muted)
-            .tracking(0.6)
-        }
-        HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
-          Text(nonEmpty(current.dayEmoji) ?? "📅")
-            .scaledFont(size: OmiType.title)
-          Text(nonEmpty(current.headline) ?? "Your day in review")
-            .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundStyle(HomePalette.ink)
-            .fixedSize(horizontal: false, vertical: true)
-        }
+  private var topBar: some View {
+    HStack(spacing: OmiSpacing.md) {
+      Button {
+        navigation.closeDailyRecap()
+      } label: {
+        Image(systemName: "chevron.left")
+          .scaledFont(size: OmiType.body, weight: .semibold)
+          .foregroundStyle(Ink.primary)
+          .frame(width: 24, height: 24)
+          .contentShape(Rectangle())
       }
+      .buttonStyle(.plain)
+      .accessibilityLabel(Text("Back"))
+      .accessibilityIdentifier("daily-recap-back")
+      .help("Back")
+
+      Text("Daily recap")
+        .scaledFont(size: OmiType.micro, weight: .semibold)
+        .foregroundStyle(Ink.secondary)
+        .tracking(0.6)
+        .textCase(.uppercase)
+
       Spacer(minLength: OmiSpacing.md)
-      VStack(alignment: .trailing, spacing: OmiSpacing.xs) {
-        Button("Done") { dismiss() }
-          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
-          .accessibilityIdentifier("daily-recap-done")
-        HStack(spacing: OmiSpacing.xs) {
-          Button {
-            askAboutThisDay()
-          } label: {
-            Label("Ask about this day", systemImage: "text.bubble")
-          }
-          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
-          .accessibilityIdentifier("daily-recap-ask")
-          // A record the backend served without an id gets a synthesized `date:<day>` identity
-          // (see `DailySummaryRecord.init(from:)`); posting that to `/{summary_id}/regenerate`
-          // is a guaranteed 404, so the action is only offered for a real server id.
-          if !current.id.hasPrefix("date:") {
-            Button {
-              Task { await regenerate() }
-            } label: {
-              Label(isRegenerating ? "Regenerating…" : "Regenerate", systemImage: "arrow.clockwise")
-            }
-            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
-            .disabled(isRegenerating)
-            .accessibilityIdentifier("daily-recap-regenerate")
-          }
+
+      // Single-line by construction: one line of text that never wraps. A wrapped
+      // action pill reads as two controls.
+      Button {
+        askAboutThisDay()
+      } label: {
+        Label("Ask about this day", systemImage: "text.bubble")
+          .lineLimit(1)
+          .fixedSize(horizontal: true, vertical: false)
+      }
+      .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+      .accessibilityIdentifier("daily-recap-ask")
+
+      if !isSynthesizedID {
+        Button {
+          Task { await regenerate() }
+        } label: {
+          Label(isRegenerating ? "Regenerating…" : "Regenerate", systemImage: "arrow.clockwise")
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
         }
-        if let regenerateError {
-          Text(regenerateError)
-            .scaledFont(size: OmiType.micro)
-            .foregroundStyle(Ink.errorRed)
-        }
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+        .disabled(isRegenerating)
+        .accessibilityIdentifier("daily-recap-regenerate")
       }
     }
     .padding(.horizontal, OmiSpacing.lg)
-    .padding(.vertical, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm + 2)
   }
 
-  private var overview: some View {
-    Text(nonEmpty(current.overview) ?? "")
+  // MARK: - Body
+
+  private func pageBody(_ record: DailySummaryRecord) -> some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+        header(record)
+        overview(record)
+        if let stats = record.stats {
+          statsRow(stats)
+        }
+        highlightsSection(record)
+        tasksSection(record)
+        unresolvedQuestionsSection(record)
+        decisionsSection(record)
+        memoriesLearnedSection(record)
+        learningsSection(record)
+        if let failedLinkID {
+          Text("Couldn't open that conversation.")
+            .scaledFont(size: OmiType.caption)
+            .foregroundStyle(Ink.errorRed)
+            .accessibilityIdentifier("daily-recap-open-failed")
+            // The id is only a change key; the message never shows it.
+            .id(failedLinkID)
+        }
+        if let regenerateError {
+          Text(regenerateError)
+            .scaledFont(size: OmiType.caption)
+            .foregroundStyle(Ink.errorRed)
+        }
+      }
+      .padding(.horizontal, OmiSpacing.xl)
+      .padding(.vertical, OmiSpacing.lg)
+      // Generous, readable column: the recap is prose with rows, not a dashboard.
+      .frame(maxWidth: 720, alignment: .leading)
+      .frame(maxWidth: .infinity, alignment: .top)
+    }
+    .omiAnimation(.easeOut(duration: 0.2), value: record.id)
+  }
+
+  private func header(_ record: DailySummaryRecord) -> some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+      Text(ChatDailySummaryPresentation.pageDateLabel(for: record.date, now: Date()) ?? "")
+        .scaledFont(size: OmiType.micro, weight: .semibold)
+        .foregroundStyle(HomePalette.muted)
+        .tracking(0.6)
+      HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm + 2) {
+        Text(nonEmpty(record.dayEmoji) ?? "📅")
+          .scaledFont(size: OmiType.title)
+        Text(nonEmpty(record.headline) ?? "Your day in review")
+          .scaledFont(size: OmiType.heading, weight: .semibold)
+          .foregroundStyle(HomePalette.ink)
+          .lineLimit(3)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+  }
+
+  private func overview(_ record: DailySummaryRecord) -> some View {
+    Text(nonEmpty(record.overview) ?? "")
       .scaledFont(size: OmiType.body)
       .foregroundStyle(HomePalette.secondary)
       .fixedSize(horizontal: false, vertical: true)
       .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  // MARK: - Sections
+  /// One row of equal-width chips, each a single line: icon, bold value, label
+  /// ("4h watching"). The fixed width is what keeps the line from ever wrapping
+  /// mid-word — a chip that outgrows its slot scrolls, it does not fold.
+  private func statsRow(_ stats: DailySummaryRecord.Stats) -> some View {
+    let chips = HomeDailySummaryStatsRow.chips(for: stats)
+    return Group {
+      if !chips.isEmpty {
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: OmiSpacing.xs) {
+            ForEach(chips) { chip in
+              statChip(chip)
+            }
+          }
+          .padding(.vertical, 1)
+        }
+        .accessibilityIdentifier("daily-recap-stats")
+      }
+    }
+  }
+
+  private func statChip(_ chip: HomeDailySummaryStatsRow.Chip) -> some View {
+    HStack(spacing: OmiSpacing.xxs + 1) {
+      Image(systemName: chip.symbol)
+        .scaledFont(size: OmiType.micro, weight: .semibold)
+        .foregroundStyle(HomePalette.muted)
+      Text(chip.value)
+        .scaledFont(size: OmiType.caption, weight: .bold)
+        .monospacedDigit()
+        .foregroundStyle(HomePalette.ink)
+      Text(chip.label)
+        .scaledFont(size: OmiType.caption)
+        .foregroundStyle(HomePalette.secondary)
+    }
+    .lineLimit(1)
+    .truncationMode(.tail)
+    .padding(.horizontal, OmiSpacing.sm + 1)
+    .padding(.vertical, OmiSpacing.xxs + 2)
+    .background(Capsule().fill(Ink.rowFill))
+    .frame(width: Self.statChipWidth, alignment: .leading)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("\(chip.value) \(chip.label)")
+  }
 
   @ViewBuilder
-  private var highlightsSection: some View {
-    let highlights = ChatDailySummaryPresentation.highlights(in: current)
+  private func highlightsSection(_ record: DailySummaryRecord) -> some View {
+    let highlights = ChatDailySummaryPresentation.highlights(in: record)
     if !highlights.isEmpty {
       section("Highlights") {
         ForEach(Array(highlights.enumerated()), id: \.offset) { _, highlight in
@@ -152,8 +224,8 @@ struct DailyRecapPage: View {
   }
 
   @ViewBuilder
-  private var tasksSection: some View {
-    let items = ChatDailySummaryPresentation.actionItems(in: current)
+  private func tasksSection(_ record: DailySummaryRecord) -> some View {
+    let items = ChatDailySummaryPresentation.actionItems(in: record)
     if !items.isEmpty {
       let completed = items.filter { $0.completed == true }
       // Open work first, like mobile: what is still to do is the reason the reader looks.
@@ -167,8 +239,8 @@ struct DailyRecapPage: View {
   }
 
   @ViewBuilder
-  private var unresolvedQuestionsSection: some View {
-    let questions = (current.unresolvedQuestions ?? []).filter { !($0.question ?? "").isEmpty }
+  private func unresolvedQuestionsSection(_ record: DailySummaryRecord) -> some View {
+    let questions = (record.unresolvedQuestions ?? []).filter { !($0.question ?? "").isEmpty }
     if !questions.isEmpty {
       section("Unresolved questions") {
         ForEach(Array(questions.enumerated()), id: \.offset) { _, question in
@@ -182,8 +254,8 @@ struct DailyRecapPage: View {
   }
 
   @ViewBuilder
-  private var decisionsSection: some View {
-    let decisions = (current.decisionsMade ?? []).filter { !($0.decision ?? "").isEmpty }
+  private func decisionsSection(_ record: DailySummaryRecord) -> some View {
+    let decisions = (record.decisionsMade ?? []).filter { !($0.decision ?? "").isEmpty }
     if !decisions.isEmpty {
       section("Decisions") {
         ForEach(Array(decisions.enumerated()), id: \.offset) { _, decision in
@@ -196,20 +268,20 @@ struct DailyRecapPage: View {
     }
   }
 
-  /// The same review rows the Chat surface used to compose, keyed so a regeneration rebuilds the
-  /// section's store instead of showing the replaced rows.
+  /// The same review rows the Activity day composes, keyed so a regeneration
+  /// rebuilds the section's store instead of showing the replaced rows.
   @ViewBuilder
-  private var memoriesLearnedSection: some View {
-    let learned = ChatDailySummaryPresentation.memoriesLearned(in: current)
+  private func memoriesLearnedSection(_ record: DailySummaryRecord) -> some View {
+    let learned = ChatDailySummaryPresentation.memoriesLearned(in: record)
     if !learned.isEmpty {
       MemoryReviewSection(items: learned, source: .dailySummaryDetail)
-        .id(ChatDailySummaryPresentation.reviewSectionIdentity(summaryID: current.id, items: learned))
+        .id(ChatDailySummaryPresentation.reviewSectionIdentity(summaryID: record.id, items: learned))
     }
   }
 
   @ViewBuilder
-  private var learningsSection: some View {
-    let nuggets = (current.knowledgeNuggets ?? []).filter { !($0.insight ?? "").isEmpty }
+  private func learningsSection(_ record: DailySummaryRecord) -> some View {
+    let nuggets = (record.knowledgeNuggets ?? []).filter { !($0.insight ?? "").isEmpty }
     if !nuggets.isEmpty {
       section("Things I learned today") {
         ForEach(Array(nuggets.enumerated()), id: \.offset) { _, nugget in
@@ -243,26 +315,81 @@ struct DailyRecapPage: View {
     }
   }
 
+  private var loading: some View {
+    VStack(spacing: OmiSpacing.md) {
+      ProgressView().controlSize(.small)
+      Text("Opening the recap…")
+        .scaledFont(size: OmiType.caption)
+        .foregroundStyle(Ink.secondary)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  /// The route outlived its record — deleted, another account's, or an id the
+  /// backend no longer knows. Says so instead of showing a stale or empty page.
+  private var unavailable: some View {
+    VStack(spacing: OmiSpacing.sm) {
+      Text("This recap isn't available.")
+        .scaledFont(size: OmiType.subheading, weight: .medium)
+        .foregroundStyle(Ink.primary)
+      Text("It may have been removed, or it belongs to a different account.")
+        .scaledFont(size: OmiType.caption)
+        .foregroundStyle(Ink.secondary)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .multilineTextAlignment(.center)
+    .padding(OmiSpacing.lg)
+    .accessibilityIdentifier("daily-recap-unavailable")
+  }
+
+  // MARK: - Data
+
+  /// Store first (instant, no network), then the wire by id. Either may be
+  /// stale on a relaunch; a miss on both is the unavailable state, never a
+  /// blank page and never yesterday's text.
+  private func loadIfEmpty() async {
+    guard current == nil else { return }
+    let store = ChatDailySummaryCoordinator.shared.store
+    if let record = store.latest, record.id == ref.recordID {
+      current = record
+      return
+    }
+    if let dateKey = nonEmpty(ref.date), let record = store.byDate[dateKey], record.id == ref.recordID {
+      current = record
+      return
+    }
+    guard !isFetching else { return }
+    isFetching = true
+    defer { isFetching = false }
+    do {
+      current = try await APIClient.shared.getDailySummary(id: ref.recordID)
+    } catch {
+      failedToLoad = true
+    }
+  }
+
   // MARK: - Actions
 
   private func askAboutThisDay() {
-    let question = ChatDailySummaryPresentation.followUpQuestion(for: current.date, now: Date())
+    guard let record = current else { return }
+    let question = ChatDailySummaryPresentation.followUpQuestion(for: record.date, now: Date())
     ChatDailySummaryPresentation.requestFollowUp(question)
-    // The question is in the composer behind this sheet; dismissing is what makes that visible.
-    dismiss()
+    // The question is in the composer of the surface that opened the recap;
+    // going back is what makes that visible.
+    navigation.closeDailyRecap()
   }
 
   /// Re-runs generation server-side and replaces the record in place, through the same owner fence
   /// every other recap writer uses (INV-AUTH-1).
   private func regenerate() async {
-    guard !isRegenerating else { return }
+    guard !isRegenerating, let record = current else { return }
     isRegenerating = true
     regenerateError = nil
     defer { isRegenerating = false }
     let store = ChatDailySummaryCoordinator.shared.store
     guard let isOwnerStillCurrent = store.captureOwnerFence() else { return }
     do {
-      let updated = try await APIClient.shared.regenerateDailySummary(id: current.id)
+      let updated = try await APIClient.shared.regenerateDailySummary(id: record.id)
       store.upsert(updated, isOwnerStillCurrent: isOwnerStillCurrent)
       current = updated
     } catch {
@@ -270,8 +397,8 @@ struct DailyRecapPage: View {
     }
   }
 
-  /// One fetch, one validation, then the surface's own opener. The sheet dismisses only on
-  /// success, so a dead id leaves the recap on screen with the failure said in one line.
+  /// One fetch, one validation, then the shared navigation owner's typed
+  /// conversation deep link. A dead id is said in one line, not a dead click.
   private func openConversation(_ id: String?) {
     guard let id, !id.isEmpty else { return }
     guard !isOpeningLink else { return }
@@ -287,18 +414,25 @@ struct DailyRecapPage: View {
         else {
           throw URLError(.cannotParseResponse)
         }
-        dismiss()
-        onOpenConversation(valid)
+        navigation.open(conversation: valid)
       } catch {
         failedLinkID = id
       }
     }
   }
 
+  private var isSynthesizedID: Bool {
+    ref.recordID.hasPrefix("date:")
+  }
+
   private func nonEmpty(_ value: String?) -> String? {
     guard let value, !value.isEmpty else { return nil }
     return value
   }
+
+  /// Six chips at a width that holds "34 memories" on one line at the caption
+  /// size; a narrower lane scrolls the row instead of folding a label.
+  nonisolated static let statChipWidth: CGFloat = 106
 }
 
 // MARK: - Rows
@@ -319,33 +453,34 @@ private struct RecapRow: View {
 
   @ViewBuilder
   private var row: some View {
-    let content = HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
-      if let leading {
-        Text(leading)
-          .scaledFont(size: OmiType.caption)
-      }
-      VStack(alignment: .leading, spacing: 1) {
-        if let title, !title.isEmpty {
-          Text(title)
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundStyle(HomePalette.ink)
+    let content =
+      HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
+        if let leading {
+          Text(leading)
+            .scaledFont(size: OmiType.caption)
         }
-        Text(detail)
-          .scaledFont(size: OmiType.body)
-          .foregroundStyle(HomePalette.secondary)
-          .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 1) {
+          if let title, !title.isEmpty {
+            Text(title)
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundStyle(HomePalette.ink)
+          }
+          Text(detail)
+            .scaledFont(size: OmiType.body)
+            .foregroundStyle(HomePalette.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        Spacer(minLength: OmiSpacing.sm)
+        if conversationID != nil {
+          Image(systemName: "chevron.right")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundStyle(HomePalette.muted)
+        }
       }
-      Spacer(minLength: OmiSpacing.sm)
-      if conversationID != nil {
-        Image(systemName: "chevron.right")
-          .scaledFont(size: OmiType.micro, weight: .semibold)
-          .foregroundStyle(HomePalette.muted)
-      }
-    }
-    .padding(.horizontal, OmiSpacing.sm + 1)
-    .padding(.vertical, OmiSpacing.xs)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .contentShape(Rectangle())
+      .padding(.horizontal, OmiSpacing.sm + 1)
+      .padding(.vertical, OmiSpacing.xs)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
 
     if let conversationID {
       Button {
@@ -368,26 +503,27 @@ private struct RecapTaskRow: View {
   let onOpen: (String?) -> Void
 
   var body: some View {
-    let content = HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
-      Image(systemName: item.completed == true ? "checkmark.circle.fill" : "circle")
-        .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundStyle(item.completed == true ? HomePalette.green : HomePalette.muted)
-      Text(item.description ?? "")
-        .scaledFont(size: OmiType.body)
-        .foregroundStyle(item.completed == true ? HomePalette.muted : HomePalette.ink)
-        .strikethrough(item.completed == true, color: HomePalette.muted)
-        .fixedSize(horizontal: false, vertical: true)
-      Spacer(minLength: OmiSpacing.sm)
-      if conversationID != nil {
-        Image(systemName: "chevron.right")
-          .scaledFont(size: OmiType.micro, weight: .semibold)
-          .foregroundStyle(HomePalette.muted)
+    let content =
+      HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
+        Image(systemName: item.completed == true ? "checkmark.circle.fill" : "circle")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundStyle(item.completed == true ? HomePalette.green : HomePalette.muted)
+        Text(item.description ?? "")
+          .scaledFont(size: OmiType.body)
+          .foregroundStyle(item.completed == true ? HomePalette.muted : HomePalette.ink)
+          .strikethrough(item.completed == true, color: HomePalette.muted)
+          .fixedSize(horizontal: false, vertical: true)
+        Spacer(minLength: OmiSpacing.sm)
+        if conversationID != nil {
+          Image(systemName: "chevron.right")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundStyle(HomePalette.muted)
+        }
       }
-    }
-    .padding(.horizontal, OmiSpacing.sm + 1)
-    .padding(.vertical, OmiSpacing.xs)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .contentShape(Rectangle())
+      .padding(.horizontal, OmiSpacing.sm + 1)
+      .padding(.vertical, OmiSpacing.xs)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
 
     if let conversationID {
       Button {
