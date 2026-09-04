@@ -1278,6 +1278,37 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("does not relabel a failed oversized provider result as success when the full output cannot be persisted", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const sentinel = "PROVIDER_FAILED_PERSIST_SENTINEL".repeat(26_000);
+    vi.spyOn(kernel, "getRun").mockImplementation(() => {
+      throw new Error(`control executor failed: ${sentinel}`);
+    });
+    vi.spyOn(kernel, "persistArtifact").mockImplementation(() => {
+      throw new Error("deterministic provider persistence failure");
+    });
+
+    const raw = await handleAgentControlToolCall(
+      ownerContext(kernel),
+      "get_agent_run",
+      { ownerId: "owner", runId: "run-1" },
+    );
+    const failed = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(128 * 1024);
+    expect(raw).not.toContain("PROVIDER_FAILED_PERSIST_SENTINEL");
+    expect(failed).toMatchObject({
+      ok: false,
+      error: { code: "tool_result_exceeded_provider_budget" },
+      toolResultEnvelope: {
+        status: "failed",
+        truncated: false,
+        fullOutputRef: null,
+      },
+    });
+    store.close();
+  });
+
   it("envelopes unknown and invalid control-tool errors", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const unknown = parseToolResult(await rawHandleAgentControlToolCall(ownerContext(kernel), "not_a_real_tool", {}));

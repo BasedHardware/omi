@@ -25,13 +25,15 @@ enum CuaStdioShim {
       #!/bin/sh
       # Written by Omi. Bridges an MCP stdio client to Omi's computer-use endpoint.
       # Every line in is one JSON-RPC message; every non-empty reply is one line out.
+      # A failed POST closes the pipe: a client waiting on a reply that will never
+      # come hangs, while EOF says the server is gone and it should stop.
       # Delete this file, or turn off computer control in Omi, to revoke it.
       while IFS= read -r line; do
         [ -z "$line" ] && continue
         reply=$(printf '%s' "$line" | curl -sS -X POST '\(CuaMcpRegistration.endpointURL)' \\
           -H 'Content-Type: application/json' \\
           -H 'Authorization: Bearer \(token)' \\
-          --data-binary @-) || continue
+          --data-binary @-) || exit 0
         [ -n "$reply" ] && printf '%s\\n' "$reply"
       done
 

@@ -2291,7 +2291,10 @@ function stringifyToolResult(
       if (status === "cancelled") {
         return stringifyProjectedControlCancellation(toolName, originalBytes, null, scope?.context);
       }
-      return stringifyProjectedControlSuccess(toolName, fullJson, originalBytes, null, scope?.context);
+      // A failed result that could not be persisted is not delivered, and a
+      // success-shaped projection of it would tell the model a control effect
+      // worked when it did not.
+      return stringifyProviderBudgetFailure(toolName, originalBytes, null, scope?.context);
     }
     const toolResultEnvelope = makeToolResultEnvelope({
       status,
@@ -2317,8 +2320,10 @@ function stringifyToolResult(
       toolName, originalBytes, persistedFullOutputRef ?? null, scope?.context,
     );
   }
-  return stringifyProjectedControlSuccess(
-    toolName, fullJson, originalBytes, persistedFullOutputRef ?? null, scope?.context,
+  // Same invariant as the in-loop fallthrough: a failure that outgrew every
+  // bounded form stays a failure, with the artifact ref when one exists.
+  return stringifyProviderBudgetFailure(
+    toolName, originalBytes, persistedFullOutputRef ?? null, scope?.context,
   );
 }
 

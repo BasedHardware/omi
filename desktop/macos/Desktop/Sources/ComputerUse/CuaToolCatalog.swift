@@ -310,7 +310,7 @@ enum CuaToolCatalog {
       return .error(refusal.message)
     }
     let maxLongEdge =
-      args.double("max_width").map { CGFloat($0) }
+      args.double("max_long_edge").map { CGFloat($0) }
       ?? CuaScreenObserver
       .defaultMaxLongEdge
 
