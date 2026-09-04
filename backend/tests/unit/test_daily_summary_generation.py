@@ -1,5 +1,7 @@
 """Daily summary generation is independent of push delivery, backfills missed days, and has a no-push create route."""
 
+import asyncio
+import time
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -399,7 +401,7 @@ def test_webhook_receives_the_dict_payload_as_summary_json(monkeypatch):
     assert webhooks[0]['summary'] == str(payload)
 
 
-def test_a_failing_webhook_does_not_cost_the_user_their_recap(monkeypatch):
+def test_a_failing_webhook_does_not_cost_the_user_their_recap(monkeypatch, caplog):
     """A webhook fault is contained, logged, and never fails the user.
 
     The old ``postprocess_executor.submit`` swallowed every exception into a Future nobody
@@ -419,3 +421,36 @@ def test_a_failing_webhook_does_not_cost_the_user_their_recap(monkeypatch):
 
     assert created, 'the summary record must survive a webhook failure'
     assert len(sent) == 1, 'the push must survive a webhook failure'
+    # Containment without the log line is the old swallowed Future by another name: the
+    # fault disappears and #12530's evidence never reappears. Assert the record, not just
+    # that nothing raised.
+    assert any(
+        'daily_summary_webhook_failed' in record.getMessage() for record in caplog.records
+    ), 'a contained webhook fault must still be reported'
+
+
+def test_a_slow_webhook_cannot_spend_the_users_recap_budget(monkeypatch, caplog):
+    """The webhook is bounded inside the per-user budget it now shares.
+
+    Running it inline gave it an owner but moved its cost onto the user. day_summary_webhook
+    posts through the shared client (30s read timeout, retries at 1/5/30s), so without its
+    own bound a slow receiver could burn most of DAILY_SUMMARY_USER_BUDGET_SECONDS and get a
+    user whose push had already been delivered marked reason=user_budget_exceeded — which
+    counts toward DAILY_SUMMARY_MAX_ABANDONED_USERS and can abort the rest of the hour group.
+    """
+    _generated, created, sent, _released, _webhooks = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif, 'DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS', 0.05)
+
+    async def _hangs(*_args, **_kwargs):
+        await asyncio.sleep(30)
+
+    monkeypatch.setattr(notif, 'day_summary_webhook', _hangs)
+
+    started = time.monotonic()
+    notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 5, f'the webhook must be abandoned at its own budget, took {elapsed:.1f}s'
+    assert created, 'the summary record must survive a hanging webhook'
+    assert len(sent) == 1, 'the push must survive a hanging webhook'
+    assert any('daily_summary_webhook_failed' in record.getMessage() for record in caplog.records)

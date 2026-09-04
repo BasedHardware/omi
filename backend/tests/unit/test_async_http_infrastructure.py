@@ -539,8 +539,11 @@ class TestNotificationWebhookWiring:
         with open(os.path.join(backend_dir, 'utils', 'other', 'notifications.py'), encoding='utf-8') as f:
             src = f.read()
 
-        assert 'asyncio.run(day_summary_webhook(' in src
         assert '.submit(asyncio.run, day_summary_webhook(' not in src
+        assert 'asyncio.run(' in src and 'day_summary_webhook(' in src
+        # Bounded inside the per-user budget it now shares: a slow receiver must not be
+        # able to spend someone else's recap. See DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS.
+        assert 'timeout=DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS' in src
         assert 'critical_executor' not in src
         assert 'storage_executor' not in src
 

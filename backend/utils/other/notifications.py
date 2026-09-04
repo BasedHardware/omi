@@ -221,6 +221,14 @@ DAILY_SUMMARY_JOB_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_JOB_BUDGET_SECONDS'
 # One account cannot own the job. A recap is one LLM call plus Firestore reads;
 # 90s is generous for that and still bounds a wedged provider call.
 DAILY_SUMMARY_USER_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_USER_BUDGET_SECONDS', 90.0)
+# The webhook's own slice of that per-user budget. Running it inline gave it an owner
+# but also moved its cost onto the user: day_summary_webhook posts through the shared
+# client (30s read timeout, retries at 1/5/30s), so a slow receiver could burn most of
+# the 90s and get a user whose push had already been delivered marked
+# reason=user_budget_exceeded -- which counts toward DAILY_SUMMARY_MAX_ABANDONED_USERS
+# and can abort the rest of the hour group. A developer webhook must never be able to
+# cost anyone else their recap, so it is bounded well inside the budget it now shares.
+DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS', 20.0)
 # Rendered-character budget for the conversation material fed to the summary
 # prompt. ~360k chars is roughly 90k tokens, comfortably inside the 272k-token
 # model limit even alongside the prompt scaffolding and the user's memories.
@@ -564,7 +572,12 @@ def _deliver_current_day_summary(uid, date_str: str, summary_data: dict, tokens)
     # propagate out of a user whose push had already been delivered and count them as failed.
     # Logged rather than discarded: the old path reported nothing at all.
     try:
-        asyncio.run(day_summary_webhook(uid, str(summary_data), summary_data))
+        asyncio.run(
+            asyncio.wait_for(
+                day_summary_webhook(uid, str(summary_data), summary_data),
+                timeout=DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS,
+            )
+        )
     except Exception as e:
         logger.error('daily_summary_webhook_failed uid=%s error=%s', uid, e, exc_info=e)
 
