@@ -141,19 +141,28 @@ def download_landing_html(
                background: #0a0a0a; color: #fff; display: flex; align-items: center;
                justify-content: center; min-height: 100vh; text-align: center; }}
         .container {{ max-width: 960px; padding: 40px 24px; }}
-        h1 {{ font-size: 28px; font-weight: 600; margin-bottom: 12px; }}
-        .version {{ color: #555; font-size: 14px; margin-bottom: 24px; }}
-        .subtitle {{ color: #888; font-size: 16px; margin-bottom: 32px; }}
-        .status {{ width: 40px; height: 40px; margin: 0 auto 24px; position: relative; }}
-        .spinner {{ width: 40px; height: 40px; border: 3px solid #333; border-top-color: #fff;
-                    border-radius: 50%; animation: spin 0.8s linear infinite; }}
-        .checkmark {{ display: none; font-size: 36px; color: #4ade80; }}
-        .done .spinner {{ display: none; }}
-        .done .checkmark {{ display: block; }}
-        .done .subtitle {{ color: #4ade80; }}
+        h1 {{ font-size: 30px; font-weight: 600; letter-spacing: -0.015em;
+              text-wrap: balance; margin-bottom: 8px; }}
+        .status-chip {{ display: inline-flex; align-items: center; gap: 7px;
+                        padding: 5px 12px 5px 10px; border-radius: 999px;
+                        background: #161616; border: 1px solid #262626;
+                        color: #9a9a9a; font-size: 11px; font-weight: 600;
+                        letter-spacing: 0.07em; text-transform: uppercase;
+                        margin-bottom: 18px; }}
+        .status-dot {{ width: 12px; height: 12px; border-radius: 50%; flex: none;
+                       border: 2px solid #3a3a3a; border-top-color: #9a9a9a;
+                       animation: spin 0.8s linear infinite; }}
+        .done .status-chip {{ color: #4ade80; border-color: rgba(74,222,128,0.35);
+                              background: rgba(74,222,128,0.08); }}
+        .done .status-dot {{ animation: none; border: none; width: 13px; height: 13px;
+                             background: #4ade80; position: relative; }}
+        .done .status-dot::after {{ content: ""; position: absolute; left: 4px; top: 1.5px;
+                                    width: 3px; height: 7px; border: solid #0a0a0a;
+                                    border-width: 0 2px 2px 0; transform: rotate(45deg); }}
         @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
-        .notice {{ color: #fbbf24; font-size: 14px; margin-bottom: 24px; }}
-        .download-link {{ color: #6C8FFF; text-decoration: none; font-size: 15px; }}
+        .meta {{ color: #6a6a6a; font-size: 13px; margin-bottom: 26px; }}
+        .notice {{ color: #fbbf24; font-size: 14px; margin-bottom: 20px; }}
+        .download-link {{ color: #8fa6ff; text-decoration: none; }}
         .download-link:hover {{ text-decoration: underline; }}
         .video-container {{ margin-top: 32px; border-radius: 12px; overflow: hidden;
                             background: #151515; display: none; }}
@@ -216,7 +225,7 @@ def download_landing_html(
           .steps {{ grid-template-columns: 1fr; gap: 22px; }}
           .step-art {{ height: 150px; }}
         }}
-        .ph-badge {{ display: inline-block; margin-bottom: 28px; line-height: 0;
+        .ph-badge {{ display: inline-block; margin-bottom: 4px; line-height: 0;
                      opacity: 0.92; transition: opacity 0.15s ease; }}
         .ph-badge:hover {{ opacity: 1; }}
         .ph-badge img {{ width: 250px; height: 54px; }}
@@ -227,16 +236,14 @@ def download_landing_html(
 </head>
 <body>
     <div class="container">
-        <h1>Downloading Omi {channel_label}for {os_name}</h1>
-        <p class="version">{version_display}</p>
-        {product_hunt_html}
+        <p class="status-chip" id="status-chip">
+            <span class="status-dot" aria-hidden="true"></span><span id="status-text">Downloading</span>
+        </p>
+        <h1>Omi {channel_label}for {os_name}</h1>
+        <p class="meta">{version_display} &middot; Didn&rsquo;t start?
+            <a class="download-link" href="{dmg_url}">Download manually</a></p>
         {notice_html}
-        <p class="subtitle" id="status-text">Your download should start automatically&hellip;</p>
-        <div class="status" id="status-icon">
-            <div class="spinner"></div>
-            <div class="checkmark">&#10003;</div>
-        </div>
-        <p><a class="download-link" href="{dmg_url}">Click here if the download doesn&rsquo;t start</a></p>
+        {product_hunt_html}
         <div class="video-container" id="demo-video">
             <video autoplay muted loop playsinline>
                 <source src="https://storage.googleapis.com/omi_macos_updates/omi-demo.mp4" type="video/mp4">
@@ -251,8 +258,8 @@ def download_landing_html(
     <script>
         setTimeout(function() {{
             window.location.href = "{dmg_url}";
-            document.getElementById("status-icon").classList.add("done");
-            document.getElementById("status-text").textContent = "Download started!";
+            document.body.classList.add("done");
+            document.getElementById("status-text").textContent = "In your Downloads";
             document.getElementById("demo-video").style.display = "block";
         }}, 2000);
     </script>

@@ -41,10 +41,14 @@ enum ConnectorImportOperations {
     source: OnboardingMemoryLogSource
   ) -> Outcome {
     switch result {
-    case .imported(let memories, _):
+    case .imported(let memories, let failed, _):
+      let message =
+        failed > 0
+        ? "Imported \(memories.formatted()) memories from \(source.displayName); \(failed.formatted()) couldn't be saved. Import again to retry them."
+        : "Imported \(memories.formatted()) memories from \(source.displayName)."
       return .success(
         SyncResult(sourceCount: nil, memoryCount: memories, newItems: memories),
-        message: "Imported \(memories.formatted()) memories from \(source.displayName)."
+        message: message
       )
     case .noDurableMemories:
       // Not a connect failure — the parse succeeded but produced nothing
@@ -55,8 +59,55 @@ enum ConnectorImportOperations {
           + "Make sure you pasted \(source.displayName)'s full response, then import again.",
         failureClass: .noContent
       )
-    case .failed:
-      return .failure(message: "The import couldn't run. Try again.")
+    case .failed(let failure):
+      return memoryLogFailureOutcome(failure)
+    }
+  }
+
+  private static func memoryLogFailureOutcome(
+    _ failure: OnboardingMemoryLogImportService.ImportFailure
+  ) -> Outcome {
+    switch failure {
+    case .authentication:
+      return .failure(
+        message: "Your session expired. Sign in again, then retry the import.",
+        failureClass: .authentication)
+    case .planRequired:
+      return .failure(
+        message: "Memory extraction isn't available on your current plan.",
+        failureClass: .authorizationDenied)
+    case .rateLimited:
+      return .failure(
+        message: "Too many memory imports are running. Wait a minute, then try again.",
+        failureClass: .rateLimit)
+    case .network:
+      return .failure(
+        message: "Omi couldn't reach the memory service. Check your connection, then try again.",
+        failureClass: .network)
+    case .timeout:
+      return .failure(
+        message: "Memory extraction took too long. Try the import again.",
+        failureClass: .timeout)
+    case .server:
+      return .failure(
+        message: "Omi's memory service is temporarily unavailable. Try again shortly.",
+        failureClass: .invalidResponse)
+    case .invalidResponse:
+      return .failure(
+        message: "Omi couldn't read the extracted memories. Try the import again.",
+        failureClass: .invalidResponse)
+    case .requestRejected:
+      return .failure(
+        message: "The memory service rejected this import. Check the pasted text, then try again.",
+        failureClass: .invalidResponse)
+    case .saveFailed:
+      return .failure(
+        message: "Memories were extracted, but Omi couldn't save them. Check your connection, then try again.",
+        failureClass: .unknown)
+    case .fixtureUnavailable:
+      return .failure(
+        message: "This import test is only available in development builds.",
+        failureClass: .configuration)
     }
   }
 

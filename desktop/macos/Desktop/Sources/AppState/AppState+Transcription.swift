@@ -486,6 +486,11 @@ extension AppState {
       await parked.waitForPhysicalStop()
       guard let current = audioCaptureService, current === mic else { return false }
     }
+    // A warm PTT capture whose CoreAudio start has not resolved holds the same
+    // device and cannot be stopped from here — waiting for its own completion is
+    // the boundary. See `PushToTalkManager.releaseInFlightWarmCapture`.
+    await PushToTalkManager.shared.drainInFlightWarmCapture()
+    guard let current = audioCaptureService, current === mic else { return false }
 
     do {
       let useLocalSTT = sttSession.useLocalSTT
@@ -513,6 +518,13 @@ extension AppState {
         return false
       }
       log("Transcription: Microphone capture started")
+      // This path released the parked push-to-talk capture above so the two
+      // IOProcs could not overlap, and until now nothing put one back: every
+      // press after an ambient capture start paid a cold CoreAudio start inside
+      // the hold. Re-arm now that this session's device is open — PTT routes
+      // around a contended input, so the warm capture it opens is not the one
+      // this session holds.
+      PushToTalkManager.shared.schedulePTTCaptureWarmup(trigger: .ambientCaptureStarted)
       return true
     } catch {
       logError("Transcription: Failed to start microphone capture", error: error)

@@ -47,8 +47,8 @@ final class MemoryAssistantTelemetryTests: XCTestCase {
 
   func testAnalysisOutcomeEnumIsClosedAndSourceFaithful() {
     let expected: Set<String> = [
-      "synced", "filtered_low_confidence", "no_new_memory", "sync_failed", "local_persistence_failed",
-      "sync_state_persistence_failed", "analysis_failed",
+      "synced", "filtered_low_confidence", "filtered_subject_admission", "no_new_memory", "sync_failed",
+      "local_persistence_failed", "sync_state_persistence_failed", "analysis_failed",
     ]
     let actual = Set(MemoryAssistantTelemetry.AnalysisOutcome.allCases.map(\.rawValue))
     XCTAssertEqual(actual, expected)

@@ -4675,11 +4675,75 @@
       "summary": "Create a new task, to-do, or reminder.",
       "bullets": [
         "Use when the user explicitly asks to add something to their list.",
-        "Pass a concise description and due_at only when the user gave a time."
+        "Pass a concise description and due_at only when the user gave a time.",
+        "For 'next time I'm here' or 'when I open this', use create_context_reminder."
       ]
     },
     "voice": {
-      "realtimeDescription": "Create a new task / to-do / reminder for the user ('remind me to…', 'add … to my list', 'I need to…'). Fast synchronous write. Confirm out loud after it returns."
+      "realtimeDescription": "Create a new task / to-do / timed reminder for the user ('remind me to…', 'add … to my list', 'I need to…'). Do NOT use for 'next time I'm here' / 'when I open this' — that is create_context_reminder. Fast synchronous write. Confirm out loud after it returns."
+    }
+  },
+  {
+    "name": "create_context_reminder",
+    "label": "Create Context Reminder",
+    "description": "Bind a reminder to the user's current app or document rather than a time. Use for 'remind me next time I'm here' or 'when I open this'.",
+    "promptSnippet": "create_context_reminder - Remind the user next time they return to this place",
+    "promptGuidelines": [
+      "Call when the user asks to be reminded the next time they are in the current app, document, or page.",
+      "Pass only the reminder text. The current frontmost window is captured automatically.",
+      "Do not use for timed reminders; those are create_action_item."
+    ],
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "What to remind the user of when they return to this place."
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "chatToolExecutor"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Requires a signed-in owner and a frontmost non-Omi app window."
+    ],
+    "adapters": {
+      "pi-mono": {
+        "advertised": true
+      },
+      "omi-tools-stdio": {
+        "advertised": true
+      }
+    },
+    "surfaces": [
+      "desktop_chat",
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Create Context Reminder",
+      "summary": "Bind a reminder to the user's current app or document, not to a time.",
+      "bullets": [
+        "Use when the user says 'remind me next time I'm here', 'next time I open this', or 'when I'm back in this'.",
+        "The place is captured from the frontmost window automatically; pass only the reminder text.",
+        "Do not use for timed reminders ('tomorrow', 'at 3pm') — those are create_action_item."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Bind a reminder to the place the user is in right now (the frontmost app or document). Use when they say 'remind me next time I'm here', 'next time I open this', or 'when I'm back in this'. Do NOT use for timed reminders ('tomorrow', 'at 3pm') — those are create_action_item. The place is captured automatically; pass only the reminder text. Fast synchronous write. Confirm out loud after it returns."
     }
   },
   {
@@ -4696,7 +4760,8 @@
           "description": "Task ID (required)"
         },
         "completed": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Set true to mark the task done."
         },
         "description": {
           "type": "string"
@@ -5380,6 +5445,15 @@
         "context": {
           "type": "string",
           "description": "Optional relevant context for the escalation."
+        },
+        "thinking": {
+          "type": "string",
+          "enum": [
+            "normal",
+            "heavy"
+          ],
+          "default": "normal",
+          "description": "How hard the thinking agent reasons. normal (default) thinks at a high level; heavy thinks extra hard for genuinely hard questions or when the user asks to think harder, extra carefully, or take more time."
         }
       },
       "required": [
@@ -5418,7 +5492,7 @@
       ]
     },
     "voice": {
-      "realtimeDescription": "Take more time and use Omi's full answer capabilities before replying. ALWAYS call this tool before answering when the user says 'think carefully', 'think about this', 'go deep', 'reason it out', 'take your time', 'don't just guess', or 'what should I do', or otherwise asks for advice, tradeoffs, a multi-step plan, or reconsideration of a weak answer. A short, vague, or first-turn request still counts: call the tool with the question as given instead of answering or asking a clarifying question first. For historical public research about how, when, or why a company, product, or person did something, or any public question requiring multiple sources, ALWAYS use two calls in this order: first web_search, then this tool with the original question and the complete web_search result in context. If no web_search result is present in this turn, call web_search instead of this tool first. Call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. If unsure whether deeper thought would improve the answer, call it. Skip only chit-chat, short confirmations, obvious stable facts, or one narrow current fact that a fast realtime tool fully answers, such as weather, a current price, or a score. Call immediately without speaking a wait-line or answer first: the app acknowledges the delay as soon as the tool is accepted. Never describe internal model, tool, delegation, or routing choices, and never say the request is being sent elsewhere. When the result arrives, speak only its conclusion faithfully; do not add a delayed status line.",
+      "realtimeDescription": "Take more time and use Omi's full answer capabilities before replying. ALWAYS call this tool before answering when the user says 'think carefully', 'think about this', 'go deep', 'reason it out', 'take your time', 'don't just guess', or 'what should I do', or otherwise asks for advice, tradeoffs, a multi-step plan, or reconsideration of a weak answer. A short, vague, or first-turn request still counts: call the tool with the question as given instead of answering or asking a clarifying question first. For historical public research about how, when, or why a company, product, or person did something, or any public question requiring multiple sources, ALWAYS use two calls in this order: first web_search, then this tool with the original question and the complete web_search result in context. If no web_search result is present in this turn, call web_search instead of this tool first. Call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. If unsure whether deeper thought would improve the answer, call it. Skip only chit-chat, short confirmations, obvious stable facts, or one narrow current fact that a fast realtime tool fully answers, such as weather, a current price, or a score. Call immediately without speaking a wait-line or answer first: the app acknowledges the delay as soon as the tool is accepted. Never describe internal model, tool, delegation, or routing choices, and never say the request is being sent elsewhere. When the result arrives, speak only its conclusion faithfully; do not add a delayed status line. Set thinking='heavy' only when the user asks to think harder, think extra carefully, or take more time, or the question is genuinely hard; the default 'normal' already thinks at a high level. Screenshots you viewed this turn and other same-turn context are forwarded to the thinking agent automatically; still pass the useful facts as text in context.",
       "schemaOverride": {
         "type": "object",
         "properties": {
@@ -5428,7 +5502,16 @@
           },
           "context": {
             "type": "string",
-            "description": "Relevant context you already have that helps answer well — facts you fetched, what the user is referring to, or the previous answer they pushed back on. Include only what's relevant; omit if there's nothing useful."
+            "description": "Relevant context you already have that helps answer well — facts you fetched, what the user is referring to, or the previous answer they pushed back on. Include only what's relevant; omit if there's nothing useful. Screenshots you viewed this turn and other same-turn context are forwarded automatically; still write the useful facts here so the thinking agent knows what mattered."
+          },
+          "thinking": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "heavy"
+            ],
+            "default": "normal",
+            "description": "normal (default) runs the thinking agent at high reasoning. Use heavy — extra-high reasoning that takes longer — when the user asks to think harder, think extra carefully, or take more time, or when the question is genuinely hard (intricate multi-step reasoning, dense tradeoffs, a hard puzzle or math)."
           }
         },
         "required": [
@@ -5441,8 +5524,8 @@
   {
     "name": "web_search",
     "label": "Web Search",
-    "description": "Search the live public web through the full typed-chat retrieval lane, then speak its answer.",
-    "promptSnippet": "web_search - Search the live public web for a spoken answer",
+    "description": "Search the live public web through the typed-chat retrieval lane.",
+    "promptSnippet": "web_search - Search the live public web",
     "latency": "async background",
     "inputSchema": {
       "type": "object",
@@ -5482,10 +5565,15 @@
     },
     "intendedForAgents": true,
     "runtimePreconditions": [
-      "Realtime voice only; requires the typed-chat public-web retrieval lane."
+      "Requires the typed-chat public-web retrieval lane. Paid plans only on desktop chat."
     ],
-    "adapters": {},
+    "adapters": {
+      "pi-mono": {
+        "advertised": true
+      }
+    },
     "surfaces": [
+      "desktop_chat",
       "realtime_voice"
     ],
     "capabilityDoc": {

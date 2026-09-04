@@ -170,29 +170,37 @@ _STRUCTURED_OUTPUT_FEATURES = {
 }
 STRUCTURED_OUTPUT_FEATURES = _STRUCTURED_OUTPUT_FEATURES
 
-_DEFAULT_CONFIG: Tuple[str, str] = ('gpt-5.6-luna', 'openai')
-DEFAULT_CONFIG = _DEFAULT_CONFIG
-
 # Future migration point for features that should call the gateway via an auto
 # lane. Keep empty until a ticket explicitly wires and verifies shadow/live
 # traffic; existing direct LLM routing never consults this map.
 _AUTO_LANE_FEATURES: Dict[str, str] = {}
 
 
+class UnknownLLMFeature(KeyError):
+    """A feature has no explicit map entry. Fail closed; never fall through to luna."""
+
+    def __init__(self, feature: str) -> None:
+        self.feature = feature
+        super().__init__(f"Unknown LLM feature {feature!r}; explicit entries are required")
+
+
 def _get_model_config(feature: str) -> Tuple[str, str]:
     """Get the (model, provider) tuple for a feature. Internal — used by get_llm/get_model/get_provider.
 
-    Resolution order: pinned > active profile > fallback.
+    Resolution order: pinned > active profile. Unknown features raise UnknownLLMFeature.
     """
     if feature in _PINNED_FEATURES:
         return _PINNED_FEATURES[feature]
-    return _active_profile.get(feature, _DEFAULT_CONFIG)
+    try:
+        return _active_profile[feature]
+    except KeyError as exc:
+        raise UnknownLLMFeature(feature) from exc
 
 
 def get_model_config(feature: str) -> Tuple[str, str]:
     """Get the (model, provider) tuple for a feature.
 
-    Resolution order: pinned > active profile > fallback.
+    Resolution order: pinned > active profile. Unknown features raise UnknownLLMFeature.
     """
     return _get_model_config(feature)
 
@@ -200,7 +208,7 @@ def get_model_config(feature: str) -> Tuple[str, str]:
 def get_model(feature: str) -> str:
     """Get the model name for a feature from the active Model QoS profile.
 
-    Resolution order: pinned > active profile > fallback.
+    Resolution order: pinned > active profile. Unknown features raise UnknownLLMFeature.
 
     Args:
         feature: Feature name (e.g. 'conv_action_items', 'chat_agent').
@@ -242,8 +250,12 @@ def get_route_ref(feature: str) -> RouteRef:
 
     Existing features resolve to explicit provider/model refs by default. Auto-lane
     refs are opt-in through _AUTO_LANE_FEATURES and are not used by get_model(),
-    get_provider(), or get_llm().
+    get_provider(), or get_llm(). Unknown features raise before the auto-lane map
+    is consulted, so an unmapped name cannot fail open onto a lane.
     """
+
+    if feature not in get_all_configured_features():
+        raise UnknownLLMFeature(feature)
 
     lane_id = _AUTO_LANE_FEATURES.get(feature)
     if lane_id is not None:
@@ -295,10 +307,6 @@ def get_active_profile() -> Dict[str, Tuple[str, str]]:
 
 def get_all_configured_features() -> set[str]:
     return set(_active_profile.keys()) | set(_PINNED_FEATURES.keys())
-
-
-def get_default_config() -> Tuple[str, str]:
-    return _DEFAULT_CONFIG
 
 
 def get_byok_profile() -> Dict[str, Tuple[str, str]]:

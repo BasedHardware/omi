@@ -576,18 +576,21 @@ class AnalyticsManager {
     required int durationSeconds,
     String? reason,
   }) =>
-      track('Phone Call Transcript Session', properties: {
-        'ws_accepted': wsAccepted,
-        'audio_frames_sent': audioFramesSent,
-        'audio_bytes_sent': audioBytesSent,
-        'audio_channel_1_frames': audioChannel1Frames,
-        'audio_channel_2_frames': audioChannel2Frames,
-        'event_channel_errors': eventChannelErrors,
-        'event_channel_coerced': eventChannelCoerced,
-        'transcription_status_final': transcriptionStatusFinal,
-        'duration_seconds': durationSeconds,
-        if (reason != null) 'reason': reason,
-      });
+      track(
+        'Phone Call Transcript Session',
+        properties: {
+          'ws_accepted': wsAccepted,
+          'audio_frames_sent': audioFramesSent,
+          'audio_bytes_sent': audioBytesSent,
+          'audio_channel_1_frames': audioChannel1Frames,
+          'audio_channel_2_frames': audioChannel2Frames,
+          'event_channel_errors': eventChannelErrors,
+          'event_channel_coerced': eventChannelCoerced,
+          'transcription_status_final': transcriptionStatusFinal,
+          'duration_seconds': durationSeconds,
+          if (reason != null) 'reason': reason,
+        },
+      );
 
   void phoneCallFailed({String? error}) => track('Phone Call Failed', properties: {'error': error ?? 'unknown'});
 
@@ -780,12 +783,7 @@ class AnalyticsManager {
   }) {
     track(
       'memory_review_action',
-      properties: {
-        'source': source,
-        'action': action,
-        'outcome': outcome,
-        'memory_category': memoryCategory,
-      },
+      properties: {'source': source, 'action': action, 'outcome': outcome, 'memory_category': memoryCategory},
     );
   }
 

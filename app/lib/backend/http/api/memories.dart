@@ -36,11 +36,7 @@ Future<bool> updateMemoryVisibilityServer(String memoryId, String visibility) as
 }
 
 /// Why a [GetMemoriesResult] is not a successful read.
-enum MemoriesFetchFailureReason {
-  noResponse,
-  httpError,
-  decodeError,
-}
+enum MemoriesFetchFailureReason { noResponse, httpError, decodeError }
 
 /// Result of [getMemories], carrying whether server-side device_scope was supported
 /// and whether the response was a partial page due to request-budget exhaustion.
@@ -73,41 +69,18 @@ class GetMemoriesResult {
 /// [GetMemoriesResult.deviceScopeSupported] true so a 503 cannot be mistaken
 /// for "device_scope unsupported".
 @visibleForTesting
-GetMemoriesResult memoriesResultFromHttp({
-  required int? statusCode,
-  String? body,
-  bool truncated = false,
-}) {
+GetMemoriesResult memoriesResultFromHttp({required int? statusCode, String? body, bool truncated = false}) {
   if (statusCode == null) {
-    return const GetMemoriesResult(
-      [],
-      true,
-      failureReason: MemoriesFetchFailureReason.noResponse,
-    );
+    return const GetMemoriesResult([], true, failureReason: MemoriesFetchFailureReason.noResponse);
   }
   if (statusCode == 200) {
     try {
-      return GetMemoriesResult(
-        _decodeMemoriesResponse(body ?? ''),
-        true,
-        truncated: truncated,
-        statusCode: 200,
-      );
+      return GetMemoriesResult(_decodeMemoriesResponse(body ?? ''), true, truncated: truncated, statusCode: 200);
     } catch (_) {
-      return const GetMemoriesResult(
-        [],
-        true,
-        statusCode: 200,
-        failureReason: MemoriesFetchFailureReason.decodeError,
-      );
+      return const GetMemoriesResult([], true, statusCode: 200, failureReason: MemoriesFetchFailureReason.decodeError);
     }
   }
-  return GetMemoriesResult(
-    const [],
-    true,
-    statusCode: statusCode,
-    failureReason: MemoriesFetchFailureReason.httpError,
-  );
+  return GetMemoriesResult(const [], true, statusCode: statusCode, failureReason: MemoriesFetchFailureReason.httpError);
 }
 
 void _reportMemoriesFetchFailure(GetMemoriesResult result) {
@@ -260,10 +233,7 @@ Future<RevertMemoryResult> revertMemoryServer(String memoryId, String operationI
       return const RevertMemoryResult(persisted: false);
     }
     final authoritativeMemory = payload.memory == null ? null : Memory.fromGeneratedWireJson(payload.memory!.toJson());
-    return RevertMemoryResult(
-      persisted: authoritativeMemory != null,
-      authoritativeMemory: authoritativeMemory,
-    );
+    return RevertMemoryResult(persisted: authoritativeMemory != null, authoritativeMemory: authoritativeMemory);
   } catch (error) {
     Logger.warning('revertMemory response decode failed: $error');
     return const RevertMemoryResult(persisted: false);

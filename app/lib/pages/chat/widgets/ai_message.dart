@@ -352,10 +352,7 @@ Widget buildMessageWidget(
         // can never become an external action.
         ChatEvidenceReferenceList(envelope: evidence),
       ],
-      if (followUp != null) ...[
-        const SizedBox(height: 8),
-        ChatFollowUpChip(question: followUp, onSend: sendMessage),
-      ],
+      if (followUp != null) ...[const SizedBox(height: 8), ChatFollowUpChip(question: followUp, onSend: sendMessage)],
     ],
   );
 }

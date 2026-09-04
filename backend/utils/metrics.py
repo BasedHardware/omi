@@ -188,7 +188,7 @@ for _journey in CLIENT_JOURNEYS:
     for _outcome in CLIENT_JOURNEY_OUTCOMES:
         OMI_CLIENT_JOURNEY_DURATION_SECONDS.labels(journey=_journey, outcome=_outcome)
 
-# The three gauges below report one GLOBAL Firestore-derived quantity, and every
+# The gauges below report one GLOBAL Firestore-derived quantity, and every
 # replica publishes the same value. Aggregate them with max(), never sum(): a
 # sum() multiplies the real number by the replica count and, while replicas run
 # different images, mixes two different answers to the same question.
@@ -196,6 +196,28 @@ LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_nonterminal_age_seconds',
     'Global age of the oldest queued, leased, or blocked listen finalization job; '
     'replicated per process, aggregate with max() not sum()',
+)
+
+# Durable-queue substrate age. Every replica publishes the same Firestore-derived
+# value for a given queue name; aggregate with max(), never sum(). Do not
+# zero-initialize: absent() means the periodic publisher has not run.
+OMI_QUEUE_OLDEST_READY_AGE_SECONDS = Gauge(
+    'omi_queue_oldest_ready_age_seconds',
+    'Age in seconds of the oldest ready durable-queue item; replicated per process, ' 'aggregate with max() not sum()',
+    ['queue'],
+)
+
+OMI_QUEUE_NAMES = (
+    'memory_outbox',
+    'candidate_integration_outbox',
+    'chat_first_proactive_intents',
+    'conversation_finalization_jobs',
+    'daily_summary_hour_groups',
+    'daily_memory_sweep',
+    'vector_repair_outbox',
+    'task_recurrence_inbox',
+    'frame_deletion_outbox',
+    'projection_repairs',
 )
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(

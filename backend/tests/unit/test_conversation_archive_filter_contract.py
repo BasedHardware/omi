@@ -1,6 +1,7 @@
 """Hermetic contract tests for the server-side Omi capture archive filter."""
 
 import os
+import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock
@@ -170,6 +171,8 @@ def conversations_db():
     utils.__path__ = []
     utils_other = ModuleType("utils.other")
     utils_other.__path__ = []
+    utils_conversations = ModuleType("utils.conversations")
+    utils_conversations.__path__ = []
 
     fakes = {
         "google": google,
@@ -188,12 +191,30 @@ def conversations_db():
         "models.conversation_photo": AutoMockModule("models.conversation_photo"),
         "models.transcript_segment": AutoMockModule("models.transcript_segment"),
         "utils": utils,
+        "utils.conversations": utils_conversations,
         "utils.encryption": AutoMockModule("utils.encryption"),
         "utils.other": utils_other,
         "utils.other.hume": AutoMockModule("utils.other.hume"),
         "utils.other.list_budget": list_budget_real,
         "utils.other.storage": AutoMockModule("utils.other.storage"),
     }
+
+    # database.conversations binds PROJECTION_FAMILY_FIELDS and the transcript
+    # digest at import time, and both must be the real modules: an AutoMock answers
+    # ``in`` with False, which would silently turn the projection field-path filter
+    # into a no-op here. They are loaded before the stub block, not inside it --
+    # each needs its own real models.* dependency to build (a pydantic enum, a
+    # dataclass), which the fakes do not provide.
+    client_processing_real = load_module_fresh(
+        "models.client_processing",
+        os.path.join(str(_BACKEND), "models", "client_processing.py"),
+    )
+    transcript_hash_real = load_module_fresh(
+        "utils.conversations.transcript_hash",
+        os.path.join(str(_BACKEND), "utils", "conversations", "transcript_hash.py"),
+    )
+    fakes["models.client_processing"] = client_processing_real
+    fakes["utils.conversations.transcript_hash"] = transcript_hash_real
 
     with stub_modules(fakes):
         module = load_module_fresh(

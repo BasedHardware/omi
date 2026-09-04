@@ -32,9 +32,7 @@ const _reviewBlock = {
 
 void main() {
   test('decodes a memoryReviewCard delivered as FCM JSON text', () {
-    final message = ServerMessage.fromJson(
-      _fcmDaySummaryData(contentBlocks: jsonEncode([_reviewBlock])),
-    );
+    final message = ServerMessage.fromJson(_fcmDaySummaryData(contentBlocks: jsonEncode([_reviewBlock])));
 
     final card = message.memoryReviewCard;
     expect(card, isNotNull);
@@ -132,11 +130,25 @@ void main() {
     expect(message.followUpQuestion, isNull);
   });
 
-  test('fallback text is sensible for both new block types', () {
-    final reviewOnly = ServerMessage.fromJson(
-      _fcmDaySummaryData(text: '', contentBlocks: [_reviewBlock]),
+  test('neither natively rendered block invents fallback prose that repeats it', () {
+    // MemoryReviewCard draws "Things I learned today" itself and
+    // ChatFollowUpChip draws the question, so a prose copy would either say the
+    // same words twice or — when the block is too malformed to render a card —
+    // leave a heading standing over nothing.
+    final reviewOnly = ServerMessage.fromJson(_fcmDaySummaryData(text: '', contentBlocks: [_reviewBlock]));
+    expect(reviewOnly.text, '');
+    expect(reviewOnly.memoryReviewCard, isNotNull);
+
+    final malformedReviewOnly = ServerMessage.fromJson(
+      _fcmDaySummaryData(
+        text: '',
+        contentBlocks: [
+          {'type': 'memoryReviewCard', 'id': 'summary-9:memories', 'items': []},
+        ],
+      ),
     );
-    expect(reviewOnly.text, 'Things I learned today');
+    expect(malformedReviewOnly.memoryReviewCard, isNull);
+    expect(malformedReviewOnly.text, '');
 
     final followUpOnly = ServerMessage.fromJson({
       'id': 'message-4',
@@ -148,7 +160,8 @@ void main() {
         {'type': 'followUp', 'text': 'Should I pull the rest?'},
       ],
     });
-    expect(followUpOnly.text, 'Should I pull the rest?');
+    expect(followUpOnly.text, '');
+    expect(followUpOnly.followUpQuestion, 'Should I pull the rest?');
   });
 
   test('unknown and existing block types keep their previous fallback', () {

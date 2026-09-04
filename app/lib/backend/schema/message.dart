@@ -393,10 +393,7 @@ class ServerMessage {
 
   /// Decode only additive evidence fields. A malformed or unknown payload is
   /// treated as absent so released text/chat behavior remains unchanged.
-  static ChatEvidenceReferenceEnvelope? _decodeEvidenceEnvelope(
-    Map<String, dynamic> json,
-    String? metadata,
-  ) {
+  static ChatEvidenceReferenceEnvelope? _decodeEvidenceEnvelope(Map<String, dynamic> json, String? metadata) {
     final direct =
         json['evidence'] ?? json['evidence_envelope'] ?? json['evidence_refs'] ?? json['evidence_references'];
     final parsedDirect = _tryEvidenceEnvelope(direct);
@@ -548,10 +545,15 @@ class ServerMessage {
         return value('text').isEmpty ? 'Question' : value('text');
       case 'memoryReviewCard':
       case 'memory_review_card':
-        return 'Things I learned today';
       case 'followUp':
       case 'follow_up':
-        return value('text');
+        // Both render natively on mobile — MemoryReviewCard draws its own
+        // "Things I learned today" heading, and ChatFollowUpChip draws the
+        // question. Inventing the same words as fallback prose says them
+        // twice; and when the block is malformed enough that no card renders
+        // (MemoryReviewCardBlock.tryFromBlock returns null for an item-less
+        // block), a bare heading over nothing is worse than no heading.
+        return '';
       case 'taskCard':
       case 'task_card':
         return 'Task';

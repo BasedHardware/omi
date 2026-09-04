@@ -283,6 +283,33 @@ final class HomeKnowsComposerTests: XCTestCase {
     XCTAssertEqual(HomeKnowsListComposer.openTaskCount(candidates), 2)
     XCTAssertEqual(HomeKnowsListComposer.openTaskCount(candidates, ledger: ledger), 1)
   }
+
+  /// The greeting counts what the list can show. Three ways the two used to
+  /// disagree, each of which made "N things need you" name a row that was not
+  /// under it: the hub's concatenated buckets repeat a task id, a long-dead
+  /// past-due task is not surfaced, and a dismissal stops applying once the
+  /// task's own text moves.
+  func testOpenTaskCountAgreesWithTheRowsItIsPhrasedAround() {
+    let now = HomeKnowsLedgerFixture.noon
+    let duplicated = tasks + [HomeKnowsTaskCandidate(id: "t1", text: "Submit the Design PR by 7pm")]
+    XCTAssertEqual(HomeKnowsListComposer.openTaskCount(duplicated, now: now), 2)
+
+    let stale = [
+      HomeKnowsTaskCandidate(id: "old", text: "Long-dead commitment", dueAt: now.addingTimeInterval(-20 * 86_400)),
+      HomeKnowsTaskCandidate(id: "live", text: "Still open", dueAt: now.addingTimeInterval(-3 * 86_400)),
+    ]
+    XCTAssertEqual(
+      HomeKnowsListComposer.compose(tasks: stale, insights: [], questions: [], now: now).rows.count, 1)
+    XCTAssertEqual(HomeKnowsListComposer.openTaskCount(stale, now: now), 1)
+
+    // Dismissed, then edited: `compose` surfaces it again, so the count does too.
+    let ledger = HomeKnowsLedgerFixture.dismissing(taskID: "t1", text: "Submit the Design PR by 7pm")
+    let edited = [HomeKnowsTaskCandidate(id: "t1", text: "Submit the Design PR by 9pm")]
+    XCTAssertEqual(
+      HomeKnowsListComposer.compose(tasks: edited, insights: [], questions: [], ledger: ledger, now: now)
+        .rows.map(\.kind), [.task(id: "t1")])
+    XCTAssertEqual(HomeKnowsListComposer.openTaskCount(edited, ledger: ledger, now: now), 1)
+  }
 }
 
 /// Shared ledger fixtures. A fixed instant keeps the calendar-day rules

@@ -122,6 +122,19 @@ class TestDailySummaryGates:
             gate.assert_called_once_with('u1', platform='macos')
             summaries_db.get_daily_summary.assert_not_called()
 
+    def test_create_user_daily_summary_blocked_past_cap(self):
+        import routers.users as users_router
+
+        request = users_router.CreateDailySummaryRequest(date='2026-08-20')
+        with patch.object(users_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate, patch.object(
+            users_router, 'notification_db'
+        ) as notif_db:
+            with pytest.raises(HTTPException) as exc_info:
+                users_router.create_user_daily_summary(request, uid='u1', x_app_platform='macos')
+            assert exc_info.value.status_code == 402
+            gate.assert_called_once_with('u1', platform='macos')
+            notif_db.get_user_time_zone.assert_not_called()
+
     def test_regenerate_daily_summary_allowed_proceeds(self):
         import routers.users as users_router
 
@@ -230,6 +243,13 @@ class TestOmniRelayGate:
         ), patch.object(
             relay, 'is_trial_paywalled', return_value=False
         ), patch.object(
+            # Explicit: the module-level AutoMock of database.users does not reach
+            # `relay.users_db` when routers.omni_relay was already imported by
+            # another test file in this process, and the real one reads Firestore.
+            relay.users_db,
+            'is_byok_active',
+            return_value=False,
+        ), patch.object(
             relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': False}
         ) as snapshot:
             asyncio.run(relay.omni_relay(ws))
@@ -302,6 +322,8 @@ class TestOmniRelayGate:
             relay, 'extract_byok_from_websocket', return_value={}
         ), patch.object(
             relay, 'is_trial_paywalled', return_value=False
+        ), patch.object(
+            relay.users_db, 'is_byok_active', return_value=False
         ), patch.object(
             relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': True}
         ):
