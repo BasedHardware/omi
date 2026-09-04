@@ -1,0 +1,3 @@
+{
+  "change": "Skipping or denying a permission during onboarding no longer makes Omi re-ask for it on every launch, app switch, or settings sync — microphone, screen recording, and file indexing stay off until you turn them on yourself"
+}
