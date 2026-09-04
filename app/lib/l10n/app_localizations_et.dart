@@ -1858,9 +1858,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get openSettings => 'Ava seaded';
 
   @override
-  String get wantDifferentName => 'Soovite kasutada muud nime?';
-
-  @override
   String get whatsYourName => 'Mis on teie nimi?';
 
   @override
@@ -9906,6 +9903,17 @@ class AppLocalizationsEt extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Salvestamata ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Transkriptsioon ei saa heli';

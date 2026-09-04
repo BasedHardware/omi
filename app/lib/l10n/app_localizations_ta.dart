@@ -1871,9 +1871,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get openSettings => 'அமைப்புகளைத் திறக்கவும்';
 
   @override
-  String get wantDifferentName => 'வேறு ஒன்றால் செல்ல விரும்புகிறீர்களா?';
-
-  @override
   String get whatsYourName => 'உங்கள் பெயர் என்ன?';
 
   @override
@@ -9982,6 +9979,17 @@ class AppLocalizationsTa extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'பதிவு செய்யப்படவில்லை ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'நகலெடுப்பு ஆடியோவைப் பெறவில்லை';

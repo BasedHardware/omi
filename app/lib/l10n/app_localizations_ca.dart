@@ -1872,9 +1872,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get openSettings => 'Obrir configuració';
 
   @override
-  String get wantDifferentName => 'Voleu que us anomeni d\'una altra manera?';
-
-  @override
   String get whatsYourName => 'Com et dius?';
 
   @override
@@ -9969,6 +9966,17 @@ class AppLocalizationsCa extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'No enregistrat ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'La transcripció no rep àudio';

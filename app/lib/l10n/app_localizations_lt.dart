@@ -1858,9 +1858,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get openSettings => 'Atidaryti nustatymus';
 
   @override
-  String get wantDifferentName => 'Norite, kad jus vadintų kitaip?';
-
-  @override
   String get whatsYourName => 'Koks tavo vardas?';
 
   @override
@@ -9932,6 +9929,17 @@ class AppLocalizationsLt extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Neįrašyta ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Transkripcija negauna garso';

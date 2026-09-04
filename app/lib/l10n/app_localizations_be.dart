@@ -1862,9 +1862,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get openSettings => 'Адкрыць налады';
 
   @override
-  String get wantDifferentName => 'Хочаце быць вядомамі пад чым-то іншым?';
-
-  @override
   String get whatsYourName => 'Якое вашае імя?';
 
   @override
@@ -9944,6 +9941,17 @@ class AppLocalizationsBe extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Не запісана ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Транскрыпцыя не атрымлівае аўдыё';

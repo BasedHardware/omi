@@ -1863,9 +1863,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get openSettings => 'Отвори настройки';
 
   @override
-  String get wantDifferentName => 'Искате ли различно име?';
-
-  @override
   String get whatsYourName => 'Как се казвате?';
 
   @override
@@ -9949,6 +9946,17 @@ class AppLocalizationsBg extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Не е записано ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Транскрипцията не получава аудио';

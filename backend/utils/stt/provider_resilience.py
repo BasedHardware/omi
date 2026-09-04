@@ -81,6 +81,19 @@ class ProviderCircuitBreaker:
         with self._lock:
             return self._state
 
+    def cooldown_elapsed(self) -> bool:
+        """Read-only: whether a caller *would* be let through right now.
+
+        Mirrors ``allow_request``'s open->half_open cooldown check without
+        mutating state or claiming the single half-open probe slot, so a
+        read-only pre-flight check can't itself flip the breaker or starve a
+        real connection attempt of the probe.
+        """
+        with self._lock:
+            if self._state != 'open':
+                return True
+            return self._clock() - self._opened_at >= self._cooldown_seconds
+
     def allow_request(self) -> bool:
         with self._lock:
             if self._state == 'closed':

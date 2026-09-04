@@ -1861,9 +1861,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get openSettings => 'Otevřít nastavení';
 
   @override
-  String get wantDifferentName => 'Chcete jiné jméno?';
-
-  @override
   String get whatsYourName => 'Jak se jmenujete?';
 
   @override
@@ -9913,6 +9910,17 @@ class AppLocalizationsCs extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nezaznamenáno ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Transkripce nepřijímá zvuk';

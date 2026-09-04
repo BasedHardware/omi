@@ -1870,9 +1870,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get openSettings => 'Buksan ang Settings';
 
   @override
-  String get wantDifferentName => 'Gusto mo bang gamitin ang ibang pangalan?';
-
-  @override
   String get whatsYourName => 'Ano ang iyong pangalan?';
 
   @override
@@ -10003,6 +10000,17 @@ class AppLocalizationsTl extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Hindi na-record ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Hindi tumatanggap ng audio ang transkripsyon';

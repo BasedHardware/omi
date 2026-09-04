@@ -1849,9 +1849,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get openSettings => 'เปิดการตั้งค่า';
 
   @override
-  String get wantDifferentName => 'ต้องการใช้ชื่ออื่นไหม?';
-
-  @override
   String get whatsYourName => 'คุณชื่ออะไร?';
 
   @override
@@ -9855,6 +9852,17 @@ class AppLocalizationsTh extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'ไม่ได้บันทึก ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'การถอดเสียงไม่ได้รับเสียง';

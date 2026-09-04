@@ -1825,9 +1825,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get openSettings => '설정 열기';
 
   @override
-  String get wantDifferentName => '다른 이름으로 부르시겠습니까?';
-
-  @override
   String get whatsYourName => '이름이 무엇인가요?';
 
   @override
@@ -9746,6 +9743,17 @@ class AppLocalizationsKo extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return '기록되지 않음 ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => '전사가 오디오를 받지 못하고 있습니다';

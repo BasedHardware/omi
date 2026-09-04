@@ -48,6 +48,7 @@ class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocke
     super.onboardingMode,
     super.geolocation,
     super.clientConversationId,
+    super.speechProfileRedo,
   }) : super.create(includeSpeechProfile: false);
 }
 
@@ -96,6 +97,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   String? clientConversationId;
 
   bool onboardingMode;
+  bool speechProfileRedo;
   Geolocation? geolocation;
 
   TranscriptSegmentSocketService.create(
@@ -107,6 +109,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.customSttMode = false,
     this.sttConfigId,
     this.onboardingMode = false,
+    this.speechProfileRedo = false,
     this.geolocation,
     this.clientConversationId,
   }) {
@@ -128,6 +131,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     if (onboardingMode) {
       params += '&onboarding=enabled';
+    }
+
+    if (speechProfileRedo) {
+      params += '&speech_profile_redo=enabled';
     }
 
     // Enable server-side speaker auto-assignment (backward compatibility flag)
@@ -162,6 +169,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.customSttMode = false,
     this.sttConfigId,
     this.onboardingMode = false,
+    this.speechProfileRedo = false,
     this.geolocation,
     this.clientConversationId,
   }) {

@@ -1874,9 +1874,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get openSettings => 'Άνοιγμα Ρυθμίσεων';
 
   @override
-  String get wantDifferentName => 'Θέλετε να αποκαλείστε διαφορετικά;';
-
-  @override
   String get whatsYourName => 'Πώς σε λένε;';
 
   @override
@@ -9982,6 +9979,17 @@ class AppLocalizationsEl extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Δεν καταγράφηκε ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Η μεταγραφή δεν λαμβάνει ήχο';

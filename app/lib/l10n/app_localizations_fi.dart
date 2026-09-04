@@ -1857,9 +1857,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get openSettings => 'Avaa asetukset';
 
   @override
-  String get wantDifferentName => 'Haluatko käyttää eri nimeä?';
-
-  @override
   String get whatsYourName => 'Mikä on nimesi?';
 
   @override
@@ -9913,6 +9910,17 @@ class AppLocalizationsFi extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Ei tallennettu ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Transkriptio ei vastaanota ääntä';

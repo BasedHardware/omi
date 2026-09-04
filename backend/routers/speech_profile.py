@@ -21,6 +21,7 @@ from utils.other.storage import (
 )
 from utils.multipart import MultipartMaxPartSizeRoute, SPEECH_PROFILE_MAX_PART_SIZE, max_part_size
 from utils.stt.speaker_embedding import extract_embedding
+from utils.stt.streaming import is_stt_available
 from utils.stt.vad import apply_vad_for_speech_profile, VADEmptyError
 import logging
 
@@ -52,9 +53,23 @@ class SpeechProfileStatusResponse(BaseModel):
     url: Optional[str] = None
 
 
+class SttAvailabilityResponse(BaseModel):
+    available: bool
+
+
 @router.get('/v3/speech-profile', tags=['v3'], response_model=HasSpeechProfileResponse)
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'has_profile': get_user_has_speech_profile(uid)}
+
+
+@router.get('/v3/speech-profile/stt-availability', tags=['v3'], response_model=SttAvailabilityResponse)
+def get_speech_profile_stt_availability(uid: str = Depends(auth.get_current_user_uid)):
+    """Pre-flight check the client uses before entering the recording UI, so a
+    known-down streaming primary (whichever provider STT_SERVICE_MODELS
+    currently leads with) surfaces as an upfront error dialog instead of a
+    dead recording screen with no questions/progress.
+    """
+    return {'available': is_stt_available()}
 
 
 @router.get('/v4/speech-profile', tags=['v3'], response_model=SpeechProfileResponse)

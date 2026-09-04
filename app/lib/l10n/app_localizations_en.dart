@@ -1786,7 +1786,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get maybeLater => 'Maybe Later';
 
   @override
-  String get speechProfileIntro => 'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.';
+  String get speechProfileIntro => 'Let\'s set up your speech profile. You can always change it later';
 
   @override
   String get getStarted => 'Get Started';
@@ -1855,9 +1855,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get openSettings => 'Open Settings';
-
-  @override
-  String get wantDifferentName => 'Want to go by something else?';
 
   @override
   String get whatsYourName => 'What\'s your name?';
@@ -5594,7 +5591,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get doItAgain => 'Do it again';
 
   @override
-  String get listenToSpeechProfile => 'Listen to my speech profile ➡️';
+  String get listenToSpeechProfile => 'Listen to my speech profile';
 
   @override
   String get recognizingOthers => 'Recognizing others 👀';
@@ -9903,6 +9900,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Not captured ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Transcription not receiving audio';

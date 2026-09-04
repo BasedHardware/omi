@@ -1861,9 +1861,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get openSettings => 'Öppna inställningar';
 
   @override
-  String get wantDifferentName => 'Vill du kallas något annat?';
-
-  @override
   String get whatsYourName => 'Vad heter du?';
 
   @override
@@ -9916,6 +9913,17 @@ class AppLocalizationsSv extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Inte fångat ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Transkrieringen tar inte emot ljud';

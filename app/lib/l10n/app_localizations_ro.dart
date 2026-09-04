@@ -1869,9 +1869,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get openSettings => 'Deschide setările';
 
   @override
-  String get wantDifferentName => 'Vrei să folosești alt nume?';
-
-  @override
   String get whatsYourName => 'Cum te cheamă?';
 
   @override
@@ -9959,6 +9956,17 @@ class AppLocalizationsRo extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Neînregistrat ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Transcrierea nu primește audio';

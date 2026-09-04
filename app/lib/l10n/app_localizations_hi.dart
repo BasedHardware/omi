@@ -1839,9 +1839,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get openSettings => 'सेटिंग्स खोलें';
 
   @override
-  String get wantDifferentName => 'क्या आप कोई दूसरा नाम इस्तेमाल करना चाहते हैं?';
-
-  @override
   String get whatsYourName => 'आपका नाम क्या है?';
 
   @override
@@ -9891,6 +9888,17 @@ class AppLocalizationsHi extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'रिकॉर्ड नहीं हुआ ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'ट्रांसक्रिप्शन ऑडियो प्राप्त नहीं कर रहा है';

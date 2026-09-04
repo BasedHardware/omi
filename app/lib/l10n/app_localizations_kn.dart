@@ -1863,9 +1863,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get openSettings => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು ತೆರೆಯಿರಿ';
 
   @override
-  String get wantDifferentName => 'ಬೇರೆ ರೀತಿಯಲ್ಲಿ ಹೆಸರು ಹೇಳಿದೆ ತೆಗೆದುಕೊಳ್ಳಬೇಕೆ?';
-
-  @override
   String get whatsYourName => 'ನಿಮ್ಮ ಹೆಸರು ಏನು?';
 
   @override
@@ -9944,6 +9941,17 @@ class AppLocalizationsKn extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'ದಾಖಲಾಗಿಲ್ಲ ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'ಲಿಪ್ಯಂತರಣ ಆಡಿಯೊ ಸ್ವೀಕರಿಸುತ್ತಿಲ್ಲ';

@@ -1858,9 +1858,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get openSettings => 'باز کردن تنظیمات';
 
   @override
-  String get wantDifferentName => 'می‌خواهید به چیز دیگری نامیده شوید؟';
-
-  @override
   String get whatsYourName => 'نام شما چیست؟';
 
   @override
@@ -9912,6 +9909,17 @@ class AppLocalizationsFa extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'ثبت نشده ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'رونویسی صدا دریافت نمی‌کند';

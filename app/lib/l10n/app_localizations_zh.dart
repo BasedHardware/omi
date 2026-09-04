@@ -1823,9 +1823,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openSettings => '打开设置';
 
   @override
-  String get wantDifferentName => '想用不同的名字？';
-
-  @override
   String get whatsYourName => '您叫什么名字？';
 
   @override
@@ -9724,6 +9721,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return '未记录 ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => '转录未接收到音频';

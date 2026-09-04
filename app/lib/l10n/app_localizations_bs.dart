@@ -1859,9 +1859,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get openSettings => 'Otvorite postavke';
 
   @override
-  String get wantDifferentName => 'Želite li da se zoveš nečim drugim?';
-
-  @override
   String get whatsYourName => 'Kako se zoveš?';
 
   @override
@@ -9941,6 +9938,17 @@ class AppLocalizationsBs extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nije snimljeno ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Transkripcija ne prima audio';

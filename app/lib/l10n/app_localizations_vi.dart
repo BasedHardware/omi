@@ -1863,9 +1863,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get openSettings => 'Mở cài đặt';
 
   @override
-  String get wantDifferentName => 'Muốn được gọi bằng tên khác?';
-
-  @override
   String get whatsYourName => 'Tên bạn là gì?';
 
   @override
@@ -9907,6 +9904,17 @@ class AppLocalizationsVi extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Không được ghi âm ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Bản ghi âm không nhận được âm thanh';

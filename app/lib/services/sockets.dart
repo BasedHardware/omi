@@ -31,6 +31,7 @@ abstract class ISocketService {
     required String language,
     bool force = false,
     String? source,
+    bool speechProfileRedo = false,
   });
 }
 
@@ -151,6 +152,7 @@ class SocketServicePool extends ISocketService {
     required String language,
     bool force = false,
     String? source,
+    bool speechProfileRedo = false,
   }) async {
     Logger.debug("socket speech profile > $codec $sampleRate $force source: $source");
 
@@ -165,6 +167,7 @@ class SocketServicePool extends ISocketService {
         language,
         source: source,
         onboardingMode: true,
+        speechProfileRedo: speechProfileRedo,
       );
 
       await _speechProfileSocket?.start();

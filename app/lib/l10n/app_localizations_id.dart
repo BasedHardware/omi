@@ -1863,9 +1863,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get openSettings => 'Buka Pengaturan';
 
   @override
-  String get wantDifferentName => 'Ingin menggunakan nama lain?';
-
-  @override
   String get whatsYourName => 'Siapa nama Anda?';
 
   @override
@@ -9923,6 +9920,17 @@ class AppLocalizationsId extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Tidak direkam ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Transkripsi tidak menerima audio';

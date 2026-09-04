@@ -1872,9 +1872,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get openSettings => 'Beállítások megnyitása';
 
   @override
-  String get wantDifferentName => 'Máshogy szeretnéd, hogy hívjanak?';
-
-  @override
   String get whatsYourName => 'Mi a neved?';
 
   @override
@@ -9953,6 +9950,17 @@ class AppLocalizationsHu extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nincs rögzítve ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'Az átírás nem kap hangot';

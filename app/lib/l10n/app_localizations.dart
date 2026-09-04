@@ -3504,7 +3504,7 @@ abstract class AppLocalizations {
   /// Introduction text for speech profile setup
   ///
   /// In en, this message translates to:
-  /// **'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.'**
+  /// **'Let\'s set up your speech profile. You can always change it later'**
   String get speechProfileIntro;
 
   /// Button text to begin a process
@@ -3632,12 +3632,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open Settings'**
   String get openSettings;
-
-  /// Question asking if user wants to change their display name
-  ///
-  /// In en, this message translates to:
-  /// **'Want to go by something else?'**
-  String get wantDifferentName;
 
   /// Question asking for user's name
   ///
@@ -10626,7 +10620,7 @@ abstract class AppLocalizations {
   /// Button text to listen to speech profile
   ///
   /// In en, this message translates to:
-  /// **'Listen to my speech profile ➡️'**
+  /// **'Listen to my speech profile'**
   String get listenToSpeechProfile;
 
   /// Button text to recognize other people
@@ -18452,6 +18446,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not captured ({count})'**
   String conversationsNotCapturedCount(int count);
+
+  /// Title shown on the speech profile page when the user already has a speech profile set up
+  ///
+  /// In en, this message translates to:
+  /// **'{name}\'s Speech Profile'**
+  String speechProfileOwnerTitle(String name);
+
+  /// Label for the play/listen button on the speech profile page
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get play;
+
+  /// Label for the redo/re-record button on the speech profile page
+  ///
+  /// In en, this message translates to:
+  /// **'Redo'**
+  String get redo;
 
   /// Status when an active call transcription socket receives no audio frames
   ///

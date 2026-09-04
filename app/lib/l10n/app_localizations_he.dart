@@ -1844,9 +1844,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get openSettings => 'פתח הגדרות';
 
   @override
-  String get wantDifferentName => 'רוצה להכנס בשם אחר?';
-
-  @override
   String get whatsYourName => 'מה שמך?';
 
   @override
@@ -9833,6 +9830,17 @@ class AppLocalizationsHe extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'לא הוקלט ($count)';
   }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 
   @override
   String get transcriptionNoAudio => 'התמליל אינו מקבל שמע';
