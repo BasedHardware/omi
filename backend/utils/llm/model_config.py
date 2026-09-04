@@ -170,6 +170,28 @@ _STRUCTURED_OUTPUT_FEATURES = {
 }
 STRUCTURED_OUTPUT_FEATURES = _STRUCTURED_OUTPUT_FEATURES
 
+# Features whose prompt summarizes a whole conversation (or a whole day) inside a request a
+# user is waiting on. They cannot answer inside the shared gateway transport deadline (15s to
+# first response byte, DEFAULT_GATEWAY_FIRST_BYTE_TIMEOUT_SECONDS), which is sized for
+# background feature calls, and a first-byte timeout there loses the user's summary outright.
+#
+# The deadline is declared per feature rather than per call site because the call-site version
+# of this rule failed three times: `daily_summary` on POST /test-prompt and `conv_structure` on
+# conversation finalization both died at ~15.2-15.8s in prod on 2026-08-19, and `conv_app_result`
+# — the app/template summary — was still on the background deadline on 2026-09-04, failing 128 of
+# 412 app-selected POST /v1/conversations/{id}/reprocess calls (31%) with
+# `httpcore.ReadTimeout` -> `Error executing app: Request timed out.` A new call site for one of
+# these features now inherits the deadline instead of having to remember it.
+FOREGROUND_REQUEST_TIMEOUT_SECONDS = 60.0
+_FOREGROUND_TIMEOUT_FEATURES = frozenset(
+    {
+        'conv_structure',
+        'conv_app_result',
+        'daily_summary',
+    }
+)
+
+
 # Future migration point for features that should call the gateway via an auto
 # lane. Keep empty until a ticket explicitly wires and verifies shadow/live
 # traffic; existing direct LLM routing never consults this map.
@@ -243,6 +265,18 @@ def get_route_options(feature: str, model: str, provider: str) -> Dict[str, obje
         # Completions.parse() and rejects thinking_budget (issue #7898).
         options['thinking_budget'] = 0
     return options
+
+
+def feature_request_timeout(feature: str) -> float | None:
+    """Return the request deadline a feature needs, or None to use the client default.
+
+    Only features whose generation cannot finish inside the background gateway transport
+    deadline declare one (see _FOREGROUND_TIMEOUT_FEATURES). Callers may still pass an
+    explicit request_timeout to get_llm; this is the default when they do not.
+    """
+    if feature in _FOREGROUND_TIMEOUT_FEATURES:
+        return FOREGROUND_REQUEST_TIMEOUT_SECONDS
+    return None
 
 
 def get_route_ref(feature: str) -> RouteRef:
