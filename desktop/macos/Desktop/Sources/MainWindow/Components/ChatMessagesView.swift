@@ -178,6 +178,32 @@ enum ChatInitialRestoreState: Equatable {
   }
 }
 
+/// The daily summary card's admission decision, in one place (INV-CHAT-2).
+///
+/// The card is chrome above the thread, and chrome must not outrun the thread.
+/// Admitting while the initial history is still loading printed the summary
+/// alone over a loading spinner, and the reader watched it yank above the fold
+/// the moment the transcript landed at the live edge — launch read as
+/// "summary page, then chat". The initial load therefore defers admission to
+/// the loading-complete observer, which admits before the live-edge restore
+/// measures geometry. Once the thread exists, the reader is only moved when
+/// they are following the live edge (the re-follow lands them back at the
+/// bottom) or when there is nothing to move.
+enum ChatDailySummaryAdmission {
+  static func shouldAdmit(
+    hasSummary: Bool,
+    isClearedFromTranscript: Bool,
+    alreadyAdmitted: Bool,
+    isLoadingInitial: Bool,
+    scrollMode: ChatScrollMode,
+    hasMessages: Bool
+  ) -> Bool {
+    guard hasSummary, !isClearedFromTranscript, !alreadyAdmitted else { return false }
+    guard !isLoadingInitial else { return false }
+    return scrollMode == .followingBottom || !hasMessages
+  }
+}
+
 /// **The rhythm of the transcript**, which is what makes a column of short
 /// messages read as a conversation instead of as scattered text.
 ///
@@ -708,8 +734,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // A journal restore may be populated by background events while the
     // loader is still collecting its canonical snapshot. Reveal it only after
     // loading completes, then make one initial placement at the live edge.
+    // The summary admission runs first: it was deferred for the whole load
+    // (INV-CHAT-2), and admitting before the restore measures geometry lands
+    // the reader at the live edge in one pass with the card above the fold.
     .onChange(of: isLoadingInitial) { wasLoading, isLoading in
-      guard wasLoading, !isLoading, !messages.isEmpty else { return }
+      guard wasLoading, !isLoading else { return }
+      admitDailySummaryIfFollowing(proxy: proxy)
+      guard !messages.isEmpty else { return }
       handleInitialRestore(proxy: proxy)
     }
     // MARK: - Daily summary admission (INV-CHAT-2)
@@ -717,6 +748,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // inserted above the viewport shifts everything below it, so it is admitted
     // only while the transcript follows the live edge (then re-followed), and a
     // reader who has scrolled away meets it on their next return to the bottom.
+    // The initial load defers admission entirely — see `ChatDailySummaryAdmission`.
     .modifier(
       DailySummaryAdmissionObserver(
         summaryID: dailySummaryStore.latest?.id, scrollMode: scrollMode,
@@ -860,19 +892,28 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   }
 
   /// Admit the daily summary card above the thread only when doing so cannot
-  /// move the reader: the transcript is following the live edge (so the
-  /// re-follow below lands it back at the bottom) or is empty. Once admitted it
-  /// stays; a summary that disappears (owner change) withdraws it.
+  /// move the reader: the initial snapshot has landed and the transcript is
+  /// following the live edge (so the re-follow below lands it back at the
+  /// bottom), or the thread is empty. Once admitted it stays; a summary that
+  /// disappears (owner change) withdraws it.
   private func admitDailySummaryIfFollowing(proxy: ScrollViewProxy) {
     guard showsDailySummary else { return }
-    guard dailySummaryStore.latest != nil, !dailySummaryCoordinator.isClearedFromTranscript else {
-      dailySummaryAdmitted = false
+    let hasAdmittableSummary =
+      dailySummaryStore.latest != nil && !dailySummaryCoordinator.isClearedFromTranscript
+    guard
+      ChatDailySummaryAdmission.shouldAdmit(
+        hasSummary: hasAdmittableSummary,
+        isClearedFromTranscript: dailySummaryCoordinator.isClearedFromTranscript,
+        alreadyAdmitted: dailySummaryAdmitted,
+        isLoadingInitial: isLoadingInitial,
+        scrollMode: scrollMode,
+        hasMessages: !messages.isEmpty)
+    else {
+      if !hasAdmittableSummary { dailySummaryAdmitted = false }
       return
     }
-    guard !dailySummaryAdmitted else { return }
-    guard scrollMode == .followingBottom || messages.isEmpty else { return }
     dailySummaryAdmitted = true
-    guard !messages.isEmpty, !isLoadingInitial else { return }
+    guard !messages.isEmpty else { return }
     handleLiveContentChange(proxy: proxy)
   }
 

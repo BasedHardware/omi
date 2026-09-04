@@ -335,4 +335,66 @@ final class ChatDailySummaryTests: XCTestCase {
     XCTAssertEqual(question, "What did I do on Sun, Aug 23?")
   }
 
+  // MARK: - Transcript admission (INV-CHAT-2)
+
+  /// The reported launch ergonomics: the card admitted above a transcript that
+  /// was still loading printed the summary alone over a spinner, and the reader
+  /// watched it yank above the fold when history landed at the live edge.
+  func testAdmissionDefersToTheInitialHistoryLoad() {
+    XCTAssertFalse(
+      ChatDailySummaryAdmission.shouldAdmit(
+        hasSummary: true, isClearedFromTranscript: false, alreadyAdmitted: false,
+        isLoadingInitial: true, scrollMode: .followingBottom, hasMessages: false),
+      "Launch must not print the summary above a transcript that is still loading"
+    )
+    XCTAssertTrue(
+      ChatDailySummaryAdmission.shouldAdmit(
+        hasSummary: true, isClearedFromTranscript: false, alreadyAdmitted: false,
+        isLoadingInitial: false, scrollMode: .followingBottom, hasMessages: true),
+      "The loading-complete observer admits once the snapshot is placed"
+    )
+    XCTAssertTrue(
+      ChatDailySummaryAdmission.shouldAdmit(
+        hasSummary: true, isClearedFromTranscript: false, alreadyAdmitted: false,
+        isLoadingInitial: false, scrollMode: .followingBottom, hasMessages: false),
+      "A genuinely empty thread shows the card once loading completes"
+    )
+  }
+
+  func testAdmissionNeverMovesAReaderWhoScrolledAway() {
+    XCTAssertFalse(
+      ChatDailySummaryAdmission.shouldAdmit(
+        hasSummary: true, isClearedFromTranscript: false, alreadyAdmitted: false,
+        isLoadingInitial: false, scrollMode: .freeScrolling, hasMessages: true),
+      "A reader away from the live edge meets the card on their next return to the bottom"
+    )
+    XCTAssertTrue(
+      ChatDailySummaryAdmission.shouldAdmit(
+        hasSummary: true, isClearedFromTranscript: false, alreadyAdmitted: false,
+        isLoadingInitial: false, scrollMode: .freeScrolling, hasMessages: false),
+      "An empty thread has nothing to move"
+    )
+    XCTAssertFalse(
+      ChatDailySummaryAdmission.shouldAdmit(
+        hasSummary: true, isClearedFromTranscript: false, alreadyAdmitted: true,
+        isLoadingInitial: false, scrollMode: .followingBottom, hasMessages: true),
+      "Once admitted the card stays"
+    )
+  }
+
+  func testAdmissionWithdrawsWhenThereIsNothingToAdmit() {
+    XCTAssertFalse(
+      ChatDailySummaryAdmission.shouldAdmit(
+        hasSummary: false, isClearedFromTranscript: false, alreadyAdmitted: true,
+        isLoadingInitial: false, scrollMode: .followingBottom, hasMessages: true),
+      "A summary that disappeared (owner change) withdraws the card"
+    )
+    XCTAssertFalse(
+      ChatDailySummaryAdmission.shouldAdmit(
+        hasSummary: true, isClearedFromTranscript: true, alreadyAdmitted: true,
+        isLoadingInitial: false, scrollMode: .followingBottom, hasMessages: true),
+      "A cleared summary keeps the card away"
+    )
+  }
+
 }
