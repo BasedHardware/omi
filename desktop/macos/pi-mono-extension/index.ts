@@ -978,10 +978,25 @@ function startMcpDiscovery(entry: McpServerEntry): Promise<void> {
 /** Tool names listed inline per server before the index defers to mcp_tools_info. */
 const MCP_INDEX_NAME_CAP = 40;
 const MCP_INDEX_PROMPT_CAP = 10;
+/**
+ * Tool and prompt names are the server's to choose (`listTools` accepts any
+ * non-empty string), so each name is clipped before it rides in the proxy
+ * tools' frozen descriptions — the name caps bound the count, not the size.
+ * A clipped name is still findable: the live mcp_tools_info results always
+ * carry the real, full name.
+ */
+const MCP_INDEX_NAME_WIDTH = 64;
+/** Server lines embedded in the frozen descriptions before deferring to the live index. */
+const MCP_INDEX_SERVER_LINE_CAP = 20;
+
+function clippedName(name: string): string {
+  return name.length <= MCP_INDEX_NAME_WIDTH ? name : `${name.slice(0, MCP_INDEX_NAME_WIDTH)}…`;
+}
 
 function nameList(names: string[], cap: number): string {
-  if (names.length <= cap) return names.join(", ");
-  return `${names.slice(0, cap).join(", ")} … +${names.length - cap} more`;
+  const clipped = names.map(clippedName);
+  if (clipped.length <= cap) return clipped.join(", ");
+  return `${clipped.slice(0, cap).join(", ")} … +${names.length - cap} more`;
 }
 
 /**
@@ -989,10 +1004,12 @@ function nameList(names: string[], cap: number): string {
  * description if the server declares one, live status, tool names. Sorted and
  * name-only, because this text rides in the proxy tools' descriptions on every
  * turn: it must stay compact and never carry tool descriptions or schemas.
+ * Server lines are bounded too: past the cap the description defers to the
+ * live mcp_tools_info index instead of growing with the user's config.
  */
 function mcpIndexText(): string {
   if (mcpServers.length === 0) return "No user MCP servers are configured.";
-  return mcpServers.map((entry) => {
+  const lines = mcpServers.slice(0, MCP_INDEX_SERVER_LINE_CAP).map((entry) => {
     const hint = entry.client.serverDescription;
     if (entry.status === "connecting") {
       return `- ${entry.name}: connecting…`;
@@ -1005,7 +1022,13 @@ function mcpIndexText(): string {
       ? `; prompts (${entry.prompts.length}): ${nameList(entry.prompts.map((prompt) => prompt.name), MCP_INDEX_PROMPT_CAP)}`
       : "";
     return `- ${entry.name}${hint ? ` — ${hint}` : ""}: ${tools}${prompts}`;
-  }).join("\n");
+  });
+  if (mcpServers.length > MCP_INDEX_SERVER_LINE_CAP) {
+    lines.push(
+      `… +${mcpServers.length - MCP_INDEX_SERVER_LINE_CAP} more — call mcp_tools_info with no arguments for the live index`,
+    );
+  }
+  return lines.join("\n");
 }
 
 function mcpTextResult(text: string) {

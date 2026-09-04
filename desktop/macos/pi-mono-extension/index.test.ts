@@ -2294,6 +2294,68 @@ test("registerUserMcpTools: real tool names pass through unchanged, however long
   await server.close();
 });
 
+// Hostile names cannot bloat the frozen proxy descriptions: the tool-name cap
+// bounds the count, so each embedded name is also clipped to a fixed width.
+test("registerUserMcpTools: a 1MB tool name produces a bounded description", async () => {
+  const huge = "x".repeat(1_000_000);
+  const server = await startFakeHttpMcpServer((message) => {
+    if (message.method === "initialize") return { protocolVersion: "2025-06-18", capabilities: {} };
+    if (message.method === "tools/list") return { tools: [{ name: huge, inputSchema: { type: "object" } }] };
+    return {};
+  });
+
+  await withMcpEnv({ hostile: { url: server.url } }, async () => {
+    const registered: RegisteredTool[] = [];
+    await __registerUserMcpToolsForTest(fakePiCollecting(registered));
+
+    for (const tool of registered) {
+      assert.ok(
+        tool.description.length < 4096,
+        `${tool.name} description is ${tool.description.length} chars; hostile names must be clipped`,
+      );
+    }
+    // The name is clipped at the advertised width with an ellipsis, never truncated blind.
+    assert.ok(registered[0].description.includes(`${"x".repeat(64)}…`));
+    assert.ok(!registered[0].description.includes("x".repeat(65)));
+  });
+  await server.close();
+});
+
+// The frozen description bounds the number of server lines too: past the cap it
+// defers to the live mcp_tools_info index instead of growing with the config.
+test("registerUserMcpTools: the frozen description bounds the number of server lines", async () => {
+  const config: Record<string, unknown> = {};
+  for (let i = 0; i < 25; i += 1) {
+    config[`srv${String(i).padStart(2, "0")}`] = { url: "http://127.0.0.1:1/mcp" };
+  }
+
+  const previousBudget = process.env.OMI_MCP_FIRST_TURN_BUDGET_MS;
+  process.env.OMI_MCP_FIRST_TURN_BUDGET_MS = "500";
+  try {
+    await withMcpEnv(config, async () => {
+      const registered: RegisteredTool[] = [];
+      await __registerUserMcpToolsForTest(fakePiCollecting(registered));
+
+      const description = registered[0].description;
+      const embeddedServers = (description.match(/^- srv/gm) ?? []).length;
+      assert.equal(embeddedServers, 20, "exactly the first 20 server lines ride in the description");
+      assert.ok(description.includes("srv00"));
+      assert.ok(description.includes("srv19"));
+      assert.ok(!description.includes("srv20"));
+      assert.match(
+        description,
+        /\+5 more — call mcp_tools_info with no arguments for the live index/,
+      );
+      // The live index still reports every configured server.
+      const live = JSON.parse((await registered[0].execute("c1", {})).content[0].text);
+      assert.equal(live.servers.length, 25);
+    });
+  } finally {
+    if (previousBudget === undefined) delete process.env.OMI_MCP_FIRST_TURN_BUDGET_MS;
+    else process.env.OMI_MCP_FIRST_TURN_BUDGET_MS = previousBudget;
+  }
+});
+
 test("registerUserMcpTools: unreachable server is reported through the proxies, never fatal", async () => {
   await withMcpEnv({ dead: { url: "http://127.0.0.1:1/mcp" } }, async () => {
     const registered: RegisteredTool[] = [];
