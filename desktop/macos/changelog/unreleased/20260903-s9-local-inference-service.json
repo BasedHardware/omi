@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "S9 lands the local inference protocol, localhost adapter, and kill switches behind tests. Finalization is not wired yet, so there is no user-visible behavior change."
+}
