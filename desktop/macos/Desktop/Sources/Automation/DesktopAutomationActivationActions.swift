@@ -261,3 +261,4 @@ extension DesktopAutomationActionRegistry {
     }
   }
 
+}
