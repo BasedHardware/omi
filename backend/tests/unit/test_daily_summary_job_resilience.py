@@ -114,6 +114,8 @@ def _loaded_job() -> Iterator[Tuple[ModuleType, ModuleType, FakeRedis, RecordedF
         'database.redis_db': _module(
             'database.redis_db',
             try_acquire_daily_summary_lock=lambda *_args: True,
+            # Declines before the LLM call hand the day back instead of sitting on the 2h key.
+            release_daily_summary_lock=lambda *_args: None,
             r=fake_redis,
         ),
         'models.notification_message': _module(
@@ -511,7 +513,11 @@ def _loaded_send_path(
             get_users_token_in_timezones=lambda *_a, **_k: [],
         ),
         'database.redis_db': _module(
-            'database.redis_db', try_acquire_daily_summary_lock=lambda *_args: True, r=FakeRedis()
+            'database.redis_db',
+            try_acquire_daily_summary_lock=lambda *_args: True,
+            # Declines before the LLM call hand the day back instead of sitting on the 2h key.
+            release_daily_summary_lock=lambda *_args: None,
+            r=FakeRedis(),
         ),
         'utils.conversations.factory': _module(
             'utils.conversations.factory', deserialize_conversation=lambda _v: _FakeConversation()

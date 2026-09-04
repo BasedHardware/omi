@@ -1221,6 +1221,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     search_memories: ["query"],
     get_action_items: [],
     create_action_item: ["description"],
+    create_context_reminder: ["text"],
     update_action_item: ["action_item_id"],
     capture_screen: [],
     check_permission_status: [],

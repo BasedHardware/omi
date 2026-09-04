@@ -1,5 +1,13 @@
 # Omi Mac → Windows Parity Audit — Master Index
 
+> **Post-baseline deletion note (2026-09-03).** A repo-wide dead-code pass removed several
+> files these dated audits reference as if present — on Windows: `focus/stats.ts`,
+> `graphLayout.ts`, `kgSynthesisPrompt.ts`, `rewindLive.ts`, `TranscriptPopup.tsx`,
+> `AutoCreatedTasksStep.tsx`, `RewindSearchBar.tsx`, `Versions.tsx`, `main/ipc/ocr.ts`,
+> `BrainMap.tsx`, and the insight helpers (`insightGate/Prompt/Activity.ts`); on macOS:
+> the `agent-cloud/` and `acp-bridge/` runtime leftovers. Where an audit says such a file
+> is "written and unit-tested" or "no reader yet", treat the file as now deleted, not pending.
+
 > **What this is.** A documentation-only survey of features, capabilities, behaviors, and enhancements the **macOS** Omi desktop app has that the **Windows** app does not (or does more weakly). It exists to feed a later planning session — **no fixes, plans, sequencing, or effort estimates are proposed here.** Each entry says *what the feature is, where it lives (files + symbols), how it works, and the exact Windows status*.
 >
 > **How it was produced.** A fleet of 13 parallel research agents, one per macOS subsystem, each read the Swift/TS source deeply (several ran their own sub-fleets of line-by-line deep-reads), then verified the Windows side by reading and grepping `desktop/windows/` before declaring any gap. Every "Absent/Partial" claim is grounded in a specific file check, not assumption.
@@ -60,7 +68,7 @@ Value = impact on the Windows product (H/M/L). Tables below list only what's **s
 ### A. Proactive-assistant framework — *shipped; remaining gaps are dashboards, tunability, and cross-device sync*
 | Gap | Area | Value |
 |---|---|:---:|
-| Focus dashboard/history page — data layer (`focus/persist.ts`, `focus/stats.ts`) is written and unit-tested, no IPC or page reads it | 01 | M |
+| Focus dashboard/history page — data layer (`focus/persist.ts` is written and unit-tested; its `focus/stats.ts` companion was removed by the 2026-09-03 dead-code pass, so a rebuilt dashboard must re-create the aggregation) — no IPC or page reads it | 01 | M |
 | Insight prompt-editor + confidence-slider UI; Focus exclusion-list/cooldown Settings UI (data model ready, no write path) | 01 | S (quick win) |
 | Insight history is local-only — Mac's equivalent syncs cross-device via the backend memories API | 01 | M |
 | Memory extraction interval/confidence/excluded-apps Settings UI + prompt editor (master toggle already exists) | 03 | M |
@@ -166,7 +174,7 @@ These need *connection*, not construction. (Two items from the earlier pass of t
 - **Agent-pill provider logo** — the tinted Hermes/OpenClaw logo assets already exist (feeding the Connections panel); the pill itself still shows a generic Bot icon (file 13).
 - **Typing indicator on the default chat surface** — the real 8-dot `OmiThinkingSpinner` component exists and is used on the bar overlay; the main-window surface still falls through to a literal `'…'` string because it's scoped to the wrong `variant` (file 13).
 - **Promotion notification** — the staged-task→action-item pipeline is fully built and deliberately silent; `assistants/core/notify.ts` is a drop-in delivery path for a "task added" toast (file 02).
-- **`AutoCreatedTasksStep.tsx`** — still compiles and passes its own test, but has been unreachable dead code since a 2026-07-23 commit made Goal the terminal onboarding step; needs a product decision (restore the import, or delete the file) rather than more building (file 10).
+- **`AutoCreatedTasksStep.tsx`** — *resolved by the 2026-09-03 dead-code pass: the file was deleted (it had been unreachable dead code since a 2026-07-23 commit made Goal the terminal onboarding step).* If the onboarding flow ever wants auto-created tasks back, that is a rebuild from product intent, not a restore (file 10).
 
 ## Windows-ahead — do NOT regress these when porting
 

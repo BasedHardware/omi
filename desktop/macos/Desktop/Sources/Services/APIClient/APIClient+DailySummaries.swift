@@ -162,4 +162,18 @@ extension APIClient {
     let response: DailySummariesListResponse = try await get("v1/users/daily-summaries?limit=\(bounded)")
     return response.summaries
   }
+
+  /// Generate (or return) a recap for a local calendar date. No push is sent.
+  func createDailySummary(date: String) async throws -> DailySummaryRecord {
+    struct Body: Encodable { let date: String }
+    return try await post(
+      "v1/users/daily-summaries", body: Body(date: date), requestTimeout: 180)
+  }
+
+  /// Re-run summary generation for an existing recap and overwrite it in place. No push.
+  func regenerateDailySummary(id: String) async throws -> DailySummaryRecord {
+    struct EmptyBody: Encodable {}
+    return try await post(
+      "v1/users/daily-summaries/\(id)/regenerate", body: EmptyBody(), requestTimeout: 180)
+  }
 }

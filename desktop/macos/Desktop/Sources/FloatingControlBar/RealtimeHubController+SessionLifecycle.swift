@@ -818,20 +818,22 @@ extension RealtimeHubController {
   /// a second durable queue.
   /// The single funnel every realtime voice turn is journaled through.
   ///
-  /// `terminal` is required and is the only thing that decides the assistant row's
-  /// status: no caller can assert completion. It replaced an `interrupted: Bool`
-  /// that this body never read, which is why every cut-off turn — barge-in, provider
-  /// error, timeout — was sealed as a completed answer and fed back to the model as
-  /// canonical history on the next press.
+  /// `terminal` and `answerDelivered` together decide the assistant row's
+  /// status: no caller can assert completion. The reason alone once sealed every
+  /// cut-off turn as completed; delivery state now keeps the inverse lie out too —
+  /// a reply the user fully heard before a barge-in is a delivered answer, not a
+  /// cut-off failure the model later re-delivers out of context.
   func persistTurnDirectlyToKernel(
     ownerID: String,
     userText: String,
     assistantText: String,
     terminal: VoiceTurnTerminalReason,
     idempotencyKey: String,
-    acceptedSpawnOwnerID: String?
+    acceptedSpawnOwnerID: String?,
+    answerDelivered: Bool = false
   ) async -> Bool {
-    let journalStatus = VoiceTurnJournalStatusPolicy.status(for: terminal)
+    let journalStatus = VoiceTurnJournalStatusPolicy.status(
+      for: terminal, answerDelivered: answerDelivered)
     let terminalReason = journalStatus == .completed ? nil : terminal.rawValue
     guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
       log("RealtimeHub: refusing voice journal write after authenticated owner changed")
@@ -1114,7 +1116,8 @@ extension RealtimeHubController {
               assistantText: turn.assistantText,
               terminal: .interruptedByBargeIn,
               idempotencyKey: turn.idempotencyKey,
-              acceptedSpawnOwnerID: turn.acceptedSpawnOwnerID) ?? false
+              acceptedSpawnOwnerID: turn.acceptedSpawnOwnerID,
+              answerDelivered: turn.answerDelivered) ?? false
           }
           return await task.value
         },

@@ -1,0 +1,8 @@
+{
+  "entries": [
+    {
+      "path": "desktop/macos/agent/src/runtime/contract-schema.ts",
+      "reason": "contract test fixtures module"
+    }
+  ]
+}

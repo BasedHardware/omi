@@ -66,6 +66,28 @@ enum ChatDailySummaryPresentation {
     }
   }
 
+  /// True when the summary's day is more than two whole calendar days before today.
+  /// Uses the same `Calendar.dateComponents` arithmetic as `dateLabel` — a 86 400-second
+  /// subtraction is wrong on the two days a year that are not 24 hours long.
+  static func isStale(_ date: String?, now: Date, calendar: Calendar = .current) -> Bool {
+    guard let day = day(from: date, calendar: calendar) else { return false }
+    let today = calendar.startOfDay(for: now)
+    let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: day), to: today).day
+    return (days ?? 0) > 2
+  }
+
+  /// The eyebrow when `isStale` is true. It **keeps the day** and adds the age: dropping the date
+  /// would leave the reader unable to tell which day a stale recap is even about, which is a worse
+  /// failure than the one staleness copy exists to fix.
+  static func staleLabel(
+    for date: String?, now: Date, calendar: Calendar = .current, locale: Locale = .current
+  ) -> String {
+    guard let label = dateLabel(for: date, now: now, calendar: calendar, locale: locale) else {
+      return "Several days old"
+    }
+    return "\(label) · several days old"
+  }
+
   /// Longest overview that still reads as a banner rather than a wall of text.
   static let cardBodyLimit = 140
 

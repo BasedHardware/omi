@@ -126,6 +126,10 @@ final class UntrustedNotificationContextTests: XCTestCase {
     XCTAssertTrue(
       afterClose.contains(InterjectVoiceFeedbackRouting.classificationInstruction),
       "classification must sit outside the untrusted block")
+    XCTAssertTrue(afterClose.contains("record_interject_feedback"))
+    XCTAssertFalse(
+      afterClose.contains("[[interject:"),
+      "the hub instruction must not re-teach a speakable token")
   }
 
   // MARK: - Suggestion grounding

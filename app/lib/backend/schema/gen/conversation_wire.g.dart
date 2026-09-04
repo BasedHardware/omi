@@ -705,6 +705,7 @@ class GeneratedConversation {
   final bool privateCloudSyncEnabled;
   final String? processingConversationId;
   final String? processingMemoryId;
+  final String? processingState;
   final bool screenshotSharingEnabled;
   final String? source;
   final bool starred;
@@ -749,6 +750,7 @@ class GeneratedConversation {
     this.privateCloudSyncEnabled = false,
     this.processingConversationId,
     this.processingMemoryId,
+    this.processingState,
     this.screenshotSharingEnabled = true,
     this.source = "omi",
     this.starred = false,
@@ -795,6 +797,7 @@ class GeneratedConversation {
       privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "private_cloud_sync_enabled"),
       processingConversationId: _readFieldValue<String>(_readField(json, const ["processing_conversation_id"]), "processing_conversation_id", _readString, requiredField: false, nullable: true),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
+      processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
       starred: _required(_readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool, requiredField: false, nullable: false, defaultValue: false), "starred"),
@@ -842,6 +845,7 @@ class GeneratedConversation {
       'private_cloud_sync_enabled': privateCloudSyncEnabled,
       'processing_conversation_id': processingConversationId,
       'processing_memory_id': processingMemoryId,
+      'processing_state': processingState,
       'screenshot_sharing_enabled': screenshotSharingEnabled,
       'source': source,
       'starred': starred,
@@ -1078,6 +1082,7 @@ class GeneratedConversationSearchItem {
   final bool privateCloudSyncEnabled;
   final String? processingConversationId;
   final String? processingMemoryId;
+  final String? processingState;
   final bool screenshotSharingEnabled;
   final String? source;
   final bool starred;
@@ -1123,6 +1128,7 @@ class GeneratedConversationSearchItem {
     this.privateCloudSyncEnabled = false,
     this.processingConversationId,
     this.processingMemoryId,
+    this.processingState,
     this.screenshotSharingEnabled = true,
     this.source = "omi",
     this.starred = false,
@@ -1170,6 +1176,7 @@ class GeneratedConversationSearchItem {
       privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "private_cloud_sync_enabled"),
       processingConversationId: _readFieldValue<String>(_readField(json, const ["processing_conversation_id"]), "processing_conversation_id", _readString, requiredField: false, nullable: true),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
+      processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
       starred: _required(_readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool, requiredField: false, nullable: false, defaultValue: false), "starred"),
@@ -1218,6 +1225,7 @@ class GeneratedConversationSearchItem {
       'private_cloud_sync_enabled': privateCloudSyncEnabled,
       'processing_conversation_id': processingConversationId,
       'processing_memory_id': processingMemoryId,
+      'processing_state': processingState,
       'screenshot_sharing_enabled': screenshotSharingEnabled,
       'source': source,
       'starred': starred,

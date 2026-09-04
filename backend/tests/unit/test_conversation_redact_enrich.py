@@ -372,7 +372,6 @@ class TestCallSitesMigrated:
         backend = os.path.join(os.path.dirname(__file__), '../..')
         for rel_path in [
             'utils/conversations/process_conversation.py',
-            'utils/conversations/postprocess_conversation.py',
             'utils/conversations/merge_conversations.py',
         ]:
             path = os.path.join(backend, rel_path)

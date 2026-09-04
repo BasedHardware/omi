@@ -3843,10 +3843,10 @@ class FloatingControlBarManager {
     storedNotification(forContinuityKey: key)?.context?.detail
   }
 
-  /// Hub journal finalization is the realtime path into the ledger. Same
-  /// mutation owner as the batch `sendVoiceOnlyQuery` path.
+  /// Hub classification writes through `record_interject_feedback`. Parsing a
+  /// leftover token here would double-fire the ledger against the silent tool.
   func consumeInterjectHubTranscript(_ text: String) async {
-    await consumeInterjectVoiceReplyAsync(text)
+    _ = text
   }
 
   func consumeInterjectVoiceReply(_ text: String) {
@@ -4514,6 +4514,8 @@ class FloatingControlBarManager {
       // opens focused with the question in it, unsent.
       FirstRealAppCardCoordinator.shared.handleCardTapped(prompt: prompt)
       return
+    case .contextReminder:
+      break
     case nil:
       break
     }
@@ -5132,8 +5134,8 @@ class FloatingControlBarManager {
     // we should bail before doing setup work — especially before
     // `limiter.recordQuery()` (which would consume a local quota slot)
     // and before the screenshot capture. This matches the pattern used
-    // elsewhere in the codebase (OnboardingChatView, FileIndexingView,
-    // DesktopHomeView) and is cheap insurance against future refactors.
+    // elsewhere in the codebase (FileIndexingView, DesktopHomeView) and is
+    // cheap insurance against future refactors.
     guard !Task.isCancelled,
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
         ?? true

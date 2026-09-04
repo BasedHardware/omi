@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+import threading
 
 import pytest
 from datetime import timedelta
@@ -307,3 +308,71 @@ def test_inflight_deletion_blocks_external_writer_before_provider_work():
         legal_holds._acquire_destructive_operation_transaction.to_wrap(
             client.transaction(), client, "uid1", "external_data_write", "writer-token", now
         )
+
+
+def test_concurrent_single_deletes_one_succeeds_other_raises_typed_exception(monkeypatch):
+    """Reproduction: two concurrent destructive_operation_gate contexts for one uid.
+
+    The account gate is exclusive. One caller finishes; the other surfaces
+    DestructiveOperationInProgress rather than sharing the lock. Read-only
+    fences still honor the live gate.
+    """
+    client = _FakeClient()
+    gate_lock = threading.Lock()
+
+    def acquire(uid, *, kind, token, firestore_client=None, now=None):
+        current = now or legal_holds.datetime.now(legal_holds.timezone.utc)
+        with gate_lock:
+            legal_holds._acquire_destructive_operation_transaction.to_wrap(
+                client.transaction(), client, uid, kind, token, current
+            )
+
+    def finish(uid, *, kind, token, outcome, firestore_client=None, now=None):
+        current = now or legal_holds.datetime.now(legal_holds.timezone.utc)
+        with gate_lock:
+            legal_holds._finish_destructive_operation_transaction.to_wrap(
+                client.transaction(), client, uid, kind, token, outcome, current
+            )
+
+    monkeypatch.setattr(legal_holds, "acquire_destructive_operation", acquire)
+    monkeypatch.setattr(legal_holds, "finish_destructive_operation", finish)
+    monkeypatch.setattr(legal_holds, "account_deletion_firestore_client", lambda **_kwargs: client)
+
+    started = threading.Event()
+    release = threading.Event()
+    outcomes: list[str] = []
+
+    def holder():
+        with legal_holds.destructive_operation_gate("uid1", firestore_client=client):
+            started.set()
+            assert release.wait(timeout=5)
+            outcomes.append("first_ok")
+
+    def contender():
+        assert started.wait(timeout=5)
+        try:
+            with legal_holds.external_write_fence("uid1", firestore_client=client):
+                outcomes.append("fence_leaked")
+        except legal_holds.DestructiveOperationInProgress:
+            outcomes.append("fence_blocked")
+        try:
+            with legal_holds.destructive_operation_gate("uid1", firestore_client=client):
+                outcomes.append("second_ok")
+        except legal_holds.DestructiveOperationInProgress as exc:
+            outcomes.append(type(exc).__name__)
+        finally:
+            release.set()
+
+    first = threading.Thread(target=holder)
+    second = threading.Thread(target=contender)
+    first.start()
+    second.start()
+    first.join(timeout=5)
+    second.join(timeout=5)
+    assert not first.is_alive() and not second.is_alive()
+    assert outcomes.count("first_ok") == 1
+    assert "DestructiveOperationInProgress" in outcomes
+    assert "second_ok" not in outcomes
+    assert "fence_blocked" in outcomes
+    assert "fence_leaked" not in outcomes
+    assert legal_holds.GATE_STALE_AFTER_SECONDS == 6 * 60 * 60

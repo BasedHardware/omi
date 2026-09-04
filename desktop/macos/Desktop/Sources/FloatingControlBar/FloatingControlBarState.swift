@@ -238,6 +238,9 @@ enum FloatingBarNotificationAction: Equatable {
   /// turn a dead-end notch card into the user's first question — they still
   /// press return, so the question stays theirs.
   case askOmiPrefilled(prompt: String)
+  /// Place-bound reminder: Done marks it complete, Remind me tomorrow snoozes
+  /// until the next calendar day. Bound to the frontmost app/document, not a time.
+  case contextReminder(reminderID: String)
 }
 
 /// A custom in-app notification rendered directly below the floating bar.

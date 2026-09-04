@@ -812,10 +812,10 @@ export type OmiBridgeApi = {
    *  on any failure. Faithful port of macOS's URLSession isAppSetupCompleted. */
   checkAppSetup: (args: { url: string; uid: string }) => Promise<boolean>
   // Bulk-delete memories from the main process (survives renderer navigation /
-  // reload; paced + backed-off). Renderer supplies the API base, a fresh token,
-  // and the ids; progress streams via onMemoriesDeleteProgress.
+  // reload; paced + backed-off). Renderer supplies a fresh token and the ids;
+  // the API base is main-owned config and progress streams via
+  // onMemoriesDeleteProgress.
   memoriesBulkDelete: (args: {
-    baseURL: string
     token: string
     ids: string[]
   }) => Promise<{ deleted: number; failed: number; firstError?: string }>

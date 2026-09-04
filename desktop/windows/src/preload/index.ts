@@ -329,7 +329,7 @@ const omi: OmiBridgeApi = {
       notificationsEnabled: boolean
       notificationFrequency: number
     }>,
-  memoriesBulkDelete: (args: { baseURL: string; token: string; ids: string[] }) =>
+  memoriesBulkDelete: (args: { token: string; ids: string[] }) =>
     ipcRenderer.invoke('memories:bulkDelete', args),
   onMemoriesDeleteProgress: (
     cb: (p: { deleted: number; failed: number; total: number; done: boolean }) => void

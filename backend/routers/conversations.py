@@ -1222,6 +1222,13 @@ def delete_conversation(
                     status_code=503,
                     detail='Conversation memory retraction is busy, please retry',
                 ) from error
+            except RuntimeError as error:
+                # Isolated router tests stub database/utils.other at import time.
+                if type(error).__name__ != "DestructiveOperationInProgress":
+                    raise
+                from utils.other.account_gate_http import account_gate_busy_http_exception
+
+                raise account_gate_busy_http_exception() from error
 
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)

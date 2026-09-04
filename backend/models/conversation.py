@@ -11,6 +11,7 @@ from models.chat import Message
 from models.client_processing import ClientProcessing
 from models.conversation_enums import (
     CategoryEnum,
+    ConversationProcessingState,
     ConversationSource,
     ConversationStatus,
     ConversationVisibility,
@@ -304,6 +305,10 @@ class Conversation(BaseModel):
     # Untrusted client-authored display projection. Sibling of structured, never
     # inside it or external_data. Display only — never an input to intelligence.
     client_processing: Optional[ClientProcessing] = None
+    # Why `structured` holds the §1.7 deterministic minimum instead of an
+    # enriched summary. Server-authored; absent on every enriched conversation.
+    # Clients read `client_processing` first — see the enum's docstring.
+    processing_state: Optional[ConversationProcessingState] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None

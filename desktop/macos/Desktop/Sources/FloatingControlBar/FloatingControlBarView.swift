@@ -588,6 +588,10 @@ struct FloatingControlBarView: View {
       case .askOmiPrefilled(let prompt)? = notification.action
     {
       FirstRealAppCard(notification: notification, prompt: prompt)
+    } else if notification.assistantId == ContextReminderCoordinator.assistantID,
+      case .contextReminder(let reminderID)? = notification.action
+    {
+      ContextReminderCard(notification: notification, reminderID: reminderID)
     } else {
       notificationView(notification)
     }

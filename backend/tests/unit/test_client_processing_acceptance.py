@@ -36,7 +36,7 @@ from models.client_processing import (
     ProjectionProvenance,
 )
 from models.conversation import Conversation, CreateConversation
-from models.conversation_enums import ConversationSource, ConversationStatus
+from models.conversation_enums import ConversationProcessingState, ConversationSource, ConversationStatus
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.projection_payload import PROVENANCE_LOG_MAX_CHARS
@@ -878,6 +878,76 @@ def test_store_deterministic_minimum_without_projection_omits_field(stack) -> No
     payload = _persisted_payload(created)
     assert 'client_processing' not in payload
     assert _nested(payload, 'structured', 'title') == _SEGMENT_TEXT
+
+
+# --- S3: §1.7 processing_state on the terminal persist ------------------------
+
+
+# red-proof: drop `conversation.processing_state = _minimum_processing_state(...)`
+def test_desktop_minimum_without_projection_is_local_pending(stack) -> None:
+    """A capable client is expected to deliver, so the client spins with a
+    timeout rather than showing a permanent empty state (§1.7 row 5)."""
+    pc, _dev = stack
+    created = pc.lifecycle_service.create_completed_conversation
+    created.reset_mock()
+    stored, persisted = pc._store_deterministic_minimum(_UID, _desktop_create(), _minimum_plan(pc))
+    assert persisted is True
+    assert stored.processing_state is ConversationProcessingState.local_pending
+    assert _persisted_payload(created)['processing_state'] == 'local_pending'
+
+
+# red-proof: return `local_pending` unconditionally from `_minimum_processing_state`
+def test_non_desktop_minimum_is_none_because_no_projection_is_coming(stack) -> None:
+    pc, _dev = stack
+    created = pc.lifecycle_service.create_completed_conversation
+    created.reset_mock()
+    create = _desktop_create()
+    create.source = ConversationSource.omi
+    stored, persisted = pc._store_deterministic_minimum(_UID, create, _minimum_plan(pc))
+    assert persisted is True
+    assert stored.processing_state is ConversationProcessingState.none
+    assert _persisted_payload(created)['processing_state'] == 'none'
+
+
+# red-proof: set a processing_state when a projection is already in hand
+def test_projected_conversation_carries_no_processing_state(stack) -> None:
+    """Nothing is pending: the projection IS the summary."""
+    pc, _dev = stack
+    created = pc.lifecycle_service.create_completed_conversation
+    created.reset_mock()
+    stored, persisted = pc._store_projected_conversation(
+        _UID, _desktop_create(), _projection_plan(pc), client_projection=_projection()
+    )
+    assert persisted is True
+    assert stored.processing_state is None
+    assert _persisted_payload(created)['processing_state'] is None
+
+
+# red-proof: revert `_store_deterministic_minimum` to `_build_deferred_structured`
+def test_minimum_structured_is_the_spec_row_not_the_deferred_placeholder(stack) -> None:
+    """§1.7: first *sentence*, empty overview, category `other`. The deferred
+    placeholder's first-8-words title is a different algorithm on a different
+    path and must not leak into the terminal store."""
+    pc, _dev = stack
+    created = pc.lifecycle_service.create_completed_conversation
+    created.reset_mock()
+    create = _desktop_create()
+    create.transcript_segments = [
+        TranscriptSegment(
+            text='One two three four five six seven eight nine ten. Second sentence.',
+            speaker='SPEAKER_00',
+            is_user=False,
+            start=0.0,
+            end=4.0,
+        )
+    ]
+    pc._store_deterministic_minimum(_UID, create, _minimum_plan(pc))
+    payload = _persisted_payload(created)
+    assert _nested(payload, 'structured', 'title') == 'One two three four five six seven eight nine ten.'
+    assert _nested(payload, 'structured', 'overview') == ''
+    assert _nested(payload, 'structured', 'category') == 'other'
+    assert _nested(payload, 'structured', 'action_items') == []
+    assert _nested(payload, 'structured', 'events') == []
 
 
 # red-proof: skip the after-process `client_processing_mutation` on non-idempotent ingest (paid persist strips and never stores)

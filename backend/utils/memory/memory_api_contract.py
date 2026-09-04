@@ -11,6 +11,8 @@ from typing import Any, Dict, Iterable
 
 from pydantic import BaseModel
 
+from utils.memory.belief_model import belief_model_enabled
+
 
 class MemoryApiExposure(str, Enum):
     LEGACY = "legacy"
@@ -18,6 +20,7 @@ class MemoryApiExposure(str, Enum):
 
 
 CANONICAL_LIFECYCLE_FIELDS = frozenset({"memory_tier", "layer", "tier", "expires_at"})
+BELIEF_VIEW_FIELDS = frozenset({"currency", "currency_band", "as_of", "half_life_days", "belief_class"})
 MEMORY_INTERNAL_FIELDS = frozenset(
     {
         "memory_only",
@@ -55,6 +58,9 @@ def memory_api_payload(value: BaseModel | Dict[str, Any], exposure: MemoryApiExp
         tier = payload.get("memory_tier") or payload.get("tier")
         if tier is not None and payload.get("layer") is None:
             payload["layer"] = tier
+    if not belief_model_enabled():
+        for field in BELIEF_VIEW_FIELDS:
+            payload.pop(field, None)
     return payload
 
 

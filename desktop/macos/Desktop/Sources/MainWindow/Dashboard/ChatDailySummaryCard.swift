@@ -8,10 +8,11 @@ import SwiftUI
 /// of its own because Chat is the surface the app opens on, and the summary is a read the user
 /// should meet without navigating to it.
 ///
-/// **Chrome, not a message.** It is drawn above the transcript inside `ChatMessagesView`'s scroll
-/// content: no turn is recorded, no synthetic row is appended, and the thread's one journal-owned
-/// transcript is untouched (INV-CHAT-1). The follow-up chip prefills the composer through the
-/// existing `MainChatNavigationRequestStore` seam and sends nothing — asking stays the user's move.
+/// **Chrome, not a message.** It is pinned to the top of the messages viewport as an overlay,
+/// not a transcript row: no turn is recorded, no synthetic row is appended, and the thread's one
+/// journal-owned transcript is untouched (INV-CHAT-1). The follow-up chip prefills the composer
+/// through the existing `MainChatNavigationRequestStore` seam and sends nothing — asking stays
+/// the user's move.
 ///
 /// It shows only what the backend filled: no summary, no card; no highlights, no highlights
 /// section. A quiet day, day 0, and a user who turned generation off all render nothing rather
@@ -23,30 +24,85 @@ struct ChatDailySummaryCard: View {
 
   /// Injected so the label and the chip's wording are deterministic in tests.
   private let now: () -> Date
+  /// When true, the card is chrome pinned to the transcript viewport: a one-line bar at rest,
+  /// expanding to the full card on click. Chat opens scrolled to the bottom, so an in-document
+  /// card at the top of the thread is unreachable once there is any history.
+  private let pinsToViewport: Bool
 
   @State private var isExpanded = false
+  @State private var isPinnedExpanded = false
   @State private var isHovering = false
   @State private var reportedSummaryID: String?
 
-  init(coordinator: ChatDailySummaryCoordinator = .shared, now: @escaping () -> Date = Date.init) {
+  init(
+    coordinator: ChatDailySummaryCoordinator = .shared,
+    now: @escaping () -> Date = Date.init,
+    pinsToViewport: Bool = false
+  ) {
     self.coordinator = coordinator
     self._store = ObservedObject(wrappedValue: coordinator.store)
     self.now = now
+    self.pinsToViewport = pinsToViewport
   }
 
   var body: some View {
     Group {
       if let summary = store.latest {
-        card(summary)
-          .onAppear { reportShown(summary) }
-          .onChange(of: summary.id) { _, _ in reportShown(summary) }
+        if pinsToViewport, !isPinnedExpanded {
+          pinnedBar(summary)
+            .onAppear { reportShown(summary) }
+            .onChange(of: summary.id) { _, _ in reportShown(summary) }
+        } else {
+          card(summary)
+            .onAppear { reportShown(summary) }
+            .onChange(of: summary.id) { _, _ in reportShown(summary) }
+        }
       }
     }
     .task { await coordinator.activate() }
     .omiAnimation(.easeOut(duration: 0.2), value: isExpanded)
+    .omiAnimation(.easeOut(duration: 0.2), value: isPinnedExpanded)
   }
 
   // MARK: - Card
+
+  private func pinnedBar(_ summary: DailySummaryRecord) -> some View {
+    let stale = ChatDailySummaryPresentation.isStale(summary.date, now: now())
+    let headline = nonEmpty(summary.headline) ?? "Your day in review"
+    // Stale still shows the headline; the age rides in front of it so the bar never becomes a
+    // warning that hides which day it is about.
+    let line =
+      stale
+      ? "\(ChatDailySummaryPresentation.staleLabel(for: summary.date, now: now())) · \(headline)"
+      : headline
+    return Button {
+      isPinnedExpanded = true
+    } label: {
+      HStack(spacing: OmiSpacing.sm) {
+        Text(nonEmpty(summary.dayEmoji) ?? "📅")
+          .scaledFont(size: OmiType.caption)
+        Text(line)
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundStyle(stale ? HomePalette.muted : HomePalette.ink)
+          .lineLimit(1)
+          .truncationMode(.tail)
+        Spacer(minLength: OmiSpacing.sm)
+        Image(systemName: "chevron.down")
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+          .foregroundStyle(HomePalette.muted)
+      }
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.xs)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+          .stroke(Ink.separator, lineWidth: 1)
+      )
+    }
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("chat-daily-summary-bar")
+  }
 
   private func card(_ summary: DailySummaryRecord) -> some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -101,7 +157,13 @@ struct ChatDailySummaryCard: View {
       Text(nonEmpty(summary.dayEmoji) ?? "📅")
         .scaledFont(size: OmiType.subheading)
       VStack(alignment: .leading, spacing: 2) {
-        if let label = ChatDailySummaryPresentation.dateLabel(for: summary.date, now: now()) {
+        if ChatDailySummaryPresentation.isStale(summary.date, now: now()) {
+          Text(ChatDailySummaryPresentation.staleLabel(for: summary.date, now: now()))
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundStyle(HomePalette.muted)
+            .tracking(0.6)
+            .accessibilityIdentifier("chat-daily-summary-date")
+        } else if let label = ChatDailySummaryPresentation.dateLabel(for: summary.date, now: now()) {
           Text(label)
             .scaledFont(size: OmiType.micro, weight: .semibold)
             .foregroundStyle(HomePalette.muted)
@@ -115,6 +177,13 @@ struct ChatDailySummaryCard: View {
           .fixedSize(horizontal: false, vertical: true)
       }
       Spacer(minLength: OmiSpacing.sm)
+      if pinsToViewport {
+        Button("Hide") { isPinnedExpanded = false }
+          .buttonStyle(.plain)
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundStyle(HomePalette.secondary)
+          .accessibilityIdentifier("chat-daily-summary-hide")
+      }
       if hasExpandableDetail(summary) {
         Button(isExpanded ? "Less" : "More") {
           isExpanded.toggle()

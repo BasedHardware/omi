@@ -107,6 +107,7 @@ describe("omi tool manifest", () => {
       "search_memories",
       "get_action_items",
       "create_action_item",
+      "create_context_reminder",
       "update_action_item",
       "capture_screen",
       "check_permission_status",

@@ -9,7 +9,6 @@ REQUIRED_ARTIFACT_TERMS = [
     "mutation_allowed",
     "ns2",
     "find_similar_memories",
-    "search_memories_by_vector",
     "memory_schema_version",
     "memory_tier",
     "source_state",

@@ -346,19 +346,25 @@ struct InterruptedTurnPayload: Equatable {
   /// A successful `spawn_agent` call has already committed this turn's exchange
   /// to the kernel. Capture that authority before a barge-in clears transport state.
   let acceptedSpawnOwnerID: String?
+  /// Whether the turn's full-answer playback had drained by capture time. A
+  /// barge-in after a fully spoken reply must journal that reply as delivered,
+  /// not as a cut-off failure the model later tries to re-deliver.
+  let answerDelivered: Bool
 
   init(
     ownerID: String,
     userText: String,
     assistantText: String,
     idempotencyKey: String,
-    acceptedSpawnOwnerID: String? = nil
+    acceptedSpawnOwnerID: String? = nil,
+    answerDelivered: Bool = false
   ) {
     self.ownerID = ownerID
     self.userText = userText
     self.assistantText = assistantText
     self.idempotencyKey = idempotencyKey
     self.acceptedSpawnOwnerID = acceptedSpawnOwnerID
+    self.answerDelivered = answerDelivered
   }
 
   /// User-visible chat text for a PTT-barged reply: keep streamed partial text only.

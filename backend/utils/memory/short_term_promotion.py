@@ -50,6 +50,7 @@ from utils.memory.memory_system import (
     resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
 )
 from utils.memory.short_term_lifecycle import ShortTermDisposition, effective_short_term_expiry
+from utils.memory.belief_model import belief_model_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -264,8 +265,16 @@ def run_canonical_short_term_ttl_lifecycle(
     terminal = 0
     for item in items:
         disposition = None
-        if item.tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= current_time:
+        expired = item.tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= current_time
+        if expired and not belief_model_enabled():
             disposition = ShortTermDisposition.reject_or_hide
+        elif expired:
+            logger.info(
+                "canonical_short_term_ttl_lifecycle: skipped_time_only_reject " "uid=%s memory_id=%s run_id=%s",
+                uid,
+                item.memory_id,
+                run_id,
+            )
         record, was_created = process_short_term_lifecycle_item(
             item,
             store=store,

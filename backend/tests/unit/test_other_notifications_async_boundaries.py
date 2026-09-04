@@ -50,7 +50,12 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
         'database._client': AutoMockModule('database._client'),
         'database.conversations': _module('database.conversations', get_conversations=lambda *_args, **_kwargs: []),
         'database.notifications': notification_db,
-        'database.redis_db': _module('database.redis_db', try_acquire_daily_summary_lock=lambda *_args: True),
+        'database.redis_db': _module(
+            'database.redis_db',
+            try_acquire_daily_summary_lock=lambda *_args: True,
+            # Declines before the LLM call hand the day back instead of sitting on the 2h key.
+            release_daily_summary_lock=lambda *_args: None,
+        ),
         'models.notification_message': _module(
             'models.notification_message',
             NotificationMessage=notification_message,
