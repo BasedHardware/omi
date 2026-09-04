@@ -522,6 +522,7 @@ describe("worker request contract", () => {
         expect(request.url).toBe(
           "https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=test-firebase-key"
         );
+        expect(request.redirect).toBe("manual");
         expect((await request.json()) as unknown).toEqual({
           idToken: "firebase-id-token",
         });
@@ -545,6 +546,35 @@ describe("worker request contract", () => {
 
       expect(response.status).toBe(200);
       expect(accountCalls).toEqual(["account:firebase:firebase-user"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("a Firebase redirect is an unavailable verifier, not an invalid session", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(
+      async () => new Response(null, { status: 302 })
+    ) as never;
+    try {
+      const response = await handler.fetch(
+        onTheWireRequest("/v1/conversations", {
+          authorization: "Bearer firebase-id-token",
+          "x-omi-client-id": "desktop-client",
+        }),
+        { ...env, FIREBASE_API_KEY: "test-firebase-key" } as never,
+        executionContext as never
+      );
+
+      expect(response.status).toBe(503);
+      expect((await response.json()) as unknown).toEqual({
+        error: {
+          code: "service_unavailable",
+          retryable: true,
+          action: "retry",
+        },
+      });
+      expect(accountCalls).toEqual([]);
     } finally {
       globalThis.fetch = originalFetch;
     }

@@ -46,6 +46,7 @@ import {
   isClientId,
   json,
   type ChatCreate,
+  withTimeout,
 } from "./wire";
 
 export type AccountPort = {
@@ -280,47 +281,66 @@ async function firebaseAccountId(
 ): Promise<string | "invalid" | "unavailable"> {
   if (token.length === 0 || token.length > 16_384 || apiKey.length === 0)
     return "invalid";
-  let response: Response;
   try {
-    response = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(
-        apiKey
-      )}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ idToken: token }),
-        redirect: "error",
-        signal: AbortSignal.timeout(5_000),
+    return await withTimeout(5_000, async (signal) => {
+      const response = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(
+          apiKey
+        )}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ idToken: token }),
+          redirect: "manual",
+          signal,
+        }
+      );
+      if (response.status !== 200) {
+        const unavailable =
+          response.status === 0 ||
+          response.status === 429 ||
+          response.status >= 500 ||
+          (response.status >= 300 && response.status < 400);
+        if (unavailable) {
+          console.error(
+            JSON.stringify({
+              event: "firebase_lookup_failed",
+              status: response.status,
+            })
+          );
+        }
+        return unavailable ? "unavailable" : "invalid";
       }
+      const parsed = await readBoundedJsonStream(
+        response.body,
+        response.headers.get("content-length"),
+        65_536
+      );
+      if (
+        parsed.kind !== "ok" ||
+        parsed.value === null ||
+        typeof parsed.value !== "object"
+      )
+        return "unavailable";
+      const users = (parsed.value as Record<string, unknown>)["users"];
+      if (!Array.isArray(users) || users.length !== 1) return "invalid";
+      const user = users[0];
+      if (user === null || typeof user !== "object" || Array.isArray(user))
+        return "invalid";
+      const localId = (user as Record<string, unknown>)["localId"];
+      return typeof localId === "string" && isClientId(localId)
+        ? `firebase:${localId}`
+        : "invalid";
+    });
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "firebase_lookup_failed",
+        name: error instanceof Error ? error.name : "Unknown",
+      })
     );
-  } catch {
     return "unavailable";
   }
-  if (response.status !== 200)
-    return response.status >= 500 || response.status === 429
-      ? "unavailable"
-      : "invalid";
-  const parsed = await readBoundedJsonStream(
-    response.body,
-    response.headers.get("content-length"),
-    65_536
-  );
-  if (
-    parsed.kind !== "ok" ||
-    parsed.value === null ||
-    typeof parsed.value !== "object"
-  )
-    return "unavailable";
-  const users = (parsed.value as Record<string, unknown>)["users"];
-  if (!Array.isArray(users) || users.length !== 1) return "invalid";
-  const user = users[0];
-  if (user === null || typeof user !== "object" || Array.isArray(user))
-    return "invalid";
-  const localId = (user as Record<string, unknown>)["localId"];
-  return typeof localId === "string" && isClientId(localId)
-    ? `firebase:${localId}`
-    : "invalid";
 }
 
 export async function authorizeV1(

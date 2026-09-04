@@ -90,6 +90,23 @@ const captureLogs = () => {
 };
 
 describe("openrouter gateway request shape", () => {
+  test("keeps the timeout active while the response body is consumed", async () => {
+    const { withTimeout } = await import("../src/wire");
+    await expect(
+      withTimeout(5, (signal) =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              signal.addEventListener("abort", () =>
+                controller.error(new Error("aborted"))
+              );
+            },
+          })
+        ).text()
+      )
+    ).rejects.toThrow("aborted");
+  });
+
   test("posts to the gateway URL with bearer secret, correlation header, and bounded body", async () => {
     const { openrouter } = await import("../src/openrouter");
     const fetchMock = captureFetch(
@@ -116,6 +133,7 @@ describe("openrouter gateway request shape", () => {
       if (request === undefined) throw new Error("no fetch call captured");
       expect(request.method).toBe("POST");
       expect(request.url).toBe("https://gateway.example.invalid/openrouter");
+      expect(request.redirect).toBe("manual");
       expect(request.headers.get("authorization")).toBe("Bearer test-secret");
       expect(request.headers.get("content-type")).toBe("application/json");
       expect(request.headers.get("x-omi-correlation-id")).toBe("corr-shape-1");
