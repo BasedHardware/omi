@@ -95,6 +95,7 @@ final class ChatStreamingRevealTests: XCTestCase {
       beatStarts.append(DispatchTime.now().uptimeNanoseconds)
       // Work that occupies three quarters of the interval, the way a growing
       // transcript render does late in an answer.
+      // omi-test-quality: wall-clock-wait -- the beat period under real elapsed time is the subject; a fake clock would test the fake.
       Thread.sleep(forTimeInterval: interval * 0.75)
       if buffer.flushPaced(messages: &messages) {
         buffer.scheduleFlush { flushBeat() }
