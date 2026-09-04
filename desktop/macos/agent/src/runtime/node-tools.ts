@@ -6,6 +6,15 @@ export function isSafeSkillName(name: string): boolean {
   return /^[A-Za-z0-9._-]+$/.test(name) && name !== "." && name !== ".." && !name.includes("..");
 }
 
+/**
+ * Strip a leading UTF-8 BOM. Editors write one routinely, and every skill
+ * parser anchors on `^---` — a BOM-prefixed file silently lost its frontmatter
+ * and leaked it into part 1.
+ */
+function stripUtf8Bom(text: string): string {
+  return text.startsWith("\uFEFF") ? text.slice(1) : text;
+}
+
 export interface DiscoveredSkill {
   name: string;
   description: string;
@@ -75,7 +84,7 @@ export async function discoverSkillCatalog(roots: readonly string[]): Promise<Di
       try {
         const path = await realpath(resolve(realRoot, name, "SKILL.md"));
         if (!path.startsWith(`${realRoot}/`)) continue;
-        const content = await readFile(path, "utf8");
+        const content = stripUtf8Bom(await readFile(path, "utf8"));
         discovered.set(name, { name, description: skillDescription(content), path });
       } catch {
         // Ignore incomplete skills and paths outside an approved skill root.
@@ -227,7 +236,7 @@ export async function loadSkillInstructions(
     return `Skill '${trimmedName}' is disabled. Enable it in the desktop skill settings if the request needs it.`;
   }
 
-  const rawContent = capSkillFile(await readFile(skill.path, "utf8"), trimmedName);
+  const rawContent = capSkillFile(stripUtf8Bom(await readFile(skill.path, "utf8")), trimmedName);
   // The dev-mode skill intentionally carries the workspace binding above its full body.
   const workspacePrefix = rawContent && trimmedName === "dev-mode" && workspace ? `Workspace: ${workspace}\n\n` : "";
 

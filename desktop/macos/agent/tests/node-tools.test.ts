@@ -156,6 +156,40 @@ describe("load_skill progressive disclosure", () => {
     );
   });
 
+  it("parses a BOM-prefixed skill file's frontmatter and parts correctly", async () => {
+    // Editors write a UTF-8 BOM routinely; `^---` matching must see past it.
+    const root = await mkdtemp(join(tmpdir(), "omi-agent-bom-"));
+    const skillName = `bom-skill-${Math.random().toString(36).slice(2, 10)}`;
+    try {
+      await mkdir(join(root, ".claude", "skills", skillName), { recursive: true });
+      await writeFile(
+        join(root, ".claude", "skills", skillName, "SKILL.md"),
+        `\uFEFF---\nname: ${skillName}\ndescription: BOM prefixed skill\n---\n\nIntro prose.\n## Usage\nusage steps`
+      );
+
+      const result = await loadSkillInstructions(skillName, root);
+      expect(result).toContain(`Skill: ${skillName}`);
+      expect(result).toContain("Description: BOM prefixed skill");
+      expect(result).toContain("1. Overview (");
+      expect(result).toContain("2. Usage (");
+      expect(result).toContain("part 1/2: Overview");
+      expect(result).toContain("Intro prose.");
+      // The frontmatter must not leak into part 1.
+      expect(result).not.toMatch(/^---/m);
+      expect(result).not.toContain("description: BOM prefixed skill");
+
+      const usage = await loadSkillInstructions(skillName, root, { part: 2 });
+      expect(usage).toContain("part 2/2: Usage");
+      expect(usage).toContain("usage steps");
+
+      // Discovery derives the description from the (de-BOMed) frontmatter too.
+      const search = await searchSkills("BOM prefixed", root, new Set());
+      expect(search).toContain(skillName);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("caps a single oversized section with a truncation note", async () => {
     await withSkill(`## Huge\n${"x".repeat(SKILL_PART_CHAR_LIMIT + 4096)}`, async (skillName, root) => {
       const result = await loadSkillInstructions(skillName, root, { part: 1 });
