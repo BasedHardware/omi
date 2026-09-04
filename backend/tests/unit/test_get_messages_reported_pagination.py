@@ -51,12 +51,16 @@ class _FakeQuery:
         rows = self.collection.rows
         start = self.requested_offset
         end = start + (self.requested_limit if self.requested_limit is not None else len(rows))
-        return rows[start:end]
+        page = rows[start:end]
+        # Firestore bills streamed documents, so the count is the cost this scan pays.
+        self.collection.streamed += len(page)
+        return page
 
 
 class _FakeCollection:
     def __init__(self, rows):
         self.rows = rows
+        self.streamed = 0
 
     def where(self, **_kwargs):
         return _FakeQuery(self)
@@ -132,3 +136,50 @@ def test_offset_advances_by_visible_rows_not_raw_firestore_slots():
 
     assert [row['id'] for row in first] == ['visible-a', 'visible-b']
     assert [row['id'] for row in second] == ['visible-c', 'visible-d']
+
+
+def test_a_clean_page_streams_no_more_documents_than_it_returns():
+    """No reported rows means no slack: the read costs exactly what the page needs.
+
+    The first version of this scan floored the budget at 100 and read a flat
+    100-document first batch, so the chat-send path's limit=5 / limit=15 history
+    reads streamed ~20x the documents the old raw query did. Slack must be paid
+    only by a page that actually meets a reported row.
+    """
+    collection = _FakeCollection([_message(f'visible-{i}') for i in range(500)])
+    with _patch_db(collection):
+        page = chat_db.get_messages('uid', limit=5, offset=0)
+
+    assert [row['id'] for row in page] == [f'visible-{i}' for i in range(5)]
+    assert collection.streamed == 5
+
+
+def test_a_deep_offset_is_still_serviced_rather_than_reported_as_end_of_results():
+    """A deep offset must return its page, not an empty one.
+
+    Capping the *total* scan (min(1000, ...)) meant offset + limit beyond the cap
+    could never be reached, so the page came back empty. routers/chat.py reads an
+    empty page as end-of-results, which is the same "later visible messages are
+    never fetched" defect this scan exists to fix — reintroduced at depth. The
+    budget therefore floors at the rows the page needs and bounds only the slack.
+    """
+    collection = _FakeCollection([_message(f'visible-{i}') for i in range(1300)])
+    with _patch_db(collection):
+        page = chat_db.get_messages('uid', limit=5, offset=1200)
+
+    assert [row['id'] for row in page] == [f'visible-{i}' for i in range(1200, 1205)]
+
+
+def test_slack_is_bounded_even_when_every_scanned_row_is_reported():
+    """The scan still terminates on a page that can never be filled.
+
+    Flooring the budget at the page size must not turn into an unbounded stream
+    when reported rows are dense: the slack above the floor is what is capped.
+    """
+    collection = _FakeCollection([_message(f'reported-{i}', reported=True) for i in range(5000)])
+    with _patch_db(collection):
+        page = chat_db.get_messages('uid', limit=10, offset=0)
+
+    assert page == []
+    needed = 10
+    assert collection.streamed <= needed + chat_db.CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK

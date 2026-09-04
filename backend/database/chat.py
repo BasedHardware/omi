@@ -38,9 +38,14 @@ CHAT_HISTORY_APPEND_EPOCH_MESSAGES = 8
 # when a user has thousands of lifetime reported messages; the newest page
 # rarely contains more reported rows than this cap.
 CHAT_HISTORY_REPORTED_RAW_SCAN_CAP = 50
-# Bound raw Firestore reads when filling a visible get_messages page past
-# reported rows. Same spirit as get_messages_reconcile_page.
-CHAT_MESSAGES_VISIBLE_PAGE_SCAN_CAP = 1000
+# Extra documents a visible page may stream *beyond* the rows it would need if none
+# were reported. The floor is the page itself, never this: the previous raw
+# ``.offset(n).limit(m)`` query already streamed n + m documents, so budgeting
+# ``needed + slack`` can only read more than before by the slack, and can never fail
+# to service an offset the old query serviced. Capping the total instead made a deep
+# offset return an empty page, which the router reads as end-of-results -- the same
+# defect this scan exists to fix.
+CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK = 1000
 
 
 class ClientMessageIdPayloadConflict(ValueError):
@@ -263,8 +268,10 @@ def get_messages(
 
     query: Any = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    # Cover the visible skip + page, plus slack for reported rows in between.
-    scan_budget = min(CHAT_MESSAGES_VISIBLE_PAGE_SCAN_CAP, max(100, (max(offset, 0) + max(limit, 0)) * 4))
+    # A page with no reported rows needs exactly this many documents, which is what the
+    # old raw query streamed. Bound the *slack* on top of it, not the page itself.
+    needed = max(offset, 0) + max(limit, 0)
+    scan_budget = needed + min(CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK, needed * 3)
     scanned = 0
     visible_skipped = 0
     messages: List[Dict[str, Any]] = []
@@ -273,7 +280,13 @@ def get_messages(
     cursor_snapshot: Any = None
 
     while scanned < scan_budget and len(messages) < limit:
+        # Read exactly what the page needs before reading any slack. Without this the
+        # first batch was a flat 100 documents, so the chat-send path's limit=5 and
+        # limit=15 reads streamed ~20x the documents they used to. Slack is only paid
+        # for by a page that actually met a reported row.
         batch_limit = min(100, scan_budget - scanned)
+        if scanned == 0:
+            batch_limit = min(batch_limit, max(1, needed))
         page_query = query.start_after(cursor_snapshot) if cursor_snapshot is not None else query
         documents = list(page_query.limit(batch_limit).stream())
         if not documents:
