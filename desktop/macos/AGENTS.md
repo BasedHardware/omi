@@ -230,6 +230,10 @@ do not hand-edit those paths to match a specific machine.
 - OCR-bearing rows sync independently from embeddings. Embeddings are an optional later projection and must never gate capture, OCR, or text delivery.
 - Firestore screen-activity timestamps use the lexicographically sortable UTC form `yyyy-MM-dd HH:mm:ss.SSS`. The backend normalizes ISO-8601 input before storage.
 
+### Feature-flag authority
+
+Bundle vs PostHog vs `runtime_env` is catalogued in [`backend/docs/feature-flag-registry.md`](../../backend/docs/feature-flag-registry.md). Editing that file does not turn a feature on. Do not target Beta vs stable via PostHog person `update_channel`.
+
 ### User Subcollections (Firestore)
 - `users/{uid}/conversations` - Has `source` field (omi, desktop, phone, etc.)
 - `users/{uid}/action_items` - Tasks (no platform tracking)
