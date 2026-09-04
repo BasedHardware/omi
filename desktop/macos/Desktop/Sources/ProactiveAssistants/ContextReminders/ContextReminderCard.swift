@@ -38,7 +38,9 @@ struct ContextReminderCard: View {
         Button {
           guard !didAct else { return }
           didAct = true
-          ContextReminderCoordinator.shared.markDone(reminderID: reminderID)
+          ContextReminderCoordinator.shared.markDone(reminderID: reminderID) { succeeded in
+            if !succeeded { didAct = false }
+          }
         } label: {
           Text("Done")
             .scaledFont(size: OmiType.caption, weight: .semibold)
@@ -54,7 +56,9 @@ struct ContextReminderCard: View {
         Button {
           guard !didAct else { return }
           didAct = true
-          ContextReminderCoordinator.shared.snoozeUntilTomorrow(reminderID: reminderID)
+          ContextReminderCoordinator.shared.snoozeUntilTomorrow(reminderID: reminderID) { succeeded in
+            if !succeeded { didAct = false }
+          }
         } label: {
           Text("Remind me tomorrow")
             .scaledFont(size: OmiType.caption, weight: .semibold)
@@ -90,5 +94,10 @@ struct ContextReminderCard: View {
     }
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("context-reminder-card")
+    .onChange(of: reminderID) { _, _ in
+      // A replacement reminder reuses this persistent card branch; its buttons
+      // must start enabled rather than inheriting the previous card's didAct.
+      didAct = false
+    }
   }
 }

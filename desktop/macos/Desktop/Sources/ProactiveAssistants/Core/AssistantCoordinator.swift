@@ -301,6 +301,10 @@ class AssistantCoordinator {
     newApp: String,
     newWindowTitle: String?
   ) async {
+    // Capture the arriving context before any assistant's awaited work so the
+    // reminder observation below cannot pair a pre-await title with a
+    // post-await frontmost app when the user switches windows mid-loop.
+    let arrivingContext = ContextReminderCoordinator.frontmostSnapshotContext()
     for (_, assistant) in assistants {
       await assistant.onContextSwitch(
         departingFrame: departingFrame,
@@ -309,7 +313,7 @@ class AssistantCoordinator {
       )
     }
     await ContextReminderCoordinator.shared.observeFrontmostChange(
-      appName: newApp, windowTitle: newWindowTitle)
+      arriving: arrivingContext, appName: newApp, windowTitle: newWindowTitle)
   }
 
   private func finishContextTransition(_ request: ContextTransitionRequest) {

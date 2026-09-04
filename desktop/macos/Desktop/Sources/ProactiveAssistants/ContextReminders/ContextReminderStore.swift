@@ -117,16 +117,26 @@ actor ContextReminderStore {
     return reminder
   }
 
-  func dueReminders(for context: ContextReminderObservedContext, now: Date = Date()) throws -> [ContextReminder] {
-    try load().filter { reminder in
+  /// Owner-bound read: resolves the owner first, reads that owner's file, and
+  /// discards the results if the owner changed while the read was in flight so
+  /// one account's reminders can never be presented under a newer owner.
+  func dueReminders(
+    for context: ContextReminderObservedContext,
+    now: Date = Date(),
+    expectedOwnerID: String? = nil
+  ) throws -> [ContextReminder] {
+    // No owner means no reminders can exist (mutation paths already refuse
+    // ownerless writes in production), so read as empty instead of throwing on
+    // every context switch while signed out.
+    guard let ownerID = resolvedOwnerID() else { return [] }
+    guard expectedOwnerID == nil || expectedOwnerID == ownerID else { throw CocoaError(.userCancelled) }
+    let reminders = try load()
+    guard resolvedOwnerID() == ownerID else { throw CocoaError(.userCancelled) }
+    return reminders.filter { reminder in
       reminder.doneAt == nil
         && (reminder.snoozeUntil.map { $0 <= now } ?? true)
         && reminder.contextKey.matches(context)
     }
-  }
-
-  func reminder(id: String) throws -> ContextReminder? {
-    try load().first { $0.id == id }
   }
 
   @discardableResult
