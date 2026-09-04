@@ -11,7 +11,6 @@
         "app/lib/pages/action_items/action_items_page.dart",
         "app/lib/pages/action_items/services/action_item_export_service.dart",
         "app/lib/pages/action_items/widgets/action_item_form_sheet.dart",
-        "app/lib/pages/action_items/widgets/action_item_tile_widget.dart",
         "app/lib/pages/conversation_detail/widgets.dart",
         "app/lib/pages/conversations/widgets/goals_widget.dart",
         "backend/routers/action_items.py"
