@@ -162,6 +162,12 @@ struct KernelJournalTurnUpdate: Sendable {
   let resourcesJSON: String?
   let appendResourcesJSON: String?
   let metadataJSON: String?
+  /// Narrow authority flag for revising an optimistically sealed terminal row:
+  /// the same desktop client that sealed a row `.completed` before delivery
+  /// resolved may downgrade it to `.failed` when the answer never reached the
+  /// user (#12743). The kernel accepts this only as a payload-free downgrade
+  /// and merges — never replaces — the row's existing metadata.
+  let terminalRevision: Bool
 
   /// A terminal lifecycle update that deliberately carries no response
   /// payload. This is used after stop/supersession when the visible projection
@@ -179,7 +185,37 @@ struct KernelJournalTurnUpdate: Sendable {
       appendContentBlocksJSON: nil,
       resourcesJSON: nil,
       appendResourcesJSON: nil,
-      metadataJSON: nil
+      metadataJSON: nil,
+      terminalRevision: false
+    )
+  }
+
+  /// Downgrades an optimistically sealed `.completed` row to `.failed` with
+  /// its truncation cause, carrying no payload: content, content blocks,
+  /// resources, and existing metadata (model attribution, continuity) stay
+  /// untouched while `terminalReason` merges into the row's metadata.
+  static func sealedTerminalRevision(
+    turnId: String,
+    terminalReason: String
+  ) -> KernelJournalTurnUpdate {
+    let encodedReason: String
+    if let data = try? JSONSerialization.data(withJSONObject: ["terminalReason": terminalReason]),
+      let encoded = String(data: data, encoding: .utf8)
+    {
+      encodedReason = encoded
+    } else {
+      encodedReason = "{}"
+    }
+    return KernelJournalTurnUpdate(
+      turnId: turnId,
+      status: .failed,
+      content: nil,
+      contentBlocksJSON: nil,
+      appendContentBlocksJSON: nil,
+      resourcesJSON: nil,
+      appendResourcesJSON: nil,
+      metadataJSON: encodedReason,
+      terminalRevision: true
     )
   }
 
@@ -200,6 +236,7 @@ struct KernelJournalTurnUpdate: Sendable {
       value["appendResources"] = KernelJournalTurnWrite.jsonArray(appendResourcesJSON)
     }
     if let metadataJSON { value["metadataJson"] = metadataJSON }
+    if terminalRevision { value["terminalRevision"] = true }
     return value
   }
 }
@@ -395,7 +432,8 @@ extension ChatMessage {
       appendContentBlocksJSON: nil,
       resourcesJSON: ChatResource.encodeResourcesForPersistence(displayResources) ?? "[]",
       appendResourcesJSON: nil,
-      metadataJSON: metadataJSON
+      metadataJSON: metadataJSON,
+      terminalRevision: false
     )
   }
 }
