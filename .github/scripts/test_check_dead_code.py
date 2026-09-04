@@ -31,6 +31,11 @@ def run_checker(root: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def git_init(root: Path) -> None:
+    """Make `root` a real repo so `git ls-files --ignored` can answer."""
+    subprocess.run(["git", "init", "-q", str(root)], check=True, capture_output=True)
+
+
 def write(root: Path, rel: str, content: str) -> None:
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -226,6 +231,41 @@ class DeadCodeRatchetTests(unittest.TestCase):
         result = run_checker(self.root)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("no longer dead", result.stdout)
+
+    def test_gitignored_files_are_not_reported_dead(self) -> None:
+        """A file git ignores is not in the tree CI checks out (#12476 shape)."""
+        git_init(self.root)
+        write(self.root, ".gitignore", "/app/lib/widgets/ignored_widget.dart\nbuild_output/\n")
+        write(self.root, "app/lib/widgets/ignored_widget.dart", "class IgnoredWidget {}\n")
+        # A file under an ignored *directory*: `ls-files --directory` collapses the
+        # directory to one entry, so this matches through an ancestor.
+        write(self.root, "app/lib/build_output/generated_widget.dart", "class GeneratedWidget {}\n")
+
+        scan = scan_flutter(self.root)
+
+        self.assertNotIn("app/lib/widgets/ignored_widget.dart", scan.dead)
+        self.assertNotIn("app/lib/build_output/generated_widget.dart", scan.dead)
+        # The tracked dead file is still caught: this filters the checkout, not the verdict.
+        self.assertIn(DEAD_BY_AREA["flutter"], scan.dead)
+
+    def test_gitignored_backend_module_is_not_reported_dead(self) -> None:
+        git_init(self.root)
+        write(self.root, ".gitignore", "/backend/utils/local_secrets.py\n")
+        write(self.root, "backend/utils/local_secrets.py", "TOKEN = 'x'\n")
+
+        scan = scan_backend(self.root)
+
+        self.assertNotIn("backend/utils/local_secrets.py", scan.dead)
+        self.assertIn(DEAD_BY_AREA["backend"], scan.dead)
+
+    def test_scan_outside_a_git_repo_is_unchanged(self) -> None:
+        """git cannot answer here, so the pure-filesystem behaviour must stand."""
+        write(self.root, "app/lib/widgets/untracked_widget.dart", "class UntrackedWidget {}\n")
+
+        scan = scan_flutter(self.root)
+
+        self.assertIn("app/lib/widgets/untracked_widget.dart", scan.dead)
+        self.assertIn(DEAD_BY_AREA["flutter"], scan.dead)
 
     def test_scan_is_deterministic_across_runs(self) -> None:
         seed_allowlist(self.root)
