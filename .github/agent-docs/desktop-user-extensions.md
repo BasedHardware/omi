@@ -144,7 +144,7 @@ and the live index reports `connecting` / `unavailable` per server.
 
 ### Applying changes
 
-The pi-mono extension reads `~/.omi/mcp.json` **once per process spawn**
+The pi-mono extension reads `mcp.json` in `~/.omi` **once per process spawn**
 (when it registers the proxy tools), so a change to the file does not reach a
 running session by itself. The desktop closes that gap: every write to the
 file — a save, a removal, a key change, an OAuth sign-in, and the unawaited
@@ -251,7 +251,7 @@ never sees the same index twice.
 
 | Lane | MCP servers | Skills |
 |---|---|---|
-| ACP | `buildMcpServers()` (stdio and `type: "http"` shapes), re-read per session and handed to the harness at `session/new` — harness-managed, no progressive disclosure | plugin-only (`plugins` option, gated on `.claude-plugin/plugin.json`) |
+| ACP | `buildMcpServers()` (stdio and `type: "http"` shapes), re-read per session and handed to the harness at `session/new` — harness-managed, no progressive disclosure | plugin-only (`plugins` option, gated on `plugin.json` under `.claude-plugin/`) |
 | pi-mono | progressive disclosure via the `mcp_tools_info` / `mcp_call` proxy tools, registered in `pi-mono-extension` at startup over `McpHttpClient` / `McpSseClient` / `McpStdioClient` (10s http cap per server, 30s stdio cap for npx cold starts), non-blocking for the first prompt behind a short global budget | native catalog (`PI_CODING_AGENT_DIR` = `~/.omi`), `search_skills` / `load_skill` — which returns the overview (table of contents plus first section) by default and pages sections through `part` — and the compact catalog in `ChatProvider.loadClaudeConfigFromDisk` |
 
 ## Failure behavior
