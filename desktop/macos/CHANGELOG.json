@@ -2,6 +2,64 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.284",
+      "date": "2026-09-04",
+      "changes": [
+        "Reminders can now bind to the app or document you were in, and come back the next time you open it",
+        "Daily recaps now generate without a phone, fill missed days, and show on the Activity timeline"
+      ]
+    },
+    {
+      "version": "0.12.283",
+      "date": "2026-09-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.282",
+      "date": "2026-09-04",
+      "changes": [
+        "Desktop thumbs-down now asks why, and Focus/memory cards stop repeating the same mistake."
+      ]
+    },
+    {
+      "version": "0.12.281",
+      "date": "2026-09-03",
+      "changes": [
+        "Daily summaries now include time watched and proactive moments from the Mac app"
+      ]
+    },
+    {
+      "version": "0.12.280",
+      "date": "2026-09-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.279",
+      "date": "2026-09-03",
+      "changes": [
+        "Push-to-talk deep-think answers now come from a dedicated thinking agent that sees the same screenshots you showed Omi and can think extra hard when you ask for it"
+      ]
+    },
+    {
+      "version": "0.12.278",
+      "date": "2026-09-03",
+      "changes": [
+        "Onboarding no longer quits if the Mac's speakers are not ready to play the intro sounds"
+      ]
+    },
+    {
+      "version": "0.12.277",
+      "date": "2026-09-03",
+      "changes": [
+        "Push-to-talk now has the microphone running before your first hold, so the first question after setup is no longer dropped with \"Hold longer to record\". A hold whose microphone was still starting says so and retries instead of blaming the press.",
+        "Fixed ChatGPT and Claude tagged memory imports and added actionable failure messages"
+      ]
+    },
+    {
       "version": "0.12.276",
       "date": "2026-09-03",
       "changes": [

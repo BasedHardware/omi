@@ -579,16 +579,20 @@ extension PostHogManager {
 
   // MARK: - Search Events
 
-  func searchQueryEntered(query: String) {
-    track(
-      "Search Query Entered",
-      properties: [
-        "query_length": query.count
-      ])
+  func searchQueryEntered(properties: [String: Any]) {
+    track("Search Query Entered", properties: properties)
   }
 
-  func searchBarFocused() {
-    track("Search Bar Focused")
+  func searchBarFocused(properties: [String: Any]) {
+    track("Search Bar Focused", properties: properties)
+  }
+
+  func searchResultOpened(properties: [String: Any]) {
+    track("Search Result Opened", properties: properties)
+  }
+
+  func conversationOpenedFromSearch(properties: [String: Any]) {
+    track("Conversation Opened From Search", properties: properties)
   }
 
   // MARK: - Settings Events

@@ -91,6 +91,7 @@ struct SpineStream: View {
   @ObservedObject var appState: AppState
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   @ObservedObject var tasksStore: TasksStore
+  var searchSurface: SearchSurface
 
   /// Hands a conversation to the page that owns conversations. The whole record, not its id: the
   /// row already holds it, and handing over an id forced the receiver to look it back up against a
@@ -106,6 +107,7 @@ struct SpineStream: View {
   @StateObject private var store = SpineStore()
   /// Pages the rest of the account in behind the first paint. See `SpineHydration`.
   @StateObject private var hydrator = SpineHydrator()
+  @ObservedObject private var dailySummaries = ChatDailySummaryCoordinator.shared.store
   @State private var viewport = SpineViewport()
   /// Which days are folded shut. Lives with the view rather than with the store because it is a
   /// reading position, not data: it is worth exactly as long as this list is on screen.
@@ -146,12 +148,16 @@ struct SpineStream: View {
       await tasksStore.loadTasksIfNeeded()
       ingest()
       hydrator.start(conversations: conversationPages, memories: memoryPages)
+      await ChatDailySummaryCoordinator.shared.activate()
     }
     .onDisappear { hydrator.stop() }
     .onReceive(appState.$conversations) { _ in ingest() }
     .onReceive(memoriesViewModel.$streamMemories) { _ in ingest() }
     .onReceive(tasksStore.$incompleteTasks) { _ in ingest() }
-    .onChange(of: request) { _, newValue in store.apply(request: newValue) }
+    .onChange(of: request) { _, newValue in
+      store.apply(request: newValue)
+      commitSearchAnalytics(newValue)
+    }
   }
 
   private func ingest() {
@@ -161,9 +167,35 @@ struct SpineStream: View {
       tasks: tasksStore.incompleteTasks
     )
     store.apply(request: request)
+    commitSearchAnalytics(request)
     // A store that was hydrated and has since been truncated under us reopens its cursor; this is
     // where the spine notices and goes back for the rest.
     hydrator.resume()
+  }
+
+  private func commitSearchAnalytics(_ request: QueryShellRequest) {
+    SearchAnalytics.scheduleQueryEntered(surface: searchSurface, query: request.text) {
+      store.matchCount
+    }
+  }
+
+  private var searchIsActive: Bool {
+    DebouncedSearchCoordinator.isActive(request.text)
+  }
+
+  private func openConversationFromSearch(_ conversation: ServerConversation) {
+    SearchAnalytics.resultOpened(surface: searchSurface, searchIsActive: searchIsActive)
+    onOpenConversation(conversation)
+  }
+
+  private func openMemoryFromSearch(_ memory: SpineMemory) {
+    SearchAnalytics.resultOpened(surface: searchSurface, searchIsActive: searchIsActive)
+    onOpenMemory(memory)
+  }
+
+  private func openRewindFromSearch() {
+    SearchAnalytics.resultOpened(surface: searchSurface, searchIsActive: searchIsActive)
+    onOpenRewind()
   }
 
   /// The two paged stores, as the hydrator sees them. Neither is owned here — the spine reads the
@@ -195,12 +227,13 @@ struct SpineStream: View {
             // Folding is presentation, never a filter: the rows are still composed, still counted by
             // `queryShellMatchCount`, and still in the same chronological place when they come back.
             if !collapse.contains(day.id) {
+              recapSlot(for: day)
               ForEach(day.rows) { row in
                 SpineRowView(
                   row: row,
                   showsIndent: store.kind == .everything,
-                  onOpenConversation: onOpenConversation,
-                  onOpenMemory: onOpenMemory,
+                  onOpenConversation: openConversationFromSearch,
+                  onOpenMemory: openMemoryFromSearch,
                   onToggleTask: { task in Task { await tasksStore.toggleTask(task) } },
                   onToggleStar: toggleStar,
                   // Clicking a moment used to discard the moment and navigate to the Rewind
@@ -212,7 +245,7 @@ struct SpineStream: View {
                       strip.map { QuickLookFrame(screenshot: $0.screenshot) },
                       startingAt: String(moment.id))
                   },
-                  onShowAllMoments: onOpenRewind,
+                  onShowAllMoments: openRewindFromSearch,
                   onOpenBrainMap: onOpenBrainMap
                 )
                 .background(anchor(for: row, in: day))
@@ -222,7 +255,8 @@ struct SpineStream: View {
             SpineDayHeader(
               day: day,
               isCollapsed: collapse.contains(day.id),
-              onToggle: { toggleCollapse(day) }
+              onToggle: { toggleCollapse(day) },
+              recapEmoji: recap(for: day)?.dayEmoji
             )
           }
         }
@@ -285,6 +319,34 @@ struct SpineStream: View {
       corpus: hydrator.state,
       canLoadMore: appState.canLoadMoreConversations || memoriesViewModel.hasMoreMemories
     )
+  }
+
+  /// Recap chrome for the day: not a `SpineRow`, so counts and the collapsed subtitle stay honest.
+  @ViewBuilder
+  private func recapSlot(for day: SpineDay) -> some View {
+    let dateKey = SpineDayDateKey.string(from: day.id, calendar: store.calendar) ?? ""
+    let content = SpineDayRecapContent.resolve(
+      recap: recap(for: day),
+      conversationCount: day.conversationCount,
+      isFiltering: request.isFiltering,
+      dayID: day.id,
+      now: Date(),
+      calendar: store.calendar,
+      summaryHour: dailySummaries.summaryHour
+    )
+    if content != .hidden {
+      SpineDayRecapRow(
+        content: content,
+        dateKey: dateKey,
+        now: Date(),
+        calendar: store.calendar
+      )
+    }
+  }
+
+  private func recap(for day: SpineDay) -> DailySummaryRecord? {
+    guard let key = SpineDayDateKey.string(from: day.id, calendar: store.calendar) else { return nil }
+    return dailySummaries.byDate[key]
   }
 
   /// Folds one day shut, or opens it again.
@@ -454,6 +516,7 @@ struct SpineDayHeader: View {
   let day: SpineDay
   let isCollapsed: Bool
   let onToggle: () -> Void
+  var recapEmoji: String? = nil
 
   @State private var isHovering = false
 
@@ -461,6 +524,12 @@ struct SpineDayHeader: View {
     Button(action: onToggle) {
       HStack(spacing: 10) {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
+          if let recapEmoji, !recapEmoji.isEmpty {
+            Text(recapEmoji)
+              .font(.system(size: 11))
+              .frame(height: 11, alignment: .center)
+              .accessibilityHidden(true)
+          }
           Text(day.title.uppercased())
             .font(.system(size: 11, weight: .semibold))
             .tracking(1.0)

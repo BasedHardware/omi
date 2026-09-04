@@ -9,7 +9,7 @@ non-empty, so older clients see exactly the message they saw before.
 
 from datetime import datetime, timedelta, timezone
 
-from models.daily_summary_payload import LearnedMemoryRef
+from models.daily_summary_payload import DailySummaryDayStatsPayload, LearnedMemoryRef
 from models.memories import MemoryCategory, MemoryDB
 from models.notification_message import NotificationMessage
 from routers.users import DailySummaryResponse
@@ -361,8 +361,9 @@ def test_generate_comprehensive_daily_summary_does_not_read_memories_itself():
 def test_generator_defaults_to_no_card_without_a_selection():
     from utils.llm.external_integrations import _basic_daily_summary
 
-    assert _basic_daily_summary('2026-09-01', 0, 0.0, [], [])['memories_learned'] == []
-    assert _basic_daily_summary('2026-09-01', 0, 0.0, [], [], [{'memory_id': 'm1'}])['memories_learned'] == [
+    stats = DailySummaryDayStatsPayload()
+    assert _basic_daily_summary('2026-09-01', 0, 0.0, [], [], stats)['memories_learned'] == []
+    assert _basic_daily_summary('2026-09-01', 0, 0.0, [], [], stats, [{'memory_id': 'm1'}])['memories_learned'] == [
         {'memory_id': 'm1'}
     ]
 

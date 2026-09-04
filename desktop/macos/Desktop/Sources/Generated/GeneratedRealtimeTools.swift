@@ -19,6 +19,7 @@ enum HubTool: String {
   case searchMemories = "search_memories"
   case getActionItems = "get_action_items"
   case createActionItem = "create_action_item"
+  case createContextReminder = "create_context_reminder"
   case updateActionItem = "update_action_item"
   case checkPermissionStatus = "check_permission_status"
   case requestPermission = "request_permission"
@@ -512,7 +513,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "create_action_item",
-    "description": "Create a new task / to-do / reminder for the user ('remind me to…', 'add … to my list', 'I need to…'). Fast synchronous write. Confirm out loud after it returns.",
+    "description": "Create a new task / to-do / timed reminder for the user ('remind me to…', 'add … to my list', 'I need to…'). Do NOT use for 'next time I'm here' / 'when I open this' — that is create_context_reminder. Fast synchronous write. Confirm out loud after it returns.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -530,6 +531,23 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "description"
+      ]
+    }
+  },
+  {
+    "type": "function",
+    "name": "create_context_reminder",
+    "description": "Bind a reminder to the place the user is in right now (the frontmost app or document). Use when they say 'remind me next time I'm here', 'next time I open this', or 'when I'm back in this'. Do NOT use for timed reminders ('tomorrow', 'at 3pm') — those are create_action_item. The place is captured automatically; pass only the reminder text. Fast synchronous write. Confirm out loud after it returns.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "What to remind the user of when they return to this place."
+        }
+      },
+      "required": [
+        "text"
       ]
     }
   },
@@ -662,7 +680,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "think_deeper",
-    "description": "Take more time and use Omi's full answer capabilities before replying. ALWAYS call this tool before answering when the user says 'think carefully', 'think about this', 'go deep', 'reason it out', 'take your time', 'don't just guess', or 'what should I do', or otherwise asks for advice, tradeoffs, a multi-step plan, or reconsideration of a weak answer. A short, vague, or first-turn request still counts: call the tool with the question as given instead of answering or asking a clarifying question first. For historical public research about how, when, or why a company, product, or person did something, or any public question requiring multiple sources, ALWAYS use two calls in this order: first web_search, then this tool with the original question and the complete web_search result in context. If no web_search result is present in this turn, call web_search instead of this tool first. Call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. If unsure whether deeper thought would improve the answer, call it. Skip only chit-chat, short confirmations, obvious stable facts, or one narrow current fact that a fast realtime tool fully answers, such as weather, a current price, or a score. Call immediately without speaking a wait-line or answer first: the app acknowledges the delay as soon as the tool is accepted. Never describe internal model, tool, delegation, or routing choices, and never say the request is being sent elsewhere. When the result arrives, speak only its conclusion faithfully; do not add a delayed status line.",
+    "description": "Take more time and use Omi's full answer capabilities before replying. ALWAYS call this tool before answering when the user says 'think carefully', 'think about this', 'go deep', 'reason it out', 'take your time', 'don't just guess', or 'what should I do', or otherwise asks for advice, tradeoffs, a multi-step plan, or reconsideration of a weak answer. A short, vague, or first-turn request still counts: call the tool with the question as given instead of answering or asking a clarifying question first. For historical public research about how, when, or why a company, product, or person did something, or any public question requiring multiple sources, ALWAYS use two calls in this order: first web_search, then this tool with the original question and the complete web_search result in context. If no web_search result is present in this turn, call web_search instead of this tool first. Call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. If unsure whether deeper thought would improve the answer, call it. Skip only chit-chat, short confirmations, obvious stable facts, or one narrow current fact that a fast realtime tool fully answers, such as weather, a current price, or a score. Call immediately without speaking a wait-line or answer first: the app acknowledges the delay as soon as the tool is accepted. Never describe internal model, tool, delegation, or routing choices, and never say the request is being sent elsewhere. When the result arrives, speak only its conclusion faithfully; do not add a delayed status line. Set thinking='heavy' only when the user asks to think harder, think extra carefully, or take more time, or the question is genuinely hard; the default 'normal' already thinks at a high level. Screenshots you viewed this turn and other same-turn context are forwarded to the thinking agent automatically; still pass the useful facts as text in context.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -672,7 +690,15 @@ enum GeneratedRealtimeTools {
         },
         "context": {
           "type": "string",
-          "description": "Relevant context you already have that helps answer well — facts you fetched, what the user is referring to, or the previous answer they pushed back on. Include only what's relevant; omit if there's nothing useful."
+          "description": "Relevant context you already have that helps answer well — facts you fetched, what the user is referring to, or the previous answer they pushed back on. Include only what's relevant; omit if there's nothing useful. Screenshots you viewed this turn and other same-turn context are forwarded automatically; still write the useful facts here so the thinking agent knows what mattered."
+        },
+        "thinking": {
+          "type": "string",
+          "enum": [
+            "normal",
+            "heavy"
+          ],
+          "description": "normal (default) runs the thinking agent at high reasoning. Use heavy — extra-high reasoning that takes longer — when the user asks to think harder, think extra carefully, or take more time, or when the question is genuinely hard (intricate multi-step reasoning, dense tradeoffs, a hard puzzle or math)."
         }
       },
       "required": [

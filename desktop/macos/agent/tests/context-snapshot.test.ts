@@ -87,6 +87,9 @@ describe("kernel ContextSnapshot", () => {
     expect(at65?.contextPlan.stableCacheIdentity).toBe(at64?.contextPlan.stableCacheIdentity);
     expect(at65?.contextPlan.dynamicContextIdentity).not.toBe(at64?.contextPlan.dynamicContextIdentity);
     expect(at65?.contextPlan.semanticGuidance).toContain("recentTurns are the canonical history");
+    expect(at65?.contextPlan.semanticGuidance).toContain(
+      "task write, or memory write succeeded unless the corresponding tool result says it succeeded",
+    );
     const cacheBoundedPolicy = kernelSystemPolicy("main_chat", "coordinator", at65!.contextPlan);
     expect(cacheBoundedPolicy).toContain(`stable=${at65?.contextPlan.stableCacheIdentity}`);
     expect(cacheBoundedPolicy).toContain("dynamic=per_turn");

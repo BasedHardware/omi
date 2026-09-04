@@ -55,6 +55,7 @@ from routers import (
     candidates,
     chat_first,
     chat_first_e2e,
+    daily_summary_e2e,
     task_integrations,
     integrations,
     x_connector,
@@ -122,10 +123,12 @@ from utils.executors import (
 )
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
+from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
 from services.conversation_finalization import reconcile_abandoned_byok_finalization_jobs
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_processing_conversations
+from database.durable_queue_age import publish_all_queue_oldest_ready_ages
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 from utils.other.local_storage import local_storage_root_from_env
 
@@ -192,6 +195,10 @@ if is_chat_first_e2e_harness_runtime():
     # The fixture router has its own runtime check as defense in depth.  It is
     # intentionally absent from dev/prod route tables, not merely disabled.
     app.include_router(chat_first_e2e.router)
+    # Same stage boundary, same defense in depth: the desktop memory-review flow
+    # needs a daily summary carrying `memories_learned`, which only the nightly
+    # job produces in a deployable environment.
+    app.include_router(daily_summary_e2e.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)
@@ -439,11 +446,16 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
                 logger.info(f"Periodic meeting-receipt reconciliation: {receipt_result}")
         except Exception as e:
             logger.error(f"Periodic meeting-receipt reconciliation failed: {e}")
+        try:
+            await run_blocking(db_executor, publish_all_queue_oldest_ready_ages)
+        except Exception as e:
+            logger.error(f"Periodic durable-queue age publish failed: {e}")
 
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_event():
     await drain_background_tasks(timeout=10.0)
+    await shutdown_managed_spend_ledger()
     await close_all_clients()
     close_posthog_control_plane()
     stop_metrics_sidecar_server()

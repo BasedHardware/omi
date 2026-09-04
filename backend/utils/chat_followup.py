@@ -53,6 +53,34 @@ _GENERIC_PATTERNS = [
 
 _WHITESPACE = re.compile(r'\s+')
 
+# One chip carries one question. A tail that packs a second question, or a
+# statement in front of the question, is a contract violation rather than a
+# chip: the user would be shown several prompts on one tappable surface. The
+# period arm only fires on a real sentence boundary (". W"), so decimals and
+# lowercase abbreviations ("3.5", "10 a.m. standup") stay legal.
+_INTERNAL_TERMINATOR = re.compile(r'[?!]|\.\s+["\'(\[]*[A-Z0-9]')
+
+# A turn cut short mid-marker leaves residue like ``<<<`` or ``<<<FOLL``. One
+# stray ``<`` is far more likely to be real text than marker residue, so the
+# transcript keeps it; two or more is only ever the delimiter starting.
+_MIN_MARKER_RESIDUE = 2
+
+
+def _partial_delimiter_suffix_length(text: str, delimiter: str) -> int:
+    """Length of the trailing run of ``text`` that could still become ``delimiter``."""
+    for length in range(min(len(text), len(delimiter) - 1), 0, -1):
+        if delimiter.startswith(text[len(text) - length :]):
+            return length
+    return 0
+
+
+def strip_partial_followup_delimiter(text: str) -> str:
+    """Drop a half-written delimiter left at the end of a cut-short answer."""
+    held = _partial_delimiter_suffix_length(text, FOLLOWUP_DELIMITER)
+    if held < _MIN_MARKER_RESIDUE:
+        return text
+    return text[: len(text) - held]
+
 
 def _normalize_question(question: str) -> str:
     collapsed = _WHITESPACE.sub(' ', question).strip()
@@ -79,7 +107,9 @@ def split_followup_tail(text: Optional[str]) -> Tuple[str, Optional[str]]:
         return '', None
     index = text.find(FOLLOWUP_DELIMITER)
     if index < 0:
-        return text, None
+        # A timed-out or cut-short turn can stop part-way through the marker.
+        # A half-formed tail must never leak into the transcript either.
+        return strip_partial_followup_delimiter(text), None
     visible = text[:index].rstrip()
     raw_tail = text[index + len(FOLLOWUP_DELIMITER) :]
     # Only the first line of the tail is the question; a model that keeps
@@ -88,6 +118,8 @@ def split_followup_tail(text: Optional[str]) -> Tuple[str, Optional[str]]:
     if not question:
         return visible, None
     if not question.endswith('?'):
+        return visible, None
+    if _INTERNAL_TERMINATOR.search(question[:-1]):
         return visible, None
     if len(question) > MAX_FOLLOWUP_CHARS or len(question.split()) > MAX_FOLLOWUP_WORDS:
         return visible, None
@@ -170,7 +202,7 @@ class FollowUpTailStreamFilter:
             self._suppressing = True
             self._pending = ''
             return buffer[:index]
-        hold = self._partial_delimiter_suffix_length(buffer)
+        hold = _partial_delimiter_suffix_length(buffer, self._delimiter)
         if hold:
             self._pending = buffer[len(buffer) - hold :]
             return buffer[: len(buffer) - hold]
@@ -185,12 +217,6 @@ class FollowUpTailStreamFilter:
         remaining = self._pending
         self._pending = ''
         return remaining
-
-    def _partial_delimiter_suffix_length(self, buffer: str) -> int:
-        for length in range(min(len(buffer), len(self._delimiter) - 1), 0, -1):
-            if self._delimiter.startswith(buffer[len(buffer) - length :]):
-                return length
-        return 0
 
 
 FOLLOWUP_PROMPT_SECTION = f"""

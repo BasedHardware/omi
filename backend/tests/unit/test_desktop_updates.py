@@ -1556,8 +1556,52 @@ class TestDesktopUpdateAdminEndpoints:
             expected_generation=9,
             expected_current_release_id="v0.12.86+12086-macos",
             operation="repoint",
+            serving_backends=None,
         )
         delete_cache.assert_called_once_with("desktop_update_pointer:macos:stable")
+
+    @pytest.mark.asyncio
+    async def test_promote_rejects_unknown_serving_backend_keys_and_malformed_shas(self):
+        serving = {
+            "desktop_backend": {
+                "release_sha": "a" * 40,
+                "release_channel": "production",
+                "chat_contract_version": "1",
+                "health_url": "https://desktop-backend-hhibjajaja-uc.a.run.app/health",
+            },
+            "api_backend": {"release_sha": "b" * 40, "health_url": "https://api.omi.me/health"},
+            "captured_at": "2026-09-01T15:35:00Z",
+        }
+        with patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                unknown = await client.post(
+                    "/v2/desktop/channels/promote",
+                    headers={"secret-key": "real-secret"},
+                    json={
+                        "platform": "macos",
+                        "channel": "stable",
+                        "release_id": "v0.12.254+12254-macos",
+                        "expected_generation": 1,
+                        "serving_backends": {**serving, "extra": "nope"},
+                    },
+                )
+                bad_sha = await client.post(
+                    "/v2/desktop/channels/promote",
+                    headers={"secret-key": "real-secret"},
+                    json={
+                        "platform": "macos",
+                        "channel": "stable",
+                        "release_id": "v0.12.254+12254-macos",
+                        "expected_generation": 1,
+                        "serving_backends": {
+                            **serving,
+                            "desktop_backend": {**serving["desktop_backend"], "release_sha": "DEADBEEF"},
+                        },
+                    },
+                )
+
+        assert unknown.status_code == 422
+        assert bad_sha.status_code == 422
 
 
 # --- Update policy endpoint ---
@@ -1983,6 +2027,8 @@ class TestDownloadLandingInstallSteps:
         assert 'class="checkmark"' not in html
         assert 'id="status-icon"' not in html
         assert "Your download should start automatically" not in html
+        # the chip says where the file went, not that a process completed
+        assert "Downloading" in html and "Download started" not in html
         # the manual fallback survives, inline in the meta line rather than on its own row
         assert 'class="meta"' in html
         assert html.count('class="download-link"') == 1

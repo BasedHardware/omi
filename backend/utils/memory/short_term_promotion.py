@@ -28,7 +28,6 @@ from jobs.short_term_lifecycle_worker import (
     process_short_term_lifecycle_item,
 )
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
-from utils.durable_queue_metrics import observe_oldest_ready_age
 from utils.memory.atom_keyword_index import delete_atom_keyword_doc, sync_atom_keyword_index_for_item
 from models.memory_apply import MemoryControlState
 from utils.memory.canonical_consolidation import (
@@ -51,6 +50,7 @@ from utils.memory.memory_system import (
     resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
 )
 from utils.memory.short_term_lifecycle import ShortTermDisposition, effective_short_term_expiry
+from utils.memory.belief_model import belief_model_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +184,6 @@ def _drain_canonical_outbox(
             side_effects=side_effects,
             now=now,
         )
-        observe_oldest_ready_age('memory_outbox', summary.get('oldest_ready_age_seconds'))
         aggregate["ticks"] += 1
         for key in (
             "leased_count",
@@ -266,8 +265,16 @@ def run_canonical_short_term_ttl_lifecycle(
     terminal = 0
     for item in items:
         disposition = None
-        if item.tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= current_time:
+        expired = item.tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= current_time
+        if expired and not belief_model_enabled():
             disposition = ShortTermDisposition.reject_or_hide
+        elif expired:
+            logger.info(
+                "canonical_short_term_ttl_lifecycle: skipped_time_only_reject " "uid=%s memory_id=%s run_id=%s",
+                uid,
+                item.memory_id,
+                run_id,
+            )
         record, was_created = process_short_term_lifecycle_item(
             item,
             store=store,
