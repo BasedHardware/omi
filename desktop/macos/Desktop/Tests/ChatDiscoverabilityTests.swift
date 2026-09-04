@@ -198,7 +198,13 @@ final class ChatDiscoverabilityTests: XCTestCase {
         declaredTools.insert(name)
       }
     }
-    let localApiOnlyTools: Set<String> = ["get_local_status", "get_screenshot"]
+    // `look_at_frame` is not a tool of its own: `omi-tool-manifest.ts` declares it under
+    // `get_screenshot`'s `aliasCapabilityDocs`, and `LocalAgentAPIServer` maps it straight
+    // back to `get_screenshot`. Both capability docs say "Local API only", so it is exempt
+    // for the same reason its canonical name is. It reached the registry in #12084
+    // (2026-08-27) while this list had not changed since 2026-08-01, which is why the
+    // assertion below has failed ever since.
+    let localApiOnlyTools: Set<String> = ["get_local_status", "get_screenshot", "look_at_frame"]
 
     for toolName in DesktopCapabilityRegistry.desktopToolNames where !localApiOnlyTools.contains(toolName) {
       XCTAssertTrue(declaredTools.contains(toolName), "Missing agent tool declaration for \(toolName)")
