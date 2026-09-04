@@ -17669,6 +17669,17 @@
             "title": "Arguments",
             "type": "object"
           },
+          "belief_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Belief Class"
+          },
           "capture_confidence": {
             "anyOf": [
               {
@@ -17702,6 +17713,17 @@
             ],
             "description": "Expected durability horizon for the fact",
             "title": "Durability"
+          },
+          "half_life_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Half Life Days"
           },
           "headline": {
             "anyOf": [
@@ -17758,6 +17780,16 @@
             "description": "Stable entity id for who/what the fact is about",
             "title": "Subject Entity Id"
           },
+          "subject_scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemorySubjectScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "tags": {
             "description": "The tags of the memory and learning",
             "items": {
@@ -17773,6 +17805,18 @@
             },
             "title": "Uncertainty Reasons",
             "type": "array"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
           },
           "veracity": {
             "anyOf": [
@@ -17923,6 +17967,29 @@
             "title": "Arguments",
             "type": "object"
           },
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "belief_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Belief Class"
+          },
           "body": {
             "anyOf": [
               {
@@ -17995,6 +18062,28 @@
             "title": "Curation Weight",
             "type": "integer"
           },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "currency_band": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Band"
+          },
           "data_protection_level": {
             "anyOf": [
               {
@@ -18029,6 +18118,17 @@
             },
             "title": "Evidence",
             "type": "array"
+          },
+          "half_life_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Half Life Days"
           },
           "headline": {
             "anyOf": [
@@ -18312,6 +18412,18 @@
               }
             ],
             "title": "Valid At"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
           },
           "veracity": {
             "anyOf": [

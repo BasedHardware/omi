@@ -88,6 +88,7 @@ from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import memory_matches_device
 from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
+from utils.memory.belief_model import public_belief_overlay_json
 from utils.memory.universal_list_cursor import (
     StreamKeyset,
     UniversalListCursorError,
@@ -3133,6 +3134,7 @@ class MemoryService:
                     "agent_use": "default_access_memory",
                     "access_reason": "default_memory_allowed",
                     "superseded_by": None,
+                    **public_belief_overlay_json(memory, now=now or datetime.now(timezone.utc)),
                 }
             )
 
