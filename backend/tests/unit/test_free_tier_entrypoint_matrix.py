@@ -990,20 +990,15 @@ def test_red_proof_desktop_merge_flag_on_basic_is_minimum_not_legacy(monkeypatch
 
 
 # red-proof (6): the normal persist keeping Conversation.dict()'s null
-# processing_state default (the F-1 regression) → the flag-off dark row fails
+# processing_state default (the F-1 regression) → the flag-off dark row fails.
+# Exercises the real `_normal_persist_payload` (no builder monkeypatch): if the
+# builder regresses to a bare `conversation.dict()`, the key is present and
+# this goes red.
 def test_red_proof_null_processing_state_default_stamped_on_persist(monkeypatch: Any, pc: Any) -> None:
     monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
     spies = _spy_managed_effects(monkeypatch, pc)
     spies['should_defer'].return_value = False
-
-    def regressed_normal_payload(conversation: Any, *, clear_terminal_marker: bool) -> dict[str, Any]:
-        payload = conversation.dict()
-        if clear_terminal_marker:
-            payload[pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] = None
-        return pc.strip_client_processing(payload)
-
-    monkeypatch.setattr(pc, '_normal_persist_payload', regressed_normal_payload)
     entry = next(e for e in _ENTRIES if e['id'] == 'conversations_create_351')
     _call_coordinator(pc, entry)
     payloads = [p for p in spies['persist_payloads'] if isinstance(p, dict)]
-    assert payloads and payloads[-1].get('processing_state') is None
+    assert payloads and 'processing_state' not in payloads[-1]
