@@ -34,6 +34,15 @@ enum SpineDayRecapContent: Equatable {
   }
 }
 
+extension SpineDayRecapContent {
+  /// True for `.recap` — the only content that attaches to the header's card.
+  /// The generate affordance stays its own small surface.
+  var attachesToHeaderCard: Bool {
+    if case .recap = self { return true }
+    return false
+  }
+}
+
 /// Recap chrome drawn inside a day's `Section` content, before its rows, so it folds and unfolds
 /// with the day.
 ///
@@ -118,14 +127,39 @@ struct SpineDayRecapRow: View {
             .fixedSize(horizontal: false, vertical: true)
         }
       }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
+      .padding(.horizontal, 12)
+      .padding(.top, OmiSpacing.xxs)
+      .padding(.bottom, OmiSpacing.sm)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .glassRow(.rest, cornerRadius: InkGlass.cornerRadius)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .padding(.top, SpineMetrics.attachedGap)
+    // **The day card's body, not a second surface.** Same material as the
+    // header above, square where they meet, rounded where the card ends, and
+    // the hairline only on the edges that are actually outer — so header and
+    // recap read as one continuous card.
+    .background(
+      UnevenRoundedRectangle(
+        bottomLeadingRadius: 10, bottomTrailingRadius: 10, style: .continuous
+      )
+      .fill(.regularMaterial)
+    )
+    .overlay(
+      ZStack(alignment: .bottom) {
+        VStack {
+          HStack {
+            Rectangle().fill(Ink.separator).frame(width: 1)
+            Spacer(minLength: 0)
+            Rectangle().fill(Ink.separator).frame(width: 1)
+          }
+          Spacer(minLength: 0)
+        }
+        Rectangle().fill(Ink.separator).frame(height: 1)
+      }
+      .clipShape(
+        UnevenRoundedRectangle(
+          bottomLeadingRadius: 10, bottomTrailingRadius: 10, style: .continuous))
+    )
     .accessibilityIdentifier("spine-day-recap")
     .accessibilityLabel(Text("Open the daily recap"))
     .help("Open the full recap for this day")
