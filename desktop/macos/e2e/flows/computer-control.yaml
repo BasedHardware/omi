@@ -1,10 +1,12 @@
 version: 2
 name: computer-control
 tier: manual
-description: Computer control on the Apps page — the switch is off by default, turning it on writes the MCP entry and the stdio shim, the tools drive the real Mac through the loopback endpoint, and the kill switch stops them
+description: Computer control as a regular MCP server on the Apps page — the built-in omi-computer-use card's switch is off by default, turning it on writes the MCP entry and the stdio shim, the tools drive the real Mac through the loopback endpoint, and the kill switch stops them
 app: com.omi.computer-macos
 covers:
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/ComputerControlSection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ComputerUseServerCard.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaControlStatusStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/AgentExtensionsSections.swift
   - desktop/macos/Desktop/Sources/ComputerUse/CuaControlGate.swift
   - desktop/macos/Desktop/Sources/ComputerUse/CuaPermissions.swift
   - desktop/macos/Desktop/Sources/ComputerUse/CuaAppleScript.swift
@@ -24,33 +26,34 @@ preconditions:
 
 steps:
   - id: S1
-    name: The switch is off, and says what it turns on
+    name: The switch is off, on the built-in server's own card
     # Off by default is the whole consent model. A flow that starts by turning it on would never
     # notice the day it starts shipping on.
-    do: "Click the Apps pill in the top bar (accessibility identifier top-navigation-8), then the apps-section-mcp chip. Confirm a Computer Control card sits above MCP Servers, its switch is off, and its text names the loopback endpoint it serves."
+    do: "Click the Apps pill in the top bar (accessibility identifier top-navigation-8), then the apps-section-mcp chip. Confirm the MCP Servers grid is led by an omi-computer-use card marked Built-in, ahead of every other server, with its switch off and a Manage button beside it."
     expect:
       interactive_count: { min: 6 }
       text_visible:
-        - Computer Control
-        - Allow Omi to control this Mac
+        - omi-computer-use
+        - Built-in
 
   - id: S2
     name: Turning it on names every permission it still needs
     # A missing grant is the difference between a click that works and a click that silently does
-    # nothing, which reads to a model as success. The card has to say so before the first tool call.
-    do: "Turn the switch on. Confirm rows appear for Accessibility and Screen Recording, each showing granted or a Grant button, and a status line reading Ready."
+    # nothing, which reads to a model as success. The server's own surfaces have to say so before
+    # the first tool call.
+    do: "Turn the card's switch on and open the detail sheet with Manage. Confirm the sheet shows a permissions block with rows for Input, Reading controls, and Screen — each granted or with a Grant button — and a status line reading Ready. Back on the card, confirm a warning chip counts the missing grants."
     expect:
       interactive_count: { min: 3 }
       text_visible:
-        - Accessibility
-        - Screen Recording
+        - Input
+        - Screen
 
   - id: S2b
     name: A grant given while Omi is running is noticed without a relaunch
     # `AXIsProcessTrusted` answers from a per-process cache filled on its first
     # call, so the app used to go on asking for a permission the user had already
     # given. The live probe is the whole point of this step.
-    do: "With Accessibility not yet granted, tick Omi in System Settings ▸ Privacy & Security ▸ Accessibility and return to the card without relaunching Omi. Confirm the Input and Reading controls rows both turn granted within a few seconds, and that a click tool now works rather than repeating the refusal."
+    do: "With Accessibility not yet granted, tick Omi in System Settings ▸ Privacy & Security ▸ Accessibility and return to the sheet without relaunching Omi. Confirm the Input and Reading controls rows both turn granted within a few seconds, and that a click tool now works rather than repeating the refusal."
     expect:
       interactive_count: { min: 2 }
 
@@ -65,7 +68,7 @@ steps:
     # A model-written script can wait forever on a dialog. In process that would
     # freeze the main thread, which is where the Stop button and the kill switch
     # live.
-    do: "Call run_applescript with `return 6 * 7` and confirm it answers 42. Call it with `display dialog \"wait\"` and confirm the call returns a timeout failure within its timeout rather than hanging, that no dialog is left on screen blocking Omi, and that the Stop now button still responds."
+    do: "Call run_applescript with `return 6 * 7` and confirm it answers 42. Call it with `display dialog \"wait\"` and confirm the call returns a timeout failure within its timeout rather than hanging, that no dialog is left on screen blocking Omi, and that the Stop now button in the sheet still responds."
     expect:
       interactive_count: { min: 1 }
 
@@ -105,7 +108,7 @@ steps:
     name: The kill switch stops everything, and stays stopped
     # A kill switch that expires, or that only stops the next click and not the next screenshot, is
     # not one. The user reaches for it precisely when they cannot reach the pointer.
-    do: "While the tools are working, press ⌃⌥⌘. Confirm the card's status reads Stopped, and that a further tools/call for `click` and for `screenshot` both come back refused. Confirm nothing re-arms on its own, then click Re-arm and confirm calls work again."
+    do: "While the tools are working, press ⌃⌥⌘. Confirm the card's status reads Stopped, and that a further tools/call for `click` and for `screenshot` both come back refused. Confirm nothing re-arms on its own, then open the sheet and click Re-arm and confirm calls work again."
     expect:
       interactive_count: { min: 2 }
       text_visible:
@@ -113,6 +116,6 @@ steps:
 
   - id: S9
     name: Turning it off revokes both artefacts
-    do: "Turn the switch off. Confirm the 'omi-computer-use' entry is gone from ~/.omi/mcp.json, ~/.omi/omi-cua no longer exists, any other MCP server in the file is untouched, and a POST to /mcp is refused."
+    do: "Turn the card's switch off. Confirm the 'omi-computer-use' entry is gone from ~/.omi/mcp.json, ~/.omi/omi-cua no longer exists, any other MCP server in the file is untouched, and a POST to /mcp is refused."
     expect:
       interactive_count: { min: 2 }

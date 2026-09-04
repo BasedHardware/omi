@@ -36,7 +36,7 @@ final class CuaControlGate: ObservableObject {
       switch self {
       case .disabled:
         return
-          "Computer control is off. Turn on \"Allow Omi to control this Mac\" in Omi ▸ Settings ▸ Apps."
+          "Computer control is off. Turn on the omi-computer-use server in Omi ▸ Settings ▸ Apps."
       case .suspended(let reason):
         return "Computer control was stopped (\(reason)). Re-arm it in Omi ▸ Settings ▸ Apps."
       case .ownerChanged:

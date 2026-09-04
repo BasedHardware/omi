@@ -69,6 +69,15 @@ struct ComputerUseServerCard: View {
 
             ImportConnectorActionButton(title: "Manage", isConnected: true)
           }
+
+          // A refused enable (no account signed in) bounces the switch back;
+          // the reason has to be where the switch is.
+          if let failure = store.failure {
+            Text(failure)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
         }
         .padding(OmiSpacing.md)
         .background(isHovering ? Ink.rowFillHover : Ink.rowFill)
@@ -98,6 +107,10 @@ struct ComputerUseServerCard: View {
   private var statusText: String {
     if !store.isEnabled { return "Off" }
     if store.isSuspended { return "Stopped" }
+    // This server has no sign-in; a 401 from it means a stale entry, which the
+    // app heals the next time the loopback server starts, so it reads as not
+    // responding rather than asking for credentials it never accepts.
+    if status == .needsAuth { return "Not responding" }
     return status.label
   }
 

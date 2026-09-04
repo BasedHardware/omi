@@ -11,7 +11,7 @@ final class CuaControlStatusStoreTests: XCTestCase {
   private var suiteName = ""
   private var tempRoot = FileManager.default.temporaryDirectory
   /// Set by `makeStore`, which every test calls first.
-  private var gate: CuaControlGate!
+  private var gate: CuaControlGate?
 
   override func setUpWithError() throws {
     suiteName = "cua-control-status-\(UUID().uuidString)"
@@ -29,11 +29,12 @@ final class CuaControlStatusStoreTests: XCTestCase {
 
   @MainActor
   private func makeStore(granted: [CuaPermission]) -> CuaControlStatusStore {
-    gate = CuaControlGate(
+    let gate = CuaControlGate(
       defaults: defaults,
       missingPermission: { _ in nil },
       ownerID: { "owner-1" })
     gate.setEnabled(true)
+    self.gate = gate
     return CuaControlStatusStore(
       gate: gate,
       isGranted: { granted.contains($0) })
@@ -58,6 +59,7 @@ final class CuaControlStatusStoreTests: XCTestCase {
 
     store.isEnabled = false
 
+    let gate = try XCTUnwrap(self.gate)
     XCTAssertFalse(store.isEnabled)
     XCTAssertFalse(gate.isEnabled)
     XCTAssertNil(LocalMcpStore.readAllServers()[CuaMcpRegistration.serverName])
@@ -68,6 +70,7 @@ final class CuaControlStatusStoreTests: XCTestCase {
   @MainActor
   func testStatusTextHumanizesTheLastAction() throws {
     let store = makeStore(granted: [])
+    let gate = try XCTUnwrap(self.gate)
 
     store.stopNow()
     XCTAssertEqual(store.statusText(), "Stopped — stopped from Settings")
