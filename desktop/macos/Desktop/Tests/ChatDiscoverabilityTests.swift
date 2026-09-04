@@ -198,13 +198,28 @@ final class ChatDiscoverabilityTests: XCTestCase {
         declaredTools.insert(name)
       }
     }
-    // `look_at_frame` is not a tool of its own: `omi-tool-manifest.ts` declares it under
-    // `get_screenshot`'s `aliasCapabilityDocs`, and `LocalAgentAPIServer` maps it straight
-    // back to `get_screenshot`. Both capability docs say "Local API only", so it is exempt
-    // for the same reason its canonical name is. It reached the registry in #12084
-    // (2026-08-27) while this list had not changed since 2026-08-01, which is why the
-    // assertion below has failed ever since.
-    let localApiOnlyTools: Set<String> = ["get_local_status", "get_screenshot", "look_at_frame"]
+    // Derived from the same fixture, not hand-maintained. A hardcoded list is what broke
+    // this test: `look_at_frame` reached the registry in #12084 (2026-08-27) while the list
+    // had not changed since 2026-08-01, so a manifest addition became a test failure.
+    //
+    // A tool is exempt when the manifest says it is Local API only, and an alias inherits
+    // its canonical entry's exemption — `look_at_frame` is an alias of `get_screenshot`,
+    // which `LocalAgentAPIServer` also maps it back to.
+    var localApiOnlyTools = Set<String>()
+    for entry in fixture {
+      guard let name = entry["name"] as? String,
+        let executor = entry["executor"] as? [String: Any],
+        executor["kind"] as? String == "localApiOnly"
+      else { continue }
+      localApiOnlyTools.insert(name)
+      for alias in (entry["aliases"] as? [String]) ?? [] {
+        localApiOnlyTools.insert(alias)
+      }
+    }
+    XCTAssertFalse(
+      localApiOnlyTools.isEmpty,
+      "the fixture must still mark Local API only tools; an empty set would silently exempt nothing"
+    )
 
     for toolName in DesktopCapabilityRegistry.desktopToolNames where !localApiOnlyTools.contains(toolName) {
       XCTAssertTrue(declaredTools.contains(toolName), "Missing agent tool declaration for \(toolName)")
