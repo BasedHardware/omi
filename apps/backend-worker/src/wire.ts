@@ -49,6 +49,19 @@ export const backendError = (
   retryable = false
 ): Response => json({ error: { code, retryable, action } }, status);
 
+export async function withTimeout<T>(
+  timeoutMilliseconds: number,
+  operation: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMilliseconds);
+  try {
+    return await operation(controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export const isChatCreate = (value: unknown): value is ChatCreate => {
   if (value === null || typeof value !== "object" || Array.isArray(value))
     return false;

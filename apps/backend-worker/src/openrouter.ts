@@ -1,4 +1,5 @@
 import { gatewayFailureEvent } from "./observability";
+import { withTimeout } from "./wire";
 
 const SYSTEM_PROMPT = "You are Omi, a concise and helpful personal assistant.";
 const MAX_TOKENS = 768;
@@ -60,43 +61,46 @@ export const generateViaGateway = async (
   correlationId: string
 ): Promise<GatewayResult> => {
   try {
-    const response = await fetch(config.url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${config.secret}`,
-        "x-omi-correlation-id": correlationId,
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: prompt },
-        ],
-        max_tokens: MAX_TOKENS,
-      }),
-      signal: AbortSignal.timeout(GATEWAY_FETCH_TIMEOUT_MS),
+    return await withTimeout(GATEWAY_FETCH_TIMEOUT_MS, async (signal) => {
+      const response = await fetch(config.url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${config.secret}`,
+          "x-omi-correlation-id": correlationId,
+        },
+        body: JSON.stringify({
+          model: config.model,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: prompt },
+          ],
+          max_tokens: MAX_TOKENS,
+        }),
+        redirect: "manual",
+        signal,
+      });
+      if (!response.ok) {
+        logGateway(
+          "gateway_http_error",
+          correlationId,
+          config.model,
+          response.status
+        );
+        return { kind: "error" };
+      }
+      const text = extractText(await response.json());
+      if (text === null) {
+        logGateway(
+          "gateway_shape_error",
+          correlationId,
+          config.model,
+          response.status
+        );
+        return { kind: "error" };
+      }
+      return { kind: "ok", text };
     });
-    if (!response.ok) {
-      logGateway(
-        "gateway_http_error",
-        correlationId,
-        config.model,
-        response.status
-      );
-      return { kind: "error" };
-    }
-    const text = extractText(await response.json());
-    if (text === null) {
-      logGateway(
-        "gateway_shape_error",
-        correlationId,
-        config.model,
-        response.status
-      );
-      return { kind: "error" };
-    }
-    return { kind: "ok", text };
   } catch {
     logGateway("gateway_fetch_error", correlationId, config.model, 0);
     return { kind: "error" };
