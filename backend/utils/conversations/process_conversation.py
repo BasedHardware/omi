@@ -57,7 +57,13 @@ from models.conversation import (
     CreateConversation,
     ExternalIntegrationCreateConversation,
 )
-from models.conversation_enums import ConversationSource, ConversationStatus, ExternalIntegrationConversationSource
+from models.conversation_enums import (
+    ConversationProcessingState,
+    ConversationSource,
+    ConversationStatus,
+    ExternalIntegrationConversationSource,
+)
+from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
     client_processing_mutation,
@@ -82,9 +88,14 @@ from utils.observability.finalization import FinalizationFailureReason, record_f
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
+from utils.free_tier_memory_policy import (
+    free_tier_memory_suppression_enabled,
+    memory_formation_verdict,
+)
 from utils.free_tier_processing_policy import (
     FreeTierProcessingPlan,
     free_tier_local_processing_enabled,
+    minimum_processing_state,
     resolve_free_tier_processing_plan,
 )
 from utils.managed_compute import Decision, authorize_managed_compute, request_carries_validated_byok_key
@@ -964,6 +975,19 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
             conversation.id,
         )
         return
+    # §1.8: plan denial is a second early return in this same boundary, not a
+    # parallel branch. Everything below spends `get_llm('memories')`, so the
+    # gate has to sit above it rather than inside the extractor.
+    if free_tier_memory_suppression_enabled():
+        verdict = memory_formation_verdict(decision_for=_managed_compute_decision_for(uid))
+        if verdict.suppressed:
+            logger.info(
+                'memory extraction skipped: plan denies managed formation uid=%s conv=%s reason=%s',
+                uid,
+                conversation.id,
+                verdict.reason,
+            )
+            return
     source = source_for_conversation(conversation)
     parity_capture = SurfaceParityCapture.from_environ(
         principal_id=uid,
@@ -2050,7 +2074,15 @@ def _store_deterministic_minimum(
 ) -> Tuple[Conversation, bool]:
     """Persist a conversation at the no-LLM deterministic minimum, terminally.
 
-    Reuses ``_build_deferred_structured`` but does not set ``deferred=True`` or
+    ``structured`` is §1.7's deterministic minimum
+    (``build_deterministic_minimum_structured``): a title derived from the
+    transcript's first sentence with no model in the path, an empty overview,
+    category ``other``, and no action items or events. It is NOT
+    ``_build_deferred_structured`` — that one is the JIT first-open placeholder
+    and stays on the deferred path, where a later luna enrichment overwrites it.
+    Here nothing overwrites it, so the values have to be the spec's.
+
+    This does not set ``deferred=True`` or
     ``status=processing`` — those are the first-open reprocess markers
     ``get_conversation_by_id`` reads. This path emits no managed call, no JIT
     obligation, no memory extraction, no app fan-out, and no folder assignment.
@@ -2069,10 +2101,17 @@ def _store_deterministic_minimum(
     ingest site, not through this persist.
     """
     is_initial_creation = _is_ingress_create(conversation)
-    structured = _build_deferred_structured(conversation)
+    structured = build_deterministic_minimum_structured(
+        conversation,
+        tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
+    )
     conversation = _get_conversation_obj(uid, structured, conversation)
     conversation.deferred = False
     conversation.status = ConversationStatus.completed
+    minimum_state = minimum_processing_state(
+        getattr(conversation, 'source', None), has_projection=client_projection is not None
+    )
+    conversation.processing_state = ConversationProcessingState(minimum_state) if minimum_state else None
     _attach_client_projection(conversation, client_projection)
     payload = _terminal_persist_payload(conversation)
     if is_initial_creation and client_projection is not None:

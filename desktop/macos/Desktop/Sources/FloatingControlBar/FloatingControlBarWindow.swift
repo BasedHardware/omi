@@ -3843,10 +3843,10 @@ class FloatingControlBarManager {
     storedNotification(forContinuityKey: key)?.context?.detail
   }
 
-  /// Hub journal finalization is the realtime path into the ledger. Same
-  /// mutation owner as the batch `sendVoiceOnlyQuery` path.
+  /// Hub classification writes through `record_interject_feedback`. Parsing a
+  /// leftover token here would double-fire the ledger against the silent tool.
   func consumeInterjectHubTranscript(_ text: String) async {
-    await consumeInterjectVoiceReplyAsync(text)
+    _ = text
   }
 
   func consumeInterjectVoiceReply(_ text: String) {

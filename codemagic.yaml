@@ -1816,8 +1816,8 @@ workflows:
 
   # ============================================
   # OMI DESKTOP SWIFT RELEASE
-  # Builds, signs, notarizes, and publishes the Swift macOS app from omi/desktop/macos/.
-  # Source code lives directly in omi/desktop/macos/ (monorepo).
+  # Builds, signs, notarizes, and publishes the Swift macOS app from desktop/macos/.
+  # Source code lives directly in desktop/macos/ (monorepo).
   #
   # Trigger: push a tag like v0.0.10+10-macos to BasedHardware/omi
   #   git tag v0.0.10+10-macos && git push origin v0.0.10+10-macos

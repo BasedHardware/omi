@@ -93,6 +93,11 @@ enum DefaultsKey: String {
   /// Monthly-goal answered marker kept by `OnboardingChatPersistence`.
   case onboardingGoalCompleted = "onboardingGoalCompleted"
   case hasCompletedFileIndexing = "hasCompletedFileIndexing"
+  /// Durable record that the user skipped Accessibility during onboarding. Absent
+  /// means "no recorded skip" (pre-marker onboarding or an Allow); macOS exposes no
+  /// denied/notDetermined distinction for AX, so this is the only signal that keeps
+  /// the sidebar from pulsing a deliberate skip as "denied".
+  case onboardingAccessibilitySkipped = "onboardingAccessibilitySkipped"
   case screenAnalysisEnabled = "screenAnalysisEnabled"
   case ratingPromptQuestionCount = "ratingPromptQuestionCount"
   case ratingPromptSubmittedRating = "ratingPromptSubmittedRating"

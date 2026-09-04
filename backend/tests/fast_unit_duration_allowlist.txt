@@ -329,6 +329,9 @@ tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feat
 tests/unit/test_llm_gateway_coverage_guardrails.py::test_resolver_feature_literals_are_configured_and_dynamic_sites_are_reviewed
 tests/unit/test_llm_gateway_embeddings_route.py::test_embeddings_success_returns_openai_shape_and_records_accounting
 tests/unit/test_llm_gateway_vertex_provider.py::test_gateway_registry_uses_native_vertex_for_gemini
+# File-level: red-proof AST walks of production sources exceed 0.30s CPU per
+# test under saturated pre-push once this file is in the changed set.
+tests/unit/test_client_processing_trust_boundary.py
 # First route test in its file: amortizes the routers.users FastAPI/pydantic import into its call
 # phase. Structural (the file-isolation runner model), not a per-test regression.
 tests/unit/test_daily_summary_generation.py::test_create_route_happy_path

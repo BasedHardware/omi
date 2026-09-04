@@ -130,6 +130,13 @@ struct LocalInferenceRuntime: Sendable {
       let value: T = try await engine.generateStructured(prompt: prompt, schema: schema)
       return .engine(value, engineID: engine.engineID)
     } catch {
+      guard Self.isRetryable(error) else {
+        // A refusal, a permanent 4xx, an undecodable response, or a cancelled
+        // task: attempting it a second time cannot change the answer, and a
+        // fail-closed component must not re-attempt an operation policy has
+        // already refused.
+        return failClosed(from: engine.engineID.rawValue, reason: reason(for: error), input: minimumInput)
+      }
       do {
         let value: T = try await engine.generateStructured(prompt: prompt, schema: schema)
         fallback.recordLocalInferenceFallback(
@@ -161,6 +168,29 @@ struct LocalInferenceRuntime: Sendable {
       outcome: .exhausted
     )
     return .deterministicMinimum(DeterministicConversationMinimum.make(from: input))
+  }
+
+  /// Only a failure a second identical attempt could plausibly survive.
+  ///
+  /// Transport faults, 429, and 5xx are the engine being briefly unavailable.
+  /// Everything else — policy refusal, capability mismatch, unknown engine,
+  /// undecodable output, any other 4xx, cancellation — is deterministic, and
+  /// retrying it doubles the work and (for `nonLoopbackBaseURL`) attempts a
+  /// refused request twice.
+  static func isRetryable(_ error: Error) -> Bool {
+    if error is CancellationError { return false }
+    switch error as? LocalInferenceError {
+    case .httpStatus(let status):
+      return status == 429 || status >= 500
+    case .disabled, .nonLoopbackBaseURL, .capabilityUnavailable, .unknownEngine, .engineUnavailable,
+      .invalidResponse:
+      return false
+    case .engineFailed:
+      return true
+    case .none:
+      // Not one of ours: a URLError or another transport-layer failure.
+      return true
+    }
   }
 
   private func reason(for error: Error) -> String {

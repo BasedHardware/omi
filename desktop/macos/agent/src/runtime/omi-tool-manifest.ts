@@ -843,6 +843,34 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         "After screenshot succeeds for a current-screen question, report exactly one concise grounding observation. This report is internal verification, not the user-facing answer: when it succeeds, answer the user's original request naturally from the attached image.",
     },
   },
+  record_interject_feedback: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc(
+      "Record Interject Feedback",
+      "Silently record how the user's utterance relates to the proactive card.",
+      [
+        "Call silently when the latest utterance is a reply to the quoted card, then speak only the user-facing answer.",
+        "For a question or continuation, use riff or omit this tool; the first audio must be the answer.",
+        "Never speak the verb, a heads-up, or the tool result.",
+      ],
+    ),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "Record how the user's latest utterance relates to the proactive card, then speak only the user-facing reply. Call silently and immediately: do not speak a heads-up, do not speak the verb, and do not read the tool result. The app does not play a canned acknowledgement. For a question or continuation, use riff or omit this tool and let the first audio be the answer. For a correction, speak one English consequence sentence that names the fact that changed. Never speak taxonomy names as labels.",
+      schemaOverride: schema(
+        {
+          verb: {
+            type: "string",
+            enum: ["useful", "false_positive", "snooze", "disable", "missed", "correction", "riff"],
+            description:
+              "How the utterance relates to the card. riff is continuation or a question about the card.",
+          },
+        },
+        ["verb"],
+      ),
+    },
+  },
   point_click: {
     surfaces: ["realtime_voice"],
     capabilityDoc: doc("Point Click", "Click at on-screen pixel coordinates.", [
@@ -1889,6 +1917,31 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     intendedForAgents: true,
     runtimePreconditions: ["Realtime voice only; screenshot evidence must belong to the active PTT turn."],
+    adapters: {},
+  },
+  {
+    name: "record_interject_feedback",
+    label: "Record Interject Feedback",
+    description:
+      "Silently record how the user's latest utterance relates to the proactive card. Not a user-facing reply.",
+    promptSnippet: "record_interject_feedback - Silently classify a card reply, then speak only the answer",
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        verb: {
+          type: "string",
+          enum: ["useful", "false_positive", "snooze", "disable", "missed", "correction", "riff"],
+          description:
+            "How the utterance relates to the card. riff is continuation or a question about the card.",
+        },
+      },
+      ["verb"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only; Interject classification for the current PTT turn."],
     adapters: {},
   },
   {

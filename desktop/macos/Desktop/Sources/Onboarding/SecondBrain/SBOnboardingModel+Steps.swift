@@ -324,9 +324,31 @@ extension SBOnboardingModel {
     }
   }
 
-  func answerMic() { advance(userAnswer: micState == .on ? "Allowed" : "Skip", to: .systemAudio) }
+  /// Skip on the mic step is a durable off for the automatic listening path: write
+  /// `.off` so launch/restore never tries to start (and prompt) again. Allowing
+  /// undoes an earlier skip so a user who goes Back and grants isn't left dark —
+  /// the capture step's explicit answer remains the final word either way.
+  func answerMic() {
+    let allowed = micState == .on
+    if allowed {
+      if AssistantSettings.shared.audioRecordingMode == .off {
+        AssistantSettings.shared.audioRecordingMode = .onlyMeetings
+      }
+    } else {
+      AssistantSettings.shared.audioRecordingMode = .off
+    }
+    advance(userAnswer: allowed ? "Allowed" : "Skip", to: .systemAudio)
+  }
+
   func answerSystemAudio() { advance(userAnswer: sysState == .on ? "Allowed" : "Skip", to: .screen) }
-  func answerScreen() { advance(userAnswer: scrState == .on ? "Allowed" : "Skip", to: .files) }
+
+  /// Skip on the screen step is a durable off for screen analysis — completion and
+  /// every later automatic restore read this as the user's standing intent instead
+  /// of force-enabling Rewind for someone who just declined it.
+  func answerScreen() {
+    AssistantSettings.shared.screenAnalysisEnabled = scrState == .on
+    advance(userAnswer: scrState == .on ? "Allowed" : "Skip", to: .files)
+  }
   /// Restores the legacy Files-stage contract: scan what is readable after the
   /// Full Disk Access choice, then form the aggregate local-file memories
   /// before moving on. A skipped FDA grant still scans folders macOS permits.
@@ -378,7 +400,14 @@ extension SBOnboardingModel {
     guard localFileProfileState.isTerminal else { return }
     advance(userAnswer: nil, to: .accessibility)
   }
-  func answerAccessibility() { advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation) }
+  /// Skip on accessibility is a durable "not now": the sidebar must not pulse the
+  /// row as denied for a user who explicitly walked past it. macOS exposes no
+  /// denied/notDetermined distinction for AX, so the onboarding decision is the
+  /// only honest signal — an Allow clears it, a Skip sets it.
+  func answerAccessibility() {
+    UserDefaults.standard.set(accState != .on, forKey: .onboardingAccessibilitySkipped)
+    advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation)
+  }
   func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .notifications) }
   func answerNotifications() { advance(userAnswer: notifState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }
 

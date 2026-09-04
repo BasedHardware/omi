@@ -80,6 +80,15 @@ Genuinely non-unit tests (real `asyncio` sleeps, network/Redis, stress, codebase
 wiring, per-test fresh module reload) must be marked `@pytest.mark.slow` / `@pytest.mark.integration` so they
 leave the PR lane (`not integration and not slow`) rather than being allowlisted.
 
+**`slow` is not "does not run".** Until 2026-09-04 it was: `run-unit-ci.sh` was the only backend unit lane,
+so a `slow` marker took a test out of CI entirely and an exact-set guardrail that fails nothing is a comment.
+#12701 added two managed `get_llm` call sites the LLM-inventory pin rejects and merged anyway, within the
+hour, because nothing ran the pin. If you mark a **guardrail** `slow` — a codebase grep, a coverage ratchet,
+an exact-set pin — add its file to `tests/slow_guardrail_manifest.txt` so
+`scripts/run-slow-guardrails-ci.sh` runs it. That lane is unselected and unconditional by design: a check
+whose job is to notice a change nobody anticipated cannot be gated on the change set that triggered the run.
+Stress and network tests still belong in `slow` with no manifest entry.
+
 ## Integration Tests
 
 Integration tests live under `tests/integration/` and are not run by `bash test.sh`. They may require Redis,

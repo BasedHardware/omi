@@ -476,6 +476,12 @@ _PRODUCTION_DUMPS = _scan_dumps()
 # dump in a scanned file fails until reviewed — receiver name is not a filter.
 PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
     {
+        # Daily-summary stats payloads (`DailySummaryDayStatsPayload`), not
+        # conversations: the scanner keys on the call, not the receiver's type,
+        # so these two land here. Reviewed 2026-09-04 — neither dump can carry
+        # `client_processing`, because neither subject is a `Conversation`.
+        DumpSite('utils/llm/external_integrations.py', '_basic_daily_summary', 'model_dump'),
+        DumpSite('utils/llm/external_integrations.py', 'generate_comprehensive_daily_summary', 'model_dump'),
         DumpSite('models/conversation.py', 'project_shared_conversation', 'model_dump'),
         DumpSite('models/conversation.py', 'as_dict_cleaned_dates', 'model_dump'),
         DumpSite('utils/conversations/render.py', 'conversation_to_dict', 'model_dump'),
@@ -484,6 +490,11 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('routers/developer.py', 'get_memories', 'model_dump'),
         DumpSite('routers/developer.py', '_create_conversation_from_segments', 'model_dump'),
         DumpSite('routers/developer.py', 'update_goal', 'model_dump'),
+        # DailySummaryDayStatsPayload aggregates (counts/minutes watched), not
+        # conversation content; transcripts reach the LLM via
+        # conversations_to_string. Reviewed with the daily-summary work (#12636).
+        DumpSite('utils/llm/external_integrations.py', '_basic_daily_summary', 'model_dump'),
+        DumpSite('utils/llm/external_integrations.py', 'generate_comprehensive_daily_summary', 'model_dump'),
         DumpSite(
             'utils/conversations/projection_payload.py',
             'client_processing_mutation',
@@ -552,6 +563,9 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         ),
         DumpSite('utils/task_intelligence/backend_capture.py', 'policy_signals', 'model_dump'),
         DumpSite('utils/task_intelligence/conversation_capture.py', 'canonical_fields', 'model_dump'),
+        # Daily-summary stats payload (not Conversation); scanner matches any model_dump.
+        DumpSite('utils/llm/external_integrations.py', '_basic_daily_summary', 'model_dump'),
+        DumpSite('utils/llm/external_integrations.py', 'generate_comprehensive_daily_summary', 'model_dump'),
         DumpSite('routers/goals.py', 'create_goal', 'model_dump'),
         DumpSite('routers/goals.py', 'create_canonical_goal', 'model_dump'),
         DumpSite('routers/goals.py', 'update_goal', 'model_dump'),
@@ -576,6 +590,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'uses_custom_stt',
         'structured',
         'client_processing',
+        # S3 (§1.7): server-authored, NOT projection-family. It says why
+        # `structured` is the deterministic minimum; it carries no client text,
+        # so the integration redactor must not strip it.
+        'processing_state',
         'transcript_segments',
         'transcript_segments_compressed',
         'geolocation',

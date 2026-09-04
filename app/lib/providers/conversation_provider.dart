@@ -17,15 +17,16 @@ typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool 
 typedef ConversationPageFetcher = Future<({List<ServerConversation> items, bool ok, bool truncated})> Function();
 typedef ConversationLifecycleFetcher = Future<({ServerConversation? item, bool ok})> Function(String id);
 typedef DailySummariesChecker = Future<bool> Function();
-typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)> Function(
-  String query, {
-  int? page,
-  int? limit,
-  required bool includeDiscarded,
-  DateTime? startDate,
-  DateTime? endDate,
-  String? speakerId,
-});
+typedef ConversationSearchFetcher =
+    Future<(List<ServerConversation>, int, int)> Function(
+      String query, {
+      int? page,
+      int? limit,
+      required bool includeDiscarded,
+      DateTime? startDate,
+      DateTime? endDate,
+      String? speakerId,
+    });
 typedef ConversationDetailsFetcher = Future<ServerConversation?> Function(String conversationId);
 
 /// Day-bucket key for a conversation timestamp, in the viewer's **local** timezone.
@@ -160,11 +161,11 @@ class ConversationProvider extends ChangeNotifier {
     DailySummariesChecker? dailySummariesChecker,
     ConversationSearchFetcher? conversationSearchFetcher,
     bool Function()? isSignedIn,
-  })  : _conversationListFetcher = conversationListFetcher,
-        _conversationLifecycleFetcher = conversationLifecycleFetcher ?? getConversationByIdResult,
-        _dailySummariesChecker = dailySummariesChecker,
-        _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
-        _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
+  }) : _conversationListFetcher = conversationListFetcher,
+       _conversationLifecycleFetcher = conversationLifecycleFetcher ?? getConversationByIdResult,
+       _dailySummariesChecker = dailySummariesChecker,
+       _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
+       _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
     _setupMergeListener();
     _loadSettings();
   }
@@ -445,8 +446,9 @@ class ConversationProvider extends ChangeNotifier {
   Future<bool> checkHasDailySummaries() async {
     if (!_isSignedIn()) return false;
     final generation = _sessionGeneration;
-    final hasSummaries = await (_dailySummariesChecker?.call() ??
-        getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
+    final hasSummaries =
+        await (_dailySummariesChecker?.call() ??
+            getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
     if (generation != _sessionGeneration || !_isSignedIn()) return false;
     hasDailySummaries = hasSummaries;
     notifyListeners();
@@ -978,9 +980,9 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Map<String, ServerConversation> _realProcessingConversationsById() => {
-        for (final conversation in processingConversations)
-          if (conversation.id != '0') conversation.id: conversation,
-      };
+    for (final conversation in processingConversations)
+      if (conversation.id != '0') conversation.id: conversation,
+  };
 
   Future<Map<String, ({ServerConversation? item, bool ok})>> _loadProcessingLifecycleResults(
     List<ServerConversation> pageItems,
@@ -1022,8 +1024,9 @@ class ConversationProvider extends ChangeNotifier {
       }
     }
 
-    final workerCount =
-        ids.length < _processingLifecycleMaxConcurrency ? ids.length : _processingLifecycleMaxConcurrency;
+    final workerCount = ids.length < _processingLifecycleMaxConcurrency
+        ? ids.length
+        : _processingLifecycleMaxConcurrency;
     final workers = List<Future<void>>.generate(workerCount, (_) => worker());
     try {
       await Future.wait(workers).timeout(_processingLifecycleDeadline);
@@ -1247,27 +1250,6 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // _handleCalendarCreation(ServerMemory memory) {
-  //   if (!SharedPreferencesUtil().calendarEnabled) return;
-  //   if (SharedPreferencesUtil().calendarType != 'auto') return;
-  //
-  //   List<Event> events = memory.structured.events;
-  //   if (events.isEmpty) return;
-  //
-  //   List<int> indexes = events.mapIndexed((index, e) => index).toList();
-  //   setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
-  //   for (var i = 0; i < events.length; i++) {
-  //     if (events[i].created) continue;
-  //     events[i].created = true;
-  //     CalendarUtil().createEvent(
-  //       events[i].title,
-  //       events[i].startsAt,
-  //       events[i].duration,
-  //       description: events[i].description,
-  //     );
-  //   }
-  // }
-
   /////////////////////////////////////////////////////////////////
   ////////// Delete Memory With Undo Functionality ///////////////
 
@@ -1432,8 +1414,8 @@ class ConversationProvider extends ChangeNotifier {
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
       final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere(
-            (item) => item.description == actionItemDescription,
-          );
+        (item) => item.description == actionItemDescription,
+      );
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -1446,8 +1428,8 @@ class ConversationProvider extends ChangeNotifier {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
         final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere(
-              (item) => item.description == actionItemDescription,
-            );
+          (item) => item.description == actionItemDescription,
+        );
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }

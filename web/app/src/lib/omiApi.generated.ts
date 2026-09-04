@@ -1145,6 +1145,7 @@ export interface Conversation {
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
   processing_memory_id?: string | null;
+  processing_state?: ConversationProcessingState | null;
   screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
   starred?: boolean;
@@ -1263,6 +1264,8 @@ export interface ConversationPhoto {
   storage_id?: string | null;
 }
 
+export type ConversationProcessingState = "local_pending" | "none";
+
 export interface ConversationRecordingResponse {
   has_recording: boolean;
 }
@@ -1323,6 +1326,7 @@ export interface ConversationSearchItem {
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
   processing_memory_id?: string | null;
+  processing_state?: ConversationProcessingState | null;
   screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
   starred?: boolean;
@@ -4991,6 +4995,7 @@ export interface OmiApiSchemas {
   "ConversationLinkSpec": ConversationLinkSpec;
   "ConversationMutationResponse": ConversationMutationResponse;
   "ConversationPhoto": ConversationPhoto;
+  "ConversationProcessingState": ConversationProcessingState;
   "ConversationRecordingResponse": ConversationRecordingResponse;
   "ConversationScreenFrame": ConversationScreenFrame;
   "ConversationScreenFrameSet": ConversationScreenFrameSet;

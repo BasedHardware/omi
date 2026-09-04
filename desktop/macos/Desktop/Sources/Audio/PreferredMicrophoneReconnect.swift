@@ -118,7 +118,7 @@ final class PreferredMicrophoneReconnectMonitor {
       "Transcription: preferred microphone reconnected — restarting capture onto \(resolved?.name ?? preferredUID)"
     )
     if await appState.prepareTranscriptionRestartAfterSettingsChange() {
-      appState.startTranscription()
+      appState.startTranscription(userInitiated: false)
     }
   }
 

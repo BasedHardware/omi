@@ -595,7 +595,6 @@ class DurableMemoryPatch(BaseModel):
 # Neutral symbol aliases (WS-G) — same types, canonical names for new code.
 WorkingObservation = WorkingMemoryObservation
 WorkingObservationArchiveItem = L1MemoryArchiveItem
-PromotionRoute = L2MemoryRoute
 
 __all__ = [
     "DURABLE_MEMORY_PATCH_FACT_SOURCE",
@@ -609,7 +608,6 @@ __all__ = [
     "L2SearchRequest",
     "L2SearchResult",
     "LifecycleState",
-    "PromotionRoute",
     "SourceBackedMemoryCandidate",
     "DURABLE_MEMORY_PATCH_FACT_SOURCE",
     "WorkingMemoryObservation",

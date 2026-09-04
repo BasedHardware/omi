@@ -18,6 +18,7 @@ import pytest
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
+from config.plan_catalog import PlanType
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
@@ -1101,3 +1102,126 @@ def test_terminal_persist_writes_marker_and_normal_persist_clears_it(monkeypatch
     ), 'normal persist must write the marker as None so merge=True clears a stale terminal'
     assert normal_payloads[-1][field] is None
     assert terminal_payloads[-1][field] is True
+
+
+# --- S5 (§1.8): managed memory formation stops for basic ----------------------
+
+
+def _memory_decision(pc, *, allowed: bool, reason: str, plan: Any = None):
+    return pc.Decision(
+        allowed=allowed,
+        reason=reason,
+        feature='memories',
+        funding_owner='omi',
+        plan=plan,
+        plan_resolved=plan is not None,
+    )
+
+
+def _extract_memories_probe(monkeypatch, pc, *, suppression_on: bool, decision) -> MagicMock:
+    """Drive the real `extract_memories` down to (or past) the §1.8 gate."""
+    # A MagicMock result, not a SimpleNamespace: past the gate the real
+    # telemetry reads attributes this test does not care about, and the point
+    # here is only whether the extractor was reached.
+    inner = MagicMock(return_value=MagicMock(count=1, path='eager'))
+    monkeypatch.setattr(pc, '_extract_memories_inner', inner)
+    monkeypatch.setattr(pc, 'MemoryService', MagicMock())
+    monkeypatch.setattr(pc, '_sweep_owned_writer_mode', lambda _uid: None)
+    monkeypatch.setattr(pc, 'free_tier_memory_suppression_enabled', lambda: suppression_on)
+    monkeypatch.setattr(pc, '_funding_owner_for_feature', lambda _feature: 'omi')
+    monkeypatch.setattr(pc, 'authorize_managed_compute', lambda *args, **kwargs: decision)
+    return inner
+
+
+# red-proof: delete the `if free_tier_memory_suppression_enabled():` block in extract_memories
+def test_basic_uid_forms_no_managed_memory(monkeypatch, pc) -> None:
+    """Named proof (a): a finalized conversation on basic makes zero
+    memory-extraction provider-lane calls."""
+    inner = _extract_memories_probe(
+        monkeypatch,
+        pc,
+        suppression_on=True,
+        decision=_memory_decision(pc, allowed=False, reason='basic_not_entitled', plan=PlanType.basic),
+    )
+    pc.extract_memories('basic-uid', _existing_desktop('basic-conv'))
+    inner.assert_not_called()
+
+
+def test_paid_uid_still_forms_memories_with_the_flag_on(monkeypatch, pc) -> None:
+    inner = _extract_memories_probe(
+        monkeypatch,
+        pc,
+        suppression_on=True,
+        decision=_memory_decision(pc, allowed=True, reason='plan_paid', plan=PlanType.unlimited),
+    )
+    pc.extract_memories('paid-uid', _existing_desktop('paid-conv'))
+    inner.assert_called_once()
+
+
+def test_flag_off_is_byte_identical_for_basic(monkeypatch, pc) -> None:
+    """Dark rollout: with the flag off, a basic uid extracts exactly as today —
+    the policy is not even consulted."""
+    consulted: list[str] = []
+    inner = _extract_memories_probe(
+        monkeypatch,
+        pc,
+        suppression_on=False,
+        decision=_memory_decision(pc, allowed=False, reason='basic_not_entitled', plan=PlanType.basic),
+    )
+    monkeypatch.setattr(
+        pc,
+        'memory_formation_verdict',
+        lambda **kwargs: consulted.append('called') or pytest.fail('policy consulted with the flag off'),
+    )
+    pc.extract_memories('basic-uid', _existing_desktop('flag-off-conv'))
+    inner.assert_called_once()
+    assert consulted == []
+
+
+def test_sweep_owned_writer_still_short_circuits_before_the_plan_gate(monkeypatch, pc) -> None:
+    """The plan gate is a *second* early return in the same boundary, not a
+    replacement: a ledger-cutover account is still skipped for its own reason,
+    and the plan lookup never runs for it."""
+    inner = _extract_memories_probe(
+        monkeypatch,
+        pc,
+        suppression_on=True,
+        decision=_memory_decision(pc, allowed=True, reason='plan_paid', plan=PlanType.unlimited),
+    )
+    monkeypatch.setattr(pc, '_sweep_owned_writer_mode', lambda _uid: 'ledger')
+    asked: list[str] = []
+    monkeypatch.setattr(pc, 'memory_formation_verdict', lambda **kwargs: asked.append('asked'))
+    pc.extract_memories('ledger-uid', _existing_desktop('ledger-conv'))
+    inner.assert_not_called()
+    assert asked == [], 'the sweep-owned early return must win before any plan lookup'
+
+
+def test_replayed_finalization_of_a_suppressed_conversation_still_spends_nothing(monkeypatch, pc) -> None:
+    """S6's worst defect was request-scoped terminal state: a Cloud Task retry
+    re-ran memory extraction for a basic user. The gate must hold on replay."""
+    inner = _extract_memories_probe(
+        monkeypatch,
+        pc,
+        suppression_on=True,
+        decision=_memory_decision(pc, allowed=False, reason='basic_not_entitled', plan=PlanType.basic),
+    )
+    conversation = _existing_desktop('replayed-conv')
+    for _ in range(3):
+        pc.extract_memories('basic-uid', conversation)
+    inner.assert_not_called()
+
+
+def test_a_raising_plan_lookup_suppresses_instead_of_failing_finalization(monkeypatch, pc) -> None:
+    inner = _extract_memories_probe(
+        monkeypatch,
+        pc,
+        suppression_on=True,
+        decision=_memory_decision(pc, allowed=True, reason='plan_paid', plan=PlanType.unlimited),
+    )
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError('authorization exploded')
+
+    monkeypatch.setattr(pc, 'authorize_managed_compute', boom)
+    pc.extract_memories('erroring-uid', _existing_desktop('erroring-conv'))
+    inner.assert_not_called()

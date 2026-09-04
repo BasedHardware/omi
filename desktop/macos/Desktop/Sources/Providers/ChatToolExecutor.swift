@@ -2227,6 +2227,18 @@ class ChatToolExecutor {
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
+      // A denied grant is spent: `requestAccess` never resurfaces it, and forcing
+      // System Settings from a chat turn repeats the auto-reprompt class. Report it.
+      if MicrophoneCaptureAuthorizationPolicy.action(for: AudioCaptureService.authorizationStatus())
+        == .surfacePermissionAlert
+      {
+        appState?.hasMicrophonePermission = false
+        return permissionRequestResult(
+          type: type, granted: false,
+          pendingMessage:
+            "Microphone permission is denied at the system level; tell the user to re-enable it in System Settings › Privacy & Security › Microphone.",
+          requiresRestart: false)
+      }
       NSApp.activate()
       guard let granted = await requestMicrophonePermissionDirectly(),
         isPermissionAuthorizationCurrent(
@@ -2255,13 +2267,29 @@ class ChatToolExecutor {
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
+      // Same rule as microphone: a denied authorization is spent — no re-request,
+      // no forced System Settings jump from a chat turn.
+      let preStatus = await withCheckedContinuation {
+        (continuation: CheckedContinuation<UNAuthorizationStatus, Never>) in
+        UserNotificationCallbackBridge.authorizationStatus { status in
+          continuation.resume(returning: status)
+        }
+      }
+      if preStatus == .denied {
+        appState?.hasNotificationPermission = false
+        return permissionRequestResult(
+          type: type, granted: false,
+          pendingMessage:
+            "Notifications are denied at the system level; tell the user to re-enable Omi in System Settings › Notifications.",
+          requiresRestart: false)
+      }
       guard let granted = await requestNotificationPermissionDirectly(),
         isPermissionAuthorizationCurrent(
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
       appState?.hasNotificationPermission = granted
-      if !granted {
+      if !granted, preStatus == .notDetermined {
         _ = openNotificationPrivacySettings(
           expectedOwnerID: expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
