@@ -174,19 +174,21 @@ final class AuthSessionCoordinatorTests: XCTestCase {
   /// alone, with the launch attempt named only as a diagnostic.
   func testRestoreWatchdogArmsBeforeTheRestoreAndResolvesOnPhaseAlone() throws {
     let source = try sourceFile("AuthService.swift")
-    let configureRange = source.range(of: "func configure() async {")
-    let armRange = source.range(of: "armRestoringPhaseWatchdog(attempt: attempt)")
-    let restoreRange = source.range(of: "await restoreAuthState(attempt: attempt)")
-    XCTAssertNotNil(configureRange)
-    XCTAssertNotNil(armRange)
-    XCTAssertNotNil(restoreRange)
+    let configureRange = try XCTUnwrap(source.range(of: "func configure() async {"))
+    let armRange = try XCTUnwrap(
+      source.range(of: "armRestoringPhaseWatchdog(attempt: attempt)"))
+    let restoreRange = try XCTUnwrap(
+      source.range(of: "await restoreAuthState(attempt: attempt)"))
     XCTAssertLessThan(
-      armRange!.lowerBound, restoreRange!.lowerBound,
+      configureRange.lowerBound, armRange.lowerBound,
+      "the watchdog arms inside configure")
+    XCTAssertLessThan(
+      armRange.lowerBound, restoreRange.lowerBound,
       "the watchdog arms before the restore can suspend on its own awaits")
 
-    let watchdogRange = source.range(of: "func armRestoringPhaseWatchdog(attempt:")
-    XCTAssertNotNil(watchdogRange)
-    let watchdog = String(source[watchdogRange!.lowerBound...]).prefix(1800)
+    let watchdogRange = try XCTUnwrap(
+      source.range(of: "func armRestoringPhaseWatchdog(attempt:"))
+    let watchdog = String(source[watchdogRange.lowerBound...]).prefix(1800)
     XCTAssertTrue(watchdog.contains("AuthState.shared.isRestoringAuth"))
     XCTAssertTrue(watchdog.contains("transition(to: .recoveryRequired)"))
     XCTAssertFalse(
