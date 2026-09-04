@@ -161,7 +161,102 @@ final class UserMcpRuntimeRefreshTests: XCTestCase {
     refresh.changeDetected()
     await refresh.awaitDebouncedCycleForTesting()
 
-    XCTAssertEqual(respawns.current, 0, "the next start reads the file; there is nothing to respawn")
+    XCTAssertEqual(respawns.current, 0, "with nothing warm there is nothing to respawn yet")
+  }
+
+  /// A change landing while the runtime is down must not vanish: the real
+  /// instance is the unawaited `refreshExpiredTokens()` at spawn, whose write
+  /// notifies during the stop → spawn → warmup window, when the warm flag is
+  /// still false. It stays pending and the next boundary applies it.
+  @MainActor
+  func testChangeDuringColdStartSurvivesAndAppliesAtTheNextBoundary() async throws {
+    let respawns = Counter()
+    let started = Box(false)
+    let refresh = UserMcpRuntimeRefresh(
+      debounce: { _ in },
+      isTurnActive: { false },
+      isRuntimeStarted: { started.value },
+      respawn: { respawns.increment() })
+
+    refresh.changeDetected()
+    await refresh.awaitDebouncedCycleForTesting()
+    XCTAssertEqual(respawns.current, 0)
+
+    // The window closed with the runtime warm; the next boundary applies.
+    started.value = true
+    await refresh.applyAtTurnBoundary()
+    XCTAssertEqual(respawns.current, 1, "a change that landed mid-startup applies once the runtime is up")
+    await refresh.applyAtTurnBoundary()
+    XCTAssertEqual(respawns.current, 1, "and exactly once")
+  }
+
+  /// The runtime's own writes go through the store's write path, which records
+  /// their fingerprint — so the post-respawn re-stat must not read them back
+  /// as another change and chase a respawn loop.
+  @MainActor
+  func testRuntimeOwnWriteDuringRespawnDoesNotRepend() async throws {
+    let respawns = Counter()
+    var wroteTokenRefresh = false
+    let refresh = UserMcpRuntimeRefresh(
+      debounce: { _ in },
+      isTurnActive: { false },
+      isRuntimeStarted: { true },
+      respawn: {
+        respawns.increment()
+        guard !wroteTokenRefresh else { return }
+        wroteTokenRefresh = true
+        // What refreshExpiredTokens does mid-spawn: an own write through the
+        // shared store seam, which notifies but records its fingerprint.
+        try? LocalMcpStore.upsertServer(
+          "playwright", entry: ["url": "https://mcp.example.com", "auth": ["access_token": "t2"]])
+      })
+
+    refresh.changeDetected()
+    await refresh.awaitDebouncedCycleForTesting()
+    XCTAssertEqual(respawns.current, 1)
+
+    await refresh.applyAtTurnBoundary()
+    XCTAssertEqual(respawns.current, 1, "the runtime's own refresh write must not respawn again")
+  }
+
+  /// A hand-edit landing during the respawn window may postdate the new
+  /// process's read of the file: the post-respawn re-stat re-pends it, the
+  /// next boundary respawns for it, and then it settles.
+  @MainActor
+  func testExternalEditDuringRespawnWindowAppliesAtTheNextBoundary() async throws {
+    // A store write first, so the process has a fingerprint baseline to
+    // compare the mid-respawn hand-edit against.
+    try LocalMcpStore.addCommandServer(name: "calc", commandLine: "node calc.js")
+
+    let respawns = Counter()
+    var handEdited = false
+    let refresh = UserMcpRuntimeRefresh(
+      debounce: { _ in },
+      isTurnActive: { false },
+      isRuntimeStarted: { true },
+      respawn: {
+        respawns.increment()
+        guard !handEdited else { return }
+        handEdited = true
+        // A write from outside the app: it bypasses the store's write path,
+        // so nothing records its fingerprint.
+        let edited: [String: Any] = [
+          "mcpServers": [
+            "calc": ["command": "node", "args": ["calc.js"]],
+            "deepwiki": ["url": "https://mcp.deepwiki.com/mcp"],
+          ]
+        ]
+        try? JSONSerialization.data(withJSONObject: edited).write(to: LocalMcpStore.fileURL)
+      })
+
+    refresh.changeDetected()
+    await refresh.awaitDebouncedCycleForTesting()
+    XCTAssertEqual(respawns.current, 1)
+
+    await refresh.applyAtTurnBoundary()
+    XCTAssertEqual(respawns.current, 2, "the mid-respawn hand-edit applies again at the next boundary")
+    await refresh.applyAtTurnBoundary()
+    XCTAssertEqual(respawns.current, 2, "and then it settles — no loop")
   }
 
   @MainActor

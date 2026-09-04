@@ -225,19 +225,39 @@ enum LocalMcpStore {
 /// (a marketplace install burst, or one OAuth refresh sweeping several tokens,
 /// costs one respawn) and never land mid-turn: a change noticed while a query
 /// is streaming stays pending until the next turn's bridge-readiness check,
-/// which is the safe point between turns. The runtime's own restart refuses
-/// while requests are active (a background agent mid-run, for example), which
-/// defers the respawn the same way.
+/// which is the safe point between turns. A change that lands while nothing is
+/// warm — the real instance is the runtime's own token refresh, which fires
+/// unawaited during a spawn — survives the whole stop → spawn → warmup window
+/// and applies at the next boundary instead of being dropped. After a
+/// successful respawn the coordinator re-stats the file through the store's
+/// external-change semantics, so a hand-edit that landed mid-respawn (after
+/// the new process may have read the file) applies again, while the runtime's
+/// own writes stay excluded and cannot chase it into a respawn loop. The
+/// runtime's own restart refuses while requests are active (a background agent
+/// mid-run, for example), which defers the respawn the same way.
 ///
 /// The closures exist so the decision logic is testable without a runtime.
 @MainActor
 final class UserMcpRuntimeRefresh {
   static let debounceNanoseconds: UInt64 = 500_000_000
 
+  /// The process-wide coordinator. ChatProvider binds it to the main
+  /// provider's bridge state at init; its notification observer feeds it and
+  /// its bridge-readiness check consumes it. Task chat consumes the same
+  /// pending state at its own boundary (TaskChatRuntime.sharedBridge) because
+  /// a task-chat-only session never calls ensureBridgeStarted — and both
+  /// surfaces drive the one shared runtime process. Before a provider exists
+  /// nothing has observed a change, so there is no deferred state to apply
+  /// and the neutral bindings below simply refuse to respawn.
+  static let shared = UserMcpRuntimeRefresh(
+    isTurnActive: { false },
+    isRuntimeStarted: { false },
+    respawn: { throw BridgeError.stopped })
+
   private let debounce: (UInt64) async -> Void
-  private let isTurnActive: () -> Bool
-  private let isRuntimeStarted: () -> Bool
-  private let respawn: () async throws -> Void
+  private var isTurnActive: () -> Bool
+  private var isRuntimeStarted: () -> Bool
+  private var respawn: () async throws -> Void
   private var pendingChange = false
   private var debounceInFlight = false
   private var cycleTask: Task<Void, Never>?
@@ -249,6 +269,19 @@ final class UserMcpRuntimeRefresh {
     respawn: @escaping () async throws -> Void
   ) {
     self.debounce = debounce
+    self.isTurnActive = isTurnActive
+    self.isRuntimeStarted = isRuntimeStarted
+    self.respawn = respawn
+  }
+
+  /// Rebinds the questions the coordinator asks. Production: ChatProvider's
+  /// init installs closures over its own bridge state, so the shared
+  /// coordinator has exactly one view of the runtime. Tests install doubles.
+  func bindRuntime(
+    isTurnActive: @escaping () -> Bool,
+    isRuntimeStarted: @escaping () -> Bool,
+    respawn: @escaping () async throws -> Void
+  ) {
     self.isTurnActive = isTurnActive
     self.isRuntimeStarted = isRuntimeStarted
     self.respawn = respawn
@@ -289,13 +322,28 @@ final class UserMcpRuntimeRefresh {
   private func applyPendingChange(onlyWhenIdle: Bool) async {
     guard pendingChange else { return }
     if onlyWhenIdle, isTurnActive() { return }  // stays pending; retried at the next boundary
+    // Nothing warm to respawn — but the change must not vanish: the stop →
+    // spawn → warmup window is exactly when the runtime's own writes (the
+    // unawaited OAuth token refresh at spawn) notify, and a spawn already in
+    // flight may have read the file before the change landed. It stays
+    // pending for the next boundary instead of being dropped.
+    guard isRuntimeStarted() else { return }
     pendingChange = false
-    guard isRuntimeStarted() else { return }  // nothing warm to respawn; the next start reads the file
     do {
       try await respawn()
     } catch {
       // The respawn did not happen. Keep the change pending so the next turn
       // boundary retries once the refusal clears.
+      pendingChange = true
+      return
+    }
+    // The runtime reads mcp.json at some point during its startup, so a
+    // change that landed mid-respawn may postdate the spawn's read. Re-stat
+    // through the store's external-change semantics: writes made by this
+    // process (the token refresh writes through the same store) are recorded
+    // by the write path and stay excluded, so the runtime's own refresh
+    // during a spawn cannot chase this into a respawn loop.
+    if LocalMcpStore.checkForExternalChanges() {
       pendingChange = true
     }
   }
