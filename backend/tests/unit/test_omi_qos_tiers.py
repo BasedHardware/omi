@@ -441,10 +441,17 @@ class TestGetLlm:
         assert llm1 is llm2
 
     def test_different_models_return_different_instances(self):
-        # memories and conv_structure both resolve to Luna in premium.
+        llm1 = get_llm('memories')
+        llm2 = get_llm('persona_chat')
+        assert llm1 is not llm2
+
+    def test_foreground_timeout_does_not_share_cached_client(self):
+        # Both resolve to Luna in premium, but conv_structure carries
+        # FOREGROUND_REQUEST_TIMEOUT_SECONDS and request_timeout is part of the
+        # client cache key.
         llm1 = get_llm('memories')
         llm2 = get_llm('conv_structure')
-        assert llm1 is llm2
+        assert llm1 is not llm2
 
     def test_streaming_returns_different_instance(self):
         llm = get_llm('conv_action_items')
