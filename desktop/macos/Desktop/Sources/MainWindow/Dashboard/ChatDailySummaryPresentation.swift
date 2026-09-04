@@ -110,4 +110,58 @@ enum ChatDailySummaryPresentation {
     let text = headline.isEmpty ? "Your day in review" : headline
     return emoji.isEmpty ? text : "\(emoji) \(text)"
   }
+
+  // MARK: - Section projection
+
+  /// Pure so the "render only what is there" rule is testable without a view: an empty section is
+  /// never drawn. Shared by every surface that renders a recap, so their sections cannot drift.
+  nonisolated static func highlights(in summary: DailySummaryRecord) -> [DailySummaryRecord.Highlight] {
+    (summary.highlights ?? []).filter { !($0.summary ?? "").isEmpty }
+  }
+
+  nonisolated static func actionItems(in summary: DailySummaryRecord) -> [DailySummaryRecord.ActionItem] {
+    (summary.actionItems ?? []).filter { !($0.description ?? "").isEmpty }
+  }
+
+  /// The review rows, and only from `memories_learned`.
+  ///
+  /// Deliberately never falls back to `knowledge_nuggets`: a nugget is LLM prose with no memory
+  /// behind it, so a ✓ on one would mutate nothing and a ✗ would teach extraction nothing. A day
+  /// with no qualifying memory shows no section, which is the honest empty state.
+  nonisolated static func memoriesLearned(in summary: DailySummaryRecord) -> [MemoryReviewItem] {
+    summary.memoriesLearned
+      .filter {
+        // Trimmed, not merely non-empty: a blank-but-present id would render a row whose ✓ / ✗ /
+        // Fix address no memory at all.
+        !$0.memoryID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      }
+      .prefix(MemoryReviewSection.maxRows)
+      .map(MemoryReviewItem.init)
+  }
+
+  /// Identity for a recap's memory-review section.
+  ///
+  /// The section holds one `MemoryReviewCardStore`, and the store captures its rows at init. A
+  /// summary regenerated for the same day keeps its id, so keying on the id alone kept the old
+  /// store alive: new memories never appeared and corrected ones kept the text the record no
+  /// longer contained. Folding the rows in rebuilds the section exactly when they change.
+  nonisolated static func reviewSectionIdentity(
+    summaryID: String, items: [MemoryReviewItem]
+  ) -> String {
+    let rows = items.map { "\($0.memoryID)\u{1F}\($0.content)" }.joined(separator: "\u{1E}")
+    return "memory-review-\(summaryID)\u{1E}\(rows)"
+  }
+
+  // MARK: - Actions
+
+  /// The follow-up affordance's whole action, separated from any view so it is testable: place the
+  /// question in the composer and stop. It never sends — the reader reads the recap, then decides
+  /// whether to ask. `MainChatNavigationRequestStore` is the one prefill seam both shells'
+  /// composers consume; a second path would race the first for the draft.
+  @MainActor
+  static func requestFollowUp(_ question: String) {
+    MainChatNavigationRequestStore.shared.request(draft: question)
+    AnalyticsManager.shared.trackDailySummary(.followUpTapped)
+  }
 }

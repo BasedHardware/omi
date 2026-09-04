@@ -485,8 +485,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Whether the daily summary card is currently allowed above the thread.
   /// See `admitDailySummaryIfFollowing` (INV-CHAT-2).
   @State private var dailySummaryAdmitted = false
-  /// Measured height of the pinned recap bar, used to inset the transcript so it is occluded
-  /// by nothing.
+  /// Measured height of the pinned recap pill, used to inset the transcript so it is occluded
+  /// by nothing. Tracked live — see the preference handler below.
   @State private var dailySummaryBarHeight: CGFloat = 0
   @ObservedObject private var dailySummaryStore: HomeDailySummaryStore = ChatDailySummaryCoordinator.shared.store
   /// Withdraws the card when the reader clears Chat. See `noteChatCleared`.
@@ -580,15 +580,17 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       }
       // Pinned as an overlay rather than as the first row of the document. That is deliberate
       // for INV-CHAT-2: an in-document card changed the scroll document's height whenever it
-      // appeared or expanded, which is exactly the geometry mutation the invariant forbids
-      // during reader-owned movement. An overlay has no document height at all.
+      // appeared, which is exactly the geometry mutation the invariant forbids during
+      // reader-owned movement. An overlay has no document height at all.
       //
-      // The transcript is inset by the bar's measured height so rows are never *hidden* behind
+      // The transcript is inset by the pill's measured height so rows are never *hidden* behind
       // it — an overlay that occludes the top of the thread trades one unreachable card for one
-      // unreadable message.
+      // unreadable message. The pill is thin and never expands in place (the full recap is a
+      // sheet), so its height barely varies; the inset below tracks it live rather than through a
+      // high-water mark.
       .overlay(alignment: .top) {
         if showsDailySummary, dailySummaryAdmitted {
-          ChatDailySummaryCard(pinsToViewport: true)
+          ChatDailyRecapPill()
             .padding(.leading, leadingContentPadding)
             .padding(.trailing, trailingContentInset)
             .padding(.top, OmiSpacing.xs)
@@ -601,12 +603,15 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         }
       }
       .onPreferenceChange(ChatDailySummaryBarHeightKey.self) { height in
-        // INV-CHAT-2: this height feeds the transcript's top padding, so every change to it is a
-        // change to the scroll document *above* the reader — the same class of instability the
-        // eager-measurement note on `scrollContent` exists to prevent. Take the high-water mark
-        // rather than the live value: a rewrap on window resize then costs no shift, and the
-        // reserve can never fall behind the bar and let it occlude the newest message.
-        if height > dailySummaryBarHeight { dailySummaryBarHeight = height }
+        // This height feeds the transcript's top padding, so it must equal the pill's real height
+        // in both directions. The old full-card overlay tracked a high-water mark instead: a mark
+        // can never shrink, so one tall expand (or one rewrap at a narrow width) padded the thread
+        // forever after, and a bar that shrank before the first measurement left the transcript
+        // lapping under it — the overlap the slim pill exists to retire. The pill does not expand
+        // in place, so its height moves by at most a line across content changes and rewraps;
+        // taking the live value keeps the inset exact. The epsilon keeps a sub-pixel preference
+        // flutter from re-entering layout.
+        if abs(height - dailySummaryBarHeight) > 0.5 { dailySummaryBarHeight = height }
       }
       .overlay(alignment: .trailing) {
         if enablesPromptTimeline {
@@ -1425,7 +1430,7 @@ private struct DailySummaryAdmissionObserver: ViewModifier {
   }
 }
 
-/// Height of the pinned daily-recap bar, reported up so the transcript can inset by exactly it.
+/// Height of the pinned daily-recap pill, reported up so the transcript can inset by exactly it.
 private struct ChatDailySummaryBarHeightKey: PreferenceKey {
   static let defaultValue: CGFloat = 0
   static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {

@@ -7,9 +7,9 @@ import Foundation
 /// need to know is whether the card is seen, opened, acted on, and cleared — six bounded values
 /// answer that.
 enum DailySummaryTelemetryPhase: String {
-  /// The card rendered at the top of the thread.
+  /// The recap pill rendered at the top of the thread.
   case shown
-  /// The reader opened "More".
+  /// The reader opened the dedicated recap page (from the Chat pill or the Activity day).
   case expanded
   /// The reader tapped the follow-up chip (which prefills the composer and sends nothing).
   case followUpTapped = "follow_up_tapped"

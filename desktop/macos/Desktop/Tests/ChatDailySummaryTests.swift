@@ -149,12 +149,12 @@ final class ChatDailySummaryTests: XCTestCase {
         DailySummaryRecord.ActionItem(description: "Ping Priya", priority: "high", completed: false),
         DailySummaryRecord.ActionItem(description: "", priority: nil, completed: nil),
       ])
-    XCTAssertEqual(ChatDailySummaryCard.highlights(in: summary).count, 1)
-    XCTAssertEqual(ChatDailySummaryCard.actionItems(in: summary).count, 1)
+    XCTAssertEqual(ChatDailySummaryPresentation.highlights(in: summary).count, 1)
+    XCTAssertEqual(ChatDailySummaryPresentation.actionItems(in: summary).count, 1)
 
     let bare = record(highlights: nil, actionItems: [])
-    XCTAssertTrue(ChatDailySummaryCard.highlights(in: bare).isEmpty)
-    XCTAssertTrue(ChatDailySummaryCard.actionItems(in: bare).isEmpty)
+    XCTAssertTrue(ChatDailySummaryPresentation.highlights(in: bare).isEmpty)
+    XCTAssertTrue(ChatDailySummaryPresentation.actionItems(in: bare).isEmpty)
   }
 
   // MARK: - Coordinator
@@ -341,7 +341,7 @@ final class ChatDailySummaryTests: XCTestCase {
 
     let question = ChatDailySummaryPresentation.followUpQuestion(
       for: "2026-09-01", now: date(2026, 9, 2), calendar: calendar)
-    ChatDailySummaryCard.requestFollowUp(question)
+    ChatDailySummaryPresentation.requestFollowUp(question)
 
     XCTAssertEqual(MainChatNavigationRequestStore.shared.consumeDraft(), "What did I do yesterday?")
     // Consumed exactly once — a second composer must not re-insert it, and nothing was sent.
