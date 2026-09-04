@@ -50,6 +50,8 @@ When debugging issues for a specific user, check Sentry dashboard for crashes an
 ### Fallback / resilience telemetry
 Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.recordFallback(area:from:to:reason:outcome:)` (PostHog `desktop_health_event` / `fallback_triggered`) or Rust `fallback::record_fallback`. Same field contract as root `AGENTS.md` → Fallback / resilience telemetry. Do not invent new health-event enum cases or product “Recording Error” events for successful heals (`outcome=recovered`).
 
+Gemini Live has no safe mid-session system role. Background agent/card text stays on its canonical tool or visible UI surface and must never use Gemini's realtime user-input wire.
+
 ## Repository
 - This is the `desktop/macos/` subfolder of the **OMI monorepo** (`BasedHardware/omi`)
 - macOS Swift app lives here; its shared Python desktop backend lives under `../../backend`
@@ -228,11 +230,20 @@ do not hand-edit those paths to match a specific machine.
 - OCR-bearing rows sync independently from embeddings. Embeddings are an optional later projection and must never gate capture, OCR, or text delivery.
 - Firestore screen-activity timestamps use the lexicographically sortable UTC form `yyyy-MM-dd HH:mm:ss.SSS`. The backend normalizes ISO-8601 input before storage.
 
+### Feature-flag authority
+
+Bundle vs PostHog vs `runtime_env` is catalogued in [`backend/docs/feature-flag-registry.md`](../../backend/docs/feature-flag-registry.md). Editing that file does not turn a feature on. Do not target Beta vs stable via PostHog person `update_channel`.
+
 ### User Subcollections (Firestore)
 - `users/{uid}/conversations` - Has `source` field (omi, desktop, phone, etc.)
 - `users/{uid}/action_items` - Tasks (no platform tracking)
 - `users/{uid}/fcm_tokens` - Token ID prefix = platform (ios_, android_, macos_)
 - `users/{uid}/memories` - Extracted memories
+
+### User MCP Servers & Skills (Apps page)
+User-managed MCP servers (~/.omi/mcp.json, incl. native OAuth) and skills
+(`~/.omi/skills/<slug>/SKILL.md`), fully local and fail-open. Contract and
+runtime wiring: [`.github/agent-docs/desktop-user-extensions.md`](../../.github/agent-docs/desktop-user-extensions.md).
 
 ### Known Limitations
 - Firestore has no collection group indexes for `source` field

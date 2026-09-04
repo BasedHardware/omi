@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-sentry-group-collapses-distinct-sites",
+  "violated_contract": "A privacy-safe Sentry event that redacts the free-form message must still distinguish which compile-time call site produced the failure. Bucketing only by file-derived area plus NSError domain family collapses unrelated onboarding failures into one [area/underlying_error/runtime] group with error_type=other, so a burst cannot be triaged.",
+  "canonical_prevention": "Attach a bounded error_site token derived from #fileID last component plus #function, stripped to [a-z0-9], and include it in the onboarding event title and as an error_site tag. Map app-module Swift error types to a bounded type token instead of other. Never send the message, path, or user content.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/Logger.swift",
+    "desktop/macos/Desktop/Tests/DesktopErrorTelemetryTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Logger.swift",
+    "desktop/macos/Desktop/Tests/DesktopErrorTelemetryTests.swift"
+  ],
+  "status": "open"
+}

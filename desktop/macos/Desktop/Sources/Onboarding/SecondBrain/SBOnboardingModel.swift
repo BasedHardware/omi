@@ -176,6 +176,10 @@ final class SBOnboardingModel: ObservableObject {
   var voiceCancellable: AnyCancellable?
   var voiceTimeout: Task<Void, Never>?
   var screenDemoSetupTask: Task<Void, Never>?
+  /// Dwell-time origin for the current step's `Onboarding Step Completed` event.
+  var stepStartedAt = Date()
+  /// Guards double-fire when `skip()`/`complete()` run after `advance` already recorded.
+  var stepExitRecorded = false
 
   // Connectors — keyed by a stable id ("openclaw", "calendar", …) → state string
   // ("idle" | "connecting" | "on" | "unavailable" | "needsSignIn").
@@ -531,6 +535,8 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   func streamMessage(for step: Step) {
+    stepStartedAt = OnboardingStepTelemetry.now()
+    stepExitRecorded = false
     streamTask?.cancel()
     showWidget = false
     typing = true
@@ -585,10 +591,12 @@ final class SBOnboardingModel: ObservableObject {
     if let userAnswer, !userAnswer.isEmpty {
       thread.append(Msg(isOmi: false, text: userAnswer))
     }
+    recordStepExit()
     teardownStep(step)
     // Don't ask for a permission the user has already granted — skip straight to
     // the first step that still needs an answer.
     let target = firstUnaskedStep(from: next)
+    recordJumpedPermissionSteps(from: next, to: target)
     step = target
     UserDefaults.standard.set(target.rawValue, forKey: Self.resumeStepKey)
     streamMessage(for: target)
@@ -821,11 +829,13 @@ final class SBOnboardingModel: ObservableObject {
       complete()
       return
     }
+    recordStepExit(skipped: true)
     finishOnboardingHandoff(clearOnboardingChatFlag: false)
   }
 
   /// Replicates the essential real side-effects of the legacy handleOnboardingComplete().
   private func complete() {
+    recordStepExit(skipped: false)
     // Do NOT mark file indexing complete here. Onboarding never actually scans, so
     // setting this flag "faked" the Files connector as connected while indexing
     // nothing — and, worse, permanently suppressed the Home view's automatic
@@ -844,14 +854,28 @@ final class SBOnboardingModel: ObservableObject {
     if AppBuild.usesLazyDevPermissions {
       AssistantSettings.shared.screenAnalysisEnabled = false
     } else {
-      AssistantSettings.shared.screenAnalysisEnabled = true
-      if !ProactiveAssistantsPlugin.shared.isMonitoring {
+      // Skipping Screen Recording is a durable off for the automatic path: never
+      // force the intent on for a user who just declined it (the sidebar and the
+      // restore path then stop treating "onboarded but not granted" as denied).
+      appState.checkScreenRecordingPermission()
+      let screenGranted = appState.hasScreenRecordingPermission
+      AssistantSettings.shared.screenAnalysisEnabled =
+        Self.screenAnalysisIntentAtCompletion(screenRecordingGranted: screenGranted)
+      if screenGranted, !ProactiveAssistantsPlugin.shared.isMonitoring {
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
       }
     }
     Task { [appState] in
-      appState.startTranscription()
+      // Automatic start: with the mic granted this behaves exactly as before; with
+      // it skipped (audioRecordingMode == .off, or still undetermined) it must not
+      // raise the TCC sheet — the user asked to skip, not to be asked again.
+      appState.startTranscription(userInitiated: false)
       await appState.reconcileCapture()
+      // Ambient transcription opens the shared input device on its way in and
+      // releases any parked push-to-talk capture to avoid two IOProcs on one
+      // device. Re-arm behind it: the first ⌥ hold after onboarding is the one
+      // that used to be lost to capture-start latency.
+      PushToTalkManager.shared.prewarmMicCapture(trigger: .onboardingCompleted)
     }
     // NOTE: previously this created a "Run omi for two days…" welcome task. That
     // seeded onboarding scaffolding into the user's real Tasks surface (there is no
@@ -874,6 +898,14 @@ final class SBOnboardingModel: ObservableObject {
     if setEnabled(enabled) {
       report(enabled)
     }
+  }
+
+  /// The durable screen-analysis intent onboarding leaves behind. A granted Screen
+  /// Recording keeps the capture intent on; a skipped or denied one turns it off —
+  /// "not forced on" is not enough, because every automatic restore path and the
+  /// sidebar's denied pulse read this flag as the user's standing intent.
+  static func screenAnalysisIntentAtCompletion(screenRecordingGranted: Bool) -> Bool {
+    screenRecordingGranted
   }
 
   /// Cancel every live task/monitor this model owns. Safe to call repeatedly.

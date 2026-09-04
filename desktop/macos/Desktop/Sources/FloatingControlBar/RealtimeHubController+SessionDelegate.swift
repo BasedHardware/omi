@@ -563,20 +563,29 @@ extension RealtimeHubController {
     case .thinkDeeper:
       let query = (command.input["query"] as? String) ?? turnTranscript
       let toolContext = (command.input["context"] as? String) ?? ""
+      let thinkingLevel = RealtimeHubTools.EscalationThinkingLevel.fromToolInput(command.input["thinking"])
       return await escalateToHigherModel(
         query,
         toolContext: toolContext,
+        thinkingLevel: thinkingLevel,
+        invocationTurnID: invocation.turnID,
         invocationID: command.invocationID,
         ownerID: command.ownerID)
 
     case .webSearch:
-      let query = (command.input["query"] as? String) ?? turnTranscript
+      let scope = RealtimePublicWebSearchScope(toolValue: command.input["scope"])
+      let query = RealtimeHubTools.authorizedPublicWebQuery(
+        proposedQuery: (command.input["query"] as? String) ?? turnTranscript,
+        turnTranscript: turnTranscript,
+        scope: scope)
       let toolContext = (command.input["context"] as? String) ?? ""
       return await searchPublicWeb(
         query,
+        scope: scope,
         toolContext: toolContext,
         invocationID: command.invocationID,
-        ownerID: command.ownerID)
+        ownerID: command.ownerID,
+        turnID: invocation.turnID)
 
     case .screenshot:
       // Preserve the original descriptor before suspension. The timeout branch must never read
@@ -925,6 +934,14 @@ extension RealtimeHubController {
         expectedTurnEpoch: toolTurnEpoch)
       return
     }
+    if name == HubTool.recordInterjectFeedback.rawValue {
+      handleInterjectFeedbackReport(
+        source: source,
+        callId: callId,
+        arguments: arguments,
+        expectedTurnEpoch: toolTurnEpoch)
+      return
+    }
     invokeExternallyAuthorizedTool(
       source: source,
       turnID: turnID,
@@ -1126,6 +1143,10 @@ extension RealtimeHubController {
             terminal: .success,
             idempotencyKey: completedTurnIdempotencyKey,
             acceptedSpawnOwnerID: acceptedSpawnOwnerID) ?? false
+        if accepted, !resolution.userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          let repliedToCard = FloatingControlBarManager.shared.recentNotchCardVoiceContext() != nil
+          DesktopUsageDailyReporter.shared.recordCompletedPTTTurn(repliedToCard: repliedToCard)
+        }
         self?.lastTurnDiagnostics = [
           "provider": provider,
           "provider_transcript": heard,

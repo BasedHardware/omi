@@ -67,6 +67,8 @@ struct OmiSearchField: View {
   let placeholder: String
   @Binding var text: String
   var isLoading = false
+  var searchSurface: SearchSurface? = nil
+  @FocusState private var isFocused: Bool
 
   var body: some View {
     HStack(spacing: OmiSpacing.sm) {
@@ -86,6 +88,11 @@ struct OmiSearchField: View {
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
         .foregroundStyle(Ink.primary)
+        .focused($isFocused)
+        .onChange(of: isFocused) { _, focused in
+          guard focused, let searchSurface else { return }
+          SearchAnalytics.barFocused(surface: searchSurface)
+        }
 
       if !text.isEmpty {
         Button {

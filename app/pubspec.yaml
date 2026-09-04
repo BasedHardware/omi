@@ -24,13 +24,10 @@ dependencies:
 
   # UI
   auto_size_text: 3.0.0
-  lottie: ^3.1.2
-  expandable_text: ^2.3.0
   flutter_native_splash: ^2.4.0
   gradient_borders: ^1.0.1
   visibility_detector: ^0.4.0+2
   flutter_rating_bar: ^4.0.1
-  dotted_border: ^2.1.0
   skeletonizer: 2.0.1
   shimmer: ^3.0.0
   pull_down_button: ^0.10.2
@@ -59,7 +56,6 @@ dependencies:
   pool: ^1.5.1
   collection: ^1.19.1
   http: ^1.4.0
-  pdf: ^3.11.0
   intl: ^0.20.2
   permission_handler: ^12.0.0+1
   # Must stay >=2.0.0 — 1.x's iOS registration force-unwraps
@@ -81,11 +77,9 @@ dependencies:
   # Auth token only — Keychain (iOS/macOS) / EncryptedSharedPreferences (Android).
   flutter_secure_storage: 9.2.4
   url_launcher: ^6.3.0
-  wav: ^1.4.0
   path: ^1.9.0
   uuid: ^4.4.0
   tuple: ^2.0.2
-  googleapis_auth: 2.0.0
   envied: 1.3.8
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
@@ -130,7 +124,6 @@ dependencies:
   file_picker: 8.3.2
   photo_view: ^0.15.0
   font_awesome_flutter: ^11.0.0
-  in_app_review: ^2.0.9
   fl_chart: ^0.68.0
   image: ^4.3.0
   calendar_date_picker2: ^2.0.1
@@ -139,7 +132,6 @@ dependencies:
       url: https://github.com/BasedHardware/whisper_flutter_new.git
       ref: af6b457cca4cdd6c97cc2dfa8557333ee09c81f1
   disk_space_2: ^1.0.11
-  pasteboard: ^0.5.0
   vector_math: ^2.2.0
   marionette_flutter: ^0.3.0
   quick_actions: ^1.0.0
@@ -163,7 +155,6 @@ dev_dependencies:
   flutter_lints: ^4.0.0
   integration_test:
     sdk: flutter
-  lints: ^4.0.0
   flutter_test:
     sdk: flutter
   fake_async: ^1.3.3

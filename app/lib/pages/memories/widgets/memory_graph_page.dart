@@ -41,9 +41,9 @@ class GraphNode3D {
     required this.baseColor,
     required v.Vector3 initialPosition,
     this.isFixed = false,
-  })  : position = initialPosition,
-        velocity = v.Vector3.zero(),
-        force = v.Vector3.zero();
+  }) : position = initialPosition,
+       velocity = v.Vector3.zero(),
+       force = v.Vector3.zero();
 }
 
 class GraphEdge3D {
@@ -341,10 +341,11 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       _populateGraph(data);
       _runLayoutSync();
     } catch (e) {
+      Logger.debug('Knowledge graph load failed: $e');
       if (!mounted) return;
       if (!silent) {
         setState(() {
-          _error = e.toString();
+          _error = context.l10n.couldNotLoadKnowledgeGraph;
         });
       }
     } finally {

@@ -1001,6 +1001,7 @@ def test_failures_retry_with_deterministic_backoff_then_dead_letter_without_raw_
     assert stored["last_error_code"] == "vector_upsert_failed"
     assert first["retryable_failure_count"] == 1
     assert first["delivered_count"] == 0
+    assert "oldest_ready_age_seconds" in first
 
     second_now = NOW + timedelta(seconds=10)
     second = run_canonical_memory_outbox_worker_tick(
@@ -1034,6 +1035,42 @@ def test_failures_retry_with_deterministic_backoff_then_dead_letter_without_raw_
     assert "PRIVATE MEMORY TEXT" not in repr(second)
     assert "PRIVATE MEMORY TEXT" not in repr(third)
     assert "PRIVATE MEMORY TEXT" not in caplog.text
+
+
+def test_poison_event_does_not_block_the_event_behind_it():
+    poison = _event("poison", memory_id="mem-poison", available_at=NOW - timedelta(minutes=2))
+    healthy = _event("healthy", memory_id="mem-healthy", available_at=NOW - timedelta(minutes=1))
+    db = _db(
+        poison,
+        healthy,
+        items={"mem-poison": _item("mem-poison"), "mem-healthy": _item("mem-healthy")},
+    )
+    processed: list[str] = []
+
+    def projection_upsert(item, account_generation):
+        processed.append(item.memory_id)
+        if item.memory_id == "mem-poison":
+            raise RuntimeError("malformed payload")
+        return True
+
+    result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
+        uid=UID,
+        config=_config(),
+        side_effects=CanonicalMemoryOutboxSideEffects(
+            projection_upsert=projection_upsert,
+            projection_delete=lambda *_args, **_kwargs: True,
+            vector_upsert=lambda *_args, **_kwargs: True,
+            vector_delete=lambda *_args, **_kwargs: True,
+        ),
+        now=NOW,
+    )
+
+    assert processed == ["mem-poison", "mem-healthy"]
+    assert result["delivered_count"] == 1
+    assert result["retryable_failure_count"] == 1
+    assert db.docs[_event_path("poison")]["status"] == MemoryOutboxStatus.retryable_failure.value
+    assert db.docs[_event_path("healthy")]["status"] == MemoryOutboxStatus.delivered.value
 
 
 def test_false_side_effect_result_is_not_acknowledged_as_delivered():

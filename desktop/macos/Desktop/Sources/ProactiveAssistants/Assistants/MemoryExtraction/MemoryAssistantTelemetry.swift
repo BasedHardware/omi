@@ -69,6 +69,8 @@ enum MemoryAssistantTelemetry {
     /// Analysis succeeded and produced a memory that was below the confidence
     /// threshold (filtered out before persistence).
     case filteredLowConfidence = "filtered_low_confidence"
+    /// Subject-admission gate refused the memory before persist/notify.
+    case filteredSubjectAdmission = "filtered_subject_admission"
     /// Analysis succeeded but produced no new memory (model decided nothing to
     /// extract, or returned an empty result set).
     case noNewMemory = "no_new_memory"

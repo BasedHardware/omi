@@ -256,6 +256,18 @@ struct SpineRow: Identifiable, Equatable {
 
 // MARK: - Day
 
+/// Formats `SpineDay.id` (local start-of-day) as the backend's `YYYY-MM-DD` key.
+///
+/// Must use the same calendar the day was composed in. A UTC formatter here renders the
+/// previous evening in every zone east of UTC, and every recap lookup misses.
+enum SpineDayDateKey {
+  static func string(from dayID: Date, calendar: Calendar) -> String? {
+    let parts = calendar.dateComponents([.year, .month, .day], from: dayID)
+    guard let year = parts.year, let month = parts.month, let day = parts.day else { return nil }
+    return String(format: "%04d-%02d-%02d", year, month, day)
+  }
+}
+
 /// One day of the spine, with the header that counts it.
 struct SpineDay: Identifiable, Equatable {
   /// The local start of the day. Stable across recompositions, which is what keeps the sticky

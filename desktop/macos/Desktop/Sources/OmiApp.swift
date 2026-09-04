@@ -554,6 +554,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // opens gets the tap-to-ask card. Started here for the same reason as the
     // line above — it installs its own observers and decides eligibility itself.
     FirstRealAppCardCoordinator.shared.start()
+    ContextReminderCoordinator.shared.start()
 
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {

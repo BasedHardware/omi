@@ -62,8 +62,9 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
       TextSpan(
         text: text.substring(index, index + searchQuery.length),
         style: TextStyle(
-          backgroundColor:
-              isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
+          backgroundColor: isCurrentResult
+              ? Colors.orange.withValues(alpha: 0.9)
+              : Colors.deepPurple.withValues(alpha: 0.6),
           color: Colors.white,
           fontWeight: FontWeight.bold,
         ),
@@ -887,8 +888,9 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
   Widget build(BuildContext context) {
     final String content = widget.appResponse.content.trim().decodeString;
     // Sections belong to Omi's own structured summary; an app summary replaces them.
-    final String sectionsContent =
-        widget.appResponse.appId == null ? sectionsToMarkdown(widget.conversation.structured.sections) : '';
+    final String sectionsContent = widget.appResponse.appId == null
+        ? sectionsToMarkdown(widget.conversation.structured.sections)
+        : '';
 
     if (widget.asSliver) {
       return _buildSliver(context, content, sectionsContent);
@@ -927,15 +929,15 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                     ],
                   )
                 : _isEditing
-                    ? _buildEditor(context, content)
-                    : GestureDetector(
-                        onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
-                        child: ConversationMarkdownWidget(
-                          content: content,
-                          searchQuery: widget.searchQuery,
-                          currentResultIndex: widget.currentResultIndex,
-                        ),
-                      ),
+                ? _buildEditor(context, content)
+                : GestureDetector(
+                    onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+                    child: ConversationMarkdownWidget(
+                      content: content,
+                      searchQuery: widget.searchQuery,
+                      currentResultIndex: widget.currentResultIndex,
+                    ),
+                  ),
           ),
 
           if (sectionsContent.isNotEmpty && !_isEditing) ConversationMarkdownWidget(content: sectionsContent),
@@ -1128,8 +1130,9 @@ class GetAppsWidgets extends StatelessWidget {
                 canStartEditing: canStartEditing,
                 onEditStarted: onEditStarted == null ? null : () => onEditStarted!(summarizedApp.appId),
                 onEditCancelled: onEditCancelled == null ? null : () => onEditCancelled!(summarizedApp.appId),
-                onSaveSummary:
-                    onSaveSummary == null ? null : (newContent) => onSaveSummary!(summarizedApp.appId, newContent),
+                onSaveSummary: onSaveSummary == null
+                    ? null
+                    : (newContent) => onSaveSummary!(summarizedApp.appId, newContent),
                 asSliver: true,
               ),
             const SliverToBoxAdapter(child: SizedBox(height: 8)),
@@ -1586,20 +1589,6 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
             },
           ),
         ),
-        // widget.memory.postprocessing?.status == MemoryPostProcessingStatus.completed
-        // widget.memory.postprocessing?.status != MemoryPostProcessingStatus.not_started
-        //     ? Card(
-        //         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-        //         child: ListTile(
-        //           title: const Text('Compare Transcripts Models'),
-        //           leading: const Icon(Icons.chat),
-        //           trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-        //           onTap: () {
-        //             routeToPage(context, CompareTranscriptsPage(memory: widget.memory));
-        //           },
-        //         ),
-        //       )
-        //     : const SizedBox.shrink(),
       ],
     );
   }

@@ -2,6 +2,148 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.288",
+      "date": "2026-09-04",
+      "changes": [
+        "An answer that Omi speaks after deferring a voice question (\"Let me verify...\") is now written to the conversation journal, so a follow-up no longer gets answered from the earlier reply it already corrected.",
+        "Bring your own MCP servers and skills: browse the official MCP registry and skill catalogs on the Apps page, or add your own local command or remote URL, and chat sees a compact index of each server's tools and loads full details on demand — all stored as plain files under ~/.omi",
+        "MCP servers work on both transports; chat discovers their tools through a compact sorted index instead of hundreds of tool definitions (mcp_tools_info / mcp_call), published prompts stay usable, local servers spawn with a minimal environment instead of Omi's full process env, and dropped SSE servers reconnect before giving up. Installing a skill brings its scripts and references instead of just the instructions, skills load a section at a time with parts returned by default, and the disable toggle now fully hides a skill from the assistant",
+        "Added or removed MCP servers now reach an open chat right away instead of waiting for a restart, and hand-edits to ~/.omi/mcp.json are picked up on the Apps page",
+        "Fixed an MCP server change being dropped when it landed while the agent runtime was already restarting, and task chat now applies pending server changes too",
+        "Tightened permissions on ~/.omi and its mcp.json, which can hold OAuth tokens, so they are now readable only by your user account",
+        "Quoted paths and arguments now survive when adding a local command server instead of being split at every space",
+        "Renaming or deleting a skill now keeps its disabled state in sync instead of silently re-enabling it or leaving stale entries"
+      ]
+    },
+    {
+      "version": "0.12.287",
+      "date": "2026-09-04",
+      "changes": [
+        "Improved ChatGPT and Claude memory imports so mixed-format exports stay complete and partial saves are clearly reported"
+      ]
+    },
+    {
+      "version": "0.12.286",
+      "date": "2026-09-04",
+      "changes": [
+        "Omi no longer reads Interject's classification aloud during voice replies",
+        "Skipping or denying a permission during onboarding no longer makes Omi re-ask for it on every launch, app switch, or settings sync — microphone, screen recording, and file indexing stay off until you turn them on yourself",
+        "Push-to-talk replies you fully heard are no longer repeated or re-corrected on later, unrelated questions",
+        "Voice transcripts no longer duplicate Omi's own spoken replies picked up by the microphone"
+      ]
+    },
+    {
+      "version": "0.12.285",
+      "date": "2026-09-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.284",
+      "date": "2026-09-04",
+      "changes": [
+        "Reminders can now bind to the app or document you were in, and come back the next time you open it",
+        "Daily recaps now generate without a phone, fill missed days, and show on the Activity timeline"
+      ]
+    },
+    {
+      "version": "0.12.283",
+      "date": "2026-09-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.282",
+      "date": "2026-09-04",
+      "changes": [
+        "Desktop thumbs-down now asks why, and Focus/memory cards stop repeating the same mistake."
+      ]
+    },
+    {
+      "version": "0.12.281",
+      "date": "2026-09-03",
+      "changes": [
+        "Daily summaries now include time watched and proactive moments from the Mac app"
+      ]
+    },
+    {
+      "version": "0.12.280",
+      "date": "2026-09-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.279",
+      "date": "2026-09-03",
+      "changes": [
+        "Push-to-talk deep-think answers now come from a dedicated thinking agent that sees the same screenshots you showed Omi and can think extra hard when you ask for it"
+      ]
+    },
+    {
+      "version": "0.12.278",
+      "date": "2026-09-03",
+      "changes": [
+        "Onboarding no longer quits if the Mac's speakers are not ready to play the intro sounds"
+      ]
+    },
+    {
+      "version": "0.12.277",
+      "date": "2026-09-03",
+      "changes": [
+        "Push-to-talk now has the microphone running before your first hold, so the first question after setup is no longer dropped with \"Hold longer to record\". A hold whose microphone was still starting says so and retries instead of blaming the press.",
+        "Fixed ChatGPT and Claude tagged memory imports and added actionable failure messages"
+      ]
+    },
+    {
+      "version": "0.12.276",
+      "date": "2026-09-03",
+      "changes": [
+        "Rating a chat answer thumbs-down now asks what went wrong — pick Incorrect, Not helpful, Ignored instructions, Too long, or Other, or skip it. Your thumbs-down is recorded either way."
+      ]
+    },
+    {
+      "version": "0.12.275",
+      "date": "2026-09-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.274",
+      "date": "2026-09-03",
+      "changes": [
+        "Fixed the Permissions page reporting Automation as \"Not Granted\" when it was already granted in System Settings"
+      ]
+    },
+    {
+      "version": "0.12.273",
+      "date": "2026-09-03",
+      "changes": [
+        "Added a Things I learned today section to the daily summary in Chat where you can confirm, drop, or fix what Omi picked up",
+        "Added a tappable follow-up question under grounded chat and floating-bar answers, never on failed turns",
+        "Fixed the Home suggestions list repeating the same tasks and tips day after day; rows you have seen or dismissed now rotate out",
+        "Conversations that are still being summarized now show their first transcript line instead of \"Processing…\", tell you when processing is taking longer than usual or looks stuck, offer Reprocess right on the row, and land in place when a recording ends"
+      ]
+    },
+    {
+      "version": "0.12.272",
+      "date": "2026-09-03",
+      "changes": [
+        "Notification cards in the notch no longer shrink to a narrow strip when you hold the push-to-talk shortcut to reply to them.",
+        "Push-to-talk on a second display now plays the start sound and shows the listening animation on the first press instead of the second"
+      ]
+    },
+    {
+      "version": "0.12.271",
+      "date": "2026-09-03",
+      "changes": [
+        "Voice answers now carry the exact current-screen image into deeper thinking, keep unrelated background results out of your next question, and use deeper research for company and product history"
+      ]
+    },
+    {
       "version": "0.12.270",
       "date": "2026-09-03",
       "changes": [

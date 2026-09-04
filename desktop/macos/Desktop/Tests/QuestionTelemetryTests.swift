@@ -1,6 +1,7 @@
 import XCTest
 
 @testable import Omi_Computer
+@testable import VoiceTurnDomain
 
 /// `question_asked` / `question_answered` are one vocabulary across typed chat
 /// and push-to-talk. The in-app question counter (rating prompt, remote
@@ -57,8 +58,9 @@ final class QuestionTelemetryTests: XCTestCase {
   func testVoiceTerminalReasonsMapToOutcomesAndUncommittedTurnsProduceNone() {
     // Nothing was committed for these, so no `question_asked` exists to pair with.
     for reason in [
-      "too_short", "silent_rejected", "permission_denied", "capture_failed", "transcription_failed",
-      "hub_warm_timeout", "deferred_commit_timeout", "cancelled", "explicit_interrupt", "owner_changed",
+      "too_short", "silent_rejected", "permission_denied", "capture_failed", "capture_not_ready",
+      "transcription_failed", "hub_warm_timeout", "deferred_commit_timeout", "cancelled",
+      "explicit_interrupt", "owner_changed",
     ] {
       XCTAssertNil(AnalyticsManager.questionOutcome(forVoiceTerminalReason: reason, answerDelivered: false), reason)
     }
@@ -68,6 +70,13 @@ final class QuestionTelemetryTests: XCTestCase {
       AnalyticsManager.questionOutcome(forVoiceTerminalReason: "explicit_interrupt", answerDelivered: true), .grounded)
     XCTAssertEqual(
       AnalyticsManager.questionOutcome(forVoiceTerminalReason: "provider_failed", answerDelivered: false), .error)
+    // Spelled by the state machine, not by this test: a rename there must not
+    // quietly drop the reason back into `default` and emit an orphan answer.
+    XCTAssertNil(
+      AnalyticsManager.questionOutcome(
+        forVoiceTerminalReason: VoiceTurnTerminalReason.captureNotReady.rawValue,
+        answerDelivered: false),
+      "a turn whose microphone never came up committed no question")
   }
 
   func testVoiceRouteLabelsMapToTheSurfaceTheAskUsed() {
