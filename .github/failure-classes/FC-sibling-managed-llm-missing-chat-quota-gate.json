@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-sibling-managed-llm-missing-chat-quota-gate",
+  "violated_contract": "User-initiated managed LLM/image endpoints that share the same billable feature (for example Features.APP_GENERATOR via track_usage) must call enforce_chat_quota before spend. Leaving a sibling route ungated while related routes in the same router already enforce chat quota lets free users past FREE_CHAT_QUESTIONS_PER_MONTH trigger Omi-paid generation.",
+  "canonical_prevention": "At every user-triggered APP_GENERATOR (or equivalent tracked) entrypoint, call enforce_chat_quota(uid, platform=X-App-Platform) before track_usage / provider work — matching generate-description and generate-description-emoji. Pin the wiring with hermetic router tests that assert a 402 from the gate prevents the LLM/image helper from being awaited.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_free_quota_gate_wiring.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/apps.py",
+    "backend/utils/subscription.py",
+    "backend/utils/llm/usage_tracker.py",
+    "backend/tests/unit/test_free_quota_gate_wiring.py"
+  ],
+  "status": "open"
+}

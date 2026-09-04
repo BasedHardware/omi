@@ -3,8 +3,9 @@
 Regression for the enforcement-coverage gap where a free user past
 FREE_CHAT_QUESTIONS_PER_MONTH could still trigger managed LLM spend through
 daily-summary regeneration, goal progress extraction, app description
-generation, and the omni realtime relay. Each test proves the endpoint calls
-the shared gate BEFORE doing LLM work and lets the 402 propagate.
+generation, AI app/icon generation, and the omni realtime relay. Each test
+proves the endpoint calls the shared gate BEFORE doing LLM work and lets the
+402 propagate.
 
 `enforce_chat_quota`'s own decision logic is covered in test_chat_quota.py;
 these tests only pin the call-site wiring, so the gate is patched at each
@@ -197,6 +198,72 @@ class TestAppGeneratorGates:
                 apps_router.generate_description_and_emoji_endpoint(data, uid='u1', x_app_platform='macos')
             assert exc_info.value.status_code == 402
             gate.assert_called_once_with('u1', platform='macos')
+
+    def test_generate_app_blocked_past_cap(self):
+        """POST /v1/app/generate must gate before billable APP_GENERATOR spend."""
+        import routers.apps as apps_router
+
+        data = apps_router.GenerateAppRequest(prompt='build a meeting notes extractor app')
+        with patch.object(apps_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate, patch(
+            'utils.llm.app_generator.generate_app_from_prompt', new_callable=AsyncMock
+        ) as llm:
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.run(apps_router.generate_app_endpoint(data, uid='u1'))
+            assert exc_info.value.status_code == 402
+            gate.assert_called_once_with('u1')
+            llm.assert_not_awaited()
+
+    def test_generate_app_allowed_proceeds(self):
+        import routers.apps as apps_router
+
+        generated = MagicMock()
+        generated.name = 'Notes'
+        generated.description = 'extracts action items'
+        generated.category = 'productivity'
+        generated.capabilities = ['chat']
+        generated.chat_prompt = 'help'
+        generated.memory_prompt = 'remember'
+        data = apps_router.GenerateAppRequest(prompt='build a meeting notes extractor app')
+        with patch.object(apps_router, 'enforce_chat_quota') as gate, patch(
+            'utils.llm.app_generator.generate_app_from_prompt', new_callable=AsyncMock, return_value=generated
+        ) as llm:
+            result = asyncio.run(apps_router.generate_app_endpoint(data, uid='u1'))
+            assert result['status'] == 'ok'
+            assert result['app']['name'] == 'Notes'
+            gate.assert_called_once_with('u1')
+            llm.assert_awaited_once()
+
+    def test_generate_app_icon_blocked_past_cap(self):
+        """POST /v1/app/generate-icon must gate before billable image generation."""
+        import routers.apps as apps_router
+
+        data = apps_router.GenerateAppIconRequest(
+            name='Notes', description='extracts action items', category='productivity'
+        )
+        with patch.object(apps_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate, patch(
+            'utils.llm.app_generator.generate_app_icon', new_callable=AsyncMock
+        ) as llm:
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.run(apps_router.generate_app_icon_endpoint(data, uid='u1'))
+            assert exc_info.value.status_code == 402
+            gate.assert_called_once_with('u1')
+            llm.assert_not_awaited()
+
+    def test_generate_app_icon_allowed_proceeds(self):
+        import routers.apps as apps_router
+
+        data = apps_router.GenerateAppIconRequest(
+            name='Notes', description='extracts action items', category='productivity'
+        )
+        with patch.object(apps_router, 'enforce_chat_quota') as gate, patch(
+            'utils.llm.app_generator.generate_app_icon', new_callable=AsyncMock, return_value=b'png-bytes'
+        ) as llm:
+            result = asyncio.run(apps_router.generate_app_icon_endpoint(data, uid='u1'))
+            assert result['status'] == 'ok'
+            assert result['mime_type'] == 'image/png'
+            assert result['icon_base64']  # base64 of png-bytes
+            gate.assert_called_once_with('u1')
+            llm.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------

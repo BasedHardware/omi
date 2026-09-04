@@ -1588,6 +1588,10 @@ async def generate_app_endpoint(data: GenerateAppRequest, uid: str = Depends(aut
     """
     from utils.llm.app_generator import generate_app_from_prompt
 
+    # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    # Sibling description generators already enforce; this path was left ungated.
+    enforce_chat_quota(uid)
+
     prompt = data.prompt.strip()
     if not prompt:
         raise HTTPException(status_code=422, detail='Prompt is required')
@@ -1627,6 +1631,10 @@ async def generate_app_icon_endpoint(data: GenerateAppIconRequest, uid: str = De
     """
     from utils.llm.app_generator import generate_app_icon
     import base64
+
+    # User-initiated image generation — same free-tier gate as chat (402 past cap).
+    # Sibling description generators already enforce; this path was left ungated.
+    enforce_chat_quota(uid)
 
     app_name = data.name.strip()
     app_description = data.description.strip()
