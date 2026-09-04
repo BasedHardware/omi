@@ -2356,6 +2356,33 @@ test("registerUserMcpTools: the frozen description bounds the number of server l
   }
 });
 
+// The index text is the biggest per-turn cost of the proxies: it rides once,
+// in mcp_tools_info's description. mcp_call carries server names only.
+test("registerUserMcpTools: mcp_call carries server names only — the tool index is not paid twice", async () => {
+  const server = await startFakeHttpMcpServer((message) => {
+    if (message.method === "initialize") return { protocolVersion: "2025-06-18", capabilities: {} };
+    if (message.method === "tools/list") {
+      return { tools: [{ name: "unique_tool_name", description: "d", inputSchema: { type: "object" } }] };
+    }
+    return {};
+  });
+
+  await withMcpEnv({ solo: { url: server.url } }, async () => {
+    const registered: RegisteredTool[] = [];
+    await __registerUserMcpToolsForTest(fakePiCollecting(registered));
+    const [toolsInfo, mcpCall] = registered;
+
+    // Discovery keeps the full name-only tool index in its description…
+    assert.match(toolsInfo.description, /\bunique_tool_name\b/);
+    assert.match(toolsInfo.description, /\bsolo\b/);
+    // …while dispatch carries server names only and points at mcp_tools_info.
+    assert.match(mcpCall.description, /\bsolo\b/);
+    assert.doesNotMatch(mcpCall.description, /unique_tool_name/);
+    assert.match(mcpCall.description, /mcp_tools_info/);
+  });
+  await server.close();
+});
+
 test("registerUserMcpTools: unreachable server is reported through the proxies, never fatal", async () => {
   await withMcpEnv({ dead: { url: "http://127.0.0.1:1/mcp" } }, async () => {
     const registered: RegisteredTool[] = [];

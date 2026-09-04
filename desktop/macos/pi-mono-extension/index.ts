@@ -1031,6 +1031,23 @@ function mcpIndexText(): string {
   return lines.join("\n");
 }
 
+/**
+ * Server names for the mcp_call description: names only, count-bounded. The
+ * full name-only tool index rides once, in mcp_tools_info's description —
+ * duplicating it in both proxies cost its size again on every turn. Server
+ * names need no clipping: loadLocalMcpConfig admits 1-64 chars only.
+ */
+function mcpServerNameLine(): string {
+  if (mcpServers.length === 0) return "No user MCP servers are configured.";
+  const names = mcpServers.slice(0, MCP_INDEX_SERVER_LINE_CAP).map((entry) => entry.name);
+  if (mcpServers.length > MCP_INDEX_SERVER_LINE_CAP) {
+    names.push(
+      `… +${mcpServers.length - MCP_INDEX_SERVER_LINE_CAP} more — call mcp_tools_info with no arguments for the live index`,
+    );
+  }
+  return names.join(", ");
+}
+
 function mcpTextResult(text: string) {
   return { content: [{ type: "text" as const, text }], details: undefined };
 }
@@ -1145,8 +1162,10 @@ function mcpCallTool() {
     description:
       "Run a tool (or a published prompt) on one of the user's MCP servers, by its real server and tool " +
       "names, and get the result content back as text.\n\n" +
-      `Configured servers right now:\n${mcpIndexText()}\n\n` +
-      "If you do not know a tool's contract, call mcp_tools_info first for its full description and input schema.",
+      // Server names only: the tool index rides once, in mcp_tools_info's
+      // description — duplicating it here cost its full size again per turn.
+      `Configured servers right now: ${mcpServerNameLine()}\n` +
+      "Call mcp_tools_info first for the tool index and, when you need it, a tool's full description and input schema.",
     parameters: Type.Object({
       server: Type.String({ description: "Server name from the mcp_tools_info index" }),
       tool: Type.String({ description: "Tool (or prompt) name on that server" }),
