@@ -1645,8 +1645,21 @@ describe("external realtime surface authority", () => {
       finalText: { text: "not a string" } as unknown as string,
     }), "invalid_external_request");
 
-    // The rejection must leave the run terminalizable, not half-sealed.
-    expect(fixture.store.getRow("SELECT status FROM runs WHERE run_id = ?", [run.runId]).status).not.toBe("succeeded");
+    // A rejected call must leave the run terminalizable rather than half-sealed,
+    // which only a valid retry landing on a terminal status actually proves.
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "Recovered after the rejected call.",
+    });
+
+    expect(fixture.store.getRow(
+      "SELECT status, final_text FROM runs WHERE run_id = ?",
+      [run.runId],
+    )).toEqual({ status: "succeeded", final_text: "Recovered after the rejected call." });
     fixture.store.close();
   });
 });
