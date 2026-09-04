@@ -500,6 +500,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Set immediately by the scroll wheel monitor to win the race against
   /// throttled programmatic scrolls during streaming.
   @State private var userIsScrolling = false
+  /// The follow glide's clock. Lives across body evaluations so a newer
+  /// follow retargets the glide in flight instead of starting a second one.
+  @State private var followGlide = ChatFollowGlide()
   /// When this transcript last moved its own viewport. The scroll detector
   /// reads it so a follow-scroll landing under an open mouse press is not
   /// mistaken for the reader taking the viewport.
@@ -1057,8 +1060,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     }
   }
 
-  /// Cancels all pending scheduled scrolls (throttle and initial placement).
+  /// Cancels all pending scheduled scrolls (throttle, initial placement, and
+  /// any follow glide in flight).
   private func cancelAllPendingScrolls() {
+    followGlide.cancel()
     scrollThrottleWorkItem?.cancel()
     scrollThrottleWorkItem = nil
     // The queued run is gone, so the throttle must stop reporting one as
@@ -1315,13 +1320,31 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     guard !messages.isEmpty else { return }
     transcriptGeometry.setFollowingLiveEdge(true)
     programmaticScroll.markProgrammaticScroll()
-    if animated, let animation = OmiMotion.gated(ChatScrollFollowThrottle.followAnimation) {
-      withAnimation(animation) {
-        proxy.scrollTo("bottom-anchor", anchor: .bottom)
-      }
-    } else {
-      proxy.scrollTo("bottom-anchor", anchor: .bottom)
+    // The glide runs on its own run-loop clock (`ChatFollowGlide`) when the
+    // resolved scroll view can carry it, and falls back to the snap otherwise
+    // — early frames before the detector resolves, and Reduce Motion, which
+    // gates the animation away.
+    if animated, OmiMotion.gated(ChatScrollFollowThrottle.followAnimation) != nil,
+      glideToLiveEdge()
+    {
+      return
     }
+    proxy.scrollTo("bottom-anchor", anchor: .bottom)
+  }
+
+  /// The live edge, as a clip-view bounds target for the glide. False when no
+  /// scroll view has been resolved yet.
+  private func glideToLiveEdge() -> Bool {
+    guard let scrollView = transcriptGeometry.scrollView, let document = scrollView.documentView
+    else { return false }
+    let clipView = scrollView.contentView
+    let viewportHeight = clipView.bounds.height
+    let top = max(document.frame.height - viewportHeight, 0)
+    let originY = document.isFlipped ? top : document.frame.height - top - viewportHeight
+    return followGlide.glide(
+      clipView: clipView,
+      to: NSPoint(x: clipView.bounds.origin.x, y: originY),
+      duration: ChatScrollFollowThrottle.followDuration)
   }
 
   /// Rate-limited version of scrollToBottom: at most one follow per

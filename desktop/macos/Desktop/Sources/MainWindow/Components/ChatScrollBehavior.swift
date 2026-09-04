@@ -86,7 +86,8 @@ enum ChatScrollFollowThrottle {
   /// The glide from one follow to the next. Shorter than `interval` so a
   /// follow always lands before the next one starts, and never a spring: the
   /// live edge has nothing to overshoot into.
-  static let followAnimation: Animation = .easeOut(duration: 0.16)
+  static let followDuration: TimeInterval = 0.16
+  static let followAnimation: Animation = .easeOut(duration: followDuration)
 
   enum Decision: Equatable {
     /// Run the scroll on this turn.
@@ -106,6 +107,86 @@ enum ChatScrollFollowThrottle {
     // the transcript in a window that never expires.
     guard elapsed >= 0, elapsed < interval else { return .now }
     return .schedule(after: interval - elapsed)
+  }
+}
+
+/// **The follow glide's own clock.**
+///
+/// SwiftUI animation transactions and AppKit's animator proxy both advance on
+/// the display cycle. A transcript mounted in a test host never reaches that
+/// cycle, so when the glide rode `withAnimation`, the mounted-transcript guard
+/// tests (INV-CHAT-2) watched the follow silently do nothing while the live
+/// edge ran 484 pt past a 600 pt viewport — the exact abandonment this
+/// surface's throttle exists to prevent, invisible to the one suite that
+/// guards it. A run-loop timer is driven by the run loop itself, which the app
+/// and the harness both pump, so the glide the reader feels is the glide the
+/// tests measure.
+///
+/// Same shape as the easing it replaces (`followDuration`, ease-out): a newer
+/// follow retargets the clock in flight rather than fighting it, and any
+/// reader input cancels it outright.
+@MainActor
+final class ChatFollowGlide {
+  /// 60 Hz — half of the follow throttle's own cadence, so a glide lands
+  /// several steps before the next follow retargets.
+  private static let stepInterval: TimeInterval = 1.0 / 60.0
+
+  private var timer: Timer?
+  private var isGliding = false
+
+  /// True while a glide is moving the viewport. Reader input checks this the
+  /// same way it checks a pending scroll.
+  var isActive: Bool { isGliding }
+
+  /// Eases `clipView` to `target` over `duration`. Returns false when there is
+  /// nothing to ease — including the sub-point case, where the caller's snap
+  /// path would be wasted work but is still correct.
+  @discardableResult
+  func glide(clipView: NSClipView, to target: NSPoint, duration: TimeInterval) -> Bool {
+    cancel()
+    let start = clipView.bounds.origin
+    guard abs(start.y - target.y) > 0.5 else { return false }
+    isGliding = true
+    let began = Date()
+    let step = Timer(timeInterval: Self.stepInterval, repeats: true) {
+      [weak self, weak clipView] _ in
+      MainActor.assumeIsolated {
+        guard let self, let clipView, self.isGliding else {
+          self?.cancel()
+          return
+        }
+        let progress = Date().timeIntervalSince(began) / duration
+        guard progress < 1 else {
+          self.moveTo(target, in: clipView)
+          self.cancel()
+          return
+        }
+        // Ease-out cubic: fast while the reader's eye is on the arriving
+        // text, settling as it reaches the live edge.
+        let eased = 1 - pow(1 - progress, 3)
+        var origin = start
+        origin.y = start.y + (target.y - start.y) * eased
+        self.moveTo(origin, in: clipView)
+      }
+    }
+    timer = step
+    RunLoop.main.add(step, forMode: .common)
+    return true
+  }
+
+  /// Reader input and teardown call this; an in-flight glide must never fight
+  /// the viewport's owner.
+  func cancel() {
+    timer?.invalidate()
+    timer = nil
+    isGliding = false
+  }
+
+  private func moveTo(_ origin: NSPoint, in clipView: NSClipView) {
+    clipView.setBoundsOrigin(origin)
+    if let scrollView = clipView.enclosingScrollView {
+      scrollView.reflectScrolledClipView(clipView)
+    }
   }
 }
 
