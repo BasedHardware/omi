@@ -106,6 +106,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   );
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatEpoch, setChatEpoch] = useState(0);
+  const chatMutationSeqRef = useRef(0);
   // Monotonic chat session epoch. Each run of the chat-history effect (a gate
   // transition or a backend plane switch) bumps it, so a send or older-page
   // load that started under a retired session can never write transcript
@@ -126,6 +127,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     [],
   );
   const {
+    authError,
     completeFirstRun,
     onboardingRequired,
     revalidateSession,
@@ -160,10 +162,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const searchRef = useRef<TextInput>(null);
   useEffect(() => {
     let active = true;
-    const backend = omiBackend;
-    if (backend === undefined || backend === null) {
-      return () => undefined;
-    }
     chatSessionEpochRef.current += 1;
     if (macDesktop && onboardingRequired !== false) {
       // Leaving a ready session drops the previous session's transcript,
@@ -172,6 +170,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       // start while chatBusy, so a send that never settled must not brick the
       // next session's composer.
       setChatError(null);
+      setDraft('');
       setMessages([]);
       setOlderChatCursor(null);
       setHasOlderChat(false);
@@ -184,9 +183,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         active = false;
       };
     }
+    const backend = omiBackend;
+    if (backend === undefined || backend === null) {
+      return () => undefined;
+    }
+    const mutation = chatMutationSeqRef.current;
     loadNewestChatHistory(backend)
       .then(page => {
-        if (active) {
+        if (active && mutation === chatMutationSeqRef.current) {
           page.messages.forEach(message =>
             stableChatMessageIds.add(message.id),
           );
@@ -390,6 +394,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       return;
     }
     const session = chatSessionEpochRef.current;
+    chatMutationSeqRef.current += 1;
+    let admitted = false;
     setChatBusy(true);
     setChatError(null);
     shouldFollowChat.current = true;
@@ -402,7 +408,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         text,
         localMessage.createdAt,
         id => {
-          setActiveGenerationId(id);
+          admitted = true;
+          if (chatSessionEpochRef.current === session) {
+            setActiveGenerationId(id);
+          }
         },
         localMessage,
       );
@@ -436,18 +445,31 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           ...withoutCanonical.slice(insertAt),
         ];
       });
+      setChatEpoch(current => current + 1);
     } catch (error) {
       if (chatSessionEpochRef.current === session) {
-        setChatError(chatErrorCopy(error));
+        if (!admitted) {
+          setMessages(current =>
+            current.filter(message => message.id !== localMessage.id),
+          );
+        }
+        setChatError(
+          admitted
+            ? 'Response interrupted. Refreshing chat history.'
+            : chatErrorCopy(error),
+        );
+        if (admitted) {
+          setChatEpoch(current => current + 1);
+        }
         if (macDesktop && chatSessionLost(error)) {
           revalidateSession().catch(() => undefined);
         }
       }
     } finally {
-      // Busy flags always release, even when the send's session was retired:
-      // a stuck chatBusy would brick the next session's composer.
-      setActiveGenerationId(null);
-      setChatBusy(false);
+      if (chatSessionEpochRef.current === session) {
+        setActiveGenerationId(null);
+        setChatBusy(false);
+      }
     }
   };
 
@@ -463,11 +485,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       return;
     }
     const session = chatSessionEpochRef.current;
+    const mutation = chatMutationSeqRef.current;
     setLoadingOlderChat(true);
     setChatError(null);
     try {
       const page = await loadOlderChatHistory(backend, cursor);
-      if (chatSessionEpochRef.current !== session) {
+      if (
+        chatSessionEpochRef.current !== session ||
+        chatMutationSeqRef.current !== mutation
+      ) {
         return;
       }
       page.messages.forEach(message => stableChatMessageIds.add(message.id));
@@ -475,7 +501,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       setOlderChatCursor(page.olderCursor);
       setHasOlderChat(page.hasOlder);
     } catch (error) {
-      if (chatSessionEpochRef.current !== session) {
+      if (
+        chatSessionEpochRef.current !== session ||
+        chatMutationSeqRef.current !== mutation
+      ) {
         return;
       }
       if (
@@ -485,7 +514,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       ) {
         try {
           const page = await loadNewestChatHistory(backend);
-          if (chatSessionEpochRef.current !== session) {
+          if (
+            chatSessionEpochRef.current !== session ||
+            chatMutationSeqRef.current !== mutation
+          ) {
             return;
           }
           page.messages.forEach(message =>
@@ -506,7 +538,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         setChatError('Older messages could not be loaded.');
       }
     } finally {
-      setLoadingOlderChat(false);
+      if (chatSessionEpochRef.current === session) {
+        setLoadingOlderChat(false);
+      }
     }
   };
 
@@ -569,6 +603,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
 
   const firstRunOnboarding = (
     <Onboarding
+      error={authError}
       onSignIn={() => {
         completeFirstRun().catch(() => undefined);
       }}
@@ -677,16 +712,26 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     return (
       <PageShell macDesktop workspaceMaterial>
         <DesktopApp
+          activeGenerationId={activeGenerationId}
+          authError={authError}
           chatBusy={chatBusy}
           chatError={chatError}
           draft={draft}
+          hasOlderChat={hasOlderChat}
+          loadingOlderChat={loadingOlderChat}
           messages={messages}
           onDraftChange={setDraft}
+          onLoadOlderChat={() => {
+            loadOlderMessages().catch(() => undefined);
+          }}
           onRefresh={() => {
             refreshReads(false).catch(() => undefined);
           }}
           onSend={() => {
             send().catch(() => undefined);
+          }}
+          onStop={() => {
+            stopGeneration().catch(() => undefined);
           }}
           onSignIn={() => {
             signInAndRefresh().catch(() => undefined);

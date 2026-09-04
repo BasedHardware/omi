@@ -598,6 +598,7 @@ RCT_EXPORT_MODULE(OmiAuth)
     self.pendingSignInReject = nil;
   }
   [self closeLoopback];
+  [self bringOmiToFront];
   if (code != nil) {
     reject(code, message, error);
     return;
@@ -605,7 +606,6 @@ RCT_EXPORT_MODULE(OmiAuth)
   OmiAuthSetEnvironmentCloudTokensIgnored(NO);
   OmiAuthSetShippingSessionIgnored(NO);
   resolve(value);
-  [self bringOmiToFront];
 }
 
 - (void)finishWithFirebaseCustomToken:(NSString *)customToken

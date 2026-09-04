@@ -32,7 +32,16 @@ export function isCaptureBackendPath(path: string): boolean {
   }
   const route = new URL(path, 'https://omi.invalid').pathname;
   return (
-    route === '/v1/device-sessions' || route.startsWith('/v1/device-sessions/')
+    route === '/v1/settings' ||
+    route === '/v1/chat-messages' ||
+    route.startsWith('/v1/chat-generations/') ||
+    route === '/v1/chat-attachments' ||
+    route.startsWith('/v1/chat-attachments/') ||
+    route === '/v1/device-sessions' ||
+    route.startsWith('/v1/device-sessions/') ||
+    route === '/v1/conversations' ||
+    route === '/v1/memories' ||
+    route === '/v1/tasks'
   );
 }
 
@@ -117,9 +126,12 @@ export function resolveNativeRequestOrigin(input: {
       return {ok: true, origin: CLOUD_BACKEND_ORIGIN};
     }
     const v5 = validateV5BackendUrl(input.v5BackendUrl);
-    return v5 === null
-      ? {ok: false, reason: 'rejected'}
-      : {ok: true, origin: v5.origin};
+    if (v5 === null) {
+      return {ok: false, reason: 'rejected'};
+    }
+    if (isCaptureBackendPath(input.path)) {
+      return {ok: true, origin: v5.origin};
+    }
   }
   return {ok: true, origin: CLOUD_BACKEND_ORIGIN};
 }

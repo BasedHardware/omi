@@ -6,6 +6,7 @@ export function useOnboarding(
   refreshReads: (initial: boolean) => Promise<void>,
 ) {
   const [signingIn, setSigningIn] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [onboardingRequired, setOnboardingRequired] = useState<boolean | null>(
     macDesktop ? null : false,
   );
@@ -54,6 +55,7 @@ export function useOnboarding(
     if (omiAuth === undefined || omiAuth === null) {
       return;
     }
+    setAuthError(null);
     setSigningIn(true);
     try {
       const result = await omiAuth.signIn();
@@ -61,7 +63,12 @@ export function useOnboarding(
         await omiAuth.markOnboardingComplete();
         setOnboardingRequired(false);
         await refreshReads(false);
+      } else {
+        setAuthError('Sign in was not completed. Try again.');
       }
+    } catch (error) {
+      setAuthError('Sign in was not completed. Try again.');
+      throw error;
     } finally {
       setSigningIn(false);
     }
@@ -115,6 +122,7 @@ export function useOnboarding(
   }, [macDesktop]);
 
   return {
+    authError,
     completeFirstRun,
     onboardingRequired,
     revalidateSession,

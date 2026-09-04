@@ -1,6 +1,8 @@
-import React, {useMemo} from 'react';
+import React, {useEffect, useMemo, useRef} from 'react';
 import {
   ActivityIndicator,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +16,7 @@ import type {
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
+import {ReadStatus} from '../ui/ReadStatus';
 import {ShippingListInsert} from './ShippingStage';
 import {EmptyCopy, ReadRow, SectionTitle, TaskRow} from './DesktopRows';
 import {desktopTokens as token} from './tokens';
@@ -21,7 +24,10 @@ import {desktopTokens as token} from './tokens';
 type Props = {
   chatBusy: boolean;
   draft: string;
+  hasOlderChat: boolean;
+  loadingOlderChat: boolean;
   messages: ChatMessage[];
+  onLoadOlderChat: () => void;
   onRefresh: () => void;
   outcomes: DesktopReadOutcomes | null;
   reads: DesktopReadProjection[];
@@ -42,7 +48,7 @@ export function RewindPanel() {
   );
 }
 
-function SessionBanner({
+export function DesktopReadBanner({
   onRefresh,
   readsPhase,
 }: {
@@ -79,19 +85,51 @@ function SessionBanner({
 
 function AskExchange({
   chatBusy,
+  hasOlderChat,
+  loadingOlderChat,
   messages,
+  onLoadOlderChat,
 }: {
   chatBusy: boolean;
+  hasOlderChat: boolean;
+  loadingOlderChat: boolean;
   messages: ChatMessage[];
+  onLoadOlderChat: () => void;
 }) {
   return (
     <View accessibilityLabel="Ask exchange" style={styles.exchange}>
+      {hasOlderChat ? (
+        <FocusPressable
+          accessibilityLabel="Load earlier messages"
+          accessibilityRole="button"
+          disabled={loadingOlderChat}
+          onPress={onLoadOlderChat}
+          style={({pressed}) => [styles.older, pressed && styles.pressed]}>
+          <Text style={styles.bannerAction}>
+            {loadingOlderChat ? 'Loading earlier…' : 'Load earlier messages'}
+          </Text>
+        </FocusPressable>
+      ) : null}
       {messages.map(item => (
         <View key={item.id} style={styles.exchangeRow}>
           <Text style={styles.rowMeta}>
             {item.sender === 'human' ? 'You' : 'Omi'}
           </Text>
-          <Text style={styles.rowTitle}>{item.text}</Text>
+          <Text
+            accessibilityLabel={
+              item.generationOutcome === 'failed'
+                ? 'Failed response'
+                : undefined
+            }
+            style={styles.rowTitle}>
+            {item.generationOutcome === 'failed'
+              ? item.generationRetryable === true
+                ? 'Response failed. Try again.'
+                : 'Response failed.'
+              : item.generationOutcome === 'cancelled' && item.text === ''
+              ? 'Response stopped.'
+              : item.text}
+          </Text>
         </View>
       ))}
       {chatBusy ? (
@@ -104,17 +142,27 @@ function AskExchange({
 export function DesktopHome({
   chatBusy,
   draft,
+  hasOlderChat,
+  loadingOlderChat,
   messages,
+  onLoadOlderChat,
   onRefresh,
   outcomes,
   reads,
   readsPhase,
 }: Props) {
+  const chatScrollRef = useRef<ScrollView>(null);
+  const shouldFollowChat = useRef(true);
+  useEffect(() => {
+    if (chatBusy) {
+      shouldFollowChat.current = true;
+    }
+  }, [chatBusy]);
   const query = draft.trim();
   const normalized = query.toLocaleLowerCase();
-  const conversations = useMemo(() => {
+  const currents = useMemo(() => {
     return reads.filter(item => {
-      if (item.kind !== 'conversation') {
+      if (item.kind === 'task') {
         return false;
       }
       return (
@@ -140,23 +188,54 @@ export function DesktopHome({
       ? tasksOutcome.error
       : 'No tasks yet';
   const conversationsOutcome = outcomes?.conversations ?? null;
-  const conversationsEmptyCopy =
-    conversationsOutcome === null
-      ? 'Conversations will show here when your day is loaded.'
-      : conversationsOutcome.status === 'error'
-      ? conversationsOutcome.error
+  const memoriesOutcome = outcomes?.memories ?? null;
+  const currentsError = [conversationsOutcome, memoriesOutcome].find(
+    outcome => outcome?.status === 'error',
+  );
+  const currentsEmptyCopy =
+    conversationsOutcome === null || memoriesOutcome === null
+      ? 'Conversations and memories will show here when your day is loaded.'
+      : currentsError?.status === 'error'
+      ? currentsError.error
       : query !== ''
       ? 'Nothing captured matches this search.'
       : 'Nothing captured yet.';
   return (
     <View style={styles.home}>
-      <SessionBanner onRefresh={onRefresh} readsPhase={readsPhase} />
+      <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
+      {messages.length > 0 || chatBusy || hasOlderChat ? (
+        <ScrollView
+          contentContainerStyle={styles.chatContent}
+          onContentSizeChange={() => {
+            if (shouldFollowChat.current) {
+              chatScrollRef.current?.scrollToEnd({animated: true});
+            }
+          }}
+          onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+            const {contentOffset, contentSize, layoutMeasurement} =
+              event.nativeEvent;
+            shouldFollowChat.current =
+              contentOffset.y + layoutMeasurement.height >=
+              contentSize.height - 48;
+          }}
+          ref={chatScrollRef}
+          scrollEventThrottle={16}
+          style={styles.chatList}>
+          <AskExchange
+            chatBusy={chatBusy}
+            hasOlderChat={hasOlderChat}
+            loadingOlderChat={loadingOlderChat}
+            messages={messages}
+            onLoadOlderChat={() => {
+              shouldFollowChat.current = false;
+              onLoadOlderChat();
+            }}
+          />
+        </ScrollView>
+      ) : null}
       <ScrollView
         contentContainerStyle={styles.listContent}
         style={styles.list}>
-        {messages.length > 0 || chatBusy ? (
-          <AskExchange chatBusy={chatBusy} messages={messages} />
-        ) : null}
         <View
           accessibilityLabel="Home tasks"
           style={[styles.section, styles.sectionSpaced]}>
@@ -170,13 +249,16 @@ export function DesktopHome({
           ) : (
             <EmptyCopy>{tasksEmptyCopy}</EmptyCopy>
           )}
+          {tasksOutcome?.status === 'success' ? (
+            <ReadStatus label="Tasks" mac page={tasksOutcome.value.page} />
+          ) : null}
         </View>
         <View
           accessibilityLabel="Home currents"
           style={[styles.section, styles.sectionSpaced]}>
-          <SectionTitle>Conversations</SectionTitle>
-          {conversations.length > 0 ? (
-            conversations.map(item => (
+          <SectionTitle>Conversations & memories</SectionTitle>
+          {currents.length > 0 ? (
+            currents.map(item => (
               <ShippingListInsert
                 itemKey={`${item.kind}-${item.id}`}
                 key={`${item.kind}-${item.id}`}>
@@ -184,8 +266,22 @@ export function DesktopHome({
               </ShippingListInsert>
             ))
           ) : (
-            <EmptyCopy>{conversationsEmptyCopy}</EmptyCopy>
+            <EmptyCopy>{currentsEmptyCopy}</EmptyCopy>
           )}
+          {conversationsOutcome?.status === 'success' ? (
+            <ReadStatus
+              label="Conversations"
+              mac
+              page={conversationsOutcome.value.page}
+            />
+          ) : null}
+          {memoriesOutcome?.status === 'success' ? (
+            <ReadStatus
+              label="Memories"
+              mac
+              page={memoriesOutcome.value.page}
+            />
+          ) : null}
         </View>
         <View accessibilityLabel="Home rewind" style={styles.section}>
           <SectionTitle>Screen history</SectionTitle>
@@ -198,6 +294,8 @@ export function DesktopHome({
 
 const styles = StyleSheet.create({
   home: {flex: 1, gap: 12},
+  chatList: {maxHeight: '42%'},
+  chatContent: {paddingBottom: 4},
   banner: {
     alignItems: 'center',
     alignSelf: 'stretch',
@@ -220,6 +318,7 @@ const styles = StyleSheet.create({
     fontSize: token.type.meta,
     fontWeight: '600',
   },
+  older: {alignSelf: 'flex-start', minHeight: 28, paddingVertical: 4},
   pressed: {opacity: 0.78},
   list: {flex: 1},
   sectionSpaced: {marginBottom: 14},

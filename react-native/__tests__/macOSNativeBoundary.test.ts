@@ -420,7 +420,7 @@ test('clears the leftover loopback tab and returns the user to the app', () => {
   expect(auth).toContain('[NSApp activate];');
   expect(auth).toContain('makeKeyAndOrderFront');
   expect(auth).toMatch(
-    /finishSignInAttempt:[^]*\[self closeLoopback\];[^]*OmiAuthSetEnvironmentCloudTokensIgnored\(NO\);[^]*resolve\(value\);[^]*\[self bringOmiToFront\];/,
+    /finishSignInAttempt:[^]*\[self closeLoopback\];[^]*\[self bringOmiToFront\];[^]*if \(code != nil\)[^]*OmiAuthSetEnvironmentCloudTokensIgnored\(NO\);[^]*resolve\(value\);/,
   );
 });
 

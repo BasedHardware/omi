@@ -361,6 +361,31 @@ test('loads and normalizes all three exact desktop read routes', async () => {
   );
 });
 
+test('keeps processing conversations whose title and overview are not ready yet', async () => {
+  const backend = backendFor(() => ({
+    status: 200,
+    body: JSON.stringify([
+      {
+        ...conversation,
+        structured: {title: '', overview: ''},
+        status: 'processing',
+      },
+    ]),
+  }));
+
+  await expect(loadConversations(backend)).resolves.toEqual(
+    expect.objectContaining({
+      items: [
+        expect.objectContaining({
+          title: '',
+          summary: '',
+          status: 'processing',
+        }),
+      ],
+    }),
+  );
+});
+
 test('groups validated UTC conversation timestamps by local calendar day', () => {
   const now = new Date(2026, 7, 14, 12, 0).getTime();
   expect(
