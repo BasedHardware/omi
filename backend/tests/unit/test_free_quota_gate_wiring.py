@@ -211,6 +211,32 @@ class TestAppGeneratorGates:
             assert exc_info.value.status_code == 402
             gate.assert_called_once_with('u1', platform='macos')
 
+    def test_generate_app_blocked_past_cap(self):
+        # Regression for #12715: generate_app_endpoint tracked spend via
+        # track_usage but never called enforce_chat_quota, unlike the sibling
+        # description generators above — a free user past cap could still
+        # trigger billable AI app-config generation.
+        import routers.apps as apps_router
+
+        with patch.object(apps_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate:
+            data = apps_router.GenerateAppRequest(prompt='an app that summarizes my meetings')
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.run(apps_router.generate_app_endpoint(data, uid='u1', x_app_platform='macos'))
+            assert exc_info.value.status_code == 402
+            gate.assert_called_once_with('u1', platform='macos')
+
+    def test_generate_app_icon_blocked_past_cap(self):
+        # Regression for #12715: same gap as generate_app_endpoint, for the
+        # DALL-E icon generator (also billed under Features.APP_GENERATOR).
+        import routers.apps as apps_router
+
+        with patch.object(apps_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate:
+            data = apps_router.GenerateAppIconRequest(name='My App', description='does things', category='other')
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.run(apps_router.generate_app_icon_endpoint(data, uid='u1', x_app_platform='macos'))
+            assert exc_info.value.status_code == 402
+            gate.assert_called_once_with('u1', platform='macos')
+
 
 # ---------------------------------------------------------------------------
 # routers/omni_relay.py — realtime relay WebSocket
