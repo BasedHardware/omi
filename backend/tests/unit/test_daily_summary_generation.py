@@ -42,14 +42,23 @@ def _install_generation_fakes(monkeypatch, *, existing_by_date=None, tokens_unus
         'create_daily_summary',
         lambda uid, payload: created.append(payload) or payload.get('id'),
     )
-    monkeypatch.setattr(notif.postprocess_executor, 'submit', lambda *a, **k: None)
-    monkeypatch.setattr(notif, 'day_summary_webhook', lambda *a, **k: None)
     monkeypatch.setattr(notif, 'send_notification', lambda *a, **k: sent.append({'args': a, 'kwargs': k}))
-    return generated_dates, created, sent, released
+
+    # A coroutine, like the real one. The webhook is awaited inline now, so a sync stub would
+    # hand asyncio.run a None and the harness itself would be the thing under test.
+    # ``pushes_before`` records how many pushes had already gone out when the webhook ran,
+    # which is what pins the ordering.
+    webhooks = []
+
+    async def _day_summary_webhook(uid, summary, summary_json=None):
+        webhooks.append({'uid': uid, 'summary': summary, 'summary_json': summary_json, 'pushes_before': len(sent)})
+
+    monkeypatch.setattr(notif, 'day_summary_webhook', _day_summary_webhook)
+    return generated_dates, created, sent, released, webhooks
 
 
 def test_tokenless_user_gets_a_record_and_no_push(monkeypatch):
-    generated_dates, created, sent, _released = _install_generation_fakes(monkeypatch)
+    generated_dates, created, sent, _released, _webhooks = _install_generation_fakes(monkeypatch)
     notif._send_summary_notification(('u1', [], 'UTC'))
     assert created, 'a tokenless user must still get a daily summary record'
     assert generated_dates, 'generation must run without an FCM token'
@@ -57,7 +66,7 @@ def test_tokenless_user_gets_a_record_and_no_push(monkeypatch):
 
 
 def test_user_with_tokens_gets_record_and_push(monkeypatch):
-    generated_dates, created, sent, _released = _install_generation_fakes(monkeypatch)
+    generated_dates, created, sent, _released, _webhooks = _install_generation_fakes(monkeypatch)
     notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
     assert created
     assert generated_dates
@@ -73,7 +82,9 @@ def test_backfill_generates_missing_day_skips_present_without_llm_and_never_noti
     present = (display - timedelta(days=1)).strftime('%Y-%m-%d')
     missing = (display - timedelta(days=2)).strftime('%Y-%m-%d')
     existing = {present: {'id': 'already', 'date': present}}
-    generated_dates, created, sent, _released = _install_generation_fakes(monkeypatch, existing_by_date=existing)
+    generated_dates, created, sent, _released, _webhooks = _install_generation_fakes(
+        monkeypatch, existing_by_date=existing
+    )
 
     notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
 
@@ -86,7 +97,7 @@ def test_backfill_generates_missing_day_skips_present_without_llm_and_never_noti
 
 
 def test_backfill_cap_is_honored(monkeypatch):
-    generated_dates, created, sent, _released = _install_generation_fakes(monkeypatch)
+    generated_dates, created, sent, _released, _webhooks = _install_generation_fakes(monkeypatch)
     notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
     # Current day + at most 3 backfilled generations, even if 7 days are empty.
     assert len(generated_dates) == 1 + notif._DAILY_SUMMARY_BACKFILL_GENERATE_CAP
@@ -209,7 +220,7 @@ def test_backfill_is_skipped_for_a_user_with_no_conversations(monkeypatch):
     lock writes, seven by-date reads and seven conversation queries chasing holes it can never
     fill.
     """
-    generated_dates, created, sent, _released = _install_generation_fakes(monkeypatch)
+    generated_dates, created, sent, _released, _webhooks = _install_generation_fakes(monkeypatch)
 
     conversation_queries = []
 
@@ -242,7 +253,7 @@ def test_a_day_declined_before_the_llm_releases_its_lock(monkeypatch):
     press on a quiet evening left the 22:00 cron tick unable to acquire the lock — and that day
     never got a recap at all. A guard that spends no tokens must give the day back.
     """
-    _generated, _created, _sent, released = _install_generation_fakes(monkeypatch)
+    _generated, _created, _sent, released, _webhooks = _install_generation_fakes(monkeypatch)
     monkeypatch.setattr(notif.conversations_db, 'get_conversations', lambda *a, **k: [])
 
     record, created, declined = notif._generate_and_store_daily_summary(
@@ -256,7 +267,7 @@ def test_a_day_declined_before_the_llm_releases_its_lock(monkeypatch):
 
 def test_losing_the_lock_does_not_release_another_workers_day(monkeypatch):
     """Releasing on decline must not turn into releasing a lock this call never took."""
-    _generated, _created, _sent, released = _install_generation_fakes(monkeypatch)
+    _generated, _created, _sent, released, _webhooks = _install_generation_fakes(monkeypatch)
     monkeypatch.setattr(notif, 'try_acquire_daily_summary_lock', lambda *_a, **_k: False)
 
     _record, _created_flag, declined = notif._generate_and_store_daily_summary(
@@ -271,7 +282,7 @@ def test_a_day_of_only_locked_conversations_still_backfills(monkeypatch):
     """`is_locked` conversations prove the owner was recording, so their older days are worth
     walking back for. Classifying the day as `no_conversations` skipped the backfill entirely
     for exactly the accounts that had one."""
-    generated_dates, _created, _sent, _released = _install_generation_fakes(monkeypatch)
+    generated_dates, _created, _sent, _released, _webhooks = _install_generation_fakes(monkeypatch)
     display = notif._display_date_for_now('UTC')
     today = display.strftime('%Y-%m-%d')
 
@@ -319,3 +330,92 @@ def test_create_route_reports_contention_as_retryable_not_as_an_empty_day():
             users_router.create_user_daily_summary(request, uid='u1', x_app_platform='macos')
     assert exc.value.status_code == 409
     patches['set_generic_cache'].assert_not_called()
+
+
+def test_webhook_completes_before_the_user_call_returns(monkeypatch):
+    """The daily-summary webhook is owned by this call, not handed to a pool.
+
+    Regression for #12530: the webhook used to be
+    ``postprocess_executor.submit(asyncio.run, day_summary_webhook(...))``. That had two
+    defects. ``_send_summary_notification`` is itself dispatched through
+    ``run_blocking(postprocess_executor, ...)``, so the submit made the function its own
+    child on the pool it was running on. And nothing owned the result: the per-user
+    ``asyncio.wait_for`` budget covers only this call, and the Cloud Run Job exits without
+    joining the pool, so a queued webhook died with the container — logged as
+    ``coroutine 'day_summary_webhook' was never awaited`` right before exit.
+
+    Making ``submit`` raise is what keeps this honest: asserting only that the webhook ran
+    would still pass if someone reintroduced the submit alongside an inline call.
+    """
+
+    def _explode(*_args, **_kwargs):
+        raise AssertionError('the daily summary webhook must not be submitted back to postprocess_executor')
+
+    _generated, _created, sent, _released, webhooks = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif.postprocess_executor, 'submit', _explode)
+
+    notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
+
+    # Populated by the time the call returns: nothing is left in flight for the job to drop.
+    assert len(webhooks) == 1
+    assert webhooks[0]['uid'] == 'u1'
+    # The push is the owner-visible artifact and goes first; the webhook is developer integration.
+    assert webhooks[0]['pushes_before'] == 1
+    assert len(sent) == 1
+
+
+def test_tokenless_user_still_reaches_their_webhook(monkeypatch):
+    """The webhook sits outside the FCM-token guard, exactly as it did before the fix.
+
+    The old code submitted the webhook *before* the ``if not tokens: return`` early exit.
+    Moving the call after the push would silently drop the webhook for every user without a
+    token unless the guard is restructured, which is why the push is a branch rather than an
+    early return.
+    """
+    _generated, created, sent, _released, webhooks = _install_generation_fakes(monkeypatch)
+
+    notif._send_summary_notification(('u1', [], 'UTC'))
+
+    assert created, 'a tokenless user must still get a daily summary record'
+    assert sent == [], 'no FCM token means no push'
+    assert len(webhooks) == 1, 'a tokenless user must still reach their developer webhook'
+    assert webhooks[0]['pushes_before'] == 0
+
+
+def test_webhook_receives_the_dict_payload_as_summary_json(monkeypatch):
+    """``summary_json`` carries the real object; ``summary`` stays the legacy repr string."""
+    _generated, created, _sent, _released, webhooks = _install_generation_fakes(monkeypatch)
+
+    notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
+
+    current = notif._display_date_for_now('UTC').strftime('%Y-%m-%d')
+
+    assert len(webhooks) == 1
+    payload = webhooks[0]['summary_json']
+    assert isinstance(payload, dict)
+    # The generated record for the current day, not merely "some dict".
+    assert payload['overview'] == f'summary-{current}'
+    assert payload['id'] == f'id-{current}'
+    assert webhooks[0]['summary'] == str(payload)
+
+
+def test_a_failing_webhook_does_not_cost_the_user_their_recap(monkeypatch):
+    """A webhook fault is contained, logged, and never fails the user.
+
+    The old ``postprocess_executor.submit`` swallowed every exception into a Future nobody
+    read. That hid real faults, but it also meant a broken webhook could not cost the owner
+    their recap. Running inline moves the fault onto this call, so it has to be caught
+    explicitly: ``_send_summary_notification`` is what the per-user gather counts, and an
+    escaping webhook error would mark a user whose push already went out as failed.
+    """
+    _generated, created, sent, _released, _webhooks = _install_generation_fakes(monkeypatch)
+
+    async def _boom(*_args, **_kwargs):
+        raise RuntimeError('webhook receiver is down')
+
+    monkeypatch.setattr(notif, 'day_summary_webhook', _boom)
+
+    notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
+
+    assert created, 'the summary record must survive a webhook failure'
+    assert len(sent) == 1, 'the push must survive a webhook failure'

@@ -530,18 +530,43 @@ def _deliver_current_day_summary(uid, date_str: str, summary_data: dict, tokens)
         content_blocks=[review_block] if review_block else None,
     )
 
-    # Also send webhook with the full summary data (day_summary_webhook is async, so wrap in asyncio.run).
+    if tokens:
+        send_notification(
+            uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
+        )
+    else:
+        logger.info(f"Skipping daily summary push for uid={uid}: no FCM tokens")
+
+    # Also send the webhook with the full summary data. This runs inline rather than
+    # being submitted, for two reasons (#12530):
+    #
+    # * This function already runs *on* postprocess_executor (send_daily_summary_notification
+    #   dispatches _send_summary_notification through run_blocking(postprocess_executor, ...)),
+    #   so submitting back into the same pool made it its own child — the arrangement
+    #   backend/AGENTS.md forbids.
+    # * A submitted webhook belonged to no one. The per-user asyncio.wait_for budget covers
+    #   only this call, and the Cloud Run Job never joins the pool before exiting, so a queued
+    #   webhook died with the container — the "coroutine 'day_summary_webhook' was never
+    #   awaited" warning logged immediately before exit in #12530.
+    #
+    # Inline, it finishes inside the same per-user budget that governs the rest of this user's
+    # work. It is deliberately after the push: the recap is what the owner receives, the webhook
+    # is developer integration, and it stays outside the ``tokens`` guard so a user with no FCM
+    # token still reaches their webhook exactly as before.
+    #
     # ``summary`` is the legacy str(...) form, kept for backward compatibility; ``summary_json``
     # carries the same payload as a real JSON object for receivers to migrate to.
-    postprocess_executor.submit(asyncio.run, day_summary_webhook(uid, str(summary_data), summary_data))
-
-    if not tokens:
-        logger.info(f"Skipping daily summary push for uid={uid}: no FCM tokens")
-        return
-
-    send_notification(
-        uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
-    )
+    #
+    # Contained, because inline changes who pays for a fault. The submit swallowed every
+    # exception into a Future nobody read — invisible, but it also meant a broken webhook never
+    # cost the owner their recap. day_summary_webhook handles its own HTTP failures, not the
+    # work around them (URL assembly, the webhook-status reads). Left bare, one of those would
+    # propagate out of a user whose push had already been delivered and count them as failed.
+    # Logged rather than discarded: the old path reported nothing at all.
+    try:
+        asyncio.run(day_summary_webhook(uid, str(summary_data), summary_data))
+    except Exception as e:
+        logger.error('daily_summary_webhook_failed uid=%s error=%s', uid, e, exc_info=e)
 
 
 def _backfill_recent_daily_summaries(uid, display_date, tz_name: Optional[str]) -> None:
