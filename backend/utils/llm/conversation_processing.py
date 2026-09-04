@@ -1165,10 +1165,7 @@ def sanitize_structured_speaker_placeholders(structured: Structured) -> Structur
 # /reprocess ended at 15.2-15.8s of request latency chained from `openai.APITimeoutError`, leaving
 # the conversation with no summary; successful requests on those routes already run to ~55s, inside
 # the route's own 120s TimeoutMiddleware budget.
-#
-# The deadline now belongs to the feature route (model_config._FOREGROUND_TIMEOUT_FEATURES), which
-# is what get_llm applies when a caller passes none; this constant names the same budget for the
-# call sites that state it explicitly.
+# The budget itself is declared on the feature route now (see model_config).
 CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
 
 
@@ -1578,11 +1575,9 @@ def get_app_result(
     {full_context}
     '''
 
-    # Both branches below run while the user waits on POST /v1/conversations/{id}/reprocess?app_id=,
-    # applying a user-authored app/template prompt to a whole conversation, so they need the same
-    # foreground deadline whole-transcript structuring needed. get_llm supplies it for the
-    # conv_app_result feature; on the background transport deadline this call returned
-    # `openai.APITimeoutError: Request timed out.` and the reprocess failed with no summary at all.
+    # Both branches run a user-authored prompt over a whole conversation while the user waits, so
+    # they need the foreground deadline get_llm gives the conv_app_result feature (see model_config);
+    # on the background one they returned `openai.APITimeoutError` and the reprocess lost its summary.
     if prompt_prefix is not None:
         cache_enabled = shared_conversation_cache_supported() and prompt_prefix.cache_eligible
         instructions = f'''Apply this explicitly selected summarization app to the shared conversation above.
