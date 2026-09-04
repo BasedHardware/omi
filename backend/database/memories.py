@@ -228,6 +228,10 @@ _MEMORY_LIST_INDEX_FIELDS = (
     'capture_device_ids',
 )
 _MEMORY_LIST_CANDIDATE_WINDOW_MAX = 5000
+# Cap for the scoring_desc visible-page scan. Covers skip+page plus slack for
+# user-rejected / invalidated rows between visible ones; one request must not
+# stream an unbounded historical collection.
+_MEMORY_SCORING_VISIBLE_PAGE_SCAN_CAP = 2000
 
 
 def _memory_passes_list_visibility(memory: Dict[str, Any], *, include_invalidated: bool) -> bool:
@@ -416,18 +420,50 @@ def get_memories(
     )
 
     # Closest safe Firestore query for this path: category / created_at bounds
-    # (applied above) plus scoring+created_at order, limit, and offset. Do not add
-    # ``user_review`` / ``invalid_at`` FieldFilters — see
-    # ``_memory_passes_list_visibility``. A server-side ``user_review != False``
-    # (or ``not-in [False]``) would also need a new composite index with scoring
-    # and still drop legacy docs missing the field (#4498).
-    memories_ref = memories_ref.limit(limit).offset(offset)
+    # (applied above) plus scoring+created_at order. Do not add ``user_review`` /
+    # ``invalid_at`` FieldFilters — see ``_memory_passes_list_visibility``. A
+    # server-side ``user_review != False`` (or ``not-in [False]``) would also need
+    # a new composite index with scoring and still drop legacy docs missing the
+    # field (#4498). Applying limit/offset on the raw stream then filtering in
+    # Python returns short pages and advances past visible rows the client never
+    # saw — same failure class as chat ``get_messages`` reported pagination.
+    # Scan with a bounded budget until ``offset`` visible rows are skipped and
+    # ``limit`` visible rows are collected.
+    visible_limit = max(0, int(limit))
+    visible_offset = max(0, int(offset))
+    scan_budget = min(
+        _MEMORY_SCORING_VISIBLE_PAGE_SCAN_CAP,
+        max(100, (visible_offset + visible_limit) * 4),
+    )
+    scanned = 0
+    visible_skipped = 0
+    result: List[Dict[str, Any]] = []
+    cursor_snapshot: Any = None
 
-    memories: List[Dict[str, Any]] = [_typed_doc(doc) for doc in memories_ref.stream()]
-    logger.info(f"get_memories {len(memories)}")
-    result: List[Dict[str, Any]] = [
-        memory for memory in memories if _memory_passes_list_visibility(memory, include_invalidated=include_invalidated)
-    ]
+    while scanned < scan_budget and len(result) < visible_limit:
+        batch_limit = min(100, scan_budget - scanned)
+        page_query = memories_ref.start_after(cursor_snapshot) if cursor_snapshot is not None else memories_ref
+        documents = list(page_query.limit(batch_limit).stream())
+        if not documents:
+            break
+
+        for document in documents:
+            scanned += 1
+            cursor_snapshot = document
+            memory = _typed_doc(document)
+            if not _memory_passes_list_visibility(memory, include_invalidated=include_invalidated):
+                continue
+            if visible_skipped < visible_offset:
+                visible_skipped += 1
+                continue
+            result.append(memory)
+            if len(result) == visible_limit:
+                break
+
+        if len(documents) < batch_limit:
+            break
+
+    logger.info(f"get_memories {len(result)}")
     return result
 
 
