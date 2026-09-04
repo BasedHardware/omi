@@ -484,6 +484,11 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('routers/developer.py', 'get_memories', 'model_dump'),
         DumpSite('routers/developer.py', '_create_conversation_from_segments', 'model_dump'),
         DumpSite('routers/developer.py', 'update_goal', 'model_dump'),
+        # DailySummaryDayStatsPayload aggregates (counts/minutes watched), not
+        # conversation content; transcripts reach the LLM via
+        # conversations_to_string. Reviewed with the daily-summary work (#12636).
+        DumpSite('utils/llm/external_integrations.py', '_basic_daily_summary', 'model_dump'),
+        DumpSite('utils/llm/external_integrations.py', 'generate_comprehensive_daily_summary', 'model_dump'),
         DumpSite(
             'utils/conversations/projection_payload.py',
             'client_processing_mutation',
