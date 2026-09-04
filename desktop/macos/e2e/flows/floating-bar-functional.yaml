@@ -37,6 +37,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectDisplayTimer.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectFeature.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectGraceWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectHubFeedbackTool.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectReplyHint.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectReplyWindow.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectSuggestionFeedbackStore.swift

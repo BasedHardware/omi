@@ -29,6 +29,7 @@ enum HubTool: String {
   case webSearch = "web_search"
   case screenshot = "screenshot"
   case reportScreenObservation = "report_screen_observation"
+  case recordInterjectFeedback = "record_interject_feedback"
   case pointClick = "point_click"
 }
 
@@ -760,6 +761,32 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "observation"
+      ]
+    }
+  },
+  {
+    "type": "function",
+    "name": "record_interject_feedback",
+    "description": "Record how the user's latest utterance relates to the proactive card, then speak only the user-facing reply. Call silently and immediately: do not speak a heads-up, do not speak the verb, and do not read the tool result. The app does not play a canned acknowledgement. For a question or continuation, use riff or omit this tool and let the first audio be the answer. For a correction, speak one English consequence sentence that names the fact that changed. Never speak taxonomy names as labels.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "verb": {
+          "type": "string",
+          "enum": [
+            "useful",
+            "false_positive",
+            "snooze",
+            "disable",
+            "missed",
+            "correction",
+            "riff"
+          ],
+          "description": "How the utterance relates to the card. riff is continuation or a question about the card."
+        }
+      },
+      "required": [
+        "verb"
       ]
     }
   },

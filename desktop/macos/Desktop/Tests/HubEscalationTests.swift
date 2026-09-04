@@ -12,6 +12,9 @@ final class HubEscalationTests: XCTestCase {
       RealtimeSlowToolAcknowledgementKind(toolName: HubTool.webSearch.rawValue),
       .publicWebSearch)
     XCTAssertNil(RealtimeSlowToolAcknowledgementKind(toolName: HubTool.getTasks.rawValue))
+    XCTAssertNil(
+      RealtimeSlowToolAcknowledgementKind(toolName: HubTool.recordInterjectFeedback.rawValue),
+      "Interject classification must not play a canned ack")
 
     let phrases = RealtimeSlowToolAcknowledgementKind.allCases.flatMap(\.phrases)
     XCTAssertGreaterThanOrEqual(phrases.count, 8)
