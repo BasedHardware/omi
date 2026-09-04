@@ -69,11 +69,15 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
         const previous = readOutcomesRef.current;
         const hadSavedRows =
           previous !== null &&
-          [previous.conversations, previous.memories].some(
+          [previous.conversations, previous.memories, previous.tasks].some(
             outcome =>
               outcome.status === 'success' && outcome.value.items.length > 0,
           );
-        const homeOutcomes = [outcomes.conversations, outcomes.memories];
+        const homeOutcomes = [
+          outcomes.conversations,
+          outcomes.memories,
+          outcomes.tasks,
+        ];
         const failed = homeOutcomes.some(outcome => outcome.status === 'error');
         setReadOutcomes(current => {
           let next: DesktopReadOutcomes;
@@ -98,7 +102,8 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
           readOutcomesRef.current = next;
           if (
             next.conversations.status === 'success' ||
-            next.memories.status === 'success'
+            next.memories.status === 'success' ||
+            next.tasks.status === 'success'
           ) {
             homeReadsLoadedRef.current = true;
           }

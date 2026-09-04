@@ -37,6 +37,15 @@ function RowGlyph({kind}: {kind: DesktopReadProjection['kind']}) {
   );
 }
 
+function conversationTitle(item: ConversationProjection): string {
+  if (item.title !== '') {
+    return item.title;
+  }
+  return item.status === 'processing'
+    ? 'Processing conversation…'
+    : 'Conversation title unavailable';
+}
+
 export function SectionTitle({children}: {children: string}) {
   return <Text style={styles.sectionTitle}>{children}</Text>;
 }
@@ -61,7 +70,7 @@ export const ReadRow = memo(function ReadRow({
       <RowGlyph kind={item.kind} />
       <View style={styles.rowCopy}>
         <Text numberOfLines={1} style={styles.rowTitle}>
-          {item.title}
+          {item.kind === 'conversation' ? conversationTitle(item) : item.title}
         </Text>
         <Text numberOfLines={1} style={styles.rowMeta}>
           {meta.filter(part => part !== '').join(' · ')}
@@ -81,7 +90,7 @@ export const ConversationRow = memo(function ConversationRow({
       <RowGlyph kind="conversation" />
       <View style={styles.rowCopy}>
         <Text numberOfLines={1} style={styles.rowTitle}>
-          {item.title}
+          {conversationTitle(item)}
         </Text>
         <Text numberOfLines={1} style={styles.rowMeta}>
           {[timeLabel(item), item.summary]

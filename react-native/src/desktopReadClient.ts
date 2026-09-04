@@ -247,6 +247,13 @@ function string(value: unknown, label: string): string {
   return value;
 }
 
+function text(value: unknown, label: string): string {
+  if (typeof value !== 'string') {
+    throw new Error(`${label} is malformed`);
+  }
+  return value;
+}
+
 function boolean(value: unknown, label: string): boolean {
   if (typeof value !== 'boolean') {
     throw new Error(`${label} is malformed`);
@@ -434,11 +441,8 @@ export async function loadConversations(
       `Conversation ${index} structured`,
     );
     const id = string(record.id, `Conversation ${index} id`);
-    const title = string(structured.title, `Conversation ${index} title`);
-    const summary = string(
-      structured.overview,
-      `Conversation ${index} overview`,
-    );
+    const title = text(structured.title, `Conversation ${index} title`);
+    const summary = text(structured.overview, `Conversation ${index} overview`);
     const createdAt = timestamp(
       record.created_at,
       `Conversation ${index} created_at`,
