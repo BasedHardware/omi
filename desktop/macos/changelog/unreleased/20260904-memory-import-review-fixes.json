@@ -1,0 +1,3 @@
+{
+  "change": "Improved ChatGPT and Claude memory imports so mixed-format exports stay complete and partial saves are clearly reported"
+}
