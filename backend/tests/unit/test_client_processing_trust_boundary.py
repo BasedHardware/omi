@@ -476,6 +476,12 @@ _PRODUCTION_DUMPS = _scan_dumps()
 # dump in a scanned file fails until reviewed — receiver name is not a filter.
 PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
     {
+        # Daily-summary stats payloads (`DailySummaryDayStatsPayload`), not
+        # conversations: the scanner keys on the call, not the receiver's type,
+        # so these two land here. Reviewed 2026-09-04 — neither dump can carry
+        # `client_processing`, because neither subject is a `Conversation`.
+        DumpSite('utils/llm/external_integrations.py', '_basic_daily_summary', 'model_dump'),
+        DumpSite('utils/llm/external_integrations.py', 'generate_comprehensive_daily_summary', 'model_dump'),
         DumpSite('models/conversation.py', 'project_shared_conversation', 'model_dump'),
         DumpSite('models/conversation.py', 'as_dict_cleaned_dates', 'model_dump'),
         DumpSite('utils/conversations/render.py', 'conversation_to_dict', 'model_dump'),
