@@ -134,13 +134,16 @@ static NSDictionary *OmiOwnKeychainCloudSession(void) {
     (__bridge id)kSecMatchLimit : (__bridge id)kSecMatchLimitOne,
     (__bridge id)kSecUseAuthenticationUI : (__bridge id)kSecUseAuthenticationUIFail,
     (__bridge id)kSecUseAuthenticationContext : context,
+    (__bridge id)kSecUseDataProtectionKeychain : @YES,
   };
-  CFTypeRef result = NULL;
-  OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
-  if (status != errSecSuccess || result == NULL) return nil;
-  NSData *data = CFBridgingRelease(result);
-  id session = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-  return [session isKindOfClass:NSDictionary.class] ? session : nil;
+  @synchronized (OmiAuthKeychainLock()) {
+    CFTypeRef result = NULL;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+    if (status != errSecSuccess || result == NULL) return nil;
+    NSData *data = CFBridgingRelease(result);
+    id session = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    return [session isKindOfClass:NSDictionary.class] ? session : nil;
+  }
 }
 
 static BOOL OmiStoreOwnKeychainCloudSession(NSDictionary *session) {
@@ -150,19 +153,22 @@ static BOOL OmiStoreOwnKeychainCloudSession(NSDictionary *session) {
     (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
     (__bridge id)kSecAttrService : @"com.omi.rnruntime.firebase-rest-session",
     (__bridge id)kSecAttrAccount : @"firebase-rest-tokens",
+    (__bridge id)kSecUseDataProtectionKeychain : @YES,
   };
   NSDictionary *attributes = @{
     (__bridge id)kSecValueData : data,
     (__bridge id)kSecAttrAccessible : (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
   };
-  OSStatus status = SecItemUpdate((__bridge CFDictionaryRef)query,
-                                  (__bridge CFDictionaryRef)attributes);
-  if (status == errSecItemNotFound) {
-    NSMutableDictionary *add = [query mutableCopy];
-    [add addEntriesFromDictionary:attributes];
-    status = SecItemAdd((__bridge CFDictionaryRef)add, NULL);
+  @synchronized (OmiAuthKeychainLock()) {
+    OSStatus status = SecItemUpdate((__bridge CFDictionaryRef)query,
+                                    (__bridge CFDictionaryRef)attributes);
+    if (status == errSecItemNotFound) {
+      NSMutableDictionary *add = [query mutableCopy];
+      [add addEntriesFromDictionary:attributes];
+      status = SecItemAdd((__bridge CFDictionaryRef)add, NULL);
+    }
+    return status == errSecSuccess;
   }
-  return status == errSecSuccess;
 }
 
 static void OmiClearOwnKeychainCloudSession(void) {
@@ -170,22 +176,51 @@ static void OmiClearOwnKeychainCloudSession(void) {
     (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
     (__bridge id)kSecAttrService : @"com.omi.rnruntime.firebase-rest-session",
     (__bridge id)kSecAttrAccount : @"firebase-rest-tokens",
+    (__bridge id)kSecUseDataProtectionKeychain : @YES,
   };
-  SecItemDelete((__bridge CFDictionaryRef)query);
+  @synchronized (OmiAuthKeychainLock()) {
+    SecItemDelete((__bridge CFDictionaryRef)query);
+  }
+}
+
+static BOOL OmiCloudRefreshTokensEqual(NSString *left, NSString *right) {
+  return left == right || [left isEqualToString:right];
+}
+
+static BOOL OmiStoreOwnKeychainCloudSessionIfCurrent(
+    NSDictionary *session, NSString *expectedRefreshToken) {
+  @synchronized (OmiAuthKeychainLock()) {
+    NSDictionary *current = OmiOwnKeychainCloudSession();
+    NSString *currentRefreshToken = [current[@"refreshToken"] isKindOfClass:NSString.class]
+        ? current[@"refreshToken"] : nil;
+    if (!OmiCloudRefreshTokensEqual(currentRefreshToken, expectedRefreshToken)) return NO;
+    return OmiStoreOwnKeychainCloudSession(session);
+  }
+}
+
+static void OmiClearOwnKeychainCloudSessionIfCurrent(NSString *expectedRefreshToken) {
+  @synchronized (OmiAuthKeychainLock()) {
+    NSDictionary *current = OmiOwnKeychainCloudSession();
+    NSString *currentRefreshToken = [current[@"refreshToken"] isKindOfClass:NSString.class]
+        ? current[@"refreshToken"] : nil;
+    if (OmiCloudRefreshTokensEqual(currentRefreshToken, expectedRefreshToken)) {
+      OmiClearOwnKeychainCloudSession();
+    }
+  }
 }
 
 static NSString *OmiOwnKeychainCloudToken(NSDictionary *session) {
   NSString *token = [session[@"idToken"] isKindOfClass:NSString.class] ? session[@"idToken"] : nil;
   NSNumber *expiryTime = [session[@"expiryTime"] isKindOfClass:NSNumber.class] ? session[@"expiryTime"] : nil;
-  if (expiryTime != nil && expiryTime.doubleValue <= NSDate.date.timeIntervalSince1970 + 60) return nil;
+  if (expiryTime == nil || expiryTime.doubleValue <= NSDate.date.timeIntervalSince1970 + 60) return nil;
   return token.length > 0 ? token : nil;
 }
 
 static BOOL OmiCloudSessionNeedsRefresh(NSDictionary *session) {
   NSString *token = [session[@"idToken"] isKindOfClass:NSString.class] ? session[@"idToken"] : nil;
   NSNumber *expiryTime = [session[@"expiryTime"] isKindOfClass:NSNumber.class] ? session[@"expiryTime"] : nil;
-  return token.length > 0 && expiryTime != nil &&
-      expiryTime.doubleValue <= NSDate.date.timeIntervalSince1970 + 60;
+  return token.length > 0 && (expiryTime == nil ||
+      expiryTime.doubleValue <= NSDate.date.timeIntervalSince1970 + 60);
 }
 
 static BOOL OmiCloudRefreshFailureIsDefinitive(NSInteger status, NSDictionary *json) {
@@ -205,7 +240,7 @@ static void OmiRefreshOwnKeychainCloudSession(
   NSString *refreshToken = [session[@"refreshToken"] isKindOfClass:NSString.class]
       ? session[@"refreshToken"] : nil;
   if (refreshToken.length == 0) {
-    OmiClearOwnKeychainCloudSession();
+    OmiClearOwnKeychainCloudSessionIfCurrent(refreshToken);
     completion(nil);
     return;
   }
@@ -233,7 +268,9 @@ static void OmiRefreshOwnKeychainCloudSession(
       NSDictionary *json = data == nil ? nil
           : [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
       if (error != nil || status < 200 || status >= 300 || ![json isKindOfClass:NSDictionary.class]) {
-        if (OmiCloudRefreshFailureIsDefinitive(status, json)) OmiClearOwnKeychainCloudSession();
+        if (OmiCloudRefreshFailureIsDefinitive(status, json)) {
+          OmiClearOwnKeychainCloudSessionIfCurrent(refreshToken);
+        }
         completion(error ?: [NSError errorWithDomain:@"OmiBackend" code:status userInfo:nil]);
         return;
       }
@@ -253,7 +290,7 @@ static void OmiRefreshOwnKeychainCloudSession(
       updated[@"firebaseApiKey"] = firebaseApiKey;
       NSString *userId = [json[@"user_id"] isKindOfClass:NSString.class] ? json[@"user_id"] : nil;
       if (userId.length > 0) updated[@"tokenUserId"] = userId;
-      if (!OmiStoreOwnKeychainCloudSession(updated)) {
+      if (!OmiStoreOwnKeychainCloudSessionIfCurrent(updated, refreshToken)) {
         completion([NSError errorWithDomain:@"OmiBackend" code:0 userInfo:nil]);
         return;
       }
@@ -579,7 +616,7 @@ RCT_REMAP_METHOD(request,
                  resolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
   [self resolveBackendPolicyWithCompletion:^(OmiBackendPolicy *policy, NSError *resolutionError) {
-  if (resolutionError != nil && policy == nil) {
+  if (resolutionError != nil) {
     reject(@"OMI_HTTP_TRANSPORT", @"Native HTTP session refresh failed", nil);
     return;
   }
@@ -677,7 +714,7 @@ RCT_REMAP_METHOD(generationEvents,
                  resolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
   [self resolveBackendPolicyWithCompletion:^(OmiBackendPolicy *policy, NSError *resolutionError) {
-  if (resolutionError != nil && policy == nil) {
+  if (resolutionError != nil) {
     reject(@"OMI_HTTP_TRANSPORT", @"Native generation session refresh failed", nil);
     return;
   }
@@ -747,7 +784,7 @@ RCT_REMAP_METHOD(cancelGenerationEvents,
                  resolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
   [self resolveBackendPolicyWithCompletion:^(OmiBackendPolicy *policy, NSError *resolutionError) {
-  if (resolutionError != nil && policy == nil) {
+  if (resolutionError != nil) {
     reject(@"OMI_HTTP_TRANSPORT", @"Native generation session refresh failed", nil);
     return;
   }
