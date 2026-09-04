@@ -755,8 +755,10 @@ export async function handleMemories(context: CoreContext): Promise<Response> {
   ) {
     return backendError("bad_request", "edit_request", 400);
   }
+  const limit = parseLimit(query.get("limit") ?? undefined);
   const cursor = query.get("cursor") ?? undefined;
-  if (cursor === "") return backendError("bad_request", "edit_request", 400);
+  if (limit === null || cursor === "")
+    return backendError("bad_request", "edit_request", 400);
   return backendError("projection_unavailable", "retry", 503, true);
 }
 
