@@ -332,13 +332,32 @@ final class RealtimeTurnPersistenceLedger {
   /// observes the follow-up before the journal settles. The follow-up runs
   /// only after the original write's kernel result is known; a plain `enqueue`
   /// would drop it entirely while the original is still in flight.
+  ///
+  /// When the original obligation already completed before this call, its
+  /// retained receipt (if any) is final and must survive the follow-up: a
+  /// later `consumeReceipt` still reports the original write's acceptance.
+  /// The follow-up therefore runs as a fresh non-retaining obligation that
+  /// never touches the receipt slot — unlike `enqueue`, which clears a key's
+  /// receipt when it starts a superseding write.
   @discardableResult
   func enqueueFollowUp(
     continuityKey: String,
     _ followUp: @escaping @MainActor () async -> Bool
   ) -> Task<Bool, Never> {
     guard let existing = obligations[continuityKey] else {
-      return enqueue(continuityKey: continuityKey, retainingReceipt: false, followUp)
+      generation &+= 1
+      let followUpID = UUID()
+      let task = Task { @MainActor [weak self] in
+        let accepted = await followUp()
+        guard let self, self.obligations[continuityKey]?.id == followUpID else {
+          return accepted
+        }
+        self.obligations.removeValue(forKey: continuityKey)
+        return accepted
+      }
+      obligations[continuityKey] = Obligation(
+        id: followUpID, task: task, retainingReceipt: false)
+      return task
     }
     let previous = existing.task
     let retention = existing.retainingReceipt
@@ -418,13 +437,13 @@ struct InterruptedTurnPayload: Equatable {
 /// The assistant row a voice turn's funnel sealed `.completed` at
 /// provider-response-finish, before the reducer's playback fence resolved.
 /// Consumed by the reducer's terminal: when the answer never reached the user,
-/// the sealed row is revised through the same journal update path that
-/// finalized it (`VoiceJournalSealedRowRevisionPolicy`). Journal-write
-/// bookkeeping only — the reducer remains the lifecycle owner (INV-VOICE-1),
-/// and the kernel journal stays the one transcript authority (INV-CHAT-1).
+/// the sealed row is revised through the payload-free terminal-revision update
+/// (`VoiceJournalSealedRowRevisionPolicy`) — its content and canonical
+/// metadata stay exactly as sealed. Journal-write bookkeeping only — the
+/// reducer remains the lifecycle owner (INV-VOICE-1), and the kernel journal
+/// stays the one transcript authority (INV-CHAT-1).
 struct SealedCompletedVoiceJournalRow {
   let ownerID: String
-  let assistantText: String
   let surface: AgentSurfaceReference
 }
 

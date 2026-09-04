@@ -277,6 +277,187 @@ import XCTest
       XCTAssertTrue(accepted)
       XCTAssertTrue(ledger.pendingContinuityKeys.isEmpty)
     }
+
+    func testFollowUpAfterCompletedObligationPreservesTheRetainedReceipt() async {
+      // cubic P1 interleaving: the funnel write completes and retains its
+      // accepted receipt BEFORE the reducer's terminal schedules the revision.
+      // Scheduling that follow-up must never delete the receipt — the later
+      // `finalizeJournal` still consumes the original acceptance.
+      let ledger = RealtimeTurnPersistenceLedger()
+      let gate = SuspendedFollowUpGate()
+
+      let original = ledger.enqueue(continuityKey: "voice:fm6-late", retainingReceipt: true) {
+        true
+      }
+      _ = await original.value
+      XCTAssertEqual(
+        ledger.receipt(for: "voice:fm6-late"),
+        .init(continuityKey: "voice:fm6-late", accepted: true))
+
+      let followUp = ledger.enqueueFollowUp(continuityKey: "voice:fm6-late") {
+        await gate.suspendOriginal()
+        return true
+      }
+      await gate.waitUntilSuspended()
+      XCTAssertEqual(
+        ledger.receipt(for: "voice:fm6-late"),
+        .init(continuityKey: "voice:fm6-late", accepted: true),
+        "the revision in flight must not delete the original write's receipt")
+
+      await gate.resumeOriginal()
+      _ = await followUp.value
+      let consumed = await ledger.consumeReceipt(for: "voice:fm6-late")
+      XCTAssertEqual(consumed, .init(continuityKey: "voice:fm6-late", accepted: true))
+    }
+
+    // MARK: - Revision wire shape: payload-free, reason-only metadata patch
+
+    func testSealedTerminalRevisionCarriesNoPayloadAndMergesOnlyItsReason() throws {
+      // cubic P2: the revision must not replace the sealed row's content
+      // blocks, resources, or metadata (model attribution, continuity). The
+      // update carries status and the terminal reason only; the kernel merges
+      // the reason into the row's existing metadata.
+      let update = KernelJournalTurnUpdate.sealedTerminalRevision(
+        turnId: "turn-assistant",
+        terminalReason: "answer_not_delivered")
+
+      XCTAssertEqual(update.turnId, "turn-assistant")
+      XCTAssertEqual(update.status, .failed)
+      XCTAssertNil(update.content)
+      XCTAssertNil(update.contentBlocksJSON)
+      XCTAssertNil(update.appendContentBlocksJSON)
+      XCTAssertNil(update.resourcesJSON)
+      XCTAssertNil(update.appendResourcesJSON)
+      XCTAssertTrue(update.terminalRevision)
+
+      let metadataObject = try XCTUnwrap(
+        update.metadataJSON.flatMap { raw in
+          (try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [String: String]
+        })
+      XCTAssertEqual(metadataObject, ["terminalReason": "answer_not_delivered"])
+
+      let dictionary = update.dictionary
+      XCTAssertEqual(dictionary["turnId"] as? String, "turn-assistant")
+      XCTAssertEqual(dictionary["status"] as? String, "failed")
+      XCTAssertEqual(dictionary["terminalRevision"] as? Bool, true)
+      XCTAssertNil(dictionary["content"])
+      XCTAssertNil(dictionary["replaceContentBlocks"])
+      XCTAssertNil(dictionary["replaceResources"])
+      XCTAssertFalse(dictionary.keys.contains("appendContentBlocks"))
+      XCTAssertFalse(dictionary.keys.contains("appendResources"))
+    }
+
+    // MARK: - Sealed-row marker: synchronous at seal scheduling
+
+    func testSealedRowMarkerRegistersSynchronouslyAtSealScheduling() {
+      // cubic P2: the marker used to be registered inside the async persist
+      // closure — after a transcript-resolution await bounded by the 20s LID
+      // deadline. A terminal in that window found no marker and the
+      // `.completed` seal became permanent. Registration now happens at the
+      // enqueue site, before any async work.
+      let controller = RealtimeHubController()
+      let key = "voice:\(UUID().uuidString.lowercased())"
+
+      controller.registerSealedCompletedVoiceJournalRow(
+        ownerID: "owner-a",
+        assistantText: "Take the blue potion at 12:45.",
+        terminal: .success,
+        acceptedSpawnOwnerID: nil,
+        idempotencyKey: key,
+        coordinator: VoiceTurnCoordinator(scheduler: ManualDeadlineScheduler()))
+
+      XCTAssertNotNil(controller.sealedCompletedVoiceJournalRows[key])
+    }
+
+    func testSealedRowMarkerSkipsRegistrationWhenTheTurnAlreadyTerminalized() throws {
+      // A turn the reducer already terminalized (e.g. playback failed
+      // mid-generation) has no future terminal to consume the marker; the
+      // funnel's write-time delivery re-check carries the outcome instead.
+      let (coordinator, turnID) = try providerFinishedTurn()
+      guard
+        case .acquired(let lease) = coordinator.acquireOutput(
+          .selectedVoiceFallback, turnID: turnID)
+      else { return XCTFail("expected output lease") }
+      coordinator.publish(
+        .playbackFailedScoped(
+          turnID: turnID,
+          identity: lease.identity,
+          leaseID: lease.id,
+          message: "synthetic playback error"))
+      let key = RealtimeHubController.voiceContinuityKey(for: turnID)
+      XCTAssertNotNil(
+        RealtimeHubController.undeliveredTerminalRevision(
+          forVoiceContinuityKey: key, coordinator: coordinator))
+
+      let controller = RealtimeHubController()
+      controller.registerSealedCompletedVoiceJournalRow(
+        ownerID: "owner-a",
+        assistantText: "Take the blue potion at 12:45.",
+        terminal: .success,
+        acceptedSpawnOwnerID: nil,
+        idempotencyKey: key,
+        coordinator: coordinator)
+      XCTAssertNil(controller.sealedCompletedVoiceJournalRows[key])
+    }
+
+    func testWriteTimeDeliveryRecheckDowngradesTheFunnelSeal() throws {
+      // Terminal-before-funnel ordering: playback failed while the model was
+      // still generating, so the reducer terminalized before the turn-done
+      // funnel even ran. The funnel's write-time re-check derives the same
+      // downgrade revision from the turn's continuity key, so its write seals
+      // the truthful `.failed` outcome instead of another `.completed` lie.
+      let (coordinator, turnID) = try providerFinishedTurn()
+      guard
+        case .acquired(let lease) = coordinator.acquireOutput(
+          .selectedVoiceFallback, turnID: turnID)
+      else { return XCTFail("expected output lease") }
+      coordinator.publish(
+        .playbackFailedScoped(
+          turnID: turnID,
+          identity: lease.identity,
+          leaseID: lease.id,
+          message: "synthetic playback error"))
+      XCTAssertEqual(coordinator.model.lastTerminal?.reason, .playbackFailed)
+
+      let key = RealtimeHubController.voiceContinuityKey(for: turnID)
+      XCTAssertEqual(
+        RealtimeHubController.undeliveredTerminalRevision(
+          forVoiceContinuityKey: key, coordinator: coordinator),
+        .init(status: .failed, terminalReason: "playback_failed"))
+
+      // Another turn's continuity key is untouched by this terminal, and a
+      // delivered terminal never downgrades.
+      XCTAssertNil(
+        RealtimeHubController.undeliveredTerminalRevision(
+          forVoiceContinuityKey: "voice:\(UUID().uuidString.lowercased())",
+          coordinator: coordinator))
+    }
+
+    func testTurnDoneSiteRegistersTheMarkerBeforeEnqueueingPersistence() throws {
+      // The turn-done callback cannot be driven without a live socket, so the
+      // wiring is pinned at the source level (established pattern): the
+      // synchronous registration must precede the funnel's
+      // `enqueueTurnPersistence`, and `persistTurnDirectlyToKernel` itself
+      // must not re-register — a late registration there can never be
+      // consumed and the marker would leak.
+      let lifecycle = try RealtimeHubControllerSourceTestSupport.source(
+        named: "RealtimeHubController+SessionLifecycle.swift",
+        testFilePath: #filePath)
+      XCTAssertEqual(
+        lifecycle.ranges(of: "sealedCompletedVoiceJournalRows[idempotencyKey] =").count, 1,
+        "only registerSealedCompletedVoiceJournalRow may write the marker; "
+          + "persistTurnDirectlyToKernel must not re-register it")
+
+      let delegate = try RealtimeHubControllerSourceTestSupport.source(
+        named: "RealtimeHubController+SessionDelegate.swift",
+        testFilePath: #filePath)
+      let registration = try XCTUnwrap(
+        delegate.range(of: "registerSealedCompletedVoiceJournalRow("))
+      let enqueue = try XCTUnwrap(delegate.range(of: "enqueueTurnPersistence("))
+      XCTAssertLessThan(
+        registration.lowerBound, enqueue.lowerBound,
+        "the sealed-row marker must be registered before the funnel's async persistence is enqueued")
+    }
   }
 
   /// Deterministic deadline scheduler (mirrors the coordinator suite's): no
