@@ -8,6 +8,7 @@ const mockAuth = {
   signIn: jest.fn(),
   signOut: jest.fn(),
 };
+let mockBackendSessionInvalidatedListener: (() => void) | undefined;
 
 jest.mock('../src/omiNative', () => ({
   omiAuth: {
@@ -16,6 +17,12 @@ jest.mock('../src/omiNative', () => ({
     markOnboardingComplete: () => mockAuth.markOnboardingComplete(),
     signIn: () => mockAuth.signIn(),
     signOut: () => mockAuth.signOut(),
+  },
+  subscribeOmiBackendSessionInvalidated: (listener: () => void) => {
+    mockBackendSessionInvalidatedListener = listener;
+    return () => {
+      mockBackendSessionInvalidatedListener = undefined;
+    };
   },
 }));
 
@@ -57,12 +64,28 @@ async function renderOnboarding(
 }
 
 beforeEach(() => {
+  mockBackendSessionInvalidatedListener = undefined;
   mockAuth.hasCloudSession.mockReset();
   mockAuth.hasCompletedOnboarding.mockReset();
   mockAuth.markOnboardingComplete.mockReset();
   mockAuth.signIn.mockReset();
   mockAuth.signOut.mockReset();
   mockAuth.markOnboardingComplete.mockResolvedValue(undefined);
+});
+
+test('a native 401 invalidation re-probes and leaves the ready shell', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValueOnce(true).mockResolvedValue(false);
+
+  const hook = await renderOnboarding(true);
+  expect(hook.latest().onboardingRequired).toBe(false);
+
+  await ReactTestRenderer.act(async () => {
+    mockBackendSessionInvalidatedListener?.();
+    await Promise.resolve();
+  });
+
+  expect(hook.latest().onboardingRequired).toBe(true);
 });
 
 test('completed onboarding without a cloud session still requires Sign in', async () => {
@@ -238,7 +261,10 @@ test('a late revalidation cannot eject a newer signed-in session', async () => {
 
 test('a Mac without the native auth module stays on Welcome instead of faking ready', async () => {
   jest.resetModules();
-  jest.doMock('../src/omiNative', () => ({omiAuth: null}));
+  jest.doMock('../src/omiNative', () => ({
+    omiAuth: null,
+    subscribeOmiBackendSessionInvalidated: () => () => undefined,
+  }));
   const {useOnboarding: missingAuthHook} = require('../src/app/useOnboarding');
 
   let latest: ReturnType<typeof missingAuthHook> | null = null;

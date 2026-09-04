@@ -317,3 +317,9 @@ export function subscribeOmiNativeEvents(
 ): () => void {
   return () => undefined;
 }
+
+export function subscribeOmiBackendSessionInvalidated(
+  _listener: () => void,
+): () => void {
+  return () => undefined;
+}

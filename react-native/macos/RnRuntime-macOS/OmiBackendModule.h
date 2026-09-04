@@ -1,4 +1,4 @@
-#import <React/RCTBridgeModule.h>
+#import <React/RCTEventEmitter.h>
 
-@interface OmiBackendModule : NSObject <RCTBridgeModule>
+@interface OmiBackendModule : RCTEventEmitter <RCTBridgeModule>
 @end

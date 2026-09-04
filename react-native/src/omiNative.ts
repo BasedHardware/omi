@@ -58,6 +58,21 @@ export function resolveOmiBackend(nativeModule: OmiBackend | null | undefined) {
   return {adapter: nativeModule, installed: nativeModule != null};
 }
 
+export function subscribeOmiBackendSessionInvalidated(
+  listener: () => void,
+): () => void {
+  const nativeModule = NativeModules.OmiBackend;
+  if (nativeModule == null) {
+    return () => undefined;
+  }
+  const emitter = new NativeEventEmitter(nativeModule);
+  const subscription = emitter.addListener(
+    'omiBackendSessionInvalidated',
+    listener,
+  );
+  return () => subscription.remove();
+}
+
 export function resolveOmiAuth(nativeModule: OmiAuth | null | undefined) {
   return {adapter: nativeModule, installed: nativeModule != null};
 }
