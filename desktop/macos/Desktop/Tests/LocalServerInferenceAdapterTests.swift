@@ -34,7 +34,7 @@ final class LocalServerInferenceAdapterTests: XCTestCase {
     let http = RecordingLocalInferenceHTTPClient()
     let adapter = LocalServerInferenceAdapter(
       configuration: LocalServerInferenceConfiguration(
-        baseURL: URL(string: "https://api.openai.com/v1")!,
+        baseURL: try XCTUnwrap(URL(string: "https://api.openai.com/v1")),
         model: "gpt-4o",
         contextWindowTokens: 8192,
         timeout: 5
@@ -60,18 +60,18 @@ final class LocalServerInferenceAdapterTests: XCTestCase {
     let payload = """
       {"choices":[{"message":{"content":"{\\"title\\":\\"on device\\"}"}}]}
       """
-    let url = URL(string: "http://127.0.0.1:11434/v1/chat/completions")!
+    let url = try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1/chat/completions"))
     await http.setResult(
       .success(
         (
           Data(payload.utf8),
-          HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+          try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil))
         )
       )
     )
     let adapter = LocalServerInferenceAdapter(
       configuration: LocalServerInferenceConfiguration(
-        baseURL: URL(string: "http://127.0.0.1:11434/v1")!,
+        baseURL: try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1")),
         model: "local",
         contextWindowTokens: 8192,
         timeout: 5
@@ -93,13 +93,13 @@ final class LocalServerInferenceAdapterTests: XCTestCase {
     XCTAssertTrue(LocalInferenceLoopback.isAllowed(url))
   }
 
-  func testRuntimeFailClosedOnCloudBaseURLSendsNoHTTP() async {
+  func testRuntimeFailClosedOnCloudBaseURLSendsNoHTTP() async throws {
     let http = RecordingLocalInferenceHTTPClient()
     let runtime = LocalInferenceRuntime(
       engines: [
         LocalServerInferenceAdapter(
           configuration: LocalServerInferenceConfiguration(
-            baseURL: URL(string: "https://generativelanguage.googleapis.com/v1")!,
+            baseURL: try XCTUnwrap(URL(string: "https://generativelanguage.googleapis.com/v1")),
             model: "gemini",
             contextWindowTokens: 8192,
             timeout: 5
@@ -117,7 +117,7 @@ final class LocalServerInferenceAdapterTests: XCTestCase {
       minimumInput: DeterministicMinimumInput(
         transcript: "Hello there.",
         startedAt: Date(timeIntervalSince1970: 0),
-        timeZone: TimeZone(secondsFromGMT: 0)!
+        timeZone: TimeZone.gmt
       )
     )
 
@@ -128,10 +128,10 @@ final class LocalServerInferenceAdapterTests: XCTestCase {
     XCTAssertEqual(urls, [])
   }
 
-  func testToolLoopIsStubbedOnTheAdapter() async {
+  func testToolLoopIsStubbedOnTheAdapter() async throws {
     let adapter = LocalServerInferenceAdapter(
       configuration: LocalServerInferenceConfiguration(
-        baseURL: URL(string: "http://127.0.0.1:11434/v1")!,
+        baseURL: try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1")),
         model: "local",
         contextWindowTokens: 8192,
         timeout: 5
@@ -151,42 +151,44 @@ final class LocalServerInferenceAdapterTests: XCTestCase {
     }
   }
 
-  func testLoopbackHelperRejectsPublicHosts() {
-    XCTAssertTrue(LocalInferenceLoopback.isAllowed(URL(string: "http://127.0.0.1:8080/v1")!))
-    XCTAssertTrue(LocalInferenceLoopback.isAllowed(URL(string: "http://localhost:11434/v1")!))
-    XCTAssertTrue(LocalInferenceLoopback.isAllowed(URL(string: "http://[::1]:8080/v1")!))
-    XCTAssertFalse(LocalInferenceLoopback.isAllowed(URL(string: "https://api.openai.com/v1")!))
-    XCTAssertFalse(LocalInferenceLoopback.isAllowed(URL(string: "https://generativelanguage.googleapis.com")!))
-    XCTAssertFalse(LocalInferenceLoopback.isAllowed(URL(string: "http://10.0.0.4/v1")!))
+  func testLoopbackHelperRejectsPublicHosts() throws {
+    XCTAssertTrue(LocalInferenceLoopback.isAllowed(try XCTUnwrap(URL(string: "http://127.0.0.1:8080/v1"))))
+    XCTAssertTrue(LocalInferenceLoopback.isAllowed(try XCTUnwrap(URL(string: "http://localhost:11434/v1"))))
+    XCTAssertTrue(LocalInferenceLoopback.isAllowed(try XCTUnwrap(URL(string: "http://[::1]:8080/v1"))))
+    XCTAssertFalse(LocalInferenceLoopback.isAllowed(try XCTUnwrap(URL(string: "https://api.openai.com/v1"))))
+    XCTAssertFalse(
+      LocalInferenceLoopback.isAllowed(try XCTUnwrap(URL(string: "https://generativelanguage.googleapis.com")))
+    )
+    XCTAssertFalse(LocalInferenceLoopback.isAllowed(try XCTUnwrap(URL(string: "http://10.0.0.4/v1"))))
   }
 }
 
 final class LocalInferenceKillSwitchTests: XCTestCase {
-  func testEnvironmentDisableWins() {
+  func testEnvironmentDisableWins() throws {
     let switches = LocalInferenceKillSwitches.resolve(
       environment: [LocalInferenceKillSwitches.disableEnvironmentKey: "1"],
-      defaults: UserDefaults(suiteName: UUID().uuidString)!
+      defaults: try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
     )
     XCTAssertTrue(switches.isDisabled)
   }
 
-  func testUserDefaultsDisable() {
-    let defaults = UserDefaults(suiteName: UUID().uuidString)!
+  func testUserDefaultsDisable() throws {
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
     defaults.set(true, forKey: LocalInferenceKillSwitches.disableDefaultsKey)
     let switches = LocalInferenceKillSwitches.resolve(environment: [:], defaults: defaults)
     XCTAssertTrue(switches.isDisabled)
   }
 
-  func testForceEngineFromEnvironment() {
+  func testForceEngineFromEnvironment() throws {
     let switches = LocalInferenceKillSwitches.resolve(
       environment: [LocalInferenceKillSwitches.forceEngineEnvironmentKey: "local-server"],
-      defaults: UserDefaults(suiteName: UUID().uuidString)!
+      defaults: try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
     )
     XCTAssertEqual(switches.forcedEngine, .localServer)
   }
 
-  func testForceEngineFromDefaultsWhenEnvAbsent() {
-    let defaults = UserDefaults(suiteName: UUID().uuidString)!
+  func testForceEngineFromDefaultsWhenEnvAbsent() throws {
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
     defaults.set("afm", forKey: LocalInferenceKillSwitches.forceEngineDefaultsKey)
     let switches = LocalInferenceKillSwitches.resolve(environment: [:], defaults: defaults)
     XCTAssertEqual(switches.forcedEngine, .afm)
@@ -214,7 +216,7 @@ final class DeterministicConversationMinimumTests: XCTestCase {
         transcript: "   \n",
         startedAt: started,
         sourceLabel: "Recording",
-        timeZone: TimeZone(secondsFromGMT: 0)!
+        timeZone: TimeZone.gmt
       )
     )
     XCTAssertEqual(minimum.title, "Recording · 8:14 PM")
@@ -235,7 +237,7 @@ final class DeterministicConversationMinimumTests: XCTestCase {
     let input = DeterministicMinimumInput(
       transcript: "",
       startedAt: Date(timeIntervalSince1970: 1_704_140_040),
-      timeZone: TimeZone(secondsFromGMT: 0)!
+      timeZone: TimeZone.gmt
     )
     XCTAssertEqual(
       DeterministicConversationMinimum.title(from: input),

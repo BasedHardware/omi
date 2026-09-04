@@ -51,9 +51,21 @@ struct LocalInferenceKillSwitches: Sendable, Equatable {
     let raw =
       trimmed(environment[Self.serverURLEnvironmentKey])
       ?? trimmed(defaults.string(forKey: Self.serverURLDefaultsKey))
-      ?? "http://127.0.0.1:11434/v1"
-    return URL(string: raw) ?? URL(string: "http://127.0.0.1:11434/v1")!
+    if let raw, let parsed = URL(string: raw) {
+      return parsed
+    }
+    return defaultLoopbackURL
+
   }
+
+  private static let defaultLoopbackURL: URL = {
+    var components = URLComponents()
+    components.scheme = "http"
+    components.host = "127.0.0.1"
+    components.port = 11434
+    components.path = "/v1"
+    return components.url ?? URL(fileURLWithPath: "/v1")
+  }()
 
   static func localServerModel(
     environment: [String: String] = ProcessInfo.processInfo.environment,

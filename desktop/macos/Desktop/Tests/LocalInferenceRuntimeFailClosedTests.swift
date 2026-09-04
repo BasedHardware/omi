@@ -82,7 +82,7 @@ private func minimumInput() -> DeterministicMinimumInput {
     transcript: "We decided to ship the local runtime today. Extra sentence.",
     startedAt: Date(timeIntervalSince1970: 1_704_140_040),  // 2024-01-01 20:14:00 UTC
     sourceLabel: "Recording",
-    timeZone: TimeZone(secondsFromGMT: 0)!
+    timeZone: TimeZone.gmt
   )
 }
 
