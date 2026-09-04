@@ -41,10 +41,10 @@ enum LocalMcpStore {
   /// Add a stdio server from a single command line ("npx @playwright/mcp@latest").
   static func addCommandServer(name: String, commandLine: String) throws {
     let slug = LocalSkillsStore.slugify(name)
-    let parts = commandLine.split(separator: " ").map(String.init)
     guard !slug.isEmpty else {
       throw storeError("Server name must contain letters or numbers")
     }
+    let parts = try splitCommandLine(commandLine)
     guard let command = parts.first, !command.isEmpty else {
       throw storeError("Enter the command to run, e.g. npx @playwright/mcp@latest")
     }
@@ -53,6 +53,50 @@ enum LocalMcpStore {
     if parts.count > 1 { entry["args"] = Array(parts.dropFirst()) }
     servers[slug] = entry
     try writeServers(servers)
+  }
+
+  /// Split a command line into argv the way a shell would for the cases users
+  /// hit: bare words, and runs quoted with `"` or `'` kept whole — a quoted
+  /// path with spaces stays one argument, and a quote toggles quoting from
+  /// anywhere in a word, so `--filter="App Store"` survives as one argument
+  /// too. Backslash escapes are not interpreted; quote a path instead of
+  /// escaping it. Runs of spaces or tabs separate words outside quotes. An
+  /// unterminated quote is a typo that would mangle the command at spawn, so
+  /// it throws rather than guessing.
+  static func splitCommandLine(_ line: String) throws -> [String] {
+    var parts: [String] = []
+    var current = ""
+    var inWord = false
+    var quote: Character?
+    for character in line {
+      switch character {
+      case "\"", "'":
+        if let open = quote {
+          if open == character { quote = nil } else { current.append(character) }
+        } else {
+          quote = character
+          inWord = true
+        }
+      case " ", "\t":
+        guard quote == nil else {
+          current.append(character)
+          continue
+        }
+        if inWord {
+          parts.append(current)
+          current = ""
+          inWord = false
+        }
+      default:
+        current.append(character)
+        inWord = true
+      }
+    }
+    guard quote == nil else {
+      throw storeError("The command has an unmatched quote")
+    }
+    if inWord { parts.append(current) }
+    return parts
   }
 
   static func removeServer(name: String) {
@@ -89,9 +133,20 @@ enum LocalMcpStore {
     }
     root["mcpServers"] = servers
     let fm = FileManager.default
-    try fm.createDirectory(at: LocalSkillsStore.rootURL, withIntermediateDirectories: true)
+    try fm.createDirectory(
+      at: LocalSkillsStore.rootURL, withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700])
+    // The directory also holds auth material (token-bearing mcp.json, skills),
+    // so it must not be world-listable — a directory that predates this
+    // hardening keeps its looser mode, so re-assert on every write.
+    try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: LocalSkillsStore.rootURL.path)
     let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+    // The file carries OAuth access/refresh tokens and client secrets, so it
+    // is user-only. The atomic rename replaces the file wholesale, so the
+    // chmod must run on every write — it both sets the new file's mode and
+    // tightens a file written by an older build.
     try data.write(to: fileURL, options: .atomic)
+    try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
     recordWriteFingerprint()
     notifyChanged()
   }
@@ -170,19 +225,39 @@ enum LocalMcpStore {
 /// (a marketplace install burst, or one OAuth refresh sweeping several tokens,
 /// costs one respawn) and never land mid-turn: a change noticed while a query
 /// is streaming stays pending until the next turn's bridge-readiness check,
-/// which is the safe point between turns. The runtime's own restart refuses
-/// while requests are active (a background agent mid-run, for example), which
-/// defers the respawn the same way.
+/// which is the safe point between turns. A change that lands while nothing is
+/// warm — the real instance is the runtime's own token refresh, which fires
+/// unawaited during a spawn — survives the whole stop → spawn → warmup window
+/// and applies at the next boundary instead of being dropped. After a
+/// successful respawn the coordinator re-stats the file through the store's
+/// external-change semantics, so a hand-edit that landed mid-respawn (after
+/// the new process may have read the file) applies again, while the runtime's
+/// own writes stay excluded and cannot chase it into a respawn loop. The
+/// runtime's own restart refuses while requests are active (a background agent
+/// mid-run, for example), which defers the respawn the same way.
 ///
 /// The closures exist so the decision logic is testable without a runtime.
 @MainActor
 final class UserMcpRuntimeRefresh {
   static let debounceNanoseconds: UInt64 = 500_000_000
 
+  /// The process-wide coordinator. ChatProvider binds it to the main
+  /// provider's bridge state at init; its notification observer feeds it and
+  /// its bridge-readiness check consumes it. Task chat consumes the same
+  /// pending state at its own boundary (TaskChatRuntime.sharedBridge) because
+  /// a task-chat-only session never calls ensureBridgeStarted — and both
+  /// surfaces drive the one shared runtime process. Before a provider exists
+  /// nothing has observed a change, so there is no deferred state to apply
+  /// and the neutral bindings below simply refuse to respawn.
+  static let shared = UserMcpRuntimeRefresh(
+    isTurnActive: { false },
+    isRuntimeStarted: { false },
+    respawn: { throw BridgeError.stopped })
+
   private let debounce: (UInt64) async -> Void
-  private let isTurnActive: () -> Bool
-  private let isRuntimeStarted: () -> Bool
-  private let respawn: () async throws -> Void
+  private var isTurnActive: () -> Bool
+  private var isRuntimeStarted: () -> Bool
+  private var respawn: () async throws -> Void
   private var pendingChange = false
   private var debounceInFlight = false
   private var cycleTask: Task<Void, Never>?
@@ -194,6 +269,19 @@ final class UserMcpRuntimeRefresh {
     respawn: @escaping () async throws -> Void
   ) {
     self.debounce = debounce
+    self.isTurnActive = isTurnActive
+    self.isRuntimeStarted = isRuntimeStarted
+    self.respawn = respawn
+  }
+
+  /// Rebinds the questions the coordinator asks. Production: ChatProvider's
+  /// init installs closures over its own bridge state, so the shared
+  /// coordinator has exactly one view of the runtime. Tests install doubles.
+  func bindRuntime(
+    isTurnActive: @escaping () -> Bool,
+    isRuntimeStarted: @escaping () -> Bool,
+    respawn: @escaping () async throws -> Void
+  ) {
     self.isTurnActive = isTurnActive
     self.isRuntimeStarted = isRuntimeStarted
     self.respawn = respawn
@@ -234,13 +322,28 @@ final class UserMcpRuntimeRefresh {
   private func applyPendingChange(onlyWhenIdle: Bool) async {
     guard pendingChange else { return }
     if onlyWhenIdle, isTurnActive() { return }  // stays pending; retried at the next boundary
+    // Nothing warm to respawn — but the change must not vanish: the stop →
+    // spawn → warmup window is exactly when the runtime's own writes (the
+    // unawaited OAuth token refresh at spawn) notify, and a spawn already in
+    // flight may have read the file before the change landed. It stays
+    // pending for the next boundary instead of being dropped.
+    guard isRuntimeStarted() else { return }
     pendingChange = false
-    guard isRuntimeStarted() else { return }  // nothing warm to respawn; the next start reads the file
     do {
       try await respawn()
     } catch {
       // The respawn did not happen. Keep the change pending so the next turn
       // boundary retries once the refusal clears.
+      pendingChange = true
+      return
+    }
+    // The runtime reads mcp.json at some point during its startup, so a
+    // change that landed mid-respawn may postdate the spawn's read. Re-stat
+    // through the store's external-change semantics: writes made by this
+    // process (the token refresh writes through the same store) are recorded
+    // by the write path and stay excluded, so the runtime's own refresh
+    // during a spawn cannot chase this into a respawn loop.
+    if LocalMcpStore.checkForExternalChanges() {
       pendingChange = true
     }
   }

@@ -449,7 +449,21 @@ enum TaskChatRuntime {
     }
   #endif
 
+  /// Consumes a pending ~/.omi/mcp.json change at this surface's turn
+  /// boundary. Task chat never goes through ChatProvider.ensureBridgeStarted —
+  /// the only other consumer — so a change deferred mid-turn, or noticed while
+  /// a respawn was already in flight, would otherwise wait for a main-chat
+  /// turn a task-chat-only session never runs. Both bridges drive
+  /// `AgentRuntimeProcess.shared`, so the coordinator's respawn reaches this
+  /// surface too. Internal so tests drive exactly what `sharedBridge` runs.
+  static func applyPendingUserMcpChangeAtTurnBoundary() async {
+    await UserMcpRuntimeRefresh.shared.applyAtTurnBoundary()
+  }
+
   private static func sharedBridge() async throws -> AgentBridge {
+    // See applyPendingUserMcpChangeAtTurnBoundary: no runtime work is issued
+    // before this point, and the restart refuses while requests are active.
+    await applyPendingUserMcpChangeAtTurnBoundary()
     if let agentBridge { return agentBridge }
 
     let mode = UserDefaults.standard.string(forKey: .chatBridgeMode) ?? "piMono"

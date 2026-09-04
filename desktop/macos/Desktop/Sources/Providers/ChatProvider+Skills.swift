@@ -40,15 +40,11 @@ extension ChatProvider {
   // MARK: - Disabled skills
 
   /// Explicitly disabled skill names straight from UserDefaults, for callers
-  /// without a provider instance (task chat, runtime spawn env).
+  /// without a provider instance (task chat, runtime spawn env). The parse —
+  /// and the set's rename/delete upkeep — live on `LocalSkillsStore`, which
+  /// owns the slug identity.
   nonisolated static func disabledSkillNamesFromDefaults() -> Set<String> {
-    guard let raw = UserDefaults.standard.string(forKey: DefaultsKey.disabledSkillsJSON.rawValue),
-      let data = raw.data(using: .utf8),
-      let names = try? JSONDecoder().decode([String].self, from: data)
-    else {
-      return []  // Default: nothing disabled = all enabled
-    }
-    return Set(names)
+    LocalSkillsStore.disabledSkillNames()
   }
 
   /// Canonical JSON array exported to the runtime as `OMI_DISABLED_SKILLS`, so
