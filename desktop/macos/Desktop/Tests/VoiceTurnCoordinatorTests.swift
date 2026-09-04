@@ -614,9 +614,13 @@ import XCTest
     /// Drives one turn to a drained full-answer playback, then starts the next
     /// turn's capture — the physical shape of "the user heard the whole reply
     /// and spoke again." The terminal must carry delivery so the journal seals
-    /// the reply as the completed answer it was.
+    /// the reply as the completed answer it was. `beginTurn`'s interrupted-turn
+    /// capture reads exactly this terminal state (`lastTerminal` barge-in +
+    /// `lastTerminalAnswerDelivered`), because the superseded turn's own drain
+    /// entry is already consumed by the time capture runs.
     private func drainedTurnReadyForBargeIn() throws -> (VoiceTurnCoordinator, VoiceTurnID) {
       DesktopDiagnosticsManager.shared.resetForTests()
+      defer { DesktopDiagnosticsManager.shared.resetForTests() }
       let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
       let turnID = coordinator.begin(intent: .hold)
       coordinator.publish(.selectRoute(turnID: turnID, route: .deepgramBatch))
@@ -646,7 +650,6 @@ import XCTest
 
     func testBargeInAfterPlaybackDrainTerminalizesWithDeliveredAnswer() throws {
       let (coordinator, turnID) = try drainedTurnReadyForBargeIn()
-      defer { DesktopDiagnosticsManager.shared.resetForTests() }
 
       // The next press starts a new turn; the drained one terminalizes as a barge-in.
       _ = coordinator.begin(intent: .hold)

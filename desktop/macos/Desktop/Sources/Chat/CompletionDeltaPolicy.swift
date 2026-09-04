@@ -26,8 +26,13 @@ enum CompletionDeltaPolicy {
   /// Live voice surfaces admit completions only while they can still be the
   /// answer to a pending question. The realtime hub reconnects between PTT
   /// presses, and every reconnect drains unacknowledged completions — a long
-  /// window replays long-dead work into unrelated turns.
-  static let realtimeVoiceMaxAgeMs = 10 * 60 * 1_000
+  /// window replays long-dead work into unrelated turns. Thirty minutes keeps
+  /// the follow-up band the measured incident actually used (a deferred
+  /// verification answered ~3 minutes after its question) while the age and
+  /// origin anchors keep older items from being spoken as fresh; the residual
+  /// 30–60-minute band is dropped rather than injected unanchored, which is
+  /// the safer failure for voice.
+  static let realtimeVoiceMaxAgeMs = 30 * 60 * 1_000
 
   static func maxAgeMs(forSurfaceKind surfaceKind: String) -> Int {
     surfaceKind == "realtime_voice" ? realtimeVoiceMaxAgeMs : defaultMaxAgeMs

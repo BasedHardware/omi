@@ -3,18 +3,21 @@ import Foundation
 /// Identifies a narrow class of duplicate STT segments caused by the same
 /// playback being present in both the system-audio tap and the microphone input.
 ///
-/// This deliberately requires exact normalized text, a contiguous containment of
-/// sufficient length, and tight timing. Arbitrary fuzzy matching would risk
-/// deleting legitimate speech where two people happen to say similar words at
-/// the same time.
+/// This deliberately requires exact normalized text, or the mic segment's entire
+/// normalized word run appearing contiguously inside a system-audio segment, plus
+/// tight timing. Arbitrary fuzzy matching would risk deleting legitimate speech
+/// where two people happen to say similar words at the same time.
 ///
 /// The containment rule exists because both recognizers run rolling windows
 /// with different boundaries: the same playback re-transcribes as a *partial*
 /// overlap (measured 2026-09-04: every spoken reply appeared 2-4× across the two
-/// lanes, none of the duplicate pairs exactly equal). A short contained run of
-/// words is still playback bleed when it crosses lanes inside overlapping
-/// windows; it is not something a second human produces by coincidence while
-/// the machine speech plays the same words.
+/// lanes, none of the duplicate pairs exactly equal). Containment is strictly
+/// one-directional — only a mic row that is *entirely* an echo fragment of a
+/// system-audio row may be dropped. A mic row that mixes human speech with echo
+/// (rolling windows routinely fuse "user question + reply onset" into one row)
+/// is kept whole, because row-level suppression cannot separate the two; the
+/// same measurement showed bidirectional containment deleting the user's own
+/// questions from the ambient record.
 enum LocalTranscriptionDuplicateDecision: Equatable {
   case accept
   case suppressIncoming
@@ -63,10 +66,14 @@ enum LocalTranscriptionDuplicatePolicy {
       return timestampRangesAreClose(lhs, rhs)
     }
 
-    guard min(lhsWords.count, rhsWords.count) >= minimumContainmentWordCount,
-      containsContiguous(lhsWords, subsequence: rhsWords)
-        || containsContiguous(rhsWords, subsequence: lhsWords)
-    else { return false }
+    // Containment: only a mic row wholly contained in a system-audio row is an
+    // echo fragment. The reverse (system ⊆ mic) means the mic row carries more
+    // than the playback — human speech, a longer capture window, or both — and
+    // must survive.
+    guard min(lhsWords.count, rhsWords.count) >= minimumContainmentWordCount else { return false }
+    let micWords = lhs.isUser ? lhsWords : rhsWords
+    let systemWords = lhs.isUser ? rhsWords : lhsWords
+    guard containsContiguous(systemWords, subsequence: micWords) else { return false }
 
     return timestampRangesAreClose(lhs, rhs)
   }

@@ -75,7 +75,7 @@ final class LocalTranscriptionDuplicatePolicyTests: XCTestCase {
     )
   }
 
-  func testPartialWindowEchoAcrossLanesIsSuppressed() {
+  func testPureEchoWindowAcrossLanesIsSuppressed() {
     let (micText, systemText) = hopperEchoText()
     let mic = segment(text: micText, isUser: true, start: 1, end: 10)
     let system = segment(text: systemText, isUser: false, start: 0, end: 10)
@@ -84,10 +84,40 @@ final class LocalTranscriptionDuplicatePolicyTests: XCTestCase {
       LocalTranscriptionDuplicatePolicy.decision(for: mic, existing: [system]),
       .suppressIncoming
     )
+    // The reverse arrival keeps the mic row's identity but stores the fuller
+    // system-audio capture over it — the mic text is fully contained, so no
+    // human speech is overwritten.
     XCTAssertEqual(
       LocalTranscriptionDuplicatePolicy.decision(for: system, existing: [mic]),
       .replaceExisting(segmentId: mic.segmentId ?? "")
     )
+  }
+
+  func testMixedWindowWithUserQuestionAndEchoIsKept() {
+    // The exact regression the 2026-09-04 replay caught: rolling mic windows
+    // fuse the user's question with the reply onset. Row-level suppression
+    // cannot separate them, so the whole row must survive — bidirectional
+    // containment deleted this user question from the ambient record.
+    let mic = segment(
+      text: "How many blaze rods do I need? I'll take a closer look.",
+      isUser: true, start: 0, end: 10)
+    let system = segment(
+      text: "I'll take a closer look at that for you right now.",
+      isUser: false, start: 0, end: 10)
+
+    XCTAssertEqual(LocalTranscriptionDuplicatePolicy.decision(for: mic, existing: [system]), .accept)
+  }
+
+  func testMicSupersetOfSystemPlaybackIsKept() {
+    // A mic row that carries MORE than the playback (echo plus surrounding
+    // speech, or a longer capture window) is not a droppable fragment.
+    let (_, systemText) = hopperEchoText()
+    let mic = segment(
+      text: "yeah okay " + systemText + " and then what",
+      isUser: true, start: 0, end: 10)
+    let system = segment(text: systemText, isUser: false, start: 0, end: 10)
+
+    XCTAssertEqual(LocalTranscriptionDuplicatePolicy.decision(for: mic, existing: [system]), .accept)
   }
 
   func testShortContainedRunIsNotSuppressed() {

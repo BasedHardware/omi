@@ -98,11 +98,13 @@ extension AppState {
           "Transcript [UPDATE] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
         )
         segmentsToPersist.append(segment)
-      } else {
-        // The mic-vs-system-audio playback-echo dedup applies to every STT
-        // engine: both capture lanes feed segments with lane-derived isUser
-        // flags regardless of which recognizer transcribes them, and the cloud
-        // path previously appended every echo unfiltered.
+      } else if sttSession.useLocalSTT {
+        // Echo dedup is local-STT-only by architecture: only the local engine
+        // runs the two capture lanes (mic + system-audio tap) that produce
+        // cross-lane playback duplicates. Cloud mode mixes mic and system into
+        // one mono stream, so the same playback cannot transcribe twice and
+        // is_user comes from backend diarization — running this dedup there
+        // would risk suppressing real speech with no echo to remove.
         switch LocalTranscriptionDuplicatePolicy.decision(for: newSeg, existing: speakerSegments) {
         case .accept:
           appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
@@ -130,6 +132,8 @@ extension AppState {
             "Transcript [DEDUP] Promoted system-audio copy over mic playback duplicate [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]"
           )
         }
+      } else {
+        appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
       }
     }
 
