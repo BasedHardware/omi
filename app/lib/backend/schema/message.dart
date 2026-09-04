@@ -532,10 +532,15 @@ class ServerMessage {
         return value('text').isEmpty ? 'Question' : value('text');
       case 'memoryReviewCard':
       case 'memory_review_card':
-        return 'Things I learned today';
       case 'followUp':
       case 'follow_up':
-        return value('text');
+        // Both render natively on mobile — MemoryReviewCard draws its own
+        // "Things I learned today" heading, and ChatFollowUpChip draws the
+        // question. Inventing the same words as fallback prose says them
+        // twice; and when the block is malformed enough that no card renders
+        // (MemoryReviewCardBlock.tryFromBlock returns null for an item-less
+        // block), a bare heading over nothing is worse than no heading.
+        return '';
       case 'taskCard':
       case 'task_card':
         return 'Task';

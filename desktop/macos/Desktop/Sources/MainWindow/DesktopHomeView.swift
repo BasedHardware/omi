@@ -10,8 +10,15 @@ private struct AnySendableBox: @unchecked Sendable { let value: Any? }
 /// settings sync therefore both need to reconcile the two states instead of using
 /// a one-time readiness check as the source of truth.
 enum PersistedCaptureLaunchPolicy {
-  static func shouldStartTranscription(intentEnabled: Bool, isTranscribing: Bool) -> Bool {
-    intentEnabled && !isTranscribing
+  static func shouldStartTranscription(
+    intentEnabled: Bool,
+    isTranscribing: Bool,
+    micPermissionAuthorized: Bool
+  ) -> Bool {
+    // Restores run on launch/reactivation/key-load/sync; without a mic grant an
+    // attempted start would raise the TCC sheet (the skip-mic loop) or bounce a
+    // denied alert. The intent waits for an explicit Listen/Grant action instead.
+    intentEnabled && !isTranscribing && micPermissionAuthorized
   }
 
   static func shouldStartScreenAnalysis(intentEnabled: Bool, isMonitoring: Bool) -> Bool {
@@ -302,7 +309,8 @@ struct DesktopHomeView: View {
             continue
           }
           log("DesktopHomeView: Triggering background file rescan")
-          await FileIndexerService.shared.backgroundRescan()
+          await FileIndexerService.shared.backgroundRescan(
+            fullDiskAccessGranted: await appState.refreshFullDiskAccess())
         }
       }
   }
@@ -817,7 +825,6 @@ struct DesktopHomeView: View {
       initialFileIndexingBackfill.reserveIfNeeded(
         hasCompletedBackfill: UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing"))
     else { return }
-
     let sessionScope = StartupWarmupSessionScope(
       userId: UserDefaults.standard.string(forKey: .authUserId))
     let scheduled = viewModelContainer.scheduleSessionWarmup(
@@ -826,7 +833,8 @@ struct DesktopHomeView: View {
       onCancel: { initialFileIndexingBackfill.releaseReservation() },
       operation: {
         log("DesktopHomeView: Running delayed background file scan for existing user")
-        await FileIndexerService.shared.backgroundRescan()
+        await FileIndexerService.shared.backgroundRescan(
+          fullDiskAccessGranted: await appState.refreshFullDiskAccess())
         guard !Task.isCancelled,
           sessionScope.matches(
             currentUserId: UserDefaults.standard.string(forKey: .authUserId),
@@ -888,14 +896,17 @@ struct DesktopHomeView: View {
 
   private func restorePersistedCaptureServices(reason: String) {
     let settings = AssistantSettings.shared
+    // Fresh TCC answer before deciding whether an automatic start is allowed.
+    appState.checkMicrophonePermission()
     if PersistedCaptureLaunchPolicy.shouldStartTranscription(
       intentEnabled: settings.audioRecordingMode != .off,
-      isTranscribing: appState.isTranscribing
+      isTranscribing: appState.isTranscribing,
+      micPermissionAuthorized: appState.hasMicrophonePermission
     ) {
       log("DesktopHomeView: Restoring transcription from persisted intent (\(reason))")
       // Local transcription does not require remote API keys. AppState owns the
       // permission and provider checks, so it remains the single start boundary.
-      appState.startTranscription()
+      appState.startTranscription(userInitiated: false)
     }
 
     let plugin = ProactiveAssistantsPlugin.shared

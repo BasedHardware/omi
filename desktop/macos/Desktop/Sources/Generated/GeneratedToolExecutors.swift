@@ -25,6 +25,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case closeFact = "close_fact"
   case getActionItems = "get_action_items"
   case createActionItem = "create_action_item"
+  case createContextReminder = "create_context_reminder"
   case updateActionItem = "update_action_item"
   case captureScreen = "capture_screen"
   case checkPermissionStatus = "check_permission_status"
@@ -40,6 +41,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case webSearch = "web_search"
   case screenshot = "screenshot"
   case reportScreenObservation = "report_screen_observation"
+  case recordInterjectFeedback = "record_interject_feedback"
   case pointClick = "point_click"
   case createCanonicalGoal = "create_canonical_goal"
   case getCanonicalGoals = "get_canonical_goals"
@@ -54,8 +56,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:e8991c25a4912784c474dea8339dc21dc2e4c3a2fa9149c17b1a601565fd90d8"
-  static let chatFirstManifestDigest = "sha256:2feb70285d459c0279258c829377c6cfd454ef9ad5ebc6b5e3ef1fbdb4524bfd"
+  static let manifestDigest = "sha256:8663da900e5f51d96acb42a5f425502db443b88d47625b3b304797970ed9cc98"
+  static let chatFirstManifestDigest = "sha256:ef6fd8de9c7c2443f80c377a5bb7936e3b4022545db157f818fc3c598db0eab0"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -87,6 +89,7 @@ enum GeneratedToolExecutors {
     .closeFact: .chatToolExecutor,
     .getActionItems: .chatToolExecutor,
     .createActionItem: .chatToolExecutor,
+    .createContextReminder: .chatToolExecutor,
     .updateActionItem: .chatToolExecutor,
     .captureScreen: .chatToolExecutor,
     .checkPermissionStatus: .chatToolExecutor,
@@ -102,6 +105,7 @@ enum GeneratedToolExecutors {
     .webSearch: .realtimeHub,
     .screenshot: .realtimeHub,
     .reportScreenObservation: .realtimeHub,
+    .recordInterjectFeedback: .realtimeHub,
     .pointClick: .realtimeHub,
     .createCanonicalGoal: .chatToolExecutor,
     .getCanonicalGoals: .chatToolExecutor,
@@ -161,6 +165,7 @@ enum GeneratedToolExecutors {
     case closeFact
     case getActionItems
     case createActionItem
+    case createContextReminder
     case updateActionItem
     case captureScreen
     case checkPermissionStatus
@@ -206,6 +211,7 @@ enum GeneratedToolExecutors {
     case .closeFact: return .closeFact
     case .getActionItems: return .getActionItems
     case .createActionItem: return .createActionItem
+    case .createContextReminder: return .createContextReminder
     case .updateActionItem: return .updateActionItem
     case .captureScreen: return .captureScreen
     case .checkPermissionStatus: return .checkPermissionStatus

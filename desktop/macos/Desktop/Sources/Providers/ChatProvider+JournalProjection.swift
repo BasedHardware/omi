@@ -179,6 +179,9 @@ extension ChatProvider {
       durableToolReferences,
       ChatCitationProvenanceRegistry.references(
         fromToolCallBlocks: messages[index].contentBlocks))
+    // The authoritative answer replaces every streamed projection, so the raw
+    // accumulator this turn was built from has no further reader.
+    streamingBuffer.finishStreaming(messageId: messageId)
     messages[index].applyAuthoritativeTerminalAnswer(queryText)
     messages[index].applySelectedSourceFallback(
       selectedReferences: selectedReferences,

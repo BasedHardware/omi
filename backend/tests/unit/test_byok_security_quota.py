@@ -5,6 +5,9 @@ Covers: Chat/transcription quota bypass and quota-boundary consistency.
 
 from unittest.mock import patch
 
+from types import SimpleNamespace
+
+from models.users import PlanType
 import pytest
 
 from tests.unit._byok_fixtures import _byok_isolation  # noqa: F401
@@ -208,15 +211,23 @@ class TestTranscriptionCreditBYOKBypass:
 
         assert get_remaining_transcription_seconds('byok-uid') is None
 
-    @patch('utils.byok.get_byok_key', return_value=None)
+    @patch('utils.subscription.get_monthly_usage_for_subscription', return_value={'transcription_seconds': 10**9})
+    @patch('utils.subscription.get_byok_key', return_value=None)
     @patch('utils.subscription.users_db')
-    def test_transcription_not_bypassed_when_no_deepgram_header(self, mock_users_db, _mock_get_key):
-        """BYOK active but no x-byok-deepgram header — should NOT bypass."""
+    def test_transcription_not_bypassed_when_no_deepgram_header(self, mock_users_db, _mock_get_key, _mock_usage):
+        """BYOK active but no x-byok-deepgram header — should NOT bypass.
+
+        The proof that the bypass did not fire is that the plan path ran: the
+        active basic subscription was read, its usage was consulted, and the
+        exhausted allowance decided (one answer for both questions, shard S16).
+        """
         mock_users_db.is_byok_active.return_value = True
-        mock_users_db.get_user_valid_subscription.return_value = None
+        mock_users_db.get_user_valid_subscription.return_value = SimpleNamespace(plan=PlanType.basic)
         from utils.subscription import has_transcription_credits
 
         assert has_transcription_credits('fake-byok-uid') is False
+        mock_users_db.get_user_valid_subscription.assert_called_once()
+        _mock_usage.assert_called_once_with('fake-byok-uid')
 
 
 # ---------------------------------------------------------------------------

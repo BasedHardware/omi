@@ -38,10 +38,11 @@ env: []
 resources: {}
 
 livenessProbe:
-  tcpSocket:
+  httpGet:
+    path: /live
     port: 8080
-  failureThreshold: 10
-  periodSeconds: 30
+  failureThreshold: 3
+  periodSeconds: 10
 
 readinessProbe:
   httpGet:

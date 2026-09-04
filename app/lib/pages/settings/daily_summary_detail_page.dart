@@ -490,33 +490,44 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   }
 
   Widget _buildStatsRow(DailySummary summary) {
-    return Row(
-      children: [
-        _buildStatItem(FontAwesomeIcons.message, '${summary.stats.totalConversations}'),
-        const SizedBox(width: 8),
-        _buildStatItem(FontAwesomeIcons.clock, summary.stats.formattedDuration),
-        const SizedBox(width: 8),
-        _buildStatItem(FontAwesomeIcons.circleCheck, '${summary.stats.actionItemsCount}'),
-      ],
+    final items = <Widget>[
+      _buildStatItem(FontAwesomeIcons.message, '${summary.stats.totalConversations}'),
+      _buildStatItem(FontAwesomeIcons.clock, summary.stats.formattedDuration),
+      _buildStatItem(FontAwesomeIcons.circleCheck, '${summary.stats.actionItemsCount}'),
+    ];
+    if ((summary.stats.watchingMinutes ?? 0) > 0) {
+      items.add(_buildStatItem(FontAwesomeIcons.eye, summary.stats.formattedWatchingDuration!));
+    }
+    if ((summary.stats.proactiveMoments ?? 0) > 0) {
+      items.add(_buildStatItem(FontAwesomeIcons.bell, '${summary.stats.proactiveMoments}'));
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = items.length > 3 ? 3 : items.length;
+        final itemWidth = (constraints.maxWidth - (columns - 1) * 8) / columns;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [for (final item in items) SizedBox(width: itemWidth, child: item)],
+        );
+      },
     );
   }
 
   Widget _buildStatItem(FaIconData icon, String value) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-        decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            FaIcon(icon, color: Colors.grey.shade400, size: 14),
-            const SizedBox(width: 8),
-            Text(
-              value,
-              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FaIcon(icon, color: Colors.grey.shade400, size: 14),
+          const SizedBox(width: 8),
+          Text(
+            value,
+            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+          ),
+        ],
       ),
     );
   }

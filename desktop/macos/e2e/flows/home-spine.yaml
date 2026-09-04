@@ -14,6 +14,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStore.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStream.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineRowViews.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineDayRecapRow.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHourRail.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineScreenIndex.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHydration.swift
@@ -118,3 +119,20 @@ steps:
       twice, and no conversation or memory appears twice within a day — the stores page by offset
       against a list the server re-sorts, so an overlapping page is normal and must not become a
       duplicate row.
+
+  - id: S11
+    name: The day's recap sits at the head of the day, and an unsummarized day offers to make one
+    do: >-
+      Scroll to a day that already has a recap. Above that day's first row, inside the day's
+      section, is a recap card: a day emoji and headline, an overview paragraph, highlight chips,
+      and the "Ask about this day" and "Regenerate" actions. It is chrome, not a row — the day
+      header's counts do not change when it appears, and collapsing the day folds it away with the
+      rows. Now find a past day that has conversations but no recap: it shows "No recap for this
+      day" with a "Generate recap" button. Click it; the card replaces the empty state in place,
+      and the same recap is on the Chat card without a relaunch. Finally click the "Memories" chip
+      — existing recap cards stay (a recap belongs to the day, not the query) but the "Generate
+      recap" affordance is gone, because the filtered count cannot say whether the day was
+      recorded.
+    expect:
+      text_visible:
+        - Ask about this day

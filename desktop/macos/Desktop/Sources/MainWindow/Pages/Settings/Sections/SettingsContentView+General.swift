@@ -255,6 +255,13 @@ extension SettingsContentView {
         AnalyticsManager.shared.settingToggled(
           setting: "audio_recording_mode_\(mode.rawValue)", enabled: mode != .off)
         AssistantSettings.shared.audioRecordingMode = mode
+        // The mode-change observer restores capture automatically, and automatic
+        // starts never raise the TCC sheet. Enabling listening here IS an explicit
+        // user action, so it owns the one-shot permission request itself (same
+        // contract as the Listen control's `cycleListening`).
+        if mode != .off, !appState.hasMicrophonePermission {
+          appState.requestMicrophonePermission()
+        }
       }
     )
   }

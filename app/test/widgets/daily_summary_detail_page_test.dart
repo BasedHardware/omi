@@ -132,12 +132,34 @@ void main() {
       lessThan(tester.getTopLeft(find.text('Async beats status meetings')).dy),
     );
   });
+
+  testWidgets('shows positive desktop watching and proactive stats', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData.dark(),
+        home: DailySummaryDetailPage(
+          summaryId: 'summary-stats',
+          summary: _summary(
+            stats: DayStats(totalConversations: 1, totalDurationMinutes: 30, watchingMinutes: 17, proactiveMoments: 9),
+          ),
+          tileProvider: _MemoryTileProvider(),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('17m'), findsOneWidget);
+    expect(find.text('9'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 DailySummary _summary({
   List<LocationPin>? locations,
   List<MemoryReviewItem> memoriesLearned = const [],
   List<KnowledgeNugget> knowledgeNuggets = const [],
+  DayStats? stats,
 }) {
   return DailySummary(
     id: 'summary-1',
@@ -145,7 +167,7 @@ DailySummary _summary({
     createdAt: DateTime(2026, 7, 16),
     headline: 'A day around the city',
     overview: 'A productive day.',
-    stats: DayStats(totalConversations: 1, totalDurationMinutes: 30),
+    stats: stats ?? DayStats(totalConversations: 1, totalDurationMinutes: 30),
     memoriesLearned: memoriesLearned,
     knowledgeNuggets: knowledgeNuggets,
     locations: locations ??

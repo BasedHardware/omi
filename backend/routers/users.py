@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import List, Dict, Any, Union, Optional
+from typing import Annotated, List, Dict, Any, Union, Optional
 import os
 import asyncio
 
 import pytz
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from database import (
     conversations as conversations_db,
@@ -45,6 +45,7 @@ from database.redis_db import (
     remove_daily_summary_to_uid,
 )
 
+from utils.chat_rating_triage import extract_rating_triage_fields, normalize_rating_reason
 from database.users import (
     claim_deletion_wipe_for_task,
     get_user_transcription_preferences,
@@ -55,7 +56,7 @@ from database.users import (
 from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
-from utils.feedback import record_chat_message_feedback, record_conversation_summary_feedback
+from utils.feedback import record_chat_message_feedback
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
@@ -66,6 +67,7 @@ from models.user_usage import UserUsageResponse, UsagePeriod
 from datetime import datetime, time, timedelta
 
 from models.users import (
+    TranscriptionAllowanceSnapshot,
     ChatUsageQuota,
     ChatQuotaUnit,
     WebhookType,
@@ -85,6 +87,7 @@ from models.users import (
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
+    resolve_transcription_allowance,
     request_has_llm_byok_key,
     enforce_chat_quota,
     get_chat_quota_snapshot,
@@ -118,9 +121,14 @@ from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
+from utils.other.notifications import (
+    DAILY_SUMMARY_DECLINE_LOCKED,
+    generate_daily_summary_on_demand,
+    local_day_bounds_utc,
+)
 from models.notification_message import NotificationMessage
 from models.daily_summary_payload import LearnedMemoryRef
-from utils.memory.learned_today import memories_learned_for_summary, memory_review_card_block
+from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.other import endpoints as auth
 from utils.other.storage import (
     delete_all_conversation_recordings,
@@ -290,6 +298,10 @@ class DailySummaryDayStats(BaseModel):
     total_conversations: Optional[int] = None
     total_duration_minutes: Optional[int] = None
     action_items_count: Optional[int] = None
+    memories_created: Optional[int] = None
+    action_items_created: Optional[int] = None
+    watching_minutes: Optional[int] = None
+    proactive_moments: Optional[int] = None
 
 
 class DailySummaryLocationPin(BaseModel):
@@ -778,8 +790,11 @@ def set_memory_summary_rating(
     value: int,  # 0, 1, -1 (shown)
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    set_conversation_summary_rating_score(uid, memory_id, value)
-    record_conversation_summary_feedback(uid, memory_id, value)
+    # The conversation-summary rating UI has been unreachable since 2025-04-11
+    # (bbfe540bc4 / PR #2178) while field builds kept writing ~1,105 impression
+    # rows/day. No-op the server first so every client version stops writing —
+    # including into the unified feedback ledger, which would otherwise record
+    # a "rating" that no user action produced.
     return {'status': 'ok'}
 
 
@@ -788,11 +803,7 @@ def get_memory_summary_rating(
     memory_id: str,
     _: str = Depends(auth.get_current_user_uid),
 ):
-    rating = get_conversation_summary_rating_score(memory_id)
-    # TODO: later ask reason, a set of options, if user says good, whats the best, if bad, whats the worst
-    if not rating:
-        return {'has_rating': False}
-    return {'has_rating': rating.get('value', -1) != -1, 'rating': rating.get('value', -1)}
+    return {'has_rating': False}
 
 
 @router.post('/v1/users/analytics/chat_message', tags=['v1'], response_model=UserStatusResponse)
@@ -807,23 +818,25 @@ def set_chat_message_analytics(
 
     Args:
         message_id: ID of the message being rated
-        value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = neutral/removed)
-        reason: Optional reason for thumbs down. Valid values:
-            - 'too_verbose': Response was too long or wordy
-            - 'incorrect_or_hallucination': Response contained incorrect information
-            - 'not_helpful_or_irrelevant': Response didn't address the question
-            - 'didnt_follow_instructions': Response didn't follow user instructions
-            - 'other': Other reason
+        value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = user cleared)
+        reason: Optional reason for thumbs down. Enum keys only.
     """
-    # Always store feedback in Firestore analytics collection
-    set_chat_message_rating_score(uid, message_id, value, reason)
+    rating_value = None if value == 0 else value
+    snapshot = chat_db.update_message_rating(uid, message_id, rating_value) or {}
+    triage = extract_rating_triage_fields(snapshot)
+    normalized_reason = normalize_rating_reason(reason)
+    set_chat_message_rating_score(
+        uid,
+        message_id,
+        value,
+        reason=normalized_reason,
+        platform='mobile',
+        notification_kind=triage.get('notification_kind'),
+        app_id=triage.get('app_id'),
+    )
 
     # Unified feedback ledger — the daily thumbs-down report reads from here.
-    record_chat_message_feedback(uid, message_id, value, reason=reason, platform='mobile')
-
-    # Also update the rating directly on the message document for persistence
-    rating_value = None if value == 0 else value
-    chat_db.update_message_rating(uid, message_id, rating_value)
+    record_chat_message_feedback(uid, message_id, value, reason=normalized_reason, platform='mobile')
 
     # Try to submit feedback to LangSmith if the message has a run_id
     try:
@@ -1199,14 +1212,37 @@ def get_user_subscription_endpoint(
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
 ):
-    """Gets the user's subscription plan and usage."""
+    """Gets the user's subscription plan and usage, plus the one transcription-allowance answer."""
+    already_read: dict[str, Any] = {}
+    response = _user_subscription_response(uid, x_app_platform, x_app_version, already_read)
+    # The same resolver the listen socket enforces, so the client's startup
+    # snapshot and the server's gate cannot disagree about which STT mode to
+    # open. `X-App-Platform` plays the listen `source` role for the paywall,
+    # and the subscription/usage the snapshot already read are reused.
+    allowance = resolve_transcription_allowance(uid, source=x_app_platform, **already_read)
+    response.transcription_allowance = TranscriptionAllowanceSnapshot(**allowance.as_dict())
+    return response
+
+
+def _user_subscription_response(
+    uid: str, x_app_platform: Optional[str], x_app_version: Optional[str], already_read: dict[str, Any]
+) -> UserSubscriptionResponse:
+    """The subscription/usage snapshot, unchanged; the endpoint decorates it.
+
+    ``already_read`` receives the BYOK enrolment, the valid subscription
+    (``None`` when there is none) and the monthly usage this snapshot reads,
+    so the allowance is resolved from the same reads rather than repeating
+    them.
+    """
     # BYOK free plan: unlimited chat/insights only for a validated LLM-capability
     # key (same predicate as enforce_chat_quota). Deepgram-only does not unlock this.
     # Synthetic paid-tier quota for BYOK / marketplace-reviewer overrides so
     # these users aren't surprised by a disabled phone-call feature.
     unlimited_phone_quota = PhoneCallQuota(has_access=True, is_paid=True)
 
-    if users_db.is_byok_active(uid) and request_has_llm_byok_key():
+    byok_active = users_db.is_byok_active(uid)
+    already_read['byok_active'] = byok_active
+    if byok_active and request_has_llm_byok_key():
         # Snapshot split: a validated LLM key unlocks unlimited chat/insights, but
         # backend transcription credits still flow through Omi's Deepgram, so the
         # transcription/words fields stay metered on the free tier unless this
@@ -1226,6 +1262,7 @@ def get_user_subscription_endpoint(
                 phone_call_quota=unlimited_phone_quota,
             )
         usage = get_monthly_usage_for_subscription(uid)
+        already_read['usage'] = dict(usage) if isinstance(usage, dict) else usage
         basic_limits = get_basic_plan_limits()
         return UserSubscriptionResponse(
             subscription=_byok_unlimited_subscription(
@@ -1274,6 +1311,10 @@ def get_user_subscription_endpoint(
 
     # Then re-evaluate using our normal "valid subscription" semantics.
     subscription = get_user_valid_subscription(uid)
+    # A copy: this object is remapped below for legacy clients (operator -> unlimited,
+    # wire_plan_for_client), and the allowance must be resolved for the plan that is
+    # actually subscribed, not the one the client is shown.
+    already_read['subscription'] = subscription.model_copy() if subscription else None
     if not subscription:
         # Return default basic plan if no valid subscription
         subscription = get_default_basic_subscription()
@@ -1302,6 +1343,7 @@ def get_user_subscription_endpoint(
 
     # Get current usage
     usage = get_monthly_usage_for_subscription(uid)
+    already_read['usage'] = dict(usage) if isinstance(usage, dict) else usage
 
     # Calculate usage metrics
     transcription_seconds_used = usage.get('transcription_seconds', 0)
@@ -1597,19 +1639,15 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
 def _memories_learned_payload(uid, conversations, start_date_utc, end_date_utc):
     """Select the day's review items for a summary about to be generated.
 
-    The read lives here rather than inside generate_comprehensive_daily_summary:
-    that module is the LLM summary builder, and giving it a memory dependency
-    would put a Firestore read behind every caller and every test of it.
+    Thin adapter over the shared selection so this route and the scheduled job
+    cannot drift into two different definitions of "learned today".
     """
-    return [
-        ref.model_dump(mode='json')
-        for ref in memories_learned_for_summary(
-            uid,
-            conversation_ids=[c.id for c in conversations if not getattr(c, 'discarded', False)],
-            window_start=start_date_utc,
-            window_end=end_date_utc,
-        )
-    ]
+    return memories_learned_payload(
+        uid,
+        conversations,
+        window_start=start_date_utc,
+        window_end=end_date_utc,
+    )
 
 
 class TestDailySummaryRequest(BaseModel):
@@ -1749,6 +1787,85 @@ def test_daily_summary(
 # Daily Summaries API
 
 
+DesktopUsageSeconds = Annotated[int, Field(strict=True, ge=0, le=86400)]
+DesktopUsageCount = Annotated[int, Field(strict=True, ge=0, le=10000)]
+
+
+class DesktopDailyUsageRequest(BaseModel):
+    date: str
+    timezone: str
+    client_device_id: str = Field(min_length=1, max_length=200)
+    watching_seconds: DesktopUsageSeconds
+    listening_seconds: DesktopUsageSeconds
+    proactive_cards_shown: DesktopUsageCount
+    proactive_cards_acted: DesktopUsageCount
+    ptt_turns: DesktopUsageCount
+
+    @field_validator('date')
+    @classmethod
+    def validate_date_format(cls, value: str) -> str:
+        try:
+            parsed = datetime.strptime(value, '%Y-%m-%d').date()
+        except ValueError as exc:
+            raise ValueError('date must be a real date in YYYY-MM-DD format') from exc
+        if parsed.strftime('%Y-%m-%d') != value:
+            raise ValueError('date must be a real date in YYYY-MM-DD format')
+        return value
+
+    @field_validator('timezone')
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        try:
+            pytz.timezone(value)
+        except pytz.UnknownTimeZoneError as exc:
+            raise ValueError('timezone must be a valid IANA timezone') from exc
+        return value
+
+    @field_validator('client_device_id')
+    @classmethod
+    def validate_client_device_id(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError('client_device_id cannot be blank')
+        return value
+
+    @model_validator(mode='after')
+    def validate_date_window(self):
+        target_date = datetime.strptime(self.date, '%Y-%m-%d').date()
+        local_today = datetime.now(pytz.timezone(self.timezone)).date()
+        if abs((target_date - local_today).days) > 2:
+            raise ValueError('date must be within 2 days of today in the supplied timezone')
+        return self
+
+
+class DesktopDailyUsageResponse(BaseModel):
+    ok: bool
+
+
+@router.post('/v1/users/desktop-usage/daily', tags=['v1'], response_model=DesktopDailyUsageResponse)
+def record_desktop_daily_usage(
+    data: DesktopDailyUsageRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'users:desktop_usage_daily')),
+):
+    daily_summaries_db.upsert_desktop_daily_usage(
+        uid,
+        data.date,
+        data.timezone,
+        data.client_device_id,
+        {
+            'watching_seconds': data.watching_seconds,
+            'listening_seconds': data.listening_seconds,
+            'proactive_cards_shown': data.proactive_cards_shown,
+            'proactive_cards_acted': data.proactive_cards_acted,
+            'ptt_turns': data.ptt_turns,
+        },
+    )
+    return {'ok': True}
+
+
+class CreateDailySummaryRequest(BaseModel):
+    date: str  # YYYY-MM-DD
+
+
 @router.get('/v1/users/daily-summaries', tags=['v1'], response_model=DailySummariesResponse)
 def get_daily_summaries(
     limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid)
@@ -1759,6 +1876,65 @@ def get_daily_summaries(
     """
     summaries = daily_summaries_db.get_daily_summaries(uid, limit=limit, offset=offset)
     return {'summaries': summaries}
+
+
+@router.post('/v1/users/daily-summaries', tags=['v1'], response_model=DailySummaryResponse)
+def create_user_daily_summary(
+    request: CreateDailySummaryRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
+    """
+    Generate (or return) a daily summary for a local calendar date.
+
+    No FCM token is required and no push is sent — the caller is looking at the
+    screen. A record already stored for that date is returned without spending
+    LLM tokens.
+    """
+    enforce_chat_quota(uid, platform=x_app_platform)
+    try:
+        target_date = datetime.strptime(request.date, '%Y-%m-%d').date()
+    except ValueError:
+        raise HTTPException(status_code=422, detail='Invalid date format. Use YYYY-MM-DD')
+
+    time_zone_name = notification_db.get_user_time_zone(uid)
+    if time_zone_name:
+        try:
+            today = datetime.now(pytz.timezone(time_zone_name)).date()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+    else:
+        today = datetime.now(pytz.utc).date()
+    if target_date > today:
+        raise HTTPException(status_code=422, detail='Date cannot be in the future')
+
+    date_str = target_date.strftime('%Y-%m-%d')
+    existing = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
+    if existing:
+        return existing
+
+    cooldown_key = f'daily_summary_create:{uid}:{date_str}'
+    if get_generic_cache(cooldown_key):
+        raise HTTPException(
+            status_code=429,
+            detail='Please wait a few seconds before regenerating this recap again.',
+        )
+
+    start_date_utc, end_date_utc = local_day_bounds_utc(target_date, time_zone_name)
+    record, declined = generate_daily_summary_on_demand(uid, date_str, start_date_utc, end_date_utc)
+    if record:
+        # The cooldown exists to rate-limit LLM spend, so it is armed by a generation that
+        # happened. Arming it before the call charged the user for attempts that cost nothing
+        # and left them 429'd for 30s after a 400 they could have fixed by recording something.
+        set_generic_cache(cooldown_key, {'at': datetime.utcnow().isoformat()}, ttl=_REGENERATE_COOLDOWN_SECONDS)
+        return record
+
+    if declined == DAILY_SUMMARY_DECLINE_LOCKED:
+        # Another writer — almost always the cron for the same day — is mid-generation. That is a
+        # retry, not an answer; reporting it as "nothing to summarize" told the user their day was
+        # empty at the exact moment it was being summarized.
+        raise HTTPException(status_code=409, detail='This recap is already being generated. Try again in a moment.')
+    raise HTTPException(status_code=400, detail=f'Nothing to summarize for {date_str}')
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)

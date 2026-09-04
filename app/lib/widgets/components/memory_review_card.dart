@@ -58,11 +58,24 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
   final Set<String> _failed = {};
   final Map<String, TextEditingController> _editors = {};
 
+  /// The text a persisted correction submitted, per row. A knowledge-ledger
+  /// correction appends a new row under a *new* id, so the id this card
+  /// references stops resolving in the provider; without this the row would
+  /// fall back to the original learned text under an "Updated." status.
+  final Map<String, String> _settledEdits = {};
+
   /// Ids this process has already asked the provider to go looking for. A card
   /// scrolled in and out of the chat list rebuilds its State, and an id that is
   /// genuinely absent from the account would otherwise re-trigger a full
   /// memories fetch on every rebuild.
   static final Set<String> _requestedIds = {};
+
+  /// Whether this process has already asked the provider to load its list.
+  /// Nothing in app start-up initialises [MemoriesProvider] — only the memories
+  /// page calls `init()` — and a provider that has never loaded still reports
+  /// `loading == true`, so "already loading" cannot be read as "a fetch is in
+  /// flight" until this card has started one itself.
+  static bool _loadRequested = false;
 
   /// Card identities already counted as shown in this process.
   static final Set<String> _seenImpressions = {};
@@ -105,13 +118,18 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
   void _ensureMemoriesLoaded() {
     if (!mounted) return;
     final provider = _memoriesProvider(listen: false);
-    if (provider == null || provider.loading) return;
+    if (provider == null) return;
     final unresolved = _rows
         .where((item) => _memoryFor(provider, item.memoryId) == null)
         .map((item) => item.memoryId)
         .where(_requestedIds.add)
         .toList(growable: false);
     if (unresolved.isEmpty) return;
+    // Only skip when a fetch this process started is still running. Chat and
+    // the daily summary are usually the first memory surface a session opens,
+    // and there `loading` is just the never-loaded initial value.
+    if (_loadRequested && provider.loading) return;
+    _loadRequested = true;
     provider.loadMemories();
   }
 
@@ -124,7 +142,10 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
   _RowState _stateFor(Memory? memory, String memoryId) {
     final optimistic = _optimistic[memoryId];
     if (optimistic != null) return optimistic;
-    if (memory == null) return _RowState.loading;
+    // A correction that appended a replacement row leaves this id unresolvable.
+    // That is settled, not still loading — but only while nothing live answers
+    // for the id, so a later refresh or another device still wins.
+    if (memory == null) return _settledEdits.containsKey(memoryId) ? _RowState.updated : _RowState.loading;
     if (memory.userReview == false) return _RowState.dropped;
     if (memory.userReview == true) return _RowState.confirmed;
     if (memory.edited) return _RowState.updated;
@@ -188,15 +209,18 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     if (!mounted) return;
     setState(() {
       _inFlight.remove(item.memoryId);
+      // Drop the optimistic paint either way. What the row shows next is
+      // derived state: the live memory when the id still resolves, otherwise
+      // the correction recorded below.
+      _optimistic.remove(item.memoryId);
       if (persisted) {
         _editors.remove(item.memoryId)?.dispose();
         // A knowledge-ledger correction appends a new row under a new id, so
-        // the memory this reference points at can stop resolving. Keep the
-        // "Updated." state for this card rather than falling back to a
-        // disabled row.
-        _optimistic[item.memoryId] = _RowState.updated;
+        // the memory this reference points at can stop resolving. Remember what
+        // was submitted so the row shows the corrected text under "Updated."
+        // rather than the original learned text under a disabled control.
+        _settledEdits[item.memoryId] = value;
       } else {
-        _optimistic.remove(item.memoryId);
         _failed.add(item.memoryId);
       }
     });
@@ -238,7 +262,8 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     final state = _stateFor(memory, item.memoryId);
     final editing = _editors.containsKey(item.memoryId);
     final dimmed = state == _RowState.dropped;
-    final content = memory?.content.trim().isNotEmpty == true ? memory!.content.trim() : item.content;
+    final live = memory?.content.trim() ?? '';
+    final content = live.isNotEmpty ? live : (_settledEdits[item.memoryId] ?? item.content);
 
     return Container(
       key: Key('memory_review_row_${item.memoryId}'),

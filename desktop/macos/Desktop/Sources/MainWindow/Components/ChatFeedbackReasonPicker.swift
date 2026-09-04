@@ -8,6 +8,9 @@ import SwiftUI
 /// appears, so a user who ignores it loses nothing — they keep reading, and the
 /// report records that turn's reason as "not captured".
 struct ChatFeedbackReasonPicker: View {
+  /// Which five chips to show — notification cards and chat answers use
+  /// distinct taxonomies (see `ChatFeedbackReason.chips(isProactiveNotification:)`).
+  let reasons: [ChatFeedbackReason]
   /// The reason already chosen, if any. Highlights that chip.
   let selected: ChatFeedbackReason?
   let onSelect: (ChatFeedbackReason) -> Void
@@ -19,7 +22,7 @@ struct ChatFeedbackReasonPicker: View {
         .scaledFont(size: OmiType.micro)
         .foregroundColor(Ink.secondary)
 
-      ForEach(ChatFeedbackReason.allCases) { reason in
+      ForEach(reasons) { reason in
         Button(action: { onSelect(reason) }) {
           Text(reason.label)
             .scaledFont(size: OmiType.micro)

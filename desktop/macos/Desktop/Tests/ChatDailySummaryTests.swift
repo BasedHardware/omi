@@ -78,6 +78,29 @@ final class ChatDailySummaryTests: XCTestCase {
       ChatDailySummaryPresentation.dateLabel(for: "2026-13-40", now: now, calendar: calendar))
   }
 
+  func testIsStaleIsFalseThroughTwoWholeDaysAndTrueOnTheThird() {
+    let now = date(2026, 9, 2)
+    XCTAssertFalse(ChatDailySummaryPresentation.isStale("2026-09-02", now: now, calendar: calendar))
+    XCTAssertFalse(ChatDailySummaryPresentation.isStale("2026-09-01", now: now, calendar: calendar))
+    XCTAssertFalse(ChatDailySummaryPresentation.isStale("2026-08-31", now: now, calendar: calendar))
+    XCTAssertTrue(ChatDailySummaryPresentation.isStale("2026-08-30", now: now, calendar: calendar))
+    XCTAssertFalse(ChatDailySummaryPresentation.isStale(nil, now: now, calendar: calendar))
+  }
+
+  /// Spring-forward 2026-03-08 in America/New_York is not 24 hours. Counting calendar days
+  /// still treats March 8 as two days before March 10, not a stale recap.
+  func testIsStaleUsesCalendarDaysAcrossASpringForward() {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "America/New_York") ?? .current
+    let now =
+      calendar.date(from: DateComponents(year: 2026, month: 3, day: 10, hour: 9))
+      ?? Date(timeIntervalSince1970: 0)
+    XCTAssertFalse(ChatDailySummaryPresentation.isStale("2026-03-10", now: now, calendar: calendar))
+    XCTAssertFalse(ChatDailySummaryPresentation.isStale("2026-03-09", now: now, calendar: calendar))
+    XCTAssertFalse(ChatDailySummaryPresentation.isStale("2026-03-08", now: now, calendar: calendar))
+    XCTAssertTrue(ChatDailySummaryPresentation.isStale("2026-03-07", now: now, calendar: calendar))
+  }
+
   func testFollowUpNamesTheDayTheSummaryIsAbout() {
     let now = date(2026, 9, 2)
     XCTAssertEqual(
@@ -397,4 +420,26 @@ final class ChatDailySummaryTests: XCTestCase {
     )
   }
 
+}
+
+extension ChatDailySummaryTests {
+  /// Staleness copy must not cost the reader the date. Naming the day is the whole reason the
+  /// eyebrow exists; "several days old" on its own is less informative than what it replaced.
+  func testStaleLabelKeepsTheDayItIsAbout() throws {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+    let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 9, day: 2)))
+
+    let label = ChatDailySummaryPresentation.staleLabel(
+      for: "2026-08-23", now: now, calendar: calendar, locale: Locale(identifier: "en_US"))
+
+    XCTAssertTrue(label.contains("Aug"), "stale label must still name the day: \(label)")
+    XCTAssertTrue(label.contains("23"), "stale label must still name the day: \(label)")
+    XCTAssertTrue(label.lowercased().contains("old"), "stale label must say it is old: \(label)")
+  }
+
+  func testStaleLabelFallsBackWhenTheDateIsUnusable() {
+    let label = ChatDailySummaryPresentation.staleLabel(for: nil, now: Date())
+    XCTAssertEqual(label, "Several days old")
+  }
 }

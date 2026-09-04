@@ -934,6 +934,14 @@ extension RealtimeHubController {
         expectedTurnEpoch: toolTurnEpoch)
       return
     }
+    if name == HubTool.recordInterjectFeedback.rawValue {
+      handleInterjectFeedbackReport(
+        source: source,
+        callId: callId,
+        arguments: arguments,
+        expectedTurnEpoch: toolTurnEpoch)
+      return
+    }
     invokeExternallyAuthorizedTool(
       source: source,
       turnID: turnID,
@@ -1135,6 +1143,10 @@ extension RealtimeHubController {
             terminal: .success,
             idempotencyKey: completedTurnIdempotencyKey,
             acceptedSpawnOwnerID: acceptedSpawnOwnerID) ?? false
+        if accepted, !resolution.userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          let repliedToCard = FloatingControlBarManager.shared.recentNotchCardVoiceContext() != nil
+          DesktopUsageDailyReporter.shared.recordCompletedPTTTurn(repliedToCard: repliedToCard)
+        }
         self?.lastTurnDiagnostics = [
           "provider": provider,
           "provider_transcript": heard,
