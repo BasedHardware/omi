@@ -326,6 +326,48 @@ final class RealtimeTurnPersistenceLedger {
     }
   }
 
+  /// Chains one follow-up write after the in-flight obligation for the same
+  /// continuity key, taking over that key's obligation slot so
+  /// `awaitPendingObligations` — the next voice turn's context fence — still
+  /// observes the follow-up before the journal settles. The follow-up runs
+  /// only after the original write's kernel result is known; a plain `enqueue`
+  /// would drop it entirely while the original is still in flight.
+  @discardableResult
+  func enqueueFollowUp(
+    continuityKey: String,
+    _ followUp: @escaping @MainActor () async -> Bool
+  ) -> Task<Bool, Never> {
+    guard let existing = obligations[continuityKey] else {
+      return enqueue(continuityKey: continuityKey, retainingReceipt: false, followUp)
+    }
+    let previous = existing.task
+    let retention = existing.retainingReceipt
+    let followUpID = UUID()
+    generation &+= 1
+    let task = Task { @MainActor [weak self] in
+      let originalAccepted = await previous.value
+      guard let self, self.obligations[continuityKey]?.id == followUpID else {
+        return originalAccepted
+      }
+      // The original write's epilogue no longer owns this slot, so its receipt
+      // semantics survive here: retention still reflects the original write's
+      // kernel result, never the follow-up's revision of an accepted row.
+      if retention, self.receipts[continuityKey] == nil {
+        self.receipts[continuityKey] = RealtimeTurnPersistenceReceipt(
+          continuityKey: continuityKey,
+          accepted: originalAccepted)
+      }
+      let accepted = await followUp()
+      if self.obligations[continuityKey]?.id == followUpID {
+        self.obligations.removeValue(forKey: continuityKey)
+      }
+      return accepted
+    }
+    obligations[continuityKey] = Obligation(
+      id: followUpID, task: task, retainingReceipt: retention)
+    return task
+  }
+
   /// Owner replacement revokes every local waiter.  An ignored cancellation can
   /// still complete its kernel RPC, but its old obligation is forbidden from
   /// removing or writing over any newer key's state.
@@ -371,6 +413,19 @@ struct InterruptedTurnPayload: Equatable {
   static func visibleAssistantText(partialAssistantText: String) -> String {
     partialAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
+}
+
+/// The assistant row a voice turn's funnel sealed `.completed` at
+/// provider-response-finish, before the reducer's playback fence resolved.
+/// Consumed by the reducer's terminal: when the answer never reached the user,
+/// the sealed row is revised through the same journal update path that
+/// finalized it (`VoiceJournalSealedRowRevisionPolicy`). Journal-write
+/// bookkeeping only — the reducer remains the lifecycle owner (INV-VOICE-1),
+/// and the kernel journal stays the one transcript authority (INV-CHAT-1).
+struct SealedCompletedVoiceJournalRow {
+  let ownerID: String
+  let assistantText: String
+  let surface: AgentSurfaceReference
 }
 
 /// Resolves and records the visible portion of a provider-failed turn before

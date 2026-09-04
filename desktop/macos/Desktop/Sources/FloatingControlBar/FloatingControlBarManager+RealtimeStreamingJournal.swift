@@ -67,4 +67,37 @@ extension FloatingControlBarManager {
     }
     return false
   }
+
+  /// Revises an assistant row that was finalized `.completed` at
+  /// provider-response-finish after its turn terminalized without delivering
+  /// the answer (#12743). This is the same kernel-journal update path the
+  /// streaming finalize uses — the journal stays the one transcript authority
+  /// (INV-CHAT-1); it only corrects the row's status and truncation cause, so
+  /// the model's next turns stop inheriting an answer the user never heard.
+  /// Bounded retry mirrors `completeStreamingRealtimeExchange` so a transient
+  /// rejection does not strand the optimistic status.
+  func reviseSealedRealtimeAssistantStatus(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    continuityKey: String,
+    assistantText: String,
+    status: KernelJournalTurnStatus,
+    terminalReason: String
+  ) async -> Bool {
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+      let provider = sharedFloatingProvider
+    else { return false }
+    let projection = RealtimeStreamingJournalProjection(
+      ownerID: ownerID, continuityKey: continuityKey, admissionSurface: surface)
+    for _ in 0..<3 {
+      if await provider.kernelTurnProjection.updateTurn(
+        surface: surface,
+        message: projection.assistantMessage(text: assistantText, isStreaming: false),
+        status: status, terminalReason: terminalReason, ownerID: ownerID) != nil
+      {
+        return true
+      }
+    }
+    return false
+  }
 }

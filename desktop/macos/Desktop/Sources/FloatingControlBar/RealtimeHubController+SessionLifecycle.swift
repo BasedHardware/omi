@@ -263,7 +263,52 @@ extension RealtimeHubController {
     } else if screenEvidence?.descriptor.turnID == turnID {
       clearScreenGrounding(stage: "cancelled")
     }
+    reviseSealedJournalRowIfUndelivered(turnID: turnID)
     if pendingSessionRefreshReason != nil { applyPendingSessionRefreshIfIdle() }
+  }
+
+  /// The one stable continuity key for a voice turn. `beginTurn` assigns it and
+  /// the sealed-row revision derives it from the reducer's terminal turn ID, so
+  /// both must stay byte-identical.
+  nonisolated static func voiceContinuityKey(for turnID: VoiceTurnID) -> String {
+    "voice:\(turnID.rawValue.uuidString.lowercased())"
+  }
+
+  /// The reducer terminalized a turn whose assistant row was sealed
+  /// `.completed` at provider-response-finish. If the terminal proves the
+  /// answer never reached the user, revise the row through the same journal
+  /// update path that finalized it — never a second writer (INV-CHAT-1).
+  /// Delivered outcomes leave the sealed row untouched, and the revision
+  /// chains after the turn's in-flight funnel write so the next voice turn's
+  /// context fence still observes the journal settling.
+  private func reviseSealedJournalRowIfUndelivered(turnID: VoiceTurnID) {
+    let continuityKey = Self.voiceContinuityKey(for: turnID)
+    guard let sealed = sealedCompletedVoiceJournalRows.removeValue(forKey: continuityKey) else {
+      return
+    }
+    guard let terminal = VoiceTurnCoordinator.shared.model.lastTerminal,
+      terminal.turnID == turnID,
+      let revision = VoiceJournalSealedRowRevisionPolicy.revision(
+        forTerminalReason: terminal.reason,
+        answerDelivered: VoiceTurnCoordinator.shared.lastTerminalAnswerDelivered,
+        sealedCompletedRowExists: true)
+    else { return }
+    log(
+      "RealtimeHub: revising sealed voice journal row after undelivered answer "
+        + "turn=\(turnID.description) reason=\(revision.terminalReason)")
+    let ownerID = sealed.ownerID
+    let assistantText = sealed.assistantText
+    let surface = sealed.surface
+    _ = turnPersistenceLedger.enqueueFollowUp(continuityKey: continuityKey) {
+      guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+      return await FloatingControlBarManager.shared.reviseSealedRealtimeAssistantStatus(
+        surface: surface,
+        ownerID: ownerID,
+        continuityKey: continuityKey,
+        assistantText: assistantText,
+        status: revision.status,
+        terminalReason: revision.terminalReason)
+    }
   }
 
   /// Managed users: fetch a short-lived ephemeral token from the backend (gated by
@@ -818,11 +863,15 @@ extension RealtimeHubController {
   /// a second durable queue.
   /// The single funnel every realtime voice turn is journaled through.
   ///
-  /// `terminal` and `answerDelivered` together decide the assistant row's
-  /// status: no caller can assert completion. The reason alone once sealed every
-  /// cut-off turn as completed; delivery state now keeps the inverse lie out too —
-  /// a reply the user fully heard before a barge-in is a delivered answer, not a
-  /// cut-off failure the model later re-delivers out of context.
+  /// `terminal` and `delivery` together decide the assistant row's status: no
+  /// caller can assert completion. The reason alone once sealed every cut-off
+  /// turn as completed; delivery state now keeps the inverse lie out too — a
+  /// reply the user fully heard before a barge-in is a delivered answer, not a
+  /// cut-off failure the model later re-delivers out of context. A `.success`
+  /// write defaults to `pending` delivery because this funnel runs at
+  /// provider-response-finish, while playback is usually still draining; the
+  /// reducer's terminal later revises the optimistic row if the answer never
+  /// reached the user (#12743).
   func persistTurnDirectlyToKernel(
     ownerID: String,
     userText: String,
@@ -830,10 +879,10 @@ extension RealtimeHubController {
     terminal: VoiceTurnTerminalReason,
     idempotencyKey: String,
     acceptedSpawnOwnerID: String?,
-    answerDelivered: Bool = false
+    delivery: VoiceTurnJournalStatusPolicy.AnswerDelivery = .pending
   ) async -> Bool {
     let journalStatus = VoiceTurnJournalStatusPolicy.status(
-      for: terminal, answerDelivered: answerDelivered)
+      for: terminal, delivery: delivery)
     let terminalReason = journalStatus == .completed ? nil : terminal.rawValue
     guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
       log("RealtimeHub: refusing voice journal write after authenticated owner changed")
@@ -843,6 +892,21 @@ extension RealtimeHubController {
     let kernelOwnsExchange = RealtimeHubContinuityRestore.kernelOwnsExchange(
       continuityKey: idempotencyKey,
       kernelTurnIDs: prefetchedVoiceContextTurnIDs)
+    // A provider-owned `.success` row is sealed while playback is still
+    // pending; remember it so the reducer's terminal can revise the row when
+    // the answer never reaches the user. Spawn-owned and kernel-owned
+    // exchanges are sealed by another authority and stay untouched here.
+    if terminal == .success,
+      journalStatus == .completed,
+      acceptedSpawnOwnerID != ownerID,
+      !kernelOwnsExchange,
+      !assistantText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    {
+      sealedCompletedVoiceJournalRows[idempotencyKey] = SealedCompletedVoiceJournalRow(
+        ownerID: ownerID,
+        assistantText: assistantText,
+        surface: surface)
+    }
     if acceptedSpawnOwnerID == ownerID
       || (kernelOwnsExchange && !streamingJournalWriteLedger.contains(continuityKey: idempotencyKey))
     {
@@ -1117,7 +1181,7 @@ extension RealtimeHubController {
               terminal: .interruptedByBargeIn,
               idempotencyKey: turn.idempotencyKey,
               acceptedSpawnOwnerID: turn.acceptedSpawnOwnerID,
-              answerDelivered: turn.answerDelivered) ?? false
+              delivery: turn.answerDelivered ? .delivered : .notDelivered) ?? false
           }
           return await task.value
         },
