@@ -48,12 +48,10 @@ final class ChatQuotaBannerTests: XCTestCase {
   // MARK: - Which threshold is showing
 
   func testBelowFirstThresholdShowsNothing() throws {
-    XCTAssertNil(try banner(used: 374))
+    XCTAssertNil(try banner(used: 449))
   }
 
   func testThresholdsAppearAsUsageClimbs() throws {
-    XCTAssertEqual(try banner(used: 375)?.threshold, 75)
-    XCTAssertEqual(try banner(used: 449)?.threshold, 75)
     XCTAssertEqual(try banner(used: 450)?.threshold, 90)
     XCTAssertEqual(try banner(used: 499)?.threshold, 90)
     XCTAssertEqual(try banner(used: 500)?.threshold, 100)
@@ -61,8 +59,8 @@ final class ChatQuotaBannerTests: XCTestCase {
   }
 
   func testLocalSendsMoveTheBannerWithoutAServerSync() throws {
-    XCTAssertNil(try banner(used: 370))
-    XCTAssertEqual(try banner(used: 370, optimisticDelta: 5)?.threshold, 75)
+    XCTAssertNil(try banner(used: 445))
+    XCTAssertEqual(try banner(used: 445, optimisticDelta: 5)?.threshold, 90)
   }
 
   func testCostQuotaIgnoresLocalSendCount() throws {
@@ -76,10 +74,10 @@ final class ChatQuotaBannerTests: XCTestCase {
     // The only surface that states dollars rather than questions, and the
     // branch the nil-below-threshold case above can never reach.
     let shown = try XCTUnwrap(
-      try banner(used: 310, limit: 400, plan: "Architect", unit: "cost_usd"))
-    XCTAssertEqual(shown.threshold, 75)
+      try banner(used: 370, limit: 400, plan: "Architect", unit: "cost_usd"))
+    XCTAssertEqual(shown.threshold, 90)
     XCTAssertEqual(
-      shown.message, "$310.00 of your $400 Architect monthly spend used. Resets in 11 days.")
+      shown.message, "$370.00 of your $400 Architect monthly spend used. Resets in 11 days.")
   }
 
   func testCostQuotaAtItsLimitStillBillsOverage() throws {
@@ -117,10 +115,19 @@ final class ChatQuotaBannerTests: XCTestCase {
       shown.message, "30 of 30 Free questions used. Upgrade to keep chatting. Resets in 11 days.")
   }
 
-  func testWarningThresholdsStateTheCountAndReset() throws {
-    let shown = try XCTUnwrap(try banner(used: 375))
-    XCTAssertEqual(shown.title, "75% of your monthly limit")
-    XCTAssertEqual(shown.message, "375 of 500 Operator questions used. Resets in 11 days.")
+  func testWarningThresholdNamesTheApproachAndStatesTheCountAndReset() throws {
+    let shown = try XCTUnwrap(try banner(used: 475))
+    XCTAssertEqual(shown.title, "Almost at your monthly limit")
+    XCTAssertEqual(shown.message, "475 of 500 Operator questions used. Resets in 11 days.")
+  }
+
+  func testMeterPercentFloorsAndClampsToTheAllowance() throws {
+    XCTAssertEqual(try banner(used: 475)?.percent, 95)
+    // 499/500 must not render a full meter before the cap is actually reached.
+    XCTAssertEqual(try banner(used: 499)?.percent, 99)
+    XCTAssertEqual(try banner(used: 500)?.percent, 100)
+    // Past the allowance the meter stays full rather than overshooting.
+    XCTAssertEqual(try banner(used: 900)?.percent, 100)
   }
 
   func testMissingOverageFieldReadsAsHardCap() throws {
@@ -132,31 +139,31 @@ final class ChatQuotaBannerTests: XCTestCase {
   // MARK: - Dismissal
 
   func testDismissingOneThresholdHidesOnlyThatThreshold() throws {
-    let atSeventyFive = try XCTUnwrap(try banner(used: 375))
+    let atNinety = try XCTUnwrap(try banner(used: 460))
     let key = ChatQuotaBanner.dismissalKey(
-      threshold: atSeventyFive.threshold, cycleID: atSeventyFive.cycleID)
+      threshold: atNinety.threshold, cycleID: atNinety.cycleID)
 
-    XCTAssertNil(try banner(used: 375, dismissed: [key]), "the dismissed threshold stays hidden")
+    XCTAssertNil(try banner(used: 460, dismissed: [key]), "the dismissed threshold stays hidden")
     XCTAssertEqual(
-      try banner(used: 450, dismissed: [key])?.threshold, 90,
+      try banner(used: 500, dismissed: [key])?.threshold, 100,
       "crossing the next threshold speaks again")
   }
 
   func testDismissalExpiresWithTheBillingCycle() throws {
     let key = ChatQuotaBanner.dismissalKey(
-      threshold: 75, cycleID: ChatQuotaBanner.cycleID(for: try quota(used: 375)))
+      threshold: 90, cycleID: ChatQuotaBanner.cycleID(for: try quota(used: 475)))
     let nextCycle = ChatQuotaBanner.current(
-      quota: try quota(used: 375, resetAt: 1_762_678_400),
+      quota: try quota(used: 475, resetAt: 1_762_678_400),
       optimisticDelta: 0,
       dismissed: [key],
       now: Date(timeIntervalSince1970: 1_759_000_000))
-    XCTAssertEqual(nextCycle?.threshold, 75, "a new cycle is not covered by last cycle's dismissal")
+    XCTAssertEqual(nextCycle?.threshold, 90, "a new cycle is not covered by last cycle's dismissal")
   }
 
   func testUpgradeUndoesADismissalTakenAgainstTheOldAllowance() throws {
     let key = ChatQuotaBanner.dismissalKey(
-      threshold: 75, cycleID: ChatQuotaBanner.cycleID(for: try quota(used: 400)))
-    XCTAssertNil(try banner(used: 400, dismissed: [key]))
+      threshold: 90, cycleID: ChatQuotaBanner.cycleID(for: try quota(used: 460)))
+    XCTAssertNil(try banner(used: 460, dismissed: [key]))
     XCTAssertEqual(
       try banner(used: 900, limit: 1000, dismissed: [key])?.threshold, 90,
       "a bigger allowance is a different banner, not the dismissed one")
@@ -181,12 +188,12 @@ final class ChatQuotaBannerTests: XCTestCase {
     let defaults = try XCTUnwrap(UserDefaults(suiteName: "chat-quota-store-\(UUID().uuidString)"))
     let store = ChatQuotaBannerDismissals(defaults: defaults)
 
-    store.dismiss(threshold: 75, cycleID: "1000-500")
     store.dismiss(threshold: 90, cycleID: "1000-500")
-    XCTAssertEqual(store.dismissed, ["75@1000-500", "90@1000-500"])
+    store.dismiss(threshold: 100, cycleID: "1000-500")
+    XCTAssertEqual(store.dismissed, ["90@1000-500", "100@1000-500"])
 
-    store.dismiss(threshold: 75, cycleID: "2000-500")
-    XCTAssertEqual(store.dismissed, ["75@2000-500"], "last cycle's dismissals are dropped")
+    store.dismiss(threshold: 90, cycleID: "2000-500")
+    XCTAssertEqual(store.dismissed, ["90@2000-500"], "last cycle's dismissals are dropped")
   }
 
   @MainActor

@@ -2,7 +2,7 @@ version: 2
 name: chat-quota-banner
 tier: 2
 description: >-
-  The chat-quota warning appears at 75%, 90% and 100% of the plan allowance, states the
+  The chat-quota warning appears at 90% and 100% of the plan allowance, states the
   count and the reset, and says the right thing for the plan's exhaustion policy. Steps
   assert both what the model derives and what the mounted banner actually rendered. The
   run also reads the pre-send gate's own verdict for each seeded plan -- allowed past
@@ -22,7 +22,7 @@ steps:
     bridge.action:
       name: apply_usage_quota
       params:
-        used: "370"
+        used: "440"
         limit: "500"
         plan: Operator
         unit: questions
@@ -31,59 +31,38 @@ steps:
       result.detail.applied: "true"
 
   - id: S2
-    name: No banner at 74%
+    name: No banner at 88%
     bridge.action:
       name: usage_limiter_snapshot
     expect:
       result.detail.banner_threshold: "none"
 
   - id: S3
-    name: Crossing 75% raises the first warning with the count
+    name: Crossing 90% raises the first warning with the count
     bridge.action:
       name: apply_usage_quota
       params:
-        used: "375"
+        used: "460"
         limit: "500"
         plan: Operator
         unit: questions
         is_overage_plan: "true"
 
   - id: S4
-    name: The 75% banner names the plan and the count
-    bridge.action:
-      name: usage_limiter_snapshot
-    expect:
-      result.detail.banner_threshold: "75"
-      result.detail.banner_title: "75% of your monthly limit"
-      result.detail.banner_message:
-        contains: "375 of 500 Operator questions used"
-      # The mounted view, not just the arithmetic behind it.
-      result.detail.rendered_banner_threshold: "75"
-      result.detail.rendered_banner_title: "75% of your monthly limit"
-
-  - id: S5
-    name: Crossing 90% replaces it with the second warning
-    bridge.action:
-      name: apply_usage_quota
-      params:
-        used: "450"
-        limit: "500"
-        plan: Operator
-        unit: questions
-        is_overage_plan: "true"
-
-  - id: S6
-    name: The 90% banner is showing
+    name: The 90% banner names the approach and the count
     bridge.action:
       name: usage_limiter_snapshot
     expect:
       result.detail.banner_threshold: "90"
-      result.detail.banner_title: "90% of your monthly limit"
+      result.detail.banner_title: "Almost at your monthly limit"
+      result.detail.banner_message:
+        contains: "460 of 500 Operator questions used"
+      # The mounted view, not just the arithmetic behind it.
       result.detail.rendered_banner_threshold: "90"
-      result.detail.rendered_banner_title: "90% of your monthly limit"
+      result.detail.rendered_banner_title: "Almost at your monthly limit"
 
-  - id: S7
-    name: At the allowance an overage plan is told it is now billing, not blocked
+  - id: S5
+    name: Crossing 100% replaces it with the exhaustion warning
     bridge.action:
       name: apply_usage_quota
       params:
@@ -93,17 +72,18 @@ steps:
         unit: questions
         is_overage_plan: "true"
 
-  - id: S8
+  - id: S6
     name: The overage plan keeps sending past its allowance
     bridge.action:
       name: usage_limiter_snapshot
     expect:
       result.detail.banner_threshold: "100"
       result.detail.banner_title: "Now billing overage"
+      result.detail.rendered_banner_threshold: "100"
       result.detail.rendered_banner_title: "Now billing overage"
       result.detail.is_limit_reached: "false"
 
-  - id: S9
+  - id: S7
     name: A hard-capped plan at its allowance is told to upgrade
     bridge.action:
       name: apply_usage_quota
@@ -114,7 +94,7 @@ steps:
         unit: questions
         is_overage_plan: "false"
 
-  - id: S10
+  - id: S8
     name: The hard-capped plan is blocked, and says so
     bridge.action:
       name: usage_limiter_snapshot
@@ -126,7 +106,7 @@ steps:
         contains: "Upgrade to keep chatting"
       result.detail.is_limit_reached: "true"
 
-  - id: S11
+  - id: S9
     name: Restore an unexhausted quota so the bundle is left usable
     bridge.action:
       name: reset_usage_limiter

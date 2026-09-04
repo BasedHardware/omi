@@ -1,3 +1,3 @@
 {
-  "change": "Chat now warns above the composer at 75%, 90% and 100% of your monthly limit, with the count and the reset date, so running out is never a surprise. Plans that bill overage keep working past the limit instead of being blocked."
+  "change": "Chat now warns above the composer at 90% and 100% of your monthly limit, with a usage meter, the count and the reset date, so running out is never a surprise; plans that bill overage keep working past the limit instead of being blocked"
 }

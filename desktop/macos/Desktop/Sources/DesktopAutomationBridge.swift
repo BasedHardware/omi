@@ -915,7 +915,7 @@ final class DesktopAutomationActionRegistry {
       }
     }
     // Seeds the quota snapshot the chat-quota warnings key off, so a harness can
-    // walk 75/90/100 without spending a month of real questions. Non-prod only.
+    // walk 90/100 without spending a month of real questions. Non-prod only.
     register(
       name: "apply_usage_quota",
       summary: "Seed the chat usage-quota snapshot (threshold-warning harness). Non-prod only.",

@@ -1,18 +1,22 @@
 import CryptoKit
 import Foundation
 
-/// The 75% / 90% / 100% chat-quota warning shown above the chat composer.
+/// The 90% / 100% chat-quota warning shown above the chat composer.
 ///
 /// A state, not an event: it is derived from the current quota snapshot every
 /// time usage moves, so it needs no scheduling and cannot be missed. The user
 /// can dismiss one, and it stays dismissed only for that threshold in that
 /// billing cycle — crossing the next threshold speaks again.
 struct ChatQuotaBanner: Equatable {
-  static let thresholds = [75, 90, 100]
+  static let thresholds = [90, 100]
 
   let threshold: Int
   let title: String
   let message: String
+  /// Usage as a whole percent of the allowance, clamped to 100 — the meter's
+  /// fill. A banner is only ever raised at a threshold, so this is never
+  /// below the smallest one.
+  let percent: Int
   /// Past the allowance on an overage plan: billed, not blocked.
   let isBillingOverage: Bool
   /// The billing cycle and allowance this banner was computed against.
@@ -43,6 +47,9 @@ struct ChatQuotaBanner: Equatable {
       message: message(
         threshold: threshold, isBillingOverage: overage, quota: quota, used: used, limit: limit,
         now: now),
+      // Floor, not round: the meter must never read full before the allowance
+      // actually is (99.8% is not "at your limit").
+      percent: min(100, Int(percent)),
       isBillingOverage: overage,
       cycleID: cycle)
   }
@@ -59,7 +66,7 @@ struct ChatQuotaBanner: Equatable {
   }
 
   private static func title(threshold: Int, isBillingOverage: Bool) -> String {
-    guard threshold >= 100 else { return "\(threshold)% of your monthly limit" }
+    guard threshold >= 100 else { return "Almost at your monthly limit" }
     return isBillingOverage ? "Now billing overage" : "Monthly limit reached"
   }
 
