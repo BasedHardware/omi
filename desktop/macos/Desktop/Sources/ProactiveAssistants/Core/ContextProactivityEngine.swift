@@ -345,11 +345,17 @@ actor ContextProactivityEngine {
         startedAt: fence.startedAt,
         endedAt: frameFreshness.endedAt)
     else { return }
-    // JIT admission, in the same position the dwell and departure entry points
-    // use it. Speech is a third way into `evaluateAndDeliver`, so leaving it out
-    // meant an utterance could deliver through the legacy lane while the kill
-    // switch was suppressing the other two — `handle()` answers `false` for
-    // `.legacyContextBucketFallback`, so the bypass only ever failed open.
+    // JIT admission, in the same position the dwell and departure entry points use it.
+    // Speech is the third way into `evaluateAndDeliver`, and it was the only one that
+    // skipped this call.
+    //
+    // The gap was never the kill switch: `permitsNewLane` false — kill switch included —
+    // yields `.legacyContextBucketFallback`, `handle()` answers `false`, and all three
+    // lanes fall through to the legacy director alike. What speech escaped was
+    // `.suppressed`, where JIT is enabled and declines on dedup, continuity keys, or
+    // planned-trigger precedence: dwell and departure stop there, speech did not.
+    //
+    // Routed rather than documented as independent, per the ruling on #12407.
     if await JITProactivityCoordinator.shared.handle(
       fence: fence, snapshot: snapshot, frame: frameSample.frame,
       authorizationSnapshot: authorizationSnapshot)

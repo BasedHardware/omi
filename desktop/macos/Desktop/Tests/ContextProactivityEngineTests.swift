@@ -591,23 +591,30 @@ final class ContextProactivityEngineTests: XCTestCase {
 
   /// Every way into `evaluateAndDeliver` must pass JIT admission first.
   ///
-  /// `evaluateFromSpeech` shipped without it (#12407): dwell and departure both consulted
+  /// `evaluateFromSpeech` was added without it (#12407): dwell and departure both consulted
   /// `JITProactivityCoordinator.shared.handle` and returned early on `true`, while speech
-  /// called `evaluateAndDeliver` directly. That only ever failed open — `handle()` answers
-  /// `false` for `.legacyContextBucketFallback`, which is what the kill switch produces, so
-  /// an utterance could deliver through the legacy lane while the switch was suppressing the
-  /// other two triggers.
+  /// called `evaluateAndDeliver` directly.
   ///
-  /// Counted rather than pinned to a signature so reformatting cannot break it. A fourth
-  /// entry point must either route through the coordinator or change this number on purpose.
+  /// The kill switch was never the gap. `permitsNewLane` false — kill switch included —
+  /// yields `.legacyContextBucketFallback` and `handle()` answers `false`, so all three
+  /// lanes fall through to the legacy director alike. What speech escaped was `.suppressed`:
+  /// JIT enabled and declining on dedup, continuity keys, or planned-trigger precedence,
+  /// where dwell and departure stop and speech did not.
+  ///
+  /// A source scrape, not behavioral coverage — the engine has no seam that lets a test
+  /// drive all three entry points against a fake coordinator. Counted rather than pinned to
+  /// a signature so reformatting cannot break it; a fourth entry point must either route
+  /// through the coordinator or change this number deliberately.
   func testEveryProactivityEntryPointPassesJITAdmission() throws {
     let source = try contextProactivityEngineSource()
     let entryPoints = ["func contextEntered(", "func evaluateAfterDeparture(", "func evaluateFromSpeech("]
     for entryPoint in entryPoints {
       XCTAssertTrue(source.contains(entryPoint), "missing entry point \(entryPoint)")
     }
-    let admissionCalls = source.components(
-      separatedBy: "JITProactivityCoordinator.shared.handle(").count - 1
+    let admissionCalls =
+      source.components(
+        separatedBy: "JITProactivityCoordinator.shared.handle("
+      ).count - 1
     XCTAssertEqual(
       admissionCalls, entryPoints.count,
       "each evaluation entry point needs its own JIT admission check")
