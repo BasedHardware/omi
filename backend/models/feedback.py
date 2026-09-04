@@ -54,9 +54,13 @@ class FeedbackTargetKind(str, Enum):
 class FeedbackReason(str, Enum):
     """Structured reason for a thumbs-down.
 
-    These five match the values the mobile client has always sent to
+    The first five match the values the mobile client has always sent to
     `POST /v1/users/analytics/chat_message`; keeping them identical means the
-    ledger and the legacy `analytics` rows stay comparable.
+    ledger and the legacy `analytics` rows stay comparable. The remaining five
+    are desktop-only reason chips for proactive-notification cards (focus,
+    insight, task, memory) — a distinct taxonomy from a chat answer's, added
+    alongside the mobile five rather than folded into them so neither surface's
+    categories are diluted by the other's.
     """
 
     too_verbose = 'too_verbose'
@@ -64,6 +68,12 @@ class FeedbackReason(str, Enum):
     not_helpful_or_irrelevant = 'not_helpful_or_irrelevant'
     didnt_follow_instructions = 'didnt_follow_instructions'
     other = 'other'
+
+    not_about_me = 'not_about_me'
+    already_done = 'already_done'
+    wrong_facts = 'wrong_facts'
+    bad_timing = 'bad_timing'
+    not_useful = 'not_useful'
 
 
 MAX_COMMENT_LENGTH = 1000

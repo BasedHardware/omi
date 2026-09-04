@@ -85,6 +85,7 @@ from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, g
 from utils.executors import run_blocking, db_executor
 from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout
 from utils.chat_followup import (
+    FOLLOWUP_DELIMITER,
     FOLLOWUP_PROMPT_SECTION,
     FollowUpTailStreamFilter,
     split_followup_tail,
@@ -549,7 +550,7 @@ async def _execute_independent_tool_calls(
             stub_after = True
             break
         except SafetyGuardError as error:
-            await _put_answer_text(callback, full_response, f'\n\n{str(error)}')
+            await _put_outcome_text(callback, full_response, f'\n\n{str(error)}')
             logger.error('Safety Guard blocked tool call: %s', error)
             await callback.end()
             return None
@@ -586,7 +587,7 @@ async def _execute_independent_tool_calls(
         try:
             safety_guard.check_context_size(result)
         except SafetyGuardError as error:
-            await _put_answer_text(callback, full_response, f'\n\n{str(error)}')
+            await _put_outcome_text(callback, full_response, f'\n\n{str(error)}')
             logger.error('Safety Guard blocked due to context size: %s', error)
             await callback.end()
             return None
@@ -793,6 +794,23 @@ async def _put_answer_text(callback: AsyncStreamingCallback, full_response: list
     await callback.put_data(text)
 
 
+async def _put_outcome_text(callback: AsyncStreamingCallback, full_response: list, text: str) -> None:
+    """Record backend-authored text that ends the turn, voiding any follow-up tail.
+
+    A model can emit its closing-question marker and still leave tool calls to run. If the turn
+    then ends on a safety limit or an error, the parser would split the answer at that marker and
+    drop this message with the rest of the tail — the user would be left with the partial answer
+    and no reason for it. Backend outcome text supersedes the tail: the marker is removed, so this
+    message stays in the persisted answer and the failed turn offers no chip. ``full_response`` is
+    rebuilt when that happens, so no caller may hold an index into it across this call.
+    """
+    joined = ''.join(full_response)
+    marker = joined.find(FOLLOWUP_DELIMITER)
+    if marker >= 0:
+        full_response[:] = [joined[:marker].rstrip()]
+    await _put_answer_text(callback, full_response, text)
+
+
 def _has_answer(full_response: list) -> bool:
     """Whether anything the router would render as an answer has been delivered.
 
@@ -960,7 +978,7 @@ async def _run_anthropic_agent_stream(
                 await handle_llm_error_async(e, 'anthropic', feature='chat_agent', model=ANTHROPIC_AGENT_MODEL)
                 # ``put_data`` alone reaches the live stream but not the persisted answer, so the
                 # router would overwrite this apology with its own canned error.
-                await _put_answer_text(callback, full_response, "\n\nSorry, I encountered an error. Please try again.")
+                await _put_outcome_text(callback, full_response, "\n\nSorry, I encountered an error. Please try again.")
                 await callback.end()
                 return f'provider_{type(e).__name__}'
 
@@ -981,7 +999,7 @@ async def _run_anthropic_agent_stream(
         if response.stop_reason == "refusal":
             logger.warning('Chat agent turn refused by provider category=%s', _refusal_category(response))
             if not _has_answer(full_response):
-                await _put_answer_text(callback, full_response, AGENT_REFUSAL_MESSAGE)
+                await _put_outcome_text(callback, full_response, AGENT_REFUSAL_MESSAGE)
             await callback.end()
             return 'provider_refusal'
 
@@ -1220,7 +1238,7 @@ async def _run_openai_agent_stream(
                     continue
 
                 await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
-                await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
+                await _put_outcome_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
                 await callback.end()
                 return f'provider_{type(error).__name__}'
 

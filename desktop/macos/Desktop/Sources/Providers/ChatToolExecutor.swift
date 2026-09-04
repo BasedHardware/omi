@@ -128,7 +128,7 @@ class ChatToolExecutor {
 
   // MARK: - Onboarding State
 
-  /// Set by OnboardingChatView before starting the chat
+  /// Set by the live onboarding flow before starting the chat
   static var onboardingAppState: AppState?
   /// Called when AI invokes complete_onboarding
   static var onCompleteOnboarding: (() -> Void)?
@@ -143,7 +143,7 @@ class ChatToolExecutor {
   /// Called when request_permission returns "pending" — used to trigger the permission help timer
   static var onPermissionPending: ((_ permissionType: String) -> Void)?
 
-  /// Email/calendar insights from background reading (set by OnboardingChatView)
+  /// Email/calendar insights from background reading (set by the live onboarding flow)
   static var emailInsightsText: String?
   static var calendarInsightsText: String?
 
@@ -361,6 +361,13 @@ class ChatToolExecutor {
         authorizationSnapshot: currentOwnerAuthorizationSnapshot,
         api: backendAPIClient)
 
+    case .createContextReminder:
+      let text = (toolCall.arguments["text"] as? String) ?? ""
+      return await ContextReminderCoordinator.shared.createFromCurrentContext(
+        text: text,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+
     case .showRewindEvidence:
       return await executeShowRewindEvidence(
         toolCall.arguments,
@@ -545,7 +552,34 @@ class ChatToolExecutor {
       if toolCall.name == "get_local_status" {
         return await executeLocalStatus(expectedOwnerID: expectedOwnerID)
       }
+      if toolCall.name == "web_search" {
+        return await executeWebSearch(
+          toolCall.arguments, expectedOwnerID: expectedOwnerID)
+      }
       return "Unknown tool: \(toolCall.name)"
+    }
+  }
+
+  private static func executeWebSearch(
+    _ arguments: [String: Any],
+    expectedOwnerID: String?
+  ) async -> String {
+    guard NegativeFeedbackRemediationFeature.isEnabled else {
+      return "Unknown tool: web_search"
+    }
+    guard !AppState.isPaywalledEffective else {
+      return "Web search is only available on paid Omi plans."
+    }
+    guard let query = arguments["query"] as? String, !query.isEmpty else {
+      return "Error: query is required"
+    }
+    guard let expectedOwnerID else { return authorizedOwnerChangedResult() }
+    do {
+      return try await APIClient.shared.searchPublicWebForVoice(
+        query: query,
+        expectedOwnerID: expectedOwnerID)
+    } catch {
+      return "The web lookup failed. Please try again."
     }
   }
 

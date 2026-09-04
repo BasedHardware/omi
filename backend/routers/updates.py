@@ -6,12 +6,13 @@ import logging
 import os
 import random
 import re
+from datetime import datetime, timezone
 from typing import Any, Optional, List, Dict, Literal, Tuple
 from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import Response, HTMLResponse
-from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 from desktop_download_page import download_landing_html
 from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
@@ -77,13 +78,74 @@ class ClearCacheResponse(BaseModel):
     message: str = Field(description='Human-readable confirmation.')
 
 
+_SERVING_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+class DesktopBackendServingObservation(BaseModel):
+    """Live desktop-backend identity observed at pointer transition time."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    release_sha: Optional[str] = None
+    release_channel: Optional[str] = None
+    chat_contract_version: Optional[str] = None
+    health_url: str = Field(min_length=1)
+
+    @field_validator("release_sha")
+    @classmethod
+    def _desktop_release_sha(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or _SERVING_SHA_RE.fullmatch(value):
+            return value
+        raise ValueError("release_sha must be 40 lowercase hex or null")
+
+
+class ApiBackendServingObservation(BaseModel):
+    """Live shared Python backend identity observed at pointer transition time."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    release_sha: Optional[str] = None
+    health_url: str = Field(min_length=1)
+
+    @field_validator("release_sha")
+    @classmethod
+    def _api_release_sha(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or _SERVING_SHA_RE.fullmatch(value):
+            return value
+        raise ValueError("release_sha must be 40 lowercase hex or null")
+
+
+class ServingBackendsObservation(BaseModel):
+    """Provenance for the backends that were serving when a pointer moved."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    desktop_backend: DesktopBackendServingObservation
+    api_backend: ApiBackendServingObservation
+    captured_at: str = Field(min_length=1)
+
+    @field_validator("captured_at")
+    @classmethod
+    def _captured_at_utc(cls, value: str) -> str:
+        try:
+            moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("captured_at must be ISO-8601 UTC") from exc
+        if moment.tzinfo is None or moment.utcoffset() is None:
+            raise ValueError("captured_at must be ISO-8601 UTC")
+        return moment.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 class DesktopChannelPromotionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     platform: str = Field(pattern="^(macos|windows|linux)$")
     channel: str = Field(pattern="^(beta|stable)$")
     release_id: str
     expected_generation: Optional[int] = Field(default=None, ge=0)
     expected_current_release_id: Optional[str] = None
     operation: Literal["promote", "repoint"] = "promote"
+    serving_backends: Optional[ServingBackendsObservation] = None
 
 
 class BetaCandidatePromotionRequest(BaseModel):
@@ -1277,6 +1339,9 @@ async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secre
             expected_generation=request.expected_generation,
             expected_current_release_id=request.expected_current_release_id,
             operation=request.operation,
+            serving_backends=(
+                None if request.serving_backends is None else request.serving_backends.model_dump(mode="json")
+            ),
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

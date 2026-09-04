@@ -67,6 +67,7 @@ from utils.observability.transcription import TranscriptionAttempt
 from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
+from utils.chat_rating_triage import extract_rating_triage_fields
 from utils.feedback import record_chat_message_feedback
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.llm.gateway_client import CHAT_AGENT_ROUTE_DIRECT, get_chat_agent_route
@@ -2015,18 +2016,28 @@ def create_initial_message_v1(
 def rate_message(
     message_id: str,
     data: RateMessageRequest,
+    x_app_platform: str | None = Header(None, alias='X-App-Platform'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Rate a chat message (thumbs up/down). Used by desktop client."""
     rating = data.rating
 
-    # Update rating on the message document
-    chat_db.update_message_rating(uid, message_id, rating)
-
-    # Also store in analytics collection
+    snapshot = chat_db.update_message_rating(uid, message_id, rating) or {}
     value = rating if rating is not None else 0
+    platform = (x_app_platform or '').strip().lower()
+    if platform not in ('desktop', 'mobile'):
+        platform = 'desktop'
+    triage = extract_rating_triage_fields(snapshot)
     reason = data.reason.value if data.reason else None
-    set_chat_message_rating_score(uid, message_id, value, reason=reason, platform='mobile')
+    set_chat_message_rating_score(
+        uid,
+        message_id,
+        value,
+        reason=reason,
+        platform=platform,
+        notification_kind=triage.get('notification_kind'),
+        app_id=triage.get('app_id'),
+    )
 
     # Unified feedback ledger — the daily thumbs-down report reads from here.
     record_chat_message_feedback(
@@ -2035,7 +2046,7 @@ def rate_message(
         value,
         reason=reason,
         comment=data.comment,
-        platform='mobile',
+        platform=platform,
     )
 
     # Try to submit feedback to LangSmith

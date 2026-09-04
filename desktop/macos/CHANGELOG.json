@@ -2,6 +2,35 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.284",
+      "date": "2026-09-04",
+      "changes": [
+        "Reminders can now bind to the app or document you were in, and come back the next time you open it",
+        "Daily recaps now generate without a phone, fill missed days, and show on the Activity timeline"
+      ]
+    },
+    {
+      "version": "0.12.283",
+      "date": "2026-09-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.282",
+      "date": "2026-09-04",
+      "changes": [
+        "Desktop thumbs-down now asks why, and Focus/memory cards stop repeating the same mistake."
+      ]
+    },
+    {
+      "version": "0.12.281",
+      "date": "2026-09-03",
+      "changes": [
+        "Daily summaries now include time watched and proactive moments from the Mac app"
+      ]
+    },
+    {
       "version": "0.12.280",
       "date": "2026-09-03",
       "changes": [

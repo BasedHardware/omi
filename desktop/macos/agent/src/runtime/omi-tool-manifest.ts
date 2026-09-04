@@ -554,11 +554,28 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       [
         "Use when the user explicitly asks to add something to their list.",
         "Pass a concise description and due_at only when the user gave a time.",
+        "For 'next time I'm here' or 'when I open this', use create_context_reminder.",
       ],
     ),
     voice: {
       realtimeDescription:
-        "Create a new task / to-do / reminder for the user ('remind me to…', 'add … to my list', 'I need to…'). Fast synchronous write. Confirm out loud after it returns.",
+        "Create a new task / to-do / timed reminder for the user ('remind me to…', 'add … to my list', 'I need to…'). Do NOT use for 'next time I'm here' / 'when I open this' — that is create_context_reminder. Fast synchronous write. Confirm out loud after it returns.",
+    },
+  },
+  create_context_reminder: {
+    surfaces: ["desktop_chat", "realtime_voice"],
+    capabilityDoc: doc(
+      "Create Context Reminder",
+      "Bind a reminder to the user's current app or document, not to a time.",
+      [
+        "Use when the user says 'remind me next time I'm here', 'next time I open this', or 'when I'm back in this'.",
+        "The place is captured from the frontmost window automatically; pass only the reminder text.",
+        "Do not use for timed reminders ('tomorrow', 'at 3pm') — those are create_action_item.",
+      ],
+    ),
+    voice: {
+      realtimeDescription:
+        "Bind a reminder to the place the user is in right now (the frontmost app or document). Use when they say 'remind me next time I'm here', 'next time I open this', or 'when I'm back in this'. Do NOT use for timed reminders ('tomorrow', 'at 3pm') — those are create_action_item. The place is captured automatically; pass only the reminder text. Fast synchronous write. Confirm out loud after it returns.",
     },
   },
   update_action_item: {
@@ -764,7 +781,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     },
   },
   web_search: {
-    surfaces: ["realtime_voice"],
+    surfaces: ["desktop_chat", "realtime_voice"],
     capabilityDoc: doc(
       "Web Search",
       "Search the live public web through Omi's typed-chat retrieval lane, then speak a grounded answer.",
@@ -1516,6 +1533,34 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     adapters: piAndStdio(),
   },
   {
+    name: "create_context_reminder",
+    label: "Create Context Reminder",
+    description:
+      "Bind a reminder to the user's current app or document rather than a time. Use for 'remind me next time I'm here' or 'when I open this'.",
+    promptSnippet: "create_context_reminder - Remind the user next time they return to this place",
+    promptGuidelines: [
+      "Call when the user asks to be reminded the next time they are in the current app, document, or page.",
+      "Pass only the reminder text. The current frontmost window is captured automatically.",
+      "Do not use for timed reminders; those are create_action_item.",
+    ],
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        text: {
+          type: "string",
+          description: "What to remind the user of when they return to this place.",
+        },
+      },
+      ["text"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires a signed-in owner and a frontmost non-Omi app window."],
+    adapters: piAndStdio(),
+  },
+  {
     name: "update_action_item",
     label: "Update Action Item",
     description: "Update task status, description, or due date.",
@@ -1524,7 +1569,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     inputSchema: schema(
       {
         action_item_id: { type: "string", description: "Task ID (required)" },
-        completed: { type: "boolean" },
+        completed: { type: "boolean", description: "Set true to mark the task done." },
         description: { type: "string" },
         due_at: { type: "string" },
       },
@@ -1771,8 +1816,8 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
     name: "web_search",
     label: "Web Search",
-    description: "Search the live public web through the full typed-chat retrieval lane, then speak its answer.",
-    promptSnippet: "web_search - Search the live public web for a spoken answer",
+    description: "Search the live public web through the typed-chat retrieval lane.",
+    promptSnippet: "web_search - Search the live public web",
     latency: "async background",
     inputSchema: schema(
       {
@@ -1790,8 +1835,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     timeoutClass: "long",
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     intendedForAgents: true,
-    runtimePreconditions: ["Realtime voice only; requires the typed-chat public-web retrieval lane."],
-    adapters: {},
+    runtimePreconditions: ["Requires the typed-chat public-web retrieval lane. Paid plans only on desktop chat."],
+    adapters: {
+      "pi-mono": { advertised: true },
+    },
   },
   {
     name: "screenshot",
@@ -2305,9 +2352,8 @@ export function toolNamesForAdapter(
 
 /// Surface projection over the same manifest that generates the Swift surface
 /// allowlists. Realtime-voice runs authorize Swift-executed voice tools (e.g.
-/// think_deeper, web_search, point_click) that no chat adapter advertises, so the
-/// kernel capability allowlist must include the run surface's tools — an
-/// adapter-only projection structurally rejects every voice-only tool.
+/// think_deeper, web_search, point_click); desktop chat now also advertises
+/// web_search as a real tool rather than a phrase-gated retrieval prefix.
 export function toolsForSurface(surface: OmiToolSurface): OmiToolManifestEntry[] {
   return omiToolManifest.filter((tool) => tool.surfaces.includes(surface));
 }

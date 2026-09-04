@@ -27,6 +27,14 @@ from utils.memory.canonical_lineage import (
     collapse_canonical_lineages,
 )
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
+from utils.memory.belief_model import (
+    SUBJECT_SCOPE_ALIASES,
+    belief_model_enabled,
+    horizon_from_extraction,
+    public_belief_overlay,
+    public_belief_overlay_json,
+    subject_scope_from_extraction,
+)
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import (
     CanonicalApplyWrite,
@@ -379,6 +387,7 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         arguments=_bounded_memory_arguments(item.arguments),
         intent_backed=item.intent_backed,
         write_reason=item.write_reason,
+        **public_belief_overlay(item, now=datetime.now(timezone.utc)),
     )
 
 
@@ -923,6 +932,7 @@ def search_canonical_memories(
                 "date": memory.updated_at.isoformat(),
                 "visibility": memory.visibility,
                 "is_locked": memory.is_locked,
+                **public_belief_overlay_json(memory, now=datetime.now(timezone.utc)),
             }
             for memory in memories[:capped_limit]
         ]
@@ -1038,6 +1048,7 @@ def search_canonical_memories(
                 "curation_weight": item.curation_weight,
                 "intent_backed": item.intent_backed,
                 "write_reason": item.write_reason.value if item.write_reason else None,
+                **public_belief_overlay_json(item, now=datetime.now(timezone.utc)),
             }
         )
     return results
@@ -1160,6 +1171,20 @@ def _user_asserted_from_payload(data: Dict[str, Any]) -> bool:
     if "manually_added" in data:
         return bool(data.get("manually_added"))
     return bool(data.get("user_asserted"))
+
+
+def _conversation_extracted_claim(data: Dict[str, Any]) -> bool:
+    """True only for conversation capture. Manual/API/integration writes skip the classifier."""
+    if _user_asserted_from_payload(data):
+        return False
+    if data.get("conversation_id"):
+        return True
+    for raw in data.get("evidence") or []:
+        if isinstance(raw, dict) and (raw.get("source_type") or "") == "conversation":
+            return True
+        if getattr(raw, "source_type", None) == "conversation":
+            return True
+    return False
 
 
 def _product_metadata_from_payload(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1337,6 +1362,8 @@ def _canonical_extraction_apply_write(
         "ledger_schema_version",
         "kind",
         "subject_scope",
+        "half_life_days",
+        "belief_class",
         "slot",
         "body",
         "valid_from",
@@ -1348,6 +1375,34 @@ def _canonical_extraction_apply_write(
     ):
         if ledger_key in data and data[ledger_key] is not None:
             patch_payload[ledger_key] = data[ledger_key]
+    raw_scope = patch_payload.get("subject_scope")
+    if isinstance(raw_scope, str) and raw_scope in SUBJECT_SCOPE_ALIASES:
+        patch_payload["subject_scope"] = SUBJECT_SCOPE_ALIASES[raw_scope]
+    if belief_model_enabled():
+        if "valid_to" not in patch_payload and data.get("invalid_at") is not None:
+            patch_payload["valid_to"] = data["invalid_at"]
+        if "subject_scope" not in patch_payload:
+            if _conversation_extracted_claim(data):
+                attribution = data.get("subject_attribution")
+                attribution_value = getattr(attribution, "value", attribution)
+                user_name = data.get("user_name")
+                patch_payload["subject_scope"] = subject_scope_from_extraction(
+                    extracted_scope=data.get("subject_scope"),
+                    attribution=str(attribution_value or ""),
+                    about=data.get("about"),
+                    user_name=user_name if isinstance(user_name, str) else None,
+                )
+            else:
+                patch_payload["subject_scope"] = "primary_user"
+        if "belief_class" not in patch_payload:
+            resolved_class, resolved_half_life = horizon_from_extraction(
+                belief_class=data.get("belief_class"),
+                half_life_days_override=data.get("half_life_days"),
+                user_asserted=_user_asserted_from_payload(data),
+            )
+            patch_payload["belief_class"] = resolved_class
+            if resolved_half_life is not None:
+                patch_payload["half_life_days"] = resolved_half_life
     supersedes = [str(value).strip() for value in (data.get("supersedes") or []) if str(value).strip()]
     if supersedes:
         patch_payload["supersedes"] = sorted(set(supersedes))
@@ -1449,6 +1504,7 @@ def write_canonical_extraction_memory(
     required_source_item: Optional[MemoryItem] = None,
     ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
     review_resolution: Optional[CanonicalReviewResolution] = None,
+    admit_neighbors: bool = True,
 ) -> str:
     """Persist one memory to memory_items + ledger (extraction or external/manual writes)."""
     if data.get("ledger_schema_version") is not None and _ledger_authority is not _LEDGER_WRITE_AUTHORITY:
@@ -1531,6 +1587,20 @@ def write_canonical_extraction_memory(
             physical_status_to_record_status(item.status.value),
             MemoryProcessingState(item.processing_state.value),
         )
+
+    if admit_neighbors and belief_model_enabled() and item is not None:
+        from utils.memory.belief_evidence import admit_claim_against_neighbors
+
+        try:
+            admit_claim_against_neighbors(
+                uid,
+                committed_id,
+                item.content or data.get("content") or "",
+                db_client=client,
+                new_user_asserted=bool(item.user_asserted),
+            )
+        except Exception:
+            logger.warning("belief evidence admission skipped memory_id=%s", committed_id, exc_info=False)
 
     return committed_id
 
@@ -1632,14 +1702,26 @@ def write_canonical_external_memory(
                     },
                 )[:32]
             )
-    return write_canonical_extraction_memory(
+    memory_id = write_canonical_extraction_memory(
         uid,
         payload,
         db_client=client,
         evidence_items=reissued_evidence,
         review_resolution=review_resolution,
         _direct_user_authority=_DIRECT_USER_LEDGER_WRITE_AUTHORITY,
+        admit_neighbors=False,
     )
+    if belief_model_enabled():
+        from utils.memory.belief_evidence import schedule_belief_admission
+
+        schedule_belief_admission(
+            uid,
+            memory_id,
+            str(payload.get("content") or ""),
+            db_client=client,
+            new_user_asserted=bool(payload.get("manually_added") or payload.get("user_asserted")),
+        )
+    return memory_id
 
 
 def write_canonical_knowledge_ledger_memory(
@@ -2191,6 +2273,10 @@ def replace_conversation_sourced_memories(
         reason="conversation_reprocess_retract",
         preserve_source_replacement_receipts=True,
     )
+    if belief_model_enabled() and result.committed_memory_ids:
+        from utils.memory.belief_evidence import admit_committed_claims
+
+        admit_committed_claims(uid, result.committed_memory_ids, items, db_client=client)
     return {
         "retracted_memory_ids": result.retracted_memory_ids,
         "committed_memory_ids": result.committed_memory_ids,
@@ -2308,6 +2394,9 @@ def _apply_canonical_user_mutation(
             continue
         raise RuntimeError(f"canonical user mutation failed: {result.status} ({result.reason})")
     raise RuntimeError("canonical user mutation conflicted repeatedly")
+
+
+apply_canonical_user_mutation = _apply_canonical_user_mutation
 
 
 @dataclass(frozen=True)
@@ -2546,6 +2635,14 @@ def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, d
                 "promotion_audit": promotion,
                 "expires_at": default_short_term_expiry(now),
                 "kg_extracted": False,
+                **(
+                    {
+                        "last_corroborated_at": now,
+                        "corroboration_count": int(item.corroboration_count or 0) + 1,
+                    }
+                    if belief_model_enabled()
+                    else {}
+                ),
             },
         )
 
@@ -2665,7 +2762,7 @@ def update_canonical_memory_visibility(
 def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_client: Any = None) -> MemoryItem:
     client = db_client if db_client is not None else default_db_client
 
-    def build_patch(item: MemoryItem, _now: datetime) -> Tuple[Payload, Payload]:
+    def build_patch(item: MemoryItem, now: datetime) -> Tuple[Payload, Payload]:
         promotion = dict(item.promotion or {})
         promotion["reviewed"] = True
         promotion["user_review"] = value
@@ -2677,7 +2774,22 @@ def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_
         patch_updates: Payload = {"promotion_audit": promotion}
         if not value:
             patch_updates["kg_extracted"] = False
-        return {}, patch_updates
+        logical_updates: Payload = {}
+        if belief_model_enabled():
+            from utils.memory.belief_evidence import EvidenceEventJudgment, EvidenceEventKind, patch_for_evidence_event
+
+            event = EvidenceEventKind.restated if value else EvidenceEventKind.contradicted
+            patch = patch_for_evidence_event(
+                item,
+                EvidenceEventJudgment(event=event, target_memory_id=memory_id, rationale="explicit user review"),
+                pointer="user_review",
+                now=now,
+                new_is_as_authoritative=False if not value else True,
+            )
+            if patch is not None:
+                logical_updates, event_extra = patch
+                patch_updates.update(event_extra)
+        return logical_updates, patch_updates
 
     previous, updated = _apply_canonical_user_mutation(
         uid,
