@@ -1434,6 +1434,10 @@ export interface CreateConversationTranscriptSegment {
   text: string;
 }
 
+export interface CreateDailySummaryRequest {
+  date: string;
+}
+
 export interface CreateFolderRequest {
   color?: string | null;
   description?: string | null;
@@ -4997,6 +5001,7 @@ export interface OmiApiSchemas {
   "CreateConversationRequest": CreateConversationRequest;
   "CreateConversationResponse": CreateConversationResponse;
   "CreateConversationTranscriptSegment": CreateConversationTranscriptSegment;
+  "CreateDailySummaryRequest": CreateDailySummaryRequest;
   "CreateFolderRequest": CreateFolderRequest;
   "CreateFrameRequest": CreateFrameRequest;
   "CreateGoalRequest": CreateGoalRequest;
@@ -8650,6 +8655,14 @@ export interface OmiApiPaths {
       operationId: "get_daily_summaries_v1_users_daily_summaries_get";
       responses: {
         "200": DailySummariesResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "create_user_daily_summary_v1_users_daily_summaries_post";
+      responses: {
+        "200": DailySummaryResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -16007,6 +16020,27 @@ export async function get_daily_summaries_v1_users_daily_summaries_get(query: { 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function create_user_daily_summary_v1_users_daily_summaries_post(header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CreateDailySummaryRequest, init?: OmiApiClientInit): Promise<DailySummaryResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/daily-summaries`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_daily_summary_v1_users_daily_summaries__summary_id__get(path: { summary_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<DailySummaryResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/daily-summaries/${path.summary_id}`;
@@ -18455,4 +18489,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 434 client methods generated.
+// Total: 435 client methods generated.
