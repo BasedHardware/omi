@@ -286,7 +286,9 @@ struct AppsPage: View {
       LocalMcpDetailSheet(
         server: server, appProvider: appProvider, onDismiss: { selectedLocalMcpServer = nil }
       )
-      .frame(width: 460, height: 420)
+      // The built-in server's permissions block is taller than a remote's
+      // sign-in block.
+      .frame(width: 460, height: server.isBuiltIn ? 620 : 420)
     }
     .dismissableSheet(isPresented: $showAddSkillSheet) {
       SkillEditorSheet(appProvider: appProvider, editingSkill: nil, onDismiss: { showAddSkillSheet = false })
@@ -674,16 +676,13 @@ struct AppsPage: View {
     case .apps:
       appsCatalogContent
     case .mcp:
-      VStack(alignment: .leading, spacing: OmiSpacing.xl) {
-        ComputerControlSection()
-        McpServersSection(
-          appProvider: appProvider,
-          searchText: searchText,
-          onAdd: { showAddMcpServerSheet = true },
-          onSelectLocal: { selectedLocalMcpServer = $0 },
-          onSelectCatalogEntry: { selectedCatalogEntry = $0 }
-        )
-      }
+      McpServersSection(
+        appProvider: appProvider,
+        searchText: searchText,
+        onAdd: { showAddMcpServerSheet = true },
+        onSelectLocal: { selectedLocalMcpServer = $0 },
+        onSelectCatalogEntry: { selectedCatalogEntry = $0 }
+      )
     case .skills:
       SkillsSection(
         appProvider: appProvider,

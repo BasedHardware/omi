@@ -15,7 +15,17 @@ struct McpServersSection: View {
   let onSelectCatalogEntry: (ExtensionCatalog.Entry) -> Void
 
   private var servers: [LocalMcpStore.Entry] {
-    appProvider.localMcpServers.filter { matchesSearch($0.name, $0.summary, query: searchText) }
+    var listed = appProvider.localMcpServers.filter { matchesSearch($0.name, $0.summary, query: searchText) }
+    // The built-in entry is in mcp.json only while the gate is on, but its card
+    // — the switch and the grants warning — is how computer control is
+    // discovered at all, so it is synthesized when absent and pinned first.
+    let builtIn = LocalMcpStore.Entry(
+      name: CuaMcpRegistration.serverName, summary: CuaMcpRegistration.endpointURL, isCommand: false)
+    listed.removeAll { $0.name == builtIn.name }
+    if matchesSearch(builtIn.name, builtIn.summary, query: searchText) {
+      listed.insert(builtIn, at: 0)
+    }
+    return listed
   }
 
   var body: some View {
@@ -50,18 +60,24 @@ struct McpServersSection: View {
         ) {
           ForEach(servers) { server in
             let status = appProvider.mcpStatuses[server.name] ?? .checking
-            AgentExtensionCard(
-              icon: server.isCommand ? "terminal" : "server.rack",
-              imageUrl: "",
-              title: server.name,
-              subtitle: server.isCommand ? "Local command" : "Remote",
-              detail: status.detail ?? server.summary,
-              statusText: status.label,
-              statusActive: status.isHealthy,
-              actionTitle: status == .needsAuth ? "Sign In" : "Manage",
-              actionIsSecondary: status != .needsAuth
-            ) {
-              onSelectLocal(server)
+            if server.isBuiltIn {
+              ComputerUseServerCard(status: status) {
+                onSelectLocal(server)
+              }
+            } else {
+              AgentExtensionCard(
+                icon: server.isCommand ? "terminal" : "server.rack",
+                imageUrl: "",
+                title: server.name,
+                subtitle: server.isCommand ? "Local command" : "Remote",
+                detail: status.detail ?? server.summary,
+                statusText: status.label,
+                statusActive: status.isHealthy,
+                actionTitle: status == .needsAuth ? "Sign In" : "Manage",
+                actionIsSecondary: status != .needsAuth
+              ) {
+                onSelectLocal(server)
+              }
             }
           }
         }
@@ -82,6 +98,12 @@ struct McpServersSection: View {
     }
     .task(id: appProvider.localMcpServers.map(\.name)) {
       await appProvider.refreshMcpStatuses()
+    }
+    // The built-in card's switch writes or removes the mcp.json entry through
+    // the gate, so the list and its probes follow the gate rather than waiting
+    // for the next page visit.
+    .onReceive(NotificationCenter.default.publisher(for: CuaControlGate.stateChanged)) { _ in
+      Task { await appProvider.fetchUserExtensions() }
     }
   }
 
@@ -1049,7 +1071,7 @@ struct LocalMcpDetailSheet: View {
             .foregroundColor(Ink.primary)
           // "Local" here used to mean "configured locally", which read as a claim about where a
           // remote server runs.
-          Text(server.isCommand ? "Local command" : "Remote server")
+          Text(subtitle)
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
         }
@@ -1057,90 +1079,135 @@ struct LocalMcpDetailSheet: View {
         DismissButton(action: onDismiss)
       }
 
-      Text(server.summary)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.primary)
-        .padding(OmiSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Ink.rowFill)
-        .cornerRadius(OmiChrome.smallControlRadius)
+      VStack(alignment: .leading, spacing: OmiSpacing.md) {
+        labelled(server.isCommand ? "Runs on your Mac" : "Endpoint") {
+          Text(server.summary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.primary)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+        }
 
-      // A remote server can refuse us for two different reasons, and the fix differs: OAuth needs a
-      // browser round trip, an API key needs the key. Both live here because a card that reports
-      // "Needs sign-in" with nothing to press is a dead end.
-      if !server.isCommand {
-        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-          HStack(spacing: OmiSpacing.sm) {
-            Text(status.label)
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(status.isHealthy ? Ink.primary : Ink.secondary)
-            Spacer()
-            Button(action: signIn) {
-              ConnectionModalActionButton(title: isSigningIn ? "Signing in…" : "Sign In")
+        if !server.isBuiltIn {
+          labelled("Status") {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text(status.label)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(status.isHealthy ? Ink.primary : Ink.secondary)
+              if let detail = status.detail {
+                Text(detail)
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.secondary)
+                  .fixedSize(horizontal: false, vertical: true)
+              }
             }
-            .buttonStyle(.plain)
-            .disabled(isSigningIn)
-            .accessibilityIdentifier("apps-mcp-sign-in")
           }
+        }
 
-          HStack(spacing: OmiSpacing.sm) {
-            SecureField("Or paste an API key", text: $apiKey)
-              .textFieldStyle(.roundedBorder)
-            Button("Save Key", action: saveAPIKey)
+        // A remote server can refuse us for two different reasons, and the fix differs: OAuth needs a
+        // browser round trip, an API key needs the key. Both live here because a card that reports
+        // "Needs sign-in" with nothing to press is a dead end. The built-in server needs neither —
+        // its token is minted and kept by the app — and carries its permissions block instead.
+        if server.isBuiltIn {
+          ComputerUsePermissionsBlock()
+        } else if !server.isCommand {
+          labelled("Authentication") {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+              Button(action: signIn) {
+                ConnectionModalActionButton(title: isSigningIn ? "Signing in…" : "Sign In")
+              }
               .buttonStyle(.plain)
-              .foregroundColor(Ink.secondary)
-              .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
-          }
-        }
-      }
+              .disabled(isSigningIn)
+              .accessibilityIdentifier("apps-mcp-sign-in")
 
-      if let notice {
-        Text(notice)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-
-      if let errorText {
-        Text(errorText)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.errorRed)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-
-      Text("Configured in ~/.omi/mcp.json. Tools are discovered when the assistant starts its next chat session.")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(Ink.secondary)
-        .fixedSize(horizontal: false, vertical: true)
-
-      HStack {
-        Spacer()
-        Button {
-          if confirmingDelete {
-            LocalMcpStore.removeServer(name: server.name)
-            Task {
-              await appProvider.fetchUserExtensions()
-              onDismiss()
+              HStack(spacing: OmiSpacing.sm) {
+                SecureField("Or paste an API key", text: $apiKey)
+                  .textFieldStyle(.roundedBorder)
+                Button("Save Key", action: saveAPIKey)
+                  .buttonStyle(.plain)
+                  .scaledFont(size: OmiType.caption, weight: .medium)
+                  .foregroundColor(Ink.primary)
+                  .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
+              }
             }
-          } else {
-            confirmingDelete = true
+            .fixedSize(horizontal: false, vertical: true)
           }
-        } label: {
-          Text(confirmingDelete ? "Confirm Remove" : "Remove")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(Ink.errorRed)
-            .padding(.horizontal, OmiSpacing.md)
-            .frame(height: 28)
-            .background(Ink.errorRed.opacity(0.1))
-            .cornerRadius(OmiChrome.chipRadius)
         }
-        .buttonStyle(.plain)
+
+        if let notice {
+          Text(notice)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
+        if let errorText {
+          Text(errorText)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.errorRed)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+
+      Text(
+        server.isBuiltIn
+          ? "Tools are discovered when the assistant starts its next chat session."
+          : "Configured in ~/.omi/mcp.json. Tools are discovered when the assistant starts its next chat session."
+      )
+      .scaledFont(size: OmiType.caption)
+      .foregroundColor(Ink.secondary)
+      .fixedSize(horizontal: false, vertical: true)
+
+      // The built-in entry follows the computer-control gate, so there is no Remove for it.
+      if !server.isBuiltIn {
+        HStack {
+          Spacer()
+          Button {
+            if confirmingDelete {
+              LocalMcpStore.removeServer(name: server.name)
+              Task {
+                await appProvider.fetchUserExtensions()
+                onDismiss()
+              }
+            } else {
+              confirmingDelete = true
+            }
+          } label: {
+            Text(confirmingDelete ? "Confirm Remove" : "Remove")
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundColor(Ink.errorRed)
+              .padding(.horizontal, OmiSpacing.md)
+              .frame(height: 28)
+              .background(Ink.errorRed.opacity(0.1))
+              .cornerRadius(OmiChrome.chipRadius)
+          }
+          .buttonStyle(.plain)
+        }
       }
 
       Spacer(minLength: 0)
     }
     .padding(OmiSpacing.lg)
     .background(Ink.surface)
+  }
+
+  private var subtitle: String {
+    if server.isBuiltIn { return "Built-in" }
+    // "Local" here used to mean "configured locally", which read as a claim
+    // about where a remote server runs.
+    return server.isCommand ? "Local command" : "Remote server"
+  }
+
+  @ViewBuilder
+  private func labelled<Content: View>(_ label: String, @ViewBuilder content: () -> Content)
+    -> some View
+  {
+    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+      Text(label)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(Ink.secondary)
+      content()
+    }
   }
 
   private func signIn() {

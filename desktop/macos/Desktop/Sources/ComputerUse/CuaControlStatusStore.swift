@@ -1,0 +1,128 @@
+import Foundation
+
+/// The computer-control state the built-in server's surfaces render: the switch
+/// and grants warning on its MCP card, and the permissions block in its detail
+/// sheet.
+///
+/// One shared instance rather than per-view `@State`, because those surfaces
+/// must agree with each other and with `CuaControlGate` at the same moment — a
+/// card switch that disagrees with the sheet it opens is how a switch stops
+/// being trusted. The gate stays the authority; this type adds only what
+/// rendering needs: the switch position, the live grants behind the warning
+/// chip, the last failure, and the enable/disable side effects (the loopback
+/// token plus the mcp.json entry Omi's own agent reads).
+@MainActor
+final class CuaControlStatusStore: ObservableObject {
+  static let shared = CuaControlStatusStore()
+
+  /// The switch position as the UI holds it. A refused enable (no account
+  /// signed in) corrects it back, which re-enters `didSet` once with the
+  /// corrected value and settles — the same settle the dedicated section this
+  /// replaced relied on.
+  @Published var isEnabled: Bool {
+    didSet {
+      guard oldValue != isEnabled else { return }
+      setEnabled(isEnabled)
+    }
+  }
+
+  /// Every grant, checked with the API that actually answers for it. Input and
+  /// UI reading are two TCC services behind one System Settings pane, so they
+  /// are listed separately: a Mac can hold either without the other.
+  @Published private(set) var granted: [CuaPermission: Bool] = [:]
+  @Published private(set) var failure: String?
+
+  /// Two of these live in the same System Settings pane and are still two
+  /// separate grants, so each is named by what it lets Omi do rather than by the
+  /// pane it is found in.
+  static let listed: [(permission: CuaPermission, title: String, detail: String)] = [
+    (.postEvents, "Input", "Move the pointer, click, and type. Accessibility pane."),
+    (
+      .accessibility, "Reading controls",
+      "List another app's controls and press them by name. Accessibility pane."
+    ),
+    (.screenRecording, "Screen", "Take screenshots. Screen Recording pane."),
+  ]
+
+  private let gate: CuaControlGate
+  private let isGranted: @MainActor (CuaPermission) -> Bool
+
+  init(
+    gate: CuaControlGate = .shared,
+    isGranted: @escaping @MainActor (CuaPermission) -> Bool = { $0.isGranted() }
+  ) {
+    self.gate = gate
+    self.isGranted = isGranted
+    self.isEnabled = gate.isEnabled
+    refreshPermissions()
+  }
+
+  /// How many of the listed grants macOS has not given. The card's warning chip
+  /// exists so a missing permission is found on the Apps page, not discovered as
+  /// a tool that silently does nothing.
+  var missingGrantCount: Int {
+    Self.listed.filter { !(granted[$0.permission] ?? false) }.count
+  }
+
+  var isSuspended: Bool { gate.suspension != nil }
+
+  /// The sheet's status line: live state and the stop control sit together
+  /// because a kill switch you have to go looking for is not one.
+  func statusText(at now: Date = Date()) -> String {
+    if let suspension = gate.suspension { return "Stopped — \(suspension)" }
+    guard let last = gate.lastActivity else { return "Ready. Nothing has used it yet." }
+    if now.timeIntervalSince(last) < 5 { return "Active now" }
+    return "Ready. Last action \(Self.relativeTime(from: last, to: now))."
+  }
+
+  func stopNow() { gate.suspend(reason: "stopped from Settings") }
+  func rearm() { gate.rearm() }
+
+  /// Turning control on also starts the loopback server and writes the entry
+  /// Omi's own agent reads, so one switch is the whole setup rather than three
+  /// steps a user can complete two of.
+  private func setEnabled(_ enabled: Bool) {
+    failure = nil
+    guard enabled else {
+      gate.setEnabled(false)
+      CuaMcpRegistration.unregister()
+      return
+    }
+    do {
+      let token = try LocalAgentAPISettings.enable()
+      try CuaMcpRegistration.register(token: token)
+      gate.setEnabled(true)
+      isEnabled = gate.isEnabled
+      if !isEnabled {
+        failure = "Sign in to Omi first — computer control is granted per account."
+      }
+    } catch {
+      failure = error.localizedDescription
+      isEnabled = false
+    }
+  }
+
+  /// Re-reads the grants and the switch. The live probe that feeds the
+  /// accessibility grants is IPC and runs off the main actor (`poll`); the box
+  /// ticked in System Settings is what this is watching for.
+  func refreshPermissions() {
+    // A plain literal, not `Dictionary(uniqueKeysWithValues:)`: that traps on a
+    // duplicate key, and `listed` is a table someone will one day add a row to.
+    var refreshed: [CuaPermission: Bool] = [:]
+    for entry in Self.listed {
+      refreshed[entry.permission] = isGranted(entry.permission)
+    }
+    granted = refreshed
+    isEnabled = gate.isEnabled
+  }
+
+  /// Catches up with grants given while Omi was running, then refreshes.
+  func poll() async {
+    await CuaPermission.refreshLiveGrants([.accessibility, .postEvents])
+    refreshPermissions()
+  }
+
+  private static func relativeTime(from date: Date, to now: Date) -> String {
+    RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
+  }
+}
