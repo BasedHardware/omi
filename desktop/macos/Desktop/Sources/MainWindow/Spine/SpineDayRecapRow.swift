@@ -34,16 +34,24 @@ enum SpineDayRecapContent: Equatable {
   }
 }
 
-/// Recap (or the generate affordance) drawn inside a day's `Section` content, before its rows,
-/// so it folds and unfolds with the day.
+/// Recap chrome drawn inside a day's `Section` content, before its rows, so it folds and unfolds
+/// with the day.
+///
+/// A stored recap renders as a **pill: title and summary, nothing else.** The stat chips, the
+/// "Ask about this day" / "Regenerate" buttons, and the highlight chips are gone from the list on
+/// purpose — the day header is the recap's toggle (thin when the day is folded, title + summary
+/// when it is open), and the full experience with badges and actions is `DailyRecapPage`, which
+/// clicking the pill opens as a sheet. The generate affordance for a day with *no* recap stays:
+/// it is not recap chrome, it is the one way to make the recap exist.
 struct SpineDayRecapRow: View {
   let content: SpineDayRecapContent
   let dateKey: String
-  let now: Date
-  let calendar: Calendar
 
   @State private var isWorking = false
   @State private var errorMessage: String?
+
+  /// Opens the dedicated recap page for the day's record.
+  var onOpenRecap: (DailySummaryRecord) -> Void = { _ in }
 
   var body: some View {
     switch content {
@@ -52,7 +60,7 @@ struct SpineDayRecapRow: View {
     case .emptyGenerate:
       emptyState
     case .recap(let record):
-      recapCard(record)
+      recapPill(record)
     }
   }
 
@@ -82,73 +90,45 @@ struct SpineDayRecapRow: View {
     .accessibilityIdentifier("spine-day-recap-empty")
   }
 
-  private func recapCard(_ record: DailySummaryRecord) -> some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      Text(nonEmpty(record.headline) ?? "Your day in review")
-        .inkStyle(.rowCopy, color: Ink.primary)
-        .fixedSize(horizontal: false, vertical: true)
-      if let overview = nonEmpty(record.overview) {
-        Text(overview)
-          .inkStyle(.statusLabel, color: Ink.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-      highlightChips(in: record)
-      HStack(spacing: OmiSpacing.sm) {
-        Button("Ask about this day") {
-          let question = ChatDailySummaryPresentation.followUpQuestion(
-            for: record.date, now: now, calendar: calendar)
-          ChatDailySummaryCard.requestFollowUp(question)
-        }
-        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
-        // A record the backend served without an `id` gets a synthesized `date:<day>` identity
-        // (see `DailySummaryRecord.init(from:)`); posting that to `/{summary_id}/regenerate`
-        // is a guaranteed 404, so the action is only offered for a real server id.
-        if !record.id.hasPrefix("date:") {
-          Button(isWorking ? "Regenerating…" : "Regenerate") {
-            Task { await runRegenerate(record) }
+  private func recapPill(_ record: DailySummaryRecord) -> some View {
+    Button {
+      onOpenRecap(record)
+    } label: {
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        HStack(spacing: OmiSpacing.sm) {
+          if let emoji = nonEmpty(record.dayEmoji) {
+            Text(emoji)
+              .scaledFont(size: OmiType.caption)
           }
-          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
-          .disabled(isWorking)
+          Text(nonEmpty(record.headline) ?? "Your day in review")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundStyle(Ink.primary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+          Spacer(minLength: OmiSpacing.sm)
+          Image(systemName: "chevron.right")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundStyle(Ink.secondary)
+        }
+        if let overview = nonEmpty(record.overview) {
+          Text(overview)
+            .scaledFont(size: OmiType.caption, weight: .regular)
+            .foregroundStyle(Ink.secondary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
         }
       }
-      if let errorMessage {
-        Text(errorMessage)
-          .scaledFont(size: OmiType.micro, weight: .regular)
-          .foregroundStyle(Ink.secondary)
-      }
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .glassRow(.rest, cornerRadius: InkGlass.cornerRadius)
+      .contentShape(Rectangle())
     }
-    .padding(.horizontal, OmiSpacing.md)
-    .padding(.vertical, OmiSpacing.sm)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .glassRow(.rest, cornerRadius: InkGlass.cornerRadius)
+    .buttonStyle(.plain)
     .padding(.top, SpineMetrics.attachedGap)
     .accessibilityIdentifier("spine-day-recap")
-  }
-
-  @ViewBuilder
-  private func highlightChips(in record: DailySummaryRecord) -> some View {
-    let highlights = Array(ChatDailySummaryCard.highlights(in: record).prefix(3))
-    if !highlights.isEmpty {
-      HStack(spacing: OmiSpacing.xs) {
-        ForEach(Array(highlights.enumerated()), id: \.offset) { _, highlight in
-          HStack(spacing: OmiSpacing.xxs) {
-            if let emoji = nonEmpty(highlight.emoji) {
-              Text(emoji).scaledFont(size: OmiType.micro)
-            }
-            if let topic = nonEmpty(highlight.topic) {
-              Text(topic)
-                .scaledFont(size: OmiType.micro, weight: .medium)
-                .foregroundStyle(Ink.primary)
-                .lineLimit(1)
-            }
-          }
-          .padding(.horizontal, OmiSpacing.sm)
-          .padding(.vertical, OmiSpacing.xxs)
-          .background(Capsule().fill(Ink.rowFill))
-          .overlay(Capsule().stroke(Ink.separator, lineWidth: 1))
-        }
-      }
-    }
+    .accessibilityLabel(Text("Open the daily recap"))
+    .help("Open the full recap for this day")
   }
 
   private func runGenerate() async {
@@ -168,20 +148,6 @@ struct SpineDayRecapRow: View {
       errorMessage = "Already being generated — check back in a moment."
     } catch {
       errorMessage = "Couldn't generate this recap."
-    }
-  }
-
-  private func runRegenerate(_ record: DailySummaryRecord) async {
-    isWorking = true
-    errorMessage = nil
-    defer { isWorking = false }
-    let store = ChatDailySummaryCoordinator.shared.store
-    guard let isOwnerStillCurrent = store.captureOwnerFence() else { return }
-    do {
-      let updated = try await APIClient.shared.regenerateDailySummary(id: record.id)
-      store.upsert(updated, isOwnerStillCurrent: isOwnerStillCurrent)
-    } catch {
-      errorMessage = "Couldn't regenerate this recap."
     }
   }
 

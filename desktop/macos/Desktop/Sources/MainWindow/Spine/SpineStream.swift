@@ -112,6 +112,10 @@ struct SpineStream: View {
   /// Which days are folded shut. Lives with the view rather than with the store because it is a
   /// reading position, not data: it is worth exactly as long as this list is on screen.
   @State private var collapse = SpineDayCollapse()
+  /// The day recap whose dedicated page is open. A sheet, not a route: the recap is a read over
+  /// the list, and the hub's own `onOpenConversation` remains the one detail owner for the rows
+  /// the page links to.
+  @State private var presentedRecap: DailySummaryRecord?
 
   var body: some View {
     GeometryReader { proxy in
@@ -266,6 +270,9 @@ struct SpineStream: View {
       .padding(.bottom, OmiSpacing.md)
     }
     .coordinateSpace(name: SpineLayout.coordinateSpace)
+    .sheet(item: $presentedRecap) { record in
+      DailyRecapPage(record: record, onOpenConversation: onOpenConversation)
+    }
     .onPreferenceChange(SpineTopRowKey.self) { anchor in
       guard let anchor else { return }
       Task { @MainActor in viewport.report(dayID: anchor.dayID, hour: anchor.hour) }
@@ -338,8 +345,7 @@ struct SpineStream: View {
       SpineDayRecapRow(
         content: content,
         dateKey: dateKey,
-        now: Date(),
-        calendar: store.calendar
+        onOpenRecap: { presentedRecap = $0 }
       )
     }
   }

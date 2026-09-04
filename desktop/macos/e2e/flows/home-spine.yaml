@@ -15,6 +15,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStream.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineRowViews.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineDayRecapRow.swift
+  # The spine recap is a doorway: the day header folds it, and the pill opens the dedicated page.
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DailyRecapPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHourRail.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineScreenIndex.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHydration.swift
