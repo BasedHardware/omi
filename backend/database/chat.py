@@ -38,6 +38,9 @@ CHAT_HISTORY_APPEND_EPOCH_MESSAGES = 8
 # when a user has thousands of lifetime reported messages; the newest page
 # rarely contains more reported rows than this cap.
 CHAT_HISTORY_REPORTED_RAW_SCAN_CAP = 50
+# Bound raw Firestore reads when filling a visible get_messages page past
+# reported rows. Same spirit as get_messages_reconcile_page.
+CHAT_MESSAGES_VISIBLE_PAGE_SCAN_CAP = 1000
 
 
 class ClientMessageIdPayloadConflict(ValueError):
@@ -238,6 +241,15 @@ def get_messages(
     app_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
+    """Return a visible chat page with offset counted in non-reported rows.
+
+    Firestore cannot apply ``reported != True`` cheaply for legacy docs that omit
+    the field, so reported rows are filtered in Python. Applying ``limit`` /
+    ``offset`` on the raw query first makes pages short and advances past
+    visible messages the client never saw. Scan with a bounded budget (same
+    spirit as ``get_messages_reconcile_page``) until ``offset`` visible rows are
+    skipped and ``limit`` visible rows are collected.
+    """
     logger.info(f'get_messages {uid} {limit} {offset} {app_id} {include_conversations}')
     user_ref = db.collection('users').document(uid)
     messages_ref = user_ref.collection('messages')
@@ -249,20 +261,41 @@ def get_messages(
         # App-scoped query: filter by plugin_id (None = main chat)
         messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
 
-    messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
+    query: Any = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
+    # Cover the visible skip + page, plus slack for reported rows in between.
+    scan_budget = min(CHAT_MESSAGES_VISIBLE_PAGE_SCAN_CAP, max(100, (max(offset, 0) + max(limit, 0)) * 4))
+    scanned = 0
+    visible_skipped = 0
     messages: List[Dict[str, Any]] = []
     conversations_id: set[str] = set()
     files_id: set[str] = set()
+    cursor_snapshot: Any = None
 
-    # Fetch messages and collect conversation IDs
-    for doc in messages_ref.stream():
-        message: Dict[str, Any] = _typed_doc(doc)
-        if message.get('reported') is True:
-            continue
-        messages.append(message)
-        conversations_id.update(message.get('memories_id', []))
-        files_id.update(message.get('files_id', []))
+    while scanned < scan_budget and len(messages) < limit:
+        batch_limit = min(100, scan_budget - scanned)
+        page_query = query.start_after(cursor_snapshot) if cursor_snapshot is not None else query
+        documents = list(page_query.limit(batch_limit).stream())
+        if not documents:
+            break
+
+        for document in documents:
+            scanned += 1
+            cursor_snapshot = document
+            message: Dict[str, Any] = _typed_doc(document)
+            if message.get('reported') is True:
+                continue
+            if visible_skipped < offset:
+                visible_skipped += 1
+                continue
+            messages.append(message)
+            conversations_id.update(message.get('memories_id', []))
+            files_id.update(message.get('files_id', []))
+            if len(messages) == limit:
+                break
+
+        if len(documents) < batch_limit:
+            break
 
     if not include_conversations:
         return messages
