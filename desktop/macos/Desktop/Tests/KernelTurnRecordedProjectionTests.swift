@@ -856,6 +856,43 @@ import XCTest
       XCTAssertFalse(RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress)
     }
 
+    /// A harness reset does not run *under* a revocation — it dissolves it first.
+    ///
+    /// This is the open question #12664 raised and declined to answer. The answer is that
+    /// the premise does not hold. `withAutomationOwnerIfMissing` asks `currentOwnerId()`,
+    /// gets `nil` (the revocation working as designed), concludes an owner is missing, and
+    /// installs one through `performEffectiveOwnerTransition`. That transition's
+    /// `endAuthorizationRevocation` calls `EffectiveOwnerAuthorizationRevocation.end()`,
+    /// clearing the flag — the revocation is a plain boolean, so a legitimate transition
+    /// ends whatever is outstanding. The body therefore executes with owner resolution
+    /// restored, not revoked.
+    ///
+    /// Pinning the mechanism rather than the outcome: if the revocation ever became a
+    /// refcount, the body would run genuinely revoked and this assertion would catch that
+    /// as the behavior change it is.
+    func testAnOwnerTransitionDissolvesAnOutstandingRevocation() async {
+      var observedInsideBody: Bool?
+
+      await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
+        XCTAssertTrue(
+          RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+          "precondition: the revocation is outstanding on entry")
+
+        await RuntimeOwnerIdentity.withAutomationOwnerIfMissing(
+          "revocation-dissolve-owner"
+        ) {
+          observedInsideBody = RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress
+        }
+      }
+
+      XCTAssertEqual(
+        observedInsideBody,
+        false,
+        "an owner transition ends the outstanding revocation, so owner-scoped work inside "
+          + "it resolves an owner normally instead of running blind")
+      XCTAssertFalse(RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress)
+    }
+
     func testFaultHarnessResetUsesCredentialFreeControlClearOnceAndCompletesProjectionReset() async throws {
       let provider = ChatProvider()
       let surface = provider.mainChatSurfaceReference()
