@@ -17,7 +17,7 @@ from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
-from utils.memory.learned_today import memory_review_card_block
+from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.notifications import send_bulk_notification, send_notification
 from utils.other import daily_summary_budget as summary_budget
 from utils.webhooks import day_summary_webhook
@@ -182,7 +182,14 @@ def _generate_and_store_daily_summary(
         )
     conversations = bounded.conversations
 
-    summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
+    summary_data = generate_comprehensive_daily_summary(
+        uid,
+        conversations,
+        date_str,
+        start_date_utc,
+        end_date_utc,
+        memories_learned=memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
+    )
     summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
     # The stored id rides on the returned record so the delivery step can build the
     # `/daily-summary/{id}` deep link without a second read.
