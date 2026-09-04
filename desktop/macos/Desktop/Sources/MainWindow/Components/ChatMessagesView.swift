@@ -611,7 +611,15 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         // in place, so its height moves by at most a line across content changes and rewraps;
         // taking the live value keeps the inset exact. The epsilon keeps a sub-pixel preference
         // flutter from re-entering layout.
-        if abs(height - dailySummaryBarHeight) > 0.5 { dailySummaryBarHeight = height }
+        if abs(height - dailySummaryBarHeight) > 0.5 {
+          dailySummaryBarHeight = height
+          // The inset is document space above the reader, so changing it moves the document under
+          // a stationary viewport — the overview arriving a beat after the headline is enough to
+          // bury the newest row under the pill. That is admission's exact problem (INV-CHAT-2),
+          // so it gets admission's exact answer: a reader following the live edge is re-followed;
+          // a reader scrolled away is left alone and finds the thread where they left it.
+          if scrollMode == .followingBottom { throttledScrollToBottom(proxy: proxy) }
+        }
       }
       .overlay(alignment: .trailing) {
         if enablesPromptTimeline {
