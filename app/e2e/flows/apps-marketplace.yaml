@@ -11,7 +11,7 @@ evidence:
 covers:
   - app/lib/pages/apps/page.dart
   - app/lib/pages/apps/explore_install_page.dart
-  - app/lib/pages/apps/list_item.dart
+  - app/lib/pages/apps/widgets/category_section.dart
   - app/lib/pages/apps/app_detail/app_detail.dart
   - app/lib/providers/app_provider.dart
   - app/lib/widgets/bottom_nav_bar.dart

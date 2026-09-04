@@ -18,6 +18,7 @@ collapses {param} placeholders to {} so `/t/{a}` and `/t/{b}` compare equal
 shadowing semantics are load-bearing for shipped clients; each entry is an
 explicit mount-order decision with a named migration follow-up. stdlib-only.
 """
+
 import re
 import sys
 from collections import defaultdict
@@ -51,19 +52,27 @@ KNOWN_DUPLICATES = {
 ROUTER_DEF = re.compile(r"(\w+)\s*=\s*APIRouter\(([^)]*)\)", re.S)
 PREFIX_KW = re.compile(r"prefix\s*=\s*['\"]([^'\"]+)['\"]")
 DECORATOR = re.compile(
-    r"@(\w+)\.(get|post|patch|put|delete|websocket|api_route)\(\s*['\"]([^'\"]+)['\"]", re.S)
+    r"@(\w+)\.(get|post|patch|put|delete|websocket|api_route)\(\s*['\"]([^'\"]+)['\"]",
+    re.S,
+)
 CONST_ASSIGN = re.compile(r"^(_?[A-Z][A-Z0-9_]*)\s*=\s*['\"]([^'\"]+)['\"]", re.M)
 DECORATOR_CONST = re.compile(
-    r"@(\w+)\.(get|post|patch|put|delete|websocket|api_route)\(\s*([A-Za-z_]\w*)\b", re.S)
+    r"@(\w+)\.(get|post|patch|put|delete|websocket|api_route)\(\s*([A-Za-z_]\w*)\b",
+    re.S,
+)
 API_ROUTE_METHODS = re.compile(r"methods\s*=\s*\[([^\]]*)\]", re.S)
 ADD_API_ROUTE = re.compile(
-    r"\b(\w+)\.add_api_route\(\s*['\"]([^'\"]+)['\"]\s*,\s*\w+\s*,\s*methods\s*=\s*(?:list\()?\[([^\]]*)\]", re.S)
+    r"\b(\w+)\.add_api_route\(\s*['\"]([^'\"]+)['\"]\s*,\s*\w+\s*,\s*methods\s*=\s*(?:list\()?\[([^\]]*)\]",
+    re.S,
+)
 # Legacy dynamic table: `for path_var, methods_var in TABLE.items():` with
 # `router.add_api_route(path_var, handler, methods=list(methods_var))` in the
 # loop body (desktop_deprecated pattern); TABLE is a literal dict of
 # "path": ("GET", "PATCH") entries.
 ROUTE_TABLE_LOOP = re.compile(
-    r"for\s+(\w+)\s*,\s*(\w+)\s+in\s+(_?[A-Z][A-Z0-9_]*)\.items\(\):(.*?)(?=\ndef |\n\n\n|\Z)", re.S)
+    r"for\s+(\w+)\s*,\s*(\w+)\s+in\s+(_?[A-Z][A-Z0-9_]*)\.items\(\):(.*?)(?=\ndef |\n\n\n|\Z)",
+    re.S,
+)
 DICT_ENTRY = re.compile(r"['\"]([^'\"]+)['\"]\s*:\s*\(([^)]*)\)")
 # include_router(<anything>) — captures the full dotted attribute expression
 # (e.g. `conv.router`, `api_key_management.mcp_router`, `imported_alias`).
@@ -209,19 +218,31 @@ def main() -> int:
     duplicates = {
         k: v for k, v in registered.items() if len(v) > 1 and k not in KNOWN_DUPLICATES
     }
-    exempted = sorted(k for k in registered if len(registered[k]) > 1 and k in KNOWN_DUPLICATES)
+    exempted = sorted(
+        k for k in registered if len(registered[k]) > 1 and k in KNOWN_DUPLICATES
+    )
     if exempted:
-        print("known duplicates exempted (load-bearing shadowing; see KNOWN_DUPLICATES):")
+        print(
+            "known duplicates exempted (load-bearing shadowing; see KNOWN_DUPLICATES):"
+        )
         for app, method, path in exempted:
             print(f"  [{app}] {method.upper()} {path}")
     if duplicates:
-        print("FAIL: duplicate route registrations (first-mounted handler silently wins):")
+        print(
+            "FAIL: duplicate route registrations (first-mounted handler silently wins):"
+        )
         for (app, method, path), mods in sorted(duplicates.items()):
-            print(f"  [{app}] {method.upper()} {path}  registered by: {', '.join(sorted(set(mods)))}")
-        print("Dedupe to one registration, or make the mount-order decision explicit in the PR.")
+            print(
+                f"  [{app}] {method.upper()} {path}  registered by: {', '.join(sorted(set(mods)))}"
+            )
+        print(
+            "Dedupe to one registration, or make the mount-order decision explicit in the PR."
+        )
         return 1
     total = len(registered)
-    print(f"ok: no duplicate route registrations across {total} mounted (app, method, path) combinations")
+    print(
+        f"ok: no duplicate route registrations across {total} mounted (app, method, path) combinations"
+    )
     return 0
 
 

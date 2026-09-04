@@ -4,11 +4,18 @@ This directory contains three distinct things:
 
 ## 1. `omi-plugin-sdk/` — shared SDK (models only)
 
-`plugins/omi-plugin-sdk` is a small Python package that owns the Omi webhook
+`omi-plugin-sdk` is a small Python package that owns the Omi webhook
 payload models (`omi_plugin_sdk.models`: `Conversation`, `TranscriptSegment`,
 `ActionItem`, ...). It is intentionally models-only — auth/webhook/FastAPI
-helpers were removed in July 2026. The legacy monolith and the `omi-*-app`
-services install it via `plugins/requirements.txt` (`./omi-plugin-sdk`).
+helpers were removed in July 2026.
+
+SDK installation differs by consumer:
+
+- **Legacy monolith** (`plugins/main.py`, `plugins/Dockerfile`): installs the
+  SDK through `plugins/requirements.txt`, which pins `./omi-plugin-sdk`.
+- **Independently deployed `omi-*-app/` services**: each has its own
+  `requirements.txt` and installs the SDK by relative path (`../omi-plugin-sdk`)
+  from within its own directory — not via `plugins/requirements.txt`.
 
 ## 2. `omi-*-app/` — independently deployed plugin services (28)
 
