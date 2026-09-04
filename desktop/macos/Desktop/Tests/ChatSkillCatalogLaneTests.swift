@@ -53,7 +53,7 @@ final class ChatSkillCatalogLaneTests: XCTestCase {
     let piMonoPayload = await TaskChatRuntime.taskWorkspaceContext(
       workspacePath: "/tmp/omi-task-workspace",
       adapterId: AgentAdapterId.piMono.rawValue
-    )
+    ).value
     XCTAssertEqual(piMonoPayload["workingDirectory"] as? String, "/tmp/omi-task-workspace")
     XCTAssertTrue(
       skillNames(in: piMonoPayload["skillCatalog"] as? [String: Any] ?? [:]).contains(unique),
@@ -64,7 +64,7 @@ final class ChatSkillCatalogLaneTests: XCTestCase {
     let acpPayload = await TaskChatRuntime.taskWorkspaceContext(
       workspacePath: "/tmp/omi-task-workspace",
       adapterId: AgentAdapterId.acp.rawValue
-    )
+    ).value
     XCTAssertEqual(acpPayload["workingDirectory"] as? String, "/tmp/omi-task-workspace")
     XCTAssertNil(acpPayload["skillCatalog"], "the ACP plugin already indexes the same skills")
   }
@@ -73,7 +73,7 @@ final class ChatSkillCatalogLaneTests: XCTestCase {
     let payload = await TaskChatRuntime.taskWorkspaceContext(
       workspacePath: "",
       adapterId: AgentAdapterId.piMono.rawValue
-    )
+    ).value
     XCTAssertTrue(payload.isEmpty)
   }
 

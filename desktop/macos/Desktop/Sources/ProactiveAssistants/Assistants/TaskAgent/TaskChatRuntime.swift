@@ -277,7 +277,7 @@ enum TaskChatRuntime {
       (
         .workspace,
         workspacePath.isEmpty ? .empty : .available,
-        await taskWorkspaceContext(workspacePath: workspacePath, adapterId: routing.adapterId)
+        await taskWorkspaceContext(workspacePath: workspacePath, adapterId: routing.adapterId).value
       ),
       (
         .surface,
@@ -335,19 +335,23 @@ enum TaskChatRuntime {
   /// Task chat has skill tools but no ChatProvider instance to index skills for
   /// them, so the run carries the same compact catalog main chat injects —
   /// unless the resolved lane owns its own skills source (the ACP plugin).
+  /// The return is boxed: a nonisolated async function's result crosses back
+  /// to the caller's isolation, and `[String: Any]` is not Sendable.
   nonisolated static func taskWorkspaceContext(
     workspacePath: String,
     adapterId: String
-  ) async -> [String: Any] {
-    guard !workspacePath.isEmpty else { return [:] }
+  ) async -> TaskToolInputBox {
+    guard !workspacePath.isEmpty else { return TaskToolInputBox([:]) }
     var payload: [String: Any] = ["workingDirectory": workspacePath]
-    guard ChatProvider.shouldInjectSkillCatalog(adapterId: adapterId) else { return payload }
+    guard ChatProvider.shouldInjectSkillCatalog(adapterId: adapterId) else {
+      return TaskToolInputBox(payload)
+    }
     // The projection is dictionary-valued (never Sendable), so it crosses the
     // detachment boundary boxed, exactly like the tool-input payloads above.
     payload["skillCatalog"] = await Task.detached(priority: .utility) {
       TaskToolInputBox(ChatProvider.skillCatalogProjectionFromDisk(workspace: workspacePath))
     }.value.value
-    return payload
+    return TaskToolInputBox(payload)
   }
 
   nonisolated static func queryRouting(
