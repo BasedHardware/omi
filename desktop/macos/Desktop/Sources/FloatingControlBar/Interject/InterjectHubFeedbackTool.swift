@@ -6,25 +6,49 @@ import Foundation
 enum InterjectHubFeedbackTool {
   static let opaqueResult = #"{"ok":true}"#
 
-  /// Local, flag-gated write through the single mutation owner. Invalid verb,
-  /// missing card identity, and flag-off are all no-ops — no store, no analytics.
+  /// Card identity captured when the tool call is admitted (synchronous with
+  /// the hub event). The async write must not blindly re-read mutable UI
+  /// state: it rechecks the live recent card against this snapshot, so an
+  /// owner or card change between admission and the write can never classify
+  /// the wrong card.
+  struct AdmittedFeedback: Sendable {
+    let identity: SuggestionAssistantTelemetry.NotificationIdentity
+  }
+
+  /// Admission: capture the current card identity synchronously with the hub
+  /// event. Flag-off or no current card admits nothing.
   @MainActor
-  static func recordIfAuthorized(
-    verbRaw: String?,
+  static func admit(
     isEnabled: Bool = InterjectFeature.isEnabled,
     identity: SuggestionAssistantTelemetry.NotificationIdentity? = FloatingControlBarManager.shared
+      .recentNotchCardFeedbackIdentity()
+  ) -> AdmittedFeedback? {
+    guard isEnabled, let identity else { return nil }
+    return AdmittedFeedback(identity: identity)
+  }
+
+  /// Write the admitted classification through the single mutation owner.
+  /// Owner/turn fence: immediately before the mutation the live recent card
+  /// must still match the admitted snapshot. Invalid verb, missing admission,
+  /// and a replaced card are all no-ops — no store, no analytics.
+  @MainActor
+  static func recordIfAdmitted(
+    _ admitted: AdmittedFeedback?,
+    verbRaw: String?,
+    currentIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = FloatingControlBarManager.shared
       .recentNotchCardFeedbackIdentity(),
     store: InterjectSuggestionFeedbackStore = .shared,
     emitAnalytics: Bool = true
   ) async {
-    guard isEnabled,
+    guard let admitted,
       let verbRaw,
       let verb = InterjectFeedbackVerb(rawValue: verbRaw),
-      let identity
+      let currentIdentity,
+      currentIdentity == admitted.identity
     else { return }
     await InterjectSuggestionFeedbackMutation.record(
-      evaluationID: identity.evaluationID,
-      suggestionID: identity.suggestionID,
+      evaluationID: admitted.identity.evaluationID,
+      suggestionID: admitted.identity.suggestionID,
       verb: verb,
       store: store,
       emitAnalytics: emitAnalytics
@@ -34,7 +58,9 @@ enum InterjectHubFeedbackTool {
 
 extension RealtimeHubController {
   /// Local Interject classification — same placement as
-  /// `report_screen_observation`, before kernel-authorized tools.
+  /// `report_screen_observation`, before kernel-authorized tools. The card
+  /// identity is captured at admission; the async write rechecks the live
+  /// card against that snapshot before mutating.
   func handleInterjectFeedbackReport(
     source: RealtimeHubSession,
     callId: String,
@@ -42,7 +68,10 @@ extension RealtimeHubController {
     expectedTurnEpoch: Int
   ) {
     let verbRaw = arguments["verb"] as? String
-    Task { await InterjectHubFeedbackTool.recordIfAuthorized(verbRaw: verbRaw) }
+    let admitted = InterjectHubFeedbackTool.admit()
+    Task {
+      await InterjectHubFeedbackTool.recordIfAdmitted(admitted, verbRaw: verbRaw)
+    }
     sendToolResultIfCurrent(
       source: source,
       callId: callId,

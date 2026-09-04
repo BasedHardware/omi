@@ -48,7 +48,7 @@ final class InterjectWiringTests: XCTestCase {
   }
 
   @MainActor
-  func testHubTranscriptWithoutATokenDoesNotWriteTheLedger() async throws {
+  func testHubTranscriptDoesNotParseTokenOntoTheLedger() async throws {
     try await withInterjectHarness {
       let deliveryID = try XCTUnwrap(UUID(uuidString: "cccccccc-cccc-cccc-cccc-cccccccccccc"))
       let cardID = try XCTUnwrap(UUID(uuidString: "dddddddd-dddd-dddd-dddd-dddddddddddd"))
@@ -94,7 +94,8 @@ final class InterjectWiringTests: XCTestCase {
         notificationID: cardID
       )
 
-      await InterjectHubFeedbackTool.recordIfAuthorized(verbRaw: "riff")
+      let admitted = InterjectHubFeedbackTool.admit()
+      await InterjectHubFeedbackTool.recordIfAdmitted(admitted, verbRaw: "riff")
 
       let record = await InterjectSuggestionFeedbackStore.shared.current(
         evaluationID: deliveryID, suggestionID: cardID)
@@ -119,7 +120,8 @@ final class InterjectWiringTests: XCTestCase {
         notificationID: cardID
       )
 
-      await InterjectHubFeedbackTool.recordIfAuthorized(verbRaw: "useful")
+      let admitted = InterjectHubFeedbackTool.admit()
+      await InterjectHubFeedbackTool.recordIfAdmitted(admitted, verbRaw: "useful")
 
       let record = await InterjectSuggestionFeedbackStore.shared.current(
         evaluationID: deliveryID, suggestionID: cardID)
@@ -145,11 +147,60 @@ final class InterjectWiringTests: XCTestCase {
         notificationID: cardID
       )
 
-      await InterjectHubFeedbackTool.recordIfAuthorized(verbRaw: "useful")
+      let admitted = InterjectHubFeedbackTool.admit()
+      XCTAssertNil(admitted, "flag-off hub tool must admit nothing")
+      await InterjectHubFeedbackTool.recordIfAdmitted(admitted, verbRaw: "useful")
 
       let record = await InterjectSuggestionFeedbackStore.shared.current(
         evaluationID: deliveryID, suggestionID: cardID)
       XCTAssertNil(record, "flag-off hub tool must not write")
+    }
+  }
+
+  /// Owner/turn fence: if the recent card changes between admission and the
+  /// async write, the stale admission must not classify the new card.
+  @MainActor
+  func testHubFeedbackToolReplacedCardDoesNotGetClassified() async throws {
+    try await withInterjectHarness {
+      let deliveryID = try XCTUnwrap(UUID(uuidString: "77777777-7777-7777-7777-777777777777"))
+      let cardID = try XCTUnwrap(UUID(uuidString: "88888888-8888-8888-8888-888888888888"))
+      FloatingControlBarManager.shared.seedInterjectRecentCardForTests(
+        ownerID: ownerID,
+        title: "Focus",
+        createdAt: Date(),
+        context: FloatingBarNotificationContext(
+          sourceTitle: "Focus",
+          assistantId: "context-director",
+          provenanceRef: deliveryID.uuidString),
+        identity: nil,
+        notificationID: cardID
+      )
+      let admitted = InterjectHubFeedbackTool.admit()
+      XCTAssertNotNil(admitted)
+
+      // The latest card changes before the async write runs.
+      let replacementDeliveryID = try XCTUnwrap(UUID(uuidString: "99999999-9999-9999-9999-999999999999"))
+      let replacementCardID = try XCTUnwrap(UUID(uuidString: "aaaaaaaa-8888-8888-8888-888888888888"))
+      FloatingControlBarManager.shared.seedInterjectRecentCardForTests(
+        ownerID: ownerID,
+        title: "Call Sam",
+        createdAt: Date(),
+        context: FloatingBarNotificationContext(
+          sourceTitle: "Task",
+          assistantId: "context-director",
+          provenanceRef: replacementDeliveryID.uuidString),
+        identity: nil,
+        notificationID: replacementCardID
+      )
+
+      await InterjectHubFeedbackTool.recordIfAdmitted(admitted, verbRaw: "useful")
+
+      let staleRecord = await InterjectSuggestionFeedbackStore.shared.current(
+        evaluationID: deliveryID, suggestionID: cardID)
+      XCTAssertNil(staleRecord, "stale admission must not write the original card")
+      let replacementRecord = await InterjectSuggestionFeedbackStore.shared.current(
+        evaluationID: replacementDeliveryID, suggestionID: replacementCardID)
+      XCTAssertNil(replacementRecord, "stale admission must not classify the replacement card")
     }
   }
 
