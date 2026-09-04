@@ -297,6 +297,7 @@ export async function sendChatMessage(
         generationOutcome: 'failed',
         generationId: admission.generation.id,
         generationRetryable: terminal.error.retryable,
+        localOnly: true,
       },
     };
   }
@@ -324,12 +325,10 @@ function reconcileGeneration(
   const canonicalHuman = history.find(
     message => message.id === admission.message.id,
   );
-  const humanIndex = history.findIndex(
-    message => message.id === admission.message.id,
+  const assistant = history.find(
+    message =>
+      message.id === admission.generation.id && message.sender === 'ai',
   );
-  const assistant = history
-    .slice(humanIndex + 1)
-    .find(message => message.sender === 'ai');
   if (canonicalHuman === undefined || assistant === undefined) {
     throw new Error(
       'Generation replay expired before canonical history reconciled',

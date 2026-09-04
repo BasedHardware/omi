@@ -34,8 +34,9 @@ type Props = {
   session: DesktopSession;
   signingIn: boolean;
   onSignIn: () => void;
-  onSignOut: () => void;
+  onSignOut: () => void | Promise<void>;
   onWorkspaceReload?: () => void;
+  softwarePlaneLocked: boolean;
 };
 
 const PANE_ITEM_HEIGHT = 40;
@@ -76,10 +77,12 @@ function Row({
 }
 
 function Segmented<Value extends string>({
+  disabled = false,
   onChange,
   options,
   value,
 }: {
+  disabled?: boolean;
   onChange: (value: Value) => void;
   options: readonly Value[];
   value: Value;
@@ -89,7 +92,8 @@ function Segmented<Value extends string>({
       {options.map(option => (
         <FocusPressable
           accessibilityRole="button"
-          accessibilityState={{selected: value === option}}
+          accessibilityState={{disabled, selected: value === option}}
+          disabled={disabled}
           key={option}
           onPress={() => onChange(option)}
           style={({pressed}) => [
@@ -169,6 +173,7 @@ export function DesktopSettings({
   onWorkspaceReload,
   session,
   signingIn,
+  softwarePlaneLocked,
 }: Props) {
   const [pane, setPane] = useState<DesktopSettingsPane>('General');
   const [prefs, setPrefs] = useState<DesktopPreferences>(
@@ -231,7 +236,10 @@ export function DesktopSettings({
     reload().catch(() => undefined);
   };
 
-  const runAction = (action: () => Promise<void>) => {
+  const runAction = (
+    action: () => Promise<void>,
+    failure = 'Settings change could not be saved. Try again.',
+  ) => {
     const seq = ++actionSeqRef.current;
     setActionStatus('Saving settings…');
     action().then(
@@ -242,7 +250,7 @@ export function DesktopSettings({
       },
       () => {
         if (seq === actionSeqRef.current) {
-          setActionStatus('Settings change could not be saved. Try again.');
+          setActionStatus(failure);
         }
       },
     );
@@ -285,7 +293,11 @@ export function DesktopSettings({
         }
       />
       <Row
-        copy="Off, always, or only while a meeting is in the foreground."
+        copy={
+          permissions.microphone === 'denied'
+            ? 'Microphone access is denied in System Settings.'
+            : 'Off, always, or only while a meeting is in the foreground.'
+        }
         title="Audio Recording"
         trailing={
           <Segmented<AudioRecordingMode>
@@ -341,7 +353,16 @@ export function DesktopSettings({
             : 'Sign in to load conversations and memories.'
         }
         title="Account"
-        action={session === 'ready' ? onSignOut : onSignIn}
+        action={
+          session === 'ready'
+            ? () => {
+                runAction(
+                  async () => onSignOut(),
+                  'Sign out failed. Try again.',
+                );
+              }
+            : onSignIn
+        }
         actionLabel={
           session === 'ready'
             ? 'Sign out'
@@ -359,7 +380,14 @@ export function DesktopSettings({
           title="Current plan"
         />
       ) : (
-        <Row copy="Plan details load after sign-in." title="Current plan" />
+        <Row
+          copy={
+            account === null
+              ? 'Loading plan…'
+              : account.subscriptionError ?? 'Plan is unavailable.'
+          }
+          title="Current plan"
+        />
       )}
     </>
   );
@@ -485,7 +513,9 @@ export function DesktopSettings({
   const advanced = (
     <Row
       copy={
-        prefs.softwarePlane === 'new'
+        softwarePlaneLocked
+          ? 'Stop the active response before switching backends.'
+          : prefs.softwarePlane === 'new'
           ? prefs.stampedV5Origin != null
             ? 'New sends v5 chat, capture, conversations, memories, tasks, and settings to the stamped origin. Account, apps, and privacy controls still use production api.omi.me.'
             : 'New is selected, but no valid stamped v5 origin is configured.'
@@ -494,6 +524,7 @@ export function DesktopSettings({
       title="Backend"
       trailing={
         <Segmented
+          disabled={softwarePlaneLocked}
           onChange={value => {
             runAction(async () => {
               await setPref('softwarePlane', value === 'new' ? 'new' : 'old');

@@ -50,7 +50,7 @@ type Props = {
   chatError: string | null;
   onRefresh: () => void;
   onSignIn: () => void;
-  onSignOut: () => void;
+  onSignOut: () => void | Promise<void>;
   onDraftChange: (value: string) => void;
   onLoadOlderChat: () => void;
   onSend: () => void;
@@ -166,6 +166,7 @@ export function DesktopApp({
               onWorkspaceReload={onWorkspaceReload}
               session={session}
               signingIn={signingIn}
+              softwarePlaneLocked={chatBusy}
             />
           </View>
         )}

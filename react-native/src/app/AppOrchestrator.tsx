@@ -459,12 +459,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }
         setChatError(
           admitted
-            ? 'Response interrupted. Refreshing chat history.'
+            ? 'Response interrupted. It may still complete.'
             : chatErrorCopy(error),
         );
-        if (admitted) {
-          setChatEpoch(current => current + 1);
-        }
         if (macDesktop && chatSessionLost(error)) {
           revalidateSession().catch(() => undefined);
         }
@@ -753,7 +750,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             signInAndRefresh().catch(() => undefined);
           }}
           onSignOut={() => {
-            signOutAndRefresh().catch(() => undefined);
+            return signOutAndRefresh();
           }}
           onWorkspaceReload={() => {
             chatSessionEpochRef.current += 1;
