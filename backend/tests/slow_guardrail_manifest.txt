@@ -25,6 +25,13 @@
 #   tests/unit/test_subscription_restructure.py       32 failed, 2 passed
 #   tests/unit/test_firestore_query_coverage_ratchet.py    1 failed, 1 passed
 #   tests/unit/test_sys_modules_hermeticity.py             1 failed, 1 passed
+#
+# REMOVED — file deleted, aliases it guarded no longer exist:
+#   tests/unit/test_ws_g_module_aliases.py  removed in a7bc5fd0c2
+#     ("chore(backend): remove dead modules and orphaned WS-G promotion family")
+#     The WS-G alias shims (WorkingObservation, L1MemoryArchiveItem, etc.) were
+#     deleted along with the rest of the WS-G promotion family. No replacement
+#     needed; the contract those aliases enforced is gone.
 
 tests/unit/test_async_tasks.py
 tests/unit/test_desktop_transcribe.py
@@ -44,4 +51,3 @@ tests/unit/test_subscription_import_cycle.py
 tests/unit/test_sync_ordered_assignment.py
 tests/unit/test_thread_join_elimination.py
 tests/unit/test_vad_gate.py
-tests/unit/test_ws_g_module_aliases.py
