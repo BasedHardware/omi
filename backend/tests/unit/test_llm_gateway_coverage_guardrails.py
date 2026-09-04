@@ -414,12 +414,46 @@ def test_managed_site_scan_sees_rest_hosts_not_just_sdk_names():
     assert 'host:generativelanguage.googleapis.com' in sites
 
 
+_HOST_CONTEXT_PROBE_SOURCE = textwrap.dedent("""
+    import httpx
+
+    _DOCS_URL = 'https://api.openai.com/docs'
+
+
+    def _raise_quota_error():
+        raise RuntimeError('api.openai.com is quota-capped')
+
+
+    async def call_default_base_url():
+        # vendor-reachable: bound as the client's default base_url
+        async with httpx.AsyncClient(base_url='https://api.anthropic.com/v1') as client:
+            await client.post('/messages', json={})
+    """)
+
+
+def test_managed_host_scan_ignores_non_call_host_mentions():
+    """A host string only counts where it can plausibly reach a vendor.
+
+    The scan flags call arguments, assignments, parameter defaults, and
+    returned URL builders. A docstring, an error message, or an unused
+    constant that merely mentions a host must not become a required
+    inventory ``host:`` call_site.
+
+    red-proof: revert ``_vendor_host_sites`` to the bare ``ast.Constant``
+    walk and the ``not in`` assertions fail (the mentions get flagged).
+    """
+    sites = _managed_sites_in_tree('probe.py', ast.parse(_HOST_CONTEXT_PROBE_SOURCE))
+    assert ('probe.py', 'host:api.openai.com') not in sites  # unused constant + error message
+    assert ('probe.py', 'host:api.anthropic.com') in sites  # client base_url default arg
+
+
 def test_managed_site_scan_sees_get_llm_literals():
     source = "from utils.llm.clients import get_llm\nget_llm('wrapped_analysis')\n"
     sites = _managed_sites_in_tree('utils/wrapped/probe.py', ast.parse(source))
     assert sites == {('utils/wrapped/probe.py', 'feature:wrapped_analysis')}
 
 
+@pytest.mark.slow
 def test_managed_call_sites_absent_from_the_inventory_fail_ci():
     """A managed get_llm or LLM REST host not listed on a surface row fails CI.
 
@@ -428,6 +462,10 @@ def test_managed_call_sites_absent_from_the_inventory_fail_ci():
     surfaces (sync/merge/reprocess/phone) have empty call_sites on purpose —
     they spend through process_conversation, which is pinned on langchain /
     conversation_processing files.
+
+    Slow-marked per tests/README.md: it is a full-backend codebase scan, and
+    codebase greps leave the PR unit-test lane via ``@pytest.mark.slow`` rather
+    than the fast-unit duration allowlist.
 
     red-proof: delete a known call_site from model_endpoint_inventory.yaml
     (the real file) and this assertion goes red.
@@ -762,10 +800,6 @@ def _managed_sites_in_tree(rel: str, tree: ast.AST) -> set[tuple[str, str]]:
                     name_assigns.append((target.id, node.value))
         elif isinstance(node, ast.AnnAssign) and node.value is not None and isinstance(node.target, ast.Name):
             name_assigns.append((node.target.id, node.value))
-        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
-            for host in LLM_REST_HOSTS:
-                if host in node.value:
-                    sites.add((rel, f'host:{host}'))
     local_aliases = _aliases_from_assignments(name_assigns, import_aliases)
     for node in calls:
         callee = _resolver_call_name(node.func, import_aliases, local_aliases)
@@ -778,6 +812,77 @@ def _managed_sites_in_tree(rel: str, tree: ast.AST) -> set[tuple[str, str]]:
             sites.add((rel, f'feature:{arg.value}'))
         else:
             sites.add((rel, 'feature:<dynamic>'))
+    sites.update(_vendor_host_sites(rel, tree, import_aliases, local_aliases))
+    return sites
+
+
+def _vendor_host_sites(
+    rel: str, tree: ast.AST, import_aliases: dict[str, str], local_aliases: dict[str, str]
+) -> set[tuple[str, str]]:
+    """REST host constants only where the string can plausibly reach a vendor.
+
+    A bare ``ast.Constant`` walk flags every mention of a host anywhere in a
+    file — docstrings, error messages, unrelated config URLs — which is not a
+    call-site signal. A host counts when it is:
+
+    - an argument of a call (a URL handed to httpx/requests/SDK/any function),
+    - the right-hand side of an assignment (the file's named URL / base-URL
+      constants that those calls read),
+    - a concatenation/join of such constants (f-strings and ``+``/``%`` over
+      host-bearing strings),
+    - a function parameter default (``def __init__(base_url='https://…')``
+      binds the host into the client), or
+    - a returned value (URL builders like ``return f'https://host/{path}'``).
+
+    A host assembled purely at runtime from non-constant parts still escapes
+    this scan; that residual is accepted — same as SDK-less vendors that never
+    name a host — because the cost of closing it (flagging every string) is
+    false pins on non-call strings.
+    """
+    sites: set[tuple[str, str]] = set()
+    read_names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)}
+
+    def _hosts_in(node: ast.AST) -> set[str]:
+        found: set[str] = set()
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                for host in LLM_REST_HOSTS:
+                    if host in sub.value:
+                        found.add(host)
+        return found
+
+    def _record(node: ast.AST) -> None:
+        for host in _hosts_in(node):
+            sites.add((rel, f'host:{host}'))
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for default in [*node.args.defaults, *node.args.kw_defaults]:
+                if default is not None:
+                    _record(default)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            if node.value is None:
+                continue
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            name_targets = [target for target in targets if isinstance(target, ast.Name)]
+            if not name_targets:
+                continue
+            if not any(target.id in read_names for target in name_targets):
+                # A named constant that nothing in the file reads cannot reach
+                # a vendor; it is a mention (docs/config), not a call site.
+                continue
+            _record(node.value)
+        elif isinstance(node, ast.Call):
+            callee_name = _dotted_name(node.func) or ''
+            if callee_name.rsplit('.', 1)[-1].endswith(('Error', 'Exception', 'Warning')):
+                # An exception message that mentions a host is documentation,
+                # not a vendor call.
+                continue
+            for arg in [*node.args, *node.keywords]:
+                value = arg.value if isinstance(arg, ast.keyword) else arg
+                _record(value)
+        elif isinstance(node, ast.Return) and node.value is not None:
+            _record(node.value)
     return sites
 
 
