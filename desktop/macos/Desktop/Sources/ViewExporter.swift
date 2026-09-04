@@ -214,12 +214,6 @@ enum ViewExporter {
     // Pages that can be shown with the sidebar
     let pages: [(String, Int, () -> AnyView)] = [
       (
-        "full-dashboard", 0,
-        {
-          AnyView
-        }
-      ),
-      (
         "full-conversations", 1,
         {
           AnyView(

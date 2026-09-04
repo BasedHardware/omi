@@ -16,6 +16,7 @@
 
 import Foundation
 
+@MainActor
 enum MemoryReviewFixture {
   static let seedEndpoint = "v1/dev-harness/daily-summary/seed"
   /// Four, so a flow can seed more learned memories than the card renders and prove the bound.
