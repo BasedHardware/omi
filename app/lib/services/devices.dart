@@ -40,7 +40,13 @@ abstract class IDeviceServiceSubsciption {
   );
 }
 
+typedef DeviceConnectionBuilder = DeviceConnection? Function(BtDevice device);
+
 class DeviceService {
+  DeviceService({DeviceConnectionBuilder? connectionBuilder})
+      : _connectionBuilder = connectionBuilder ?? DeviceConnectionFactory.create;
+
+  final DeviceConnectionBuilder _connectionBuilder;
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
   Future<void>? _activeDiscovery;
@@ -164,11 +170,33 @@ class DeviceService {
       }
     }
 
-    _connection = DeviceConnectionFactory.create(device);
+    _connection = _connectionBuilder(device);
     if (_connection != null) {
-      await _connection!.connect(
-        onConnectionStateChanged: onDeviceConnectionStateChanged,
-      );
+      final candidate = _connection!;
+      try {
+        await candidate.connect(
+          onConnectionStateChanged: onDeviceConnectionStateChanged,
+        );
+      } catch (_) {
+        // A native GATT link may already be up even when device-specific
+        // initialization (for example, a protected Limitless write) fails.
+        // Tear that partial connection down so the UI cannot retain a ghost
+        // "connected" device and the next user attempt starts cleanly.
+        try {
+          await candidate.disconnect();
+        } catch (e) {
+          Logger.debug('[DeviceService] Failed to disconnect partial connection: $e');
+        }
+        try {
+          await candidate.transport.dispose();
+        } catch (e) {
+          Logger.debug('[DeviceService] Failed to dispose partial transport: $e');
+        }
+        if (identical(_connection, candidate)) {
+          _connection = null;
+        }
+        rethrow;
+      }
     } else {
       Logger.debug(
         '[DeviceService] Failed to create device connection for ${device.id}',

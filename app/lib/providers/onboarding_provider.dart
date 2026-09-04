@@ -217,7 +217,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         }
       }
 
-      await ServiceManager.instance().device.ensureConnection(device.id, force: true);
+      final connection = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
+      if (connection == null || connection.status != DeviceConnectionState.connected) {
+        throw StateError('Device initialization did not complete');
+      }
       Logger.debug('Connected to device: ${device.name}');
       deviceId = device.id;
       await SharedPreferencesUtil().btDeviceSet(device);
