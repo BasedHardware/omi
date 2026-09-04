@@ -30,7 +30,7 @@ enum ProactiveNotificationKind: String, Equatable, CaseIterable {
     switch assistantId {
     case "suggestion": return .suggestion
     case "insight": return .insight
-    case "task": return .task
+    case "task", "context_reminder": return .task
     case "memory-extraction": return .memory
     case "goals": return .goal
     case "meeting-notes": return .meetingNotes

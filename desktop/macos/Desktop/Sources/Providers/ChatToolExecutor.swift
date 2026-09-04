@@ -361,6 +361,13 @@ class ChatToolExecutor {
         authorizationSnapshot: currentOwnerAuthorizationSnapshot,
         api: backendAPIClient)
 
+    case .createContextReminder:
+      let text = (toolCall.arguments["text"] as? String) ?? ""
+      return await ContextReminderCoordinator.shared.createFromCurrentContext(
+        text: text,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+
     case .showRewindEvidence:
       return await executeShowRewindEvidence(
         toolCall.arguments,
