@@ -24,6 +24,7 @@ from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import AutoMockModule, load_module_fresh, package_submodule_stubs, stub_modules
+import utils.managed_compute as managed_compute
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from database.first_open_obligations import claim_first_open_work
 from utils.conversations import meeting_receipt as meeting_receipt_mod
@@ -530,9 +531,11 @@ def test_funding_owner_is_computed_inside_decision_for_not_before_policy(
         kwargs['decision_for']('conv_structure')
         return _plan(pc, 'process_normally', 'plan_paid')
 
-    monkeypatch.setattr(pc, 'authorize_managed_compute', fake_authorize)
+    # The decision_for closure lives in utils.managed_compute (hoisted when the
+    # connector memory producers started sharing it), so its seams patch there.
+    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', fake_authorize)
     monkeypatch.setattr(
-        pc,
+        managed_compute,
         'request_carries_validated_byok_key',
         lambda feature: carries_validated_key,
     )
@@ -850,12 +853,12 @@ def test_raising_byok_lookup_is_deterministic_minimum_not_a_crash(monkeypatch, p
     _enable_flag(monkeypatch, pc)
     spies = _spy_managed_effects(monkeypatch, pc)
     monkeypatch.setattr(
-        pc,
+        managed_compute,
         'request_carries_validated_byok_key',
         MagicMock(side_effect=RuntimeError('byok lookup boom')),
     )
     authorize = MagicMock(side_effect=AssertionError('must not authorize'))
-    monkeypatch.setattr(pc, 'authorize_managed_compute', authorize)
+    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', authorize)
     monkeypatch.setattr(pc.lifecycle_service, 'create_completed_conversation', MagicMock(return_value=True))
 
     result = pc.process_conversation('uid', 'en', _desktop_create())
@@ -1108,7 +1111,7 @@ def test_terminal_persist_writes_marker_and_normal_persist_clears_it(monkeypatch
 
 
 def _memory_decision(pc, *, allowed: bool, reason: str, plan: Any = None):
-    return pc.Decision(
+    return managed_compute.Decision(
         allowed=allowed,
         reason=reason,
         feature='memories',
@@ -1128,8 +1131,9 @@ def _extract_memories_probe(monkeypatch, pc, *, suppression_on: bool, decision) 
     monkeypatch.setattr(pc, 'MemoryService', MagicMock())
     monkeypatch.setattr(pc, '_sweep_owned_writer_mode', lambda _uid: None)
     monkeypatch.setattr(pc, 'free_tier_memory_suppression_enabled', lambda: suppression_on)
-    monkeypatch.setattr(pc, '_funding_owner_for_feature', lambda _feature: 'omi')
-    monkeypatch.setattr(pc, 'authorize_managed_compute', lambda *args, **kwargs: decision)
+    # The §1.8 gate's decision_for closure is the shared one in utils.managed_compute;
+    # the stubbed utils.byok below already resolves the funding owner to 'omi'.
+    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', lambda *args, **kwargs: decision)
     return inner
 
 
@@ -1222,6 +1226,6 @@ def test_a_raising_plan_lookup_suppresses_instead_of_failing_finalization(monkey
     def boom(*_args, **_kwargs):
         raise RuntimeError('authorization exploded')
 
-    monkeypatch.setattr(pc, 'authorize_managed_compute', boom)
+    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', boom)
     pc.extract_memories('erroring-uid', _existing_desktop('erroring-conv'))
     inner.assert_not_called()

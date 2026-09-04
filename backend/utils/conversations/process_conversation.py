@@ -98,7 +98,16 @@ from utils.free_tier_processing_policy import (
     minimum_processing_state,
     resolve_free_tier_processing_plan,
 )
-from utils.managed_compute import Decision, authorize_managed_compute, request_carries_validated_byok_key
+
+# The injected ``decision_for`` closure and its funding-owner resolution live in
+# ``utils/managed_compute`` (next to ``authorize_managed_compute`` and the BYOK
+# lookup they compose) and are shared with the app-integration, X-connector and
+# twitter-persona memory producers (flip-review F-3). Imported under the historic
+# private name so the coordinator's call sites and this module's tests read
+# unchanged.
+from utils.managed_compute import (
+    managed_compute_decision_for as _managed_compute_decision_for,
+)
 from models.other import Person
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.notifications import send_important_conversation_message
@@ -1988,32 +1997,6 @@ def _store_deferred_conversation(
 
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
     return conversation
-
-
-def _funding_owner_for_feature(feature: str) -> str:
-    """``byok`` only when this request carries a validated key for ``feature``'s provider.
-
-    Reuses S1's ``request_carries_validated_byok_key`` so the only dynamic
-    ``get_provider(feature)`` site stays inside ``utils/managed_compute.py``.
-    Called only from the injected ``decision_for`` closure so a raising BYOK
-    lookup is caught by the policy's exception guard.
-    """
-    return 'byok' if request_carries_validated_byok_key(feature) else 'omi'
-
-
-def _managed_compute_decision_for(uid: str) -> Callable[[str], Decision]:
-    """Injected ``decision_for(feature) -> Decision`` for the S6 policy.
-
-    Funding owner is computed inside this closure, not before the policy call.
-    A raising BYOK/provider lookup therefore becomes ``policy_unavailable``
-    (deterministic minimum) instead of crashing the coordinator.
-    """
-
-    def decision_for(feature: str) -> Decision:
-        owner = _funding_owner_for_feature(feature)
-        return authorize_managed_compute(uid, feature, owner)
-
-    return decision_for
 
 
 def _terminal_persist_payload(conversation: Conversation) -> dict[str, Any]:
