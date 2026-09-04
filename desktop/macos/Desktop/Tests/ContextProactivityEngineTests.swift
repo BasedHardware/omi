@@ -1,3 +1,4 @@
+import Foundation
 import GRDB
 import XCTest
 
@@ -586,6 +587,38 @@ final class ContextProactivityEngineTests: XCTestCase {
         arguments: [now.addingTimeInterval(-1)])
     }
     return queue
+  }
+
+  /// Every way into `evaluateAndDeliver` must pass JIT admission first.
+  ///
+  /// `evaluateFromSpeech` shipped without it (#12407): dwell and departure both consulted
+  /// `JITProactivityCoordinator.shared.handle` and returned early on `true`, while speech
+  /// called `evaluateAndDeliver` directly. That only ever failed open — `handle()` answers
+  /// `false` for `.legacyContextBucketFallback`, which is what the kill switch produces, so
+  /// an utterance could deliver through the legacy lane while the switch was suppressing the
+  /// other two triggers.
+  ///
+  /// Counted rather than pinned to a signature so reformatting cannot break it. A fourth
+  /// entry point must either route through the coordinator or change this number on purpose.
+  func testEveryProactivityEntryPointPassesJITAdmission() throws {
+    let source = try contextProactivityEngineSource()
+    let entryPoints = ["func contextEntered(", "func evaluateAfterDeparture(", "func evaluateFromSpeech("]
+    for entryPoint in entryPoints {
+      XCTAssertTrue(source.contains(entryPoint), "missing entry point \(entryPoint)")
+    }
+    let admissionCalls = source.components(
+      separatedBy: "JITProactivityCoordinator.shared.handle(").count - 1
+    XCTAssertEqual(
+      admissionCalls, entryPoints.count,
+      "each evaluation entry point needs its own JIT admission check")
+  }
+
+  private func contextProactivityEngineSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/ProactiveAssistants/Core/ContextProactivityEngine.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }
 
@@ -1211,4 +1244,5 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
     XCTAssertEqual(ContextProactivityTelemetry.GateTrigger.screenVisit.rawValue, "screen_visit")
     XCTAssertEqual(ContextProactivityTelemetry.GateTrigger.speech.rawValue, "speech")
   }
+
 }

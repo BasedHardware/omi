@@ -345,6 +345,17 @@ actor ContextProactivityEngine {
         startedAt: fence.startedAt,
         endedAt: frameFreshness.endedAt)
     else { return }
+    // JIT admission, in the same position the dwell and departure entry points
+    // use it. Speech is a third way into `evaluateAndDeliver`, so leaving it out
+    // meant an utterance could deliver through the legacy lane while the kill
+    // switch was suppressing the other two — `handle()` answers `false` for
+    // `.legacyContextBucketFallback`, so the bypass only ever failed open.
+    if await JITProactivityCoordinator.shared.handle(
+      fence: fence, snapshot: snapshot, frame: frameSample.frame,
+      authorizationSnapshot: authorizationSnapshot)
+    {
+      return
+    }
     let speechSection = ContextProactivityPromptBuilder.liveSpeechSection(speech)
     await evaluateAndDeliver(
       fence: fence,
