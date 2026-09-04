@@ -203,6 +203,39 @@ test('revalidateSession keeps a live session in the shell', async () => {
   expect(hook.latest().onboardingRequired).toBe(false);
 });
 
+test('a late revalidation cannot eject a newer signed-in session', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValueOnce(true);
+  mockAuth.signIn.mockResolvedValue({signedIn: true});
+  const hook = await renderOnboarding(true);
+  let resolveLate: ((hasSession: boolean) => void) | undefined;
+  mockAuth.hasCloudSession
+    .mockImplementationOnce(
+      () =>
+        new Promise<boolean>(resolve => {
+          resolveLate = resolve;
+        }),
+    )
+    .mockResolvedValueOnce(false);
+
+  const late = hook.latest().revalidateSession();
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().revalidateSession();
+  });
+  expect(hook.latest().onboardingRequired).toBe(true);
+
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().signInAndRefresh();
+  });
+  expect(hook.latest().onboardingRequired).toBe(false);
+
+  await ReactTestRenderer.act(async () => {
+    resolveLate!(false);
+    await late;
+  });
+  expect(hook.latest().onboardingRequired).toBe(false);
+});
+
 test('a Mac without the native auth module stays on Welcome instead of faking ready', async () => {
   jest.resetModules();
   jest.doMock('../src/omiNative', () => ({omiAuth: null}));

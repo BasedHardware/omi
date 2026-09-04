@@ -208,6 +208,7 @@ test('represents a failed generation as a stable assistant delivery', async () =
       generationOutcome: 'failed',
       generationId: 'generation-failed',
       generationRetryable: true,
+      localOnly: true,
     },
   });
 });
@@ -221,10 +222,17 @@ test('reconciles canonical history when native reconnect reports replay expiry',
     generationOutcome: null,
   };
   const assistant = {
-    id: 'assistant-recovered',
+    id: 'generation-expired',
     text: 'Recovered.',
     sender: 'ai' as const,
     createdAt: 201,
+    generationOutcome: 'completed' as const,
+  };
+  const unrelatedAssistant = {
+    id: 'unrelated-generation',
+    text: 'Another client answer.',
+    sender: 'ai' as const,
+    createdAt: 200,
     generationOutcome: 'completed' as const,
   };
   let requests = 0;
@@ -240,7 +248,7 @@ test('reconciles canonical history when native reconnect reports replay expiry',
         : {
             id: request.id,
             status: 200,
-            body: historyBody([human, assistant]),
+            body: historyBody([human, unrelatedAssistant, assistant]),
           };
     },
     generationEvents: async () => ({

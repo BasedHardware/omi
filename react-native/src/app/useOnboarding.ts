@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {omiAuth} from '../omiNative';
 
 export function useOnboarding(
@@ -10,6 +10,7 @@ export function useOnboarding(
   const [onboardingRequired, setOnboardingRequired] = useState<boolean | null>(
     macDesktop ? null : false,
   );
+  const authOperationRef = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -55,22 +56,33 @@ export function useOnboarding(
     if (omiAuth === undefined || omiAuth === null) {
       return;
     }
+    const operation = ++authOperationRef.current;
     setAuthError(null);
     setSigningIn(true);
     try {
       const result = await omiAuth.signIn();
+      if (operation !== authOperationRef.current) {
+        return;
+      }
       if (result.signedIn) {
         await omiAuth.markOnboardingComplete();
+        if (operation !== authOperationRef.current) {
+          return;
+        }
         setOnboardingRequired(false);
         await refreshReads(false);
       } else {
         setAuthError('Sign in was not completed. Try again.');
       }
     } catch (error) {
-      setAuthError('Sign in was not completed. Try again.');
+      if (operation === authOperationRef.current) {
+        setAuthError('Sign in was not completed. Try again.');
+      }
       throw error;
     } finally {
-      setSigningIn(false);
+      if (operation === authOperationRef.current) {
+        setSigningIn(false);
+      }
     }
   }, [refreshReads]);
 
@@ -81,6 +93,7 @@ export function useOnboarding(
     if (auth === undefined || auth === null) {
       throw new Error('Sign out is not available in this app session.');
     }
+    const operation = ++authOperationRef.current;
     const result = await auth.signOut();
     if (!result.signedOut) {
       throw new Error('Could not clear this app session.');
@@ -94,7 +107,7 @@ export function useOnboarding(
     } catch {
       hasSession = false;
     }
-    if (macDesktop && !hasSession) {
+    if (operation === authOperationRef.current && macDesktop && !hasSession) {
       setOnboardingRequired(true);
     }
     // No refreshReads here: a signed-out Mac must not fire cloud reads, and
@@ -110,13 +123,14 @@ export function useOnboarding(
     if (!macDesktop || auth === undefined || auth === null) {
       return;
     }
+    const operation = authOperationRef.current;
     let hasSession = false;
     try {
       hasSession = await auth.hasCloudSession();
     } catch {
       hasSession = false;
     }
-    if (!hasSession) {
+    if (operation === authOperationRef.current && !hasSession) {
       setOnboardingRequired(true);
     }
   }, [macDesktop]);

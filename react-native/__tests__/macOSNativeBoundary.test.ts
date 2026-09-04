@@ -496,9 +496,10 @@ test('refreshes shipping sessions with the public Firebase key, never api-keys',
   );
   expect(backend).toContain('if (status == 401 || status == 403) return YES;');
   expect(backend).toContain('OmiCloudRefreshFailureIsDefinitive(status, json)');
-  expect(backend).toContain(
-    'OmiOwnKeychainCloudToken(OmiOwnKeychainCloudSession()).length > 0',
-  );
+  expect(backend).toContain('expectedUserId.length > 0');
+  expect(backend).toContain('[refreshedUserId isEqualToString:expectedUserId]');
+  expect(backend).toContain('[currentUserId isEqualToString:expectedUserId]');
+  expect(backend).toContain('OmiOwnKeychainCloudToken(current).length > 0');
 });
 
 test('accepts a state-bound OAuth denial without waiting for timeout', () => {
@@ -716,6 +717,9 @@ test('exposes a real OmiNative CoreBluetooth module instead of a hardware stub',
   expect(pbxproj).toContain('OmiNativeModule.mm in Sources');
   expect(pbxproj).toContain('CoreBluetooth.framework');
   expect(pbxproj).toContain('CODE_SIGN_ENTITLEMENTS');
+  expect(pbxproj).toContain(
+    'bun run --cwd packages/contracts/ratified build && bun x tsc -b packages/adapters-platform --force',
+  );
 });
 
 test('treats a generation transport failure with no HTTP response as an error', () => {
