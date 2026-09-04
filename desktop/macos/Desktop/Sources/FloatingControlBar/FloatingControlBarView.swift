@@ -541,7 +541,8 @@ struct FloatingControlBarView: View {
           barWindow: window,
           isVoiceListening: showingNotchWaveform,
           isThinking: showingNotchThinking,
-          isSpeaking: showingNotchSpeaking
+          isSpeaking: showingNotchSpeaking,
+          isDictating: state.isVoiceDictating
         )
         .scaleEffect(notchLogoHovering ? 1.06 : 1.0)
       }
@@ -2353,6 +2354,7 @@ private struct NotchAgentPillsRowView: View {
   let isVoiceListening: Bool
   let isThinking: Bool
   let isSpeaking: Bool
+  let isDictating: Bool
   @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
   @State private var pillStatusChangeToken = 0
 
@@ -2368,7 +2370,8 @@ private struct NotchAgentPillsRowView: View {
       },
       isListening: isVoiceListening,
       isThinking: isThinking,
-      isSpeaking: isSpeaking
+      isSpeaking: isSpeaking,
+      isDictating: isDictating
     )
     // Keep every PTT dot inside the same 21pt identity slot as the resting
     // Omi mark. The slot is frontmost and trails the visible left lobe, so the

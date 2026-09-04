@@ -1435,6 +1435,7 @@ final class DesktopDiagnosticsManager {
     "state_authority",
     "ptt_input_routing",
     "account_cutover",
+    "voice_typing",
     "other",
   ]
 

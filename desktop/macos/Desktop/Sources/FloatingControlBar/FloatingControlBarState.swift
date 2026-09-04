@@ -496,6 +496,8 @@ class FloatingControlBarState: NSObject, ObservableObject {
   var pttHintText: String { VoiceTurnUICopy.statusBannerText(for: voiceProjection) }
   var isVoiceResponseActive: Bool { voiceProjection.isResponseActive }
   var isVoiceResponseWaiting: Bool { voiceProjection.isResponseWaiting }
+  /// The current hold has been recognised as a dictation.
+  var isVoiceDictating: Bool { voiceProjection.isDictating }
   /// True while a committed Push-to-Talk query is being processed and no
   /// response output (voice glow or conversation surface) has surfaced yet.
   /// Drives the notch/pill "thinking" animation.
