@@ -857,6 +857,7 @@ def _stub_router_deps():
     pydub_stub.AudioSegment = MagicMock()
     sys.modules['pydub'] = pydub_stub
     limiter_stub = ModuleType('utils.voice_duration_limiter')
+    limiter_stub.MAX_SESSION_DURATION_S = 120
     limiter_stub.compute_pcm_duration_ms = lambda byte_count, sample_rate, channels: int(
         byte_count / (sample_rate * channels * 2) * 1000
     )
@@ -1936,6 +1937,31 @@ class TestVoiceMessagesEndpointBudget:
         finally:
             _cleanup_chat_client(saved)
 
+    def test_voice_messages_unreadable_wav_does_not_skip_budget_check(self):
+        """An unreadable WAV duration on /v2/voice-messages must still be
+        metered (charged the worst case) instead of transcribing for free."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/test_vm.wav']):
+                with patch.object(module, 'decode_files_to_wav', return_value=['/tmp/test_vm_decoded.wav']):
+                    with patch.object(module, 'read_wav_duration_ms', return_value=None):
+                        with patch.object(
+                            module, 'try_consume_budget', return_value=(False, 7200000, 0)
+                        ) as mock_budget:
+                            resp = client.post(
+                                '/v2/voice-messages',
+                                files=[('files', ('test.wav', io.BytesIO(b'\x00' * 100), 'audio/wav'))],
+                            )
+                            assert resp.status_code == 429
+                            assert 'budget exhausted' in resp.json()['detail']
+                            mock_budget.assert_called_once()
+                            call_args = mock_budget.call_args[0]
+                            assert call_args[1] == module.MAX_SESSION_DURATION_S * 1000
+        finally:
+            _cleanup_chat_client(saved)
+
 
 class TestWsBudgetAndSessionCap:
     """Test WS budget gate and actual duration recording."""
@@ -2184,16 +2210,22 @@ class TestMultipartBudgetAggregation:
     """Test that multipart multi-file uploads sum WAV durations correctly."""
 
     def test_multipart_multi_file_budget_sums_durations(self):
-        """Budget should be consumed with sum of all WAV durations."""
+        """Budget should be consumed with sum of all WAV durations, charging the
+        worst case (MAX_SESSION_DURATION_S) for any file whose duration is
+        unreadable — an unreadable file must not transcribe for free."""
         import io
 
         client, module, saved = _make_chat_client()
         try:
-            # Simulate 3 files: 1000ms, None (unreadable), 2000ms → budget call with 3000
+            # Simulate 3 files: 1000ms, None (unreadable), 2000ms →
+            # budget call with 1000 + MAX_SESSION_DURATION_S*1000 + 2000
             duration_values = iter([1000, None, 2000])
+            expected_total = 1000 + module.MAX_SESSION_DURATION_S * 1000 + 2000
 
             with patch.object(module, 'read_wav_duration_ms', side_effect=lambda p: next(duration_values)):
-                with patch.object(module, 'try_consume_budget', return_value=(True, 3000, 7197000)) as mock_budget:
+                with patch.object(
+                    module, 'try_consume_budget', return_value=(True, expected_total, 7200000 - expected_total)
+                ) as mock_budget:
                     with patch.object(module, 'transcribe_voice_message_segment', return_value=('hello', 'en')):
                         resp = client.post(
                             '/v2/voice-message/transcribe',
@@ -2204,11 +2236,31 @@ class TestMultipartBudgetAggregation:
                             ],
                         )
                         assert resp.status_code == 200
-                        # Budget consumed with sum: 1000 + 2000 = 3000 (None skipped)
                         mock_budget.assert_called_once()
                         call_args = mock_budget.call_args[0]
                         assert call_args[0] == 'test-uid'
-                        assert call_args[1] == 3000
+                        assert call_args[1] == expected_total
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_multipart_unreadable_wav_does_not_skip_budget_check(self):
+        """An unreadable WAV duration must still be metered and can trip the
+        429 budget-exhausted gate, instead of transcribing for free."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'read_wav_duration_ms', return_value=None):
+                with patch.object(module, 'try_consume_budget', return_value=(False, 7200000, 0)) as mock_budget:
+                    resp = client.post(
+                        '/v2/voice-message/transcribe',
+                        files=[('files', ('a.wav', io.BytesIO(b'\x00' * 100), 'audio/wav'))],
+                    )
+                    assert resp.status_code == 429
+                    assert 'budget exhausted' in resp.json()['detail']
+                    mock_budget.assert_called_once()
+                    call_args = mock_budget.call_args[0]
+                    assert call_args[1] == module.MAX_SESSION_DURATION_S * 1000
         finally:
             _cleanup_chat_client(saved)
 
