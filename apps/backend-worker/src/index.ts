@@ -28,6 +28,7 @@ type WorkerEnv = Omit<
   GatewaySecretEnv &
   ObservabilityEnv & {
     API_TOKEN: string;
+    FIREBASE_API_KEY?: string;
     DB?: D1Database;
     ATTACHMENTS?: R2Bucket;
     ATTACHMENT_INGEST?: Queue<AttachmentIngestMessage>;
@@ -66,7 +67,7 @@ for (const route of publicRoutes) {
 }
 
 app.use("/v1/*", async (context, next) => {
-  const refusal = authorizeV1(fromHono(context));
+  const refusal = await authorizeV1(fromHono(context));
   if (refusal !== null) return refusal;
   await next();
 });

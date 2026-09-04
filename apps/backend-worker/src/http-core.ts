@@ -74,6 +74,7 @@ export type CoreEnv = SignedUploadEnv &
   ObservabilityEnv & {
     ENVIRONMENT: string;
     API_TOKEN: string;
+    FIREBASE_API_KEY?: string;
     STAGING_ACCOUNT_ID: string;
     STAGING_DISPLAY_NAME: string;
     STAGING_EMAIL: string;
@@ -190,15 +191,28 @@ export async function readBoundedJson(
 ): Promise<
   { kind: "ok"; value: unknown } | { kind: "invalid" } | { kind: "too_large" }
 > {
-  const declaredLength = request.headers.get("content-length");
+  return readBoundedJsonStream(
+    request.body,
+    request.headers.get("content-length"),
+    maxBytes
+  );
+}
+
+async function readBoundedJsonStream(
+  body: ReadableStream<Uint8Array> | null,
+  declaredLength: string | null,
+  maxBytes: number
+): Promise<
+  { kind: "ok"; value: unknown } | { kind: "invalid" } | { kind: "too_large" }
+> {
   if (
     declaredLength !== null &&
     (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maxBytes)
   ) {
     return { kind: "too_large" };
   }
-  if (request.body === null) return { kind: "invalid" };
-  const reader = request.body.getReader();
+  if (body === null) return { kind: "invalid" };
+  const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;
   while (true) {
@@ -264,7 +278,58 @@ export function emptyPage(
   };
 }
 
-export function authorizeV1(context: CoreContext): Response | null {
+async function firebaseAccountId(
+  token: string,
+  apiKey: string
+): Promise<string | "invalid" | "unavailable"> {
+  if (token.length === 0 || token.length > 16_384 || apiKey.length === 0)
+    return "invalid";
+  let response: Response;
+  try {
+    response = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(
+        apiKey
+      )}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idToken: token }),
+        redirect: "error",
+        signal: AbortSignal.timeout(5_000),
+      }
+    );
+  } catch {
+    return "unavailable";
+  }
+  if (response.status !== 200)
+    return response.status >= 500 || response.status === 429
+      ? "unavailable"
+      : "invalid";
+  const parsed = await readBoundedJsonStream(
+    response.body,
+    response.headers.get("content-length"),
+    65_536
+  );
+  if (
+    parsed.kind !== "ok" ||
+    parsed.value === null ||
+    typeof parsed.value !== "object"
+  )
+    return "unavailable";
+  const users = (parsed.value as Record<string, unknown>)["users"];
+  if (!Array.isArray(users) || users.length !== 1) return "invalid";
+  const user = users[0];
+  if (user === null || typeof user !== "object" || Array.isArray(user))
+    return "invalid";
+  const localId = (user as Record<string, unknown>)["localId"];
+  return typeof localId === "string" && isClientId(localId)
+    ? `firebase:${localId}`
+    : "invalid";
+}
+
+export async function authorizeV1(
+  context: CoreContext
+): Promise<Response | null> {
   // Authorization is gated on the SAME readiness predicate `/ready` reports,
   // because a readiness signal is not an enforcement point: Cloudflare routes
   // request traffic regardless of what `/ready` returns, so a deployment whose
@@ -296,18 +361,30 @@ export function authorizeV1(context: CoreContext): Response | null {
     authorization.slice("Bearer ".length)
   );
   const expected = new TextEncoder().encode(context.env.API_TOKEN);
-  if (!constantTimeEqual(supplied, expected)) {
+  if (constantTimeEqual(supplied, expected)) {
+    const clientId = context.req.header("x-omi-client-id");
+    // Staging isolation by client id, not production multi-tenant auth.
+    // After Bearer auth, each validated x-omi-client-id is its own data
+    // partition for chat, tasks, attachments, conversations, and device
+    // sessions. Settings display name/email/plan stay staging labels.
+    if (clientId === undefined || !isClientId(clientId)) {
+      return backendError("bad_request", "edit_request", 400);
+    }
+    context.set("accountId", clientId);
+    return null;
+  }
+  const firebaseApiKey = context.env.FIREBASE_API_KEY;
+  if (typeof firebaseApiKey !== "string" || firebaseApiKey.length === 0)
     return backendError("unauthorized", "reauthenticate", 401);
-  }
-  const clientId = context.req.header("x-omi-client-id");
-  // Staging isolation by client id, not production multi-tenant auth.
-  // After Bearer auth, each validated x-omi-client-id is its own data
-  // partition for chat, tasks, attachments, conversations, and device
-  // sessions. Settings display name/email/plan stay staging labels.
-  if (clientId === undefined || !isClientId(clientId)) {
-    return backendError("bad_request", "edit_request", 400);
-  }
-  context.set("accountId", clientId);
+  const accountId = await firebaseAccountId(
+    authorization.slice("Bearer ".length),
+    firebaseApiKey
+  );
+  if (accountId === "unavailable")
+    return backendError("service_unavailable", "retry", 503, true);
+  if (accountId === "invalid")
+    return backendError("unauthorized", "reauthenticate", 401);
+  context.set("accountId", accountId);
   return null;
 }
 

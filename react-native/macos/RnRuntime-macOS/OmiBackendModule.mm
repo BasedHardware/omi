@@ -56,8 +56,16 @@ static NSString *OmiSoftwarePlaneValue(void) {
 static BOOL OmiIsCaptureBackendPath(NSString *path) {
   NSURLComponents *components = [NSURLComponents componentsWithString:path];
   NSString *route = components.path;
-  return [route isEqualToString:@"/v1/device-sessions"] ||
-      [route hasPrefix:@"/v1/device-sessions/"];
+  return [route isEqualToString:@"/v1/settings"] ||
+      [route isEqualToString:@"/v1/chat-messages"] ||
+      [route hasPrefix:@"/v1/chat-generations/"] ||
+      [route isEqualToString:@"/v1/chat-attachments"] ||
+      [route hasPrefix:@"/v1/chat-attachments/"] ||
+      [route isEqualToString:@"/v1/device-sessions"] ||
+      [route hasPrefix:@"/v1/device-sessions/"] ||
+      [route isEqualToString:@"/v1/conversations"] ||
+      [route isEqualToString:@"/v1/memories"] ||
+      [route isEqualToString:@"/v1/tasks"];
 }
 
 static NSURL *OmiValidatedV5URL(NSString *value) {
@@ -77,7 +85,8 @@ static NSURL *OmiValidatedV5URL(NSString *value) {
 }
 
 static NSURL *OmiRequestBaseURL(OmiBackendPolicy *policy, NSString *path) {
-  if (policy.captureOriginRequired && policy.captureURL != nil) {
+  if (policy.captureOriginRequired && policy.captureURL != nil &&
+      OmiIsCaptureBackendPath(path)) {
     return policy.captureURL;
   }
   (void)path;
@@ -296,8 +305,8 @@ static OmiBackendPolicy *OmiResolvedBackendPolicy(NSDictionary<NSString *, NSStr
   policy.kind = OmiBackendCredentialKindCloud;
   NSString *v5URL = environment[@"OMI_V5_BACKEND_URL"];
   NSURL *v5 = v5URL.length > 0 ? OmiValidatedV5URL(v5URL) : nil;
+  if (OmiSoftwarePlaneIsNew() && v5URL.length > 0 && v5 == nil) return nil;
   if (OmiSoftwarePlaneIsNew() && v5 != nil) {
-    policy.url = v5;
     policy.captureOriginRequired = YES;
     policy.captureURL = v5;
   }
@@ -684,7 +693,8 @@ RCT_REMAP_METHOD(generationEvents,
     return;
   }
   NSString *path = [NSString stringWithFormat:@"/v1/chat-generations/%@/events", encoded];
-  NSURL *url = [NSURL URLWithString:path relativeToURL:policy.url].absoluteURL;
+  NSURL *url = [NSURL URLWithString:path
+                      relativeToURL:OmiRequestBaseURL(policy, path)].absoluteURL;
   if (url == nil || !OmiBackendPolicyIsValid(policy)) {
     reject(@"OMI_HTTP_UNCONFIGURED", @"Native generation request is unavailable", nil);
     return;
@@ -759,8 +769,9 @@ RCT_REMAP_METHOD(cancelGenerationEvents,
     reject(@"OMI_HTTP_UNCONFIGURED", @"Native generation cancellation is unavailable", nil);
     return;
   }
-  NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"/v1/chat-generations/%@", encoded]
-                     relativeToURL:policy.url].absoluteURL;
+  NSString *path = [NSString stringWithFormat:@"/v1/chat-generations/%@", encoded];
+  NSURL *url = [NSURL URLWithString:path
+                      relativeToURL:OmiRequestBaseURL(policy, path)].absoluteURL;
   NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
   request.HTTPMethod = @"DELETE";
   if (!OmiApplyAuthorization(request, policy)) {
