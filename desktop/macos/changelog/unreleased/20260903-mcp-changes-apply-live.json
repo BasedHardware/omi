@@ -1,3 +1,0 @@
-{
-  "change": "Added or removed MCP servers now reach an open chat right away instead of waiting for a restart, and hand-edits to ~/.omi/mcp.json are picked up on the Apps page"
-}
