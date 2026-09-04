@@ -38,11 +38,7 @@ import {
   parseDeviceSessionAudio,
   parseDeviceSessionCreate,
 } from "./device-sessions";
-import {
-  createVectorizeRetrievalBoundary,
-  noCanonicalMemoryStore,
-  type RetrievalEnv,
-} from "./retrieval";
+import { type RetrievalEnv } from "./retrieval";
 import { parseTaskLimit, readTasks } from "./tasks";
 import {
   backendError,
@@ -759,29 +755,9 @@ export async function handleMemories(context: CoreContext): Promise<Response> {
   ) {
     return backendError("bad_request", "edit_request", 400);
   }
-  const limit = parseTaskLimit(query.get("limit"));
   const cursor = query.get("cursor") ?? undefined;
   if (cursor === "") return backendError("bad_request", "edit_request", 400);
-  if (context.env.AI !== undefined) {
-    const retrievalEnv =
-      context.env.VECTORIZE === undefined
-        ? { AI: context.env.AI as RetrievalEnv["AI"] }
-        : {
-            AI: context.env.AI as RetrievalEnv["AI"],
-            VECTORIZE: context.env.VECTORIZE,
-          };
-    const recalled = await createVectorizeRetrievalBoundary(
-      retrievalEnv,
-      noCanonicalMemoryStore
-    ).query({
-      accountId: context.get("accountId"),
-      queryText: "",
-      topK: limit,
-    });
-    // No D1 memory table: ids cannot be revalidated, so hits stay empty.
-    void recalled;
-  }
-  return json(emptyPage("recall-completeness-v1"));
+  return backendError("projection_unavailable", "retry", 503, true);
 }
 
 export async function handleTasks(context: CoreContext): Promise<Response> {

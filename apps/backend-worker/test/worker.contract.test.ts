@@ -1,5 +1,4 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { parseSynthesizedPageJson } from "@omi-core/ratified-contracts/projections/synthesized";
 import { parseTaskPageJson } from "@omi-core/ratified-contracts/projections/tasks";
 import {
   parseChatGenerationEventStream,
@@ -219,28 +218,12 @@ const emptyConversationPage = () => ({
   absence: { kind: "query_gap" },
 });
 
-const emptyRecallPage = () => ({
-  contractVersion: "1.0.0",
-  items: [],
-  window: {
-    status: "complete",
-    complete: true,
-    hasMore: false,
-    nextCursor: null,
+const projectionUnavailable = () => ({
+  error: {
+    code: "projection_unavailable",
+    retryable: true,
+    action: "retry",
   },
-  completeness: {
-    version: "recall-completeness-v1",
-    status: "complete",
-    reasons: [],
-    frontiers: {
-      declaredFrontier: "frontier-v1:declared",
-      newestSearchedAcceptedFrontier: null,
-      missingAcceptedFrontierReason: "no_accepted_work",
-      newestSearchedStmFrontier: null,
-      missingStmFrontierReason: "no_eligible_stm",
-    },
-  },
-  absence: { kind: "query_gap" },
 });
 
 const insertAttachment = async (input: {
@@ -695,7 +678,7 @@ describe("worker request contract", () => {
     });
   });
 
-  test("memories stay empty when VECTORIZE returns ids that cannot be revalidated", async () => {
+  test("memories stay unavailable when VECTORIZE has no canonical store", async () => {
     const response = await handler.fetch(
       new Request("https://worker.test/v1/memories", {
         headers: authenticatedHeaders,
@@ -714,13 +697,11 @@ describe("worker request contract", () => {
       } as never,
       executionContext as never
     );
-    expect(response.status).toBe(200);
-    const body = await response.text();
-    expect(JSON.parse(body) as unknown).toEqual(emptyRecallPage());
-    expect(parseSynthesizedPageJson(body)).not.toBeNull();
+    expect(response.status).toBe(503);
+    expect((await response.json()) as unknown).toEqual(projectionUnavailable());
   });
 
-  test("wired chat conversations and unwired memories stay honest empty successes", async () => {
+  test("wired reads succeed while unwired memories stay unavailable", async () => {
     const conversations = await fetchWorker("/v1/conversations", {
       headers: authenticatedHeaders,
     });
@@ -732,13 +713,11 @@ describe("worker request contract", () => {
     });
 
     expect(conversations.status).toBe(200);
-    expect(memories.status).toBe(200);
+    expect(memories.status).toBe(503);
     expect((await conversations.json()) as unknown).toEqual(
       emptyConversationPage()
     );
-    const memoriesBody = await memories.text();
-    expect(JSON.parse(memoriesBody) as unknown).toEqual(emptyRecallPage());
-    expect(parseSynthesizedPageJson(memoriesBody)).not.toBeNull();
+    expect((await memories.json()) as unknown).toEqual(projectionUnavailable());
     const tasksBody = await tasks.text();
     expect(JSON.parse(tasksBody) as unknown).toEqual({
       contractVersion: "1.0.0",
@@ -945,14 +924,12 @@ describe("worker request contract", () => {
     expect(extra.status).toBe(400);
   });
 
-  test("memories stay an honest empty recall page because no store exists", async () => {
+  test("memories stay retryably unavailable because no store exists", async () => {
     const response = await fetchWorker("/v1/memories?limit=50", {
       headers: authenticatedHeaders,
     });
-    expect(response.status).toBe(200);
-    const body = await response.text();
-    expect(parseSynthesizedPageJson(body)).not.toBeNull();
-    expect(JSON.parse(body) as unknown).toEqual(emptyRecallPage());
+    expect(response.status).toBe(503);
+    expect((await response.json()) as unknown).toEqual(projectionUnavailable());
 
     const emptyCursor = await fetchWorker("/v1/memories?cursor=", {
       headers: authenticatedHeaders,
