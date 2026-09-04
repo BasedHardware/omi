@@ -1012,7 +1012,10 @@ function mcpIndexText(): string {
   const lines = mcpServers.slice(0, MCP_INDEX_SERVER_LINE_CAP).map((entry) => {
     const hint = entry.client.serverDescription;
     if (entry.status === "connecting") {
-      return `- ${entry.name}: connecting…`;
+      // Neutral wording: pi cannot revise a registered description, so a
+      // literal "connecting…" here would outlive the connection it described.
+      // The live index — mcp_tools_info with no arguments — reports real status.
+      return `- ${entry.name}: status at registration — call mcp_tools_info with no arguments for live status`;
     }
     if (entry.status === "failed") {
       return `- ${entry.name}: unavailable (${entry.error ?? "unknown error"})`;

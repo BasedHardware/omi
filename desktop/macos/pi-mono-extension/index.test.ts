@@ -2518,3 +2518,47 @@ test("registerUserMcpTools: the first turn is not blocked by a slow server, whic
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+// A description registered while a server is still connecting can never be
+// revised, so its wording must not claim a live state it cannot keep.
+test("registerUserMcpTools: a connecting server gets neutral frozen wording, and the live index keeps the real status", async () => {
+  const previousBudget = process.env.OMI_MCP_FIRST_TURN_BUDGET_MS;
+  process.env.OMI_MCP_FIRST_TURN_BUDGET_MS = "200";
+  // The stdio server stalls its initialize reply past the first-turn budget,
+  // so it is still connecting when the proxy descriptions are frozen.
+  const serverScript =
+    'const rl = require("readline").createInterface({ input: process.stdin });' +
+    'rl.on("line", (line) => { const msg = JSON.parse(line); if (msg.id === undefined) return;' +
+    'const reply = (result) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result }) + "\\n");' +
+    'if (msg.method === "initialize") setTimeout(() => reply({ protocolVersion: "2025-06-18", capabilities: {} }), 600);' +
+    'else if (msg.method === "tools/list") reply({ tools: [{ name: "add", inputSchema: { type: "object" } }] });' +
+    'else reply({}); });';
+
+  const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-wording-"));
+  const configPath = pathJoin(dir, "mcp.json");
+  await writeFile(configPath, JSON.stringify({
+    mcpServers: { slow: { command: process.execPath, args: ["-e", serverScript] } },
+  }));
+  const previous = process.env.OMI_LOCAL_MCP_FILE;
+  process.env.OMI_LOCAL_MCP_FILE = configPath;
+  try {
+    const registered: RegisteredTool[] = [];
+    await __registerUserMcpToolsForTest(fakePiCollecting(registered));
+
+    const description = registered[0].description;
+    assert.match(
+      description,
+      /status at registration — call mcp_tools_info with no arguments for live status/,
+    );
+    assert.doesNotMatch(description, /connecting…/);
+
+    // The live index still tells the truth about the connecting state.
+    const live = (await registered[0].execute("c1", {})).content[0].text;
+    assert.match(live, /connecting/);
+  } finally {
+    __resetUserMcpForTest();
+    if (previousBudget === undefined) delete process.env.OMI_MCP_FIRST_TURN_BUDGET_MS; else process.env.OMI_MCP_FIRST_TURN_BUDGET_MS = previousBudget;
+    if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
