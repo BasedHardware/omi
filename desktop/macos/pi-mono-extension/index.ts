@@ -28,7 +28,7 @@ import {
   type ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "@earendil-works/pi-ai";
-import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
@@ -485,7 +485,10 @@ export async function appendAudit(entry: AuditEntry): Promise<void> {
   const line = JSON.stringify(entry) + "\n";
   try {
     await mkdir(dirname(path), { recursive: true });
-    await appendFile(path, line, "utf-8");
+    // Owner-only: the log carries command text. `mode` applies at creation;
+    // a file that already exists is tightened at startup by
+    // restrictAuditLogPermissions.
+    await appendFile(path, line, { encoding: "utf-8", mode: 0o600 });
   } catch (err) {
     if (!auditWarned) {
       auditWarned = true;
@@ -494,6 +497,20 @@ export async function appendAudit(entry: AuditEntry): Promise<void> {
         `[omi-provider] audit log unavailable (${msg}); continuing without audit\n`
       );
     }
+  }
+}
+
+/**
+ * Best-effort startup hardening: the audit log carries command text, so an
+ * existing more-permissive file (written by an older build at 0644) is
+ * tightened to 0600. Failures are ignored — appending is best-effort too, and
+ * the 0600 create mode in appendAudit covers new files.
+ */
+export async function restrictAuditLogPermissions(): Promise<void> {
+  try {
+    await chmod(auditLogPath(), 0o600);
+  } catch {
+    // Missing file (nothing to harden yet) or chmod failure — never fatal.
   }
 }
 
@@ -1323,6 +1340,9 @@ export function __resetUserMcpForTest(): void {
 // ---------------------------------------------------------------------------
 
 export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
+  // Best-effort, never fatal: tighten a pre-existing audit log to owner-only.
+  void restrictAuditLogPermissions();
+
   const baseUrl = process.env.OMI_API_BASE_URL || "https://api.omi.me/v2";
   const apiKey = process.env.OMI_API_KEY || "";
 

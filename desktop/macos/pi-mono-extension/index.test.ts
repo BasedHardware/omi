@@ -10,7 +10,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile, unlink } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, utimes, writeFile, unlink } from "node:fs/promises";
 
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
@@ -21,6 +21,7 @@ import {
   inspectToolCall,
   summarizeInput,
   appendAudit,
+  restrictAuditLogPermissions,
   __resetAuditWarnedForTest,
   OMI_TOOLS,
   omiToolsForExecutionRole,
@@ -814,6 +815,52 @@ test("appendAudit: fail-safe when audit path is unwritable", async () => {
     } catch {
       // best-effort cleanup
     }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Audit log permissions — owner-only (0600), since the file carries command text
+// ---------------------------------------------------------------------------
+
+test("appendAudit: creates the audit log owner-only (0600)", async () => {
+  const dir = await mkdtemp(pathJoin(tmpdir(), "omi-audit-mode-"));
+  const logPath = pathJoin(dir, "audit.log");
+  const previousPath = process.env.OMI_PI_AUDIT_LOG;
+  process.env.OMI_PI_AUDIT_LOG = logPath;
+  try {
+    await appendAudit({
+      ts: new Date().toISOString(),
+      phase: "before",
+      tool: "bash",
+      decision: "allow",
+      summary: "mode-check",
+    });
+    assert.equal((await stat(logPath)).mode & 0o777, 0o600);
+  } finally {
+    if (previousPath === undefined) delete process.env.OMI_PI_AUDIT_LOG;
+    else process.env.OMI_PI_AUDIT_LOG = previousPath;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("restrictAuditLogPermissions: tightens an existing 0644 audit log to 0600", async () => {
+  const dir = await mkdtemp(pathJoin(tmpdir(), "omi-audit-harden-"));
+  const logPath = pathJoin(dir, "audit.log");
+  await writeFile(logPath, "{}\n");
+  await chmod(logPath, 0o644);
+  const previousPath = process.env.OMI_PI_AUDIT_LOG;
+  process.env.OMI_PI_AUDIT_LOG = logPath;
+  try {
+    await restrictAuditLogPermissions();
+    assert.equal((await stat(logPath)).mode & 0o777, 0o600);
+
+    // A missing file is not an error — there is nothing to harden yet.
+    await rm(logPath);
+    await restrictAuditLogPermissions();
+  } finally {
+    if (previousPath === undefined) delete process.env.OMI_PI_AUDIT_LOG;
+    else process.env.OMI_PI_AUDIT_LOG = previousPath;
+    await rm(dir, { recursive: true, force: true });
   }
 });
 
