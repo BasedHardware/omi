@@ -833,8 +833,8 @@ def _log_download_served(*, platform: str, channel: str, version: str, campaign_
 
     Cloud Logging is the counting surface for campaign attribution: a push CTA
     points here with campaign_id, and that campaign's download count is a filter
-    on this line. Emitted for every served page, with campaign_id=none when the
-    request carries no campaign, so a campaign's count keeps a denominator.
+    on this line. Emitted for every served page, with NO_CAMPAIGN_SENTINEL when the request
+    carries no campaign, so a campaign's count keeps a denominator.
     """
     logger.info(
         "desktop_download_served platform=%s channel=%s version=%s campaign_id=%s",

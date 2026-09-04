@@ -127,7 +127,14 @@ def send_notification_to_user(data: Dict[str, Any], secret_key: str = Header(...
         if (
             not isinstance(campaign_id, str)
             or len(campaign_id) > CAMPAIGN_ID_MAX_LENGTH
-            or not re.match(CAMPAIGN_ID_PATTERN, campaign_id)
+            # fullmatch, not match: Python's `$` also matches just before a
+            # trailing newline, so `re.match` accepts an id ending in one while
+            # the CTA's pydantic pattern (whole-string) rejects it — the exact
+            # send-ok/CTA-400 split this shared rule exists to prevent, and a
+            # newline would break the space-separated log line it feeds. The
+            # pattern itself cannot use `\Z`: pydantic's Rust regex has no such
+            # escape and the Query would fail to build.
+            or not re.fullmatch(CAMPAIGN_ID_PATTERN, campaign_id)
         ):
             raise HTTPException(
                 status_code=400,

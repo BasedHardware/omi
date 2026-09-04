@@ -208,6 +208,10 @@ def test_campaign_send_with_a_null_data_body_does_not_500(monkeypatch):
     [
         'has spaces',
         'has\nnewline',
+        # A trailing newline specifically: Python's `$` matches just before one,
+        # so re.match let this through the send gate while the CTA 422s it. The
+        # two ends disagreeing is the whole failure this shared rule prevents.
+        'ab\n',
         'hash#char',
         '   ',
         'x' * 65,

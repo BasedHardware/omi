@@ -1298,6 +1298,29 @@ class TestDownloadEndpoint:
         assert "campaign_id=(absent)" not in caplog.text
 
     @pytest.mark.asyncio
+    async def test_the_served_line_never_contains_a_newline(self, caplog):
+        # One record per download, fields separated by spaces. A newline anywhere
+        # in it would forge a second record in Cloud Logging and corrupt the count.
+        mock_releases = [
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.2.3+45", "build": "45"},
+                "release": {"assets": [_dmg_asset("https://example.com/Omi-stable.dmg")]},
+            },
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                with caplog.at_level(logging.INFO, logger="routers.updates"):
+                    await client.get("/v2/desktop/download/latest?channel=stable&campaign_id=macos-push-2026-09-02")
+                    await client.get("/v2/desktop/download/latest?channel=stable")
+
+        served = [r.getMessage() for r in caplog.records if "desktop_download_served" in r.getMessage()]
+        assert len(served) == 2
+        for line in served:
+            assert chr(10) not in line
+            assert chr(13) not in line
+
+    @pytest.mark.asyncio
     async def test_campaign_id_carrying_a_log_separator_is_rejected(self):
         # The id lands in a space-separated log line, so a value carrying a space
         # or a newline could forge a field or a whole record.
