@@ -23,7 +23,7 @@ import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from utils.managed_compute import DECISION_REASONS, Decision
 
@@ -168,10 +168,51 @@ def _resolve(
     )
 
 
-def _is_desktop_source(source: str | None) -> bool:
+def is_desktop_source(source: str | None) -> bool:
+    """True for the one source that can carry a client projection today.
+
+    S3 reads this to decide whether the §1.7 minimum is ``local_pending`` (a
+    capable client is expected to deliver) or ``none`` (nothing is coming), so
+    the two answers cannot drift from the policy's own source test.
+    """
     if source is None:
         return False
     return str(source).strip().lower() == DESKTOP_SOURCE
+
+
+# Historic private name; kept so the policy's own call sites read unchanged.
+_is_desktop_source = is_desktop_source
+
+
+def minimum_processing_state(source: Any, *, has_projection: bool) -> str | None:
+    """Why a conversation's ``structured`` is the §1.7 deterministic minimum.
+
+    Returns ``ConversationProcessingState``'s raw values (the model coerces) so
+    this module keeps importing nothing but the policy's own vocabulary.
+
+    Takes projection *presence* as a bool, never the projection itself: the
+    answer depends only on whether one exists, so this stays outside the
+    display-only trust boundary and the pinned reference set does not have to
+    grow to admit it.
+
+    A projection already in hand means nothing is pending, so the field stays
+    absent. Otherwise the answer is whether a capable client is expected to
+    deliver one, which today is exactly the desktop source — read through this
+    module's own source test so the two cannot drift.
+
+    This is not re-derived when a projection arrives later: the existing-row
+    stamp writes ``client_processing`` alone (its single-key payload is pinned
+    by the trust-boundary test), so a projected conversation can still read
+    ``local_pending``. Clients resolve that by checking ``client_processing``
+    first; ``ConversationProcessingState``'s docstring is the contract.
+    """
+    if has_projection:
+        return None
+    # ``source`` arrives as either the raw string or a ``ConversationSource``;
+    # unwrap here so ``str(enum)`` never becomes the literal
+    # ``'conversationsource.desktop'`` and silently answer ``none``.
+    raw_source = getattr(source, 'value', source)
+    return 'local_pending' if is_desktop_source(raw_source) else 'none'
 
 
 __all__ = [
@@ -182,5 +223,7 @@ __all__ = [
     'FreeTierProcessingPlan',
     'ProcessingMode',
     'free_tier_local_processing_enabled',
+    'is_desktop_source',
+    'minimum_processing_state',
     'resolve_free_tier_processing_plan',
 ]
