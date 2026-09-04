@@ -51,7 +51,9 @@ test('macOS first paint and session probe do not require native devices or BLE',
   expect(onboarding).not.toContain(
     'setOnboardingRequired(!completed && !hasSession)',
   );
-  expect(onboarding).toContain("import {omiAuth} from '../omiNative'");
+  expect(onboarding).toContain(
+    "import {omiAuth, subscribeOmiBackendSessionInvalidated} from '../omiNative'",
+  );
   expect(onboarding).not.toMatch(/import \{[^}]*\bomiNative\b/);
   expect(onboarding).not.toContain('getSnapshot');
   expect(onboarding).not.toContain('useNativeDevices');

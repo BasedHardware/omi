@@ -77,6 +77,7 @@ jest.mock('../src/omiNative', () => ({
   omiNative: undefined,
   isNativeModuleInstalled: false,
   isNativeBackendInstalled: true,
+  subscribeOmiBackendSessionInvalidated: () => () => undefined,
   subscribeOmiNativeEvents: () => () => undefined,
 }));
 

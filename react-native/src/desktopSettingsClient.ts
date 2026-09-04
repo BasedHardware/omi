@@ -53,12 +53,6 @@ type DesktopCommandsNative = {
   requestPermission(kind: PermissionKind): Promise<PermissionState>;
 };
 
-type BackendPlaneNative = {
-  getSoftwarePlane(): Promise<string>;
-  setSoftwarePlane(plane: string): Promise<string>;
-  stampedV5BackendOrigin(): Promise<string | null>;
-};
-
 const memoryPreferences: DesktopPreferences = {
   softwarePlane: 'old',
   screenCapture: false,
@@ -78,10 +72,6 @@ const memoryPreferences: DesktopPreferences = {
 
 function desktopCommands(): DesktopCommandsNative | undefined {
   return NativeModules.OmiDesktopCommands as DesktopCommandsNative | undefined;
-}
-
-function backendPlane(): BackendPlaneNative | undefined {
-  return NativeModules.OmiBackend as BackendPlaneNative | undefined;
 }
 
 export function parseAudioRecordingMode(value: unknown): AudioRecordingMode {
@@ -104,10 +94,14 @@ export function defaultDesktopPreferences(): DesktopPreferences {
 
 function snapshotFromRecord(
   record: Record<string, unknown>,
-  stampedV5Origin: string | null,
 ): DesktopPreferences {
+  const stampedV5Origin = parseStampedV5Origin(record.stampedV5Origin);
   return {
-    softwarePlane: parseSoftwarePlane(record.softwarePlane ?? record.plane),
+    softwarePlane: parseSoftwarePlane(
+      record.softwarePlane ??
+        record.plane ??
+        (stampedV5Origin === null ? 'old' : 'new'),
+    ),
     screenCapture: record.screenCapture === true,
     audioMode: parseAudioRecordingMode(record.audioMode),
     interfaceSounds: record.interfaceSounds !== false,
@@ -132,51 +126,22 @@ function snapshotFromRecord(
 
 export async function loadDesktopPreferences(): Promise<DesktopPreferences> {
   const commands = desktopCommands();
-  const plane = backendPlane();
-  const stamped =
-    plane === undefined
-      ? null
-      : parseStampedV5Origin(await plane.stampedV5BackendOrigin());
   if (commands === undefined) {
-    return {
-      ...memoryPreferences,
-      softwarePlane:
-        plane === undefined
-          ? memoryPreferences.softwarePlane
-          : parseSoftwarePlane(await plane.getSoftwarePlane()),
-      stampedV5Origin: stamped,
-    };
+    return {...memoryPreferences};
   }
-  const record = await commands.loadDesktopPreferences();
-  const softwarePlane =
-    plane === undefined
-      ? parseSoftwarePlane(record.softwarePlane)
-      : parseSoftwarePlane(await plane.getSoftwarePlane());
-  return snapshotFromRecord({...record, softwarePlane}, stamped);
+  return snapshotFromRecord(await commands.loadDesktopPreferences());
 }
 
 export async function setDesktopPreference<
   Key extends Exclude<keyof DesktopPreferences, 'stampedV5Origin'>,
 >(key: Key, value: DesktopPreferences[Key]): Promise<DesktopPreferences> {
-  if (key === 'softwarePlane') {
-    const plane = backendPlane();
-    if (plane !== undefined) {
-      await plane.setSoftwarePlane(String(value));
-    } else {
-      memoryPreferences.softwarePlane = parseSoftwarePlane(value);
-    }
-    return loadDesktopPreferences();
-  }
   const commands = desktopCommands();
   if (commands === undefined) {
     (memoryPreferences as Record<string, unknown>)[key] = value;
     return loadDesktopPreferences();
   }
   const record = await commands.setDesktopPreference(key, value as never);
-  return snapshotFromRecord(
-    record,
-    (await loadDesktopPreferences()).stampedV5Origin,
-  );
+  return snapshotFromRecord(record);
 }
 
 export async function loadPermissionStatus(): Promise<
