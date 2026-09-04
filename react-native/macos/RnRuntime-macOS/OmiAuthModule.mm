@@ -22,6 +22,10 @@ static NSString *const OmiAuthFirebaseApiKey = @"AIzaSyA88gHcmiAxjN_aE23tHRWXOgF
 
 static BOOL OmiAuthIgnoreEnvironmentCloudTokens = NO;
 
+id OmiAuthKeychainLock(void) {
+  return OmiAuthKeychainService;
+}
+
 NSString *OmiAuthResolvedFirebaseApiKey(void) {
   NSString *environment = NSProcessInfo.processInfo.environment[@"FIREBASE_API_KEY"];
   return environment.length > 0 ? environment : OmiAuthFirebaseApiKey;
@@ -202,11 +206,13 @@ static NSDictionary *OmiAuthKeychainQueryForService(NSString *service) {
 }
 
 static NSDictionary *OmiAuthKeychainQuery(void) {
-  return OmiAuthKeychainQueryForService(OmiAuthKeychainService);
+  NSMutableDictionary *query = [OmiAuthKeychainQueryForService(OmiAuthKeychainService) mutableCopy];
+  query[(__bridge id)kSecUseDataProtectionKeychain] = @YES;
+  return query;
 }
 
-static NSDictionary *OmiAuthReadKeychainSession(NSString *service) {
-  NSMutableDictionary *query = [OmiAuthKeychainQueryForService(service) mutableCopy];
+static NSDictionary *OmiAuthReadKeychainSessionNow(NSDictionary *baseQuery) {
+  NSMutableDictionary *query = [baseQuery mutableCopy];
   query[(__bridge id)kSecReturnData] = @YES;
   query[(__bridge id)kSecMatchLimit] = (__bridge id)kSecMatchLimitOne;
   query[(__bridge id)kSecUseAuthenticationUI] = (__bridge id)kSecUseAuthenticationUIFail;
@@ -219,6 +225,22 @@ static NSDictionary *OmiAuthReadKeychainSession(NSString *service) {
   NSData *data = CFBridgingRelease(result);
   NSDictionary *session = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
   return [session isKindOfClass:NSDictionary.class] ? session : nil;
+}
+
+static NSDictionary *OmiAuthReadKeychainSession(NSString *service) {
+  if ([service isEqualToString:OmiAuthKeychainService]) {
+    @synchronized (OmiAuthKeychainLock()) {
+      return OmiAuthReadKeychainSessionNow(OmiAuthKeychainQuery());
+    }
+  }
+  __block NSDictionary *session = nil;
+  dispatch_semaphore_t finished = dispatch_semaphore_create(0);
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    session = OmiAuthReadKeychainSessionNow(OmiAuthKeychainQueryForService(service));
+    dispatch_semaphore_signal(finished);
+  });
+  return dispatch_semaphore_wait(finished, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC)) == 0
+      ? session : nil;
 }
 
 static NSDictionary *OmiAuthReadShippingPreferences(void) {
@@ -262,14 +284,16 @@ static BOOL OmiAuthCopySessionIntoOwnKeychain(NSDictionary *session) {
     (__bridge id)kSecValueData : data,
     (__bridge id)kSecAttrAccessible : (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
   };
-  NSDictionary *query = OmiAuthKeychainQuery();
-  OSStatus status = SecItemUpdate((__bridge CFDictionaryRef)query, (__bridge CFDictionaryRef)attributes);
-  if (status == errSecItemNotFound) {
-    NSMutableDictionary *add = [query mutableCopy];
-    [add addEntriesFromDictionary:attributes];
-    status = SecItemAdd((__bridge CFDictionaryRef)add, NULL);
+  @synchronized (OmiAuthKeychainLock()) {
+    NSDictionary *query = OmiAuthKeychainQuery();
+    OSStatus status = SecItemUpdate((__bridge CFDictionaryRef)query, (__bridge CFDictionaryRef)attributes);
+    if (status == errSecItemNotFound) {
+      NSMutableDictionary *add = [query mutableCopy];
+      [add addEntriesFromDictionary:attributes];
+      status = SecItemAdd((__bridge CFDictionaryRef)add, NULL);
+    }
+    return status == errSecSuccess;
   }
-  return status == errSecSuccess;
 }
 
 BOOL OmiAuthImportShippingSessionIfNeeded(void) {
@@ -294,14 +318,20 @@ static NSDictionary *OmiAuthStoredSession(void) {
 }
 
 static OSStatus OmiAuthClearSession(void) {
-  return SecItemDelete((__bridge CFDictionaryRef)OmiAuthKeychainQuery());
+  @synchronized (OmiAuthKeychainLock()) {
+    return SecItemDelete((__bridge CFDictionaryRef)OmiAuthKeychainQuery());
+  }
 }
 
 static BOOL OmiAuthSessionTokenIsFresh(NSDictionary *session) {
   NSString *token = [session[@"idToken"] isKindOfClass:NSString.class] ? session[@"idToken"] : nil;
   NSNumber *expiryTime = [session[@"expiryTime"] isKindOfClass:NSNumber.class] ? session[@"expiryTime"] : nil;
-  return token.length > 0 &&
-      (expiryTime == nil || expiryTime.doubleValue > NSDate.date.timeIntervalSince1970 + 60);
+  return token.length > 0 && expiryTime != nil &&
+      expiryTime.doubleValue > NSDate.date.timeIntervalSince1970 + 60;
+}
+
+static BOOL OmiAuthRefreshTokensEqual(NSString *left, NSString *right) {
+  return left == right || [left isEqualToString:right];
 }
 
 static BOOL OmiAuthRefreshFailureIsDefinitive(NSInteger status, NSDictionary *json) {
@@ -357,14 +387,42 @@ static BOOL OmiAuthStoreSession(NSString *idToken, NSString *refreshToken, NSNum
     (__bridge id)kSecValueData : data,
     (__bridge id)kSecAttrAccessible : (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
   };
-  NSDictionary *query = OmiAuthKeychainQuery();
-  OSStatus status = SecItemUpdate((__bridge CFDictionaryRef)query, (__bridge CFDictionaryRef)attributes);
-  if (status == errSecItemNotFound) {
-    NSMutableDictionary *add = [query mutableCopy];
-    [add addEntriesFromDictionary:attributes];
-    status = SecItemAdd((__bridge CFDictionaryRef)add, NULL);
+  @synchronized (OmiAuthKeychainLock()) {
+    NSDictionary *query = OmiAuthKeychainQuery();
+    OSStatus status = SecItemUpdate((__bridge CFDictionaryRef)query, (__bridge CFDictionaryRef)attributes);
+    if (status == errSecItemNotFound) {
+      NSMutableDictionary *add = [query mutableCopy];
+      [add addEntriesFromDictionary:attributes];
+      status = SecItemAdd((__bridge CFDictionaryRef)add, NULL);
+    }
+    return status == errSecSuccess;
   }
-  return status == errSecSuccess;
+}
+
+static NSInteger OmiAuthStoreSessionIfCurrent(
+    NSString *expectedRefreshToken,
+    NSString *idToken,
+    NSString *refreshToken,
+    NSNumber *expiresIn,
+    NSString *localId,
+    NSString *firebaseApiKey) {
+  @synchronized (OmiAuthKeychainLock()) {
+    NSDictionary *current = OmiAuthReadKeychainSession(OmiAuthKeychainService);
+    NSString *currentRefreshToken = [current[@"refreshToken"] isKindOfClass:NSString.class]
+        ? current[@"refreshToken"] : nil;
+    if (!OmiAuthRefreshTokensEqual(currentRefreshToken, expectedRefreshToken)) return -1;
+    return OmiAuthStoreSession(idToken, refreshToken, expiresIn, localId, firebaseApiKey) ? 1 : 0;
+  }
+}
+
+static OSStatus OmiAuthClearSessionIfCurrent(NSString *expectedRefreshToken) {
+  @synchronized (OmiAuthKeychainLock()) {
+    NSDictionary *current = OmiAuthReadKeychainSession(OmiAuthKeychainService);
+    NSString *currentRefreshToken = [current[@"refreshToken"] isKindOfClass:NSString.class]
+        ? current[@"refreshToken"] : nil;
+    if (!OmiAuthRefreshTokensEqual(currentRefreshToken, expectedRefreshToken)) return errSecItemNotFound;
+    return OmiAuthClearSession();
+  }
 }
 
 @interface OmiAuthModule ()
@@ -437,8 +495,14 @@ RCT_EXPORT_MODULE(OmiAuth)
     NSDictionary *json = data == nil ? nil : [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
     if (error != nil || status < 200 || status >= 300 || ![json isKindOfClass:NSDictionary.class]) {
       if (OmiAuthRefreshFailureIsDefinitive(status, json)) {
-        OmiAuthClearSession();
-        completion(nil, nil);
+        OSStatus clearStatus = OmiAuthClearSessionIfCurrent(refreshToken);
+        if (clearStatus == errSecSuccess) {
+          completion(nil, nil);
+        } else if (clearStatus == errSecItemNotFound) {
+          [self resolveStoredToken:completion];
+        } else {
+          completion(nil, [NSError errorWithDomain:NSOSStatusErrorDomain code:clearStatus userInfo:nil]);
+        }
         return;
       }
       completion(nil, error ?: [NSError errorWithDomain:@"OmiAuth" code:status userInfo:nil]);
@@ -450,8 +514,15 @@ RCT_EXPORT_MODULE(OmiAuth)
     NSString *userId = [json[@"user_id"] isKindOfClass:NSString.class] ? json[@"user_id"] : session[@"tokenUserId"];
     NSNumber *expiresIn = [json[@"expires_in"] respondsToSelector:@selector(doubleValue)]
         ? @([json[@"expires_in"] doubleValue]) : @3600;
-    if (newIdToken.length == 0 || newRefreshToken.length == 0 ||
-        !OmiAuthStoreSession(newIdToken, newRefreshToken, expiresIn, userId, firebaseApiKey)) {
+    NSInteger stored = newIdToken.length > 0 && newRefreshToken.length > 0
+        ? OmiAuthStoreSessionIfCurrent(refreshToken, newIdToken, newRefreshToken, expiresIn,
+                                       userId, firebaseApiKey)
+        : 0;
+    if (stored < 0) {
+      [self resolveStoredToken:completion];
+      return;
+    }
+    if (stored == 0) {
       completion(nil, [NSError errorWithDomain:@"OmiAuth" code:status userInfo:nil]);
       return;
     }
@@ -473,8 +544,14 @@ RCT_EXPORT_MODULE(OmiAuth)
   NSString *refreshToken = [session[@"refreshToken"] isKindOfClass:NSString.class]
       ? session[@"refreshToken"] : nil;
   if (refreshToken.length == 0) {
-    OmiAuthClearSession();
-    completion(nil, nil);
+    OSStatus clearStatus = OmiAuthClearSessionIfCurrent(refreshToken);
+    if (clearStatus == errSecSuccess) {
+      completion(nil, nil);
+    } else if (clearStatus == errSecItemNotFound) {
+      [self resolveStoredToken:completion];
+    } else {
+      completion(nil, [NSError errorWithDomain:NSOSStatusErrorDomain code:clearStatus userInfo:nil]);
+    }
     return;
   }
   NSString *firebaseApiKey = [session[@"firebaseApiKey"] isKindOfClass:NSString.class]

@@ -302,22 +302,36 @@ test('refreshes expiring macOS cloud sessions without using stale tokens', () =>
   }
   expect(backend).toContain('grant_type" value:@"refresh_token');
   expect(backend).toContain('OmiClearOwnKeychainCloudSession');
+  expect(backend).toContain('OmiStoreOwnKeychainCloudSessionIfCurrent');
+  expect(backend).toContain('OmiClearOwnKeychainCloudSessionIfCurrent');
   expect(backend).toContain('OmiCloudRefreshFailureIsDefinitive');
   expect(backend).not.toMatch(
     /NSLog\([^\n]*(idToken|refreshToken|Authorization)/i,
   );
   expect(auth).toContain('grant_type=refresh_token');
   expect(auth).toContain('OmiAuthClearSession');
+  expect(auth).toContain('OmiAuthStoreSessionIfCurrent');
+  expect(auth).toContain('OmiAuthClearSessionIfCurrent');
   expect(auth).toContain('OmiAuthRefreshFailureIsDefinitive');
   expect(auth).toMatch(
     /hasCloudSessionWithResolver:[^]*\[self resolveStoredToken:[^]*resolve\(@\(token\.length > 0\)\)/,
   );
   expect(auth).toMatch(
-    /if \(refreshToken\.length == 0\) \{[^]*OmiAuthClearSession\(\);[^]*completion\(nil, nil\)/,
+    /if \(refreshToken\.length == 0\) \{[^]*OmiAuthClearSessionIfCurrent\(refreshToken\)/,
   );
   expect(auth).not.toMatch(
     /NSLog\([^\n]*(idToken|refreshToken|Authorization)/i,
   );
+});
+
+test('uses a noninteractive data-protection keychain for the derived app session', () => {
+  const auth = readNativeSource('OmiAuthModule.mm');
+  const backend = readNativeSource('OmiBackendModule.mm');
+
+  expect(auth).toContain('kSecUseDataProtectionKeychain');
+  expect(auth).toContain('dispatch_semaphore_wait');
+  expect(backend).toContain('kSecUseDataProtectionKeychain');
+  expect(backend).toContain('OmiAuthKeychainLock()');
 });
 
 test('validates loopback callbacks before success and keeps listening past probes', () => {
