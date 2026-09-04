@@ -4,8 +4,51 @@ protocol LocalInferenceHTTPClient: Sendable {
   func send(_ request: URLRequest) async throws -> (Data, URLResponse)
 }
 
+/// Refuses every HTTP redirect.
+///
+/// `requireLoopback` validates the *configured* base URL. `URLSession` with no
+/// delegate follows up to 20 redirects on its own, and a 307/308 preserves the
+/// method and body — so a process answering on the configured loopback port
+/// could reply `307 Location: https://<anywhere>` and the POST, prompt and
+/// transcript included, would be re-sent there under the user's network
+/// identity. `requireLoopback` never sees that URL, because the redirect is
+/// resolved below the adapter.
+///
+/// A local OpenAI-compatible server has no legitimate reason to redirect, so
+/// the policy is refusal rather than re-validation: there is no correct
+/// redirect for this adapter to follow, and refusing is the only rule with no
+/// second URL to get wrong.
+final class LocalInferenceRedirectPolicy: NSObject, URLSessionTaskDelegate, Sendable {
+  func urlSession(
+    _ session: URLSession,
+    task: URLSessionTask,
+    willPerformHTTPRedirection response: HTTPURLResponse,
+    newRequest request: URLRequest,
+    completionHandler: @escaping (URLRequest?) -> Void
+  ) {
+    completionHandler(nil)
+  }
+}
+
 struct URLSessionLocalInferenceHTTPClient: LocalInferenceHTTPClient {
-  var session: URLSession = .shared
+  private static let redirectPolicy = LocalInferenceRedirectPolicy()
+
+  /// Never `URLSession.shared`: the shared session carries no delegate, so it
+  /// follows redirects, and it cannot be given this policy without changing
+  /// behaviour for every other caller in the app. One session for the process,
+  /// because a session created per request would retain its delegate until
+  /// invalidated and leak.
+  static let fencedSession = URLSession(
+    configuration: .ephemeral,
+    delegate: redirectPolicy,
+    delegateQueue: nil
+  )
+
+  var session: URLSession
+
+  init(session: URLSession? = nil) {
+    self.session = session ?? Self.fencedSession
+  }
 
   func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
     try await session.data(for: request)
@@ -16,7 +59,15 @@ enum LocalInferenceLoopback {
   /// Fail closed: the local-server adapter may only speak to a loopback host.
   /// A misconfigured paid or remote endpoint is an error, never a silent
   /// route onto a cloud provider.
+  static let allowedSchemes: Set<String> = ["http", "https"]
+
   static func isAllowed(_ url: URL) -> Bool {
+    // A non-HTTP scheme is not a local model server. `file:` in particular
+    // would make the "base URL" a path read, and a custom scheme can be
+    // claimed by any installed app.
+    guard let scheme = url.scheme?.lowercased(), allowedSchemes.contains(scheme) else {
+      return false
+    }
     guard let host = url.host?.trimmingCharacters(in: .whitespacesAndNewlines), !host.isEmpty else {
       return false
     }
