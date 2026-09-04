@@ -35,6 +35,7 @@ import {
   __registerOmiToolsForTest,
   __registerUserMcpToolsForTest,
   __resetOmiPipeForTest,
+  __resetUserMcpForTest,
   omiRequestIdFromRelayContext,
   omiReasoningEffortFromRelayContext,
   omiBuiltInToolPolicyFromRelayContext,
@@ -1998,304 +1999,316 @@ test("callSwiftTool: normal result after abort signal is not double-resolved", a
 });
 
 // ---------------------------------------------------------------------------
-// User-added remote MCP servers
+// User-added MCP servers — progressive disclosure
+//
+// Servers are NOT registered tool-by-tool. Exactly two proxy tools are
+// registered: mcp_tools_info (discovery; the sorted server/tool-name index is
+// embedded in its description) and mcp_call (dispatch by real names). Tests
+// use a short OMI_MCP_FIRST_TURN_BUDGET_MS only where slowness is the point;
+// with fast local fakes the all-settled race wins and no state is "connecting".
 // ---------------------------------------------------------------------------
 
-test("registerUserMcpTools: discovers tools over streamable HTTP and registers callable pi tools", async () => {
+/** Fake streamable-HTTP MCP server. Returns tools/prompts/call results per method. */
+async function startFakeHttpMcpServer(
+  handle: (message: { id?: number; method: string; params?: Record<string, any> }) => unknown,
+): Promise<{ url: string; close: () => Promise<void>; requests: Array<{ method: string; auth?: string }> }> {
   const { createServer: createHttpServer } = await import("node:http");
   const requests: Array<{ method: string; auth?: string }> = [];
   const httpServer = createHttpServer((req, res) => {
     let body = "";
     req.on("data", (chunk) => { body += chunk; });
     req.on("end", () => {
-      const message = JSON.parse(body) as { id?: number; method: string; params?: { name?: string; arguments?: Record<string, unknown> } };
+      const message = JSON.parse(body) as { id?: number; method: string; params?: Record<string, any> };
       requests.push({ method: message.method, auth: req.headers.authorization });
       if (message.id === undefined) { res.writeHead(202).end(); return; }
-      const respond = (result: unknown) => {
-        res.writeHead(200, { "content-type": "application/json", "mcp-session-id": "sess-1" });
-        res.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
-      };
-      if (message.method === "initialize") {
-        respond({ protocolVersion: "2025-06-18", capabilities: {}, serverInfo: { name: "fake" } });
-      } else if (message.method === "tools/list") {
-        respond({ tools: [{
-          name: "echo",
-          description: "Echoes text back",
-          inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
-        }] });
-      } else if (message.method === "tools/call") {
-        respond({ content: [{ type: "text", text: `echo: ${message.params?.arguments?.text}` }] });
-      } else {
-        respond({});
-      }
+      res.writeHead(200, { "content-type": "application/json", "mcp-session-id": "sess-1" });
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: handle(message) }));
     });
   });
   await new Promise<void>((r) => httpServer.listen(0, "127.0.0.1", r));
   const address = httpServer.address() as { port: number };
+  return {
+    url: `http://127.0.0.1:${address.port}/mcp`,
+    requests,
+    close: () => new Promise<void>((resolve) => httpServer.close(() => resolve())),
+  };
+}
 
-  const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-"));
-  const configPath = pathJoin(dir, "mcp-servers.json");
-  await writeFile(configPath, JSON.stringify({ mcpServers: {
-    fake: { url: `http://127.0.0.1:${address.port}/mcp`, token: "sk-test" },
-  } }));
+interface RegisteredTool {
+  name: string;
+  description: string;
+  parameters?: any;
+  execute: (id: string, params: any) => Promise<{ content: Array<{ text: string }> }>;
+}
+
+function fakePiCollecting(registered: RegisteredTool[]): any {
+  return { registerTool: (tool: never) => registered.push(tool as unknown as RegisteredTool) };
+}
+
+async function withMcpEnv(configServers: Record<string, unknown>, run: () => Promise<void>): Promise<void> {
+  const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-proxy-"));
+  const configPath = pathJoin(dir, "mcp.json");
+  await writeFile(configPath, JSON.stringify({ mcpServers: configServers }));
   const previous = process.env.OMI_LOCAL_MCP_FILE;
   process.env.OMI_LOCAL_MCP_FILE = configPath;
-
   try {
-    const registered: Array<{ name: string; execute: (id: string, params: unknown) => Promise<{ content: Array<{ text: string }> }> }> = [];
-    const fakePi = { registerTool: (tool: never) => { registered.push(tool); } } as unknown as Parameters<typeof __registerUserMcpToolsForTest>[0];
-    await __registerUserMcpToolsForTest(fakePi);
-
-    assert.equal(registered.length, 1);
-    assert.equal(registered[0].name, "mcp_fake_echo");
-    const result = await registered[0].execute("call-1", { text: "hello" });
-    assert.equal(result.content[0].text, "echo: hello");
-    // Bearer token flows to the server on every request.
-    assert.ok(requests.every((r) => r.auth === "Bearer sk-test"));
-    assert.deepEqual(requests.map((r) => r.method).slice(0, 2), ["initialize", "notifications/initialized"]);
+    await run();
   } finally {
+    __resetUserMcpForTest();
     if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
-    httpServer.close();
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+test("registerUserMcpTools: default payload is the two proxy tools — names exposed, descriptions and schemas are not", async () => {
+  const server = await startFakeHttpMcpServer((message) => {
+    if (message.method === "initialize") {
+      return { protocolVersion: "2025-06-18", capabilities: {}, serverInfo: { name: "fake" } };
+    }
+    if (message.method === "tools/list") {
+      return { tools: [{
+        name: "echo",
+        description: "Echoes text back",
+        inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+      }] };
+    }
+    if (message.method === "tools/call") {
+      return { content: [{ type: "text", text: `echo: ${message.params?.arguments?.text}` }] };
+    }
+    return {};
+  });
+
+  await withMcpEnv({ fake: { url: server.url, token: "sk-test" } }, async () => {
+    const registered: RegisteredTool[] = [];
+    await __registerUserMcpToolsForTest(fakePiCollecting(registered));
+
+    // The default payload is exactly two tool definitions, whatever the server offers.
+    assert.deepEqual(registered.map((tool) => tool.name), ["mcp_tools_info", "mcp_call"]);
+
+    // Tool NAMES are discoverable without any call…
+    const toolsInfo = registered[0];
+    assert.match(toolsInfo.description, /fake/);
+    assert.match(toolsInfo.description, /\becho\b/);
+    // …but the server's verbatim description and its JSON schema are not in the payload.
+    assert.doesNotMatch(toolsInfo.description, /Echoes text back/);
+    assert.doesNotMatch(toolsInfo.description, /inputSchema/);
+    assert.doesNotMatch(registered[1].description, /Echoes text back/);
+    assert.doesNotMatch(registered[1].description, /inputSchema/);
+
+    // Dispatch happens by the REAL server and tool names; mangled names are gone.
+    const result = await registered[1].execute("call-1", { server: "fake", tool: "echo", arguments: { text: "hello" } });
+    assert.equal(result.content[0].text, "echo: hello");
+    // Bearer token still flows to the server on every request.
+    assert.ok(server.requests.every((r) => r.auth === "Bearer sk-test"));
+  });
+  await server.close();
 });
 
-test("registerUserMcpTools: a server's published prompts become callable tools", async () => {
-  const { createServer: createHttpServer } = await import("node:http");
-  const methods: string[] = [];
-  const httpServer = createHttpServer((req, res) => {
-    let body = "";
-    req.on("data", (chunk) => { body += chunk; });
-    req.on("end", () => {
-      const message = JSON.parse(body) as { id?: number; method: string; params?: { name?: string; arguments?: Record<string, unknown> } };
-      methods.push(message.method);
-      if (message.id === undefined) { res.writeHead(202).end(); return; }
-      const respond = (result: unknown) => {
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
-      };
-      if (message.method === "initialize") {
-        respond({ protocolVersion: "2025-06-18", capabilities: { tools: {}, prompts: {} } });
-      } else if (message.method === "tools/list") {
-        respond({ tools: [] });
-      } else if (message.method === "prompts/list") {
-        respond({ prompts: [{
-          name: "review_pr",
-          description: "Review a pull request",
-          arguments: [
-            { name: "number", description: "PR number", required: true },
-            { name: "focus", description: "What to weigh", required: false },
-          ],
-        }] });
-      } else if (message.method === "prompts/get") {
-        respond({ messages: [
-          { role: "user", content: { type: "text", text: `Review PR ${message.params?.arguments?.number}` } },
-        ] });
-      } else {
-        respond({});
-      }
-    });
+test("registerUserMcpTools: mcp_tools_info returns the live index, per-server schemas, and one-tool detail", async () => {
+  const server = await startFakeHttpMcpServer((message) => {
+    if (message.method === "initialize") {
+      return { protocolVersion: "2025-06-18", capabilities: {}, serverInfo: { name: "fake" } };
+    }
+    if (message.method === "tools/list") {
+      return { tools: [{
+        name: "echo",
+        description: "Echoes text back",
+        inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+      }] };
+    }
+    return {};
   });
-  await new Promise<void>((r) => httpServer.listen(0, "127.0.0.1", r));
-  const address = httpServer.address() as { port: number };
 
-  const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-prompts-"));
-  const configPath = pathJoin(dir, "mcp-servers.json");
-  await writeFile(configPath, JSON.stringify({ mcpServers: {
-    forge: { url: `http://127.0.0.1:${address.port}/mcp` },
-  } }));
-  const previous = process.env.OMI_LOCAL_MCP_FILE;
-  process.env.OMI_LOCAL_MCP_FILE = configPath;
+  await withMcpEnv({ fake: { url: server.url } }, async () => {
+    const registered: RegisteredTool[] = [];
+    await __registerUserMcpToolsForTest(fakePiCollecting(registered));
+    const toolsInfo = registered[0];
 
-  try {
-    const registered: Array<{ name: string; parameters: { required?: string[] }; execute: (id: string, params: unknown) => Promise<{ content: Array<{ text: string }> }> }> = [];
-    const fakePi = { registerTool: (tool: never) => { registered.push(tool); } } as unknown as Parameters<typeof __registerUserMcpToolsForTest>[0];
-    await __registerUserMcpToolsForTest(fakePi);
+    // No arguments: the live index — names and status, no schemas.
+    const index = JSON.parse((await toolsInfo.execute("c1", {})).content[0].text);
+    assert.equal(index.servers.length, 1);
+    assert.equal(index.servers[0].name, "fake");
+    assert.equal(index.servers[0].status, "ready");
+    assert.deepEqual(index.servers[0].tools, ["echo"]);
+    assert.deepEqual(index.servers[0].prompts, []);
 
-    assert.equal(registered.length, 1);
-    assert.equal(registered[0].name, "mcp_forge_prompt_review_pr");
-    // Only the arguments the prompt marks required are required of the model.
-    assert.deepEqual(registered[0].parameters.required, ["number"]);
-    const result = await registered[0].execute("call-1", { number: "42" });
+    // One server: full descriptions and JSON input schemas.
+    const detail = JSON.parse((await toolsInfo.execute("c2", { server: "fake" })).content[0].text);
+    assert.equal(detail.server, "fake");
+    assert.equal(detail.tools[0].description, "Echoes text back");
+    assert.deepEqual(detail.tools[0].inputSchema.required, ["text"]);
+
+    // One tool: just that tool's contract.
+    const one = JSON.parse((await toolsInfo.execute("c3", { server: "fake", tool: "echo" })).content[0].text);
+    assert.equal(one.kind, "tool");
+    assert.equal(one.name, "echo");
+    assert.equal(one.description, "Echoes text back");
+
+    // Unknown server errors instead of throwing.
+    const bad = await toolsInfo.execute("c4", { server: "nope" });
+    assert.match(bad.content[0].text, /unknown MCP server 'nope'/);
+  });
+  await server.close();
+});
+
+test("registerUserMcpTools: mcp_call surfaces unknown servers, unknown tools, and tool errors", async () => {
+  const server = await startFakeHttpMcpServer((message) => {
+    if (message.method === "initialize") return { protocolVersion: "2025-06-18", capabilities: {} };
+    if (message.method === "tools/list") return { tools: [{ name: "boom", inputSchema: { type: "object" } }] };
+    if (message.method === "tools/call") {
+      return { isError: true, content: [{ type: "text", text: "detonated" }] };
+    }
+    return {};
+  });
+
+  await withMcpEnv({ fake: { url: server.url } }, async () => {
+    const registered: RegisteredTool[] = [];
+    await __registerUserMcpToolsForTest(fakePiCollecting(registered));
+    const mcpCall = registered[1];
+
+    const unknownServer = await mcpCall.execute("c1", { server: "ghost", tool: "x" });
+    assert.match(unknownServer.content[0].text, /unknown MCP server 'ghost'/);
+    assert.match(unknownServer.content[0].text, /Configured servers: fake/);
+
+    const unknownTool = await mcpCall.execute("c2", { server: "fake", tool: "nope" });
+    assert.match(unknownTool.content[0].text, /no tool or prompt named 'nope'/);
+
+    // A server-side tool error comes back as readable text, never a throw.
+    const toolError = await mcpCall.execute("c3", { server: "fake", tool: "boom", arguments: {} });
+    assert.match(toolError.content[0].text, /detonated/);
+  });
+  await server.close();
+});
+
+test("registerUserMcpTools: a server's published prompts fold into the same pattern", async () => {
+  const server = await startFakeHttpMcpServer((message) => {
+    if (message.method === "initialize") return { protocolVersion: "2025-06-18", capabilities: { tools: {}, prompts: {} } };
+    if (message.method === "tools/list") return { tools: [] };
+    if (message.method === "prompts/list") {
+      return { prompts: [{
+        name: "review_pr",
+        description: "Review a pull request",
+        arguments: [
+          { name: "number", description: "PR number", required: true },
+          { name: "focus", description: "What to weigh", required: false },
+        ],
+      }] };
+    }
+    if (message.method === "prompts/get") {
+      return { messages: [
+        { role: "user", content: { type: "text", text: `Review PR ${message.params?.arguments?.number}` } },
+      ] };
+    }
+    return {};
+  });
+
+  await withMcpEnv({ forge: { url: server.url } }, async () => {
+    const registered: RegisteredTool[] = [];
+    await __registerUserMcpToolsForTest(fakePiCollecting(registered));
+
+    // Prompts are listed by name in the default payload…
+    assert.match(registered[0].description, /review_pr/);
+    // …with their full arguments available on demand.
+    const detail = JSON.parse((await registered[0].execute("c1", { server: "forge", tool: "review_pr" })).content[0].text);
+    assert.equal(detail.kind, "prompt");
+    assert.equal(detail.description, "Review a pull request");
+    assert.deepEqual(detail.arguments.filter((a: { required: boolean }) => a.required).map((a: { name: string }) => a.name), ["number"]);
+    // …and dispatch through mcp_call like a tool.
+    const result = await registered[1].execute("c2", { server: "forge", tool: "review_pr", arguments: { number: "42" } });
     assert.equal(result.content[0].text, "user: Review PR 42");
-  } finally {
-    if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
-    httpServer.close();
-    await rm(dir, { recursive: true, force: true });
-  }
+    assert.ok(!registered[0].description.includes("Review a pull request"), "prompt description must not ride in the default payload");
+  });
+  await server.close();
 });
 
 // A server that publishes no prompts capability must never be asked for prompts:
 // that is a guaranteed error response on every connection, every session.
 test("registerUserMcpTools: prompts are not requested from a server that has none", async () => {
-  const { createServer: createHttpServer } = await import("node:http");
-  const methods: string[] = [];
-  const httpServer = createHttpServer((req, res) => {
-    let body = "";
-    req.on("data", (chunk) => { body += chunk; });
-    req.on("end", () => {
-      const message = JSON.parse(body) as { id?: number; method: string };
-      methods.push(message.method);
-      if (message.id === undefined) { res.writeHead(202).end(); return; }
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result:
-        message.method === "initialize"
-          ? { protocolVersion: "2025-06-18", capabilities: { tools: {} } }
-          : message.method === "tools/list" ? { tools: [] } : {} }));
-    });
+  const server = await startFakeHttpMcpServer((message) => {
+    if (message.method === "initialize") return { protocolVersion: "2025-06-18", capabilities: { tools: {} } };
+    if (message.method === "tools/list") return { tools: [] };
+    return {};
   });
-  await new Promise<void>((r) => httpServer.listen(0, "127.0.0.1", r));
-  const address = httpServer.address() as { port: number };
 
-  const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-noprompts-"));
-  const configPath = pathJoin(dir, "mcp-servers.json");
-  await writeFile(configPath, JSON.stringify({ mcpServers: {
-    plain: { url: `http://127.0.0.1:${address.port}/mcp` },
-  } }));
-  const previous = process.env.OMI_LOCAL_MCP_FILE;
-  process.env.OMI_LOCAL_MCP_FILE = configPath;
-
-  try {
-    const fakePi = { registerTool: () => {} } as unknown as Parameters<typeof __registerUserMcpToolsForTest>[0];
-    await __registerUserMcpToolsForTest(fakePi);
-    assert.ok(!methods.includes("prompts/list"));
-  } finally {
-    if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
-    httpServer.close();
-    await rm(dir, { recursive: true, force: true });
-  }
+  await withMcpEnv({ plain: { url: server.url } }, async () => {
+    await __registerUserMcpToolsForTest(fakePiCollecting([]));
+    assert.ok(!server.requests.some((r) => r.method === "prompts/list"));
+  });
+  await server.close();
 });
 
 // A server with more tools than its page size returns a nextCursor. Ignoring it
 // truncated the list, and the tools past the first page did not exist as far as
 // chat was concerned.
-test("registerUserMcpTools: every page of a paginated tool list is registered", async () => {
-  const { createServer: createHttpServer } = await import("node:http");
-  const cursors: Array<string | undefined> = [];
-  const httpServer = createHttpServer((req, res) => {
-    let body = "";
-    req.on("data", (chunk) => { body += chunk; });
-    req.on("end", () => {
-      const message = JSON.parse(body) as { id?: number; method: string; params?: { cursor?: string } };
-      if (message.id === undefined) { res.writeHead(202).end(); return; }
-      const respond = (result: unknown) => {
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
-      };
-      if (message.method === "initialize") {
-        respond({ protocolVersion: "2025-06-18", capabilities: { tools: {} } });
-      } else if (message.method === "tools/list") {
-        cursors.push(message.params?.cursor);
-        if (!message.params?.cursor) {
-          respond({ tools: [{ name: "one", inputSchema: { type: "object" } }], nextCursor: "p2" });
-        } else if (message.params.cursor === "p2") {
-          respond({ tools: [{ name: "two", inputSchema: { type: "object" } }], nextCursor: "p3" });
-        } else {
-          // Repeating the cursor must end the walk, not loop on it forever.
-          respond({ tools: [{ name: "three", inputSchema: { type: "object" } }], nextCursor: "p3" });
-        }
-      } else {
-        respond({});
-      }
-    });
+test("registerUserMcpTools: every page of a paginated tool list is discoverable", async () => {
+  const server = await startFakeHttpMcpServer((message) => {
+    if (message.method === "initialize") return { protocolVersion: "2025-06-18", capabilities: { tools: {} } };
+    if (message.method === "tools/list") {
+      const cursor = message.params?.cursor;
+      if (!cursor) return { tools: [{ name: "one", inputSchema: { type: "object" } }], nextCursor: "p2" };
+      if (cursor === "p2") return { tools: [{ name: "two", inputSchema: { type: "object" } }], nextCursor: "p3" };
+      // Repeating the cursor must end the walk, not loop on it forever.
+      return { tools: [{ name: "three", inputSchema: { type: "object" } }], nextCursor: "p3" };
+    }
+    return {};
   });
-  await new Promise<void>((r) => httpServer.listen(0, "127.0.0.1", r));
-  const address = httpServer.address() as { port: number };
 
-  const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-pages-"));
-  const configPath = pathJoin(dir, "mcp-servers.json");
-  await writeFile(configPath, JSON.stringify({ mcpServers: {
-    big: { url: `http://127.0.0.1:${address.port}/mcp` },
-  } }));
-  const previous = process.env.OMI_LOCAL_MCP_FILE;
-  process.env.OMI_LOCAL_MCP_FILE = configPath;
-
-  try {
-    const registered: Array<{ name: string }> = [];
-    const fakePi = { registerTool: (tool: never) => { registered.push(tool); } } as unknown as Parameters<typeof __registerUserMcpToolsForTest>[0];
-    await __registerUserMcpToolsForTest(fakePi);
-
-    assert.deepEqual(registered.map((t) => t.name), ["mcp_big_one", "mcp_big_two", "mcp_big_three"]);
-    assert.deepEqual(cursors, [undefined, "p2", "p3"]);
-  } finally {
-    if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
-    httpServer.close();
-    await rm(dir, { recursive: true, force: true });
-  }
+  await withMcpEnv({ big: { url: server.url } }, async () => {
+    const registered: RegisteredTool[] = [];
+    await __registerUserMcpToolsForTest(fakePiCollecting(registered));
+    const index = JSON.parse((await registered[0].execute("c1", {})).content[0].text);
+    // Names arrive sorted, regardless of the server's page order.
+    assert.deepEqual(index.servers[0].tools, ["one", "three", "two"]);
+    const calls = server.requests.filter((r) => r.method === "tools/list").length;
+    assert.equal(calls, 3);
+  });
+  await server.close();
 });
 
-// Registered names are capped at 64 chars, so two long tool names on one server
-// truncate to the same string. The second registration then shadows the first or
-// throws inside the Promise.all over servers, which would reject the whole
-// extension and take every Omi tool down with it.
-test("registerUserMcpTools: names that truncate to the same string stay distinct", async () => {
-  const { createServer: createHttpServer } = await import("node:http");
+// Progressive disclosure removed the 64-character mangling entirely: real names
+// reach the server and come back unchanged, however long, with no collision
+// suffixes to race.
+test("registerUserMcpTools: real tool names pass through unchanged, however long", async () => {
   const long = "a".repeat(70);
-  const httpServer = createHttpServer((req, res) => {
-    let body = "";
-    req.on("data", (chunk) => { body += chunk; });
-    req.on("end", () => {
-      const message = JSON.parse(body) as { id?: number; method: string };
-      if (message.id === undefined) { res.writeHead(202).end(); return; }
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result:
-        message.method === "initialize"
-          ? { protocolVersion: "2025-06-18", capabilities: { tools: {} } }
-          : message.method === "tools/list"
-            ? { tools: [
-                { name: `${long}_one`, inputSchema: { type: "object" } },
-                { name: `${long}_two`, inputSchema: { type: "object" } },
-              ] }
-            : {} }));
-    });
+  const server = await startFakeHttpMcpServer((message) => {
+    if (message.method === "initialize") return { protocolVersion: "2025-06-18", capabilities: { tools: {} } };
+    if (message.method === "tools/list") {
+      return { tools: [
+        { name: `${long}_one`, inputSchema: { type: "object" } },
+        { name: `${long}_two`, inputSchema: { type: "object" } },
+      ] };
+    }
+    if (message.method === "tools/call") return { content: [{ type: "text", text: "called" }] };
+    return {};
   });
-  await new Promise<void>((r) => httpServer.listen(0, "127.0.0.1", r));
-  const address = httpServer.address() as { port: number };
 
-  const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-names-"));
-  const configPath = pathJoin(dir, "mcp-servers.json");
-  await writeFile(configPath, JSON.stringify({ mcpServers: {
-    verbose: { url: `http://127.0.0.1:${address.port}/mcp` },
-  } }));
-  const previous = process.env.OMI_LOCAL_MCP_FILE;
-  process.env.OMI_LOCAL_MCP_FILE = configPath;
+  await withMcpEnv({ verbose: { url: server.url } }, async () => {
+    const registered: RegisteredTool[] = [];
+    await __registerUserMcpToolsForTest(fakePiCollecting(registered));
 
-  try {
-    const registered: Array<{ name: string }> = [];
-    const fakePi = { registerTool: (tool: never) => { registered.push(tool); } } as unknown as Parameters<typeof __registerUserMcpToolsForTest>[0];
-    await __registerUserMcpToolsForTest(fakePi);
-
-    const names = registered.map((t) => t.name);
-    assert.equal(names.length, 2);
-    assert.equal(new Set(names).size, 2, `collided: ${names.join(" ")}`);
-    assert.ok(names.every((n) => n.length <= 64));
-  } finally {
-    if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
-    httpServer.close();
-    await rm(dir, { recursive: true, force: true });
-  }
+    const detail = JSON.parse((await registered[0].execute("c1", { server: "verbose", tool: `${long}_two` })).content[0].text);
+    assert.equal(detail.name, `${long}_two`);
+    const result = await registered[1].execute("c2", { server: "verbose", tool: `${long}_one`, arguments: {} });
+    assert.equal(result.content[0].text, "called");
+  });
+  await server.close();
 });
 
-test("registerUserMcpTools: unreachable server is skipped, never fatal", async () => {
-  const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-bad-"));
-  const configPath = pathJoin(dir, "mcp-servers.json");
-  await writeFile(configPath, JSON.stringify({ mcpServers: { dead: { url: "http://127.0.0.1:1/mcp" } } }));
-  const previous = process.env.OMI_LOCAL_MCP_FILE;
-  process.env.OMI_LOCAL_MCP_FILE = configPath;
-  try {
-    const registered: unknown[] = [];
-    const fakePi = { registerTool: (tool: never) => { registered.push(tool); } } as unknown as Parameters<typeof __registerUserMcpToolsForTest>[0];
-    await __registerUserMcpToolsForTest(fakePi);
-    assert.equal(registered.length, 0);
-  } finally {
-    if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
-    await rm(dir, { recursive: true, force: true });
-  }
+test("registerUserMcpTools: unreachable server is reported through the proxies, never fatal", async () => {
+  await withMcpEnv({ dead: { url: "http://127.0.0.1:1/mcp" } }, async () => {
+    const registered: RegisteredTool[] = [];
+    await __registerUserMcpToolsForTest(fakePiCollecting(registered));
+
+    // The proxies still register; the failure is visible, not silent.
+    assert.deepEqual(registered.map((tool) => tool.name), ["mcp_tools_info", "mcp_call"]);
+    const info = await registered[0].execute("c1", { server: "dead" });
+    assert.match(info.content[0].text, /unavailable/);
+    const call = await registered[1].execute("c2", { server: "dead", tool: "x" });
+    assert.match(call.content[0].text, /unavailable/);
+  });
 });
 
-test("registerUserMcpTools: local stdio server from ~/.omi-style mcp.json registers and executes", async () => {
-  const dir = await mkdtemp(pathJoin(tmpdir(), "local-mcp-"));
-  const configPath = pathJoin(dir, "mcp.json");
+test("registerUserMcpTools: local stdio server from ~/.omi-style mcp.json executes through mcp_call", async () => {
   const serverScript =
     'const rl = require("readline").createInterface({ input: process.stdin });' +
     'rl.on("line", (line) => { const msg = JSON.parse(line); if (msg.id === undefined) return;' +
@@ -2304,20 +2317,114 @@ test("registerUserMcpTools: local stdio server from ~/.omi-style mcp.json regist
     'else if (msg.method === "tools/list") reply({ tools: [{ name: "add", description: "adds", inputSchema: { type: "object", properties: { a: { type: "number" }, b: { type: "number" } }, required: ["a", "b"] } }] });' +
     'else if (msg.method === "tools/call") reply({ content: [{ type: "text", text: String(msg.params.arguments.a + msg.params.arguments.b) }] });' +
     'else reply({}); });';
+
+  await withMcpEnv({ calc: { command: process.execPath, args: ["-e", serverScript] } }, async () => {
+    const registered: RegisteredTool[] = [];
+    await __registerUserMcpToolsForTest(fakePiCollecting(registered));
+
+    assert.deepEqual(registered.map((tool) => tool.name), ["mcp_tools_info", "mcp_call"]);
+    const schema = JSON.parse((await registered[0].execute("c1", { server: "calc", tool: "add" })).content[0].text);
+    assert.deepEqual(schema.inputSchema.required, ["a", "b"]);
+    const result = await registered[1].execute("c2", { server: "calc", tool: "add", arguments: { a: 2, b: 40 } });
+    assert.equal(result.content[0].text, "42");
+  });
+});
+
+test("registerUserMcpTools: two runs register the same names and the same name-sorted index", async () => {
+  const alpha = await startFakeHttpMcpServer((message) => {
+    if (message.method === "initialize") return { protocolVersion: "2025-06-18", capabilities: {} };
+    if (message.method === "tools/list") return { tools: [{ name: "only", inputSchema: { type: "object" } }] };
+    return {};
+  });
+  const zeta = await startFakeHttpMcpServer((message) => {
+    if (message.method === "initialize") return { protocolVersion: "2025-06-18", capabilities: {} };
+    if (message.method === "tools/list") {
+      return { tools: [
+        { name: "b_tool", inputSchema: { type: "object" } },
+        { name: "a_tool", inputSchema: { type: "object" } },
+      ] };
+    }
+    return {};
+  });
+
+  try {
+    await withMcpEnv({
+      // Deliberately not in alphabetical order.
+      zeta: { url: zeta.url },
+      alpha: { url: alpha.url },
+    }, async () => {
+      const first: RegisteredTool[] = [];
+      await __registerUserMcpToolsForTest(fakePiCollecting(first));
+      const snapshot = first.map((tool) => ({ name: tool.name, description: tool.description }));
+
+      __resetUserMcpForTest();
+      const second: RegisteredTool[] = [];
+      await __registerUserMcpToolsForTest(fakePiCollecting(second));
+
+      const again = second.map((tool) => ({ name: tool.name, description: tool.description }));
+      assert.deepEqual(again, snapshot);
+      // Servers appear sorted by name regardless of config order, tools sorted within.
+      const toolsInfo = snapshot.find((tool) => tool.name === "mcp_tools_info")!;
+      assert.ok(toolsInfo.description.indexOf("alpha") < toolsInfo.description.indexOf("zeta"));
+      assert.ok(toolsInfo.description.indexOf("a_tool") < toolsInfo.description.indexOf("b_tool"));
+    });
+  } finally {
+    await alpha.close();
+    await zeta.close();
+  }
+});
+
+test("registerUserMcpTools: the first turn is not blocked by a slow server, which lands live afterwards", async () => {
+  const previousBudget = process.env.OMI_MCP_FIRST_TURN_BUDGET_MS;
+  process.env.OMI_MCP_FIRST_TURN_BUDGET_MS = "200";
+  // The stdio server stalls its initialize reply past the first-turn budget.
+  const serverScript =
+    'const rl = require("readline").createInterface({ input: process.stdin });' +
+    'rl.on("line", (line) => { const msg = JSON.parse(line); if (msg.id === undefined) return;' +
+    'const reply = (result) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result }) + "\\n");' +
+    'if (msg.method === "initialize") setTimeout(() => reply({ protocolVersion: "2025-06-18", capabilities: {} }), 600);' +
+    'else if (msg.method === "tools/list") reply({ tools: [{ name: "add", inputSchema: { type: "object" } }] });' +
+    'else if (msg.method === "tools/call") reply({ content: [{ type: "text", text: "3" }] });' +
+    'else reply({}); });';
+
+  const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-slow-"));
+  const configPath = pathJoin(dir, "mcp.json");
   await writeFile(configPath, JSON.stringify({
-    mcpServers: { calc: { command: process.execPath, args: ["-e", serverScript] } },
+    mcpServers: { slow: { command: process.execPath, args: ["-e", serverScript] } },
   }));
   const previous = process.env.OMI_LOCAL_MCP_FILE;
   process.env.OMI_LOCAL_MCP_FILE = configPath;
   try {
-    const registered: Array<{ name: string; execute: (id: string, params: unknown) => Promise<{ content: Array<{ text: string }> }> }> = [];
-    const fakePi = { registerTool: (tool: never) => { registered.push(tool); } } as unknown as Parameters<typeof __registerUserMcpToolsForTest>[0];
-    await __registerUserMcpToolsForTest(fakePi);
-    assert.equal(registered.length, 1);
-    assert.equal(registered[0].name, "mcp_calc_add");
-    const result = await registered[0].execute("c1", { a: 2, b: 40 });
-    assert.equal(result.content[0].text, "42");
+    const registered: RegisteredTool[] = [];
+    const started = Date.now();
+    await __registerUserMcpToolsForTest(fakePiCollecting(registered));
+    const elapsed = Date.now() - started;
+    // Registration returned at the budget, not at the server's 30s discovery cap.
+    assert.ok(elapsed < 1000, `registration blocked the first turn for ${elapsed}ms`);
+    assert.deepEqual(registered.map((tool) => tool.name), ["mcp_tools_info", "mcp_call"]);
+
+    const toolsInfo = registered[0];
+    const mcpCall = registered[1];
+    // The proxies report the connecting state instead of pretending it is ready.
+    const early = (await toolsInfo.execute("c1", {})).content[0].text;
+    assert.match(early, /connecting/);
+    const earlyCall = await mcpCall.execute("c2", { server: "slow", tool: "add", arguments: {} });
+    assert.match(earlyCall.content[0].text, /still connecting/);
+
+    // Once the server lands (in the background), it is callable with no
+    // re-registration, and the live index reflects it.
+    let index = "";
+    for (let i = 0; i < 100; i += 1) {
+      index = (await toolsInfo.execute("c3", {})).content[0].text;
+      if (!index.includes("connecting")) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.doesNotMatch(index, /connecting/);
+    const result = await mcpCall.execute("c4", { server: "slow", tool: "add", arguments: {} });
+    assert.equal(result.content[0].text, "3");
   } finally {
+    __resetUserMcpForTest();
+    if (previousBudget === undefined) delete process.env.OMI_MCP_FIRST_TURN_BUDGET_MS; else process.env.OMI_MCP_FIRST_TURN_BUDGET_MS = previousBudget;
     if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
     await rm(dir, { recursive: true, force: true });
   }
