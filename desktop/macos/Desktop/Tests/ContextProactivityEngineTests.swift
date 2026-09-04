@@ -625,6 +625,7 @@ final class ContextProactivityEngineTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/ProactiveAssistants/Core/ContextProactivityEngine.swift")
+    // omi-test-quality: source-inspection -- static contract: every entry point into evaluateAndDeliver must consult JIT admission, and the engine exposes no seam to drive all three against a fake coordinator.
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }
