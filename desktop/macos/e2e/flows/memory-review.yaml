@@ -28,9 +28,9 @@ covers:
   # The fixture helpers those actions run through: the row catalog, the local-only seed contract,
   # and the bounded waits against the mounted section's store.
   - desktop/macos/Desktop/Sources/Automation/MemoryReviewFixture.swift
-  # The pill that opens the recap, and the page that hosts the section. S6 activates the pill;
+  # The pill that opens the recap, and the page that hosts the section. S6 activates the row;
   # the sheet's `DailyRecapPage` is what makes the section mounted from S7 on.
-  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailyRecapPill.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailyRecapRow.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DailyRecapPage.swift
   # The store whose refresh brings the seeded record in.
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeDailySummaryStore.swift
@@ -99,7 +99,7 @@ steps:
   - id: S6
     name: Open the dedicated recap page through the recap pill
     ax.activate:
-      identifier: chat-daily-recap-pill
+      identifier: chat-daily-recap-row
     timeout_seconds: 10
     wait:
       state.visibleChatFirstRoute: daily-recap

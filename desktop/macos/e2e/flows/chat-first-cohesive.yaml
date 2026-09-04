@@ -74,7 +74,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
   # S22a-S22c seed a recap, open it through the slim Chat pill, and prove the dedicated recap
   # page mounts in its sheet — the one surface that carries recap badges and actions.
-  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailyRecapPill.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailyRecapRow.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DailyRecapPage.swift
   - desktop/macos/Desktop/Sources/Automation/MemoryReviewFixture.swift
 preconditions:
@@ -306,7 +306,7 @@ steps:
   - id: S22b
     name: Open the dedicated recap page through the slim recap pill
     ax.activate:
-      identifier: chat-daily-recap-pill
+      identifier: chat-daily-recap-row
     timeout_seconds: 10
     wait:
       state.visibleChatFirstRoute: daily-recap

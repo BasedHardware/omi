@@ -26,7 +26,7 @@ covers:
   - desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift
   # The recap is a thin pill above the transcript that opens the dedicated recap page
   # in a sheet; the full-card view it replaced is retired.
-  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailyRecapPill.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailyRecapRow.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DailyRecapPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailySummaryCoordinator.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailySummaryPresentation.swift

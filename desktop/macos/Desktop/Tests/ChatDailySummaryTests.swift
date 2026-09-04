@@ -358,66 +358,55 @@ final class ChatDailySummaryTests: XCTestCase {
     XCTAssertEqual(question, "What did I do on Sun, Aug 23?")
   }
 
-  // MARK: - Transcript admission (INV-CHAT-2)
+  // MARK: - The recap as a day boundary in the transcript
 
-  /// The reported launch ergonomics: the card admitted above a transcript that
-  /// was still loading printed the summary alone over a spinner, and the reader
-  /// watched it yank above the fold when history landed at the live edge.
-  func testAdmissionDefersToTheInitialHistoryLoad() {
-    XCTAssertFalse(
-      ChatDailySummaryAdmission.shouldAdmit(
-        hasSummary: true, isClearedFromTranscript: false, alreadyAdmitted: false,
-        isLoadingInitial: true, scrollMode: .followingBottom, hasMessages: false),
-      "Launch must not print the summary above a transcript that is still loading"
-    )
-    XCTAssertTrue(
-      ChatDailySummaryAdmission.shouldAdmit(
-        hasSummary: true, isClearedFromTranscript: false, alreadyAdmitted: false,
-        isLoadingInitial: false, scrollMode: .followingBottom, hasMessages: true),
-      "The loading-complete observer admits once the snapshot is placed"
-    )
-    XCTAssertTrue(
-      ChatDailySummaryAdmission.shouldAdmit(
-        hasSummary: true, isClearedFromTranscript: false, alreadyAdmitted: false,
-        isLoadingInitial: false, scrollMode: .followingBottom, hasMessages: false),
-      "A genuinely empty thread shows the card once loading completes"
-    )
-  }
+  /// The recap lives in history now: a day-boundary row anchored above the
+  /// first message on or after the recap's day. `ChatDailyRecapRowPlacement`
+  /// decides, without a view, where that boundary is and when a thread
+  /// deliberately shows none — a marker the transcript cannot back up would be
+  /// a lie about where the day began.
+  func testRecapRowPlacement() throws {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+    func message(_ month: Int, _ day: Int, hour: Int, sender: ChatSender = .user) throws -> ChatMessage {
+      let date = try XCTUnwrap(
+        calendar.date(from: DateComponents(year: 2_026, month: month, day: day, hour: hour)))
+      return ChatMessage(text: "\(month)/\(day)", createdAt: date, sender: sender)
+    }
 
-  func testAdmissionNeverMovesAReaderWhoScrolledAway() {
-    XCTAssertFalse(
-      ChatDailySummaryAdmission.shouldAdmit(
-        hasSummary: true, isClearedFromTranscript: false, alreadyAdmitted: false,
-        isLoadingInitial: false, scrollMode: .freeScrolling, hasMessages: true),
-      "A reader away from the live edge meets the card on their next return to the bottom"
-    )
-    XCTAssertTrue(
-      ChatDailySummaryAdmission.shouldAdmit(
-        hasSummary: true, isClearedFromTranscript: false, alreadyAdmitted: false,
-        isLoadingInitial: false, scrollMode: .freeScrolling, hasMessages: false),
-      "An empty thread has nothing to move"
-    )
-    XCTAssertFalse(
-      ChatDailySummaryAdmission.shouldAdmit(
-        hasSummary: true, isClearedFromTranscript: false, alreadyAdmitted: true,
-        isLoadingInitial: false, scrollMode: .followingBottom, hasMessages: true),
-      "Once admitted the card stays"
-    )
-  }
+    // Aug 31 afternoon, Sep 1 morning, Sep 2 evening.
+    let thread = [
+      try message(8, 31, hour: 15),
+      try message(9, 1, hour: 9),
+      try message(9, 2, hour: 21),
+    ]
 
-  func testAdmissionWithdrawsWhenThereIsNothingToAdmit() {
-    XCTAssertFalse(
-      ChatDailySummaryAdmission.shouldAdmit(
-        hasSummary: false, isClearedFromTranscript: false, alreadyAdmitted: true,
-        isLoadingInitial: false, scrollMode: .followingBottom, hasMessages: true),
-      "A summary that disappeared (owner change) withdraws the card"
-    )
-    XCTAssertFalse(
-      ChatDailySummaryAdmission.shouldAdmit(
-        hasSummary: true, isClearedFromTranscript: true, alreadyAdmitted: true,
-        isLoadingInitial: false, scrollMode: .followingBottom, hasMessages: true),
-      "A cleared summary keeps the card away"
-    )
+    // The Sep 1 boundary sits above the first Sep 1 message.
+    XCTAssertEqual(
+      ChatDailyRecapRowPlacement.anchorMessageID(
+        in: thread, recapDate: "2026-09-01", hasOlderMessagesAbove: false, calendar: calendar),
+      thread[1].id)
+    // The window's own first day anchors at its first row when nothing is hidden above.
+    XCTAssertEqual(
+      ChatDailyRecapRowPlacement.anchorMessageID(
+        in: thread, recapDate: "2026-08-31", hasOlderMessagesAbove: false, calendar: calendar),
+      thread[0].id)
+    // …but not when older messages exist above the window — the day may begin
+    // further up, and a marker above same-day history would be wrong once it loads.
+    XCTAssertNil(
+      ChatDailyRecapRowPlacement.anchorMessageID(
+        in: thread, recapDate: "2026-08-31", hasOlderMessagesAbove: true, calendar: calendar))
+    // A recap newer than everything loaded has no boundary in the window.
+    XCTAssertNil(
+      ChatDailyRecapRowPlacement.anchorMessageID(
+        in: thread, recapDate: "2026-09-03", hasOlderMessagesAbove: false, calendar: calendar))
+    // A missing or malformed date renders nothing rather than anchoring somewhere.
+    XCTAssertNil(
+      ChatDailyRecapRowPlacement.anchorMessageID(
+        in: thread, recapDate: nil, hasOlderMessagesAbove: false, calendar: calendar))
+    XCTAssertNil(
+      ChatDailyRecapRowPlacement.anchorMessageID(
+        in: thread, recapDate: "not-a-date", hasOlderMessagesAbove: false, calendar: calendar))
   }
 
 }

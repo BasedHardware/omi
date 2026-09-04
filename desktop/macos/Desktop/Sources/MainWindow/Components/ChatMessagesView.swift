@@ -178,32 +178,6 @@ enum ChatInitialRestoreState: Equatable {
   }
 }
 
-/// The daily summary card's admission decision, in one place (INV-CHAT-2).
-///
-/// The card is chrome above the thread, and chrome must not outrun the thread.
-/// Admitting while the initial history is still loading printed the summary
-/// alone over a loading spinner, and the reader watched it yank above the fold
-/// the moment the transcript landed at the live edge — launch read as
-/// "summary page, then chat". The initial load therefore defers admission to
-/// the loading-complete observer, which admits before the live-edge restore
-/// measures geometry. Once the thread exists, the reader is only moved when
-/// they are following the live edge (the re-follow lands them back at the
-/// bottom) or when there is nothing to move.
-enum ChatDailySummaryAdmission {
-  static func shouldAdmit(
-    hasSummary: Bool,
-    isClearedFromTranscript: Bool,
-    alreadyAdmitted: Bool,
-    isLoadingInitial: Bool,
-    scrollMode: ChatScrollMode,
-    hasMessages: Bool
-  ) -> Bool {
-    guard hasSummary, !isClearedFromTranscript, !alreadyAdmitted else { return false }
-    guard !isLoadingInitial else { return false }
-    return scrollMode == .followingBottom || !hasMessages
-  }
-}
-
 /// **The rhythm of the transcript**, which is what makes a column of short
 /// messages read as a conversation instead of as scattered text.
 ///
@@ -470,9 +444,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   var timelineTrailingInset: CGFloat = 0
   /// Narrow sidebars (task chat) keep the rail off so it cannot sit on the text.
   var enablesPromptTimeline: Bool = true
-  /// Draws the daily summary above the transcript. On for the main chat in both shells — it is the
-  /// surface the app opens on, and the summary is a read the user should meet without navigating
-  /// to it. Task chat opts out: that thread is about one task, not about the day.
+  /// Renders the daily summary as an in-history day-boundary row. On for the main chat in both
+  /// shells — the recap is part of the thread's history there. Task chat opts out: that thread is
+  /// about one task, not about the day.
   var showsDailySummary: Bool = true
   @ViewBuilder var welcomeContent: () -> WelcomeContent
 
@@ -482,14 +456,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// switch this to `.freeScrolling` — only physical user input (wheel/trackpad,
   /// mouse, or keyboard scroll-navigation).
   @State private var scrollMode: ChatScrollMode = .followingBottom
-  /// Whether the daily summary card is currently allowed above the thread.
-  /// See `admitDailySummaryIfFollowing` (INV-CHAT-2).
-  @State private var dailySummaryAdmitted = false
-  /// Measured height of the pinned recap pill, used to inset the transcript so it is occluded
-  /// by nothing. Tracked live — see the preference handler below.
-  @State private var dailySummaryBarHeight: CGFloat = 0
   @ObservedObject private var dailySummaryStore: HomeDailySummaryStore = ChatDailySummaryCoordinator.shared.store
-  /// Withdraws the card when the reader clears Chat. See `noteChatCleared`.
+  /// Withdraws the recap row when the reader clears Chat. See `noteChatCleared`.
   @ObservedObject private var dailySummaryCoordinator: ChatDailySummaryCoordinator =
     ChatDailySummaryCoordinator.shared
   /// Throttle token for scrollToBottom — prevents the streaming + scroll
@@ -577,49 +545,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // trailing strip; stacking the disc underneath it ate the click.
       ZStack {
         scrollContent(proxy: proxy)
-      }
-      // Pinned as an overlay rather than as the first row of the document. That is deliberate
-      // for INV-CHAT-2: an in-document card changed the scroll document's height whenever it
-      // appeared, which is exactly the geometry mutation the invariant forbids during
-      // reader-owned movement. An overlay has no document height at all.
-      //
-      // The transcript is inset by the pill's measured height so rows are never *hidden* behind
-      // it — an overlay that occludes the top of the thread trades one unreachable card for one
-      // unreadable message. The pill is thin and never expands in place (the full recap is a
-      // sheet), so its height barely varies; the inset below tracks it live rather than through a
-      // high-water mark.
-      .overlay(alignment: .top) {
-        if showsDailySummary, dailySummaryAdmitted {
-          ChatDailyRecapPill()
-            .padding(.leading, leadingContentPadding)
-            .padding(.trailing, trailingContentInset)
-            .padding(.top, OmiSpacing.xs)
-            .background(
-              GeometryReader { proxy in
-                Color.clear.preference(
-                  key: ChatDailySummaryBarHeightKey.self, value: proxy.size.height)
-              }
-            )
-        }
-      }
-      .onPreferenceChange(ChatDailySummaryBarHeightKey.self) { height in
-        // This height feeds the transcript's top padding, so it must equal the pill's real height
-        // in both directions. The old full-card overlay tracked a high-water mark instead: a mark
-        // can never shrink, so one tall expand (or one rewrap at a narrow width) padded the thread
-        // forever after, and a bar that shrank before the first measurement left the transcript
-        // lapping under it — the overlap the slim pill exists to retire. The pill does not expand
-        // in place, so its height moves by at most a line across content changes and rewraps;
-        // taking the live value keeps the inset exact. The epsilon keeps a sub-pixel preference
-        // flutter from re-entering layout.
-        if abs(height - dailySummaryBarHeight) > 0.5 {
-          dailySummaryBarHeight = height
-          // The inset is document space above the reader, so changing it moves the document under
-          // a stationary viewport — the overview arriving a beat after the headline is enough to
-          // bury the newest row under the pill. That is admission's exact problem (INV-CHAT-2),
-          // so it gets admission's exact answer: a reader following the live edge is re-followed;
-          // a reader scrolled away is left alone and finds the thread where they left it.
-          if scrollMode == .followingBottom { throttledScrollToBottom(proxy: proxy) }
-        }
       }
       .overlay(alignment: .trailing) {
         if enablesPromptTimeline {
@@ -736,7 +661,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       .padding(.leading, leadingContentPadding)
       .padding(.trailing, trailingContentInset)
       .padding(.vertical, verticalContentPadding)
-      .padding(.top, showsDailySummary && dailySummaryAdmitted ? dailySummaryBarHeight : 0)
       .frame(maxWidth: .infinity)
       .coordinateSpace(name: ChatTranscriptSpace.content)
       // Do not enable text selection on the whole stack. SelectionOverlay on every
@@ -778,26 +702,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // A journal restore may be populated by background events while the
     // loader is still collecting its canonical snapshot. Reveal it only after
     // loading completes, then make one initial placement at the live edge.
-    // The summary admission runs first: it was deferred for the whole load
-    // (INV-CHAT-2), and admitting before the restore measures geometry lands
-    // the reader at the live edge in one pass with the card above the fold.
     .onChange(of: isLoadingInitial) { wasLoading, isLoading in
       guard wasLoading, !isLoading else { return }
-      admitDailySummaryIfFollowing(proxy: proxy)
       guard !messages.isEmpty else { return }
       handleInitialRestore(proxy: proxy)
     }
-    // MARK: - Daily summary admission (INV-CHAT-2)
-    // The summary is chrome above the thread and arrives asynchronously. Content
-    // inserted above the viewport shifts everything below it, so it is admitted
-    // only while the transcript follows the live edge (then re-followed), and a
-    // reader who has scrolled away meets it on their next return to the bottom.
-    // The initial load defers admission entirely — see `ChatDailySummaryAdmission`.
-    .modifier(
-      DailySummaryAdmissionObserver(
-        summaryID: dailySummaryStore.latest?.id, scrollMode: scrollMode,
-        admit: { admitDailySummaryIfFollowing(proxy: proxy) })
-    )
     // MARK: - React to streaming text changes
     .onChange(of: messages.last?.text) { _, _ in
       handleLiveContentChange(proxy: proxy)
@@ -935,32 +844,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     }
   }
 
-  /// Admit the daily summary card above the thread only when doing so cannot
-  /// move the reader: the initial snapshot has landed and the transcript is
-  /// following the live edge (so the re-follow below lands it back at the
-  /// bottom), or the thread is empty. Once admitted it stays; a summary that
-  /// disappears (owner change) withdraws it.
-  private func admitDailySummaryIfFollowing(proxy: ScrollViewProxy) {
-    guard showsDailySummary else { return }
-    let hasAdmittableSummary =
-      dailySummaryStore.latest != nil && !dailySummaryCoordinator.isClearedFromTranscript
-    guard
-      ChatDailySummaryAdmission.shouldAdmit(
-        hasSummary: hasAdmittableSummary,
-        isClearedFromTranscript: dailySummaryCoordinator.isClearedFromTranscript,
-        alreadyAdmitted: dailySummaryAdmitted,
-        isLoadingInitial: isLoadingInitial,
-        scrollMode: scrollMode,
-        hasMessages: !messages.isEmpty)
-    else {
-      if !hasAdmittableSummary { dailySummaryAdmitted = false }
-      return
-    }
-    dailySummaryAdmitted = true
-    guard !messages.isEmpty else { return }
-    handleLiveContentChange(proxy: proxy)
-  }
-
+  /// The transcript's one motion contract with its content: while the reader
+  /// follows the live edge, content that lands re-follows; while they are
+  /// scrolled away, arriving content raises the activity flag instead.
   private func handleLiveContentChange(proxy: ScrollViewProxy) {
     guard !isLoadingInitial else { return }
 
@@ -1193,7 +1079,18 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // re-run on every rewrite of the streaming tail.
       let visibleMessages = visibleTranscriptMessages
       let displayMessages = AgentLifecycleDisplayProjection.project(visibleMessages)
+      // The recap row is part of the row data: it anchors above the message its
+      // day begins at, so it scrolls with history like any row. See
+      // `ChatDailyRecapRowPlacement` for when a thread deliberately shows none.
+      let hasHiddenOlderRows = hasMoreMessages || visibleMessages.count < messages.count
+      let recapAnchorID = ChatDailyRecapRowPlacement.anchorMessageID(
+        in: displayMessages,
+        recapDate: dailyRecapRecord?.date,
+        hasOlderMessagesAbove: hasHiddenOlderRows)
       ForEach(Array(displayMessages.enumerated()), id: \.element.id) { index, message in
+        if message.id == recapAnchorID {
+          dailyRecapRow
+        }
         ChatBubble(
           message: message,
           app: app,
@@ -1222,6 +1119,25 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           transcriptGeometry.setRowOffset(minY, for: message.id)
         }
       }
+      .task { await dailySummaryCoordinator.activate() }
+    }
+  }
+
+  /// The recap this thread shows as a day boundary, if any. A cleared thread
+  /// keeps its recap withdrawn (see `ChatDailySummaryCoordinator.noteChatCleared`),
+  /// and a day whose every message is absent renders nothing.
+  private var dailyRecapRecord: DailySummaryRecord? {
+    guard showsDailySummary, !dailySummaryCoordinator.isClearedFromTranscript else { return nil }
+    return dailySummaryStore.latest
+  }
+
+  /// The in-history recap row. It is part of the transcript's row data — it
+  /// scrolls with history, never pinned, never floating — and it opens the
+  /// typed recap route.
+  @ViewBuilder
+  private var dailyRecapRow: some View {
+    if let record = dailyRecapRecord {
+      ChatDailyRecapRow(record: record)
     }
   }
 
@@ -1421,27 +1337,4 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 /// from the escaping work items that retry across layout turns.
 private final class RestoreOnce: @unchecked Sendable {
   var applied = false
-}
-
-/// The three observations that admit the daily summary card, folded into one
-/// modifier so the transcript's already-long modifier chain stays type-checkable.
-private struct DailySummaryAdmissionObserver: ViewModifier {
-  let summaryID: String?
-  let scrollMode: ChatScrollMode
-  let admit: () -> Void
-
-  func body(content: Content) -> some View {
-    content
-      .onAppear(perform: admit)
-      .onChange(of: summaryID) { _, _ in admit() }
-      .onChange(of: scrollMode) { _, _ in admit() }
-  }
-}
-
-/// Height of the pinned daily-recap pill, reported up so the transcript can inset by exactly it.
-private struct ChatDailySummaryBarHeightKey: PreferenceKey {
-  static let defaultValue: CGFloat = 0
-  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-    value = max(value, nextValue())
-  }
 }
