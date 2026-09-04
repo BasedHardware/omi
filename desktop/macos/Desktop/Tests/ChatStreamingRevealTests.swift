@@ -78,4 +78,44 @@ final class ChatStreamingRevealTests: XCTestCase {
 
     wait(for: [rearmed], timeout: 1)
   }
+
+  /// A flush whose render work eats into its interval must not drag every
+  /// later beat back. Beats anchor to the beat before them, so the reveal's
+  /// period stays `flushInterval` while a flush still fits inside one — late
+  /// in a long answer is exactly when a completion-anchored cadence slows the
+  /// reveal down and the stream starts to stutter.
+  func testBeatsHoldTheirPeriodWhenFlushWorkEatsIntoTheInterval() {
+    let interval = 0.08
+    let buffer = ChatStreamingBuffer(flushInterval: interval)
+    var messages = makeMessages()
+
+    var beatStarts: [UInt64] = []
+    let drained = expectation(description: "the backlog drained")
+    func flushBeat() {
+      beatStarts.append(DispatchTime.now().uptimeNanoseconds)
+      // Work that occupies three quarters of the interval, the way a growing
+      // transcript render does late in an answer.
+      Thread.sleep(forTimeInterval: interval * 0.75)
+      if buffer.flushPaced(messages: &messages) {
+        buffer.scheduleFlush { flushBeat() }
+      } else {
+        drained.fulfill()
+      }
+    }
+    // Arm exactly the way the provider does: the append schedules the flush.
+    buffer.appendText(messageId: "m", text: String(repeating: "a", count: 2000), scheduleFlush: { flushBeat() })
+    wait(for: [drained], timeout: 10)
+
+    XCTAssertGreaterThanOrEqual(
+      beatStarts.count, 3, "precondition: enough backlog for several beats")
+    let intervalNanos = Int(interval * 1_000_000_000)
+    for (index, start) in beatStarts.enumerated().dropFirst() {
+      let period = Int(start - beatStarts[index - 1])
+      let drift = period - intervalNanos
+      XCTAssertLessThan(
+        drift, intervalNanos / 2,
+        "beat \(index) drifted to \(String(format: "%.0f", Double(period) / 1e6)) ms; "
+          + "completion-anchored beats run at interval + work")
+    }
+  }
 }

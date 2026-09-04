@@ -43,6 +43,13 @@ final class ChatStreamingBuffer {
   private var pendingSegments: [PendingSegment] = []
   private var flushWorkItem: DispatchWorkItem?
   private let flushInterval: TimeInterval
+  /// The deadline the armed flush was scheduled on (`uptimeNanoseconds`).
+  /// Re-arms anchor to it rather than to flush completion, so a flush whose
+  /// render work ran into its interval shifts that one beat instead of
+  /// pushing every later beat back — the reveal keeps its period for as long
+  /// as a flush fits inside one. Late-answer stutter reads as exactly this
+  /// drift: each beat slower than the last by however long the render took.
+  private var scheduledBeat: UInt64?
 
   init(flushInterval: TimeInterval) {
     self.flushInterval = flushInterval
@@ -61,6 +68,7 @@ final class ChatStreamingBuffer {
   func cancelPendingFlush() {
     flushWorkItem?.cancel()
     flushWorkItem = nil
+    scheduledBeat = nil
   }
 
   /// Drop only the buffered deltas for a revoked turn. A newer turn may already
@@ -127,6 +135,9 @@ final class ChatStreamingBuffer {
       }
     }
     pendingSegments.removeFirst(consumed)
+    // A drained backlog ends the beat chain; the next delta starts a fresh
+    // one rather than inheriting a deadline that has already passed.
+    if pendingSegments.isEmpty { scheduledBeat = nil }
     return !pendingSegments.isEmpty
   }
 
@@ -142,6 +153,8 @@ final class ChatStreamingBuffer {
 
     let segments = pendingSegments
     pendingSegments = []
+    // A boundary flush lands everything at once; there is no beat to hold.
+    scheduledBeat = nil
 
     for segment in segments {
       guard let index = messages.firstIndex(where: { $0.id == segment.messageId }) else { continue }
@@ -260,9 +273,19 @@ final class ChatStreamingBuffer {
 
   private func scheduleFlushIfNeeded(_ scheduleFlush: @escaping () -> Void) {
     guard flushWorkItem == nil else { return }
+    // Hold the metronome: the next beat belongs one interval after the beat
+    // before it, clamped to now so a beat the render work overran fires at
+    // once and resynchronizes instead of firing late and dragging the whole
+    // cadence back with it.
+    let now = DispatchTime.now().uptimeNanoseconds
+    let interval = UInt64(flushInterval * 1_000_000_000)
+    let deadline = max((scheduledBeat ?? now) &+ interval, now)
+    scheduledBeat = deadline
     let workItem = DispatchWorkItem(block: scheduleFlush)
     flushWorkItem = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + flushInterval, execute: workItem)
+    DispatchQueue.main.asyncAfter(
+      deadline: .now() + DispatchTimeInterval.nanoseconds(Int(deadline - now)),
+      execute: workItem)
   }
 }
 
