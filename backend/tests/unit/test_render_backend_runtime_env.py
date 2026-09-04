@@ -201,6 +201,34 @@ def test_render_dev_emits_x_connector_sync_job_outputs(capsys, monkeypatch):
 
 
 @pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_x_connector_sync_job_pins_its_task_timeout(env):
+    """The job must pin a task timeout rather than inherit Cloud Run's 600s default.
+
+    Every other Cloud Run job in this manifest pins one. An unpinned job deploys at the
+    platform default, and #12530 is what that costs: the notifications job was SIGKILLed
+    mid-batch at 600s, users past the kill point were never reached on any run, and the
+    pipeline looked healthy throughout. X sync walks a registry at ~1.5s per user plus
+    fetch and extraction, so it has the same shape of exposure.
+
+    Pinned equal to memory-maintenance-job, the job this one was cloned from.
+    """
+    jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
+    assert jobs['x-connector-sync-job']['flags']['--task-timeout'] == '3600s'
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_every_cloud_run_job_pins_a_task_timeout(env):
+    """No job may rely on the platform default.
+
+    Asserting only the new job would let the next one repeat the omission — this PR's own
+    job was added without a timeout precisely because nothing required one.
+    """
+    jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
+    unpinned = sorted(name for name, spec in jobs.items() if not (spec.get('flags') or {}).get('--task-timeout'))
+    assert unpinned == [], f'Cloud Run jobs without an explicit --task-timeout: {unpinned}'
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
 def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
     jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
     maintenance = jobs['memory-maintenance-job']

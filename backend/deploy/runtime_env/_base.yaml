@@ -575,6 +575,8 @@ environment_shared:
             value: '{env}'
             category: runtime_identity
       x-connector-sync-job:
+        flags:
+          --task-timeout: 3600s
         secrets:
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN

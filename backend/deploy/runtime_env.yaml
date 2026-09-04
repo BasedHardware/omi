@@ -945,6 +945,9 @@ environments:
           forbidden_env:
           - HOSTED_PUSHER_API_URL
         x-connector-sync-job:
+          flags:
+            --task-timeout: 3600s
+            --remove-env-vars: HOSTED_PUSHER_API_URL
           secrets:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -992,8 +995,6 @@ environments:
               category: runtime_identity
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-          flags:
-            --remove-env-vars: HOSTED_PUSHER_API_URL
           forbidden_env:
           - HOSTED_PUSHER_API_URL
         memory-maintenance-job:
@@ -2058,6 +2059,8 @@ environments:
               value: prod
               category: runtime_identity
         x-connector-sync-job:
+          flags:
+            --task-timeout: 3600s
           secrets:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
