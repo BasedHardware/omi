@@ -934,10 +934,14 @@ describe("worker request contract", () => {
     const emptyCursor = await fetchWorker("/v1/memories?cursor=", {
       headers: authenticatedHeaders,
     });
+    const invalidLimit = await fetchWorker("/v1/memories?limit=0", {
+      headers: authenticatedHeaders,
+    });
     const extra = await fetchWorker("/v1/memories?limit=1&extra=1", {
       headers: authenticatedHeaders,
     });
     expect(emptyCursor.status).toBe(400);
+    expect(invalidLimit.status).toBe(400);
     expect(extra.status).toBe(400);
   });
 
