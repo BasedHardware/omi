@@ -10,7 +10,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile, unlink } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile, unlink } from "node:fs/promises";
 
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
@@ -1026,6 +1026,50 @@ function firstTypedSchema(schema: any): any {
   if (schema?.type) return schema;
   return schema?.anyOf?.find((candidate: any) => candidate.type) ?? {};
 }
+
+// The relay used to re-read the context file on every tool call; a cache hit
+// (validated by mtime+size) must serve the old value even after a same-size
+// content rewrite, and an mtime bump must pick the new value up.
+test("omiRelayCapabilityRef: caches the context read per mtime/size and re-reads on change", async () => {
+  const dir = await mkdtemp(pathJoin(tmpdir(), "omi-pi-capcache-"));
+  const contextPath = pathJoin(dir, "context.json");
+  const previous = process.env.OMI_CONTEXT_FILE;
+  process.env.OMI_CONTEXT_FILE = contextPath;
+  try {
+    await writeFile(contextPath, JSON.stringify({ capabilityRef: "cap-old-value" }));
+    const t0 = new Date();
+    await utimes(contextPath, t0, t0);
+    assert.equal(await __omiRelayCapabilityRefForTest(), "cap-old-value");
+
+    // Same size, mtime restored: the rewrite is invisible to the cache —
+    // proving the content is not re-read while the stat matches.
+    await writeFile(contextPath, JSON.stringify({ capabilityRef: "cap-new-value" }));
+    await utimes(contextPath, t0, t0);
+    assert.equal(await __omiRelayCapabilityRefForTest(), "cap-old-value");
+
+    // An mtime bump invalidates: the rewritten context is picked up.
+    const t1 = new Date(Date.now() + 2000);
+    await utimes(contextPath, t1, t1);
+    assert.equal(await __omiRelayCapabilityRefForTest(), "cap-new-value");
+
+    // A size change invalidates even with the mtime held.
+    await writeFile(contextPath, JSON.stringify({ capabilityRef: "cap-smaller" }));
+    const t2 = new Date(Date.now() + 4000);
+    await utimes(contextPath, t2, t2);
+    assert.equal(await __omiRelayCapabilityRefForTest(), "cap-smaller");
+    await writeFile(contextPath, JSON.stringify({ capabilityRef: "cap-a-longer-value" }));
+    await utimes(contextPath, t2, t2);
+    assert.equal(await __omiRelayCapabilityRefForTest(), "cap-a-longer-value");
+
+    // A missing context file fails closed.
+    await rm(contextPath);
+    assert.equal(await __omiRelayCapabilityRefForTest(), undefined);
+  } finally {
+    if (previous === undefined) delete process.env.OMI_CONTEXT_FILE;
+    else process.env.OMI_CONTEXT_FILE = previous;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 
 function normalizeCanonicalSchema(schema: Record<string, unknown>): Record<string, unknown> {
   const normalized: Record<string, unknown> = { type: schema.type };

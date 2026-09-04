@@ -28,7 +28,7 @@ import {
   type ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "@earendil-works/pi-ai";
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
@@ -594,14 +594,31 @@ async function callSwiftTool(name: string, input: Record<string, unknown>, signa
   });
 }
 
+/**
+ * Every relayed tool call used to re-read the kernel context file for its
+ * capabilityRef. Cache the parsed value per process, re-validated by a cheap
+ * mtime+size stat so a rewritten context is still picked up; a stat hit skips
+ * the content read entirely. Keyed by path, and failures are not cached — a
+ * context file being rewritten mid-read retries on the next call.
+ */
+let capabilityRefCache: { path: string; ref?: string; mtimeMs: number; size: number } | null = null;
+
 async function omiRelayCapabilityRef(): Promise<string | undefined> {
   const path = process.env.OMI_CONTEXT_FILE;
   if (!path) return undefined;
   try {
+    const fileStat = await stat(path);
+    const cached = capabilityRefCache;
+    if (cached && cached.path === path && cached.mtimeMs === fileStat.mtimeMs && cached.size === fileStat.size) {
+      return cached.ref;
+    }
     const parsed = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
-    return typeof parsed.capabilityRef === "string" && parsed.capabilityRef.length > 0
-      ? parsed.capabilityRef
-      : undefined;
+    const ref =
+      typeof parsed.capabilityRef === "string" && parsed.capabilityRef.length > 0
+        ? parsed.capabilityRef
+        : undefined;
+    capabilityRefCache = { path, ref, mtimeMs: fileStat.mtimeMs, size: fileStat.size };
+    return ref;
   } catch {
     return undefined;
   }

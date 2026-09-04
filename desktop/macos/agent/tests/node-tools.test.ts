@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -6,10 +6,12 @@ import {
   SKILL_FILE_CHAR_LIMIT,
   SKILL_PART_CHAR_LIMIT,
   configuredDisabledSkills,
+  discoverSkillCatalog,
   isSafeSkillName,
   loadSkillInstructions,
   searchSkills,
   splitSkillBody,
+  __resetSkillCatalogCacheForTest,
 } from "../src/runtime/node-tools.js";
 
 describe("node tool helpers", () => {
@@ -234,6 +236,44 @@ describe("load_skill progressive disclosure", () => {
       expect(result).toContain("truncated at");
       expect(result.length).toBeLessThan(SKILL_PART_CHAR_LIMIT + 600);
     });
+  });
+});
+
+describe("skill catalog cache", () => {
+  it("serves the cached description without re-reading while mtime/size hold, and re-reads after an edit", async () => {
+    const root = await mkdtemp(join(tmpdir(), "omi-agent-cache-"));
+    const skillName = `cache-skill-${Math.random().toString(36).slice(2, 10)}`;
+    try {
+      await mkdir(join(root, ".claude", "skills", skillName), { recursive: true });
+      const skillPath = join(root, ".claude", "skills", skillName, "SKILL.md");
+      // The two marker variants are the same byte length, so only mtime can
+      // tell an edit apart.
+      const marker = (word: string) =>
+        `---\nname: ${skillName}\ndescription: cache-probe-${word}xx\n---\n\nbody`;
+      await writeFile(skillPath, marker("aaaa"));
+      const t0 = new Date();
+      await utimes(skillPath, t0, t0);
+      const roots = [join(root, ".claude", "skills")];
+
+      const first = await discoverSkillCatalog(roots);
+      expect(first.find((skill) => skill.name === skillName)?.description).toBe("cache-probe-aaaaxx");
+
+      // Same size, mtime restored: a full rewrite of the content is invisible
+      // to the cache — proving discovery did not re-read the file.
+      await writeFile(skillPath, marker("bbbb"));
+      await utimes(skillPath, t0, t0);
+      const second = await discoverSkillCatalog(roots);
+      expect(second.find((skill) => skill.name === skillName)?.description).toBe("cache-probe-aaaaxx");
+
+      // An mtime bump invalidates: the edit shows up on the next discovery.
+      const t1 = new Date(Date.now() + 2000);
+      await utimes(skillPath, t1, t1);
+      const third = await discoverSkillCatalog(roots);
+      expect(third.find((skill) => skill.name === skillName)?.description).toBe("cache-probe-bbbbxx");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      __resetSkillCatalogCacheForTest();
+    }
   });
 });
 

@@ -1,4 +1,4 @@
-import { readFile, readdir, realpath } from "node:fs/promises";
+import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
@@ -63,8 +63,38 @@ export function configuredDisabledSkills(raw = process.env.OMI_DISABLED_SKILLS ?
   }
 }
 
+/** Parsed description of one catalogued SKILL.md, valid while mtime+size match. */
+interface CatalogCacheEntry {
+  description: string;
+  path: string;
+  mtimeMs: number;
+  size: number;
+}
+
+/**
+ * Process-lifetime catalog cache. load_skill and search_skills re-run
+ * discovery on every call, and discovery reads every SKILL.md; caching parsed
+ * descriptions behind an mtime+size stat keeps edits visible without
+ * re-reading unchanged files on each call. Keyed by the roots list so a
+ * workspace change cannot serve another workspace's entries.
+ */
+let catalogCacheKey = "";
+let catalogCache = new Map<string, CatalogCacheEntry>();
+
+/** Test-only: drop the skill catalog cache between tests. */
+export function __resetSkillCatalogCacheForTest(): void {
+  catalogCache = new Map();
+  catalogCacheKey = "";
+}
+
 export async function discoverSkillCatalog(roots: readonly string[]): Promise<DiscoveredSkill[]> {
+  const cacheKey = roots.join("\u0000");
+  if (cacheKey !== catalogCacheKey) {
+    catalogCache = new Map();
+    catalogCacheKey = cacheKey;
+  }
   const discovered = new Map<string, DiscoveredSkill>();
+  const fresh = new Map<string, CatalogCacheEntry>();
   for (const root of roots) {
     let realRoot: string;
     try {
@@ -84,13 +114,30 @@ export async function discoverSkillCatalog(roots: readonly string[]): Promise<Di
       try {
         const path = await realpath(resolve(realRoot, name, "SKILL.md"));
         if (!path.startsWith(`${realRoot}/`)) continue;
+        const fileStat = await stat(path);
+        const cached = catalogCache.get(path);
+        if (cached && cached.mtimeMs === fileStat.mtimeMs && cached.size === fileStat.size) {
+          // Unchanged since the last full read: reuse the parsed description.
+          fresh.set(path, cached);
+          discovered.set(name, { name, description: cached.description, path });
+          continue;
+        }
         const content = stripUtf8Bom(await readFile(path, "utf8"));
-        discovered.set(name, { name, description: skillDescription(content), path });
+        const entry: CatalogCacheEntry = {
+          description: skillDescription(content),
+          path,
+          mtimeMs: fileStat.mtimeMs,
+          size: fileStat.size,
+        };
+        fresh.set(path, entry);
+        discovered.set(name, { name, description: entry.description, path });
       } catch {
         // Ignore incomplete skills and paths outside an approved skill root.
       }
     }
   }
+  // Entries that no longer appear on disk drop out of the cache with the run.
+  catalogCache = fresh;
   return [...discovered.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
