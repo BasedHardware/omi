@@ -289,6 +289,14 @@ struct ChatBubble: View {
         .offset(x: -ChatOmiMarkPlacement.markGutter)
       }
     }
+    // **The settle frame folds, it does not teleport.** When `isStreaming`
+    // flips, the row drops its tool trace and pre-tool commentary and swaps
+    // in the terminal answer, citations and metadata band — a whole-frame
+    // layout change that used to land in one frame and read as a jump.
+    // Scoped on the flip itself, so every per-token streaming frame (where
+    // `isStreaming` did not change) stays exactly as instantaneous as before.
+    // Reduce Motion folds instantly, as everywhere else.
+    .omiAnimation(.easeOut(duration: InkMotion.settle), value: message.isStreaming)
     .contentShape(Rectangle())
     .onChange(of: message.isStreaming) { wasStreaming, isStreaming in
       guard
