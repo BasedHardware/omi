@@ -45,6 +45,7 @@ from database.redis_db import (
     remove_daily_summary_to_uid,
 )
 
+from utils.chat_rating_triage import extract_rating_triage_fields, normalize_rating_reason
 from database.users import (
     claim_deletion_wipe_for_task,
     get_user_transcription_preferences,
@@ -55,7 +56,7 @@ from database.users import (
 from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
-from utils.feedback import record_chat_message_feedback, record_conversation_summary_feedback
+from utils.feedback import record_chat_message_feedback
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
@@ -784,8 +785,11 @@ def set_memory_summary_rating(
     value: int,  # 0, 1, -1 (shown)
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    set_conversation_summary_rating_score(uid, memory_id, value)
-    record_conversation_summary_feedback(uid, memory_id, value)
+    # The conversation-summary rating UI has been unreachable since 2025-04-11
+    # (bbfe540bc4 / PR #2178) while field builds kept writing ~1,105 impression
+    # rows/day. No-op the server first so every client version stops writing —
+    # including into the unified feedback ledger, which would otherwise record
+    # a "rating" that no user action produced.
     return {'status': 'ok'}
 
 
@@ -794,11 +798,7 @@ def get_memory_summary_rating(
     memory_id: str,
     _: str = Depends(auth.get_current_user_uid),
 ):
-    rating = get_conversation_summary_rating_score(memory_id)
-    # TODO: later ask reason, a set of options, if user says good, whats the best, if bad, whats the worst
-    if not rating:
-        return {'has_rating': False}
-    return {'has_rating': rating.get('value', -1) != -1, 'rating': rating.get('value', -1)}
+    return {'has_rating': False}
 
 
 @router.post('/v1/users/analytics/chat_message', tags=['v1'], response_model=UserStatusResponse)
@@ -813,23 +813,25 @@ def set_chat_message_analytics(
 
     Args:
         message_id: ID of the message being rated
-        value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = neutral/removed)
-        reason: Optional reason for thumbs down. Valid values:
-            - 'too_verbose': Response was too long or wordy
-            - 'incorrect_or_hallucination': Response contained incorrect information
-            - 'not_helpful_or_irrelevant': Response didn't address the question
-            - 'didnt_follow_instructions': Response didn't follow user instructions
-            - 'other': Other reason
+        value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = user cleared)
+        reason: Optional reason for thumbs down. Enum keys only.
     """
-    # Always store feedback in Firestore analytics collection
-    set_chat_message_rating_score(uid, message_id, value, reason)
+    rating_value = None if value == 0 else value
+    snapshot = chat_db.update_message_rating(uid, message_id, rating_value) or {}
+    triage = extract_rating_triage_fields(snapshot)
+    normalized_reason = normalize_rating_reason(reason)
+    set_chat_message_rating_score(
+        uid,
+        message_id,
+        value,
+        reason=normalized_reason,
+        platform='mobile',
+        notification_kind=triage.get('notification_kind'),
+        app_id=triage.get('app_id'),
+    )
 
     # Unified feedback ledger — the daily thumbs-down report reads from here.
-    record_chat_message_feedback(uid, message_id, value, reason=reason, platform='mobile')
-
-    # Also update the rating directly on the message document for persistence
-    rating_value = None if value == 0 else value
-    chat_db.update_message_rating(uid, message_id, rating_value)
+    record_chat_message_feedback(uid, message_id, value, reason=normalized_reason, platform='mobile')
 
     # Try to submit feedback to LangSmith if the message has a run_id
     try:

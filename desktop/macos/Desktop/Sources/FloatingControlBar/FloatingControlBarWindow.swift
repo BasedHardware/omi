@@ -3823,6 +3823,26 @@ class FloatingControlBarManager {
       evaluationID: evaluation, suggestionID: stored.notificationID)
   }
 
+  private func storedNotification(forContinuityKey key: String?) -> StoredNotificationMessage? {
+    guard let key, let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return nil }
+    return storedNotificationMessages.values.first {
+      $0.messageClientTurnId == key && $0.ownerID == ownerID
+    }
+  }
+
+  func feedbackIdentity(forContinuityKey key: String?) -> SuggestionAssistantTelemetry.NotificationIdentity? {
+    guard let stored = storedNotification(forContinuityKey: key) else { return nil }
+    if let identity = stored.suggestionIdentity { return identity }
+    let evaluation =
+      UUID(uuidString: stored.context?.provenanceRef ?? "") ?? stored.notificationID
+    return SuggestionAssistantTelemetry.NotificationIdentity(
+      evaluationID: evaluation, suggestionID: stored.notificationID)
+  }
+
+  func notificationDetail(forContinuityKey key: String?) -> String? {
+    storedNotification(forContinuityKey: key)?.context?.detail
+  }
+
   /// Hub journal finalization is the realtime path into the ledger. Same
   /// mutation owner as the batch `sendVoiceOnlyQuery` path.
   func consumeInterjectHubTranscript(_ text: String) async {
@@ -3847,6 +3867,7 @@ class FloatingControlBarManager {
       suggestionID: identity.suggestionID,
       verb: verb
     )
+    SuggestionTaskNudgeEngagement.record(fromContinuityKey: recentInterjectReplyCard()?.messageClientTurnId)
   }
 
   func consumeInterjectVoiceReplyAsync(_ text: String) async {
@@ -3860,6 +3881,8 @@ class FloatingControlBarManager {
       suggestionID: identity.suggestionID,
       verb: verb
     )
+    SuggestionTaskNudgeEngagement.record(
+      fromContinuityKey: recentInterjectReplyCard()?.messageClientTurnId)
   }
 
   func shouldAttachInterjectClassification(createdAt: Date? = nil, now: Date = Date()) -> Bool {
@@ -4596,6 +4619,9 @@ class FloatingControlBarManager {
     }
 
     if trackDismissal, let dismissedNotification {
+      if kind == .user {
+        SuggestionTaskNudgeEngagement.record(from: dismissedNotification)
+      }
       let attention: InterjectAttention? =
         InterjectFeature.isEnabled && kind == .timeout
         ? InterjectAttention.timeoutAttention(didHover: interjectCardDidHover)

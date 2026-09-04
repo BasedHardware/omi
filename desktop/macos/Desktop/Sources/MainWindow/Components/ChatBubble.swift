@@ -700,6 +700,8 @@ struct ChatBubble: View {
 
       if showReasonPicker {
         ChatFeedbackReasonPicker(
+          reasons: ChatFeedbackReason.chips(
+            isProactiveNotification: ChatContinuityInvariants.isProactiveNotification(message)),
           selected: submittedReason,
           onSelect: submitReason,
           onSkip: { showReasonPicker = false }

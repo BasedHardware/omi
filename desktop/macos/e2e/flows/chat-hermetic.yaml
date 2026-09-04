@@ -59,6 +59,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/KernelJournalEventHub.swift
   - desktop/macos/Desktop/Sources/Chat/KernelTurnJournal.swift
   - desktop/macos/Desktop/Sources/Chat/ChatMessageRatingPersistence.swift
+  - desktop/macos/Desktop/Sources/Chat/NegativeFeedbackRemediationFeature.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+MessageRating.swift
   - desktop/macos/Desktop/Sources/Chat/WritingToolsFix.swift
   - desktop/macos/Desktop/Sources/BrowserExtensionSetup.swift

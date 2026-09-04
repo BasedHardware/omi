@@ -79,4 +79,35 @@ enum InterjectSuggestionFeedbackMutation {
       )
     )
   }
+
+  /// Journaled proactive-card thumbs-down. Analytics is a side effect of this
+  /// write, not a second tally. Identity prefers the stored notification pair
+  /// and falls back to the continuity UUID.
+  static func recordFromChatRating(
+    continuityKey: String?,
+    reason: ChatFeedbackReason?,
+    store: InterjectSuggestionFeedbackStore = .shared
+  ) async {
+    guard let continuityKey else { return }
+    let verb = reason?.interjectVerb() ?? .falsePositive
+    let resolved = await MainActor.run {
+      FloatingControlBarManager.shared.feedbackIdentity(
+        forContinuityKey: continuityKey)
+    }
+    let identity =
+      resolved
+      ?? ChatContinuityInvariants.notificationID(fromContinuityKey: continuityKey).map {
+        SuggestionAssistantTelemetry.NotificationIdentity(evaluationID: $0, suggestionID: $0)
+      }
+    guard let identity else { return }
+    await record(
+      evaluationID: identity.evaluationID,
+      suggestionID: identity.suggestionID,
+      verb: verb,
+      store: store
+    )
+    await MainActor.run {
+      SuggestionTaskNudgeEngagement.record(fromContinuityKey: continuityKey)
+    }
+  }
 }

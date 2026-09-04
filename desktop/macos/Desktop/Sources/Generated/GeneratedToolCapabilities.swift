@@ -727,7 +727,7 @@ enum GeneratedToolCapabilities {
       toolName: "web_search",
       title: "Web Search",
       latency: .asyncBackground,
-      surfaces: Set([.realtimeHub]),
+      surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Search the live public web through Omi's typed-chat retrieval lane, then speak a grounded answer.",
       bullets: [
       "You MUST use this for current public information such as weather, news, prices, scores, schedules, releases, and officeholders.",

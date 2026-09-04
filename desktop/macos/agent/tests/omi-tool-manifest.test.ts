@@ -111,6 +111,7 @@ describe("omi tool manifest", () => {
       "capture_screen",
       "check_permission_status",
       "request_permission",
+      "web_search",
       "screenshot",
     ]);
     expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
