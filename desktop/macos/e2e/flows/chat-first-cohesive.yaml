@@ -45,6 +45,9 @@ covers:
   # (selectable, not editable, one view across rebuilds) is asserted
   # hermetically in ChatSelectableTextSurfaceTests, not here.
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatSelectableProse.swift
+  # The prose parse and measured height this file caches are exercised by the
+  # same mounts the flow drives; the cache changes no visible behaviour.
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatProseRenderCache.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/StableChatCardHeader.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatConversationReferencePill.swift
   # S8 drives the Tasks-page closure, including its bounded attempt/terminal telemetry.

@@ -143,6 +143,12 @@ enum ChatSelectableProse {
 /// the proposed width, and lets the transcript do the scrolling.
 struct ChatSelectableProseText: NSViewRepresentable {
   let attributed: NSAttributedString
+  /// The shared-cache entry this block's parse lives in, when it came from
+  /// `ChatSelectableProseBlock`. Lets the measured height ride the same entry
+  /// instead of a throwaway TextKit stack per `sizeThatFits` query — SwiftUI
+  /// issues about nine of those per block across the mount layout passes.
+  /// Standalone constructions leave it nil and measure every time.
+  var heightEntry: ChatProseRenderCache.Entry?
   var onOpenCitation: ((Int) -> Void)?
   /// Reports the citation under the pointer and the rectangle its marker
   /// occupies, so the transcript can anchor the same source preview the chip
@@ -201,7 +207,15 @@ struct ChatSelectableProseText: NSViewRepresentable {
   /// live container simply tracks the frame it is finally given.
   func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextView, context: Context) -> CGSize? {
     guard let width = proposal.width, width > 0, width < .greatestFiniteMagnitude else { return nil }
-    return CGSize(width: width, height: Self.height(of: attributed, fittingWidth: width))
+    let height: CGFloat
+    if let heightEntry {
+      height = ChatProseRenderCache.height(for: heightEntry, width: width) {
+        Self.height(of: attributed, fittingWidth: width)
+      }
+    } else {
+      height = Self.height(of: attributed, fittingWidth: width)
+    }
+    return CGSize(width: width, height: height)
   }
 
   /// Exposed so a test can assert the row's height without mounting a window.
@@ -360,15 +374,31 @@ struct ChatSelectableProseBlock: View {
 
   var body: some View {
     let fontSize = round(14 * fontScale)
-    if let attributed = ChatSelectableProse.attributedString(
+    // The parse and the measured height are keyed on the exact render inputs,
+    // so a hit is identical to a recompute — and a route return, which rebuilds
+    // this block from the same transcript text, hits instead of paying the
+    // Foundation Markdown parse and the throwaway TextKit layout again. See
+    // `ChatProseRenderCache` for the measured cost this retires.
+    let cacheKey = ChatProseRenderCache.Key(
       markdown: text,
       style: style,
-      fontSize: fontSize,
-      fontScale: fontScale,
-      citationOrdinals: Set(referencesByOrdinal.keys))
+      fontSize: Int(fontSize),
+      fontScaleMilli: Int((fontScale * 1_000).rounded()),
+      citationOrdinals: citations.map(\.ordinal).sorted())
+    if let entry = ChatProseRenderCache.entry(
+      for: cacheKey,
+      produce: {
+        ChatSelectableProse.attributedString(
+          markdown: text,
+          style: style,
+          fontSize: fontSize,
+          fontScale: fontScale,
+          citationOrdinals: Set(citations.map(\.ordinal)))
+      })
     {
       ChatSelectableProseText(
-        attributed: attributed,
+        attributed: entry.attributed,
+        heightEntry: entry,
         onOpenCitation: { ordinal in
           guard let reference = referencesByOrdinal[ordinal], reference.canOpen else { return }
           hover = nil
