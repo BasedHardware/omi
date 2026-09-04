@@ -430,9 +430,10 @@ struct DailyRecapPage: View {
     return value
   }
 
-  /// Six chips at a width that holds "34 memories" on one line at the caption
-  /// size; a narrower lane scrolls the row instead of folding a label.
-  nonisolated static let statChipWidth: CGFloat = 106
+  /// Six chips at a width that holds the longest label ("8h 5m listening",
+  /// "13 conversations") on one line; the row scrolls in a narrower lane
+  /// rather than folding a label mid-word.
+  nonisolated static let statChipWidth: CGFloat = 152
 }
 
 // MARK: - Rows
