@@ -39,6 +39,9 @@ extension DesktopAutomationActionRegistry {
       }
       return [
         "hasSummary": "true",
+        // Opaque identity, not content: a harness uses it to drive the recap
+        // route (`DailyRecapRouteRef`), whose page re-fetches by id.
+        "summaryId": latest.id,
         "date": latest.date ?? "",
         "dateLabel": ChatDailySummaryPresentation.dateLabel(for: latest.date, now: Date()) ?? "",
         "headlineLength": String(latest.headline?.count ?? 0),
@@ -51,6 +54,31 @@ extension DesktopAutomationActionRegistry {
         // a flow cannot tell a card that bounded its rows from a day that produced only three.
         "memoriesLearnedCount": String(latest.memoriesLearned.count),
         "followUp": ChatDailySummaryPresentation.followUpQuestion(for: latest.date, now: Date()),
+      ]
+    }
+
+    register(
+      name: "open_daily_recap_page",
+      summary:
+        "Open the dedicated daily-recap page for a summary id through the typed recap route "
+        + "(same `ChatFirstShellNavigation.openDailyRecap` the recap rows call)",
+      params: ["recordID", "date"],
+      category: "chat",
+      surfaces: ["main_chat"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "open_daily_recap_page is disabled on production bundles"]
+      }
+      let recordID = params["recordID"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      guard !recordID.isEmpty else { return ["error": "missing 'recordID'"] }
+      let date = params["date"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let before = ChatFirstShellNavigation.shared.route
+      ChatFirstShellNavigation.shared.openDailyRecap(
+        DailyRecapRouteRef(recordID: recordID, date: date))
+      return [
+        "requested": "true",
+        "previousRoute": before.stableName,
+        "route": ChatFirstShellNavigation.shared.route.stableName,
       ]
     }
 
