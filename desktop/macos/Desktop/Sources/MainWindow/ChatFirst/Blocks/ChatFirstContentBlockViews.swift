@@ -784,6 +784,39 @@ enum ChatFirstConversationLinkPolicy {
   }
 }
 
+/// Where a chat citation for a conversation opens, decided from the record the
+/// server returns for the cited ID.
+enum ChatFirstConversationCitationRoute: Equatable {
+  /// An Omi-device capture. The capture focus routes through the capture
+  /// archive, which carries the transcript moment into playback.
+  case captureFocus(momentTs: TimeInterval?)
+  /// Any other recorded conversation — a desktop or phone session the agent
+  /// retrieved. Opens as the exact fetched record, which the paginated
+  /// Conversations list may not currently contain.
+  case exactRecord
+}
+
+extension ChatFirstConversationLinkPolicy {
+  /// Chat citations name whatever conversation the agent retrieved, but the
+  /// capture focus resolves only through the archive's strictly source-scoped
+  /// fetch — routing a non-capture citation there landed the reader on the
+  /// Conversations list with nothing opened. Let the fetched record's own
+  /// provenance pick the route instead of the citation's kind alone.
+  static func citationRoute(
+    forFetched conversation: ServerConversation?,
+    requestedID: String,
+    momentTimestampMs: Int?
+  ) -> ChatFirstConversationCitationRoute? {
+    guard let conversation = validatedConversation(conversation, requestedID: requestedID) else {
+      return nil
+    }
+    if conversation.isOmiCaptureArchiveRecord {
+      return .captureFocus(momentTs: momentTimestampMs.map { TimeInterval($0) / 1_000 })
+    }
+    return .exactRecord
+  }
+}
+
 struct MemoryLinkView: View {
   let memoryID: String
   let summary: String

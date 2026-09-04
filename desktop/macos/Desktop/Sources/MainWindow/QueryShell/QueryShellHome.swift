@@ -485,8 +485,7 @@ struct QueryShellHome: View {
     let navigation = chatFirstRichBlockContext.navigation
     switch reference.kind {
     case .conversation:
-      let moment = reference.momentTimestampMs.map { TimeInterval($0) / 1_000 }
-      navigation.open(focus: .capture(id: reference.sourceID, momentTs: moment))
+      openConversationCitation(reference)
     case .memory:
       navigation.open(focus: .memory(id: reference.sourceID))
     case .task:
@@ -501,6 +500,35 @@ struct QueryShellHome: View {
       if let url = reference.url { NSWorkspace.shared.open(url) }
     case .unavailable:
       break
+    }
+  }
+
+  /// A conversation citation must open the conversation it names. The agent
+  /// cites desktop and phone recordings as readily as Omi-device captures, but
+  /// the capture focus resolves through the archive's source-scoped fetch —
+  /// navigating first used to strand a non-capture citation on the
+  /// Conversations list with nothing opened. Fetch the unscoped record, then
+  /// let its own provenance pick the route.
+  private func openConversationCitation(_ reference: ChatCitationReference) {
+    let navigation = chatFirstRichBlockContext.navigation
+    let resolutionGeneration = navigation.beginConversationLinkResolution()
+    Task { @MainActor in
+      let fetched = try? await APIClient.shared.getConversation(id: reference.sourceID)
+      guard
+        let route = ChatFirstConversationLinkPolicy.citationRoute(
+          forFetched: fetched,
+          requestedID: reference.sourceID,
+          momentTimestampMs: reference.momentTimestampMs)
+      else { return }
+      switch route {
+      case .captureFocus(let momentTs):
+        navigation.open(focus: .capture(id: reference.sourceID, momentTs: momentTs))
+      case .exactRecord:
+        guard let conversation = fetched else { return }
+        navigation.completeConversationLinkResolution(
+          conversation: conversation,
+          generation: resolutionGeneration)
+      }
     }
   }
 
