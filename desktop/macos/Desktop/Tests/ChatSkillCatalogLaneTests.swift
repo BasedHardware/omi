@@ -84,17 +84,17 @@ final class ChatSkillCatalogLaneTests: XCTestCase {
     try writeSkill(disabled, description: "Hidden everywhere")
 
     let defaults = UserDefaults.standard
-    let original = defaults.string(forKey: "disabledSkillsJSON")
+    let original = defaults.string(forKey: DefaultsKey.disabledSkillsJSON.rawValue)
     defer {
       if let original {
-        defaults.set(original, forKey: "disabledSkillsJSON")
+        defaults.set(original, forKey: DefaultsKey.disabledSkillsJSON.rawValue)
       } else {
-        defaults.removeObject(forKey: "disabledSkillsJSON")
+        defaults.removeObject(forKey: DefaultsKey.disabledSkillsJSON.rawValue)
       }
     }
 
     // Nothing disabled: both visible, and the runtime env stays unset.
-    defaults.removeObject(forKey: "disabledSkillsJSON")
+    defaults.removeObject(forKey: DefaultsKey.disabledSkillsJSON.rawValue)
     let allVisible = ChatProvider.skillCatalogProjectionFromDisk(workspace: "/tmp/omi-task-workspace")
     XCTAssertTrue(skillNames(in: allVisible).contains(enabled))
     XCTAssertTrue(skillNames(in: allVisible).contains(disabled))
@@ -102,7 +102,7 @@ final class ChatSkillCatalogLaneTests: XCTestCase {
 
     // Disabling hides the skill from the catalog and exports it to the tools.
     let disabledJSON = try XCTUnwrap(String(data: try JSONEncoder().encode([disabled]), encoding: .utf8))
-    defaults.set(disabledJSON, forKey: "disabledSkillsJSON")
+    defaults.set(disabledJSON, forKey: DefaultsKey.disabledSkillsJSON.rawValue)
 
     let projection = ChatProvider.skillCatalogProjectionFromDisk(workspace: "/tmp/omi-task-workspace")
     XCTAssertFalse(

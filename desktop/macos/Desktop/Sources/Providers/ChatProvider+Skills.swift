@@ -42,7 +42,7 @@ extension ChatProvider {
   /// Explicitly disabled skill names straight from UserDefaults, for callers
   /// without a provider instance (task chat, runtime spawn env).
   nonisolated static func disabledSkillNamesFromDefaults() -> Set<String> {
-    guard let raw = UserDefaults.standard.string(forKey: "disabledSkillsJSON"),
+    guard let raw = UserDefaults.standard.string(forKey: DefaultsKey.disabledSkillsJSON.rawValue),
       let data = raw.data(using: .utf8),
       let names = try? JSONDecoder().decode([String].self, from: data)
     else {
