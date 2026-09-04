@@ -87,18 +87,29 @@ DAILY_SUMMARY_DECLINE_LOCKED = _DECLINE_LOCKED
 def _conversation_has_summary_content(conversation: Any) -> bool:
     """True when the recap renderer would show more than this conversation's title.
 
-    Reads exactly the fields ``conversations_to_string(use_transcript=False)``
+    Reads the content fields ``conversations_to_string(use_transcript=False)``
     renders as the body — the first app result's content when one exists, else
-    the structured overview — so the pre-LLM decline guard cannot drift from
+    the structured overview, plus ``structured.action_items`` and
+    ``structured.events`` — so the pre-LLM decline guard cannot drift from
     what the model would actually see.
+
+    Attendee names are rendered too, but deliberately do not count: they are
+    presence labels attached to the conversation, not summary content, and a
+    day that renders as titles plus a list of names is still the degenerate
+    F-12 shape this gate exists to decline.
     """
     apps_results = getattr(conversation, 'apps_results', None) or []
     if apps_results:
         content = getattr(apps_results[0], 'content', None)
         if content and content.strip():
             return True
-    overview = getattr(getattr(conversation, 'structured', None), 'overview', None)
-    return bool(overview and overview.strip())
+    structured = getattr(conversation, 'structured', None)
+    overview = getattr(structured, 'overview', None)
+    if overview and overview.strip():
+        return True
+    if getattr(structured, 'action_items', None):
+        return True
+    return bool(getattr(structured, 'events', None))
 
 
 def generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc) -> Optional[dict]:
@@ -111,8 +122,9 @@ def generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc
     3. conversations exist in the window and are not ``is_locked``
     4. at least one non-discarded conversation has ``transcript_segments``
     5. the bounded day carries more than titles for the prompt: some
-       conversation has a non-empty ``structured.overview`` or first app
-       result — the only body fields the recap renderer shows
+       conversation has a non-empty ``structured.overview``, a first app
+       result, action items, or events — the body fields the recap renderer
+       shows
     6. LLM generate → persist
 
     Returns the stored record (or the pre-existing one), or ``None`` when a guard declined.
@@ -205,8 +217,9 @@ def _generate_and_store_daily_summary(
 
     # The prompt is built by ``conversations_to_string(use_transcript=False)``,
     # which renders the title plus the first app result or the structured
-    # overview — nothing else. A bounded day where no conversation carries
-    # either leaves the model titles alone: the output is thin or hallucinated
+    # overview, plus action items and events. A bounded day where no
+    # conversation carries any of these leaves the model titles alone: the
+    # output is thin or hallucinated
     # and then pushed (flip-review F-12 / decision 4). Decline before the LLM
     # call — no call, no record, no push. Paid, pre-flip and mobile days are
     # unchanged by construction: their overviews are non-empty, so this guard

@@ -347,6 +347,78 @@ def test_an_app_result_content_alone_counts_as_summary_content(monkeypatch):
     assert generated_dates == ['2026-08-20']
 
 
+def test_action_items_alone_count_as_summary_content(monkeypatch):
+    """The renderer also emits ``structured.action_items`` into the prompt body
+    (render.py). A day whose conversations have empty overviews, no app
+    results, but real action items is summarizable — declining it would drop
+    recaps that previously generated."""
+    generated_dates, created, _sent, _released = _install_generation_fakes(monkeypatch)
+
+    class _ActionItemsConvo:
+        transcript_segments = [object()]
+        discarded = False
+        apps_results: list = []
+        structured = SimpleNamespace(overview='', action_items=[object()], events=[])
+
+    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _ActionItemsConvo())
+    record, created_flag, declined = notif._generate_and_store_daily_summary(
+        'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
+    )
+
+    assert record is not None and created_flag is True
+    assert declined is None
+    assert generated_dates == ['2026-08-20']
+    assert created, 'an action-items day must still persist a DailySummary'
+
+
+def test_events_alone_count_as_summary_content(monkeypatch):
+    """Same as above for ``structured.events``: the renderer emits them into
+    the prompt body, so they are summary content."""
+    generated_dates, _created, _sent, _released = _install_generation_fakes(monkeypatch)
+
+    class _EventsConvo:
+        transcript_segments = [object()]
+        discarded = False
+        apps_results: list = []
+        structured = SimpleNamespace(overview='', action_items=[], events=[object()])
+
+    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _EventsConvo())
+    record, created, _declined = notif._generate_and_store_daily_summary(
+        'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
+    )
+
+    assert record is not None and created is True
+    assert generated_dates == ['2026-08-20']
+
+
+def test_empty_action_items_and_events_do_not_rescue_a_titles_only_day(monkeypatch):
+    """``action_items=[]``/``events=[]`` are the §1.7 deterministic minimum's
+    neutral empties — they must not flip the gate, and neither do attendee
+    names (presence labels, not summary content): a titles-only day still
+    declines before the LLM."""
+    generated_dates, created, sent, released = _install_generation_fakes(monkeypatch)
+
+    class _EmptyListsConvo:
+        transcript_segments = [object()]
+        discarded = False
+        apps_results: list = []
+
+        def __init__(self) -> None:
+            self.structured = SimpleNamespace(overview='', action_items=[], events=[])
+
+    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _EmptyListsConvo())
+    record, created_flag, declined = notif._generate_and_store_daily_summary(
+        'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
+    )
+
+    assert record is None and created_flag is False
+    assert declined == notif._DECLINE_NOTHING_TO_SUMMARIZE
+    assert generated_dates == []
+    assert created == []
+    assert sent == []
+    assert released == ['2026-08-20']
+
+
 def test_a_day_declined_before_the_llm_releases_its_lock(monkeypatch):
     """The on-demand button used to poison the day it was pressed on.
 
