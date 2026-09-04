@@ -121,16 +121,21 @@ export function resolveNativeRequestOrigin(input: {
       ? {ok: false, reason: 'rejected'}
       : {ok: true, origin: local.origin};
   }
-  if (parseSoftwarePlane(input.softwarePlane) === 'new') {
+  const stamped =
+    input.v5BackendUrl === undefined
+      ? null
+      : validateV5BackendUrl(input.v5BackendUrl);
+  const softwarePlane =
+    input.softwarePlane ?? (stamped === null ? 'old' : 'new');
+  if (parseSoftwarePlane(softwarePlane) === 'new') {
     if (input.v5BackendUrl === undefined || input.v5BackendUrl.length === 0) {
       return {ok: true, origin: CLOUD_BACKEND_ORIGIN};
     }
-    const v5 = validateV5BackendUrl(input.v5BackendUrl);
-    if (v5 === null) {
+    if (stamped === null) {
       return {ok: false, reason: 'rejected'};
     }
     if (isCaptureBackendPath(input.path)) {
-      return {ok: true, origin: v5.origin};
+      return {ok: true, origin: stamped.origin};
     }
   }
   return {ok: true, origin: CLOUD_BACKEND_ORIGIN};

@@ -138,7 +138,8 @@ static NSURL *OmiAuthValidatedCallbackURL(NSString *request, NSString *expectedS
   }
   NSMutableDictionary<NSString *, NSString *> *values = [NSMutableDictionary dictionary];
   for (NSURLQueryItem *item in components.queryItems) if (item.value != nil) values[item.name] = item.value;
-  if (![values[@"state"] isEqualToString:expectedState] || values[@"code"].length == 0) return nil;
+  if (![values[@"state"] isEqualToString:expectedState] ||
+      (values[@"code"].length == 0 && values[@"error"].length == 0)) return nil;
   return components.URL;
 }
 

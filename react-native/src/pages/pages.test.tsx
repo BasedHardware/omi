@@ -73,7 +73,7 @@ test('a rejected session probe keeps apps retryable instead of loading forever',
   const tree = textOf(renderer);
   expect(tree).toContain('Apps unavailable');
   expect(tree).toContain(
-    'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.',
+    'The selected Omi service is unavailable. Check the connection, then retry.',
   );
   expect(tree).toContain('Retry');
   expect(tree).not.toContain('Loading apps…');
@@ -98,7 +98,7 @@ test('a rejected session probe keeps settings retryable instead of loading forev
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
   expect(tree).toContain(
-    'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.',
+    'The selected Omi service is unavailable. Check the connection, then retry.',
   );
   expect(labelsOf(renderer)).toContain('Retry settings');
   expect(tree).not.toContain('Loading account…');

@@ -10,14 +10,14 @@ import {
 
 const workerOrigin = 'https://omi-v5-backend-staging.example.workers.dev';
 
-test('allowlisted worker URL is unused until Advanced flips to the new plane', () => {
+test('an allowlisted stamp defaults a fresh install to the new plane', () => {
   expect(validateV5BackendUrl(workerOrigin)?.origin).toBe(workerOrigin);
   expect(
     resolveNativeRequestOrigin({
       path: '/v1/device-sessions',
       v5BackendUrl: workerOrigin,
     }),
-  ).toEqual({ok: true, origin: CLOUD_BACKEND_ORIGIN});
+  ).toEqual({ok: true, origin: workerOrigin});
   expect(
     resolveNativeRequestOrigin({
       path: '/v1/device-sessions/11111111-2222-3333-4444-555555555555/audio',
@@ -87,12 +87,14 @@ test('old plane keeps every software path on api.omi.me', () => {
   expect(
     resolveNativeRequestOrigin({
       path: '/v1/settings',
+      softwarePlane: 'old',
       v5BackendUrl: workerOrigin,
     }),
   ).toEqual({ok: true, origin: CLOUD_BACKEND_ORIGIN});
   expect(
     resolveNativeRequestOrigin({
       path: '/v1/conversations',
+      softwarePlane: 'old',
       v5BackendUrl: workerOrigin,
     }),
   ).toEqual({ok: true, origin: CLOUD_BACKEND_ORIGIN});

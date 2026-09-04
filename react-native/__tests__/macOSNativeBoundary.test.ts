@@ -170,6 +170,9 @@ test('pairs the macOS backend origin and credentials in one validated policy', (
   );
   expect(source).toContain('omi.backend.softwarePlane');
   expect(source).toContain('OmiSoftwarePlaneIsNew');
+  expect(source).toContain(
+    'OmiValidatedV5URL(NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"])',
+  );
   expect(source).toContain('RCT_REMAP_METHOD(setSoftwarePlane');
   expect(source).toContain('RCT_REMAP_METHOD(stampedV5BackendOrigin');
   expect(source).not.toContain(
@@ -493,6 +496,17 @@ test('refreshes shipping sessions with the public Firebase key, never api-keys',
   );
   expect(backend).toContain('if (status == 401 || status == 403) return YES;');
   expect(backend).toContain('OmiCloudRefreshFailureIsDefinitive(status, json)');
+  expect(backend).toContain(
+    'OmiOwnKeychainCloudToken(OmiOwnKeychainCloudSession()).length > 0',
+  );
+});
+
+test('accepts a state-bound OAuth denial without waiting for timeout', () => {
+  const auth = readNativeSource('OmiAuthModule.mm');
+
+  expect(auth).toMatch(
+    /values\[@"code"\]\.length == 0 && values\[@"error"\]\.length == 0/,
+  );
 });
 
 test('fences overlapping native macOS sign-in attempts', () => {

@@ -19,6 +19,58 @@ const mockBackend = {
   cancelGenerationEvents: jest.fn(async () => undefined),
 };
 
+type TestMessage = {
+  id: string;
+  text: string;
+  sender: 'human' | 'ai';
+  createdAt: number;
+  generationOutcome: 'completed' | 'cancelled' | null;
+};
+
+const capabilities = {
+  maxAttachmentsPerMessage: 4,
+  maxAttachmentBytes: 52_428_800,
+  allowedAttachmentMimeTypes: ['text/plain'],
+};
+
+function wireMessage(message: TestMessage) {
+  return {
+    ...message,
+    type: 'text',
+    updatedAt: message.createdAt,
+    chatSessionId: null,
+    appId: null,
+    journalRevision: 1,
+    payloadHash: 'sha256:test',
+    messageSource: 'desktop_chat',
+    rating: null,
+    reported: false,
+    revision: '1',
+    attachments: [],
+  };
+}
+
+function historyBody(
+  messages: TestMessage[],
+  page: {olderCursor: string | null; hasOlder: boolean} = {
+    olderCursor: null,
+    hasOlder: false,
+  },
+) {
+  return JSON.stringify({
+    messages: messages.map(wireMessage),
+    page,
+    capabilities,
+  });
+}
+
+function admissionBody(message: TestMessage, generationId: string) {
+  return JSON.stringify({
+    message: wireMessage(message),
+    generation: {id: generationId},
+  });
+}
+
 jest.mock('../src/omiNative', () => ({
   omiAuth: mockAuth,
   omiBackend: mockBackend,
@@ -223,10 +275,7 @@ test('a send still in flight when the session dies never seeds the next session'
           : {
               id: value.id,
               status: 200,
-              body: JSON.stringify({
-                messages: [],
-                page: {olderCursor: null, hasOlder: false},
-              }),
+              body: historyBody([]),
             },
       );
     }
@@ -245,15 +294,15 @@ test('a send still in flight when the session dies never seeds the next session'
   mockBackend.generationEvents.mockImplementation(async () => ({
     id: 'gen-1',
     status: 200,
-    body: `data: ${JSON.stringify({
+    body: `event: done\nid: terminal\ndata: ${JSON.stringify({
       kind: 'done',
-      message: {
+      message: wireMessage({
         id: 'dead-session-reply',
         text: 'PRIVATE REPLY FROM THE DEAD SESSION',
         sender: 'ai',
         createdAt: 2,
         generationOutcome: 'completed',
-      },
+      }),
     })}\n\n`,
   }));
 
@@ -307,16 +356,16 @@ test('a send still in flight when the session dies never seeds the next session'
     resolveAdmission!({
       id: 'admission',
       status: 200,
-      body: JSON.stringify({
-        message: {
+      body: admissionBody(
+        {
           id: 'dead-session-human',
           text: 'PRIVATE IN-FLIGHT MESSAGE',
           sender: 'human',
           createdAt: 1,
           generationOutcome: null,
         },
-        generation: {id: 'gen-1'},
-      }),
+        'gen-1',
+      ),
     });
     await flushAsyncQueue();
   });
@@ -390,18 +439,15 @@ test('the previous session transcript never survives a sign-out', async () => {
       return {
         id: 'chat-history',
         status: 200,
-        body: JSON.stringify({
-          messages: [
-            {
-              id: 'prior-session-message',
-              text: 'PRIVATE PRIOR SESSION',
-              sender: 'human',
-              createdAt: 1,
-              generationOutcome: null,
-            },
-          ],
-          page: {olderCursor: null, hasOlder: false},
-        }),
+        body: historyBody([
+          {
+            id: 'prior-session-message',
+            text: 'PRIVATE PRIOR SESSION',
+            sender: 'human',
+            createdAt: 1,
+            generationOutcome: null,
+          },
+        ]),
       };
     }
     return {id: value.id, status: 501, body: null};
@@ -463,7 +509,7 @@ test('a stale older-history recovery cannot overwrite a newer desktop send', asy
   let resolveStaleRecovery:
     | ((value: {id: string; status: number; body: string}) => void)
     | undefined;
-  const canonicalMessages = [
+  const canonicalMessages: TestMessage[] = [
     {
       id: 'fresh-human',
       text: 'fresh question',
@@ -487,9 +533,9 @@ test('a stale older-history recovery cannot overwrite a newer desktop send', asy
           return Promise.resolve({
             id: value.id,
             status: 200,
-            body: JSON.stringify({
-              messages: [],
-              page: {olderCursor: 'older-1', hasOlder: true},
+            body: historyBody([], {
+              olderCursor: 'older-1',
+              hasOlder: true,
             }),
           });
         }
@@ -514,20 +560,14 @@ test('a stale older-history recovery cannot overwrite a newer desktop send', asy
         return Promise.resolve({
           id: value.id,
           status: 200,
-          body: JSON.stringify({
-            messages: canonicalMessages,
-            page: {olderCursor: null, hasOlder: false},
-          }),
+          body: historyBody(canonicalMessages),
         });
       }
       if (value.id.startsWith('admit-')) {
         return Promise.resolve({
           id: value.id,
           status: 201,
-          body: JSON.stringify({
-            message: canonicalMessages[0],
-            generation: {id: 'fresh-generation'},
-          }),
+          body: admissionBody(canonicalMessages[0], 'fresh-generation'),
         });
       }
       return Promise.resolve({id: value.id, status: 501, body: null});
@@ -536,9 +576,9 @@ test('a stale older-history recovery cannot overwrite a newer desktop send', asy
   mockBackend.generationEvents.mockResolvedValue({
     id: 'fresh-generation',
     status: 200,
-    body: `data: ${JSON.stringify({
+    body: `event: done\nid: terminal\ndata: ${JSON.stringify({
       kind: 'done',
-      message: canonicalMessages[1],
+      message: wireMessage(canonicalMessages[1]),
     })}\n\n`,
   });
 
@@ -572,10 +612,7 @@ test('a stale older-history recovery cannot overwrite a newer desktop send', asy
     resolveStaleRecovery!({
       id: 'chat-history',
       status: 200,
-      body: JSON.stringify({
-        messages: [],
-        page: {olderCursor: null, hasOlder: false},
-      }),
+      body: historyBody([]),
     });
     await flushAsyncQueue();
   });

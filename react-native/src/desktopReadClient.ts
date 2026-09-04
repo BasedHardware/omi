@@ -175,11 +175,13 @@ export const desktopBackendConfigurationCopy =
 export const desktopBackendUnauthorizedCopy =
   'Omi cloud needs a signed-in session.';
 export const desktopBackendServiceCopy =
-  'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.';
+  'The selected Omi service is unavailable. Check the connection, then retry.';
 export const desktopLocalBackendServiceCopy =
   'The configured local Omi service is unavailable. Check its connection, then retry.';
 export const desktopProjectionUnavailableCopy =
-  'Saved conversations and memories are not available from this Omi service yet. Retry after its persisted projections are connected.';
+  'This saved data is not available from the selected Omi service yet. Retry after its persisted projection is connected.';
+const desktopReadFailureCopy =
+  'This saved data could not be loaded. Retry without changing it.';
 const desktopRecoveryGenericCopy =
   'Omi could not load saved conversations or memories. Your saved data has not been changed.';
 
@@ -353,7 +355,11 @@ async function read(
         }
       }
     }
-    throw new Error(`${id} failed (${response.status})`);
+    throw new Error(
+      response.status >= 500
+        ? desktopBackendServiceCopy
+        : desktopReadFailureCopy,
+    );
   }
   return parseJson(response.body, id);
 }
