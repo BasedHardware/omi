@@ -125,6 +125,14 @@ export interface SkillPart {
 export const SKILL_PART_CHAR_LIMIT = 16 * 1024;
 
 /**
+ * Sanity cap on a whole skill file the runtime will serve, mirroring the 128KB
+ * `maxSkillBytes` the desktop skill store enforces on skills it saves itself.
+ * Hand-dropped skill folders never pass through that check, so the runtime
+ * enforces the same bound here instead of assuming the file was vetted.
+ */
+export const SKILL_FILE_CHAR_LIMIT = 128 * 1024;
+
+/**
  * Split a skill body at markdown H2 (##) boundaries. Content before the first H2 becomes
  * the "Overview" part. Fenced code blocks (``` or ~~~) are never split, even when a
  * fenced line looks like a heading. Empty parts are dropped.
@@ -177,6 +185,16 @@ function capPartContent(part: SkillPart): string {
   );
 }
 
+/** Cap an oversized skill file at read time with a note, so no load path can
+ *  return more than the store's size bound even for a hand-dropped skill. */
+function capSkillFile(content: string, name: string): string {
+  if (content.length <= SKILL_FILE_CHAR_LIMIT) return content;
+  return (
+    `${content.slice(0, SKILL_FILE_CHAR_LIMIT)}` +
+    `\n\n[Skill '${name}' truncated at ${SKILL_FILE_CHAR_LIMIT} of ${content.length} characters — the file exceeds the ${SKILL_FILE_CHAR_LIMIT / 1024}KB skill size limit.]`
+  );
+}
+
 export interface LoadSkillOptions {
   /** 1-based body section to read, or "all" to opt into the full body. */
   part?: number | "all";
@@ -209,15 +227,15 @@ export async function loadSkillInstructions(
     return `Skill '${trimmedName}' is disabled. Enable it in the desktop skill settings if the request needs it.`;
   }
 
-  const content = await readFile(skill.path, "utf8");
+  const rawContent = capSkillFile(await readFile(skill.path, "utf8"), trimmedName);
   // The dev-mode skill intentionally carries the workspace binding above its full body.
-  const workspacePrefix = content && trimmedName === "dev-mode" && workspace ? `Workspace: ${workspace}\n\n` : "";
+  const workspacePrefix = rawContent && trimmedName === "dev-mode" && workspace ? `Workspace: ${workspace}\n\n` : "";
 
-  const { meta, body } = splitSkillFrontmatter(content);
+  const { meta, body } = splitSkillFrontmatter(rawContent);
   const parts = splitSkillBody(body);
 
   if (options.part === "all") {
-    return `${workspacePrefix}${content}`;
+    return `${workspacePrefix}${rawContent}`;
   }
 
   if (typeof options.part === "number") {
@@ -230,7 +248,10 @@ export async function loadSkillInstructions(
   }
 
   if (parts.length === 0) {
-    return `${workspacePrefix}${content}`.trimEnd();
+    // A body with no H2 sections (or none with content) is served as a single
+    // capped block: the default view must never return uncapped content —
+    // only an explicit part: "all" can.
+    return `${workspacePrefix}${capPartContent({ title: trimmedName, content: rawContent })}`.trimEnd();
   }
 
   const tableOfContents = parts

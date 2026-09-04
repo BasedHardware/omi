@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  SKILL_FILE_CHAR_LIMIT,
   SKILL_PART_CHAR_LIMIT,
   configuredDisabledSkills,
   isSafeSkillName,
@@ -144,6 +145,44 @@ describe("load_skill progressive disclosure", () => {
   it("caps a single oversized section with a truncation note", async () => {
     await withSkill(`## Huge\n${"x".repeat(SKILL_PART_CHAR_LIMIT + 4096)}`, async (skillName, root) => {
       const result = await loadSkillInstructions(skillName, root, { part: 1 });
+      expect(result).toContain("truncated at");
+      expect(result.length).toBeLessThan(SKILL_PART_CHAR_LIMIT + 600);
+    });
+  });
+
+  it("caps a sectionless (no-H2) skill on the default call and serves it as a single part", async () => {
+    // No H2 headings: splitSkillBody yields exactly one "Overview" part, so the
+    // default view and part 1 must both return the same capped content.
+    await withSkill("x".repeat(SKILL_PART_CHAR_LIMIT + 4096), async (skillName, root) => {
+      const result = await loadSkillInstructions(skillName, root);
+      expect(result).toContain("truncated at");
+      expect(result).toContain("part 1/1: Overview");
+      expect(result.length).toBeLessThan(SKILL_PART_CHAR_LIMIT + 600);
+
+      const part1 = await loadSkillInstructions(skillName, root, { part: 1 });
+      expect(part1).toContain(`[${skillName} — part 1/1: Overview]`);
+      expect(part1).toContain("truncated at");
+      expect(part1.length).toBeLessThan(SKILL_PART_CHAR_LIMIT + 600);
+    });
+  });
+
+  it("caps a skill whose body yields zero parts instead of returning the file uncapped", async () => {
+    // A body made only of H2 headings flushes no content, so splitSkillBody
+    // returns zero parts; the no-parts fallback must still cap its output.
+    await withSkill("## filler\n".repeat(4096), async (skillName, root) => {
+      const result = await loadSkillInstructions(skillName, root);
+      expect(result).toContain("truncated at");
+      expect(result.length).toBeLessThan(SKILL_PART_CHAR_LIMIT + 600);
+    });
+  });
+
+  it("caps a hand-dropped skill file larger than the 128KB store limit, even for part=all", async () => {
+    await withSkill("y".repeat(SKILL_FILE_CHAR_LIMIT + 4096), async (skillName, root) => {
+      const everything = await loadSkillInstructions(skillName, root, { part: "all" });
+      expect(everything).toContain("exceeds the 128KB skill size limit");
+      expect(everything.length).toBeLessThan(SKILL_FILE_CHAR_LIMIT + 600);
+
+      const result = await loadSkillInstructions(skillName, root);
       expect(result).toContain("truncated at");
       expect(result.length).toBeLessThan(SKILL_PART_CHAR_LIMIT + 600);
     });
