@@ -1356,7 +1356,14 @@ def get_all_ratings(rating_type: str = 'memory_summary'):
 
 
 def set_chat_message_rating_score(
-    uid: str, message_id: str, value: int, reason: str = None, platform: str = None, app_version: str = None
+    uid: str,
+    message_id: str,
+    value: int,
+    reason: str = None,
+    platform: str = None,
+    app_version: str = None,
+    notification_kind: str = None,
+    app_id: str = None,
 ):
     """
     Store chat message rating/feedback.
@@ -1364,11 +1371,12 @@ def set_chat_message_rating_score(
     Args:
         uid: User ID
         message_id: Message ID being rated
-        value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = neutral/removed)
-        reason: Optional reason for thumbs down (e.g. 'too_verbose', 'incorrect_or_hallucination',
-                'not_helpful_or_irrelevant', 'didnt_follow_instructions', 'other')
-        platform: 'desktop' or 'mobile' — identifies where the rating came from
-        app_version: App version string (e.g. '0.11.276') — maps to a specific prompt version
+        value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = user cleared the rating)
+        reason: Optional enum reason for thumbs down
+        platform: 'desktop' or 'mobile' — always written; absence is not a value
+        app_version: App version string (e.g. '0.11.276')
+        notification_kind: Parsed `notification:<kind>:<uuid>` prefix, when present
+        app_id: Message app_id (Mentor vs default), copied so encryption cannot hide it
     """
     doc_id = document_id_from_seed('chat_message' + message_id)
     data = {
@@ -1385,6 +1393,10 @@ def set_chat_message_rating_score(
         data['platform'] = platform
     if app_version:
         data['app_version'] = app_version
+    if notification_kind:
+        data['notification_kind'] = notification_kind
+    if app_id:
+        data['app_id'] = app_id
     db.collection('analytics').document(doc_id).set(data)
 
 

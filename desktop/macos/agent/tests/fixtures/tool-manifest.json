@@ -4760,7 +4760,8 @@
           "description": "Task ID (required)"
         },
         "completed": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Set true to mark the task done."
         },
         "description": {
           "type": "string"
@@ -5523,8 +5524,8 @@
   {
     "name": "web_search",
     "label": "Web Search",
-    "description": "Search the live public web through the full typed-chat retrieval lane, then speak its answer.",
-    "promptSnippet": "web_search - Search the live public web for a spoken answer",
+    "description": "Search the live public web through the typed-chat retrieval lane.",
+    "promptSnippet": "web_search - Search the live public web",
     "latency": "async background",
     "inputSchema": {
       "type": "object",
@@ -5564,10 +5565,15 @@
     },
     "intendedForAgents": true,
     "runtimePreconditions": [
-      "Realtime voice only; requires the typed-chat public-web retrieval lane."
+      "Requires the typed-chat public-web retrieval lane. Paid plans only on desktop chat."
     ],
-    "adapters": {},
+    "adapters": {
+      "pi-mono": {
+        "advertised": true
+      }
+    },
     "surfaces": [
+      "desktop_chat",
       "realtime_voice"
     ],
     "capabilityDoc": {

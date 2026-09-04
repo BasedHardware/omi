@@ -1983,6 +1983,8 @@ class TestDownloadLandingInstallSteps:
         assert 'class="checkmark"' not in html
         assert 'id="status-icon"' not in html
         assert "Your download should start automatically" not in html
+        # the chip says where the file went, not that a process completed
+        assert "Downloading" in html and "Download started" not in html
         # the manual fallback survives, inline in the meta line rather than on its own row
         assert 'class="meta"' in html
         assert html.count('class="download-link"') == 1

@@ -1517,8 +1517,12 @@ export interface DailySummaryActionItem {
 
 export interface DailySummaryDayStats {
   action_items_count?: number | null;
+  action_items_created?: number | null;
+  memories_created?: number | null;
+  proactive_moments?: number | null;
   total_conversations?: number | null;
   total_duration_minutes?: number | null;
+  watching_minutes?: number | null;
 }
 
 export interface DailySummaryDecisionMade {
@@ -1655,6 +1659,21 @@ export interface DeleteKnowledgeGraphResponse {
 export interface DeleteLimitlessConversationsResponse {
   deleted_count: number;
   message: string;
+}
+
+export interface DesktopDailyUsageRequest {
+  client_device_id: string;
+  date: string;
+  listening_seconds: number;
+  proactive_cards_acted: number;
+  proactive_cards_shown: number;
+  ptt_turns: number;
+  timezone: string;
+  watching_seconds: number;
+}
+
+export interface DesktopDailyUsageResponse {
+  ok: boolean;
 }
 
 export interface DeterministicFacts {
@@ -1991,7 +2010,7 @@ export interface FeedbackCreate {
   subject_kind: FeedbackSubjectKind;
 }
 
-export type FeedbackReason = "too_verbose" | "incorrect_or_hallucination" | "not_helpful_or_irrelevant" | "didnt_follow_instructions" | "other";
+export type FeedbackReason = "too_verbose" | "incorrect_or_hallucination" | "not_helpful_or_irrelevant" | "didnt_follow_instructions" | "other" | "not_about_me" | "already_done" | "wrong_facts" | "bad_timing" | "not_useful";
 
 export interface FeedbackRecord {
   action: TaskIntelligenceFeedbackAction;
@@ -4262,6 +4281,12 @@ export interface TranscriptSegment {
   translations?: Array<Translation> | null;
 }
 
+export interface TranscriptionAllowanceSnapshot {
+  mode: string;
+  reason?: string;
+  remaining_seconds?: number | null;
+}
+
 export interface TranscriptionErrorDetail {
   error: string;
   message: string;
@@ -4539,6 +4564,7 @@ export interface UserSubscriptionResponse {
   phone_call_quota?: PhoneCallQuota | null;
   show_subscription_ui?: boolean;
   subscription: Subscription;
+  transcription_allowance?: TranscriptionAllowanceSnapshot | null;
   transcription_seconds_limit: number;
   transcription_seconds_used: number;
   words_transcribed_limit: number;
@@ -4959,6 +4985,8 @@ export interface OmiApiSchemas {
   "DeleteImportJobResponse": DeleteImportJobResponse;
   "DeleteKnowledgeGraphResponse": DeleteKnowledgeGraphResponse;
   "DeleteLimitlessConversationsResponse": DeleteLimitlessConversationsResponse;
+  "DesktopDailyUsageRequest": DesktopDailyUsageRequest;
+  "DesktopDailyUsageResponse": DesktopDailyUsageResponse;
   "DeterministicFacts": DeterministicFacts;
   "DevApiKey": DevApiKey;
   "DevApiKeyCreate": DevApiKeyCreate;
@@ -5318,6 +5346,7 @@ export interface OmiApiSchemas {
   "TrainingDataOptInResponse": TrainingDataOptInResponse;
   "TranscriptMatchSnippet": TranscriptMatchSnippet;
   "TranscriptSegment": TranscriptSegment;
+  "TranscriptionAllowanceSnapshot": TranscriptionAllowanceSnapshot;
   "TranscriptionErrorDetail": TranscriptionErrorDetail;
   "TranscriptionErrorResponse": TranscriptionErrorResponse;
   "TranscriptionOutcome": TranscriptionOutcome;
@@ -8649,6 +8678,16 @@ export interface OmiApiPaths {
       operationId: "delete_account_v1_users_delete_account_delete";
       responses: {
         "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/desktop-usage/daily": {
+    post: {
+      operationId: "record_desktop_daily_usage_v1_users_desktop_usage_daily_post";
+      responses: {
+        "200": DesktopDailyUsageResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -16078,6 +16117,27 @@ export async function delete_account_v1_users_delete_account_delete(header: { au
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function record_desktop_daily_usage_v1_users_desktop_usage_daily_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DesktopDailyUsageRequest, init?: OmiApiClientInit): Promise<DesktopDailyUsageResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/desktop-usage/daily`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_user_webhook_endpoint_v1_users_developer_webhook__wtype__get(path: { wtype: WebhookType }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserWebhookUrlResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/developer/webhook/${path.wtype}`;
@@ -17753,7 +17813,7 @@ export async function get_shared_chat_messages_v2_messages_shared__token__get(pa
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function rate_message_v2_messages__message_id__rating_patch(path: { message_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RateMessageRequest, init?: OmiApiClientInit): Promise<ChatRatingResponse> {
+export async function rate_message_v2_messages__message_id__rating_patch(path: { message_id: string }, header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RateMessageRequest, init?: OmiApiClientInit): Promise<ChatRatingResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/messages/${path.message_id}/rating`;
   const _search = "";
@@ -17763,8 +17823,8 @@ export async function rate_message_v2_messages__message_id__rating_patch(path: {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
@@ -18344,4 +18404,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 433 client methods generated.
+// Total: 434 client methods generated.

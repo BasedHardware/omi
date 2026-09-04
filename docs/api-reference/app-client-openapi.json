@@ -9692,6 +9692,39 @@
             ],
             "title": "Action Items Count"
           },
+          "action_items_created": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Items Created"
+          },
+          "memories_created": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memories Created"
+          },
+          "proactive_moments": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proactive Moments"
+          },
           "total_conversations": {
             "anyOf": [
               {
@@ -9713,6 +9746,17 @@
               }
             ],
             "title": "Total Duration Minutes"
+          },
+          "watching_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watching Minutes"
           }
         },
         "title": "DailySummaryDayStats",
@@ -10525,6 +10569,79 @@
           "message"
         ],
         "title": "DeleteLimitlessConversationsResponse",
+        "type": "object"
+      },
+      "DesktopDailyUsageRequest": {
+        "properties": {
+          "client_device_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Client Device Id",
+            "type": "string"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "listening_seconds": {
+            "maximum": 86400.0,
+            "minimum": 0.0,
+            "title": "Listening Seconds",
+            "type": "integer"
+          },
+          "proactive_cards_acted": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Proactive Cards Acted",
+            "type": "integer"
+          },
+          "proactive_cards_shown": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Proactive Cards Shown",
+            "type": "integer"
+          },
+          "ptt_turns": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Ptt Turns",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "watching_seconds": {
+            "maximum": 86400.0,
+            "minimum": 0.0,
+            "title": "Watching Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "timezone",
+          "client_device_id",
+          "watching_seconds",
+          "listening_seconds",
+          "proactive_cards_shown",
+          "proactive_cards_acted",
+          "ptt_turns"
+        ],
+        "title": "DesktopDailyUsageRequest",
+        "type": "object"
+      },
+      "DesktopDailyUsageResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "DesktopDailyUsageResponse",
         "type": "object"
       },
       "DeterministicFacts": {
@@ -12466,13 +12583,18 @@
         "type": "object"
       },
       "FeedbackReason": {
-        "description": "Structured reason for a thumbs-down.\n\nThese five match the values the mobile client has always sent to\n`POST /v1/users/analytics/chat_message`; keeping them identical means the\nledger and the legacy `analytics` rows stay comparable.",
+        "description": "Structured reason for a thumbs-down.\n\nThe first five match the values the mobile client has always sent to\n`POST /v1/users/analytics/chat_message`; keeping them identical means the\nledger and the legacy `analytics` rows stay comparable. The remaining five\nare desktop-only reason chips for proactive-notification cards (focus,\ninsight, task, memory) — a distinct taxonomy from a chat answer's, added\nalongside the mobile five rather than folded into them so neither surface's\ncategories are diluted by the other's.",
         "enum": [
           "too_verbose",
           "incorrect_or_hallucination",
           "not_helpful_or_irrelevant",
           "didnt_follow_instructions",
-          "other"
+          "other",
+          "not_about_me",
+          "already_done",
+          "wrong_facts",
+          "bad_timing",
+          "not_useful"
         ],
         "title": "FeedbackReason",
         "type": "string"
@@ -25971,6 +26093,36 @@
         "title": "TranscriptSegment",
         "type": "object"
       },
+      "TranscriptionAllowanceSnapshot": {
+        "description": "The one server answer to which STT mode the client should open (local-models free tier, S16).\n\n``mode``: ``managed`` (Omi-billed socket), ``on_device`` (the plan's managed\nminutes are spent; the local engine is free on every plan), ``blocked``\n(desktop trial paywall). ``remaining_seconds`` is null when unlimited.",
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "remaining_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Seconds"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "TranscriptionAllowanceSnapshot",
+        "type": "object"
+      },
       "TranscriptionErrorDetail": {
         "properties": {
           "error": {
@@ -27750,6 +27902,16 @@
           },
           "subscription": {
             "$ref": "#/components/schemas/Subscription"
+          },
+          "transcription_allowance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptionAllowanceSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "transcription_seconds_limit": {
             "title": "Transcription Seconds Limit",
@@ -55582,7 +55744,7 @@
     },
     "/v1/users/analytics/chat_message": {
       "post": {
-        "description": "Submit feedback rating for a chat message.\n\nArgs:\n    message_id: ID of the message being rated\n    value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = neutral/removed)\n    reason: Optional reason for thumbs down. Valid values:\n        - 'too_verbose': Response was too long or wordy\n        - 'incorrect_or_hallucination': Response contained incorrect information\n        - 'not_helpful_or_irrelevant': Response didn't address the question\n        - 'didnt_follow_instructions': Response didn't follow user instructions\n        - 'other': Other reason",
+        "description": "Submit feedback rating for a chat message.\n\nArgs:\n    message_id: ID of the message being rated\n    value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = user cleared)\n    reason: Optional reason for thumbs down. Enum keys only.",
         "operationId": "set_chat_message_analytics_v1_users_analytics_chat_message_post",
         "parameters": [
           {
@@ -56902,6 +57064,93 @@
           }
         ],
         "summary": "Delete Account",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/desktop-usage/daily": {
+      "post": {
+        "operationId": "record_desktop_daily_usage_v1_users_desktop_usage_daily_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopDailyUsageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopDailyUsageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Record Desktop Daily Usage",
         "tags": [
           "v1"
         ]
@@ -58694,7 +58943,7 @@
     },
     "/v1/users/me/subscription": {
       "get": {
-        "description": "Gets the user's subscription plan and usage.",
+        "description": "Gets the user's subscription plan and usage, plus the one transcription-allowance answer.",
         "operationId": "get_user_subscription_endpoint_v1_users_me_subscription_get",
         "parameters": [
           {
@@ -64399,19 +64648,19 @@
           },
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },

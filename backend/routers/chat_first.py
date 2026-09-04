@@ -18,13 +18,13 @@ import database.chat_first_intents as chat_first_intents_db
 import database.conversation_finalization_jobs as finalization_jobs_db
 import database.conversations as conversations_db
 import database.goals as goals_db
-from database.durable_queue import oldest_ready_age_seconds
 from database.firestore_read_metrics import FirestoreReadSite
 import database.task_intelligence_control as task_control_db
 from models.chat_first import (
     CaptureLinkSpec,
     ConversationLinkSpec,
     ChatFirstBlockSpec,
+    ChatFirstJournalBlockSpec,
     ChatFirstBlockValidationReceipt,
     ChatFirstBlockValidationRequest,
     ChatFirstSubject,
@@ -36,14 +36,17 @@ from models.chat_first import (
     MaterializableProactiveIntent,
     MaterializePromptsRequest,
     MaterializePromptsResponse,
+    ProactiveMaterializationRejection,
     ProactiveMaterializationRejectionOutcome,
     ProactiveMaterializationReceiptOutcome,
     MemoryLinkSpec,
+    MemoryReviewCardSpec,
     TaskCardSpec,
     stable_block_id,
 )
 from utils.metrics import CHAT_FIRST_PROACTIVE_TOTAL
-from utils.durable_queue_metrics import observe_oldest_ready_age
+from utils.chat_first_materialize_queue import drain_materialize_rejections, record_all_hard_reject_batch
+from utils.durable_queue_policy import ProcessOutcome
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.memory_service import fetch_memory_dict
 from utils.other import endpoints as auth
@@ -176,7 +179,7 @@ def _maybe_persist_cold_start(uid: str, *, control_generation: int, now: datetim
         logger.warning('chat_first_cold_start_prepare_failed uid=%s error=%s', sanitize_pii(uid), type(exc).__name__)
 
 
-def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
+def _entity_available(uid: str, block: ChatFirstJournalBlockSpec) -> bool:
     if isinstance(block, TaskCardSpec):
         task = action_items_db.get_action_item(uid, block.task_id)
         return bool(task and not task.get('is_locked', False))
@@ -207,6 +210,14 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
     if isinstance(block, MemoryLinkSpec):
         try:
             return bool(fetch_memory_dict(uid, block.memory_id, db_client=getattr(db_client_module, 'db', None)))
+        except HTTPException:
+            return False
+    if isinstance(block, MemoryReviewCardSpec):
+        # Every row is a claim the owner can accept or correct in place, so the
+        # card is only admissible if each one is a memory this account still owns.
+        client = getattr(db_client_module, 'db', None)
+        try:
+            return all(bool(fetch_memory_dict(uid, item.memory_id, db_client=client)) for item in block.items)
         except HTTPException:
             return False
     subject = block.subject
@@ -336,7 +347,8 @@ def _materialize_prompts(
     receipt_outcomes: list[ProactiveMaterializationReceiptOutcome] = []
     rejection_outcomes: list[ProactiveMaterializationRejectionOutcome] = []
     deferred_intent_ids: set[str] = set()
-    for rejection in request.rejections:
+
+    def process_rejection(rejection: ProactiveMaterializationRejection) -> ProcessOutcome:
         try:
             rejected_intent, dead_letter_reason = chat_first_intents_db.record_materialization_rejection(
                 uid,
@@ -348,33 +360,31 @@ def _materialize_prompts(
         except chat_first_intents_db.ChatFirstIntentGenerationMismatch as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch') from exc
         except chat_first_intents_db.ChatFirstIntentDocumentGenerationMismatch:
-            outcome = 'generation_mismatch'
             rejection_outcomes.append(
-                ProactiveMaterializationRejectionOutcome(intent_id=rejection.intent_id, outcome=outcome)
+                ProactiveMaterializationRejectionOutcome(intent_id=rejection.intent_id, outcome='generation_mismatch')
             )
-            continue
+            return ProcessOutcome.reject('generation_mismatch', reason='generation_mismatch')
         except chat_first_intents_db.ChatFirstMalformedDocument:
-            outcome = 'malformed'
             rejection_outcomes.append(
-                ProactiveMaterializationRejectionOutcome(intent_id=rejection.intent_id, outcome=outcome)
+                ProactiveMaterializationRejectionOutcome(intent_id=rejection.intent_id, outcome='malformed')
             )
-            continue
+            return ProcessOutcome.reject('malformed', reason='malformed')
         except chat_first_intents_db.ProactiveIntentNotReady:
             rejection_outcomes.append(
                 ProactiveMaterializationRejectionOutcome(intent_id=rejection.intent_id, outcome='absorbed')
             )
-            continue
+            return ProcessOutcome.ack()
         except Exception:
             logger.exception('materialization rejection processing failed')
             rejection_outcomes.append(
                 ProactiveMaterializationRejectionOutcome(intent_id=rejection.intent_id, outcome='malformed')
             )
-            continue
+            return ProcessOutcome.reject('malformed', reason='malformed')
         if rejected_intent is None:
             rejection_outcomes.append(
                 ProactiveMaterializationRejectionOutcome(intent_id=rejection.intent_id, outcome='missing')
             )
-            continue
+            return ProcessOutcome.ack()
         outcome = (
             'absorbed'
             if rejected_intent.delivery_state in {'delivered', 'dead_letter'} and dead_letter_reason is None
@@ -395,6 +405,12 @@ def _materialize_prompts(
                     else dead_letter_reason
                 ),
             ).inc()
+        if outcome == 'recorded':
+            return ProcessOutcome.reject(outcome, reason='hard_reject')
+        return ProcessOutcome.ack()
+
+    drain_materialize_rejections(request.rejections, process_rejection)
+    record_all_hard_reject_batch(rejection_outcomes)
 
     for deferral in request.deferrals:
         try:
@@ -526,13 +542,6 @@ def _materialize_prompts(
         CHAT_FIRST_PROACTIVE_TOTAL.labels(
             event='stalled', source=batch.stalled_source, reason='ready_older_than_24h'
         ).inc()
-    observe_oldest_ready_age(
-        'chat_first_proactive_intents',
-        oldest_ready_age_seconds(
-            [intent.created_at for intent in batch.intents],
-            now=now,
-        ),
-    )
     CHAT_FIRST_PROACTIVE_TOTAL.labels(event='fetch', source='materialization', reason='none').inc()
     return MaterializePromptsResponse(
         intents=[

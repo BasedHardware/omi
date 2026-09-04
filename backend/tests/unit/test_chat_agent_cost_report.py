@@ -174,6 +174,18 @@ def test_no_attempts_reports_an_empty_range_instead_of_dividing_by_zero(report) 
     assert 'No chat_agent attempts found' in report.render(totals, rates, 'chat_agent')
 
 
+def test_no_attempts_report_keeps_uid_scope(report) -> None:
+    totals = report.build_totals([])
+    rates = report.Rates('test', 0, 0, 0, 0, 0)
+
+    rendered = report.render(totals, rates, 'chat_agent', uid='u-1')
+
+    assert rendered.splitlines() == [
+        'scope: uid=u-1',
+        'No chat_agent attempts found. Check the date range and that accounting is enabled.',
+    ]
+
+
 def test_rates_come_from_the_real_card_and_an_unknown_model_fails_loudly(report) -> None:
     """Pricing the report against a model with no card would silently understate spend."""
     card_path = BACKEND_ROOT / 'llm_gateway' / 'config' / 'cost_rate_cards.yaml'
@@ -266,7 +278,7 @@ def test_the_default_window_ends_on_the_utc_day(report, monkeypatch) -> None:
     range was never meant to cover."""
     captured: dict[str, Any] = {}
 
-    def fake_fetch(_client, feature, days):
+    def fake_fetch(_client, feature, days, **_kwargs):
         captured['days'] = days
         return []
 
@@ -285,3 +297,92 @@ def test_date_range_is_inclusive_and_ordered(report) -> None:
 
     with pytest.raises(ValueError):
         report.date_range(date(2026, 7, 30), 0)
+
+
+class _Snapshot:
+    def __init__(self, data: dict[str, Any]) -> None:
+        self._data = data
+
+    def to_dict(self) -> dict[str, Any]:
+        return self._data
+
+
+class _RecordingQuery:
+    def __init__(self, snapshots: list[Any] | None = None) -> None:
+        self.filters: list[Any] = []
+        self._snapshots = snapshots or []
+
+    def where(self, *, filter: Any) -> _RecordingQuery:
+        self.filters.append(filter)
+        return self
+
+    def stream(self):
+        return iter(self._snapshots)
+
+
+class _FakeClient:
+    def __init__(self, query: _RecordingQuery) -> None:
+        self.query = query
+
+    def collection(self, _name: str) -> _RecordingQuery:
+        return self.query
+
+
+def _filter_triples(filters: list[Any]) -> list[tuple[Any, Any, Any]]:
+    return [(item.field_path, item.op_string, item.value) for item in filters]
+
+
+def test_fetch_rows_with_uid_adds_a_user_uid_equality_filter(report) -> None:
+    query = _RecordingQuery(snapshots=[_Snapshot({'feature': 'chat_agent', 'date': '2026-07-30'})])
+    rows = list(report.fetch_rows(_FakeClient(query), 'chat_agent', ['2026-07-30'], uid='u-1'))
+
+    assert _filter_triples(query.filters) == [
+        ('feature', '==', 'chat_agent'),
+        ('date', '==', '2026-07-30'),
+        ('user_uid', '==', 'u-1'),
+    ]
+    assert len(rows) == 1
+
+
+def test_fetch_rows_without_uid_adds_no_user_uid_filter(report) -> None:
+    query = _RecordingQuery(snapshots=[_Snapshot({'feature': 'chat_agent', 'date': '2026-07-30'})])
+    list(report.fetch_rows(_FakeClient(query), 'chat_agent', ['2026-07-30']))
+
+    assert _filter_triples(query.filters) == [
+        ('feature', '==', 'chat_agent'),
+        ('date', '==', '2026-07-30'),
+    ]
+    assert all(item.field_path != 'user_uid' for item in query.filters)
+
+
+def test_parse_args_accepts_an_optional_uid(report) -> None:
+    assert report.parse_args(['--uid', 'u-1']).uid == 'u-1'
+    assert report.parse_args([]).uid is None
+
+
+def test_render_includes_a_uid_scope_line_only_when_set(report) -> None:
+    totals = report.build_totals([_row(output_tokens=1)])
+    rates = report.Rates('test', 0, 0, 0, 0, 0)
+    without = report.render(totals, rates, 'chat_agent')
+    with_none = report.render(totals, rates, 'chat_agent', uid=None)
+    with_uid = report.render(totals, rates, 'chat_agent', uid='u-1')
+
+    assert without == with_none
+    without_lines = without.split('\n')
+    with_uid_lines = with_uid.split('\n')
+    assert with_uid_lines[0] == without_lines[0]
+    assert with_uid_lines[1] == 'scope: uid=u-1'
+    assert with_uid_lines[2:] == without_lines[1:]
+
+
+def test_main_passes_uid_to_fetch_rows(report, monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_fetch(_client, feature, days, *, uid=None):
+        captured['uid'] = uid
+        return []
+
+    monkeypatch.setattr(report, 'fetch_rows', fake_fetch)
+    report.main(['--uid', 'u-1', '--days', '1'], get_client=lambda: object())
+
+    assert captured['uid'] == 'u-1'

@@ -15,10 +15,9 @@ import database.notifications as notification_db
 from database.redis_db import try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
-from utils.durable_queue_metrics import observe_oldest_ready_age
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
-from utils.memory.learned_today import memory_review_card_block
+from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.notifications import send_bulk_notification, send_notification
 from utils.other import daily_summary_budget as summary_budget
 from utils.webhooks import day_summary_webhook
@@ -57,7 +56,7 @@ DAILY_SUMMARY_USER_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_USER_BUDGET_SECOND
 # prompt. ~360k chars is roughly 90k tokens, comfortably inside the 272k-token
 # model limit even alongside the prompt scaffolding and the user's memories.
 # The overflow seen in production was ~290k tokens of input.
-DAILY_SUMMARY_MAX_HISTORY_CHARS = _env_int('DAILY_SUMMARY_MAX_HISTORY_CHARS', 360_000)
+DAILY_SUMMARY_MAX_HISTORY_CHARS = _env_int('DAILY_SUMMARY_MAX_HISTORY_CHARS', summary_budget.DEFAULT_MAX_HISTORY_CHARS)
 # A per-user timeout abandons (it cannot cancel) a worker thread. Stop the run
 # once enough threads are abandoned that the pool would starve the rest.
 DAILY_SUMMARY_MAX_ABANDONED_USERS = _env_int('DAILY_SUMMARY_MAX_ABANDONED_USERS', 12)
@@ -108,6 +107,12 @@ class DailySummaryJobStats:
         )
 
 
+@dataclass(frozen=True)
+class DailySummaryCronOutcome:
+    ok: bool
+    error_text: Optional[str] = None
+
+
 def should_run_job() -> bool:
     """
     Check if the notification cron job should run.
@@ -122,10 +127,12 @@ async def start_cron_job() -> None:
     """
     logger.info(f'start_cron_job at UTC hour {datetime.now(pytz.utc).hour}')
     await send_daily_notification()
-    await send_daily_summary_notification()
+    summary_outcome = await send_daily_summary_notification()
+    if not summary_outcome.ok:
+        logger.error('Daily summary cron run failed: %s', summary_outcome.error_text)
 
 
-async def send_daily_summary_notification() -> None:
+async def send_daily_summary_notification() -> DailySummaryCronOutcome:
     """
     Send daily summary notifications to users based on their local hour preference.
 
@@ -147,13 +154,13 @@ async def send_daily_summary_notification() -> None:
     """
     deadline = monotonic() + DAILY_SUMMARY_JOB_BUDGET_SECONDS
     stats = DailySummaryJobStats()
-    cursor_key = summary_budget.job_cursor_key(datetime.now(pytz.utc))
+    cursor_key = summary_budget.job_cursor_key()
 
     try:
         timezones_by_hour = _get_timezones_grouped_by_hour()
     except Exception as e:
         logger.error(f"Error grouping daily summary timezones: {e}")
-        return None
+        return DailySummaryCronOutcome(ok=False, error_text=str(e))
 
     cursor = await run_blocking(db_executor, summary_budget.read_job_cursor, cursor_key)
     resume_hour = summary_budget.cursor_hour(cursor)
@@ -182,12 +189,29 @@ async def send_daily_summary_notification() -> None:
 
         stats.groups_attempted += 1
         try:
-            users = await _get_users_for_daily_summary(timezones, target_hour)
+            users, query_error, group_fully_read = await _get_users_for_daily_summary(timezones, target_hour)
         except Exception as e:
             # One hour group's read failing must not cost the other 23 groups.
             stats.groups_failed += 1
             logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, e)
             return ProcessOutcome.reject(str(e), reason='user_query')
+
+        if query_error and not users:
+            stats.groups_failed += 1
+            logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, query_error)
+            return ProcessOutcome.reject(str(query_error), reason='user_query')
+
+        if not group_fully_read:
+            # A dropped timezone chunk means this hour was only *partially*
+            # enumerated. Serving what did read is right, but declaring the run
+            # complete afterwards would clear the checkpoint and retire users the
+            # job never even listed. Keep the run resumable and point the next
+            # execution at this hour.
+            completed_all = False
+            await _checkpoint(cursor_key, target_hour, None)
+            _record_daily_summary_fallback(
+                from_mode='full_run', to_mode='resumable_tail', reason='other', outcome='degraded'
+            )
 
         if not users:
             return ProcessOutcome.ack()
@@ -199,6 +223,8 @@ async def send_daily_summary_notification() -> None:
         resume_uid = None
 
         logger.info(f"Sending daily summary to {len(ordered_users)} users at local hour {target_hour}")
+        failed_before = stats.failed
+        timed_out_before = stats.timed_out
         finished_group = await _send_bulk_summary_notification(
             ordered_users, deadline=deadline, stats=stats, target_hour=target_hour, cursor_key=cursor_key
         )
@@ -206,25 +232,38 @@ async def send_daily_summary_notification() -> None:
             completed_all = False
             stop_processing = True
             return ProcessOutcome.retry('daily summary group budget exhausted', reason='timeout')
+        hour_send_failures = (stats.failed - failed_before) + (stats.timed_out - timed_out_before)
+        if hour_send_failures:
+            return ProcessOutcome.reject(
+                f'{hour_send_failures} user send(s) failed at hour {target_hour}',
+                reason='hour_send_failed',
+            )
+        if query_error:
+            stats.groups_failed += 1
+            return ProcessOutcome.reject(str(query_error), reason='user_query')
         return ProcessOutcome.ack()
 
     groups = [(hour, timezones_by_hour[hour]) for hour in ordered_hours]
     results = await drain_isolated_async(groups, process_hour)
-    observe_oldest_ready_age('daily_summary_hour_groups', 0.0)
-    for result in results:
-        if result.outcome.kind != ProcessOutcome.ack().kind:
-            logger.error(
-                "Daily summary hour group failed hour=%s reason=%s error=%s",
-                result.item[0],
-                result.outcome.reason,
-                result.outcome.error_text,
-            )
+    failures = [result for result in results if result.outcome.kind != ProcessOutcome.ack().kind]
+    for result in failures:
+        logger.error(
+            "Daily summary hour group failed hour=%s reason=%s error=%s",
+            result.item[0],
+            result.outcome.reason,
+            result.outcome.error_text,
+        )
 
     if completed_all:
         await run_blocking(db_executor, summary_budget.clear_job_cursor, cursor_key)
 
     logger.info('daily_summary_job_summary complete=%s %s', completed_all, stats.as_log())
-    return None
+    if failures:
+        return DailySummaryCronOutcome(
+            ok=False,
+            error_text='; '.join(result.outcome.error_text or 'hour_failed' for result in failures),
+        )
+    return DailySummaryCronOutcome(ok=True)
 
 
 def _resume_user(users: List[Tuple[Any, ...]], resume_uid: Optional[str]) -> Optional[Tuple[Any, ...]]:
@@ -243,7 +282,18 @@ async def _checkpoint(cursor_key: str, target_hour: Optional[int], uid: Optional
     )
 
 
-async def _get_users_for_daily_summary(timezones: List[str], target_hour: int) -> List[Tuple[str, List[str], Any]]:
+async def _get_users_for_daily_summary(
+    timezones: List[str], target_hour: int
+) -> Tuple[List[Tuple[str, List[str], Any]], Optional[BaseException], bool]:
+    """Read one hour group's users.
+
+    Returns ``(users, query_error, every_chunk_read)``. A dropped chunk is a
+    *partial* read, and a caller that cannot tell the difference finishes the
+    hour, clears the checkpoint, and permanently retires users it never listed.
+    Serving the chunks that did read is still right — the flag only stops the
+    run from calling itself complete.
+
+    """
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
     # return_exceptions: one failing timezone chunk degrades that chunk's users,
     # it does not throw away the chunks that did read successfully.
@@ -255,14 +305,18 @@ async def _get_users_for_daily_summary(timezones: List[str], target_hour: int) -
         return_exceptions=True,
     )
     users: List[Tuple[str, List[str], Any]] = []
+    chunk_errors: List[BaseException] = []
+    every_chunk_read = True
     for chunk_index, chunk in enumerate(chunk_results):
         if isinstance(chunk, BaseException):
+            every_chunk_read = False
             logger.error(
                 'daily_summary_user_query_chunk_failed hour=%s chunk=%d error=%s', target_hour, chunk_index, chunk
             )
+            chunk_errors.append(chunk)
             continue
         users.extend(chunk)
-    return users
+    return users, chunk_errors[0] if chunk_errors else None, every_chunk_read
 
 
 def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
@@ -385,8 +439,19 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
             from_mode='full_day', to_mode='truncated_day', reason='quota', outcome='degraded'
         )
     conversations = bounded.conversations
-
-    summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
+    # The review card is built from what the generator returns, so the scheduled
+    # path — the only path real users receive — has to make the same selection
+    # the /v1/users/daily-summary-settings/test path makes. Omitting it left
+    # ``memories_learned`` at its None default, which made the block below
+    # unconditionally None: the card was dead in production as shipped.
+    summary_data = generate_comprehensive_daily_summary(
+        uid,
+        conversations,
+        date_str,
+        start_date_utc,
+        end_date_utc,
+        memories_learned=memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
+    )
 
     # Store in database
     summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)

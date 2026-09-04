@@ -1653,11 +1653,16 @@ struct FloatingControlBarView: View {
 
   /// The chip's secondary hint names the shortcut actually bound, and is absent
   /// when push-to-talk is off — a hint for a disabled gesture is a wrong hint.
+  ///
+  /// Every token, not the first: a chord binding (`⌃⌥`, or a modifier plus a
+  /// key) renders as several tokens, and naming only the first one tells the
+  /// user to hold a key that does not start voice. Joined the way the sibling
+  /// hold hint joins them, so the two read the same on the same bar.
   @MainActor static func followUpVoiceHint(settings: ShortcutSettings = ShortcutSettings.shared) -> String? {
     guard settings.pttEnabled else { return nil }
-    let tokens = settings.pttShortcut.displayTokens
-    guard let token = tokens.first, !token.isEmpty else { return nil }
-    return "or hold \(token) to ask aloud"
+    let shortcut = settings.pttShortcut.displayTokens.joined()
+    guard !shortcut.isEmpty else { return nil }
+    return "or hold \(shortcut) to ask aloud"
   }
 
   private var aiResponseView: some View {
