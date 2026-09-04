@@ -1115,7 +1115,7 @@ function mcpIndexText(): string {
  * names need no clipping: loadLocalMcpConfig admits 1-64 chars only.
  */
 function mcpServerNameLine(): string {
-  if (mcpServers.length === 0) return "No user MCP servers are configured.";
+  if (mcpServers.length === 0) return "none";
   const names = mcpServers.slice(0, MCP_INDEX_SERVER_LINE_CAP).map((entry) => entry.name);
   if (mcpServers.length > MCP_INDEX_SERVER_LINE_CAP) {
     names.push(
