@@ -262,7 +262,9 @@ export async function loadSkillInstructions(
     `Skill: ${trimmedName}`,
     descriptionLine ? `Description: ${descriptionLine}` : null,
     "",
-    `Body sections (${parts.length}); load_skill(name: "${trimmedName}", part: <n>) reads one section, part: "all" reads everything:`,
+    // Number-only instruction: the advertised part parameter is a number, and
+    // telling the model to pass "all" only buys a validation-error turn.
+    `Body sections (${parts.length}); load a section with load_skill(name: "${trimmedName}", part: <n>):`,
     tableOfContents,
     "",
     `${workspacePrefix}[${trimmedName} — part 1/${parts.length}: ${parts[0].title}]`,

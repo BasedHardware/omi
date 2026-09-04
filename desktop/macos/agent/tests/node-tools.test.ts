@@ -108,6 +108,20 @@ describe("load_skill progressive disclosure", () => {
     );
   });
 
+  it("advertises numeric part loads only in the table of contents", async () => {
+    // The load_skill part parameter is number-only in the tool schema; a
+    // ToC hint suggesting part: "all" costs a validation-error turn.
+    await withSkill(
+      ["Overview prose.", "## Usage", "usage instructions"].join("\n"),
+      async (skillName, root) => {
+        const result = await loadSkillInstructions(skillName, root);
+        expect(result).toContain(`load a section with load_skill(name: "${skillName}", part: <n>)`);
+        expect(result).not.toContain("part: \"all\"");
+        expect(result).not.toContain("reads everything");
+      }
+    );
+  });
+
   it("fetches a requested part by 1-based number", async () => {
     await withSkill(
       ["Overview prose.", "## Usage", "usage instructions", "## Advanced", "advanced secrets"].join("\n"),
