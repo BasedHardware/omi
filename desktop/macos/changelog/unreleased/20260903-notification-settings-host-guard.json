@@ -1,4 +1,0 @@
-{
-  "kind": "none",
-  "reason": "Test-process crash guard. The shipped app always runs from an .app bundle, so the notification-settings query behaves exactly as before for users; only a non-app host such as the xctest tool takes the new path."
-}
