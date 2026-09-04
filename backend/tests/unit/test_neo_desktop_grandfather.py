@@ -142,6 +142,8 @@ class TestEffectiveDesktopAccessTier:
             'trial_paywall:expired:neo-uid:openai',
             'trial_paywall:expired:neo-uid:anthropic',
             'trial_paywall:expired:neo-uid:gemini',
+            'trial_paywall:expired:neo-uid:deepgram',
+            'trial_paywall:expired:neo-uid:deepgram:strict',
             'trial_paywall:expired:neo-uid',
         ]
 

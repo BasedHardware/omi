@@ -49,6 +49,7 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
   private var openedChatPrompts: [String] = []
   private var telemetry: [(String, [String: Any])] = []
   private var pttStart: (@MainActor () -> Void)?
+  private var warmCaptureRequests = 0
   private var pttObservationStopped = false
   private var frontmost: (bundleIdentifier: String?, localizedName: String?) = (nil, nil)
   private var isOnboardingComplete = true
@@ -67,6 +68,7 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
     openedChatPrompts = []
     telemetry = []
     pttStart = nil
+    warmCaptureRequests = 0
     pttObservationStopped = false
     frontmost = (realApp.bundleIdentifier, realApp.appName)
     isOnboardingComplete = true
@@ -102,6 +104,7 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
         self?.pttStart = onStart
         return { self?.pttObservationStopped = true }
       },
+      warmCapture: { [weak self] in self?.warmCaptureRequests += 1 },
       openChat: { [weak self] prompt in self?.openedChatPrompts.append(prompt) },
       scheduler: scheduler
     )
@@ -135,6 +138,41 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
     XCTAssertEqual(presented.first?.ownerID, "owner-1")
     XCTAssertEqual(presented.first?.title, "I can see Safari")
     XCTAssertEqual(telemetryPhases, ["shown"])
+  }
+
+  /// The card tells the user to hold ⌥. On a fresh install that press is the one
+  /// measured failing — `capture_never_operational` — because CoreAudio has not
+  /// opened the microphone yet. Showing the card is the moment to have it running.
+  func testShowingTheCardAsksPushToTalkToWarmItsCapture() {
+    isOnboardingComplete = false
+    let coordinator = makeCoordinator()
+    coordinator.start()
+    isOnboardingComplete = true
+    coordinator.beginObservingActivationsIfReady()
+
+    XCTAssertEqual(warmCaptureRequests, 0)
+    activateRealApp(on: coordinator)
+
+    XCTAssertEqual(presented.count, 1)
+    XCTAssertEqual(warmCaptureRequests, 1)
+  }
+
+  /// A card that is never shown must not open the microphone: the warm capture
+  /// is tied to the invitation, not to app switching.
+  func testACardThatDoesNotFireNeverWarmsTheCapture() {
+    isOnboardingComplete = false
+    let coordinator = makeCoordinator()
+    coordinator.start()
+    isOnboardingComplete = true
+    coordinator.beginObservingActivationsIfReady()
+
+    // The user switches to Omi itself — the card is suppressed.
+    frontmost = (omiBundleID, "Omi")
+    coordinator.handleActivation(bundleIdentifier: omiBundleID, appName: "Omi")
+    scheduler.fire(after: FirstRealAppCardPolicy.requiredDwell)
+
+    XCTAssertEqual(presented.count, 0)
+    XCTAssertEqual(warmCaptureRequests, 0)
   }
 
   func testTheCardNeverFiresTwiceInOneSession() {

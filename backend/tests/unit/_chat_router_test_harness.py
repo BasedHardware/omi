@@ -91,6 +91,11 @@ def wire_common_stubs(install) -> SimpleNamespace:
     llm_usage_db.record_chat_quota_question = MagicMock(return_value=True)
     users_db = install('database.users')
     users_db.set_chat_message_rating_score = MagicMock()
+    # The feedback ledger reaches Firestore for real. Importing it inside a
+    # process that has stubbed google.cloud.firestore_v1 makes protobuf reject
+    # the duplicate descriptor registration, so stub it like its siblings.
+    feedback_utils = install('utils.feedback', ModuleType('utils.feedback'))
+    feedback_utils.record_chat_message_feedback = MagicMock()
     redis_db = install('database.redis_db')
     redis_db.try_acquire_goal_extraction_lock = MagicMock(return_value=False)
     redis_db.check_rate_limit = MagicMock(return_value=(True, 99, 0))
@@ -273,11 +278,15 @@ def wire_common_stubs(install) -> SimpleNamespace:
     usage_tracker.Features = Features
 
     limiter = install('utils.voice_duration_limiter', ModuleType('utils.voice_duration_limiter'))
+    limiter.MAX_SESSION_DURATION_S = 120
     limiter.compute_pcm_duration_ms = MagicMock(return_value=1000)
     limiter.read_wav_duration_ms = MagicMock(return_value=1000)
     limiter.try_consume_budget = MagicMock(return_value=(True, 1000, 7199000))
     limiter.check_budget = MagicMock(return_value=(True, 0, 7200000))
+    limiter.try_reserve_session_budget = MagicMock(return_value=(True, 120000, 120000, 7080000))
+    limiter.settle_reserved_duration = MagicMock()
     limiter.record_actual_duration = MagicMock()
+    limiter.MAX_SESSION_DURATION_S = 120
 
     multipart = install('multipart', ModuleType('multipart'))
     multipart.__version__ = '0.0.20'

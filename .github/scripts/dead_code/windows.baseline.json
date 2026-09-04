@@ -1,0 +1,5 @@
+{
+  "area": "windows",
+  "comment": "Ratchet floor of unreachable/zero-importer files tolerated at seed time. Shrink by deleting files and re-running check_dead_code.py --update-baseline --area windows; new entries fail CI.",
+  "unreachable": []
+}

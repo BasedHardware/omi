@@ -1,74 +1,85 @@
-// Source of truth: desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift
+// Source of truth: desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
 //
-// Every entry below mirrors an `AnalyticsManager.shared.onboardingStepCompleted(
-// step:, stepName:)` call in that file, in the order the app advances through
-// `currentStep`. PostHogManager.onboardingStepCompleted formats the event as
-// `Onboarding Step <stepName> Completed`, so each `stepName` (including its
-// `_Skipped` variant, where the step's view has an `onSkip` handler) maps to
-// exactly one string here.
+// Every entry below mirrors one exit from `SBOnboardingModel.Step`, in the order
+// `advance(userAnswer:to:)` walks `Step` raw values. The live app emits one
+// PostHog event per exit:
 //
-// IF YOU RENAME, ADD, OR REMOVE A STEP IN OnboardingView.swift, MIRROR IT HERE.
-// This list drifted for months: it still listed a Notifications step that no
-// longer exists and a Research step that stopped being emitted in Apr 2026
-// (both rendered as permanent ~0 funnel rows), while HowDidYouHear, DataSources
-// and Exports were missing entirely and Goal dropped its skip variant.
+//   - `Onboarding Step Completed` { step: 'promise'|'name'|…|'referral',
+//     index, elapsed_ms, skipped, exit_reason: 'answered'|'skipped'|'auto_granted',
+//     permission?, granted? }
+//   - `Onboarding Completed` (terminal; no `step` property)
+//
+// A step counts as "reached" regardless of whether `skipped` is true — same
+// semantics as the old `_Skipped` event-name variants, just carried in a
+// property instead of the event name. Permission auto-jumps (already granted)
+// also emit, so a pre-granted mic does not look like a funnel drop-off.
+//
+// `skipped` stays a boolean so existing funnel math still counts skippers as
+// having reached the step. It is true for both a user "Skip for now"
+// (`exit_reason=skipped`, `granted=false`) and a permission page the user
+// never saw (`exit_reason=auto_granted`, `granted=true`). Do not compute a
+// skip rate from `skipped` alone; filter on the closed `exit_reason` set.
+//
+// IF YOU RENAME, ADD, OR REMOVE A STEP IN SBOnboardingModel.swift, MIRROR IT HERE.
+//
+// The PREVIOUS dashboard (one `Onboarding Step <Name> Completed` event per
+// step of the dead `OnboardingView.swift` wizard) is not the live flow. Those
+// events keep existing in PostHog history from old builds, but this funnel
+// does not map them onto the steps above; the event-name filters built from
+// this file never include them.
 
 export type OnboardingStepDefinition = {
   key: string;
   label: string;
-  eventNames: string[];
+  /** The PostHog event name this step is reported under. */
+  event: string;
+  /**
+   * The value of the row's property column that identifies this step.
+   * `undefined` for a terminal step matched by event name alone (the
+   * completion event carries no `step` property).
+   */
+  property?: string;
 };
 
-/** `Onboarding Step <stepName> Completed`, per PostHogManager.swift. */
-function stepEvent(stepName: string): string {
-  return `Onboarding Step ${stepName} Completed`;
-}
+const ONBOARDING_STEP_EVENT = "Onboarding Step Completed";
+const ONBOARDING_COMPLETED_EVENT = "Onboarding Completed";
 
-/** A step whose view has no `onSkip` handler — completion is the only exit. */
-function step(key: string, label: string, stepName: string): OnboardingStepDefinition {
-  return { key, label, eventNames: [stepEvent(stepName)] };
-}
-
-/** A step with an `onSkip` handler — skippers must count as having reached it. */
-function skippableStep(
-  key: string,
-  label: string,
-  stepName: string,
-): OnboardingStepDefinition {
-  return {
-    key,
-    label,
-    eventNames: [stepEvent(stepName), stepEvent(`${stepName}_Skipped`)],
-  };
+function flowStep(key: string, label: string): OnboardingStepDefinition {
+  return { key, label, event: ONBOARDING_STEP_EVENT, property: key };
 }
 
 export const STEP_DEFINITIONS: OnboardingStepDefinition[] = [
-  step('name', 'Name', 'Name'), // OnboardingView step 0
-  step('language', 'Language', 'Language'), // step 1
-  step('how_did_you_hear', 'How Did You Hear', 'HowDidYouHear'), // step 2
-  step('trust', 'Trust', 'Trust'), // step 3
-  skippableStep('screen_recording', 'Screen Recording', 'ScreenRecording'), // step 4
-  skippableStep('full_disk_access', 'Full Disk Access', 'FullDiskAccess'), // step 5
-  skippableStep('file_scan', 'File Scan', 'FileScan'), // step 6
-  skippableStep('microphone', 'Microphone', 'Microphone'), // step 7
-  skippableStep('accessibility', 'Accessibility', 'Accessibility'), // step 8
-  skippableStep('automation', 'Automation', 'Automation'), // step 9
-  skippableStep('floating_bar_shortcut', 'Floating Bar Shortcut', 'FloatingBarShortcut'), // step 10
-  skippableStep('floating_bar', 'Floating Bar', 'FloatingBar'), // step 11
-  skippableStep('voice_shortcut', 'Voice Shortcut', 'VoiceShortcut'), // step 12
-  skippableStep('voice_demo', 'Voice Demo', 'VoiceDemo'), // step 13
-  skippableStep('data_sources', 'Data Sources', 'DataSources'), // step 14
-  skippableStep('exports', 'Exports', 'Exports'), // step 15
-  skippableStep('goal', 'Goal', 'Goal'), // step 16
-  skippableStep('tasks', 'Tasks', 'Tasks'), // step 17
-  // PostHogManager.onboardingCompleted() — not a numbered step.
-  { key: 'completed', label: 'Completed', eventNames: ['Onboarding Completed'] },
+  flowStep("promise", "Promise"),
+  flowStep("name", "Name"),
+  flowStep("howHeard", "How Did You Hear"),
+  flowStep("language", "Language"),
+  flowStep("role", "Role"),
+  flowStep("mic", "Microphone"),
+  flowStep("systemAudio", "System Audio"),
+  flowStep("screen", "Screen Recording"),
+  flowStep("files", "Files"),
+  flowStep("accessibility", "Accessibility"),
+  flowStep("automation", "Automation"),
+  flowStep("notifications", "Notifications"),
+  flowStep("shortcutOpen", "Open Shortcut"),
+  flowStep("shortcutTalk", "Talk Shortcut"),
+  flowStep("screenDemo", "Screen Demo"),
+  flowStep("agents", "Agents"),
+  flowStep("context", "Context"),
+  flowStep("capture", "Capture"),
+  flowStep("referral", "Referral"),
+  // Onboarding Completed — not a numbered step.
+  { key: "completed", label: "Completed", event: ONBOARDING_COMPLETED_EVENT },
 ];
 
-/** The entry event that defines a first-ever entrant into the flow. */
-export const ENTRY_EVENT_NAME = stepEvent('Name');
+/** The entry event + property that defines a first-ever entrant into the flow. */
+export const ENTRY_EVENT_NAME = ONBOARDING_STEP_EVENT;
+export const ENTRY_PROPERTY_NAME = "step";
+export const ENTRY_PROPERTY_VALUE = "promise";
 
-export const ALL_EVENT_NAMES: string[] = STEP_DEFINITIONS.flatMap((s) => s.eventNames);
+export const ALL_EVENT_NAMES: string[] = Array.from(
+  new Set(STEP_DEFINITIONS.map((s) => s.event))
+);
 
 export type OnboardingFunnelStep = {
   key: string;
@@ -77,26 +88,39 @@ export type OnboardingFunnelStep = {
   completionRate: number;
 };
 
+function stepIndexFor(
+  stepDefinitions: OnboardingStepDefinition[],
+  event: string,
+  property: string | null | undefined
+): number | undefined {
+  for (let i = 0; i < stepDefinitions.length; i++) {
+    const def = stepDefinitions[i];
+    if (def.event !== event) continue;
+    // Terminal steps (no `property`) match on event name alone.
+    if (def.property == null || def.property === property) return i;
+  }
+  return undefined;
+}
+
 /**
- * Collapse `[actor_id, event]` rows into an ordered funnel. A user counts for a
- * step only if they completed (or skipped) every step up to and including it.
+ * Collapse `[actor_id, event, property]` rows into an ordered funnel. A user
+ * counts for a step only if they reached every step up to and including it —
+ * `property` is matched against each step definition to find its index,
+ * regardless of any `skipped` value on the underlying event.
  */
 export function computeFunnelSteps(rows: unknown[][]): {
   totalUsers: number;
   steps: OnboardingFunnelStep[];
 } {
-  const eventToStepIndex = new Map<string, number>();
-  STEP_DEFINITIONS.forEach((s, index) => {
-    s.eventNames.forEach((eventName) => eventToStepIndex.set(eventName, index));
-  });
-
   const actorSteps = new Map<string, Set<number>>();
 
   for (const row of rows) {
     const actorId = row?.[0] as string | undefined;
     const eventName = row?.[1] as string | undefined;
-    const stepIndex = eventName == null ? undefined : eventToStepIndex.get(eventName);
-    if (!actorId || stepIndex == null) continue;
+    const property = row?.[2] as string | null | undefined;
+    if (!actorId || !eventName) continue;
+    const stepIndex = stepIndexFor(STEP_DEFINITIONS, eventName, property);
+    if (stepIndex == null) continue;
 
     const completed = actorSteps.get(actorId) ?? new Set<number>();
     completed.add(stepIndex);
@@ -123,7 +147,9 @@ export function computeFunnelSteps(rows: unknown[][]): {
     label: s.label,
     users: usersByStep[index],
     completionRate:
-      totalUsers > 0 ? Math.round((usersByStep[index] / totalUsers) * 10000) / 100 : 0,
+      totalUsers > 0
+        ? Math.round((usersByStep[index] / totalUsers) * 10000) / 100
+        : 0,
   }));
 
   return { totalUsers, steps };

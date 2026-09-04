@@ -1,0 +1,10 @@
+{
+  "version": "0.12.273",
+  "date": "2026-09-03",
+  "changes": [
+    "Added a Things I learned today section to the daily summary in Chat where you can confirm, drop, or fix what Omi picked up",
+    "Added a tappable follow-up question under grounded chat and floating-bar answers, never on failed turns",
+    "Fixed the Home suggestions list repeating the same tasks and tips day after day; rows you have seen or dismissed now rotate out",
+    "Conversations that are still being summarized now show their first transcript line instead of \"Processing…\", tell you when processing is taking longer than usual or looks stuck, offer Reprocess right on the row, and land in place when a recording ends"
+  ]
+}

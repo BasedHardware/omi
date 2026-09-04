@@ -4,6 +4,18 @@ tier: manual
 description: Desktop recording finalization flow - verify a granted microphone recording stops into one durable backend conversation and opens in detail view
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/ConversationProcessingProgress.swift
+  - desktop/macos/Desktop/Sources/ProcessingConversationWatcher.swift
+  - desktop/macos/Desktop/Sources/AnalyticsManager+ConversationProcessing.swift
+  # S9 runtime port. Not consulted by this flow until S11 wires
+  # ConversationFinalizationService; the XCTest fail-closed suite is the
+  # behavioral proof. Registering here keeps the e2e ratchet on the path
+  # that will own local inference once it is live.
+  - desktop/macos/Desktop/Sources/LocalInference/LocalInferenceService.swift
+  - desktop/macos/Desktop/Sources/LocalInference/LocalInferenceRuntime.swift
+  - desktop/macos/Desktop/Sources/LocalInference/LocalInferenceKillSwitches.swift
+  - desktop/macos/Desktop/Sources/LocalInference/LocalServerInferenceAdapter.swift
+  - desktop/macos/Desktop/Sources/LocalInference/DeterministicConversationMinimum.swift
   - desktop/Desktop/Sources/AppState.swift
   - desktop/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
   - desktop/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift

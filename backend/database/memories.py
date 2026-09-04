@@ -20,6 +20,8 @@ from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknow
 from config.memory_confidence import SOURCE_SIGNAL_CAPTURE_PRIORS
 from database import memory_ledger
 from database.firestore_index_registry import (
+    CANONICAL_MEMORIES_CAPTURED_RANGE_QUERY,
+    MEMORIES_CREATED_RANGE_QUERY,
     UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
 )
@@ -42,8 +44,7 @@ users_collection = 'users'
 def _account_write_gated(function: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(function)
     def wrapped(uid: str, *args: Any, **kwargs: Any) -> Any:
-        database = _get_db(kwargs.get("firestore_client"))
-        with external_write_fence(uid, firestore_client=database):
+        with external_write_fence(uid, firestore_client=kwargs.get("firestore_client")):
             return function(uid, *args, **kwargs)
 
     return wrapped
@@ -52,8 +53,7 @@ def _account_write_gated(function: Callable[..., Any]) -> Callable[..., Any]:
 def _destination_account_write_gated(function: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(function)
     def wrapped(prev_uid: str, new_uid: str, *args: Any, **kwargs: Any) -> Any:
-        database = _get_db(kwargs.get("firestore_client"))
-        with external_write_fence(new_uid, firestore_client=database):
+        with external_write_fence(new_uid, firestore_client=kwargs.get("firestore_client")):
             return function(prev_uid, new_uid, *args, **kwargs)
 
     return wrapped
@@ -429,6 +429,26 @@ def get_memories(
         memory for memory in memories if _memory_passes_list_visibility(memory, include_invalidated=include_invalidated)
     ]
     return result
+
+
+def count_memories_created(uid: str, start_date: datetime, end_date: datetime, *, firestore_client: Any = None) -> int:
+    """Count canonical memory items with legacy compatibility, deduplicated by stable id."""
+    database = _get_db(firestore_client)
+    legacy_collection = database.collection(users_collection).document(uid).collection(memories_collection)
+    legacy_query = MEMORIES_CREATED_RANGE_QUERY.build(
+        legacy_collection,
+        {'start': start_date, 'end': end_date},
+        field_filter_factory=FieldFilter,
+    )
+    canonical_collection = database.collection(MemoryCollections(uid=uid).memory_items)
+    canonical_query = CANONICAL_MEMORIES_CAPTURED_RANGE_QUERY.build(
+        canonical_collection,
+        {'start': start_date, 'end': end_date},
+        field_filter_factory=FieldFilter,
+    )
+    canonical_ids = {doc.id for doc in canonical_query.stream()}
+    legacy_ids = {doc.id for doc in legacy_query.stream()}
+    return len(canonical_ids | legacy_ids)
 
 
 _HISTORICAL_SCAN_PAGE_MAX = 500

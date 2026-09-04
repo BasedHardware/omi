@@ -97,6 +97,17 @@ def _prepare_message_for_read(message_data: Dict[str, Any], uid: str) -> Dict[st
     return message_data
 
 
+def decrypt_message_payload(message_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
+    """Public read-path decryption for one raw message document.
+
+    Callers outside this module (the feedback-report context hydrator) need the
+    same enhanced-protection handling `get_message` applies, but starting from a
+    raw snapshot dict they already hold. Exposed rather than reaching into the
+    private helper so the encryption contract has one owner.
+    """
+    return _prepare_message_for_read(message_data, uid)
+
+
 # *****************************
 # ********** CRUD *************
 # *****************************
@@ -507,29 +518,30 @@ def report_message(uid: str, msg_doc_id: str) -> Dict[str, str]:
         return {"message": f"Update failed: {e}"}
 
 
-def update_message_rating(uid: str, message_id: str, rating: Optional[int]) -> bool:
+def update_message_rating(uid: str, message_id: str, rating: Optional[int]) -> Optional[Dict[str, Any]]:
     """
     Update the rating on a message document.
 
-    Args:
-        uid: User ID
-        message_id: Message ID (not doc ID)
-        rating: Rating value (1 = thumbs up, -1 = thumbs down, None = no rating)
+    Returns the already-streamed message snapshot on success so analytics can
+    copy identifiers (notification kind, app_id) without a second Firestore read.
+    Returns None if the message does not exist.
     """
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
     message_doc = next(message_ref, None)
     if not message_doc:
         logger.warning(f"⚠️ Message {message_id} not found for user {uid}")
-        return False
+        return None
 
+    snapshot = _typed_doc(message_doc)
     try:
         user_ref.collection('messages').document(message_doc.id).update({'rating': rating})
         logger.info(f"✅ Updated message {message_id} rating to {rating}")
-        return True
+        snapshot['rating'] = rating
+        return snapshot
     except Exception as e:
         logger.error(f"❌ Failed to update message rating: {e}")
-        return False
+        return None
 
 
 def batch_delete_messages(

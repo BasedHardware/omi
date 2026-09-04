@@ -63,9 +63,10 @@ def ext():
         "models": _real_pkg("models", "models"),
         "database": _real_pkg("database", "database"),
         "database.action_items": _leaf("database.action_items"),
+        "database.daily_summaries": _leaf("database.daily_summaries"),
+        "database.memories": _leaf("database.memories"),
         "database.users": _leaf("database.users"),
         "models.conversation": _leaf("models.conversation"),
-        "models.daily_summary_payload": _leaf("models.daily_summary_payload"),
         "models.structured": _leaf("models.structured"),
         "models.structured_extraction": _leaf("models.structured_extraction"),
         "models.other": _leaf("models.other"),
@@ -93,12 +94,13 @@ class _Geo:
 
 
 class _Convo:
-    def __init__(self, id, geolocation=None, started_at=None, discarded=False):
+    def __init__(self, id, geolocation=None, started_at=None, discarded=False, source='omi'):
         self.id = id
         self.geolocation = geolocation
         self.started_at = started_at
         self.finished_at = None
         self.discarded = discarded
+        self.source = source
 
     def get_person_ids(self):
         return []
@@ -108,6 +110,16 @@ def _configure(ext):
     ext.users_db.get_user_profile = MagicMock(return_value={"time_zone": "UTC", "language": "en"})
     ext.users_db.get_people_by_ids = MagicMock(return_value=[])
     ext.action_items_db.get_action_items = MagicMock(return_value=[])
+    ext.memories_db.count_memories_created = MagicMock(return_value=0)
+    ext.daily_summaries_db.get_desktop_daily_usage = MagicMock(
+        return_value={
+            "watching_seconds": 0,
+            "listening_seconds": 0,
+            "proactive_cards_shown": 0,
+            "proactive_cards_acted": 0,
+            "ptt_turns": 0,
+        }
+    )
     ext.get_prompt_memories = MagicMock(return_value=("TestUser", ""))
     ext.conversations_to_string = MagicMock(return_value="history")
     # Non-JSON LLM output -> JSONDecodeError -> _basic_daily_summary(..., locations)
@@ -143,3 +155,43 @@ def test_conversation_without_geolocation_is_excluded(ext):
     result = ext.generate_comprehensive_daily_summary("uid", convos, "2026-06-29")
 
     assert result["locations"] == []
+    assert result["stats"]["memories_created"] == 0
+    assert result["stats"]["action_items_created"] == 0
+    assert result["stats"]["watching_minutes"] == 0
+    assert result["stats"]["proactive_moments"] == 0
+
+
+def test_daily_summary_populates_new_stats_and_prompt_context(ext):
+    _configure(ext)
+    ext.memories_db.count_memories_created.return_value = 4
+    ext.daily_summaries_db.get_desktop_daily_usage.return_value = {
+        "watching_seconds": 389,
+        "listening_seconds": 120,
+        "proactive_cards_shown": 7,
+        "proactive_cards_acted": 2,
+        "ptt_turns": 3,
+    }
+
+    def action_items_for_scope(_uid, **kwargs):
+        if kwargs.get("conversation_id"):
+            return [{"description": "Follow up", "conversation_id": kwargs["conversation_id"]}]
+        return [{"id": "a1"}, {"id": "a2"}]
+
+    ext.action_items_db.get_action_items.side_effect = action_items_for_scope
+    started = datetime(2026, 6, 29, 14, 0, tzinfo=timezone.utc)
+    conversation = _Convo("desktop-conversation", started_at=started, source='desktop')
+    conversation.finished_at = started.replace(minute=35)
+
+    result = ext.generate_comprehensive_daily_summary("uid", [conversation], "2026-06-29")
+
+    assert result["stats"] == {
+        "total_conversations": 1,
+        "total_duration_minutes": 35,
+        "action_items_count": 1,
+        "memories_created": 4,
+        "action_items_created": 2,
+        "watching_minutes": 6,
+        "proactive_moments": 7,
+    }
+    prompt = ext.get_llm.return_value.invoke.call_args.args[0]
+    assert "Daily stats: 4 memories created, 2 action items created, 6 minutes watched, 7 proactive moments." in prompt

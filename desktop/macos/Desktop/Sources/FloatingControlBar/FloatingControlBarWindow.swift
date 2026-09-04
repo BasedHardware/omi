@@ -426,7 +426,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   var onAskAI: (() -> Void)?
   var onHide: (() -> Void)?
   var onSendQuery: ((String) -> Void)?
-  var onRate: ((String, Int?) -> Void)?
+  var onRate: ((String, Int?, ChatFeedbackReason?) -> Void)?
   var onShareLink: (() async -> String?)?
 
   override init(
@@ -753,7 +753,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       onCloseAI: { [weak self] in self?.closeAIConversation() },
       onEscape: { [weak self] in self?.handleEscapeKey() },
       onClearVisibleConversation: { [weak self] in self?.clearVisibleConversationFromUI() },
-      onRate: { [weak self] messageId, rating in self?.onRate?(messageId, rating) },
+      onRate: { [weak self] messageId, rating, reason in self?.onRate?(messageId, rating, reason) },
       onShareLink: { [weak self] in await self?.onShareLink?() }
     ).environmentObject(state)
 
@@ -3136,10 +3136,10 @@ class FloatingControlBarManager {
       }
     }
 
-    barWindow.onRate = { [weak chatProvider] messageId, rating in
+    barWindow.onRate = { [weak chatProvider] messageId, rating, reason in
       guard let provider = chatProvider else { return }
       Task { @MainActor in
-        await provider.rateMessage(messageId, rating: rating, surface: "voice")
+        await provider.rateMessage(messageId, rating: rating, surface: "voice", reason: reason)
       }
     }
 
@@ -3823,10 +3823,30 @@ class FloatingControlBarManager {
       evaluationID: evaluation, suggestionID: stored.notificationID)
   }
 
-  /// Hub journal finalization is the realtime path into the ledger. Same
-  /// mutation owner as the batch `sendVoiceOnlyQuery` path.
+  private func storedNotification(forContinuityKey key: String?) -> StoredNotificationMessage? {
+    guard let key, let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return nil }
+    return storedNotificationMessages.values.first {
+      $0.messageClientTurnId == key && $0.ownerID == ownerID
+    }
+  }
+
+  func feedbackIdentity(forContinuityKey key: String?) -> SuggestionAssistantTelemetry.NotificationIdentity? {
+    guard let stored = storedNotification(forContinuityKey: key) else { return nil }
+    if let identity = stored.suggestionIdentity { return identity }
+    let evaluation =
+      UUID(uuidString: stored.context?.provenanceRef ?? "") ?? stored.notificationID
+    return SuggestionAssistantTelemetry.NotificationIdentity(
+      evaluationID: evaluation, suggestionID: stored.notificationID)
+  }
+
+  func notificationDetail(forContinuityKey key: String?) -> String? {
+    storedNotification(forContinuityKey: key)?.context?.detail
+  }
+
+  /// Hub classification writes through `record_interject_feedback`. Parsing a
+  /// leftover token here would double-fire the ledger against the silent tool.
   func consumeInterjectHubTranscript(_ text: String) async {
-    await consumeInterjectVoiceReplyAsync(text)
+    _ = text
   }
 
   func consumeInterjectVoiceReply(_ text: String) {
@@ -3847,6 +3867,7 @@ class FloatingControlBarManager {
       suggestionID: identity.suggestionID,
       verb: verb
     )
+    SuggestionTaskNudgeEngagement.record(fromContinuityKey: recentInterjectReplyCard()?.messageClientTurnId)
   }
 
   func consumeInterjectVoiceReplyAsync(_ text: String) async {
@@ -3860,6 +3881,8 @@ class FloatingControlBarManager {
       suggestionID: identity.suggestionID,
       verb: verb
     )
+    SuggestionTaskNudgeEngagement.record(
+      fromContinuityKey: recentInterjectReplyCard()?.messageClientTurnId)
   }
 
   func shouldAttachInterjectClassification(createdAt: Date? = nil, now: Date = Date()) -> Bool {
@@ -4059,13 +4082,25 @@ class FloatingControlBarManager {
     fromVoice: Bool = false,
     voiceTurnID: VoiceTurnID? = nil
   ) {
-    guard let window = window else { return }
-    guard let provider = activeFloatingProvider() else { return }
+    // A caller that armed a question origin (the follow-up chip, a card action)
+    // armed it for *this* send. Every return below is a send that never
+    // happened, so the arm has to go with it or it lands on the next question.
+    guard let window = window else {
+      AnalyticsManager.shared.questionOriginationAborted()
+      return
+    }
+    guard let provider = activeFloatingProvider() else {
+      AnalyticsManager.shared.questionOriginationAborted()
+      return
+    }
 
     if fromVoice {
       guard let voiceTurnID,
         VoiceTurnCoordinator.shared.requireCurrentOwner(for: voiceTurnID) != nil
-      else { return }
+      else {
+        AnalyticsManager.shared.questionOriginationAborted()
+        return
+      }
       chatCancellable?.cancel()
       chatCancellable = nil
       window.cancelInputHeightObserver()
@@ -4444,6 +4479,8 @@ class FloatingControlBarManager {
       let window
     else { return }
 
+    DesktopUsageDailyReporter.shared.recordProactiveCardActed()
+
     AnalyticsManager.shared.notificationClicked(
       notificationId: notification.id.uuidString,
       title: notification.title,
@@ -4477,6 +4514,8 @@ class FloatingControlBarManager {
       // opens focused with the question in it, unsent.
       FirstRealAppCardCoordinator.shared.handleCardTapped(prompt: prompt)
       return
+    case .contextReminder:
+      break
     case nil:
       break
     }
@@ -4556,6 +4595,7 @@ class FloatingControlBarManager {
       surface: "floating_bar",
       suggestionIdentity: notification.suggestionTelemetryIdentity
     )
+    DesktopUsageDailyReporter.shared.recordProactiveCardShown()
 
     // A persistent card (meeting summary share) stays until the user acts on
     // it — Copy/Send/close are its only exits, all of which route through
@@ -4581,6 +4621,9 @@ class FloatingControlBarManager {
     }
 
     if trackDismissal, let dismissedNotification {
+      if kind == .user {
+        SuggestionTaskNudgeEngagement.record(from: dismissedNotification)
+      }
       let attention: InterjectAttention? =
         InterjectFeature.isEnabled && kind == .timeout
         ? InterjectAttention.timeoutAttention(didHover: interjectCardDidHover)
@@ -5091,8 +5134,8 @@ class FloatingControlBarManager {
     // we should bail before doing setup work — especially before
     // `limiter.recordQuery()` (which would consume a local quota slot)
     // and before the screenshot capture. This matches the pattern used
-    // elsewhere in the codebase (OnboardingChatView, FileIndexingView,
-    // DesktopHomeView) and is cheap insurance against future refactors.
+    // elsewhere in the codebase (FileIndexingView, DesktopHomeView) and is
+    // cheap insurance against future refactors.
     guard !Task.isCancelled,
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
         ?? true
@@ -5332,8 +5375,13 @@ class FloatingControlBarManager {
       // No error and no provider-backed answer content (text/blocks/resources).
       // Never call setLocalAnswerOverride when an answerMessageId is already
       // bound — that would clear the provider answer (including block-only).
+      // Honest, and deliberately not an invitation. The measured behaviour is
+      // that nobody takes a "want me to try again?" tail — they re-send the same
+      // question themselves — so the copy states what happened and stops. A
+      // failed turn never carries a follow-up chip either: the chip is appended
+      // only on the provider's accepted-answer path.
       barWindow.state.setLocalAnswerOverride(
-        ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
+        ChatMessage(text: FloatingBarAnswerFailureCopy.emptyResponse, sender: .ai)
       )
     }
 

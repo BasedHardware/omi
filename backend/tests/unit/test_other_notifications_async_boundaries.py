@@ -5,7 +5,13 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterator
 
-from testing.import_isolation import load_module_fresh, stub_modules
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+
+# Imported for its cost, not its API. The job imports learned_today, which builds
+# the pydantic models in models.daily_summary_payload. Without this the build lands
+# inside the call phase of the fresh-module loads below and trips the fast-unit CPU
+# duration guard, which measures the call phase only.
+import utils.memory.learned_today  # noqa: F401
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -39,9 +45,17 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
         },
     )
     stubs = {
+        # utils.memory.learned_today -> models.memories -> database._client pulls
+        # the Firestore SDK into the import graph; the job never touches it here.
+        'database._client': AutoMockModule('database._client'),
         'database.conversations': _module('database.conversations', get_conversations=lambda *_args, **_kwargs: []),
         'database.notifications': notification_db,
-        'database.redis_db': _module('database.redis_db', try_acquire_daily_summary_lock=lambda *_args: True),
+        'database.redis_db': _module(
+            'database.redis_db',
+            try_acquire_daily_summary_lock=lambda *_args: True,
+            # Declines before the LLM call hand the day back instead of sitting on the 2h key.
+            release_daily_summary_lock=lambda *_args: None,
+        ),
         'models.notification_message': _module(
             'models.notification_message',
             NotificationMessage=notification_message,
@@ -60,6 +74,10 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
             send_notification=lambda *_args, **_kwargs: None,
         ),
         'utils.webhooks': _module('utils.webhooks', day_summary_webhook=no_async_work),
+        'utils.durable_queue_metrics': _module(
+            'utils.durable_queue_metrics',
+            observe_oldest_ready_age=lambda *_args, **_kwargs: None,
+        ),
         'database.daily_summaries': _module(
             'database.daily_summaries',
             get_daily_summary_by_date=lambda *_args: None,
@@ -68,6 +86,10 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
     }
 
     with stub_modules(stubs):
+        load_module_fresh(
+            'database.durable_queue',
+            str(BACKEND_DIR / 'database' / 'durable_queue.py'),
+        )
         notifications = load_module_fresh(
             'utils.other.notifications',
             str(BACKEND_DIR / 'utils' / 'other' / 'notifications.py'),
@@ -115,7 +137,7 @@ def test_daily_summary_user_read_runs_off_loop_and_preserves_empty_result() -> N
                 entered,
                 release,
             )
-            assert result is None
+            assert result.ok is True
             assert calls == [(['UTC'], 8)]
 
         asyncio.run(exercise())
@@ -159,4 +181,59 @@ def test_daily_summary_db_failure_remains_fail_soft() -> None:
 
         notification_db.get_users_for_daily_summary = fail_read
 
-        assert asyncio.run(notifications.send_daily_summary_notification()) is None
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert outcome.ok is False
+        assert 'firestore unavailable' in (outcome.error_text or '')
+
+
+def test_daily_summary_all_chunks_failed_is_a_typed_hour_reject() -> None:
+    """Two timezone chunks, both raising, must not ACK the hour as an empty success."""
+    with _loaded_other_notifications() as (notifications, notification_db):
+        timezones = [f'tz-{index}' for index in range(31)]
+        notifications._get_timezones_grouped_by_hour = lambda: {8: timezones}
+        calls: list[int] = []
+
+        def fail_every_chunk(chunk: list[str], _target_hour: int) -> list[Any]:
+            calls.append(len(chunk))
+            raise RuntimeError('all chunks unavailable')
+
+        notification_db.get_users_for_daily_summary = fail_every_chunk
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert calls == [30, 1]
+        assert outcome.ok is False
+        assert 'all chunks unavailable' in (outcome.error_text or '')
+
+
+def test_daily_summary_poison_hour_does_not_block_later_hours() -> None:
+    with _loaded_other_notifications() as (notifications, notification_db):
+        processed: list[int] = []
+
+        def users_for_hour(timezones: list[str], target_hour: int) -> list[Any]:
+            processed.append(target_hour)
+            if target_hour == 8:
+                raise RuntimeError('malformed payload')
+            return []
+
+        notifications._get_timezones_grouped_by_hour = lambda: {8: ['UTC'], 9: ['US/Eastern']}
+        notification_db.get_users_for_daily_summary = users_for_hour
+
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert outcome.ok is False
+        assert processed == [8, 9]
+
+
+def test_daily_summary_hour_send_failures_are_a_typed_cron_failure() -> None:
+    with _loaded_other_notifications() as (notifications, notification_db):
+        notifications._get_timezones_grouped_by_hour = lambda: {8: ['UTC']}
+        notification_db.get_users_for_daily_summary = lambda *_args: [('uid', 'token')]
+
+        async def fail_sends(_users: list[Any], **kwargs: Any) -> bool:
+            stats = kwargs.get('stats')
+            if stats is not None:
+                stats.failed += 2
+            return True
+
+        notifications._send_bulk_summary_notification = fail_sends
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert outcome.ok is False
+        assert 'user send' in (outcome.error_text or '')

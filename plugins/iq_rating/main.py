@@ -33,10 +33,23 @@ router = APIRouter(
     tags=["iq-rating"],
 )
 
-# API credentials
-OMI_APP_ID = os.getenv("OMI_APP_ID", "01KCMNCPS9K8EV50BEJ37C0RH7")
-OMI_APP_SECRET = os.getenv("OMI_APP_SECRET", "sk_d151b7b791931b66b6781163ee3a5773")
+# API credentials — required from the environment. No defaults: the app fails
+# fast at startup if they are missing. The check deliberately lives in a
+# startup hook rather than at import time — the plugins image-import smoke
+# imports this module without the variables (no app lifecycle runs there),
+# while a real deployment must not serve unconfigured.
+OMI_APP_ID = os.getenv("OMI_APP_ID")
+OMI_APP_SECRET = os.getenv("OMI_APP_SECRET")
 OMI_BASE_API_URL = os.getenv("OMI_BASE_API_URL", "https://api.omi.me")
+
+
+@router.on_event("startup")
+async def require_omi_credentials() -> None:
+    if not OMI_APP_ID or not OMI_APP_SECRET:
+        raise RuntimeError(
+            "iq_rating plugin requires the OMI_APP_ID and OMI_APP_SECRET environment "
+            "variables to be set (deployed service env, shell, etc.)"
+        )
 
 # OpenAI for name filtering
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")

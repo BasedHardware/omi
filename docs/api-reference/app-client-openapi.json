@@ -6785,6 +6785,45 @@
         "title": "ClickUpTeamsResponse",
         "type": "object"
       },
+      "ClientProcessing": {
+        "additionalProperties": false,
+        "properties": {
+          "action_items": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectedActionItem"
+            },
+            "maxItems": 25,
+            "title": "Action Items",
+            "type": "array"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProjectionProvenance"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "structure": {
+            "$ref": "#/components/schemas/ProjectedStructure"
+          },
+          "transcript_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Transcript Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "transcript_sha256",
+          "structure",
+          "provenance"
+        ],
+        "title": "ClientProcessing",
+        "type": "object"
+      },
       "ColdStartSequence": {
         "additionalProperties": false,
         "description": "Explicit local-only identity for the fixed sparse cold-start script.",
@@ -7118,6 +7157,16 @@
             ],
             "title": "Client Platform"
           },
+          "client_processing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientProcessing"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "conversation_audio": {
             "anyOf": [
               {
@@ -7305,6 +7354,16 @@
               }
             ],
             "title": "Processing Memory Id"
+          },
+          "processing_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationProcessingState"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "screenshot_sharing_enabled": {
             "default": true,
@@ -7946,6 +8005,15 @@
         "title": "ConversationPhoto",
         "type": "object"
       },
+      "ConversationProcessingState": {
+        "description": "Why a conversation's ``structured`` holds the §1.7 deterministic minimum.\n\nAbsent (``None``) on every conversation the server enriched itself, and on a\nconversation that already carries a ``client_processing`` projection.\nClients check ``client_processing`` FIRST: a projection that arrives after\nthe terminal persist is stamped by its own ingress mutation and does not\nrewrite this field, so a projected conversation may still read\n``local_pending`` and must render the projection regardless.\n\n- ``local_pending``: a capable client is expected to deliver a projection.\n  Render a spinner with a timeout, not a permanent empty state.\n- ``none``: no projection is coming. Render \"Summary unavailable on the\n  free plan\".",
+        "enum": [
+          "local_pending",
+          "none"
+        ],
+        "title": "ConversationProcessingState",
+        "type": "string"
+      },
       "ConversationRecordingResponse": {
         "properties": {
           "has_recording": {
@@ -8184,6 +8252,16 @@
             ],
             "title": "Client Platform"
           },
+          "client_processing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientProcessing"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "conversation_audio": {
             "anyOf": [
               {
@@ -8379,6 +8457,16 @@
               }
             ],
             "title": "Processing Memory Id"
+          },
+          "processing_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationProcessingState"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "screenshot_sharing_enabled": {
             "default": true,
@@ -8824,6 +8912,16 @@
             "description": "Client platform (ios/android/macos)",
             "title": "Client Platform"
           },
+          "client_processing": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler: a malformed projection is dropped and the conversation still lands. Display only — never an input to intelligence.",
+            "title": "Client Processing"
+          },
           "client_session_id": {
             "anyOf": [
               {
@@ -9116,6 +9214,19 @@
           "end"
         ],
         "title": "CreateConversationTranscriptSegment",
+        "type": "object"
+      },
+      "CreateDailySummaryRequest": {
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "title": "CreateDailySummaryRequest",
         "type": "object"
       },
       "CreateFolderRequest": {
@@ -9692,6 +9803,39 @@
             ],
             "title": "Action Items Count"
           },
+          "action_items_created": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Items Created"
+          },
+          "memories_created": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memories Created"
+          },
+          "proactive_moments": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proactive Moments"
+          },
           "total_conversations": {
             "anyOf": [
               {
@@ -9713,6 +9857,17 @@
               }
             ],
             "title": "Total Duration Minutes"
+          },
+          "watching_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watching Minutes"
           }
         },
         "title": "DailySummaryDayStats",
@@ -9963,6 +10118,13 @@
               }
             ],
             "title": "Locations"
+          },
+          "memories_learned": {
+            "items": {
+              "$ref": "#/components/schemas/LearnedMemoryRef"
+            },
+            "title": "Memories Learned",
+            "type": "array"
           },
           "overview": {
             "anyOf": [
@@ -10518,6 +10680,79 @@
           "message"
         ],
         "title": "DeleteLimitlessConversationsResponse",
+        "type": "object"
+      },
+      "DesktopDailyUsageRequest": {
+        "properties": {
+          "client_device_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Client Device Id",
+            "type": "string"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "listening_seconds": {
+            "maximum": 86400.0,
+            "minimum": 0.0,
+            "title": "Listening Seconds",
+            "type": "integer"
+          },
+          "proactive_cards_acted": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Proactive Cards Acted",
+            "type": "integer"
+          },
+          "proactive_cards_shown": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Proactive Cards Shown",
+            "type": "integer"
+          },
+          "ptt_turns": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Ptt Turns",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "watching_seconds": {
+            "maximum": 86400.0,
+            "minimum": 0.0,
+            "title": "Watching Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "timezone",
+          "client_device_id",
+          "watching_seconds",
+          "listening_seconds",
+          "proactive_cards_shown",
+          "proactive_cards_acted",
+          "ptt_turns"
+        ],
+        "title": "DesktopDailyUsageRequest",
+        "type": "object"
+      },
+      "DesktopDailyUsageResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "DesktopDailyUsageResponse",
         "type": "object"
       },
       "DeterministicFacts": {
@@ -12457,6 +12692,23 @@
         ],
         "title": "FeedbackCreate",
         "type": "object"
+      },
+      "FeedbackReason": {
+        "description": "Structured reason for a thumbs-down.\n\nThe first five match the values the mobile client has always sent to\n`POST /v1/users/analytics/chat_message`; keeping them identical means the\nledger and the legacy `analytics` rows stay comparable. The remaining five\nare desktop-only reason chips for proactive-notification cards (focus,\ninsight, task, memory) — a distinct taxonomy from a chat answer's, added\nalongside the mobile five rather than folded into them so neither surface's\ncategories are diluted by the other's.",
+        "enum": [
+          "too_verbose",
+          "incorrect_or_hallucination",
+          "not_helpful_or_irrelevant",
+          "didnt_follow_instructions",
+          "other",
+          "not_about_me",
+          "already_done",
+          "wrong_facts",
+          "bad_timing",
+          "not_useful"
+        ],
+        "title": "FeedbackReason",
+        "type": "string"
       },
       "FeedbackRecord": {
         "additionalProperties": false,
@@ -15761,6 +16013,42 @@
         "title": "KnowledgeGraphResponse",
         "type": "object"
       },
+      "LearnedMemoryRef": {
+        "description": "One memory the day actually produced, addressed by its canonical id.\n\nThis is the identity `knowledge_nuggets` never had: a client can render a\nnative review card and vote or correct through the existing memory\nendpoints. Review state (`user_review`, `edited`) is deliberately absent —\nclients read it live from the memory so a vote on one device shows on the\nother.",
+        "properties": {
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "category": {
+            "default": "",
+            "title": "Category",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "memory_id": {
+            "title": "Memory Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memory_id",
+          "content"
+        ],
+        "title": "LearnedMemoryRef",
+        "type": "object"
+      },
       "LedgerMirrorAliasEnvelope": {
         "additionalProperties": false,
         "properties": {
@@ -17410,6 +17698,17 @@
             "title": "Arguments",
             "type": "object"
           },
+          "belief_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Belief Class"
+          },
           "capture_confidence": {
             "anyOf": [
               {
@@ -17443,6 +17742,17 @@
             ],
             "description": "Expected durability horizon for the fact",
             "title": "Durability"
+          },
+          "half_life_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Half Life Days"
           },
           "headline": {
             "anyOf": [
@@ -17499,6 +17809,16 @@
             "description": "Stable entity id for who/what the fact is about",
             "title": "Subject Entity Id"
           },
+          "subject_scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemorySubjectScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "tags": {
             "description": "The tags of the memory and learning",
             "items": {
@@ -17514,6 +17834,18 @@
             },
             "title": "Uncertainty Reasons",
             "type": "array"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
           },
           "veracity": {
             "anyOf": [
@@ -17664,6 +17996,29 @@
             "title": "Arguments",
             "type": "object"
           },
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "belief_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Belief Class"
+          },
           "body": {
             "anyOf": [
               {
@@ -17736,6 +18091,28 @@
             "title": "Curation Weight",
             "type": "integer"
           },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "currency_band": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Band"
+          },
           "data_protection_level": {
             "anyOf": [
               {
@@ -17770,6 +18147,17 @@
             },
             "title": "Evidence",
             "type": "array"
+          },
+          "half_life_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Half Life Days"
           },
           "headline": {
             "anyOf": [
@@ -18053,6 +18441,18 @@
               }
             ],
             "title": "Valid At"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
           },
           "veracity": {
             "anyOf": [
@@ -20334,6 +20734,16 @@
                 "type": "null"
               }
             ]
+          },
+          "client_processing": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler so a malformed projection cannot 422 a finished recording. Hash-bound to the persisted transcript. Display only — never an input to intelligence.",
+            "title": "Client Processing"
           }
         },
         "title": "ProcessConversationRequest",
@@ -20449,6 +20859,151 @@
           }
         },
         "title": "ProgressExtractUpdateResponse",
+        "type": "object"
+      },
+      "ProjectedActionItem": {
+        "additionalProperties": false,
+        "description": "Display-only action item. No ids, owners, due dates, or capture fields.",
+        "properties": {
+          "completed": {
+            "default": false,
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "ProjectedActionItem",
+        "type": "object"
+      },
+      "ProjectedEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "duration": {
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "Duration",
+            "type": "integer"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "start",
+          "duration"
+        ],
+        "title": "ProjectedEvent",
+        "type": "object"
+      },
+      "ProjectedSection": {
+        "additionalProperties": false,
+        "properties": {
+          "body_markdown": {
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "heading": {
+            "title": "Heading",
+            "type": "string"
+          }
+        },
+        "required": [
+          "heading",
+          "body_markdown"
+        ],
+        "title": "ProjectedSection",
+        "type": "object"
+      },
+      "ProjectedStructure": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/CategoryEnum",
+            "default": "other"
+          },
+          "emoji": {
+            "default": "🧠",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectedEvent"
+            },
+            "maxItems": 12,
+            "title": "Events",
+            "type": "array"
+          },
+          "overview": {
+            "default": "",
+            "title": "Overview",
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectedSection"
+            },
+            "maxItems": 12,
+            "title": "Sections",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "ProjectedStructure",
+        "type": "object"
+      },
+      "ProjectionProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "device_class": {
+            "title": "Device Class",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "runtime": {
+            "title": "Runtime",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_id",
+          "runtime",
+          "device_class",
+          "generated_at"
+        ],
+        "title": "ProjectionProvenance",
         "type": "object"
       },
       "PublicFairUseCaseStatusResponse": {
@@ -20595,6 +21150,18 @@
       },
       "RateMessageRequest": {
         "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
           "rating": {
             "anyOf": [
               {
@@ -20605,6 +21172,16 @@
               }
             ],
             "title": "Rating"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedbackReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "RateMessageRequest",
@@ -25894,6 +26471,36 @@
         "title": "TranscriptSegment",
         "type": "object"
       },
+      "TranscriptionAllowanceSnapshot": {
+        "description": "The one server answer to which STT mode the client should open (local-models free tier, S16).\n\n``mode``: ``managed`` (Omi-billed socket), ``on_device`` (the plan's managed\nminutes are spent; the local engine is free on every plan), ``blocked``\n(desktop trial paywall). ``remaining_seconds`` is null when unlimited.",
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "remaining_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Seconds"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "TranscriptionAllowanceSnapshot",
+        "type": "object"
+      },
       "TranscriptionErrorDetail": {
         "properties": {
           "error": {
@@ -27673,6 +28280,16 @@
           },
           "subscription": {
             "$ref": "#/components/schemas/Subscription"
+          },
+          "transcription_allowance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptionAllowanceSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "transcription_seconds_limit": {
             "title": "Transcription Seconds Limit",
@@ -31725,19 +32342,19 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -31988,19 +32605,19 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -55505,7 +56122,7 @@
     },
     "/v1/users/analytics/chat_message": {
       "post": {
-        "description": "Submit feedback rating for a chat message.\n\nArgs:\n    message_id: ID of the message being rated\n    value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = neutral/removed)\n    reason: Optional reason for thumbs down. Valid values:\n        - 'too_verbose': Response was too long or wordy\n        - 'incorrect_or_hallucination': Response contained incorrect information\n        - 'not_helpful_or_irrelevant': Response didn't address the question\n        - 'didnt_follow_instructions': Response didn't follow user instructions\n        - 'other': Other reason",
+        "description": "Submit feedback rating for a chat message.\n\nArgs:\n    message_id: ID of the message being rated\n    value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = user cleared)\n    reason: Optional reason for thumbs down. Enum keys only.",
         "operationId": "set_chat_message_analytics_v1_users_analytics_chat_message_post",
         "parameters": [
           {
@@ -56123,6 +56740,92 @@
           }
         ],
         "summary": "Get Daily Summaries",
+        "tags": [
+          "v1"
+        ]
+      },
+      "post": {
+        "description": "Generate (or return) a daily summary for a local calendar date.\n\nNo FCM token is required and no push is sent — the caller is looking at the\nscreen. A record already stored for that date is returned without spending\nLLM tokens.",
+        "operationId": "create_user_daily_summary_v1_users_daily_summaries_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDailySummaryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailySummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Create User Daily Summary",
         "tags": [
           "v1"
         ]
@@ -56825,6 +57528,93 @@
           }
         ],
         "summary": "Delete Account",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/desktop-usage/daily": {
+      "post": {
+        "operationId": "record_desktop_daily_usage_v1_users_desktop_usage_daily_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopDailyUsageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopDailyUsageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Record Desktop Daily Usage",
         "tags": [
           "v1"
         ]
@@ -58617,7 +59407,7 @@
     },
     "/v1/users/me/subscription": {
       "get": {
-        "description": "Gets the user's subscription plan and usage.",
+        "description": "Gets the user's subscription plan and usage, plus the one transcription-allowance answer.",
         "operationId": "get_user_subscription_endpoint_v1_users_me_subscription_get",
         "parameters": [
           {
@@ -64322,19 +65112,19 @@
           },
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },

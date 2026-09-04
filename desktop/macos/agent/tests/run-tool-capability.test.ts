@@ -524,6 +524,7 @@ describe("RunToolCapabilityBroker", () => {
     expect(capability.allowedToolNames).toContain("think_deeper");
     expect(capability.allowedToolNames).toContain("web_search");
     expect(capability.allowedToolNames).toContain("point_click");
+    expect(capability.allowedToolNames).toContain("record_interject_feedback");
     const authorized = broker.authorize({
       capabilityRef: capability.capabilityRef,
       invocationId: "invoke-voice",
@@ -536,7 +537,8 @@ describe("RunToolCapabilityBroker", () => {
     expect(authorized.canonicalToolName).toBe("web_search");
     store.close();
 
-    // A plain chat run must not inherit voice-only tools.
+    // A plain ACP chat run must not inherit voice-only tools. Typed desktop
+    // chat advertises web_search through the pi-mono adapter, not this ACP fixture.
     const chat = fixture();
     const chatCapability = createBroker(chat.store).register({
       ownerId: chat.session.ownerId,
@@ -547,6 +549,7 @@ describe("RunToolCapabilityBroker", () => {
     expect(chatCapability.allowedToolNames).not.toContain("think_deeper");
     expect(chatCapability.allowedToolNames).not.toContain("web_search");
     expect(chatCapability.allowedToolNames).not.toContain("point_click");
+    expect(chatCapability.allowedToolNames).not.toContain("record_interject_feedback");
     chat.store.close();
   });
 

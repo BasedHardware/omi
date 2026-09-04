@@ -41,6 +41,33 @@ final class MicrophoneCaptureAuthorizationPolicyTests: XCTestCase {
       MicrophoneCaptureAuthorizationPolicy.action(afterRequestGranted: true), .proceed)
   }
 
+  func testAutomaticStartsNeverRequestOrSurfaceRegardlessOfStatus() {
+    // The shared rule behind "skipped/denied permissions must not auto-reprompt":
+    // launch, reactivation, key-load, settings-sync, wake, and post-onboarding
+    // starts abandon instead of raising a sheet or an alert.
+    XCTAssertEqual(
+      MicrophoneCaptureAuthorizationPolicy.action(for: .notDetermined, userInitiated: false),
+      .abandonAutomaticStart)
+    XCTAssertEqual(
+      MicrophoneCaptureAuthorizationPolicy.action(for: .denied, userInitiated: false),
+      .abandonAutomaticStart)
+    XCTAssertEqual(
+      MicrophoneCaptureAuthorizationPolicy.action(for: .restricted, userInitiated: false),
+      .abandonAutomaticStart)
+  }
+
+  func testAutomaticStartsStillProceedWhenAuthorizedAndUserStartsKeepAsking() {
+    XCTAssertEqual(
+      MicrophoneCaptureAuthorizationPolicy.action(for: .authorized, userInitiated: false),
+      .proceed)
+    XCTAssertEqual(
+      MicrophoneCaptureAuthorizationPolicy.action(for: .notDetermined, userInitiated: true),
+      .requestPermission)
+    XCTAssertEqual(
+      MicrophoneCaptureAuthorizationPolicy.action(for: .denied, userInitiated: true),
+      .surfacePermissionAlert)
+  }
+
   // MARK: - Exhausted-watchdog terminal alert
 
   func testExhaustedWatchdogBlamesPermissionWhenDenied() {
