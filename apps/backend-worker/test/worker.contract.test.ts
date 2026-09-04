@@ -531,6 +531,42 @@ describe("worker request contract", () => {
     expect((await response.json()) as unknown).toEqual(emptyConversationPage());
   });
 
+  test("a Firebase session is verified and partitioned by its uid", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        expect(request.url).toBe(
+          "https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=test-firebase-key"
+        );
+        expect((await request.json()) as unknown).toEqual({
+          idToken: "firebase-id-token",
+        });
+        return Response.json({ users: [{ localId: "firebase-user" }] });
+      }
+    ) as never;
+    try {
+      const response = await handler.fetch(
+        new Request(
+          "https://worker.test/v1/chat-generations/generation-id/events",
+          {
+            headers: {
+              authorization: "Bearer firebase-id-token",
+              "x-omi-client-id": "spoofed-account",
+            },
+          }
+        ),
+        { ...env, FIREBASE_API_KEY: "test-firebase-key" } as never,
+        executionContext as never
+      );
+
+      expect(response.status).toBe(200);
+      expect(accountCalls).toEqual(["account:firebase:firebase-user"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("a provisioned secret still refuses the empty bearer credential", async () => {
     const response = await handler.fetch(
       onTheWireRequest("/v1/settings", anonymousHeaders),

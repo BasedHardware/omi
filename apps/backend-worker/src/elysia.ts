@@ -70,7 +70,7 @@ function mount(
     });
     try {
       if (authed) {
-        const refusal = authorizeV1(context);
+        const refusal = await authorizeV1(context);
         if (refusal !== null) return observed(context, refusal, startedAt);
       }
       return observed(context, await route.handle(context), startedAt);

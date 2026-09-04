@@ -6,6 +6,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "ENVIRONMENT": "staging",
+    "FIREBASE_API_KEY": "AIzaSyA88gHcmiAxjN_aE23tHRWXOgFfapyO6dk",
     "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
     "STAGING_ACCOUNT_ID": "staging-primary",
     "STAGING_DISPLAY_NAME": "Omi Staging",
