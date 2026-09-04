@@ -44,9 +44,12 @@ static BOOL OmiIsAllowedV5Host(NSString *host) {
       normalized.length > [@".workers.dev" length];
 }
 
+static NSURL *OmiValidatedV5URL(NSString *value);
+
 static BOOL OmiSoftwarePlaneIsNew(void) {
-  return [[NSUserDefaults.standardUserDefaults stringForKey:OmiSoftwarePlaneDefaultsKey]
-      isEqualToString:@"new"];
+  NSString *stored = [NSUserDefaults.standardUserDefaults stringForKey:OmiSoftwarePlaneDefaultsKey];
+  if (stored.length > 0) return [stored isEqualToString:@"new"];
+  return OmiValidatedV5URL(NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"]) != nil;
 }
 
 static NSString *OmiSoftwarePlaneValue(void) {
@@ -291,6 +294,10 @@ static void OmiRefreshOwnKeychainCloudSession(
       NSString *userId = [json[@"user_id"] isKindOfClass:NSString.class] ? json[@"user_id"] : nil;
       if (userId.length > 0) updated[@"tokenUserId"] = userId;
       if (!OmiStoreOwnKeychainCloudSessionIfCurrent(updated, refreshToken)) {
+        if (OmiOwnKeychainCloudToken(OmiOwnKeychainCloudSession()).length > 0) {
+          completion(nil);
+          return;
+        }
         completion([NSError errorWithDomain:@"OmiBackend" code:0 userInfo:nil]);
         return;
       }

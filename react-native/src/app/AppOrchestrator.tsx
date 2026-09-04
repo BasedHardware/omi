@@ -140,6 +140,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     readOutcomes,
     reads,
     readsPhase,
+    resetReads,
     refreshReads,
   } = useDesktopReads({
     enabled: !macDesktop || onboardingRequired === false,
@@ -201,7 +202,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }
       })
       .catch(error => {
-        if (active && (!macDesktop || onboardingRequired === false)) {
+        if (
+          active &&
+          mutation === chatMutationSeqRef.current &&
+          (!macDesktop || onboardingRequired === false)
+        ) {
           setChatError(chatHistoryErrorCopy(error));
           // A 401/unconfigured history load can mean the cloud session died;
           // re-probe it instead of keeping a ready shell on dead credentials.
@@ -445,7 +450,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           ...withoutCanonical.slice(insertAt),
         ];
       });
-      setChatEpoch(current => current + 1);
     } catch (error) {
       if (chatSessionEpochRef.current === session) {
         if (!admitted) {
@@ -532,10 +536,22 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           setOlderChatCursor(page.olderCursor);
           setHasOlderChat(page.hasOlder);
           return;
-        } catch {}
+        } catch (recoveryError) {
+          if (
+            macDesktop &&
+            chatSessionEpochRef.current === session &&
+            chatMutationSeqRef.current === mutation &&
+            chatSessionLost(recoveryError)
+          ) {
+            revalidateSession().catch(() => undefined);
+          }
+        }
       }
       if (chatSessionEpochRef.current === session) {
         setChatError('Older messages could not be loaded.');
+        if (macDesktop && chatSessionLost(error)) {
+          revalidateSession().catch(() => undefined);
+        }
       }
     } finally {
       if (chatSessionEpochRef.current === session) {
@@ -740,7 +756,20 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             signOutAndRefresh().catch(() => undefined);
           }}
           onWorkspaceReload={() => {
-            refreshReads(false).catch(() => undefined);
+            chatSessionEpochRef.current += 1;
+            chatMutationSeqRef.current += 1;
+            setChatError(null);
+            setDraft('');
+            setMessages([]);
+            setOlderChatCursor(null);
+            setHasOlderChat(false);
+            setChatBusy(false);
+            setLoadingOlderChat(false);
+            setActiveGenerationId(null);
+            stableChatMessageIds.clear();
+            animatedChatMessageIds.clear();
+            resetReads();
+            refreshReads(true).catch(() => undefined);
             setChatEpoch(current => current + 1);
           }}
           outcomes={readOutcomes}

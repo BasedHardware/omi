@@ -194,7 +194,9 @@ test('maps native cloud-first backend failures to actionable, credential-safe co
   expect(desktopBackendConfigurationCopy).not.toContain('127.0.0.1:8787');
   expect(desktopBackendUnauthorizedCopy).not.toContain('OMI_LOCAL_API');
   expect(desktopBackendUnauthorizedCopy).not.toContain('127.0.0.1:8787');
-  expect(desktopBackendServiceCopy).toContain('https://api.omi.me');
+  expect(desktopBackendServiceCopy).toBe(
+    'The selected Omi service is unavailable. Check the connection, then retry.',
+  );
   expect(desktopBackendServiceCopy).not.toContain('127.0.0.1:8787');
   expect(desktopLocalBackendServiceCopy).toBe(
     'The configured local Omi service is unavailable. Check its connection, then retry.',
@@ -537,7 +539,7 @@ test.each([
   'surfaces non-success %s reads without consuming the body',
   async (_label, load) => {
     const backend = backendFor(() => ({status: 503, body: '{"items":[]}'}));
-    await expect(load(backend)).rejects.toThrow('failed (503)');
+    await expect(load(backend)).rejects.toThrow(desktopBackendServiceCopy);
   },
 );
 
@@ -757,7 +759,7 @@ test('retains successful domains when one desktop read fails', async () => {
   const result = await loadDesktopReads(backend);
   expect(result.conversations).toEqual({
     status: 'error',
-    error: 'desktop-conversations-read failed (503)',
+    error: desktopBackendServiceCopy,
   });
   expect(result.memories).toEqual(expect.objectContaining({status: 'success'}));
   expect(result.tasks).toEqual(expect.objectContaining({status: 'success'}));

@@ -271,7 +271,7 @@ test('renders the shipping search-first desktop hierarchy', () => {
   expect(tree).toContain('Conversations');
   expect(tree).toContain('Tasks');
   expect(tree).toContain('Apps');
-  expect(tree).toContain('Today');
+  expect(tree).toContain('Tasks');
   expect(tree).toContain('Product review');
   expect(tree).toContain('Ship the desktop chrome');
   expect(tree).not.toContain("I'm ready.");
@@ -579,7 +579,7 @@ test('ready chat transport error stays in the chrome and off the Home stage', ()
     'Chat is temporarily unavailable.',
   );
   expect(notices[0].props.numberOfLines).toBe(1);
-  expect(renderedText(renderer)).toContain('Today');
+  expect(renderedText(renderer)).toContain('Tasks');
   expect(renderedText(renderer)).toContain('Product review');
   for (const scroll of renderer.root.findAllByType(ScrollView)) {
     expect(
@@ -748,12 +748,12 @@ test('failed reads on Library and Tasks never claim an empty product', () => {
     conversations: {
       status: 'error' as const,
       error:
-        'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.',
+        'The selected Omi service is unavailable. Check the connection, then retry.',
     },
     memories: {
       status: 'error' as const,
       error:
-        'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.',
+        'The selected Omi service is unavailable. Check the connection, then retry.',
     },
     tasks: {
       status: 'error' as const,
@@ -776,7 +776,7 @@ test('failed reads on Library and Tasks never claim an empty product', () => {
   });
   tree = renderedText(renderer);
   expect(tree).toContain(
-    'Omi cloud at https://api.omi.me is unavailable. Check the connection, then retry.',
+    'The selected Omi service is unavailable. Check the connection, then retry.',
   );
   expect(tree).not.toContain('Nothing captured in this window yet.');
   act(() => {
@@ -910,6 +910,35 @@ test('Settings persists a plane switch before reloading the workspace', async ()
   });
   expect(setDesktopPreference).toHaveBeenCalledWith('softwarePlane', 'new');
   expect(onWorkspaceReload).toHaveBeenCalledTimes(1);
+});
+
+test('Settings surfaces a failed mutation and does not reload the workspace', async () => {
+  const onWorkspaceReload = jest.fn();
+  const {setDesktopPreference} = jest.requireMock(
+    '../desktopSettingsClient',
+  ) as {setDesktopPreference: jest.Mock};
+  setDesktopPreference.mockRejectedValueOnce(new Error('write failed'));
+  const renderer = renderDesktop({onWorkspaceReload});
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  await act(async () => {
+    pressText(renderer, 'new');
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(renderedText(renderer)).toContain(
+    'Settings change could not be saved. Try again.',
+  );
+  expect(onWorkspaceReload).not.toHaveBeenCalled();
 });
 
 test('Settings does not persist audio capture when microphone access is denied', async () => {

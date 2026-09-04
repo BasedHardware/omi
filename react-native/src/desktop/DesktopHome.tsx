@@ -239,7 +239,7 @@ export function DesktopHome({
         <View
           accessibilityLabel="Home tasks"
           style={[styles.section, styles.sectionSpaced]}>
-          <SectionTitle>Today</SectionTitle>
+          <SectionTitle>Tasks</SectionTitle>
           {visibleTasks.length > 0 ? (
             visibleTasks.map(item => (
               <ShippingListInsert itemKey={item.id} key={item.id}>

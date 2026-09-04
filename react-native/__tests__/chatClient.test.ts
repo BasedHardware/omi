@@ -14,6 +14,50 @@ import {
 import type {NativeHttpRequest, OmiBackend} from '../src/omiNative';
 import type {ChatMessage} from '../src/chatClient';
 
+const capabilities = {
+  maxAttachmentsPerMessage: 4,
+  maxAttachmentBytes: 52_428_800,
+  allowedAttachmentMimeTypes: ['text/plain'],
+};
+
+function wireMessage(message: ChatMessage) {
+  return {
+    ...message,
+    type: 'text',
+    updatedAt: message.createdAt,
+    chatSessionId: null,
+    appId: null,
+    journalRevision: 1,
+    payloadHash: 'sha256:test',
+    messageSource: 'desktop_chat',
+    rating: null,
+    reported: false,
+    revision: '1',
+    attachments: [],
+  };
+}
+
+function historyBody(
+  messages: ChatMessage[],
+  page: {olderCursor: string | null; hasOlder: boolean} = {
+    olderCursor: null,
+    hasOlder: false,
+  },
+) {
+  return JSON.stringify({
+    messages: messages.map(wireMessage),
+    page,
+    capabilities,
+  });
+}
+
+function admissionBody(message: ChatMessage, generationId: string) {
+  return JSON.stringify({
+    message: wireMessage(message),
+    generation: {id: generationId},
+  });
+}
+
 test('loads main Chat history through the native boundary', async () => {
   const requests: NativeHttpRequest[] = [];
   const backend = {
@@ -22,7 +66,7 @@ test('loads main Chat history through the native boundary', async () => {
       return {
         id: request.id,
         status: 200,
-        body: '{"messages":[],"page":{"olderCursor":null,"hasOlder":false}}',
+        body: historyBody([]),
       };
     },
     generationEvents: async () => ({id: 'events', status: 200, body: ''}),
@@ -35,14 +79,14 @@ test('loads main Chat history through the native boundary', async () => {
 
 test('admits one main-scope human message and accepts only a terminal SSE message', async () => {
   const requests: NativeHttpRequest[] = [];
-  const human = {
+  const human: ChatMessage = {
     id: 'desktop-100-1',
     text: 'Hello',
     sender: 'human',
     createdAt: 100,
     generationOutcome: null,
   };
-  const assistant = {
+  const assistant: ChatMessage = {
     id: 'assistant-1',
     text: 'Hi.',
     sender: 'ai',
@@ -55,10 +99,7 @@ test('admits one main-scope human message and accepts only a terminal SSE messag
       return {
         id: request.id,
         status: 201,
-        body: JSON.stringify({
-          message: human,
-          generation: {id: 'generation-1'},
-        }),
+        body: admissionBody(human, 'generation-1'),
       };
     },
     generationEvents: async (generationId, lastEventId) => {
@@ -68,7 +109,7 @@ test('admits one main-scope human message and accepts only a terminal SSE messag
         id: generationId,
         status: 200,
         body: `event: snapshot\nid: e1\ndata: {"kind":"snapshot","text":"H"}\n\nevent: done\nid: e2\ndata: ${JSON.stringify(
-          {kind: 'done', message: assistant},
+          {kind: 'done', message: wireMessage(assistant)},
         )}\n\n`,
       };
     },
@@ -100,6 +141,41 @@ test('fails closed when SSE ends without a terminal frame', () => {
   ).toThrow('without a terminal');
 });
 
+test('rejects malformed history, admission, and terminal payloads', async () => {
+  const historyBackend = {
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 200,
+      body: JSON.stringify({
+        messages: [{id: 'broken-row', text: 'missing fields'}],
+        page: {olderCursor: null, hasOlder: false},
+        capabilities,
+      }),
+    }),
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  } satisfies OmiBackend;
+  await expect(loadChatHistory(historyBackend)).rejects.toThrow('malformed');
+
+  const admissionBackend = {
+    ...historyBackend,
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 201,
+      body: JSON.stringify({
+        message: {id: 'broken-row', text: 'missing fields'},
+        generation: {id: 'generation-broken'},
+      }),
+    }),
+  } satisfies OmiBackend;
+  await expect(sendChatMessage(admissionBackend, 'Hello', 100)).rejects.toThrow(
+    'malformed',
+  );
+  expect(() =>
+    parseTerminal('event: done\nid: e1\ndata: {"kind":"done"}\n\n'),
+  ).toThrow('malformed');
+});
+
 test('represents a failed generation as a stable assistant delivery', async () => {
   const human = {
     id: 'desktop-failed',
@@ -112,10 +188,7 @@ test('represents a failed generation as a stable assistant delivery', async () =
     request: async (request: NativeHttpRequest) => ({
       id: request.id,
       status: 201,
-      body: JSON.stringify({
-        message: human,
-        generation: {id: 'generation-failed'},
-      }),
+      body: admissionBody(human, 'generation-failed'),
     }),
     generationEvents: async () => ({
       id: 'generation-failed',
@@ -162,18 +235,12 @@ test('reconciles canonical history when native reconnect reports replay expiry',
         ? {
             id: request.id,
             status: 201,
-            body: JSON.stringify({
-              message: human,
-              generation: {id: 'generation-expired'},
-            }),
+            body: admissionBody(human, 'generation-expired'),
           }
         : {
             id: request.id,
             status: 200,
-            body: JSON.stringify({
-              messages: [human, assistant],
-              page: {olderCursor: null, hasOlder: false},
-            }),
+            body: historyBody([human, assistant]),
           };
     },
     generationEvents: async () => ({
@@ -196,10 +263,7 @@ test('durable cancellation leaves terminal reconciliation to the active stream',
     request: async (request: NativeHttpRequest) => ({
       id: request.id,
       status: 200,
-      body: JSON.stringify({
-        messages: [],
-        page: {olderCursor: null, hasOlder: false},
-      }),
+      body: historyBody([]),
     }),
     generationEvents: async () => ({id: 'events', status: 200, body: ''}),
     cancelGenerationEvents: async generationId => {
@@ -234,7 +298,7 @@ test('native observer cancellation reconnects for the canonical terminal frame',
     request: async (request: NativeHttpRequest) => ({
       id: request.id,
       status: 201,
-      body: JSON.stringify({message: human, generation: {id: 'generation-3'}}),
+      body: admissionBody(human, 'generation-3'),
     }),
     generationEvents: async () => {
       streams += 1;
@@ -248,7 +312,7 @@ test('native observer cancellation reconnects for the canonical terminal frame',
         status: 200,
         body: `event: cancelled\nid: e3\ndata: ${JSON.stringify({
           kind: 'cancelled',
-          message: assistant,
+          message: wireMessage(assistant),
         })}\n\n`,
       };
     },
@@ -260,6 +324,42 @@ test('native observer cancellation reconnects for the canonical terminal frame',
     assistant,
   });
   expect(streams).toBe(2);
+});
+
+test('shows a truthful stopped status when cancellation retained no text', async () => {
+  const human = {
+    id: 'desktop-stop-empty',
+    text: 'Stop',
+    sender: 'human' as const,
+    createdAt: 300,
+    generationOutcome: null,
+  };
+  const backend = {
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 201,
+      body: admissionBody(human, 'generation-empty'),
+    }),
+    generationEvents: async () => ({
+      id: 'generation-empty',
+      status: 200,
+      body: 'event: cancelled\nid: terminal\ndata: {"kind":"cancelled","message":null}\n\n',
+    }),
+    cancelGenerationEvents: async () => {},
+  } satisfies OmiBackend;
+
+  await expect(sendChatMessage(backend, 'Stop', 300)).resolves.toEqual({
+    human,
+    assistant: {
+      id: 'generation:generation-empty',
+      text: '',
+      sender: 'ai',
+      createdAt: 300,
+      generationOutcome: 'cancelled',
+      generationId: 'generation-empty',
+      localOnly: true,
+    },
+  });
 });
 
 test('maps ratified public recovery without automatically retrying', () => {
@@ -301,10 +401,7 @@ test('loads opaque older cursors and preserves exact page metadata', async () =>
       return {
         id: request.id,
         status: 200,
-        body: JSON.stringify({
-          messages: [],
-          page: {olderCursor, hasOlder: true},
-        }),
+        body: historyBody([], {olderCursor, hasOlder: true}),
       };
     },
     generationEvents: async () => ({id: 'events', status: 200, body: ''}),

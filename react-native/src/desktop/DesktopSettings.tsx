@@ -178,6 +178,8 @@ export function DesktopSettings({
     Record<PermissionKind, PermissionState>
   >({microphone: 'unknown', notifications: 'unknown', screen: 'unknown'});
   const [account, setAccount] = useState<AccountSettingsSnapshot | null>(null);
+  const [actionStatus, setActionStatus] = useState<string | null>(null);
+  const actionSeqRef = useRef(0);
   const reloadSeqRef = useRef(0);
   const backend = omiBackend;
 
@@ -187,6 +189,11 @@ export function DesktopSettings({
       loadDesktopPreferences(),
       loadPermissionStatus(),
     ]);
+    if (seq !== reloadSeqRef.current) {
+      return;
+    }
+    setPrefs(nextPrefs);
+    setPermissions(nextPermissions);
     let nextAccount: AccountSettingsSnapshot | null = null;
     if (backend !== undefined && backend !== null && session === 'ready') {
       try {
@@ -198,8 +205,6 @@ export function DesktopSettings({
     if (seq !== reloadSeqRef.current) {
       return;
     }
-    setPrefs(nextPrefs);
-    setPermissions(nextPermissions);
     setAccount(nextAccount);
   }, [backend, session]);
 
@@ -207,6 +212,7 @@ export function DesktopSettings({
     reload().catch(() => undefined);
     return () => {
       reloadSeqRef.current += 1;
+      actionSeqRef.current += 1;
     };
   }, [reload]);
 
@@ -216,8 +222,30 @@ export function DesktopSettings({
     key: Key,
     value: DesktopPreferences[Key],
   ) => {
-    await setDesktopPreference(key, value);
-    await reload();
+    const seq = ++reloadSeqRef.current;
+    const next = await setDesktopPreference(key, value);
+    if (seq !== reloadSeqRef.current) {
+      return;
+    }
+    setPrefs(next);
+    reload().catch(() => undefined);
+  };
+
+  const runAction = (action: () => Promise<void>) => {
+    const seq = ++actionSeqRef.current;
+    setActionStatus('Saving settings…');
+    action().then(
+      () => {
+        if (seq === actionSeqRef.current) {
+          setActionStatus(null);
+        }
+      },
+      () => {
+        if (seq === actionSeqRef.current) {
+          setActionStatus('Settings change could not be saved. Try again.');
+        }
+      },
+    );
   };
 
   const request = async (kind: PermissionKind) => {
@@ -245,10 +273,12 @@ export function DesktopSettings({
           <Switch
             onValueChange={value => {
               if (value) {
-                request('screen').catch(() => undefined);
+                runAction(async () => {
+                  await request('screen');
+                });
                 return;
               }
-              setPref('screenCapture', false).catch(() => undefined);
+              runAction(() => setPref('screenCapture', false));
             }}
             value={prefs.screenCapture && permissions.screen !== 'denied'}
           />
@@ -260,14 +290,14 @@ export function DesktopSettings({
         trailing={
           <Segmented<AudioRecordingMode>
             onChange={value => {
-              (async () => {
+              runAction(async () => {
                 if (
                   value === 'off' ||
                   (await request('microphone')) === 'granted'
                 ) {
                   await setPref('audioMode', value);
                 }
-              })().catch(() => undefined);
+              });
             }}
             options={['off', 'always', 'meetings']}
             value={prefs.audioMode}
@@ -285,10 +315,12 @@ export function DesktopSettings({
           <Switch
             onValueChange={value => {
               if (value) {
-                request('notifications').catch(() => undefined);
+                runAction(async () => {
+                  await request('notifications');
+                });
                 return;
               }
-              setPref('notificationsEnabled', false).catch(() => undefined);
+              runAction(() => setPref('notificationsEnabled', false));
             }}
             value={
               prefs.notificationsEnabled &&
@@ -340,7 +372,7 @@ export function DesktopSettings({
         trailing={
           <Switch
             onValueChange={value => {
-              setPref('transcriptionAutoDetect', value).catch(() => undefined);
+              runAction(() => setPref('transcriptionAutoDetect', value));
             }}
             value={prefs.transcriptionAutoDetect}
           />
@@ -352,7 +384,7 @@ export function DesktopSettings({
         trailing={
           <Switch
             onValueChange={value => {
-              setPref('vadGate', value).catch(() => undefined);
+              runAction(() => setPref('vadGate', value));
             }}
             value={prefs.vadGate}
           />
@@ -369,9 +401,7 @@ export function DesktopSettings({
         trailing={
           <Segmented
             onChange={value => {
-              setPref('rewindRetentionDays', Number(value)).catch(
-                () => undefined,
-              );
+              runAction(() => setPref('rewindRetentionDays', Number(value)));
             }}
             options={['7', '14', '30', '0'] as const}
             value={String(prefs.rewindRetentionDays) as '7' | '14' | '30' | '0'}
@@ -384,7 +414,7 @@ export function DesktopSettings({
         trailing={
           <Switch
             onValueChange={value => {
-              setPref('meetingNoteScreenshots', value).catch(() => undefined);
+              runAction(() => setPref('meetingNoteScreenshots', value));
             }}
             value={prefs.meetingNoteScreenshots}
           />
@@ -410,12 +440,13 @@ export function DesktopSettings({
           backend != null &&
           typeof account?.storeRecordingPermission === 'boolean'
             ? () => {
-                setStoreRecordingPermission(
-                  backend,
-                  !(account?.storeRecordingPermission ?? false),
-                )
-                  .then(() => reload())
-                  .catch(() => undefined);
+                runAction(async () => {
+                  await setStoreRecordingPermission(
+                    backend,
+                    !(account?.storeRecordingPermission ?? false),
+                  );
+                  await reload();
+                });
               }
             : undefined
         }
@@ -436,12 +467,13 @@ export function DesktopSettings({
           backend != null &&
           typeof account?.privateCloudSync === 'boolean'
             ? () => {
-                setPrivateCloudSync(
-                  backend,
-                  !(account?.privateCloudSync ?? false),
-                )
-                  .then(() => reload())
-                  .catch(() => undefined);
+                runAction(async () => {
+                  await setPrivateCloudSync(
+                    backend,
+                    !(account?.privateCloudSync ?? false),
+                  );
+                  await reload();
+                });
               }
             : undefined
         }
@@ -455,19 +487,18 @@ export function DesktopSettings({
       copy={
         prefs.softwarePlane === 'new'
           ? prefs.stampedV5Origin != null
-            ? 'New uses the stamped v5 origin with the same OmiAuth keychain session as the shipping Mac app.'
+            ? 'New sends v5 chat, capture, conversations, memories, tasks, and settings to the stamped origin. Account, apps, and privacy controls still use production api.omi.me.'
             : 'New is selected, but no valid stamped v5 origin is configured.'
-          : 'Old uses production api.omi.me. Session is the same OmiAuth keychain as the shipping Mac app.'
+          : 'Old uses production api.omi.me. This v5 desktop requires New for chat, memories, and tasks.'
       }
       title="Backend"
       trailing={
         <Segmented
           onChange={value => {
-            setPref('softwarePlane', value === 'new' ? 'new' : 'old')
-              .then(() => {
-                onWorkspaceReload?.();
-              })
-              .catch(() => undefined);
+            runAction(async () => {
+              await setPref('softwarePlane', value === 'new' ? 'new' : 'old');
+              onWorkspaceReload?.();
+            });
           }}
           options={['old', 'new'] as const}
           value={prefs.softwarePlane}
@@ -503,6 +534,13 @@ export function DesktopSettings({
     <View style={styles.root}>
       <SettingsNav onChange={setPane} pane={pane} />
       <ScrollView contentContainerStyle={styles.content} style={styles.scroll}>
+        {actionStatus !== null ? (
+          <Text
+            accessibilityLabel="Settings action status"
+            style={styles.status}>
+            {actionStatus}
+          </Text>
+        ) : null}
         <ShippingStage stageKey={pane} variant="page">
           {body}
         </ShippingStage>
@@ -544,6 +582,12 @@ const styles = {
   paneTextActive: {color: token.color.ink},
   scroll: {flex: 1},
   content: {paddingBottom: 32},
+  status: {
+    color: token.color.inkMuted,
+    fontFamily: token.font,
+    fontSize: token.type.caption,
+    marginBottom: 10,
+  },
   row: {
     alignItems: 'center' as const,
     backgroundColor: token.color.glassQuiet,
