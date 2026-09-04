@@ -271,7 +271,6 @@ test('renders the shipping search-first desktop hierarchy', () => {
   expect(tree).toContain('Conversations');
   expect(tree).toContain('Tasks');
   expect(tree).toContain('Apps');
-  expect(tree).toContain('Tasks');
   expect(tree).toContain('Product review');
   expect(tree).toContain('Ship the desktop chrome');
   expect(tree).not.toContain("I'm ready.");
@@ -912,6 +911,34 @@ test('Settings persists a plane switch before reloading the workspace', async ()
   expect(onWorkspaceReload).toHaveBeenCalledTimes(1);
 });
 
+test('Settings disables backend switching while admission is pending', async () => {
+  const renderer = renderDesktop({chatBusy: true});
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'Stop the active response before switching backends.',
+  );
+  for (const option of ['new', 'old']) {
+    expect(
+      renderer.root.find(
+        node =>
+          node.props.accessibilityRole === 'button' &&
+          node.props.accessibilityState?.disabled === true &&
+          node.findAllByType(Text).some(text => text.props.children === option),
+      ),
+    ).toBeDefined();
+  }
+});
+
 test('Settings surfaces a failed mutation and does not reload the workspace', async () => {
   const onWorkspaceReload = jest.fn();
   const {setDesktopPreference} = jest.requireMock(
@@ -964,6 +991,74 @@ test('Settings does not persist audio capture when microphone access is denied',
   expect(settings.setDesktopPreference).not.toHaveBeenCalledWith(
     'audioMode',
     'always',
+  );
+  expect(renderedText(renderer)).toContain(
+    'Microphone access is denied in System Settings.',
+  );
+});
+
+test('Settings surfaces sign-out failures without leaving the ready shell', async () => {
+  const onSignOut = jest.fn(async () => {
+    throw new Error('sign out failed');
+  });
+  const renderer = renderDesktop({onSignOut});
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Sign out')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(onSignOut).toHaveBeenCalledTimes(1);
+  expect(renderedText(renderer)).toContain('Sign out failed. Try again.');
+  expect(renderedText(renderer)).toContain('Account & Plan');
+});
+
+test('Settings reports a subscription read failure as unavailable', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: 'Plan is temporarily unavailable.',
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain('Plan is temporarily unavailable.');
+  expect(renderedText(renderer)).not.toContain(
+    'Plan details load after sign-in.',
   );
 });
 

@@ -317,7 +317,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "export NODE_BINARY=node\n../node_modules/react-native-macos/scripts/react-native-xcode.sh\n";
+			shellScript = "(cd \"$SRCROOT/../..\" && bun run --cwd packages/contracts/ratified build && bun x tsc -b packages/adapters-platform --force)\nexport NODE_BINARY=node\n../node_modules/react-native-macos/scripts/react-native-xcode.sh\n";
 		};
 		C95AF14A1AC18D692252FD28 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;

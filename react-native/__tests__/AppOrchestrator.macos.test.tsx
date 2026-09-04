@@ -619,3 +619,68 @@ test('a stale older-history recovery cannot overwrite a newer desktop send', asy
   expect(textOf(renderer)).toContain('fresh question');
   expect(textOf(renderer)).toContain('fresh answer');
 });
+
+test('an admitted stream failure keeps its uncertain interruption visible', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(
+    async (value: {id: string; body?: string}) => {
+      if (value.id === 'chat-history') {
+        return {id: value.id, status: 200, body: historyBody([])};
+      }
+      if (value.id.startsWith('admit-')) {
+        const body = JSON.parse(value.body ?? '{}') as {
+          id: string;
+          text: string;
+          at: number;
+        };
+        return {
+          id: value.id,
+          status: 201,
+          body: admissionBody(
+            {
+              id: body.id,
+              text: body.text,
+              sender: 'human',
+              createdAt: body.at,
+              generationOutcome: null,
+            },
+            'generation-interrupted',
+          ),
+        };
+      }
+      return {id: value.id, status: 501, body: null};
+    },
+  );
+  mockBackend.generationEvents.mockRejectedValue(
+    Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'}),
+  );
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('interrupted question');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+
+  expect(textOf(renderer)).toContain('interrupted question');
+  expect(textOf(renderer)).toContain(
+    'Response interrupted. It may still complete.',
+  );
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain(
+    'Response interrupted. It may still complete.',
+  );
+});

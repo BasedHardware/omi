@@ -294,7 +294,16 @@ static void OmiRefreshOwnKeychainCloudSession(
       NSString *userId = [json[@"user_id"] isKindOfClass:NSString.class] ? json[@"user_id"] : nil;
       if (userId.length > 0) updated[@"tokenUserId"] = userId;
       if (!OmiStoreOwnKeychainCloudSessionIfCurrent(updated, refreshToken)) {
-        if (OmiOwnKeychainCloudToken(OmiOwnKeychainCloudSession()).length > 0) {
+        NSDictionary *current = OmiOwnKeychainCloudSession();
+        NSString *expectedUserId = [session[@"tokenUserId"] isKindOfClass:NSString.class]
+            ? session[@"tokenUserId"] : nil;
+        NSString *refreshedUserId = userId.length > 0 ? userId : expectedUserId;
+        NSString *currentUserId = [current[@"tokenUserId"] isKindOfClass:NSString.class]
+            ? current[@"tokenUserId"] : nil;
+        if (expectedUserId.length > 0 &&
+            [refreshedUserId isEqualToString:expectedUserId] &&
+            [currentUserId isEqualToString:expectedUserId] &&
+            OmiOwnKeychainCloudToken(current).length > 0) {
           completion(nil);
           return;
         }
