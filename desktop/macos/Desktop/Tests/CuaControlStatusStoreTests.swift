@@ -28,26 +28,39 @@ final class CuaControlStatusStoreTests: XCTestCase {
   }
 
   @MainActor
-  private func makeStore(granted: [CuaPermission]) -> CuaControlStatusStore {
+  private func makeStore(granted: [CuaPermission], gateEnabled: Bool = true)
+    -> CuaControlStatusStore
+  {
     let gate = CuaControlGate(
       defaults: defaults,
       missingPermission: { _ in nil },
       ownerID: { "owner-1" })
-    gate.setEnabled(true)
+    if gateEnabled { gate.setEnabled(true) }
     self.gate = gate
     return CuaControlStatusStore(
       gate: gate,
       isGranted: { granted.contains($0) })
   }
 
-  /// The chip counts the same three rows the sheet lists, so its number is one
-  /// the user can check against System Settings.
+  /// The card reads like every other server card — one status word, colored
+  /// active only when the tools can actually run — with gate state outranking
+  /// grants the way the gate itself outranks them.
   @MainActor
-  func testMissingGrantCountCountsTheListedRows() {
-    XCTAssertEqual(makeStore(granted: []).missingGrantCount, 3)
-    XCTAssertEqual(
-      makeStore(granted: [.postEvents, .accessibility, .screenRecording]).missingGrantCount, 0)
-    XCTAssertEqual(makeStore(granted: [.screenRecording]).missingGrantCount, 2)
+  func testCardStatusSpeaksTheUniformVocabulary() {
+    XCTAssertEqual(makeStore(granted: [], gateEnabled: false).cardStatusText, "Off")
+
+    let missing = makeStore(granted: [])
+    XCTAssertEqual(missing.cardStatusText, "Needs 3 grants")
+    XCTAssertFalse(missing.cardStatusActive)
+    XCTAssertEqual(makeStore(granted: [.screenRecording, .postEvents]).cardStatusText, "Needs 1 grant")
+
+    let ready = makeStore(granted: [.postEvents, .accessibility, .screenRecording])
+    XCTAssertEqual(ready.cardStatusText, "Ready")
+    XCTAssertTrue(ready.cardStatusActive)
+
+    ready.stopNow()
+    XCTAssertEqual(ready.cardStatusText, "Stopped")
+    XCTAssertFalse(ready.cardStatusActive)
   }
 
   /// The switch is the whole setup in both directions: turning it off closes the

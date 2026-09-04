@@ -1,10 +1,10 @@
 version: 2
 name: computer-control
 tier: manual
-description: Computer control as a regular MCP server on the Apps page — the built-in omi-computer-use card's switch is off by default, turning it on writes the MCP entry and the stdio shim, the tools drive the real Mac through the loopback endpoint, and the kill switch stops them
+description: Computer control as a regular MCP server on the Apps page — the built-in omi-computer-use card reads Off by default, the detail sheet's switch turns it on and writes the MCP entry and the stdio shim, the tools drive the real Mac through the loopback endpoint, and the kill switch stops them
 app: com.omi.computer-macos
 covers:
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/ComputerUseServerCard.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ComputerUsePermissionsBlock.swift
   - desktop/macos/Desktop/Sources/ComputerUse/CuaControlStatusStore.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AgentExtensionsSections.swift
   - desktop/macos/Desktop/Sources/ComputerUse/CuaControlGate.swift
@@ -26,22 +26,23 @@ preconditions:
 
 steps:
   - id: S1
-    name: The switch is off, on the built-in server's own card
+    name: The card reads Off, in the same shape as every other server
     # Off by default is the whole consent model. A flow that starts by turning it on would never
     # notice the day it starts shipping on.
-    do: "Click the Apps pill in the top bar (accessibility identifier top-navigation-8), then the apps-section-mcp chip. Confirm the MCP Servers grid is led by an omi-computer-use card marked Built-in, ahead of every other server, with its switch off and a Manage button beside it."
+    do: "Click the Apps pill in the top bar (accessibility identifier top-navigation-8), then the apps-section-mcp chip. Confirm the MCP Servers grid is led by an omi-computer-use card marked Built-in, ahead of every other server, rendered exactly like the others — icon, name, Built-in subtitle, endpoint URL, an Off status, and one Manage action."
     expect:
       interactive_count: { min: 6 }
       text_visible:
         - omi-computer-use
         - Built-in
+        - Off
 
   - id: S2
     name: Turning it on names every permission it still needs
     # A missing grant is the difference between a click that works and a click that silently does
     # nothing, which reads to a model as success. The server's own surfaces have to say so before
     # the first tool call.
-    do: "Turn the card's switch on and open the detail sheet with Manage. Confirm the sheet shows a permissions block with rows for Input, Reading controls, and Screen — each granted or with a Grant button — and a status line reading Ready. Back on the card, confirm a warning chip counts the missing grants."
+    do: "Open the detail sheet with Manage and turn on Allow Omi to control this Mac. Confirm the sheet shows a permissions block with rows for Input, Reading controls, and Screen — each granted or with a Grant button — and a status line reading Ready. Close the sheet and confirm the card's status counts the missing grants until none are."
     expect:
       interactive_count: { min: 3 }
       text_visible:
@@ -116,6 +117,6 @@ steps:
 
   - id: S9
     name: Turning it off revokes both artefacts
-    do: "Turn the card's switch off. Confirm the 'omi-computer-use' entry is gone from ~/.omi/mcp.json, ~/.omi/omi-cua no longer exists, any other MCP server in the file is untouched, and a POST to /mcp is refused."
+    do: "Open the sheet and turn the switch off. Confirm the card's status reads Off, the 'omi-computer-use' entry is gone from ~/.omi/mcp.json, ~/.omi/omi-cua no longer exists, any other MCP server in the file is untouched, and a POST to /mcp is refused."
     expect:
       interactive_count: { min: 2 }

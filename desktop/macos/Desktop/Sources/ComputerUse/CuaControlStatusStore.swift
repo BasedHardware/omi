@@ -66,6 +66,25 @@ final class CuaControlStatusStore: ObservableObject {
 
   var isSuspended: Bool { gate.suspension != nil }
 
+  /// The built-in server's card status, in the same vocabulary every other
+  /// server card uses. Gate state outranks everything — the same precedence the
+  /// gate itself enforces — so an off or stopped server has no grants question
+  /// worth asking.
+  var cardStatusText: String {
+    if !isEnabled { return "Off" }
+    if isSuspended { return "Stopped" }
+    if missingGrantCount > 0 {
+      return "Needs \(missingGrantCount) grant\(missingGrantCount == 1 ? "" : "s")"
+    }
+    return "Ready"
+  }
+
+  /// Active, the way a healthy server's tool count is active, only when the
+  /// tools can actually run.
+  var cardStatusActive: Bool {
+    isEnabled && !isSuspended && missingGrantCount == 0
+  }
+
   /// The sheet's status line: live state and the stop control sit together
   /// because a kill switch you have to go looking for is not one.
   func statusText(at now: Date = Date()) -> String {

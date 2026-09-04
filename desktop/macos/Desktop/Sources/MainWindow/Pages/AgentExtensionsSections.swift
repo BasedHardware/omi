@@ -14,10 +14,15 @@ struct McpServersSection: View {
   let onSelectLocal: (LocalMcpStore.Entry) -> Void
   let onSelectCatalogEntry: (ExtensionCatalog.Entry) -> Void
 
+  /// Drives the built-in server card's status line; it renders through the same
+  /// card as every other server, with the gate's state standing in for a probe.
+  @ObservedObject private var cuaStatus = CuaControlStatusStore.shared
+  private let cuaPermissionPoll = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+
   private var servers: [LocalMcpStore.Entry] {
     var listed = appProvider.localMcpServers.filter { matchesSearch($0.name, $0.summary, query: searchText) }
     // The built-in entry is in mcp.json only while the gate is on, but its card
-    // — the switch and the grants warning — is how computer control is
+    // — the status line naming what is missing — is how computer control is
     // discovered at all, so it is synthesized when absent and pinned first.
     let builtIn = LocalMcpStore.Entry(
       name: CuaMcpRegistration.serverName, summary: CuaMcpRegistration.endpointURL, isCommand: false)
@@ -59,26 +64,7 @@ struct McpServersSection: View {
           spacing: OmiSpacing.md
         ) {
           ForEach(servers) { server in
-            let status = appProvider.mcpStatuses[server.name] ?? .checking
-            if server.isBuiltIn {
-              ComputerUseServerCard(status: status) {
-                onSelectLocal(server)
-              }
-            } else {
-              AgentExtensionCard(
-                icon: server.isCommand ? "terminal" : "server.rack",
-                imageUrl: "",
-                title: server.name,
-                subtitle: server.isCommand ? "Local command" : "Remote",
-                detail: status.detail ?? server.summary,
-                statusText: status.label,
-                statusActive: status.isHealthy,
-                actionTitle: status == .needsAuth ? "Sign In" : "Manage",
-                actionIsSecondary: status != .needsAuth
-              ) {
-                onSelectLocal(server)
-              }
-            }
+            serverCard(server)
           }
         }
       }
@@ -99,11 +85,38 @@ struct McpServersSection: View {
     .task(id: appProvider.localMcpServers.map(\.name)) {
       await appProvider.refreshMcpStatuses()
     }
-    // The built-in card's switch writes or removes the mcp.json entry through
+    // The built-in card's status follows the gate and its TCC grants, so it
+    // polls the same live state the sheet's permissions block does.
+    .onReceive(cuaPermissionPoll) { _ in
+      Task { await cuaStatus.poll() }
+    }
+    .onAppear { cuaStatus.refreshPermissions() }
+    // The detail sheet's switch writes or removes the mcp.json entry through
     // the gate, so the list and its probes follow the gate rather than waiting
     // for the next page visit.
     .onReceive(NotificationCenter.default.publisher(for: CuaControlGate.stateChanged)) { _ in
       Task { await appProvider.fetchUserExtensions() }
+    }
+  }
+
+  /// Every server renders through the one card. The built-in entry differs only
+  /// in where its parameters come from — badge and icon from the entry, status
+  /// from the gate instead of a probe — so it reads as what it is: a server
+  /// Omi ships, not a different kind of thing.
+  private func serverCard(_ server: LocalMcpStore.Entry) -> some View {
+    let status = appProvider.mcpStatuses[server.name] ?? .checking
+    return AgentExtensionCard(
+      icon: server.isBuiltIn ? "macbook" : (server.isCommand ? "terminal" : "server.rack"),
+      imageUrl: "",
+      title: server.name,
+      subtitle: server.isBuiltIn ? "Built-in" : (server.isCommand ? "Local command" : "Remote"),
+      detail: server.isBuiltIn ? server.summary : (status.detail ?? server.summary),
+      statusText: server.isBuiltIn ? cuaStatus.cardStatusText : status.label,
+      statusActive: server.isBuiltIn ? cuaStatus.cardStatusActive : status.isHealthy,
+      actionTitle: !server.isBuiltIn && status == .needsAuth ? "Sign In" : "Manage",
+      actionIsSecondary: server.isBuiltIn || status != .needsAuth
+    ) {
+      onSelectLocal(server)
     }
   }
 
