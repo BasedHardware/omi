@@ -30,6 +30,7 @@ import pytest
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 from config.plan_catalog import PlanType
+import utils.free_tier_memory_policy as memory_policy
 import utils.managed_compute as managed_compute
 from models.integrations import ExternalIntegrationCreateMemory, ExternalIntegrationMemory
 from models.memories import Memory, MemoryCategory
@@ -49,7 +50,10 @@ def _decision(allowed: bool, reason: str, plan: PlanType | None) -> Any:
 
 
 def _set_flag(monkeypatch, module, enabled: bool) -> None:
-    monkeypatch.setattr(module, 'free_tier_memory_suppression_enabled', lambda: enabled)
+    # The shared producer gate (managed_memory_formation_suppressed) reads the
+    # flag inside utils.free_tier_memory_policy, not at the producer module,
+    # so that is the one seam that steers every site.
+    monkeypatch.setattr(memory_policy, 'free_tier_memory_suppression_enabled', lambda: enabled)
 
 
 def _authorize_as(monkeypatch, *, decision: Any, byok_key: bool = False, spy: list | None = None) -> None:

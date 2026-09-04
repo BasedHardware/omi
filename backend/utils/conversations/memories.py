@@ -5,40 +5,14 @@ import database._client as db_client_module
 import database.users as users_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.integrations import ExternalIntegrationCreateMemory
-from utils.free_tier_memory_policy import free_tier_memory_suppression_enabled, memory_formation_verdict
+from utils.free_tier_memory_policy import managed_memory_formation_suppressed
 from utils.llm.memories import extract_memories_from_text
-from utils.managed_compute import managed_compute_decision_for
 from utils.memory.memory_authority import MemorySystem
 from utils.memory.memory_service import MemoryService
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def _managed_formation_suppressed(uid: str, source: str) -> bool:
-    """§1.8 (flip-review F-3): no managed model forms a memory for basic.
-
-    Same gate shape as the coordinator's extraction boundary
-    (``process_conversation._extract_memories``): read the rollout flag first so
-    the flag-off path performs no lookups at all, then consult the
-    memory-formation verdict through the one shared ``decision_for`` closure
-    (``managed_compute_decision_for``) so BYOK keeps forming and a raising
-    lookup is suppressed by the policy rather than escaping. Suppression is a
-    skip, never a delete: memories formed while the user was paid stay.
-    """
-    if not free_tier_memory_suppression_enabled():
-        return False
-    verdict = memory_formation_verdict(decision_for=managed_compute_decision_for(uid))
-    if verdict.suppressed:
-        logger.info(
-            'memory extraction skipped: plan denies managed formation uid=%s source=%s reason=%s',
-            uid,
-            source,
-            verdict.reason,
-        )
-        return True
-    return False
 
 
 def _stable_source_id(*parts: str) -> str:
@@ -138,7 +112,7 @@ def process_external_integration_memory(
     if (
         memory_data.text
         and len(memory_data.text.strip()) > 0
-        and not _managed_formation_suppressed(uid, f'external_integration:{app_id}')
+        and not managed_memory_formation_suppressed(uid, f'external_integration:{app_id}')
     ):
         extracted_memories = extract_memories_from_text(
             uid,
@@ -201,7 +175,7 @@ def process_external_integration_memory(
 def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> List[MemoryDB]:
     # §1.8: the persona/twitter persona producer is one of the ungated managed
     # formation doors flip-review F-3 closed — gate before any extractor spend.
-    if _managed_formation_suppressed(uid, 'twitter_persona'):
+    if managed_memory_formation_suppressed(uid, 'twitter_persona'):
         return []
     # Extract memories from tweets using the LLM
     language = users_db.get_user_language_preference(uid)
