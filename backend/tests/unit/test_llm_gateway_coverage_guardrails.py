@@ -114,6 +114,97 @@ _FEATURE_SCAN_SKIP_DIRS = {'.venv', 'venv', '.openapi-venv', '__pycache__', 'tes
 _SNIPPET_CONFIGURED = {'chat_agent', 'memory_l1', 'conv_structure', 'what_matters_now'}
 
 
+def _frozenset_literals_from_assign(tree: ast.Module, name: str) -> frozenset[str]:
+    for node in tree.body:
+        target = None
+        value = None
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            target, value = node.targets[0].id, node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            target, value = node.target.id, node.value
+        if target != name or value is None:
+            continue
+        call = value
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id == 'frozenset':
+            arg = call.args[0] if call.args else None
+            if isinstance(arg, (ast.Set, ast.List, ast.Tuple)):
+                return frozenset(
+                    elt.value for elt in arg.elts if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+                )
+        if isinstance(call, (ast.Tuple, ast.List)):
+            return frozenset(
+                elt.value for elt in call.elts if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+            )
+    raise AssertionError(f'could not read {name} from managed_compute.py')
+
+
+def _str_constant_from_assign(tree: ast.Module, name: str) -> str:
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            if (
+                node.targets[0].id == name
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                return node.value.value
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            if node.target.id == name and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                return node.value.value
+    raise AssertionError(f'could not read {name} from managed_compute.py')
+
+
+# Reuse S1's vocabulary without importing managed_compute (that module pulls
+# database.users and hangs this file's existing import graph).
+_MANAGED_COMPUTE_TREE = ast.parse(
+    (Path(__file__).resolve().parents[2] / 'utils' / 'managed_compute.py').read_text(encoding='utf-8')
+)
+DECISION_REASONS = _frozenset_literals_from_assign(_MANAGED_COMPUTE_TREE, 'DECISION_REASONS')
+FREE_ALLOWLIST_FEATURES = _frozenset_literals_from_assign(_MANAGED_COMPUTE_TREE, 'FREE_ALLOWLIST_FEATURES')
+FREE_ALLOWLIST_PREFIX = _str_constant_from_assign(_MANAGED_COMPUTE_TREE, 'FREE_ALLOWLIST_PREFIX')
+FUNDING_OWNERS = _frozenset_literals_from_assign(_MANAGED_COMPUTE_TREE, 'FUNDING_OWNERS')
+
+# S7: plan-gating is S1's reason vocabulary plus the realtime quota label.
+PLAN_GATING_VALUES = DECISION_REASONS | {'unified_chat_quota'}
+FALLBACK_ON_DENY_VALUES = frozenset(
+    {
+        'deterministic_minimum',
+        'http_402',
+        'quota_refuse',
+        'none_unwired',
+        'gateway_fail_closed',
+        'n/a_allowed',
+    }
+)
+# Sol claim 9 missed list + realtime usage/relay companions. A rename fails CI.
+REQUIRED_USER_SURFACES = frozenset(
+    {
+        'desktop_realtime_token_mint',
+        'desktop_realtime_usage',
+        'omni_realtime_relay',
+        'wrapped_generation',
+        'listen_onboarding',
+        'session_titles',
+        'what_matters_now',
+        'app_integration',
+        'app_generation',
+        'conversation_test_prompt',
+        'phone_call_processing',
+        'external_integrations',
+        'sync_limitless',
+        'conversation_merge',
+        'conversation_reprocess',
+    }
+)
+LLM_REST_HOSTS = (
+    'api.openai.com',
+    'generativelanguage.googleapis.com',
+    'api.anthropic.com',
+    'openrouter.ai',
+    'api.perplexity.ai',
+    'aiplatform.googleapis.com',
+)
+
+
 def test_every_model_config_feature_has_inventory_and_gateway_lane():
     inventory = _load_inventory()
     configured_features = get_all_configured_features()
@@ -185,15 +276,55 @@ def test_inventory_surfaces_have_status_guardrails_and_resolvable_code_paths():
 
     assert inventory['schema_version'] == 'llm_model_endpoint_inventory.v1'
     assert isinstance(inventory['out_of_scope_surfaces'], list)
+    names: list[str] = []
     for surface in inventory['surfaces']:
         assert surface['surface']
+        names.append(surface['surface'])
         assert surface['code_path']
+        assert surface['entrypoint']
+        assert surface['feature']
+        assert surface['plan_gating'] in PLAN_GATING_VALUES, surface['surface']
+        assert surface['funding_owner'] in FUNDING_OWNERS, surface['surface']
+        assert surface['fallback_on_deny'] in FALLBACK_ON_DENY_VALUES, surface['surface']
+        assert isinstance(surface.get('call_sites'), list), surface['surface']
         assert surface['current_provider_model']
         assert surface['request_shape']
         assert surface['gateway_lane_capability_needed']
         assert surface['migration_status']
         assert surface['test_guardrail_coverage']
         assert _inventory_file_exists(surface['code_path']), surface['code_path']
+        _assert_plan_gating_matches_allowlist(surface)
+    assert len(names) == len(set(names))
+    assert REQUIRED_USER_SURFACES <= set(names)
+
+
+def _assert_plan_gating_matches_allowlist(surface: dict) -> None:
+    feature = surface['feature']
+    gating = surface['plan_gating']
+    if gating == 'unified_chat_quota' or feature in {
+        '*',
+        'desktop_vertex',
+        'desktop_tts',
+        'omni_relay',
+        'desktop_chat_realtime',
+        'public_shared_conversation_chat',
+        'openai_embeddings',
+        'gemini_embeddings',
+        'file_chat_vision',
+        'file_chat_documents',
+    }:
+        return
+    on_allowlist = feature in FREE_ALLOWLIST_FEATURES or feature.startswith(FREE_ALLOWLIST_PREFIX)
+    if gating == 'free_allowlist':
+        assert on_allowlist, surface['surface']
+    if gating == 'basic_not_entitled':
+        assert not on_allowlist, surface['surface']
+
+
+def test_required_user_surfaces_are_named():
+    """Sol claim 9's missed list must keep a named row. A rename is a CI failure."""
+    names = {surface['surface'] for surface in _load_inventory()['surfaces']}
+    assert REQUIRED_USER_SURFACES <= names
 
 
 _ACCESSOR_PROBE_SOURCE = textwrap.dedent("""
@@ -258,6 +389,61 @@ def test_direct_provider_scan_reports_the_file_chat_direct_fallback():
     uses = {use.symbol for use in _direct_provider_uses(rel, tree)}
 
     assert 'openai.chat.completions' in uses
+
+
+_REST_HOST_PROBE_SOURCE = textwrap.dedent("""
+    import httpx
+
+    _OPENAI_CLIENT_SECRETS_URL = 'https://api.openai.com/v1/realtime/client_secrets'
+    _GEMINI_AUTH_TOKENS_URL = 'https://generativelanguage.googleapis.com/v1alpha/auth_tokens'
+
+
+    async def mint():
+        await httpx.AsyncClient().post(_OPENAI_CLIENT_SECRETS_URL, json={})
+        await httpx.AsyncClient().post(_GEMINI_AUTH_TOKENS_URL, params={'key': 'k'})
+    """)
+
+
+def test_managed_site_scan_sees_rest_hosts_not_just_sdk_names():
+    """Omi calls some vendors over raw REST with httpx; a missing SDK is not a missing surface.
+
+    red-proof: drop the host walk in ``_managed_sites_in_tree`` and both assertions fail.
+    """
+    sites = {key for _path, key in _managed_sites_in_tree('probe.py', ast.parse(_REST_HOST_PROBE_SOURCE))}
+    assert 'host:api.openai.com' in sites
+    assert 'host:generativelanguage.googleapis.com' in sites
+
+
+def test_managed_site_scan_sees_get_llm_literals():
+    source = "from utils.llm.clients import get_llm\nget_llm('wrapped_analysis')\n"
+    sites = _managed_sites_in_tree('utils/wrapped/probe.py', ast.parse(source))
+    assert sites == {('utils/wrapped/probe.py', 'feature:wrapped_analysis')}
+
+
+def test_managed_call_sites_absent_from_the_inventory_fail_ci():
+    """A managed get_llm or LLM REST host not listed on a surface row fails CI.
+
+    This is the S7 automatic-or-dead check. Exact-set pin: new sites fail until
+    inventoried; stale inventory rows fail until removed. Coordinator-only
+    surfaces (sync/merge/reprocess/phone) have empty call_sites on purpose —
+    they spend through process_conversation, which is pinned on langchain /
+    conversation_processing files.
+
+    red-proof: delete a known call_site from model_endpoint_inventory.yaml
+    (the real file) and this assertion goes red.
+    """
+    discovered = _scan_managed_call_sites()
+    inventoried = _inventory_call_sites()
+    missing = sorted(discovered - inventoried)
+    stale = sorted(inventoried - discovered)
+    assert missing == [], 'managed call sites absent from the inventory: ' + '; '.join(
+        f'{path}::{key}' for path, key in missing
+    )
+    assert stale == [], 'inventory call_sites with no matching production site: ' + '; '.join(
+        f'{path}::{key}' for path, key in stale
+    )
+    duplicates = _duplicate_inventory_call_sites()
+    assert duplicates == [], 'call_site claimed by more than one surface: ' + '; '.join(duplicates)
 
 
 @pytest.mark.slow
@@ -508,6 +694,91 @@ def _load_inventory() -> dict:
         loaded = yaml.safe_load(handle)
     assert isinstance(loaded, dict)
     return loaded
+
+
+def _parse_call_site(item: str) -> tuple[str, str]:
+    path, sep, key = item.partition('::')
+    assert sep, f'call_site must be path::key, got {item!r}'
+    assert path and key, item
+    return path, key
+
+
+def _inventory_call_sites() -> set[tuple[str, str]]:
+    sites: set[tuple[str, str]] = set()
+    for surface in _load_inventory()['surfaces']:
+        for item in surface.get('call_sites') or []:
+            sites.add(_parse_call_site(item))
+    return sites
+
+
+def _duplicate_inventory_call_sites() -> list[str]:
+    seen: dict[tuple[str, str], str] = {}
+    duplicates: list[str] = []
+    for surface in _load_inventory()['surfaces']:
+        name = surface['surface']
+        for item in surface.get('call_sites') or []:
+            parsed = _parse_call_site(item)
+            if parsed in seen:
+                duplicates.append(f'{item} ({seen[parsed]} and {name})')
+            else:
+                seen[parsed] = name
+    return duplicates
+
+
+def _scan_managed_call_sites() -> set[tuple[str, str]]:
+    sites: set[tuple[str, str]] = set()
+    extra_skip = {'charts', 'deploy', 'parakeet', 'diarizer', 'nllb_translation', 'modal'}
+    for path in _iter_backend_py_files():
+        rel = path.relative_to(BACKEND_DIR).as_posix()
+        if _is_skipped_path(rel) or rel.split('/', 1)[0] in extra_skip:
+            continue
+        source = path.read_text(encoding='utf-8')
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            continue
+        sites.update(_managed_sites_in_tree(rel, tree))
+    return sites
+
+
+def _managed_sites_in_tree(rel: str, tree: ast.AST) -> set[tuple[str, str]]:
+    """get_llm literals (incl. aliases/cast) and LLM REST host string constants."""
+    sites: set[tuple[str, str]] = set()
+    import_aliases: dict[str, str] = {}
+    name_assigns: list[tuple[str, ast.AST]] = []
+    calls: list[ast.Call] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                import_aliases[alias.asname or alias.name.split('.')[0]] = alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            for alias in node.names:
+                import_aliases[alias.asname or alias.name] = f'{node.module}.{alias.name}'
+        elif isinstance(node, ast.Call) and not _is_cast_call(node) and not _is_partial_call(node):
+            calls.append(node)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    name_assigns.append((target.id, node.value))
+        elif isinstance(node, ast.AnnAssign) and node.value is not None and isinstance(node.target, ast.Name):
+            name_assigns.append((node.target.id, node.value))
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            for host in LLM_REST_HOSTS:
+                if host in node.value:
+                    sites.add((rel, f'host:{host}'))
+    local_aliases = _aliases_from_assignments(name_assigns, import_aliases)
+    for node in calls:
+        callee = _resolver_call_name(node.func, import_aliases, local_aliases)
+        if callee != 'get_llm':
+            continue
+        arg = _feature_call_arg(node)
+        if arg is None:
+            continue
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            sites.add((rel, f'feature:{arg.value}'))
+        else:
+            sites.add((rel, 'feature:<dynamic>'))
+    return sites
 
 
 def _is_skipped_path(rel: str) -> bool:
