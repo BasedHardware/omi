@@ -82,15 +82,18 @@ interest in one of them. Exactly two proxy tools are registered instead:
 
 - `mcp_tools_info` — discovery. The stable, sorted index of server names and
   tool names (plus each server's one-line description from its `initialize`
-  `instructions`/`title`, and its live status) is embedded in the proxy
-  tools' descriptions, so identifying a candidate needs no extra turn.
+  `instructions`/`title`) is embedded in **its** description, so identifying
+  a candidate needs no extra turn; each embedded name is clipped to 64
+  characters and the server lines are capped at 20, because the text is
+  frozen at registration and a hostile name must not bloat every turn.
   Calling it — with no arguments, with `server`, or with `server` + `tool` —
-  returns the live index, full descriptions and JSON input schemas for one
-  server, or a single tool's contract.
+  returns the live index (with real names and live status), full descriptions
+  and JSON input schemas for one server, or a single tool's contract.
 - `mcp_call` — dispatch. Runs a server's tool by its **real** names and
   returns the result content faithfully, with readable errors for an unknown
   server or tool, a server that is still connecting, and a server that is
-  unavailable.
+  unavailable. Its description carries server names only — the tool index is
+  paid once, in `mcp_tools_info`'s description, not duplicated per turn.
 
 There is no `mcp_<server>_<tool>` mangling and no collision-suffix race: the
 model passes real names. A server's published prompts fold into the same
@@ -128,15 +131,16 @@ down for this session" error that surfaces through `mcp_tools_info` and
 
 Registration is **deterministic** and **non-blocking for the first turn**.
 Servers are sorted by name and their tools and prompts by name before
-anything is built, so the tools payload is stable across launches. All
-servers connect concurrently at spawn under their own budgets (10s remote,
-30s stdio for a first `npx <package>` download), but those budgets are
-connection timeouts, not prompt-blocking gates: the turn path waits at most
+anything is built, so the tools payload is stable across launches. Remote
+servers connect concurrently under their own budgets (10s), while stdio
+starts share a bound of 8 child-process spawns at a time (a big config used
+to fire every `npx` spawn in one instant); the budgets are connection
+timeouts, not prompt-blocking gates: the turn path waits at most
 a short global budget (`OMI_MCP_FIRST_TURN_BUDGET_MS`, default 3s), and
 servers still connecting keep connecting in the background — pi's
 `registerTool` cannot revise a description after the fact, but the proxies
 read live state, so a late server becomes callable without re-registration
-and the index reports `connecting` / `unavailable` per server.
+and the live index reports `connecting` / `unavailable` per server.
 
 ### Applying changes
 
