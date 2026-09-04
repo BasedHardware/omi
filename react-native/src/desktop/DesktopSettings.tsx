@@ -190,15 +190,18 @@ export function DesktopSettings({
 
   const reload = useCallback(async () => {
     const seq = ++reloadSeqRef.current;
-    const [nextPrefs, nextPermissions] = await Promise.all([
-      loadDesktopPreferences(),
-      loadPermissionStatus(),
-    ]);
+    const nextPrefs = await loadDesktopPreferences();
     if (seq !== reloadSeqRef.current) {
       return;
     }
     setPrefs(nextPrefs);
-    setPermissions(nextPermissions);
+    try {
+      const nextPermissions = await loadPermissionStatus();
+      if (seq !== reloadSeqRef.current) {
+        return;
+      }
+      setPermissions(nextPermissions);
+    } catch {}
     let nextAccount: AccountSettingsSnapshot | null = null;
     if (backend !== undefined && backend !== null && session === 'ready') {
       try {

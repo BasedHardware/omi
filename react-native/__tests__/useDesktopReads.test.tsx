@@ -13,7 +13,11 @@ jest.mock('../src/omiNative', () => ({
 }));
 
 import {useDesktopReads} from '../src/app/useDesktopReads';
-import {loadDesktopReads} from '../src/desktopReadClient';
+import {
+  desktopBackendServiceCopy,
+  desktopProjectionUnavailableCopy,
+  loadDesktopReads,
+} from '../src/desktopReadClient';
 
 const readsMock = loadDesktopReads as jest.Mock;
 import type {DesktopReadOutcomes} from '../src/desktopReadClient';
@@ -203,7 +207,11 @@ test('a retry inside the live session keeps showing saved rows on failure', asyn
   const reads = await renderReads({enabled: true});
   expect(reads.latest().readsPhase).toBe('ready');
 
-  readsMock.mockResolvedValueOnce(errorOutcomes);
+  readsMock.mockResolvedValueOnce({
+    conversations: {status: 'error', error: desktopBackendServiceCopy},
+    memories: {status: 'error', error: desktopBackendServiceCopy},
+    tasks: {status: 'error', error: desktopBackendServiceCopy},
+  });
   await ReactTestRenderer.act(async () => {
     await reads.latest().refreshReads(false);
   });
@@ -214,6 +222,39 @@ test('a retry inside the live session keeps showing saved rows on failure', asyn
   expect(reads.latest().reads.map(item => item.id)).toEqual([
     'Kept conversation',
   ]);
+  reads.unmount();
+});
+
+test('a retry exposes a dead session after successful reads', async () => {
+  readsMock.mockResolvedValueOnce(successOutcomes(['Expired conversation']));
+  const reads = await renderReads({enabled: true});
+
+  readsMock.mockResolvedValueOnce(errorOutcomes);
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().refreshReads(false);
+  });
+
+  expect(reads.latest().readOutcomes).toEqual(errorOutcomes);
+  expect(reads.latest().reads).toEqual([]);
+  reads.unmount();
+});
+
+test('a retry replaces a stale error with the current failure', async () => {
+  readsMock.mockResolvedValueOnce(errorOutcomes);
+  const reads = await renderReads({enabled: true});
+
+  const currentOutcomes: DesktopReadOutcomes = {
+    ...errorOutcomes,
+    memories: {status: 'error', error: desktopProjectionUnavailableCopy},
+  };
+  readsMock.mockResolvedValueOnce(currentOutcomes);
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().refreshReads(false);
+  });
+
+  expect(reads.latest().readOutcomes?.memories).toEqual(
+    currentOutcomes.memories,
+  );
   reads.unmount();
 });
 

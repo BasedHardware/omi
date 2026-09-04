@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {omiAuth} from '../omiNative';
+import {omiAuth, subscribeOmiBackendSessionInvalidated} from '../omiNative';
 
 export function useOnboarding(
   macDesktop: boolean,
@@ -134,6 +134,15 @@ export function useOnboarding(
       setOnboardingRequired(true);
     }
   }, [macDesktop]);
+
+  useEffect(() => {
+    if (!macDesktop) {
+      return;
+    }
+    return subscribeOmiBackendSessionInvalidated(() => {
+      revalidateSession().catch(() => undefined);
+    });
+  }, [macDesktop, revalidateSession]);
 
   return {
     authError,

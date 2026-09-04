@@ -3,6 +3,9 @@ import {
   loadDesktopReads,
   projectionTimestamp,
   desktopBackendConfigurationCopy,
+  desktopBackendServiceCopy,
+  desktopLocalBackendServiceCopy,
+  type DomainReadOutcome,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
 } from '../desktopReadClient';
@@ -15,6 +18,21 @@ export type ReadsPhase =
   | 'ready'
   | 'saved-but-refresh-failed'
   | 'unavailable';
+
+function mergeOutcome<T extends DesktopReadProjection>(
+  current: DomainReadOutcome<T>,
+  next: DomainReadOutcome<T>,
+): DomainReadOutcome<T> {
+  const transientFailure =
+    next.status === 'error' &&
+    (next.error === desktopBackendServiceCopy ||
+      next.error === desktopLocalBackendServiceCopy);
+  return current.status === 'success' &&
+    current.value.items.length > 0 &&
+    transientFailure
+    ? current
+    : next;
+}
 
 export function useDesktopReads({enabled}: {enabled: boolean}) {
   const [readOutcomes, setReadOutcomes] = useState<DesktopReadOutcomes | null>(
@@ -93,18 +111,12 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
             next = outcomes;
           } else {
             next = {
-              conversations:
-                outcomes.conversations.status === 'success'
-                  ? outcomes.conversations
-                  : current.conversations,
-              memories:
-                outcomes.memories.status === 'success'
-                  ? outcomes.memories
-                  : current.memories,
-              tasks:
-                outcomes.tasks.status === 'success'
-                  ? outcomes.tasks
-                  : current.tasks,
+              conversations: mergeOutcome(
+                current.conversations,
+                outcomes.conversations,
+              ),
+              memories: mergeOutcome(current.memories, outcomes.memories),
+              tasks: mergeOutcome(current.tasks, outcomes.tasks),
             };
           }
           readOutcomesRef.current = next;

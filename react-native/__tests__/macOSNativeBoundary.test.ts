@@ -173,11 +173,7 @@ test('pairs the macOS backend origin and credentials in one validated policy', (
   expect(source).toContain(
     'OmiValidatedV5URL(NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"])',
   );
-  expect(source).toContain('RCT_REMAP_METHOD(setSoftwarePlane');
-  expect(source).toContain('RCT_REMAP_METHOD(stampedV5BackendOrigin');
-  expect(source).not.toContain(
-    'omi-v5-backend-staging.undivisible.workers.dev',
-  );
+  expect(source).toContain('OmiSoftwarePlaneDefaultsKey');
   const cloudBranch = source.slice(
     source.indexOf('OmiBackendCredentialKindCloud'),
     source.indexOf('static BOOL OmiBackendPolicyIsValid'),
@@ -208,6 +204,12 @@ test('owns an in-app PKCE sign-in session and stores its cloud token locally', (
   expect(auth).toContain('S256');
   expect(auth).toContain('firebase-rest-tokens');
   expect(auth).toContain('SecItemAdd');
+  expect(auth).toContain('kSecCodeInfoTeamIdentifier');
+  expect(auth).toContain('kSecCodeInfoUnique');
+  expect(auth).toContain('@"%@.v2.%@.bundle.%@"');
+  expect(auth).toContain('NSBundle.mainBundle.bundleIdentifier');
+  expect(backend.match(/OmiAuthKeychainService\(\)/g)).toHaveLength(3);
+  expect(backend).not.toContain('com.omi.rnruntime.firebase-rest-session');
   expect(auth).not.toMatch(/NSLog\([^\n]*(token|Authorization)/i);
   expect(backend.indexOf('OmiOwnKeychainCloudToken')).toBeGreaterThan(-1);
   expect(backend.indexOf('OmiOwnKeychainCloudToken')).toBeLessThan(
@@ -327,13 +329,45 @@ test('refreshes expiring macOS cloud sessions without using stale tokens', () =>
   );
 });
 
-test('uses a noninteractive data-protection keychain for the derived app session', () => {
+test('a cloud 401 clears only the session used by that native request', () => {
+  const backend = readNativeSource('OmiBackendModule.mm');
+
+  expect(backend).toContain(
+    'ownKeychainToken.length > 0 && [cloud isEqualToString:ownKeychainToken]',
+  );
+  expect(backend).toContain('OmiOwnKeychainCloudToken(current)');
+  expect(backend).toContain('[currentToken isEqualToString:policy.token]');
+  expect(backend).toContain(
+    'OmiCloudRefreshTokensEqual(currentRefreshToken, policy.refreshToken)',
+  );
+  expect(backend).toContain('OmiAuthSetEnvironmentCloudTokensIgnored(YES)');
+  expect(backend).toContain('OmiAuthSetShippingSessionIgnored(YES)');
+  expect(backend).not.toContain(
+    'OmiClearOwnKeychainCloudSessionIfCurrent(policy.refreshToken)',
+  );
+  expect(
+    backend.match(/OmiClearUnauthorizedCloudSession\(/g)?.length,
+  ).toBeGreaterThanOrEqual(4);
+  expect(backend).toContain('OmiBackendSessionInvalidatedEvent');
+  expect(backend).toContain('[self emitSessionInvalidated]');
+});
+
+test('uses a noninteractive keychain compatible with signed and ad-hoc sessions', () => {
   const auth = readNativeSource('OmiAuthModule.mm');
   const backend = readNativeSource('OmiBackendModule.mm');
 
   expect(auth).toContain('kSecUseDataProtectionKeychain');
+  expect(auth).toContain('OmiAuthUsesDataProtectionKeychain');
   expect(auth).toContain('dispatch_semaphore_wait');
+  expect(auth).toMatch(
+    /if \(OmiAuthUsesDataProtectionKeychain\(\)\) \{\s+for \(NSString \*service in OmiAuthShippingKeychainServices\(\)\)/,
+  );
+  expect(
+    auth.match(/attributes\[\(__bridge id\)kSecAttrAccessible\]/g),
+  ).toHaveLength(2);
   expect(backend).toContain('kSecUseDataProtectionKeychain');
+  expect(backend).toContain('OmiAuthUsesDataProtectionKeychain');
+  expect(backend).toContain('attributes[(__bridge id)kSecAttrAccessible]');
   expect(backend).toContain('OmiAuthKeychainLock()');
 });
 
@@ -534,6 +568,14 @@ test('persists completed macOS onboarding in this app NSUserDefaults', () => {
   expect(auth).toContain('setBool:YES');
 });
 
+test('migrates signed sessions from data-protection and legacy keychains', () => {
+  const auth = readNativeSource('OmiAuthModule.mm');
+
+  expect(auth).toMatch(
+    /OmiAuthKeychainQueryForService\(service\)[^]*kSecUseDataProtectionKeychain[^]*OmiAuthReadKeychainSessionNow\(query\)[^]*removeObjectForKey:[^]*OmiAuthReadKeychainSessionNow\(query\)/,
+  );
+});
+
 test('renders macOS chrome icons as named SF Symbols', () => {
   const source = readNativeSource('OmiSFSymbolView.mm');
   expect(source).toContain('RCT_EXPORT_MODULE(OmiSFSymbol)');
@@ -546,6 +588,8 @@ test('desktop settings persist preferences and request real macOS permissions', 
   const source = readNativeSource('OmiDesktopCommandsModule.mm');
   expect(source).toContain('RCT_REMAP_METHOD(loadDesktopPreferences');
   expect(source).toContain('RCT_REMAP_METHOD(setDesktopPreference');
+  expect(source).toContain('@"softwarePlane" : @"omi.backend.softwarePlane"');
+  expect(source).toContain('environment[@"OMI_V5_BACKEND_URL"]');
   expect(source).toContain('screenAnalysisEnabled');
   expect(source).toContain('audioRecordingMode');
   expect(source).toContain('CGPreflightScreenCaptureAccess');

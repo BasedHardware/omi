@@ -2,6 +2,54 @@ export const CLOUD_BACKEND_ORIGIN = 'https://api.omi.me';
 export const LOCAL_BACKEND_ORIGIN = 'http://127.0.0.1:8787';
 export const V5_BACKEND_URL_ENV = 'OMI_V5_BACKEND_URL';
 
+type ParsedOrigin = {
+  hostname: string;
+  origin: string;
+  port: string;
+  protocol: 'http:' | 'https:';
+};
+
+function parseOrigin(value: string): ParsedOrigin | null {
+  const match = /^(https?):\/\/(\[[^\]]+\]|[^:/?#@]+)(?::([0-9]+))?\/?$/i.exec(
+    value,
+  );
+  if (match === null || match[0] !== value) {
+    return null;
+  }
+  const protocol = `${match[1].toLocaleLowerCase()}:` as 'http:' | 'https:';
+  const rawHostname = match[2];
+  const hostname = rawHostname.replace(/^\[|\]$/g, '').toLocaleLowerCase();
+  if (
+    (rawHostname.startsWith('[') && hostname !== '::1') ||
+    (!rawHostname.startsWith('[') && !/^[a-z0-9.-]+$/.test(hostname))
+  ) {
+    return null;
+  }
+  const rawPort = match[3] ?? '';
+  const portNumber = rawPort === '' ? null : Number(rawPort);
+  if (
+    (portNumber !== null &&
+      (!Number.isInteger(portNumber) ||
+        portNumber < 1 ||
+        portNumber > 65535)) ||
+    hostname.length === 0
+  ) {
+    return null;
+  }
+  const port =
+    (protocol === 'https:' && portNumber === 443) ||
+    (protocol === 'http:' && portNumber === 80)
+      ? ''
+      : rawPort;
+  const host = rawHostname.startsWith('[') ? `[${hostname}]` : hostname;
+  return {
+    hostname,
+    origin: `${protocol}//${host}${port === '' ? '' : `:${port}`}`,
+    port,
+    protocol,
+  };
+}
+
 export function isLoopbackHostname(hostname: string): boolean {
   const normalized = hostname.replace(/^\[|\]$/g, '').toLocaleLowerCase();
   return (
@@ -30,7 +78,7 @@ export function isCaptureBackendPath(path: string): boolean {
   if (!path.startsWith('/') || path.startsWith('//') || path.includes('://')) {
     return false;
   }
-  const route = new URL(path, 'https://omi.invalid').pathname;
+  const route = path.split(/[?#]/, 1)[0];
   return (
     route === '/v1/settings' ||
     route === '/v1/chat-messages' ||
@@ -45,21 +93,11 @@ export function isCaptureBackendPath(path: string): boolean {
   );
 }
 
-export function validateV5BackendUrl(value: string): URL | null {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return null;
-  }
+export function validateV5BackendUrl(value: string): ParsedOrigin | null {
+  const url = parseOrigin(value);
   if (
+    url === null ||
     url.protocol !== 'https:' ||
-    url.username !== '' ||
-    url.password !== '' ||
-    (url.pathname !== '' && url.pathname !== '/') ||
-    url.search !== '' ||
-    url.hash !== '' ||
-    url.hostname.length === 0 ||
     !isAllowedV5Hostname(url.hostname)
   ) {
     return null;
@@ -74,20 +112,11 @@ export function validateV5BackendUrl(value: string): URL | null {
   return url;
 }
 
-export function validateLoopbackBackendUrl(value: string): URL | null {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return null;
-  }
+export function validateLoopbackBackendUrl(value: string): ParsedOrigin | null {
+  const url = parseOrigin(value);
   if (
+    url === null ||
     (url.protocol !== 'http:' && url.protocol !== 'https:') ||
-    url.username !== '' ||
-    url.password !== '' ||
-    (url.pathname !== '' && url.pathname !== '/') ||
-    url.search !== '' ||
-    url.hash !== '' ||
     !isLoopbackHostname(url.hostname)
   ) {
     return null;

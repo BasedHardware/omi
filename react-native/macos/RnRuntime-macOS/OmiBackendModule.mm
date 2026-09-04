@@ -7,6 +7,7 @@
 static NSString *const OmiContractVersion = @"1.0.0";
 static NSString *const OmiDevelopmentBackendUnsupportedBody = @"{\"error\":{\"code\":\"development_backend_unsupported\",\"retryable\":false,\"action\":\"none\"}}";
 static NSString *const OmiSoftwarePlaneDefaultsKey = @"omi.backend.softwarePlane";
+static NSString *const OmiBackendSessionInvalidatedEvent = @"omiBackendSessionInvalidated";
 
 typedef NS_ENUM(NSInteger, OmiBackendCredentialKind) {
   OmiBackendCredentialKindCloud,
@@ -19,6 +20,7 @@ typedef NS_ENUM(NSInteger, OmiBackendCredentialKind) {
 @property(nonatomic, strong) NSURL *captureURL;
 @property(nonatomic) BOOL captureOriginRequired;
 @property(nonatomic, copy) NSString *token;
+@property(nonatomic, copy) NSString *refreshToken;
 @property(nonatomic, copy) NSString *clientId;
 @property(nonatomic) OmiBackendCredentialKind kind;
 @end
@@ -129,16 +131,18 @@ static NSURL *OmiLocalBaseURL(NSString *value, NSString *developmentBackend) {
 static NSDictionary *OmiOwnKeychainCloudSession(void) {
   LAContext *context = [[LAContext alloc] init];
   context.interactionNotAllowed = YES;
-  NSDictionary *query = @{
+  NSMutableDictionary *query = [@{
     (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
-    (__bridge id)kSecAttrService : @"com.omi.rnruntime.firebase-rest-session",
+    (__bridge id)kSecAttrService : OmiAuthKeychainService(),
     (__bridge id)kSecAttrAccount : @"firebase-rest-tokens",
     (__bridge id)kSecReturnData : @YES,
     (__bridge id)kSecMatchLimit : (__bridge id)kSecMatchLimitOne,
     (__bridge id)kSecUseAuthenticationUI : (__bridge id)kSecUseAuthenticationUIFail,
     (__bridge id)kSecUseAuthenticationContext : context,
-    (__bridge id)kSecUseDataProtectionKeychain : @YES,
-  };
+  } mutableCopy];
+  if (OmiAuthUsesDataProtectionKeychain()) {
+    query[(__bridge id)kSecUseDataProtectionKeychain] = @YES;
+  }
   @synchronized (OmiAuthKeychainLock()) {
     CFTypeRef result = NULL;
     OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
@@ -152,16 +156,21 @@ static NSDictionary *OmiOwnKeychainCloudSession(void) {
 static BOOL OmiStoreOwnKeychainCloudSession(NSDictionary *session) {
   NSData *data = [NSJSONSerialization dataWithJSONObject:session options:0 error:nil];
   if (data == nil) return NO;
-  NSDictionary *query = @{
+  NSMutableDictionary *query = [@{
     (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
-    (__bridge id)kSecAttrService : @"com.omi.rnruntime.firebase-rest-session",
+    (__bridge id)kSecAttrService : OmiAuthKeychainService(),
     (__bridge id)kSecAttrAccount : @"firebase-rest-tokens",
-    (__bridge id)kSecUseDataProtectionKeychain : @YES,
-  };
-  NSDictionary *attributes = @{
+  } mutableCopy];
+  if (OmiAuthUsesDataProtectionKeychain()) {
+    query[(__bridge id)kSecUseDataProtectionKeychain] = @YES;
+  }
+  NSMutableDictionary *attributes = [@{
     (__bridge id)kSecValueData : data,
-    (__bridge id)kSecAttrAccessible : (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-  };
+  } mutableCopy];
+  if (OmiAuthUsesDataProtectionKeychain()) {
+    attributes[(__bridge id)kSecAttrAccessible] =
+        (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly;
+  }
   @synchronized (OmiAuthKeychainLock()) {
     OSStatus status = SecItemUpdate((__bridge CFDictionaryRef)query,
                                     (__bridge CFDictionaryRef)attributes);
@@ -174,15 +183,17 @@ static BOOL OmiStoreOwnKeychainCloudSession(NSDictionary *session) {
   }
 }
 
-static void OmiClearOwnKeychainCloudSession(void) {
-  NSDictionary *query = @{
+static BOOL OmiClearOwnKeychainCloudSession(void) {
+  NSMutableDictionary *query = [@{
     (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
-    (__bridge id)kSecAttrService : @"com.omi.rnruntime.firebase-rest-session",
+    (__bridge id)kSecAttrService : OmiAuthKeychainService(),
     (__bridge id)kSecAttrAccount : @"firebase-rest-tokens",
-    (__bridge id)kSecUseDataProtectionKeychain : @YES,
-  };
+  } mutableCopy];
+  if (OmiAuthUsesDataProtectionKeychain()) {
+    query[(__bridge id)kSecUseDataProtectionKeychain] = @YES;
+  }
   @synchronized (OmiAuthKeychainLock()) {
-    SecItemDelete((__bridge CFDictionaryRef)query);
+    return SecItemDelete((__bridge CFDictionaryRef)query) == errSecSuccess;
   }
 }
 
@@ -210,6 +221,30 @@ static void OmiClearOwnKeychainCloudSessionIfCurrent(NSString *expectedRefreshTo
       OmiClearOwnKeychainCloudSession();
     }
   }
+}
+
+static NSString *OmiOwnKeychainCloudToken(NSDictionary *session);
+
+static BOOL OmiClearUnauthorizedCloudSession(OmiBackendPolicy *policy, NSInteger status) {
+  if (status == 401 && policy.kind == OmiBackendCredentialKindCloud &&
+      policy.refreshToken != nil) {
+    @synchronized (OmiAuthKeychainLock()) {
+      NSDictionary *current = OmiOwnKeychainCloudSession();
+      NSString *currentRefreshToken = [current[@"refreshToken"] isKindOfClass:NSString.class]
+          ? current[@"refreshToken"] : nil;
+      NSString *currentToken = OmiOwnKeychainCloudToken(current);
+      if (currentToken.length > 0 && [currentToken isEqualToString:policy.token] &&
+          OmiCloudRefreshTokensEqual(currentRefreshToken, policy.refreshToken)) {
+        BOOL cleared = OmiClearOwnKeychainCloudSession();
+        if (cleared) {
+          OmiAuthSetEnvironmentCloudTokensIgnored(YES);
+          OmiAuthSetShippingSessionIgnored(YES);
+        }
+        return cleared;
+      }
+    }
+  }
+  return NO;
 }
 
 static NSString *OmiOwnKeychainCloudToken(NSDictionary *session) {
@@ -354,6 +389,10 @@ static OmiBackendPolicy *OmiResolvedBackendPolicy(NSDictionary<NSString *, NSStr
   OmiBackendPolicy *policy = [[OmiBackendPolicy alloc] init];
   policy.url = OmiValidatedURL(@"https://api.omi.me", NO);
   policy.token = [cloud copy];
+  if (ownKeychainToken.length > 0 && [cloud isEqualToString:ownKeychainToken]) {
+    policy.refreshToken = [session[@"refreshToken"] isKindOfClass:NSString.class]
+        ? session[@"refreshToken"] : nil;
+  }
   policy.clientId = @"omi-macos";
   policy.kind = OmiBackendCredentialKindCloud;
   NSString *v5URL = environment[@"OMI_V5_BACKEND_URL"];
@@ -421,6 +460,8 @@ static NSDictionary *OmiDevelopmentBackendUnsupportedResponse(NSString *requestI
 @property(nonatomic) NSInteger responseStatus;
 @property(nonatomic) NSInteger retryAfterSeconds;
 @property(nonatomic, copy) NSString *requestId;
+@property(nonatomic, strong) OmiBackendPolicy *policy;
+@property(nonatomic, copy) dispatch_block_t sessionInvalidated;
 - (instancetype)initWithResolve:(RCTPromiseResolveBlock)resolve
                           reject:(RCTPromiseRejectBlock)reject
                          cleanup:(dispatch_block_t)cleanup;
@@ -485,6 +526,9 @@ didReceiveResponse:(NSURLResponse *)response
   NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class]
       ? ((NSHTTPURLResponse *)response).statusCode : 0;
   self.responseStatus = status;
+  if (OmiClearUnauthorizedCloudSession(self.policy, status)) {
+    if (self.sessionInvalidated != nil) self.sessionInvalidated();
+  }
   if ([response isKindOfClass:NSHTTPURLResponse.class]) {
     NSString *retryAfter = [(NSHTTPURLResponse *)response valueForHTTPHeaderField:@"Retry-After"];
     NSInteger parsed = retryAfter.integerValue;
@@ -572,6 +616,7 @@ didCompleteWithError:(NSError *)error {
 @property(nonatomic, strong) NSURLSession *session;
 @property(nonatomic, strong) OmiBackendPolicy *policy;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, OmiGenerationDelegate *> *generations;
+@property(nonatomic) BOOL hasListeners;
 @end
 
 @implementation OmiBackendModule
@@ -580,6 +625,26 @@ RCT_EXPORT_MODULE(OmiBackend)
 
 + (BOOL)requiresMainQueueSetup {
   return NO;
+}
+
+- (NSArray<NSString *> *)supportedEvents {
+  return @[OmiBackendSessionInvalidatedEvent];
+}
+
+- (void)startObserving {
+  self.hasListeners = YES;
+}
+
+- (void)stopObserving {
+  self.hasListeners = NO;
+}
+
+- (void)emitSessionInvalidated {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self.hasListeners) {
+      [self sendEventWithName:OmiBackendSessionInvalidatedEvent body:@{}];
+    }
+  });
 }
 
 - (instancetype)init {
@@ -705,6 +770,9 @@ RCT_REMAP_METHOD(request,
       return;
     }
     NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+    if (OmiClearUnauthorizedCloudSession(policy, httpResponse.statusCode)) {
+      [self emitSessionInvalidated];
+    }
     NSString *retryAfter = [httpResponse valueForHTTPHeaderField:@"Retry-After"];
     NSInteger retryAfterSeconds = retryAfter.integerValue;
     NSString *responseBody = data.length > 0 ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
@@ -788,6 +856,10 @@ RCT_REMAP_METHOD(generationEvents,
   delegate.session = [NSURLSession sessionWithConfiguration:configuration delegate:delegate delegateQueue:queue];
   delegate.request = request;
   delegate.requestId = generationId;
+  delegate.policy = policy;
+  delegate.sessionInvalidated = ^{
+    [weakSelf emitSessionInvalidated];
+  };
   @synchronized(self.generations) {
     self.generations[generationId] = delegate;
   }
@@ -836,6 +908,9 @@ RCT_REMAP_METHOD(cancelGenerationEvents,
                                               completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
     NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class]
         ? ((NSHTTPURLResponse *)response).statusCode : 0;
+    if (OmiClearUnauthorizedCloudSession(policy, status)) {
+      [self emitSessionInvalidated];
+    }
     if (error != nil || (status != 202 && status != 204)) {
       reject(@"OMI_HTTP_TRANSPORT", @"Generation cancellation was not accepted", nil);
       return;

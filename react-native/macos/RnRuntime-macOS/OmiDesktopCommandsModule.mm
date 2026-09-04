@@ -11,6 +11,7 @@ static NSString *OmiDesktopDefaultsKey(NSString *preference) {
   static dispatch_once_t once;
   dispatch_once(&once, ^{
     keys = @{
+      @"softwarePlane" : @"omi.backend.softwarePlane",
       @"screenCapture" : @"screenAnalysisEnabled",
       @"audioMode" : @"audioRecordingMode",
       @"interfaceSounds" : @"omi.sound.effectsEnabled",
@@ -31,7 +32,11 @@ static NSString *OmiDesktopDefaultsKey(NSString *preference) {
 static NSDictionary *OmiDesktopPreferenceSnapshot(void) {
   NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
   NSString *audioMode = [defaults stringForKey:@"audioRecordingMode"] ?: @"off";
+  NSString *softwarePlane = [defaults stringForKey:@"omi.backend.softwarePlane"];
+  NSString *stampedV5Origin = NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"];
   return @{
+    @"softwarePlane" : softwarePlane ?: NSNull.null,
+    @"stampedV5Origin" : stampedV5Origin ?: NSNull.null,
     @"screenCapture" : @([defaults boolForKey:@"screenAnalysisEnabled"]),
     @"audioMode" : audioMode,
     @"interfaceSounds" : @([defaults objectForKey:@"omi.sound.effectsEnabled"] == nil

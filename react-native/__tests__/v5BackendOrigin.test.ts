@@ -39,6 +39,11 @@ test('http and credentialed V5 URLs are rejected', () => {
     ),
   ).toBeNull();
   expect(
+    validateV5BackendUrl(
+      'https://user@omi-v5-backend-staging.example.workers.dev',
+    ),
+  ).toBeNull();
+  expect(
     resolveNativeRequestOrigin({
       path: '/v1/device-sessions',
       softwarePlane: 'new',
