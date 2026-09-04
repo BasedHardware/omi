@@ -7,6 +7,12 @@ from typing import Any, Iterator
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
+# Imported for its cost, not its API. The job imports learned_today, which builds
+# the pydantic models in models.daily_summary_payload. Without this the build lands
+# inside the call phase of the fresh-module loads below and trips the fast-unit CPU
+# duration guard, which measures the call phase only.
+import utils.memory.learned_today  # noqa: F401
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
@@ -44,7 +50,12 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
         'database._client': AutoMockModule('database._client'),
         'database.conversations': _module('database.conversations', get_conversations=lambda *_args, **_kwargs: []),
         'database.notifications': notification_db,
-        'database.redis_db': _module('database.redis_db', try_acquire_daily_summary_lock=lambda *_args: True),
+        'database.redis_db': _module(
+            'database.redis_db',
+            try_acquire_daily_summary_lock=lambda *_args: True,
+            # Declines before the LLM call hand the day back instead of sitting on the 2h key.
+            release_daily_summary_lock=lambda *_args: None,
+        ),
         'models.notification_message': _module(
             'models.notification_message',
             NotificationMessage=notification_message,

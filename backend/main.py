@@ -54,6 +54,7 @@ from routers import (
     candidates,
     chat_first,
     chat_first_e2e,
+    daily_summary_e2e,
     task_integrations,
     integrations,
     x_connector,
@@ -192,6 +193,10 @@ if is_chat_first_e2e_harness_runtime():
     # The fixture router has its own runtime check as defense in depth.  It is
     # intentionally absent from dev/prod route tables, not merely disabled.
     app.include_router(chat_first_e2e.router)
+    # Same stage boundary, same defense in depth: the desktop memory-review flow
+    # needs a daily summary carrying `memories_learned`, which only the nightly
+    # job produces in a deployable environment.
+    app.include_router(daily_summary_e2e.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)

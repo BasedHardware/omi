@@ -61,7 +61,10 @@ struct DailySummaryRecord: Decodable, Identifiable, Equatable {
 
     init(from decoder: Decoder) throws {
       let container = try decoder.container(keyedBy: CodingKeys.self)
-      memoryID = try container.decodeIfPresent(String.self, forKey: .memoryID) ?? ""
+      // Trimmed at the wire: every reader treats a blank id as "not a review row", and a
+      // whitespace-only id would otherwise pass each of those emptiness checks.
+      memoryID = (try container.decodeIfPresent(String.self, forKey: .memoryID) ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
       content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
       category = try container.decodeIfPresent(String.self, forKey: .category) ?? ""
       capturedAt = try container.decodeIfPresent(String.self, forKey: .capturedAt)
@@ -111,10 +114,13 @@ struct DailySummaryRecord: Decodable, Identifiable, Equatable {
     highlights = try container.decodeIfPresent([Highlight].self, forKey: .highlights)
     actionItems = try container.decodeIfPresent([ActionItem].self, forKey: .actionItems)
     // A malformed entry must not cost the reader the whole summary, and a memory with no id
-    // cannot be voted on or corrected, so it is not a review row at all.
+    // cannot be voted on or corrected, so it is not a review row at all. Entries decode
+    // independently: one bad element drops itself, not every valid row beside it. The outer
+    // `try?` still absorbs a `memories_learned` that is not an array at all.
     memoriesLearned =
-      (try? container.decodeIfPresent([LearnedMemory].self, forKey: .memoriesLearned))
+      (try? container.decodeIfPresent([LenientLearnedMemory].self, forKey: .memoriesLearned))
       .flatMap { $0 }?
+      .compactMap(\.value)
       .filter { !$0.memoryID.isEmpty && !$0.content.isEmpty } ?? []
   }
 
@@ -136,6 +142,15 @@ struct DailySummaryRecord: Decodable, Identifiable, Equatable {
   }
 }
 
+/// One `memories_learned` element, decoded so that its own failure is local to it.
+private struct LenientLearnedMemory: Decodable {
+  let value: DailySummaryRecord.LearnedMemory?
+
+  init(from decoder: Decoder) throws {
+    value = try? DailySummaryRecord.LearnedMemory(from: decoder)
+  }
+}
+
 struct DailySummariesListResponse: Decodable {
   let summaries: [DailySummaryRecord]
 }
@@ -146,5 +161,19 @@ extension APIClient {
     let bounded = min(max(limit, 1), 100)
     let response: DailySummariesListResponse = try await get("v1/users/daily-summaries?limit=\(bounded)")
     return response.summaries
+  }
+
+  /// Generate (or return) a recap for a local calendar date. No push is sent.
+  func createDailySummary(date: String) async throws -> DailySummaryRecord {
+    struct Body: Encodable { let date: String }
+    return try await post(
+      "v1/users/daily-summaries", body: Body(date: date), requestTimeout: 180)
+  }
+
+  /// Re-run summary generation for an existing recap and overwrite it in place. No push.
+  func regenerateDailySummary(id: String) async throws -> DailySummaryRecord {
+    struct EmptyBody: Encodable {}
+    return try await post(
+      "v1/users/daily-summaries/\(id)/regenerate", body: EmptyBody(), requestTimeout: 180)
   }
 }

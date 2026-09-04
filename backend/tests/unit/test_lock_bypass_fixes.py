@@ -1091,15 +1091,20 @@ class TestScheduledDailySummaryLockFilter:
                 daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
                 daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
                 with patch('utils.other.notifications.send_notification'):
+                    import utils.other.notifications as notifications_module
                     from utils.other.notifications import _send_summary_notification
 
                     _send_summary_notification(('test-uid', 'token', 'UTC'))
 
-        # generate_comprehensive_daily_summary must be called only with unlocked conversations
-        mock_gen.assert_called_once()
-        conversations_passed = mock_gen.call_args[0][1]
-        assert len(conversations_passed) == 1
-        assert conversations_passed[0].id == 'conv-2'
+        # generate_comprehensive_daily_summary must be called only with unlocked conversations.
+        # The tick now also backfills behind the current day, so the exact expected count is the
+        # current day plus the backfill cap — pinned, not `>= 1`, because a loose bound here would
+        # hide the one regression that matters: backfill spending unbounded LLM calls.
+        assert mock_gen.call_count == 1 + notifications_module._DAILY_SUMMARY_BACKFILL_GENERATE_CAP
+        for call in mock_gen.call_args_list:
+            conversations_passed = call[0][1]
+            assert len(conversations_passed) == 1
+            assert conversations_passed[0].id == 'conv-2'
 
     def test_scheduled_summary_skips_when_all_locked(self):
         """_send_summary_notification returns early when all conversations are locked."""
