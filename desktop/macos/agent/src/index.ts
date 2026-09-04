@@ -2747,6 +2747,7 @@ async function main(): Promise<void> {
               ? update.appendResources as ConversationResource[]
               : undefined,
             metadataJson: typeof update.metadataJson === "string" ? update.metadataJson : undefined,
+            terminalRevision: update.terminalRevision === true,
           };
           assertPublicJournalUpdatePolicy(store, parsedUpdate);
           const turn = updateJournalTurn(store, parsedUpdate);
