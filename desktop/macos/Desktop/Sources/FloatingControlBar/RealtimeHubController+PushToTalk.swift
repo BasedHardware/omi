@@ -65,7 +65,8 @@ extension RealtimeHubController {
             assistantText: interruptedTurn.assistantText,
             terminal: .interruptedByBargeIn,
             idempotencyKey: interruptedTurn.idempotencyKey,
-            acceptedSpawnOwnerID: interruptedTurn.acceptedSpawnOwnerID) ?? false
+            acceptedSpawnOwnerID: interruptedTurn.acceptedSpawnOwnerID,
+            answerDelivered: interruptedTurn.answerDelivered) ?? false
         }
       }
     }
@@ -220,7 +221,12 @@ extension RealtimeHubController {
     let partialAssistantText = assistantText
     let idempotencyKey = turnIdempotencyKey
     let acceptedSpawnOwnerID = acceptedSpawnJournalReceiptByContinuityKey[idempotencyKey]?.ownerID
-    guard let ownerID = VoiceTurnCoordinator.shared.activeTurn?.ownerID else { return nil }
+    guard let activeTurn = VoiceTurnCoordinator.shared.activeTurn,
+      let ownerID = activeTurn.ownerID
+    else { return nil }
+    // Captured while the reducer still owns the turn: terminal processing
+    // consumes the per-turn full-answer duration this is derived from.
+    let answerDelivered = VoiceTurnCoordinator.shared.fullAnswerDrained(turnID: activeTurn.id)
     return Task {
       let resolution = await Self.resolveTranscript(
         providerText: providerText,
@@ -233,7 +239,8 @@ extension RealtimeHubController {
         assistantText: InterruptedTurnPayload.visibleAssistantText(
           partialAssistantText: partialAssistantText),
         idempotencyKey: idempotencyKey,
-        acceptedSpawnOwnerID: acceptedSpawnOwnerID)
+        acceptedSpawnOwnerID: acceptedSpawnOwnerID,
+        answerDelivered: answerDelivered)
     }
   }
 

@@ -12,6 +12,10 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentQueryResult.swift
   - desktop/macos/Desktop/Sources/Chat/APIClient+HigherModel.swift
   - desktop/macos/Desktop/Sources/Chat/ExternalSurfaceRunAuthority.swift
+  # Deferred PTT turns spawn background runs whose completions flow back into
+  # the live voice conversation through the coordinator's completion deltas.
+  - desktop/macos/Desktop/Sources/Chat/CompletionDeltaPolicy.swift
+  - desktop/macos/Desktop/Sources/Chat/DesktopCoordinatorService.swift
   - desktop/macos/Desktop/Sources/DefaultsKey.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/LegacyVoiceJournalImporter.swift

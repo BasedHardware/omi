@@ -98,7 +98,11 @@ extension AppState {
           "Transcript [UPDATE] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
         )
         segmentsToPersist.append(segment)
-      } else if sttSession.useLocalSTT {
+      } else {
+        // The mic-vs-system-audio playback-echo dedup applies to every STT
+        // engine: both capture lanes feed segments with lane-derived isUser
+        // flags regardless of which recognizer transcribes them, and the cloud
+        // path previously appended every echo unfiltered.
         switch LocalTranscriptionDuplicatePolicy.decision(for: newSeg, existing: speakerSegments) {
         case .accept:
           appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
@@ -126,8 +130,6 @@ extension AppState {
             "Transcript [DEDUP] Promoted system-audio copy over mic playback duplicate [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]"
           )
         }
-      } else {
-        appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
       }
     }
 
