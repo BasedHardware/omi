@@ -125,6 +125,8 @@ export interface CompleteExternalSurfaceRunInput {
   runId: string;
   attemptId: string;
   terminalStatus: "completed" | "failed" | "cancelled";
+  /** Text the external surface streamed, persisted to `runs.final_text` (#12731). */
+  finalText?: string;
   errorCode?: string;
 }
 
@@ -135,6 +137,8 @@ export interface CompleteExternalSurfaceRunResult {
   attemptId: string;
   terminalStatus: "completed" | "failed" | "cancelled";
   duplicate: boolean;
+  /** Whether this call wrote `finalText`, so an older kernel is detectable by its absence. */
+  finalTextPersisted: boolean;
 }
 
 export type ExternalSurfaceAuthorityErrorCode =
