@@ -44,6 +44,11 @@ from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.memory_contracts import L1MemoryArchiveClass, deterministic_contract_id
 from models.workstream_association import AssociationEvidence
 from models.product_memory import MemoryTier
+from utils.memory.belief_model import (
+    belief_model_enabled,
+    horizon_from_extraction,
+    subject_scope_from_extraction,
+)
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import ClientProcessing
 from models.conversation import (
@@ -1419,6 +1424,23 @@ def _extract_memories_canonical(
                 subject_entity_id=subject_entity_id,
                 subject_attribution=subject_attribution,
             )
+            if belief_model_enabled():
+                resolved_scope = subject_scope_from_extraction(
+                    extracted_scope=candidate.subject_scope,
+                    attribution=subject_attribution.value,
+                    about=candidate.about,
+                    user_name=user_name,
+                    speaker_label=candidate.speaker_label,
+                )
+                resolved_class, resolved_half_life = horizon_from_extraction(
+                    belief_class=candidate.belief_class,
+                    half_life_days_override=candidate.half_life_days,
+                    user_asserted=False,
+                )
+                memory.subject_scope = resolved_scope
+                memory.belief_class = resolved_class
+                memory.half_life_days = resolved_half_life
+                memory.valid_to = candidate.valid_to
             model_about = classify_model_about(
                 candidate.about,
                 user_name=user_name,

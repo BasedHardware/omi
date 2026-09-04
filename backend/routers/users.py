@@ -121,6 +121,11 @@ from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
+from utils.other.notifications import (
+    DAILY_SUMMARY_DECLINE_LOCKED,
+    generate_daily_summary_on_demand,
+    local_day_bounds_utc,
+)
 from models.notification_message import NotificationMessage
 from models.daily_summary_payload import LearnedMemoryRef
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
@@ -1857,6 +1862,10 @@ def record_desktop_daily_usage(
     return {'ok': True}
 
 
+class CreateDailySummaryRequest(BaseModel):
+    date: str  # YYYY-MM-DD
+
+
 @router.get('/v1/users/daily-summaries', tags=['v1'], response_model=DailySummariesResponse)
 def get_daily_summaries(
     limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid)
@@ -1867,6 +1876,65 @@ def get_daily_summaries(
     """
     summaries = daily_summaries_db.get_daily_summaries(uid, limit=limit, offset=offset)
     return {'summaries': summaries}
+
+
+@router.post('/v1/users/daily-summaries', tags=['v1'], response_model=DailySummaryResponse)
+def create_user_daily_summary(
+    request: CreateDailySummaryRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
+    """
+    Generate (or return) a daily summary for a local calendar date.
+
+    No FCM token is required and no push is sent — the caller is looking at the
+    screen. A record already stored for that date is returned without spending
+    LLM tokens.
+    """
+    enforce_chat_quota(uid, platform=x_app_platform)
+    try:
+        target_date = datetime.strptime(request.date, '%Y-%m-%d').date()
+    except ValueError:
+        raise HTTPException(status_code=422, detail='Invalid date format. Use YYYY-MM-DD')
+
+    time_zone_name = notification_db.get_user_time_zone(uid)
+    if time_zone_name:
+        try:
+            today = datetime.now(pytz.timezone(time_zone_name)).date()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+    else:
+        today = datetime.now(pytz.utc).date()
+    if target_date > today:
+        raise HTTPException(status_code=422, detail='Date cannot be in the future')
+
+    date_str = target_date.strftime('%Y-%m-%d')
+    existing = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
+    if existing:
+        return existing
+
+    cooldown_key = f'daily_summary_create:{uid}:{date_str}'
+    if get_generic_cache(cooldown_key):
+        raise HTTPException(
+            status_code=429,
+            detail='Please wait a few seconds before regenerating this recap again.',
+        )
+
+    start_date_utc, end_date_utc = local_day_bounds_utc(target_date, time_zone_name)
+    record, declined = generate_daily_summary_on_demand(uid, date_str, start_date_utc, end_date_utc)
+    if record:
+        # The cooldown exists to rate-limit LLM spend, so it is armed by a generation that
+        # happened. Arming it before the call charged the user for attempts that cost nothing
+        # and left them 429'd for 30s after a 400 they could have fixed by recording something.
+        set_generic_cache(cooldown_key, {'at': datetime.utcnow().isoformat()}, ttl=_REGENERATE_COOLDOWN_SECONDS)
+        return record
+
+    if declined == DAILY_SUMMARY_DECLINE_LOCKED:
+        # Another writer — almost always the cron for the same day — is mid-generation. That is a
+        # retry, not an answer; reporting it as "nothing to summarize" told the user their day was
+        # empty at the exact moment it was being summarized.
+        raise HTTPException(status_code=409, detail='This recap is already being generated. Try again in a moment.')
+    raise HTTPException(status_code=400, detail=f'Nothing to summarize for {date_str}')
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)

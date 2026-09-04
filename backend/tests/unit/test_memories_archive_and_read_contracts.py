@@ -377,6 +377,24 @@ def test_memory_item_to_memorydb_preserves_canonical_alias_for_portability():
     assert projected.model_dump(mode="json")["canonical_memory_id"] == "canonical-row"
 
 
+def test_memory_item_to_memorydb_attaches_belief_view_only_when_flag_on(monkeypatch):
+    now = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
+    item = _item("mem-state", tier=MemoryLayer.short_term, content="in a meeting", updated_at=now).model_copy(
+        update={"half_life_days": 30, "captured_at": now - timedelta(days=30)}
+    )
+    monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED", raising=False)
+    off = memory_item_to_memorydb(item)
+    assert off.currency is None
+    assert off.currency_band is None
+    assert off.as_of is None
+
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    on = memory_item_to_memorydb(item)
+    assert on.currency_band == "fading"
+    assert on.as_of == item.captured_at
+    assert on.half_life_days == 30
+
+
 def test_ledger_history_route_answers_empty_without_scan_outside_rollout():
     """Fleet-cost guard: the memories tab calls this on every load for every
     user; outside the JIT rollout (including unknown/error states) the route

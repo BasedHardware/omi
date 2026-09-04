@@ -128,7 +128,7 @@ class ChatToolExecutor {
 
   // MARK: - Onboarding State
 
-  /// Set by OnboardingChatView before starting the chat
+  /// Set by the live onboarding flow before starting the chat
   static var onboardingAppState: AppState?
   /// Called when AI invokes complete_onboarding
   static var onCompleteOnboarding: (() -> Void)?
@@ -143,7 +143,7 @@ class ChatToolExecutor {
   /// Called when request_permission returns "pending" — used to trigger the permission help timer
   static var onPermissionPending: ((_ permissionType: String) -> Void)?
 
-  /// Email/calendar insights from background reading (set by OnboardingChatView)
+  /// Email/calendar insights from background reading (set by the live onboarding flow)
   static var emailInsightsText: String?
   static var calendarInsightsText: String?
 
@@ -360,6 +360,13 @@ class ChatToolExecutor {
         expectedOwnerID: expectedOwnerID,
         authorizationSnapshot: currentOwnerAuthorizationSnapshot,
         api: backendAPIClient)
+
+    case .createContextReminder:
+      let text = (toolCall.arguments["text"] as? String) ?? ""
+      return await ContextReminderCoordinator.shared.createFromCurrentContext(
+        text: text,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
 
     case .showRewindEvidence:
       return await executeShowRewindEvidence(

@@ -350,6 +350,44 @@ def test_nonpromote_routes_are_terminal_archive_outcomes(route: str, expected_st
     assert f"users/{UID}/memory_graph_assertions/{source.memory_id}" not in db.docs
 
 
+def test_reject_hides_when_belief_flag_off(monkeypatch):
+    monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED", raising=False)
+    source = _item("mem_reject_off", "A broad but non-durable observation.")
+    db = _db_for_items(source)
+    decision = ConsolidationAgentDecision(
+        source_memory_id=source.memory_id,
+        route="reject",
+        evidence_ids=[],
+        relationship_to_user="unclear",
+        basis_for_memory="weak_or_none",
+        rationale="Not safe or useful enough for durable memory.",
+    )
+    _apply(source, decision, db)
+    stored = MemoryItem(**db.docs[f"users/{UID}/memory_items/{source.memory_id}"])
+    assert stored.tier == MemoryTier.archive
+    assert stored.status == MemoryItemStatus.hidden
+    assert stored.belief_class is None
+
+
+def test_reject_stays_listed_as_archive_residue_when_belief_flag_on(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    source = _item("mem_reject_on", "A broad but non-durable observation.")
+    db = _db_for_items(source)
+    decision = ConsolidationAgentDecision(
+        source_memory_id=source.memory_id,
+        route="reject",
+        evidence_ids=[],
+        relationship_to_user="unclear",
+        basis_for_memory="weak_or_none",
+        rationale="Not safe or useful enough for durable memory.",
+    )
+    _apply(source, decision, db)
+    stored = MemoryItem(**db.docs[f"users/{UID}/memory_items/{source.memory_id}"])
+    assert stored.tier == MemoryTier.archive
+    assert stored.status == MemoryItemStatus.active
+    assert stored.belief_class == "meta_residue"
+
+
 def test_quarantine_review_is_a_canonical_blocked_commit_with_projection_deletes():
     source = _item("mem_quarantine", "A source that exhausted automatic consolidation.")
     db = _db_for_items(source)

@@ -25,6 +25,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case closeFact = "close_fact"
   case getActionItems = "get_action_items"
   case createActionItem = "create_action_item"
+  case createContextReminder = "create_context_reminder"
   case updateActionItem = "update_action_item"
   case captureScreen = "capture_screen"
   case checkPermissionStatus = "check_permission_status"
@@ -54,8 +55,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:c4c493ca6dc551ba74d775ffcd46a7c385d5563f7cf95c8f4d15cebce437a3cd"
-  static let chatFirstManifestDigest = "sha256:5c3d09b9030bab6baeeca637f9ec4f4f23ced1e03f9ff3574902341a4f0a7408"
+  static let manifestDigest = "sha256:b43fdcbf41f825d786e33a5019b2d5aaa72e29e8119dccd77c49b018b3785ef6"
+  static let chatFirstManifestDigest = "sha256:a116ef61994c89e193953c2aa8110676a2cb4de615b2a2bfa5776abaf5d5da47"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -87,6 +88,7 @@ enum GeneratedToolExecutors {
     .closeFact: .chatToolExecutor,
     .getActionItems: .chatToolExecutor,
     .createActionItem: .chatToolExecutor,
+    .createContextReminder: .chatToolExecutor,
     .updateActionItem: .chatToolExecutor,
     .captureScreen: .chatToolExecutor,
     .checkPermissionStatus: .chatToolExecutor,
@@ -161,6 +163,7 @@ enum GeneratedToolExecutors {
     case closeFact
     case getActionItems
     case createActionItem
+    case createContextReminder
     case updateActionItem
     case captureScreen
     case checkPermissionStatus
@@ -206,6 +209,7 @@ enum GeneratedToolExecutors {
     case .closeFact: return .closeFact
     case .getActionItems: return .getActionItems
     case .createActionItem: return .createActionItem
+    case .createContextReminder: return .createContextReminder
     case .updateActionItem: return .updateActionItem
     case .captureScreen: return .captureScreen
     case .checkPermissionStatus: return .checkPermissionStatus

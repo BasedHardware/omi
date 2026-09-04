@@ -404,3 +404,32 @@ def test_same_feedback_id_with_different_payload_is_rejected():
             first.item,
             TriggerFeedback(feedback_id="a" * 64, action=TriggerFeedbackAction.false_positive, recorded_at=NOW),
         )
+
+
+def test_evaluate_trigger_rejects_fading_row_when_belief_flag_on(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    item = _trigger({"keywords": ["release"]}).model_copy(
+        update={
+            "half_life_days": 1,
+            "last_corroborated_at": NOW - timedelta(days=3),
+            "captured_at": NOW - timedelta(days=3),
+            "user_asserted": False,
+        }
+    )
+    decision = evaluate_memory_item_trigger(item, TriggerObservation(text="release", occurred_at=NOW))
+    assert decision.status == TriggerDecisionStatus.no_match
+    assert decision.reason == "trigger_not_current_belief"
+
+
+def test_evaluate_trigger_still_matches_when_belief_flag_off(monkeypatch):
+    monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED", raising=False)
+    item = _trigger({"keywords": ["release"]}).model_copy(
+        update={
+            "half_life_days": 1,
+            "last_corroborated_at": NOW - timedelta(days=3),
+            "captured_at": NOW - timedelta(days=3),
+            "user_asserted": False,
+        }
+    )
+    decision = evaluate_memory_item_trigger(item, TriggerObservation(text="release", occurred_at=NOW))
+    assert decision.status == TriggerDecisionStatus.match

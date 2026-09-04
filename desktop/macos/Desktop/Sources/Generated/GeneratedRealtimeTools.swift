@@ -19,6 +19,7 @@ enum HubTool: String {
   case searchMemories = "search_memories"
   case getActionItems = "get_action_items"
   case createActionItem = "create_action_item"
+  case createContextReminder = "create_context_reminder"
   case updateActionItem = "update_action_item"
   case checkPermissionStatus = "check_permission_status"
   case requestPermission = "request_permission"
@@ -512,7 +513,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "create_action_item",
-    "description": "Create a new task / to-do / reminder for the user ('remind me to…', 'add … to my list', 'I need to…'). Fast synchronous write. Confirm out loud after it returns.",
+    "description": "Create a new task / to-do / timed reminder for the user ('remind me to…', 'add … to my list', 'I need to…'). Do NOT use for 'next time I'm here' / 'when I open this' — that is create_context_reminder. Fast synchronous write. Confirm out loud after it returns.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -530,6 +531,23 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "description"
+      ]
+    }
+  },
+  {
+    "type": "function",
+    "name": "create_context_reminder",
+    "description": "Bind a reminder to the place the user is in right now (the frontmost app or document). Use when they say 'remind me next time I'm here', 'next time I open this', or 'when I'm back in this'. Do NOT use for timed reminders ('tomorrow', 'at 3pm') — those are create_action_item. The place is captured automatically; pass only the reminder text. Fast synchronous write. Confirm out loud after it returns.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "What to remind the user of when they return to this place."
+        }
+      },
+      "required": [
+        "text"
       ]
     }
   },
