@@ -138,6 +138,16 @@ class WalSyncs implements IWalSync {
     await _flashPageSync.refreshWalsFromDevice();
   }
 
+  /// Drains Limitless flash pages to the phone without entering the cloud
+  /// upload phase. This remains independent from [syncAll], so device storage
+  /// can be freed while an earlier recording uploads.
+  Future<void> offloadFlashPages() async {
+    if (_flashPageSync.isSyncing) return;
+    await _flashPageSync.refreshWalsFromDevice();
+    final missing = (await _flashPageSync.getMissingWals()).where((wal) => wal.status == WalStatus.miss);
+    if (missing.isNotEmpty) await _flashPageSync.syncAll();
+  }
+
   Future<WalStats> getWalStats() async {
     final allWals = await getAllWals();
     int phoneFiles = 0;

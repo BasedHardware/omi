@@ -291,6 +291,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   int _totalWalsToProcess = 0;
   int _walsProcessedCount = 0;
   bool _isDisposed = false;
+  bool _isOffloadingLimitlessFlash = false;
   late bool _rateLimitWasActive;
 
   // Computed properties for backward compatibility
@@ -319,7 +320,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   SyncMethod? get currentSyncMethod => _syncState.syncMethod;
 
   // Flash page (Limitless) sync state
-  bool get isFlashPageSyncing => _walService.getSyncs().isFlashPageSyncing;
+  bool get isFlashPageSyncing => _isOffloadingLimitlessFlash || _walService.getSyncs().isFlashPageSyncing;
 
   /// Get a WAL by ID from the current list
   Wal? getWalById(String walId) {
@@ -436,7 +437,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<RecordingTransferDrainResult> _drainEligibleWals() async {
     if (_isDisposed || _syncState.isProcessing) return const RecordingTransferDrainResult.contended();
-    if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing) {
+    if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing || isFlashPageSyncing) {
       return const RecordingTransferDrainResult.contended();
     }
 
@@ -549,6 +550,26 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     );
   }
 
+  /// Copies Limitless flash pages to the phone without waiting for, or
+  /// interfering with, the cloud-upload lane.
+  Future<void> offloadLimitlessFlash() async {
+    if (_isDisposed || isFlashPageSyncing) return;
+    _isOffloadingLimitlessFlash = true;
+    notifyListeners();
+    try {
+      await _walService.getSyncs().offloadFlashPages();
+    } finally {
+      _isOffloadingLimitlessFlash = false;
+      if (!_isDisposed) {
+        try {
+          await refreshWals();
+        } finally {
+          if (!_isDisposed) notifyListeners();
+        }
+      }
+    }
+  }
+
   Future<void> syncWal(Wal wal) async {
     // UI Sync/Auto Sync still call syncWal for a single row, but must not
     // race a coordinator drain (or device download) on the same WAL stack.
@@ -579,8 +600,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool _isTransferSeamBusy() {
     if (_syncState.isProcessing) return true;
     final syncs = _walService.getSyncs();
-    return syncs.isStorageSyncing == true || syncs.isSdCardSyncing == true;
+    return syncs.isStorageSyncing == true || syncs.isSdCardSyncing == true || isFlashPageSyncing;
   }
+
+  @visibleForTesting
+  Future<RecordingTransferDrainResult> drainEligibleWalsForTesting() => _drainEligibleWals();
 
   Future<SyncLocalFilesResponse?> _performSync({
     required Future<SyncLocalFilesResponse?> Function() operation,
