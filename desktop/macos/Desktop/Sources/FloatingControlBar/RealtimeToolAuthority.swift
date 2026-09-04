@@ -55,24 +55,42 @@ enum RealtimeExternalRunTerminalPolicy {
   }
 }
 
-/// Journal status as a total function of the reducer's terminal reason.
+/// Journal status as a total function of the reducer's terminal reason and the
+/// turn's full-answer delivery state.
 ///
 /// The journal is the model's only memory across push-to-talk presses, and the
 /// kernel prompt calls it canonical. A turn that was cut off — barge-in, provider
 /// error, timeout — must therefore not be recorded as a completed answer: the
 /// model reads its own half-sentence back as finished work and re-asks or moves on.
 ///
-/// `KernelJournalTurnStatus` has no `cancelled` case, so every non-success reason
-/// maps to `.failed` and the precise reason travels in `metadata.terminalReason`.
-/// That distinction matters for measurement (a barge-in is not a defect), never for
-/// whether the turn may claim completion.
+/// The inverse lie is just as corrosive: a reply whose audio fully drained before
+/// the user spoke again was heard in full, and journaling it `.failed` teaches the
+/// model its own delivered answer was cut off — so it re-delivers or "corrects"
+/// that answer turns later, out of context (measured on 2026-09-04: three fully
+/// spoken replies in one session journaled `interrupted_by_barge_in` failures,
+/// followed by exactly that recurrence). A barge-in after playback drained is an
+/// interruption of the *silence*, not of the answer, and journals `.completed`.
+///
+/// `KernelJournalTurnStatus` has no `cancelled` case, so every non-delivered
+/// non-success reason maps to `.failed` and the precise reason travels in
+/// `metadata.terminalReason`. That distinction matters for measurement (a barge-in
+/// is not a defect), never for whether the turn may claim completion.
 enum VoiceTurnJournalStatusPolicy {
   static func status(for reason: VoiceTurnTerminalReason) -> KernelJournalTurnStatus {
+    status(for: reason, answerDelivered: false)
+  }
+
+  static func status(
+    for reason: VoiceTurnTerminalReason,
+    answerDelivered: Bool
+  ) -> KernelJournalTurnStatus {
     switch reason {
     case .success:
       return .completed
-    case .tooShort, .silentRejected, .cancelled, .ownerChanged, .interruptedByBargeIn,
-      .explicitInterrupt, .cleanup, .permissionDenied, .captureFailed, .captureNotReady,
+    case .interruptedByBargeIn, .explicitInterrupt:
+      return answerDelivered ? .completed : .failed
+    case .tooShort, .silentRejected, .cancelled, .ownerChanged,
+      .cleanup, .permissionDenied, .captureFailed, .captureNotReady,
       .transcriptionFailed, .providerFailed, .providerNoResponse, .hubWarmTimeout,
       .deferredCommitTimeout, .bargeInReplacementTimeout, .toolTimeout, .playbackFailed,
       .journalFailed:
