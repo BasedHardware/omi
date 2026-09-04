@@ -12,6 +12,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/LocalMcpStore.swift
   - desktop/macos/Desktop/Sources/Chat/LocalMcpStore+OAuth.swift
   - desktop/macos/Desktop/Sources/Chat/LocalSkillsStore.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+Skills.swift
 preconditions:
   - auth_ready
 
