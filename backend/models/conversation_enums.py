@@ -98,3 +98,23 @@ class ExternalIntegrationConversationSource(str, Enum):
     audio = 'audio_transcript'
     message = 'message'
     other = 'other_text'
+
+
+class ConversationProcessingState(str, Enum):
+    """Why a conversation's ``structured`` holds the §1.7 deterministic minimum.
+
+    Absent (``None``) on every conversation the server enriched itself, and on a
+    conversation that already carries a ``client_processing`` projection.
+    Clients check ``client_processing`` FIRST: a projection that arrives after
+    the terminal persist is stamped by its own ingress mutation and does not
+    rewrite this field, so a projected conversation may still read
+    ``local_pending`` and must render the projection regardless.
+
+    - ``local_pending``: a capable client is expected to deliver a projection.
+      Render a spinner with a timeout, not a permanent empty state.
+    - ``none``: no projection is coming. Render "Summary unavailable on the
+      free plan".
+    """
+
+    local_pending = 'local_pending'
+    none = 'none'
