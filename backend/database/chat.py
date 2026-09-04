@@ -271,7 +271,12 @@ def get_messages(
     # A page with no reported rows needs exactly this many documents, which is what the
     # old raw query streamed. Bound the *slack* on top of it, not the page itself.
     needed = max(offset, 0) + max(limit, 0)
-    scan_budget = needed + min(CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK, needed * 3)
+    # Flat slack, not proportional. Scaling it with the page size gave a small page a
+    # tiny allowance (limit=2 -> 6 documents), so a dense run of reported rows still
+    # returned an empty page the router reads as end-of-results. The read cost is set
+    # by the batch sizing below, not by this ceiling, so a flat allowance costs a clean
+    # page nothing and only bounds how far a page that meets reported rows may scan.
+    scan_budget = needed + CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK
     scanned = 0
     visible_skipped = 0
     messages: List[Dict[str, Any]] = []

@@ -183,3 +183,21 @@ def test_slack_is_bounded_even_when_every_scanned_row_is_reported():
     assert page == []
     needed = 10
     assert collection.streamed <= needed + chat_db.CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK
+
+
+def test_scan_continues_across_batches_through_a_dense_block_of_reported_rows():
+    """A page must still fill across batches when many reported rows sit ahead of it.
+
+    Scaling the slack with the page size gave limit=2 an allowance of six documents,
+    so a run of reported rows longer than that returned an empty page — which
+    routers/chat.py reads as end-of-results, the same defect this scan exists to fix.
+    """
+    rows = [_message(f'reported-{i}', reported=True) for i in range(150)]
+    rows += [_message('visible-a'), _message('visible-b')]
+    collection = _FakeCollection(rows)
+
+    with _patch_db(collection):
+        page = chat_db.get_messages('uid', limit=2, offset=0)
+
+    assert [row['id'] for row in page] == ['visible-a', 'visible-b']
+    assert collection.streamed > 2, 'the page must have required more than its own rows'
