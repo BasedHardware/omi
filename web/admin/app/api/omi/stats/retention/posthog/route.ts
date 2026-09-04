@@ -1,12 +1,45 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin } from '@/lib/auth';
-import { posthogResults } from '@/lib/posthog';
-export const dynamic = 'force-dynamic';
+import { NextRequest, NextResponse } from "next/server";
+import { verifyAdmin } from "@/lib/auth";
+import { posthogResults } from "@/lib/posthog";
+export const dynamic = "force-dynamic";
 
-type RetentionPoint = { day: number; retention: number };
-type CohortRow = { date: string; users: number; data: RetentionPoint[] };
+export type RetentionPoint = { day: number; retention: number };
+export type CohortRow = { date: string; users: number; data: RetentionPoint[] };
 
-async function posthogQuery(host: string, projectId: string, apiKey: string, query: string): Promise<any[]> {
+/** User-weighted mean of per-cohort retention %. A 20-person day cannot
+ *  cancel a 900-person always-on day. Cohorts that have not yet reached
+ *  `day` (no point) are omitted, same as the old unweighted skip. */
+export function weightedRetentionMean(cohorts: CohortRow[]): RetentionPoint[] {
+  const maxDays =
+    cohorts.reduce((max, cohort) => {
+      const local = cohort.data.reduce((m, p) => Math.max(m, p.day), -1);
+      return Math.max(max, local);
+    }, -1) + 1;
+  const mean: RetentionPoint[] = [];
+  for (let day = 0; day < maxDays; day++) {
+    let retained = 0;
+    let total = 0;
+    for (const cohort of cohorts) {
+      const point = cohort.data.find((p) => p.day === day);
+      if (point == null || cohort.users <= 0) continue;
+      total += cohort.users;
+      retained += (point.retention / 100) * cohort.users;
+    }
+    if (total === 0) continue;
+    mean.push({
+      day,
+      retention: Math.round((retained / total) * 10000) / 100,
+    });
+  }
+  return mean;
+}
+
+async function posthogQuery(
+  host: string,
+  projectId: string,
+  apiKey: string,
+  query: string
+): Promise<any[]> {
   return (await posthogResults(host, projectId, apiKey, query)) as any[];
 }
 
@@ -17,16 +50,22 @@ export async function GET(request: NextRequest) {
   try {
     const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
     const projectId = process.env.POSTHOG_PROJECT_ID;
-    const host = (process.env.POSTHOG_HOST || 'https://us.posthog.com').replace(/\/$/, '');
+    const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(
+      /\/$/,
+      ""
+    );
 
     if (!apiKey || !projectId) {
-      return NextResponse.json({ error: 'PostHog credentials not configured' }, { status: 500 });
+      return NextResponse.json(
+        { error: "PostHog credentials not configured" },
+        { status: 500 }
+      );
     }
 
     const searchParams = request.nextUrl.searchParams;
-    const days = parseInt(searchParams.get('days') || '14', 10);
-    const intervals = parseInt(searchParams.get('intervals') || '10', 10);
-    const platform = searchParams.get('platform') || '';
+    const days = parseInt(searchParams.get("days") || "14", 10);
+    const intervals = parseInt(searchParams.get("intervals") || "10", 10);
+    const platform = searchParams.get("platform") || "";
 
     // Context for Claude is a *second product* reporting into this same PostHog project. Its events
     // are namespaced `cfc_*` (see `desktop/context-for-claude/docs/analytics.md`) and set no `$os`,
@@ -40,11 +79,11 @@ export async function GET(request: NextRequest) {
     // for exactly the events the other product emits.
     const excludeOtherProducts = `AND NOT startsWith(event, 'cfc_')`;
     const eventFilter =
-      platform === 'macos'
+      platform === "macos"
         ? `AND properties.$os_name = 'macOS' ${excludeOtherProducts}`
-        : platform === 'mobile'
-          ? `AND properties.$os_name IN ('iOS', 'Android', 'iPadOS') ${excludeOtherProducts}`
-          : excludeOtherProducts;
+        : platform === "mobile"
+        ? `AND properties.$os_name IN ('iOS', 'Android', 'iPadOS') ${excludeOtherProducts}`
+        : excludeOtherProducts;
     const url = `${host}/api/projects/${projectId}/query/`;
 
     const cohortRows = await posthogQuery(
@@ -68,19 +107,24 @@ export async function GET(request: NextRequest) {
 
     const actorToCohortDate = new Map<string, string>();
     for (const row of cohortRows) {
-      const actorId = String(row[0] ?? '');
-      const cohortDate = String(row[1] ?? '').slice(0, 10);
+      const actorId = String(row[0] ?? "");
+      const cohortDate = String(row[1] ?? "").slice(0, 10);
       if (!actorId || !cohortDate) continue;
       actorToCohortDate.set(actorId, cohortDate);
     }
 
     if (actorToCohortDate.size === 0) {
-      return NextResponse.json({ data: [], cohorts: [], totalCohorts: 0, totalUsers: 0 });
+      return NextResponse.json({
+        data: [],
+        cohorts: [],
+        totalCohorts: 0,
+        totalUsers: 0,
+      });
     }
 
     const actorIds = Array.from(actorToCohortDate.keys())
       .map((id) => `'${id.replace(/'/g, "\\'")}'`)
-      .join(', ');
+      .join(", ");
 
     const eventRows = await posthogQuery(
       host,
@@ -102,21 +146,26 @@ export async function GET(request: NextRequest) {
     );
 
     const cohortUsers = new Map<string, Map<string, Set<number>>>();
-    for (const [actorId, cohortDate] of Array.from(actorToCohortDate.entries())) {
-      const users = cohortUsers.get(cohortDate) ?? new Map<string, Set<number>>();
+    for (const [actorId, cohortDate] of Array.from(
+      actorToCohortDate.entries()
+    )) {
+      const users =
+        cohortUsers.get(cohortDate) ?? new Map<string, Set<number>>();
       users.set(actorId, new Set<number>([0]));
       cohortUsers.set(cohortDate, users);
     }
 
     for (const row of eventRows) {
-      const actorId = String(row[0] ?? '');
-      const eventDate = String(row[1] ?? '').slice(0, 10);
+      const actorId = String(row[0] ?? "");
+      const eventDate = String(row[1] ?? "").slice(0, 10);
       const cohortDate = actorToCohortDate.get(actorId);
       if (!actorId || !eventDate || !cohortDate) continue;
 
       const cohortStart = new Date(`${cohortDate}T00:00:00Z`);
       const activeDate = new Date(`${eventDate}T00:00:00Z`);
-      const offset = Math.round((activeDate.getTime() - cohortStart.getTime()) / 86_400_000);
+      const offset = Math.round(
+        (activeDate.getTime() - cohortStart.getTime()) / 86_400_000
+      );
       if (offset < 0 || offset > intervals) continue;
 
       const users = cohortUsers.get(cohortDate);
@@ -134,7 +183,10 @@ export async function GET(request: NextRequest) {
         const cohortStart = new Date(`${cohortDate}T00:00:00Z`);
         const maxAvailableDay = Math.min(
           intervals,
-          Math.max(0, Math.floor((today.getTime() - cohortStart.getTime()) / 86_400_000))
+          Math.max(
+            0,
+            Math.floor((today.getTime() - cohortStart.getTime()) / 86_400_000)
+          )
         );
 
         const data: RetentionPoint[] = [];
@@ -143,13 +195,20 @@ export async function GET(request: NextRequest) {
         for (let day = 0; day <= maxAvailableDay; day++) {
           let retainedUsers = 0;
           for (const offsets of actorOffsets) {
-            if (day === 0 || Array.from(offsets).some((value) => value >= day)) {
+            if (
+              day === 0 ||
+              Array.from(offsets).some((value) => value >= day)
+            ) {
               retainedUsers += 1;
             }
           }
           data.push({
             day,
-            retention: actorOffsets.length > 0 ? Math.round((retainedUsers / actorOffsets.length) * 10000) / 100 : 0,
+            retention:
+              actorOffsets.length > 0
+                ? Math.round((retainedUsers / actorOffsets.length) * 10000) /
+                  100
+                : 0,
           });
         }
 
@@ -160,22 +219,7 @@ export async function GET(request: NextRequest) {
         };
       });
 
-    const maxDays = cohorts.reduce((max, cohort) => Math.max(max, cohort.data.length), 0);
-    const mean: RetentionPoint[] = [];
-
-    for (let day = 0; day < maxDays; day++) {
-      const values = cohorts
-        .map((cohort) => cohort.data.find((point) => point.day === day)?.retention)
-        .filter((value): value is number => value != null);
-
-      if (values.length === 0) continue;
-
-      const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
-      mean.push({
-        day,
-        retention: Math.round(avg * 100) / 100,
-      });
-    }
+    const mean = weightedRetentionMean(cohorts);
 
     const totalUsers = cohorts.reduce((sum, cohort) => sum + cohort.users, 0);
 
@@ -186,9 +230,9 @@ export async function GET(request: NextRequest) {
       totalUsers,
     });
   } catch (error) {
-    console.error('Error fetching PostHog retention:', error);
+    console.error("Error fetching PostHog retention:", error);
     return NextResponse.json(
-      { error: 'Failed to fetch PostHog retention data' },
+      { error: "Failed to fetch PostHog retention data" },
       { status: 500 }
     );
   }

@@ -73,6 +73,20 @@ enum DefaultsKey: String {
   case onboardingHowDidYouHearSource = "onboardingHowDidYouHearSource"
   case onboardingRole = "onboardingRole"
   case onboardingJustCompleted = "onboardingJustCompleted"
+  /// Legacy onboarding ACP session id (pre-kernel `surface_conversations`).
+  case onboardingACPSessionId = "onboardingACPSessionId"
+  /// Legacy locally persisted onboarding chat messages; kernel journal owns this now.
+  case onboardingChatMessages = "onboardingChatMessages"
+  /// Mid-onboarding restart marker kept by `OnboardingChatPersistence`.
+  case onboardingMidOnboarding = "onboardingMidOnboarding"
+  /// Retired-wizard exploration text; only cleared from disk, never written now.
+  case onboardingExplorationText = "onboardingExplorationText"
+  /// Retired-wizard exploration completion; only cleared from disk, never written now.
+  case onboardingExplorationCompleted = "onboardingExplorationCompleted"
+  /// `complete_onboarding` tool-call marker kept by `OnboardingChatPersistence`.
+  case onboardingToolCompleted = "onboardingToolCompleted"
+  /// Monthly-goal answered marker kept by `OnboardingChatPersistence`.
+  case onboardingGoalCompleted = "onboardingGoalCompleted"
   case hasCompletedFileIndexing = "hasCompletedFileIndexing"
   case screenAnalysisEnabled = "screenAnalysisEnabled"
   case ratingPromptQuestionCount = "ratingPromptQuestionCount"
@@ -215,6 +229,10 @@ struct ScopedDefaultsKey {
 
   static func taskInterruptionLedger(ownerID: String) -> Self {
     Self(rawValue: "proactiveTaskInterruptionLedger.v1.\(ownerID)")
+  }
+
+  static func suggestionTaskNudgeLedger(ownerID: String) -> Self {
+    Self(rawValue: "suggestionTaskNudgeLedger.v1.\(ownerID)")
   }
 
   /// Owner-scoped record of which Home knows-list rows have already been shown,

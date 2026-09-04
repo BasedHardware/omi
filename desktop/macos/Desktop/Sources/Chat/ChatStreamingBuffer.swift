@@ -13,12 +13,33 @@ final class ChatStreamingBuffer {
     }
   }
 
+  /// The raw, un-normalized text a streaming message has received so far.
+  ///
+  /// `normalizeText` is a *projection*, not an edit: it may legitimately withhold
+  /// text it cannot yet classify — the follow-up tail marker arrives split across
+  /// flushes, and the question after it must never appear in the transcript. Feeding
+  /// a projection its own previous output destroys the evidence it needs on the next
+  /// flush, so what was withheld once leaks token by token afterwards. The raw text
+  /// is therefore accumulated here and the projection is only ever *written to* the
+  /// message, never read back out of it.
+  private struct RawAccumulator {
+    var text: String = ""
+    var blocks: [String: String] = [:]
+  }
+
   private var pendingSegments: [PendingSegment] = []
+  private var rawAccumulators: [String: RawAccumulator] = [:]
   private var flushWorkItem: DispatchWorkItem?
   private let flushInterval: TimeInterval
 
-  init(flushInterval: TimeInterval) {
+  /// Non-production leak detector for the projections this buffer emits. Nil on any bundle the
+  /// automation bridge is not enabled on, so a shipped app allocates nothing and runs no extra
+  /// work per flush. See `ChatStreamingTailProbe`.
+  let tailProjectionProbe: ChatStreamingTailProbe?
+
+  init(flushInterval: TimeInterval, probe: ChatStreamingTailProbe? = nil) {
     self.flushInterval = flushInterval
+    tailProjectionProbe = probe ?? (DesktopAutomationLaunchOptions.isEnabled ? ChatStreamingTailProbe() : nil)
   }
 
   func appendText(messageId: String, text: String, scheduleFlush: @escaping () -> Void) {
@@ -36,11 +57,23 @@ final class ChatStreamingBuffer {
     flushWorkItem = nil
   }
 
+  /// Release the raw accumulator for a finished turn.
+  ///
+  /// Called when the authoritative terminal answer replaces the streamed text.
+  /// Without this the map grows for the life of the session, and a message id
+  /// that streams a second time would resume from the first turn's text.
+  func finishStreaming(messageId: String) {
+    rawAccumulators[messageId] = nil
+    tailProjectionProbe?.forget(messageId: messageId)
+  }
+
   /// Drop only the buffered deltas for a revoked turn. A newer turn may already
   /// share this buffer, so cancelling or flushing the whole queue would either
   /// lose its tokens or apply the stopped turn's late output.
   func discardPendingSegments(messageId: String) {
     pendingSegments.removeAll { $0.messageId == messageId }
+    rawAccumulators[messageId] = nil
+    tailProjectionProbe?.forget(messageId: messageId)
     if pendingSegments.isEmpty {
       cancelPendingFlush()
     }
@@ -145,20 +178,34 @@ final class ChatStreamingBuffer {
     to message: inout ChatMessage,
     normalizeText: (_ message: ChatMessage, _ text: String) -> String
   ) {
-    message.text = normalizeText(message, message.text + text)
+    // Seed from what the message already carries the first time this turn
+    // appends, so a message that was restored or resumed keeps its prefix.
+    let seedText = message.text
+    var accumulator = rawAccumulators[message.id] ?? RawAccumulator(text: message.text)
+    accumulator.text += text
+    message.text = normalizeText(message, accumulator.text)
+    // Watched against a raw stream this buffer does not own, so the check survives the buffer
+    // losing its own. See `ChatStreamingTailProbe`.
+    tailProjectionProbe?.observe(
+      messageId: message.id, seed: seedText, delta: text, projection: message.text)
 
     if let lastBlockIndex = message.contentBlocks.indices.last,
       case .text(let blockId, let existing) = message.contentBlocks[lastBlockIndex]
     {
+      let rawBlock = (accumulator.blocks[blockId] ?? existing) + text
+      accumulator.blocks[blockId] = rawBlock
       message.contentBlocks[lastBlockIndex] = .text(
         id: blockId,
-        text: normalizeText(message, existing + text)
+        text: normalizeText(message, rawBlock)
       )
     } else {
+      let blockId = UUID().uuidString
+      accumulator.blocks[blockId] = text
       message.contentBlocks.append(
-        .text(id: UUID().uuidString, text: normalizeText(message, text))
+        .text(id: blockId, text: normalizeText(message, text))
       )
     }
+    rawAccumulators[message.id] = accumulator
   }
 
   private func appendThinkingSegment(_ text: String, to message: inout ChatMessage) {
@@ -344,5 +391,62 @@ enum ToolCallBlockUpdater {
       return toolUseId == requestedToolUseId || (toolUseId == nil && name == requestedName)
     }
     return name == requestedName
+  }
+}
+
+/// Counts projections that leaked text the follow-up tail rule had withheld.
+///
+/// The tail's damage is entirely mid-stream: the authoritative terminal answer overwrites
+/// `message.text` when the turn finishes, so every assertion a flow can make *after* the turn
+/// passes whether or not the chip's question was typed into the prose a token at a time on the way
+/// there. c164760b6b fixed exactly that leak and could be proved only by unit-testing the buffer
+/// directly. This makes the same property observable from a live app: not "the final text is
+/// right", but "no intermediate projection the reader saw ever contained the withheld tail".
+///
+/// It is an observer, not a second projection. It keeps its own raw stream — seeded once from the
+/// message and extended with the deltas the buffer is handed — and calls the shipped
+/// `ChatFollowUpTail.strippingPendingTail` on it. Keeping its own stream is the whole point: the
+/// defect was the buffer re-deriving the projection from its own withheld output, and a probe that
+/// read the buffer's accumulator would have agreed with the bug. Two projections of the same raw
+/// text differ only by the spacing normalizer, which inserts whitespace and never removes a
+/// character, so the comparison is on non-whitespace content and is exact rather than fuzzy.
+///
+/// Nil in production (`ChatStreamingBuffer.init`), so nothing here is a shipped path and the
+/// shipped projection is unchanged.
+final class ChatStreamingTailProbe {
+  /// Raw text per streaming message, independent of the buffer's own accumulator.
+  private var rawByMessage: [String: String] = [:]
+
+  /// How many projections have been checked. A flow reads it to know the probe was actually fed.
+  private(set) var projectionCount = 0
+  /// Whether any raw stream has carried a complete delimiter. Without this a zero leak count is
+  /// unfalsifiable: a turn that never produced a tail cannot leak one.
+  private(set) var delimiterSeen = false
+  /// Projections whose visible content did not match what the tail rule would have shown.
+  private(set) var leakCount = 0
+
+  /// - Parameters:
+  ///   - seed: the message text before this flush wrote to it, used only the first time this probe
+  ///     sees the message so a resumed turn keeps its prefix.
+  ///   - delta: the raw tokens this flush is applying.
+  ///   - projection: what the buffer just wrote to `message.text`.
+  func observe(messageId: String, seed: String, delta: String, projection: String) {
+    let raw = (rawByMessage[messageId] ?? seed) + delta
+    rawByMessage[messageId] = raw
+    projectionCount += 1
+    if raw.range(of: ChatFollowUpTail.delimiter) != nil { delimiterSeen = true }
+    if Self.significant(projection) != Self.significant(ChatFollowUpTail.strippingPendingTail(raw)) {
+      leakCount += 1
+    }
+  }
+
+  func forget(messageId: String) {
+    rawByMessage[messageId] = nil
+  }
+
+  /// Everything the spacing normalizer is not allowed to touch. It only ever inserts whitespace,
+  /// so two projections of the same raw text agree here exactly.
+  private static func significant(_ text: String) -> String {
+    text.filter { !$0.isWhitespace }
   }
 }

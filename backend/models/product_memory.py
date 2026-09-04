@@ -191,6 +191,8 @@ class MemoryItem(BaseModel):
     primary_capture_device: Optional[str] = None
     corroboration_count: int = 0
     last_corroborated_at: Optional[datetime] = None
+    half_life_days: Optional[float] = None
+    belief_class: Optional[str] = None
     confidence: Optional[float] = None
     superseded_by: Optional[str] = None
     subject_entity_id: Optional[str] = None

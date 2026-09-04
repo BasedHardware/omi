@@ -29,6 +29,10 @@ def _drive(monkeypatch, overview):
     monkeypatch.setattr(notif.daily_summaries_db, 'create_daily_summary', lambda *a, **k: 'sid')
     monkeypatch.setattr(notif.postprocess_executor, 'submit', lambda *a, **k: None)
     monkeypatch.setattr(notif, 'day_summary_webhook', lambda *a, **k: None)
+    # The scheduled send now selects the day's learned memories for the review
+    # card. Without a stub this reaches the real MemoryService and issues a live
+    # Firestore query from a unit test, which hangs under api_core's retry.
+    monkeypatch.setattr(notif, 'memories_learned_payload', lambda *a, **k: [])
     monkeypatch.setattr(notif, 'send_notification', lambda *a, **k: sent.append(a))
 
     notif._send_summary_notification(('u1', ['tok1']))

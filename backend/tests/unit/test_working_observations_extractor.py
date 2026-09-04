@@ -578,3 +578,38 @@ def test_l1_archive_extractor_deduplicates_within_subject_without_collapsing_oth
         ("Bob", "speaker_1"),
     ]
     assert len({item.archive_id for item in items}) == 2
+
+
+def test_l1_prompt_omits_belief_instructions_when_flag_off(monkeypatch):
+    monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED", raising=False)
+    fake_llm = FakeLLM('{"items": []}')
+    extract_l1_memory_archive_items_from_text(
+        uid="user_belief_off",
+        source_id="source_belief_off",
+        source_type="voice_transcript",
+        text="User prefers dark mode and asked Omi to remember it.",
+        persist_route_outcomes=False,
+        llm=fake_llm,
+    )
+    prompt = fake_llm.calls[0][0][1]
+    assert "belief_class" not in prompt
+    assert "half_life_days" not in prompt
+    assert "subject_scope" not in prompt
+
+
+def test_l1_prompt_includes_belief_instructions_when_flag_on(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    fake_llm = FakeLLM('{"items": []}')
+    extract_l1_memory_archive_items_from_text(
+        uid="user_belief_on",
+        source_id="source_belief_on",
+        source_type="voice_transcript",
+        text="User prefers dark mode and asked Omi to remember it.",
+        persist_route_outcomes=False,
+        llm=fake_llm,
+    )
+    prompt = fake_llm.calls[0][0][1]
+    assert "belief_class" in prompt
+    assert "half_life_days" in prompt
+    assert "subject_scope" in prompt
+    assert "media_screen" in prompt

@@ -1143,6 +1143,10 @@ extension RealtimeHubController {
             terminal: .success,
             idempotencyKey: completedTurnIdempotencyKey,
             acceptedSpawnOwnerID: acceptedSpawnOwnerID) ?? false
+        if accepted, !resolution.userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          let repliedToCard = FloatingControlBarManager.shared.recentNotchCardVoiceContext() != nil
+          DesktopUsageDailyReporter.shared.recordCompletedPTTTurn(repliedToCard: repliedToCard)
+        }
         self?.lastTurnDiagnostics = [
           "provider": provider,
           "provider_transcript": heard,

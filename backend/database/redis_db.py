@@ -1390,6 +1390,21 @@ def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) 
     return result is not None
 
 
+def release_daily_summary_lock(uid: str, date: str) -> None:
+    """Release a day lock this process took but did not spend on generation.
+
+    The 2h TTL exists to stop two workers doing the same LLM work, not to bar the day.
+    A holder that declines before the LLM call (no conversations yet, nothing transcribed)
+    has done nothing worth protecting, and keeping the key would block every later attempt
+    — including the on-demand button and the cron tick that would have caught the day once
+    it had content.
+    """
+    try:
+        r.delete(f'users:{uid}:daily_summary_lock:{date}')
+    except Exception as error:
+        logger.warning('Failed to release daily summary lock uid=%s date=%s: %s', uid, date, error)
+
+
 @try_catch_decorator
 def set_credits_invalidation_signal(uid: str, ttl: int = 120) -> None:
     """Signal active WebSocket sessions to refresh credits immediately.

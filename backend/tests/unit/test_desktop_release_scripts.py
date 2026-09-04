@@ -270,6 +270,9 @@ def test_stable_workflow_reads_current_beta_and_owns_its_cas_inputs():
     assert 'ref: ${{ inputs.release_tag }}' in workflow
     assert "operation:" not in workflow
     assert "repoint" not in workflow
+    assert "serving_backends" in workflow
+    assert "check_desktop_backend_drift.py" in workflow
+    assert "--strict" not in workflow
 
 
 def test_stable_workflow_uses_current_beta_manifest_without_qualification_lookup():

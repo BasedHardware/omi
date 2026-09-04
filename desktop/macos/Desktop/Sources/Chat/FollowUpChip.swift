@@ -81,3 +81,33 @@ struct FollowUpChip: View {
     }
   }
 }
+
+/// The send a main-window chip performs, as one function rather than a closure
+/// inside the bubble.
+///
+/// It is lifted out so the automation bridge's `tap_chat_follow_up_chip` is a
+/// second *caller* of the tap and never a second implementation of it. A copied
+/// closure would keep passing whatever the harness wrote into it long after the
+/// real chip changed — and the one thing the harness is there to prove is the
+/// attribution, which lives entirely in the order of these three lines.
+@MainActor
+enum FollowUpChipTap {
+  /// - Returns: the message id the provider accepted, or `nil` when it refused.
+  @discardableResult
+  static func send(question: String, provider: ChatProvider) async -> String? {
+    // Analytics commit at the provider's own acceptance boundary: a send it
+    // refuses emits nothing and mislabels nothing later.
+    await provider.sendMessage(
+      question,
+      surfaceRef: provider.mainChatSurfaceReference(),
+      turnOwner: .mainChat,
+      onAccepted: {
+        AnalyticsManager.shared.questionOriginating(.followUp)
+        AnalyticsManager.shared.chatMessageSent(
+          messageLength: question.count,
+          source: "follow_up_chip"
+        )
+      }
+    )
+  }
+}
