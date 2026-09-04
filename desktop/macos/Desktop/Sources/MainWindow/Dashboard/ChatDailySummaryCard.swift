@@ -67,10 +67,10 @@ struct ChatDailySummaryCard: View {
 
       let learned = Self.memoriesLearned(in: summary)
       if !learned.isEmpty {
-        // Keyed to the summary, so tomorrow's card starts from tomorrow's memories rather than
-        // inheriting a row model built for yesterday's.
+        // Keyed to the rows themselves, so tomorrow's card starts from tomorrow's memories rather
+        // than inheriting a row model built for yesterday's.
         MemoryReviewSection(items: learned, source: .dailySummaryChat)
-          .id("memory-review-\(summary.id)")
+          .id(Self.reviewSectionIdentity(summaryID: summary.id, items: learned))
       }
 
       if isExpanded {
@@ -251,8 +251,26 @@ struct ChatDailySummaryCard: View {
   /// with no qualifying memory shows no section, which is the honest empty state.
   nonisolated static func memoriesLearned(in summary: DailySummaryRecord) -> [MemoryReviewItem] {
     summary.memoriesLearned
-      .filter { !$0.memoryID.isEmpty && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+      .filter {
+        // Trimmed, not merely non-empty: a blank-but-present id would render a row whose ✓ / ✗ /
+        // Fix address no memory at all.
+        !$0.memoryID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      }
       .prefix(MemoryReviewSection.maxRows)
       .map(MemoryReviewItem.init)
+  }
+
+  /// Identity for the review section.
+  ///
+  /// The section holds one `MemoryReviewCardStore`, and the store captures its rows at init. A
+  /// summary regenerated for the same day keeps its id, so keying on the id alone kept the old
+  /// store alive: new memories never appeared and corrected ones kept the text the record no
+  /// longer contained. Folding the rows in rebuilds the section exactly when they change.
+  nonisolated static func reviewSectionIdentity(
+    summaryID: String, items: [MemoryReviewItem]
+  ) -> String {
+    let rows = items.map { "\($0.memoryID)\u{1F}\($0.content)" }.joined(separator: "\u{1E}")
+    return "memory-review-\(summaryID)\u{1E}\(rows)"
   }
 }

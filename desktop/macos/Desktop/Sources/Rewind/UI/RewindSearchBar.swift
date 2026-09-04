@@ -117,6 +117,10 @@ struct RewindSearchBar: View {
           .foregroundStyle(Ink.primary)
           .focused(focus)
           .accessibilityLabel(Text(Self.searchActionName))
+          .onChange(of: focus.wrappedValue) { _, focused in
+            guard focused else { return }
+            SearchAnalytics.barFocused(surface: .rewind)
+          }
       }
       .padding(.leading, isTyped ? RewindSearchMetrics.chipPaddingHorizontal : 0)
     }

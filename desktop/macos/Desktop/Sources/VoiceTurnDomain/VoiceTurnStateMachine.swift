@@ -259,6 +259,11 @@ package enum VoiceTurnTerminalReason: String, Equatable, Sendable, CaseIterable 
   case interruptedByBargeIn = "interrupted_by_barge_in"
   case permissionDenied = "permission_denied"
   case captureFailed = "capture_failed"
+  /// The press was long enough to speak into, but the microphone capture only
+  /// became operational near the end of it (or not at all). Distinct from
+  /// `captureFailed`, which is a capture start that errored, and from
+  /// `tooShort`, which blames the user for latency they did not cause.
+  case captureNotReady = "capture_not_ready"
   case transcriptionFailed = "transcription_failed"
   case providerFailed = "provider_failed"
   case providerNoResponse = "provider_no_response"
@@ -348,6 +353,8 @@ package enum VoiceTurnUICopy {
       return "Hold longer to record"
     case .captureFailed:
       return "Microphone unavailable — try again"
+    case .captureNotReady:
+      return "Microphone wasn't ready — retrying, hold again"
     case .transcriptionFailed:
       return "Couldn't transcribe that — try again"
     case .journalFailed:

@@ -38,7 +38,6 @@ from utils.llm.model_config import (
     _active_profile_name,
     _byok_profile,
     _byok_profile_name,
-    get_default_config,
     get_active_profile,
     get_active_profile_name,
     get_all_configured_features,

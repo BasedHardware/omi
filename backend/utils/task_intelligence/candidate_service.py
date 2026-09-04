@@ -1,13 +1,13 @@
 """Candidate lifecycle orchestration and post-commit integration policy."""
 
 import asyncio
-from datetime import datetime, timezone
 from typing import Optional, Protocol
 
 import database.action_items as action_items_db
+import database.candidate_integration_outbox as integration_outbox_db
 import database.candidates as candidates_db
 import database.workstreams as workstreams_db
-from database.durable_queue import OutcomeKind, ProcessOutcome, drain_isolated, oldest_ready_age_seconds
+from database.durable_queue import OutcomeKind, ProcessOutcome, drain_isolated
 from models.candidate import (
     CandidateAction,
     CandidateCreate,
@@ -17,7 +17,6 @@ from models.candidate import (
     CandidateSubjectKind,
 )
 from utils.executors import postprocess_executor, submit_with_context
-from utils.durable_queue_metrics import observe_oldest_ready_age
 from utils.observability.fallback import record_fallback
 from utils.task_sync import auto_sync_action_item
 from utils.task_intelligence import task_links
@@ -57,7 +56,7 @@ def create_candidate(
 
 
 def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, account_generation: int) -> bool:
-    lease_token = candidates_db.claim_candidate_integration_dispatch(
+    lease_token = integration_outbox_db.claim_candidate_integration_dispatch(
         uid,
         candidate_id,
         account_generation=account_generation,
@@ -66,7 +65,7 @@ def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, acc
         return False
     task = action_items_db.get_action_item(uid, task_id)
     if not task:
-        candidates_db.complete_candidate_integration_dispatch(
+        integration_outbox_db.complete_candidate_integration_dispatch(
             uid,
             candidate_id,
             account_generation=account_generation,
@@ -81,13 +80,13 @@ def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, acc
             reason='other',
             outcome='degraded',
         )
-        return True
+        return False
 
     def run_sync() -> None:
         try:
             result = asyncio.run(auto_sync_action_item(uid, task, skip_apple_reminders=False))
         except Exception:
-            candidates_db.complete_candidate_integration_dispatch(
+            integration_outbox_db.complete_candidate_integration_dispatch(
                 uid,
                 candidate_id,
                 account_generation=account_generation,
@@ -110,7 +109,7 @@ def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, acc
             'client_handles_sync',
         }
         succeeded = bool(result.get('synced')) or terminal_noop
-        candidates_db.complete_candidate_integration_dispatch(
+        integration_outbox_db.complete_candidate_integration_dispatch(
             uid,
             candidate_id,
             account_generation=account_generation,
@@ -132,21 +131,23 @@ def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, acc
 
 
 def drain_candidate_integrations(uid: str, *, account_generation: int, limit: int = 100) -> int:
-    items = candidates_db.list_candidate_integration_dispatches(
+    items = integration_outbox_db.list_candidate_integration_dispatches(
         uid,
         account_generation=account_generation,
         limit=limit,
-    )
-    created_ats = [item.get('created_at') for item in items if isinstance(item.get('created_at'), datetime)]
-    observe_oldest_ready_age(
-        'candidate_integration_outbox',
-        oldest_ready_age_seconds(created_ats, now=datetime.now(timezone.utc)),
     )
 
     def process_one(item: dict) -> ProcessOutcome:
         candidate_id = item.get('candidate_id')
         task_id = item.get('task_id')
         if not isinstance(candidate_id, str) or not isinstance(task_id, str):
+            if isinstance(candidate_id, str):
+                integration_outbox_db.dead_letter_malformed_candidate_integration(
+                    uid,
+                    candidate_id,
+                    account_generation=account_generation,
+                    error_text='malformed integration outbox item',
+                )
             return ProcessOutcome.reject('malformed integration outbox item', reason='malformed')
         scheduled = _dispatch_task_integration(
             uid,
@@ -154,7 +155,9 @@ def drain_candidate_integrations(uid: str, *, account_generation: int, limit: in
             task_id,
             account_generation=account_generation,
         )
-        return ProcessOutcome.ack() if scheduled else ProcessOutcome.retry('not_scheduled', reason='not_scheduled')
+        if not scheduled:
+            return ProcessOutcome.retry('not_scheduled', reason='not_scheduled')
+        return ProcessOutcome.ack()
 
     results = drain_isolated(items, process_one)
     return sum(1 for result in results if result.outcome.kind == OutcomeKind.ACK)

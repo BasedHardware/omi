@@ -66,6 +66,36 @@ final class MemoryReviewCardTests: XCTestCase {
     XCTAssertEqual(record.memoriesLearned.map(\.memoryID), ["mem_3"])
   }
 
+  /// One entry of the wrong shape is one row lost, not the whole section: the rest of the array
+  /// decodes independently around it.
+  func testOneMalformedLearnedEntryDoesNotDiscardTheValidRowsBesideIt() throws {
+    let record = try decodeRecord(
+      """
+      {
+        "id": "ds_1",
+        "memories_learned": [
+          { "memory_id": 17, "content": "id is a number" },
+          "not an object at all",
+          { "memory_id": "mem_2", "content": "Keeps a Wednesday release train." }
+        ]
+      }
+      """)
+    XCTAssertEqual(record.memoriesLearned.map(\.memoryID), ["mem_2"])
+  }
+
+  /// A blank-but-present id passes an emptiness check and produces a row whose ✓ / ✗ / Fix would
+  /// address no memory at all.
+  func testAWhitespaceOnlyMemoryIDIsNotAReviewRow() throws {
+    let record = try decodeRecord(
+      #"{"id": "ds_1", "memories_learned": [{"memory_id": "  ", "content": "Real content."}]}"#)
+    XCTAssertTrue(record.memoriesLearned.isEmpty)
+
+    let summary = DailySummaryRecord(
+      id: "ds_1", date: "2026-09-01", headline: nil, overview: nil,
+      memoriesLearned: [DailySummaryRecord.LearnedMemory(memoryID: " ", content: "Real content.")])
+    XCTAssertTrue(ChatDailySummaryCard.memoriesLearned(in: summary).isEmpty)
+  }
+
   func testRecordSurvivesAMemoriesLearnedFieldOfTheWrongShape() throws {
     let record = try decodeRecord(#"{"id": "ds_1", "headline": "Still here", "memories_learned": "nope"}"#)
     XCTAssertEqual(record.headline, "Still here")
@@ -95,6 +125,25 @@ final class MemoryReviewCardTests: XCTestCase {
       id: "ds_2", date: "2026-09-01", headline: "Quiet", overview: nil,
       memoriesLearned: [DailySummaryRecord.LearnedMemory(memoryID: "mem_1", content: "   ")])
     XCTAssertTrue(ChatDailySummaryCard.memoriesLearned(in: blank).isEmpty)
+  }
+
+  /// The section captures its rows when it is built, so a summary regenerated under the same id
+  /// must not reuse the old one: new memories would never appear and corrected ones would keep the
+  /// text the record no longer contains.
+  func testTheReviewSectionIsRebuiltWhenARegeneratedSummaryChangesItsRows() {
+    let first = [MemoryReviewItem(memoryID: "mem_1", content: "Prefers async standups.")]
+    let corrected = [MemoryReviewItem(memoryID: "mem_1", content: "Prefers written standups.")]
+    let added = first + [MemoryReviewItem(memoryID: "mem_2", content: "Ships on Wednesdays.")]
+
+    let identity = ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_1", items: first)
+    XCTAssertEqual(
+      identity, ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_1", items: first))
+    XCTAssertNotEqual(
+      identity, ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_1", items: corrected))
+    XCTAssertNotEqual(
+      identity, ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_1", items: added))
+    XCTAssertNotEqual(
+      identity, ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_2", items: first))
   }
 
   func testCategoryLabelIsBoundedButNeverInvented() {
@@ -339,6 +388,31 @@ final class MemoryReviewCardTests: XCTestCase {
       .none)
   }
 
+  // MARK: - Live read
+
+  /// A failed mirror read used to burn the once-per-mount flag: every row then read as unreviewed
+  /// for as long as the card stayed mounted, indistinguishable from a day nobody voted on.
+  @MainActor
+  func testAFailedLiveReadIsRetriedInsteadOfSettlingEveryRowAsUnreviewed() async {
+    let reader = FlakyStateReader()
+    let item = MemoryReviewItem(memoryID: "mem_1", content: "Prefers async standups.")
+    let store = MemoryReviewCardStore(
+      items: [item], source: .dailySummaryChat, mutator: UnusedMutator(), stateReader: reader)
+
+    await store.loadLiveStateIfNeeded()
+    XCTAssertEqual(reader.reads, 1)
+    XCTAssertEqual(store.row("mem_1").displayed, .none)
+
+    reader.result = ["mem_1": .accepted]
+    await store.loadLiveStateIfNeeded()
+    XCTAssertEqual(reader.reads, 2)
+    XCTAssertEqual(store.row("mem_1").displayed, .accepted)
+
+    // Once it has succeeded the section stops reading: it is chrome, not a poller.
+    await store.loadLiveStateIfNeeded()
+    XCTAssertEqual(reader.reads, 2)
+  }
+
   // MARK: - Telemetry shape
 
   func testTelemetryCategoryStaysBounded() {
@@ -348,7 +422,139 @@ final class MemoryReviewCardTests: XCTestCase {
     XCTAssertEqual(AnalyticsManager.boundedMemoryCategory(""), "unknown")
   }
 
+  // MARK: - Harness handle (memory-review.yaml)
+
+  /// The bridge reaches a mounted card through this handle; without it `memory-review.yaml` could
+  /// see a card render but never read which rows it bound or vote on one.
+  @MainActor
+  func testTheMountedHandleIsIdentityCheckedAcrossARebuild() {
+    let first = store(items: [MemoryReviewItem(memoryID: "mem_1", content: "One.")])
+    let second = store(items: [MemoryReviewItem(memoryID: "mem_2", content: "Two.")])
+
+    MemoryReviewCardRegistry.register(first, enabled: true)
+    MemoryReviewCardRegistry.register(second, enabled: true)
+    // The card rebuilds its section when the rows change, and both are mounted for a frame. The
+    // outgoing one must not clear the handle the incoming one just took.
+    MemoryReviewCardRegistry.unregister(first)
+    XCTAssertTrue(MemoryReviewCardRegistry.mounted === second)
+
+    MemoryReviewCardRegistry.unregister(second)
+    XCTAssertNil(MemoryReviewCardRegistry.mounted)
+  }
+
+  @MainActor
+  func testAProductionBundleRegistersNothing() {
+    // Compared against whatever was mounted rather than asserted nil, so the test says the same
+    // thing whichever order the suite runs in.
+    let before = MemoryReviewCardRegistry.mounted
+    MemoryReviewCardRegistry.register(
+      store(items: [MemoryReviewItem(memoryID: "mem_1", content: "One.")]), enabled: false)
+    XCTAssertTrue(MemoryReviewCardRegistry.mounted === before)
+  }
+
+  // MARK: - Fixture wire shape
+
+  /// Pinned against `backend/tests/unit/test_daily_summary_e2e_fixture.py`: the seed writes
+  /// `memory_id`, and a rename on either side leaves the card rendering no rows at all.
+  func testTheSeedRequestUsesTheKeysTheFixtureRouterReads() throws {
+    let request = MemoryReviewFixture.SeedRequest(
+      memories: [
+        MemoryReviewFixture.WireMemory(memoryID: "mem_1", content: "One.", category: "system")
+      ])
+    let json = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: try JSONEncoder().encode(request)) as? [String: Any])
+    let memories = try XCTUnwrap(json["memories"] as? [[String: Any]])
+    XCTAssertEqual(memories[0]["memory_id"] as? String, "mem_1")
+    XCTAssertEqual(memories[0]["content"] as? String, "One.")
+    XCTAssertEqual(memories[0]["category"] as? String, "system")
+  }
+
+  func testTheSeedResponseDecodesTheFixtureRouterReply() throws {
+    let response = try JSONDecoder().decode(
+      MemoryReviewFixture.SeedResponse.self,
+      from: Data(
+        """
+        {"status":"ok","summary_id":"dev-harness-daily-summary-2026-03-04",
+         "date":"2026-03-04","memories_learned":4}
+        """.utf8))
+    XCTAssertEqual(response.summaryID, "dev-harness-daily-summary-2026-03-04")
+    XCTAssertEqual(response.memoriesLearned, 4)
+  }
+
+  /// The flow seeds four and asserts three rows, so the catalog must be able to overfill the card.
+  @MainActor
+  func testTheFixtureCatalogCanOverfillTheCard() {
+    XCTAssertGreaterThan(MemoryReviewFixture.catalog.count, MemoryReviewSection.maxRows)
+    XCTAssertNil(MemoryReviewFixture.rows(count: 0))
+    XCTAssertNil(MemoryReviewFixture.rows(count: MemoryReviewFixture.catalog.count + 1))
+    // Asserted verbatim by `memory-review.yaml` S6.
+    XCTAssertEqual(
+      MemoryReviewFixture.rows(count: 4)?.map(\.content).first,
+      "Prefers async standups over daily calls.")
+    XCTAssertEqual(MemoryReviewFixture.rows(count: 4)?.count, 4)
+  }
+
+  @MainActor
+  func testOnlyTheTwoDrivableVerdictsAreAccepted() {
+    XCTAssertEqual(MemoryReviewFixture.event(for: "accept"), .accept)
+    XCTAssertEqual(MemoryReviewFixture.event(for: "reject"), .reject)
+    // `edit` needs a draft the row view owns, so the bridge refuses rather than half-driving it.
+    XCTAssertNil(MemoryReviewFixture.event(for: "edit"))
+    XCTAssertNil(MemoryReviewFixture.event(for: ""))
+  }
+
+  /// What the bridge reports is the row's own model, so the flow's expectations and the reducer
+  /// cannot drift: this asserts the exact strings `memory-review.yaml` S7 pins.
+  @MainActor
+  func testRowDetailReportsTheSettledRowTheFlowAsserts() async {
+    let item = MemoryReviewItem(memoryID: "mem_1", content: "Prefers async standups.", category: "system")
+    let card = store(items: [item])
+
+    let before = MemoryReviewFixture.rowDetail(index: 0, item: item, store: card)
+    XCTAssertEqual(before["row0_id"], "mem_1")
+    XCTAssertEqual(before["row0_category"], "About You")
+    XCTAssertEqual(before["row0_verdict"], "none")
+    XCTAssertEqual(before["row0_settled"], "false")
+
+    card.send(.accept, to: item)
+    _ = await MemoryReviewFixture.waitForSettled(store: card, item: item, timeoutMs: 2_000)
+
+    let after = MemoryReviewFixture.rowDetail(index: 0, item: item, store: card)
+    XCTAssertEqual(after["row0_verdict"], "accepted")
+    XCTAssertEqual(after["row0_settled"], "true")
+    XCTAssertEqual(after["row0_status"], "Confirmed. I'll act on this.")
+    XCTAssertEqual(after["row0_error"], "")
+    XCTAssertEqual(after["row0_busy"], "false")
+  }
+
   // MARK: - Helpers
+
+  /// Fails until it is given a result, so "the read failed" and "nobody has voted" are two
+  /// different observable outcomes rather than the same empty dictionary.
+  private final class FlakyStateReader: MemoryReviewStateReading, @unchecked Sendable {
+    struct ReadFailed: Error {}
+
+    var result: [String: MemoryReviewVerdict]?
+    private(set) var reads = 0
+
+    func verdicts(for items: [MemoryReviewItem]) async throws -> [String: MemoryReviewVerdict] {
+      reads += 1
+      guard let result else { throw ReadFailed() }
+      return result
+    }
+  }
+
+  @MainActor
+  private func store(items: [MemoryReviewItem]) -> MemoryReviewCardStore {
+    MemoryReviewCardStore(
+      items: items, source: .dailySummaryChat, mutator: UnusedMutator(),
+      stateReader: FlakyStateReader(), analytics: { _, _, _, _ in })
+  }
+
+  private struct UnusedMutator: MemoryReviewMutating {
+    func review(memoryID: String, keep: Bool) async throws {}
+    func edit(memoryID: String, content: String) async throws {}
+  }
 
   private func memory(content: String, review: Bool?) -> ServerMemory {
     ServerMemory(

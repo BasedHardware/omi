@@ -536,7 +536,8 @@ describe("RunToolCapabilityBroker", () => {
     expect(authorized.canonicalToolName).toBe("web_search");
     store.close();
 
-    // A plain chat run must not inherit voice-only tools.
+    // A plain ACP chat run must not inherit voice-only tools. Typed desktop
+    // chat advertises web_search through the pi-mono adapter, not this ACP fixture.
     const chat = fixture();
     const chatCapability = createBroker(chat.store).register({
       ownerId: chat.session.ownerId,

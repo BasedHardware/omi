@@ -47,8 +47,8 @@ enum RealtimeExternalRunTerminalPolicy {
     case .tooShort, .silentRejected, .cancelled, .ownerChanged, .interruptedByBargeIn,
       .explicitInterrupt, .cleanup:
       return .cancelled
-    case .permissionDenied, .captureFailed, .transcriptionFailed, .providerFailed,
-      .providerNoResponse, .hubWarmTimeout, .deferredCommitTimeout,
+    case .permissionDenied, .captureFailed, .captureNotReady, .transcriptionFailed,
+      .providerFailed, .providerNoResponse, .hubWarmTimeout, .deferredCommitTimeout,
       .bargeInReplacementTimeout, .toolTimeout, .playbackFailed, .journalFailed:
       return .failed
     }
@@ -72,9 +72,10 @@ enum VoiceTurnJournalStatusPolicy {
     case .success:
       return .completed
     case .tooShort, .silentRejected, .cancelled, .ownerChanged, .interruptedByBargeIn,
-      .explicitInterrupt, .cleanup, .permissionDenied, .captureFailed, .transcriptionFailed,
-      .providerFailed, .providerNoResponse, .hubWarmTimeout, .deferredCommitTimeout,
-      .bargeInReplacementTimeout, .toolTimeout, .playbackFailed, .journalFailed:
+      .explicitInterrupt, .cleanup, .permissionDenied, .captureFailed, .captureNotReady,
+      .transcriptionFailed, .providerFailed, .providerNoResponse, .hubWarmTimeout,
+      .deferredCommitTimeout, .bargeInReplacementTimeout, .toolTimeout, .playbackFailed,
+      .journalFailed:
       return .failed
     }
   }

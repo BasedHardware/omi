@@ -70,6 +70,9 @@ environments:
           CONVERSATION_NOTES_V2_ENABLED:
             value: 'true'
             category: rollout
+          LLM_GATEWAY_ACCOUNTING_ENABLED:
+            value: 'true'
+            category: rollout
           MEETING_RECEIPT_RECONCILER_ENABLED:
             value: 'false'
             category: rollout
@@ -385,6 +388,9 @@ environments:
         PROMETHEUS_SIDECAR_PORT:
           value: '9090'
           category: telemetry
+        LLM_GATEWAY_ACCOUNTING_ENABLED:
+          value: 'true'
+          category: rollout
       secrets:
         METRICS_SECRET:
           secret: METRICS_SECRET
@@ -436,6 +442,9 @@ environments:
               value: '9090'
               category: telemetry
             CONVERSATION_NOTES_V2_ENABLED:
+              value: 'true'
+              category: rollout
+            LLM_GATEWAY_ACCOUNTING_ENABLED:
               value: 'true'
               category: rollout
             MEETING_RECEIPT_RECONCILER_ENABLED:
@@ -1288,6 +1297,9 @@ environments:
           CONVERSATION_NOTES_V2_ENABLED:
             value: 'true'
             category: rollout
+          LLM_GATEWAY_ACCOUNTING_ENABLED:
+            value: 'true'
+            category: rollout
           MEETING_RECEIPT_RECONCILER_ENABLED:
             value: 'false'
             category: rollout
@@ -1527,6 +1539,9 @@ environments:
         PROMETHEUS_SIDECAR_PORT:
           value: '9090'
           category: telemetry
+        LLM_GATEWAY_ACCOUNTING_ENABLED:
+          value: 'true'
+          category: rollout
       secrets:
         METRICS_SECRET:
           secret: METRICS_SECRET
@@ -1583,6 +1598,9 @@ environments:
               value: '9090'
               category: telemetry
             CONVERSATION_NOTES_V2_ENABLED:
+              value: 'true'
+              category: rollout
+            LLM_GATEWAY_ACCOUNTING_ENABLED:
               value: 'true'
               category: rollout
             MEETING_RECEIPT_RECONCILER_ENABLED:

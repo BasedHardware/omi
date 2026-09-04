@@ -18,8 +18,9 @@ already-satisfied identities, prioritize user-time-sensitive sources, and page o
 a durable stalled-queue event.
 
 After the substrate lands, **new queues must use it**. There is at most one
-durable-queue implementation in Python (`database/durable_queue.py`) and one in
-TypeScript (`desktop/macos/agent/src/runtime/durable-queue.ts`).
+durable-queue policy implementation in Python (`utils/durable_queue_policy.py`,
+re-exported by `database/durable_queue.py`) and one in TypeScript
+(`desktop/macos/agent/src/runtime/durable-queue.ts`).
 
 ## Required properties
 
@@ -45,7 +46,7 @@ its own SELECT/lease/retry copy.
 |---|---|---|---|---|---|---|---|
 | `backend_turn_outbox` | `conversation-journal.ts`, `sqlite-store.ts` | Y — hash-mismatch quarantines the row | Y — 5 attempts, `failed` is the DL | Y — `turn_id` PK, `ON CONFLICT DO NOTHING` | N — FIFO | Y — `getJournalObservability().oldestPendingDeliveryCreatedAtMs` | P — stale HTTP results absorbed as superseded |
 | `backend_conversation_delete_outbox` | `conversation-journal.ts`, `sqlite-store.ts` | P — lease is per row; a throw aborts the pump batch | Y — 5 attempts | Y — `operation_id`; duplicate insert can raise on UNIQUE | N | N | Y |
-| `chat_first_deferral_outbox` | `conversation-journal.ts`, `sqlite-store.ts` | Y | Y — 5 attempts, non-retry on `*_4xx` | P — `continuity_key` PK; payload-hash mismatch throws | N | N | Y |
+| `chat_first_deferral_outbox` | `conversation-journal.ts`, `sqlite-store.ts` | Y | Y — 5 attempts, non-retry on `*_4xx` | Y — `continuity_key` PK; reused key keeps the first payload | N | N | Y |
 | `chat_first_materialization_receipts` | `conversation-journal.ts`, `sqlite-store.ts` | Y — not a drain queue; per-intent txn | N — receipts are not retried | P — `intent_id` PK; identity mismatch throws rather than adopt | N | N | Y |
 | `chat_first_cold_start_sequence_receipts` | `conversation-journal.ts`, `sqlite-store.ts` | Y | N | Y — `(sequence_id, owner_id)` | N | N | Y |
 
@@ -107,31 +108,51 @@ outside `FC-batch-fault-domain-head-of-line-poison`'s four sibling incidents.
 
 ## After
 
-Every TypeScript and Python queue in the tables above consumes that language's
-substrate for the six properties. Remaining exceptions, called out because they
-must not change product semantics:
+Every production drain in the inventory now goes through `drain_isolated` /
+`drain_isolated_async` / `drainIsolated`. Policy primitives (outcomes,
+`decide_attempt`, `backoff_seconds`, `adopt_on_identity`, `ready_sort_key`,
+`oldest_ready_age_seconds`, drain) live in `utils/durable_queue_policy.py` so
+async callers can import them without the async-blocker treating `database.*`
+as I/O. `database/durable_queue.py` re-exports those names and owns the
+additive redrive patch. Store-wide oldest-ready sampling lives in
+`database/durable_queue_age.py` and is published from the backend's periodic
+reconcile tick in `main.py`, never from a request or from the items a drain
+happened to lease.
+
+Remaining exceptions, called out because they must not change product semantics:
 
 - `conversation_finalization_jobs` keeps its Firestore document shape, BYOK
-  `blocked_byok`, and `reconcile_after_at` semantics. Age is published as
-  `omi_queue_oldest_ready_age_seconds` from the finalization service. The async
-  pusher helper keeps its existing Cloud Tasks attempt fence so it does not
-  import `database.durable_queue` (the async-blocker gate treats `database.*`
-  calls as blocking I/O).
-- `chat_first_proactive_intents` already isolated per item in PR #12556; this
-  change observes `omi_queue_oldest_ready_age_seconds` from the materialize
-  route rather than growing `chat_first_intents.py`.
+  `blocked_byok`, Cloud Tasks fence, and `reconcile_after_at`. The attempt
+  decision in the async pusher helper comes from `decide_attempt` in
+  `utils/durable_queue_policy.py`. Age is sampled store-wide on the periodic
+  tick from `get_finalization_job_summary`.
+- `chat_first_proactive_intents` fetch order uses `ready_sort_key` via
+  `database/chat_first_intent_queue.py` so `chat_first_intents.py` does not
+  grow. Materialize keeps HTTP 200 for the client contract; a batch whose
+  every intent is a hard rejection increments `chat_first_proactive_total`
+  `materialize_batch_rejected`.
 - `frame_deletion_outbox` still retries storage deletes without a hard stop
   (user objects must keep converging). Drain is `drain_isolated`; failures
   record `last_error_text`.
 - `task_recurrence_inbox` drain uses `drain_isolated`; receipts already adopt
   by identity. Retry stays pending rather than a new status enum.
-- Daily-sweep UID cleanup uses `drain_sweep_uids`; the per-UID process loop
-  already isolated with try/except and is not rewritten in the 5048-line file.
+- Daily-summary hour groups are ephemeral (no durable row). One hour-group
+  failure never aborts later hours; `send_daily_summary_notification` returns
+  a typed non-success outcome when any hour rejects, including per-user send
+  failures and an hour whose every timezone-chunk read failed.
+- Daily-sweep cleanup **and** the #12533 per-UID process loop drain through
+  `drain_sweep_uids` in `daily_memory_sweep_queue.py`.
+- Kernel SQLite outboxes publish oldest-ready age through
+  `getJournalObservability`'s store-wide `MIN(created_at_ms)` union, not
+  `omi_queue_*`.
 - Swift app-local queues stay Swift; the kernel owns the SQLite outboxes.
 
-The implementations are `database/durable_queue.py` and
-`desktop/macos/agent/src/runtime/durable-queue.ts`. New queues must import those
-modules. The oldest-ready gauge is `omi_queue_oldest_ready_age_seconds`; the
-pager is `omi-queue-oldest-ready` in `backend/charts/monitoring/alerts/resilience.json`.
-No new Firestore composite indexes. Failure-class registry JSON is not edited
-in this PR.
+The implementations are `utils/durable_queue_policy.py` (I/O-free),
+`database/durable_queue.py` (redrive), `database/durable_queue_age.py`
+(store-wide sample), and `desktop/macos/agent/src/runtime/durable-queue.ts`.
+New queues must import those modules. The oldest-ready gauge is
+`omi_queue_oldest_ready_age_seconds`; it is **not** zero-initialized, so
+`absent()` means the periodic publisher has not run. The pager is
+`omi-queue-oldest-ready` in `backend/charts/monitoring/alerts/resilience.json`
+with `noDataState: Alerting`. No new Firestore composite indexes. Failure-class
+registry JSON is not edited in this PR.

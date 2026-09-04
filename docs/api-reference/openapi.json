@@ -265,6 +265,16 @@
             "description": "Client platform (ios/android/macos)",
             "title": "Client Platform"
           },
+          "client_processing": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler: a malformed projection is dropped and the conversation still lands. Display only — never an input to intelligence.",
+            "title": "Client Processing"
+          },
           "client_session_id": {
             "anyOf": [
               {

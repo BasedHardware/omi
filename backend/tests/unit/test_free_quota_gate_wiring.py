@@ -230,6 +230,13 @@ class TestOmniRelayGate:
         ), patch.object(
             relay, 'is_trial_paywalled', return_value=False
         ), patch.object(
+            # Explicit: the module-level AutoMock of database.users does not reach
+            # `relay.users_db` when routers.omni_relay was already imported by
+            # another test file in this process, and the real one reads Firestore.
+            relay.users_db,
+            'is_byok_active',
+            return_value=False,
+        ), patch.object(
             relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': False}
         ) as snapshot:
             asyncio.run(relay.omni_relay(ws))
@@ -302,6 +309,8 @@ class TestOmniRelayGate:
             relay, 'extract_byok_from_websocket', return_value={}
         ), patch.object(
             relay, 'is_trial_paywalled', return_value=False
+        ), patch.object(
+            relay.users_db, 'is_byok_active', return_value=False
         ), patch.object(
             relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': True}
         ):

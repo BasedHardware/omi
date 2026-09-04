@@ -321,3 +321,66 @@ def test_chat_first_validate_returns_a_typed_rejection_for_malformed_block_schem
 
     assert response.status_code == 200
     assert response.json() == {'accepted': False, 'code': 'invalid_request', 'blocks': []}
+
+
+def test_chat_first_validate_admits_the_desktop_memory_review_card(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    monkeypatch.setattr(
+        chat_first_router,
+        'fetch_memory_dict',
+        lambda uid, memory_id, **kwargs: {'id': memory_id, 'content': 'private-content-not-returned'},
+    )
+
+    # The exact shape the desktop adapter emits, including the empty-string
+    # substitutions it makes when the source block carried no provenance.
+    response = _client().post(
+        '/v1/chat-first/blocks/validate',
+        json=_request(
+            blocks=[
+                {
+                    'type': 'memoryReviewCard',
+                    'summary_id': '',
+                    'date': '',
+                    'items': [
+                        {'memory_id': 'memory-1', 'content': 'Prefers async standups', 'category': 'work'},
+                        {'memory_id': 'memory-2', 'content': 'Runs on Tuesdays', 'category': ''},
+                    ],
+                }
+            ]
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json()['accepted'] is True
+    block = response.json()['blocks'][0]
+    assert block['type'] == 'memoryReviewCard'
+    assert [item['memory_id'] for item in block['items']] == ['memory-1', 'memory-2']
+
+
+def test_chat_first_validate_rejects_a_memory_review_card_the_account_does_not_own(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    monkeypatch.setattr(
+        chat_first_router,
+        'fetch_memory_dict',
+        lambda uid, memory_id, **kwargs: {'id': memory_id} if memory_id == 'memory-1' else None,
+    )
+
+    response = _client().post(
+        '/v1/chat-first/blocks/validate',
+        json=_request(
+            blocks=[
+                {
+                    'type': 'memoryReviewCard',
+                    'summary_id': 'summary-1',
+                    'date': '2026-09-02',
+                    'items': [
+                        {'memory_id': 'memory-1', 'content': 'Owned', 'category': ''},
+                        {'memory_id': 'memory-9', 'content': 'Not this account', 'category': ''},
+                    ],
+                }
+            ]
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {'accepted': False, 'code': 'entity_unavailable', 'blocks': []}

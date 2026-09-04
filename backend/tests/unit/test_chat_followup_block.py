@@ -198,3 +198,43 @@ def test_failed_turn_persists_no_followup_block():
         assert ai_writes[0]['content_blocks'] == []
     finally:
         _cleanup(saved)
+
+
+@pytest.mark.parametrize(
+    'tail',
+    [
+        'Who else was there? What did they decide?',
+        'That was the Q3 review. Want the attendee list?',
+        'Nice! Should I pull the attendee list?',
+    ],
+)
+def test_tail_with_more_than_one_sentence_is_dropped(tail):
+    """One chip carries one question; a packed tail has left the contract."""
+    visible, question = split_followup_tail(f"Answer.\n{FOLLOWUP_DELIMITER} {tail}")
+    assert visible == 'Answer.'
+    assert question is None
+
+
+@pytest.mark.parametrize(
+    'tail',
+    [
+        'Want the notes from the 10 a.m. standup?',
+        'Should I check what the 3.5 release changed?',
+    ],
+)
+def test_one_question_survives_an_internal_period(tail):
+    """A decimal or a lowercase abbreviation is not a sentence boundary."""
+    visible, question = split_followup_tail(f"Answer.\n{FOLLOWUP_DELIMITER} {tail}")
+    assert visible == 'Answer.'
+    assert question == tail
+
+
+def test_a_turn_cut_short_mid_marker_leaves_no_residue():
+    """A timeout can stop the model part-way through the delimiter it was writing."""
+    visible, question = split_followup_tail('You and Priya settled on Thursday.\n<<<FOLL')
+    assert visible == 'You and Priya settled on Thursday.\n'
+    assert question is None
+
+
+def test_text_that_merely_ends_in_an_angle_bracket_is_kept():
+    assert split_followup_tail('The condition is x <') == ('The condition is x <', None)

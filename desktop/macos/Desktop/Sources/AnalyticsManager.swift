@@ -165,11 +165,19 @@ class AnalyticsManager {
   /// Test seam for `question_asked` / `question_answered`; the emitters live in
   /// `Analytics/AnalyticsManager+Questions.swift`, so this is internal, not private.
   var questionTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  /// Test seam for search events; emitters live in `Analytics/AnalyticsManager+Search.swift`.
+  var searchTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
 
   func setFloatingBarQueryTelemetryCaptureForTests(
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
   ) {
     floatingBarQueryTelemetryCaptureForTests = capture
+  }
+
+  func setSearchTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    searchTelemetryCaptureForTests = capture
   }
 
   // MARK: - Initialization
@@ -850,16 +858,6 @@ class AnalyticsManager {
   func desktopPromptDismissed(promptId: String, promptType: String) {
     PostHogManager.shared.track(
       "Desktop Prompt Dismissed", properties: ["prompt_id": promptId, "prompt_type": promptType])
-  }
-
-  // MARK: - Search Events
-
-  func searchQueryEntered(query: String) {
-    PostHogManager.shared.searchQueryEntered(query: query)
-  }
-
-  func searchBarFocused() {
-    PostHogManager.shared.searchBarFocused()
   }
 
   // MARK: - Settings Events

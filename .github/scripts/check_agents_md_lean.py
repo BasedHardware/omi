@@ -20,6 +20,7 @@ that is cheaper than the file you are editing.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -69,10 +70,52 @@ def check_file(path: Path, budget: tuple[int, int], label: str) -> list[str]:
     return errors
 
 
+def ignored_paths(repo: Path) -> set[Path]:
+    """Directories and files git ignores, as absolute paths.
+
+    The scan walks the working tree, but the contract is about the tree CI checks
+    out. A developer machine also holds gitignored siblings — `.claude/worktrees/`
+    is a documented multi-worktree pattern — and each of those contains its own
+    copy of the repo's tracked AGENTS.md files. Walking into them reports a file
+    that is neither new nor in the pushed diff, and the only way past it is
+    `--no-verify`, which drops every other pre-push guard too.
+
+    Returns an empty set when git cannot answer, so the check degrades to the
+    static SKIP_PARTS list rather than failing.
+    """
+    try:
+        completed = subprocess.run(
+            [
+                "git", "-C", str(repo), "ls-files", "--others", "--ignored",
+                "--exclude-standard", "--directory", "-z",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    return {
+        (repo / entry).resolve()
+        for entry in completed.stdout.split("\0")
+        if entry
+    }
+
+
 def discover(repo: Path) -> list[Path]:
+    ignored = ignored_paths(repo)
+
+    def is_ignored(path: Path) -> bool:
+        resolved = path.resolve()
+        return any(
+            resolved == candidate or candidate in resolved.parents
+            for candidate in ignored
+        )
+
     return sorted(
         p for p in repo.rglob("AGENTS.md")
-        if not SKIP_PARTS.intersection(p.parts)
+        if not SKIP_PARTS.intersection(p.parts) and not is_ignored(p)
     )
 
 
@@ -91,6 +134,30 @@ def self_test() -> None:
         f.write_text("y" * 101)
         assert any("bytes" in e for e in check_file(f, (10_000, 100), "t")), (
             "over-bytes must fail"
+        )
+
+    # A gitignored sibling worktree holds its own copy of every tracked AGENTS.md.
+    # Discovering those reports files that are neither new nor in the pushed diff
+    # (#12572), so `discover` must see the same tree CI checks out.
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp)
+        try:
+            subprocess.run(
+                ["git", "init", "-q", str(repo)],
+                capture_output=True, timeout=60, check=True,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return  # git unavailable: the check degrades to SKIP_PARTS, nothing to prove
+
+        (repo / ".gitignore").write_text(".claude/\n")
+        (repo / "AGENTS.md").write_text("# tracked\n")
+        worktree = repo / ".claude" / "worktrees" / "agent-abc" / ".github"
+        worktree.mkdir(parents=True)
+        (worktree / "AGENTS.md").write_text("# copy inside an ignored sibling worktree\n")
+
+        found = {p.relative_to(repo).as_posix() for p in discover(repo)}
+        assert found == {"AGENTS.md"}, (
+            f"ignored worktree copies must not be discovered, got {sorted(found)}"
         )
 
 

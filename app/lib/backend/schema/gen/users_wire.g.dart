@@ -592,28 +592,44 @@ class GeneratedLearnedMemoryRef {
 
 class GeneratedDailySummaryDayStats {
   final int? actionItemsCount;
+  final int? actionItemsCreated;
+  final int? memoriesCreated;
+  final int? proactiveMoments;
   final int? totalConversations;
   final int? totalDurationMinutes;
+  final int? watchingMinutes;
 
   const GeneratedDailySummaryDayStats({
     this.actionItemsCount,
+    this.actionItemsCreated,
+    this.memoriesCreated,
+    this.proactiveMoments,
     this.totalConversations,
     this.totalDurationMinutes,
+    this.watchingMinutes,
   });
 
   factory GeneratedDailySummaryDayStats.fromJson(Map<String, dynamic> json) {
     return GeneratedDailySummaryDayStats(
       actionItemsCount: _readFieldValue<int>(_readField(json, const ["action_items_count"]), "action_items_count", _readInt, requiredField: false, nullable: true),
+      actionItemsCreated: _readFieldValue<int>(_readField(json, const ["action_items_created"]), "action_items_created", _readInt, requiredField: false, nullable: true),
+      memoriesCreated: _readFieldValue<int>(_readField(json, const ["memories_created"]), "memories_created", _readInt, requiredField: false, nullable: true),
+      proactiveMoments: _readFieldValue<int>(_readField(json, const ["proactive_moments"]), "proactive_moments", _readInt, requiredField: false, nullable: true),
       totalConversations: _readFieldValue<int>(_readField(json, const ["total_conversations"]), "total_conversations", _readInt, requiredField: false, nullable: true),
       totalDurationMinutes: _readFieldValue<int>(_readField(json, const ["total_duration_minutes"]), "total_duration_minutes", _readInt, requiredField: false, nullable: true),
+      watchingMinutes: _readFieldValue<int>(_readField(json, const ["watching_minutes"]), "watching_minutes", _readInt, requiredField: false, nullable: true),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'action_items_count': actionItemsCount,
+      'action_items_created': actionItemsCreated,
+      'memories_created': memoriesCreated,
+      'proactive_moments': proactiveMoments,
       'total_conversations': totalConversations,
       'total_duration_minutes': totalDurationMinutes,
+      'watching_minutes': watchingMinutes,
     };
   }
 }

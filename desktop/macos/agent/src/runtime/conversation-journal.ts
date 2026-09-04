@@ -2,11 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { structuredTurnFallbackText } from "./content-block-fallback.js";
 import { conversationTurnFromRow } from "./conversation-turns.js";
 import {
-  adoptOnIdentity,
   decideAttempt,
   DEFERRAL_OUTBOX_POLICY,
+  drainIsolated,
   JOURNAL_OUTBOX_POLICY,
-  oldestReadyCreatedAtMs,
 } from "./durable-queue.js";
 import { generateAgentId } from "./sqlite-store.js";
 import type {
@@ -1124,7 +1123,6 @@ function materializeChatFirstIntentInTransaction(
     [intentId],
   );
   if (existingReceipt) {
-    adoptOnIdentity(intentId, intentId);
     if (
       String(existingReceipt.owner_id) !== input.ownerId
       || String(existingReceipt.conversation_id) !== input.conversationId
@@ -1373,7 +1371,8 @@ export function drainChatFirstDeferralOutbox(
        ORDER BY created_at_ms ASC LIMIT ?`,
       [input.ownerId, now, now, limit],
     );
-    return rows.map((row) => {
+    const deliveries: ChatFirstDeferralDelivery[] = [];
+    drainIsolated(rows, (row) => {
       const continuityKey = String(row.continuity_key);
       const deliveryGeneration = Number(row.delivery_generation) + 1;
       const attemptCount = Number(row.attempt_count) + 1;
@@ -1385,7 +1384,7 @@ export function drainChatFirstDeferralOutbox(
         [attemptCount, deliveryGeneration, now + DEFAULT_OUTBOX_LEASE_MS, now, continuityKey, input.ownerId],
       );
       const question = JSON.parse(String(row.question_json)) as Extract<ConversationContentBlock, { type: "questionCard" }>;
-      return {
+      deliveries.push({
         continuityKey,
         ownerId: String(row.owner_id),
         conversationId: String(row.conversation_id),
@@ -1395,8 +1394,10 @@ export function drainChatFirstDeferralOutbox(
         payloadHash: String(row.payload_hash),
         attemptCount,
         deliveryGeneration,
-      };
+      });
+      return { kind: "ack" };
     });
+    return deliveries;
   });
 }
 
@@ -2850,7 +2851,8 @@ export function drainBackendConversationDeleteOutbox(
        LIMIT ?`,
       [ownerId, now, now, limit],
     );
-    return candidates.map((candidate) => {
+    const deliveries: BackendConversationDeleteDelivery[] = [];
+    drainIsolated(candidates, (candidate) => {
       const operationId = String(candidate.operation_id);
       store.execute(
         `UPDATE backend_conversation_delete_outbox
@@ -2860,8 +2862,10 @@ export function drainBackendConversationDeleteOutbox(
          WHERE operation_id = ?`,
         [now + leaseMs, now, operationId],
       );
-      return requireBackendConversationDelete(store, operationId);
+      deliveries.push(requireBackendConversationDelete(store, operationId));
+      return { kind: "ack" };
     });
+    return deliveries;
   });
 }
 
@@ -3046,7 +3050,7 @@ export function drainBackendTurnOutbox(
 
     const deliveries: BackendTurnDelivery[] = [];
     const quarantined: string[] = [];
-    for (const candidate of candidates) {
+    drainIsolated(candidates, (candidate) => {
       const turnId = String(candidate.turn_id);
       const currentOutbox = requireOutboxRecord(store, turnId);
       const turn = requireJournalTurn(store, currentOutbox.conversationId, turnId);
@@ -3072,12 +3076,12 @@ export function drainBackendTurnOutbox(
         });
         store.execute(
           `UPDATE backend_turn_outbox
-           SET status = 'failed', last_error_code = ?, lease_expires_at_ms = NULL, updated_at_ms = ?
+           SET status = ?, last_error_code = ?, lease_expires_at_ms = NULL, updated_at_ms = ?
            WHERE turn_id = ?`,
-          [decision.errorText, now, turnId],
+          [decision.terminal ? "failed" : "retrying", decision.errorText, now, turnId],
         );
         quarantined.push(turnId);
-        continue;
+        return { kind: "ack" };
       }
       const journalState = requireJournalState(store, currentOutbox.conversationId);
       store.execute(
@@ -3091,7 +3095,8 @@ export function drainBackendTurnOutbox(
       );
       const outbox = requireOutboxRecord(store, turnId);
       deliveries.push({ ...outbox, clientMessageId: turnId, turn, payload });
-    }
+      return { kind: "ack" };
+    });
     if (input.onQuarantine) {
       for (const turnId of quarantined) input.onQuarantine(turnId);
     }
@@ -3353,9 +3358,7 @@ export function getJournalObservability(
   return {
     turnStatusCounts: countRows<ConversationTurnStatus>(turnRows),
     deliveryStatusCounts: countRows<BackendTurnOutboxStatus>(deliveryRows),
-    oldestPendingDeliveryCreatedAtMs: oldestReadyCreatedAtMs(
-      oldest?.oldest == null ? [] : [Number(oldest.oldest)],
-    ),
+    oldestPendingDeliveryCreatedAtMs: oldest?.oldest == null ? null : Number(oldest.oldest),
   };
 }
 
@@ -3983,7 +3986,7 @@ function questionInteractionTurns(
   };
 }
 
-function enqueueChatFirstDeferral(
+export function enqueueChatFirstDeferral(
   store: AgentStore,
   input: {
     ownerId: string;
@@ -4011,8 +4014,9 @@ function enqueueChatFirstDeferral(
     "SELECT continuity_key FROM chat_first_deferral_outbox WHERE continuity_key = ?",
     [input.continuityKey],
   );
+  // Identity-keyed adopt: a reused continuity_key keeps the first payload.
+  // The helper would compare the same key to itself after this SELECT.
   if (existing) {
-    adoptOnIdentity(String(existing.continuity_key), input.continuityKey);
     return;
   }
   store.execute(

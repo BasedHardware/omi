@@ -232,15 +232,17 @@ import database.staged_tasks as staged_tasks_db  # noqa: E402
 # ---------------------------------------------------------------------------
 from pydantic import BaseModel, Field, ValidationError  # noqa: E402
 
+# routers.chat_sessions imports utils.chat_rating_triage and utils.other.endpoints
+# at module scope, so the real utils package must be resolvable before it loads.
+_ensure_package_path("models", BACKEND_DIR / "models")
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.other", BACKEND_DIR / "utils" / "other")
+
 from routers.chat_sessions import SaveMessageRequest, RateMessageRequest  # noqa: E402
 from routers.focus_sessions import CreateFocusSessionRequest  # noqa: E402
 from routers.advice import CreateAdviceRequest  # noqa: E402
 from routers.staged_tasks import BatchUpdateScoresRequest, BatchScoreEntry  # noqa: E402
 import routers.staged_tasks as staged_router  # noqa: E402
-
-_ensure_package_path("models", BACKEND_DIR / "models")
-_ensure_package_path("utils", BACKEND_DIR / "utils")
-_ensure_package_path("utils.other", BACKEND_DIR / "utils" / "other")
 
 # Cannot import routers.users directly — it pulls in database.conversations → utils.other.hume
 # which has heavy deps. Mirror the models here and verify parity via AST test below.

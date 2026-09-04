@@ -233,9 +233,9 @@ def test_healthy_gateway_path_records_no_fallback(monkeypatch, fallback_counter)
     """The ledger lane staying up is the happy path — no mode change, no telemetry."""
     _gateway_mode(monkeypatch)
 
-    with patch.object(
-        clients, 'invoke_openai_embeddings_gateway', MagicMock(return_value=[[0.5, 0.6]])
-    ), patch.object(clients, 'get_byok_key', MagicMock(return_value=None)):
+    with patch.object(clients, 'invoke_openai_embeddings_gateway', MagicMock(return_value=[[0.5, 0.6]])), patch.object(
+        clients, 'get_byok_key', MagicMock(return_value=None)
+    ):
         vector = clients.embeddings.embed_query('query')
 
     assert vector == [0.5, 0.6]
@@ -251,9 +251,7 @@ def test_byok_key_failure_keeps_its_existing_fallback_labels(monkeypatch, fallba
     def gateway_call(texts, *, byok_api_key=None):
         calls.append({'texts': texts, 'byok': byok_api_key})
         if len(calls) == 1:
-            raise httpx.HTTPStatusError(
-                'Client error 401', request=MagicMock(), response=MagicMock(status_code=401)
-            )
+            raise httpx.HTTPStatusError('Client error 401', request=MagicMock(), response=MagicMock(status_code=401))
         return [[0.9]]
 
     with patch.object(clients, 'invoke_openai_embeddings_gateway', MagicMock(side_effect=gateway_call)), patch.object(

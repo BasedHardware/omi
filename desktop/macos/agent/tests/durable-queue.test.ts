@@ -6,7 +6,6 @@ import {
   drainIsolated,
   JOURNAL_OUTBOX_POLICY,
   oldestReadyAgeMs,
-  readySortKey,
   type ProcessOutcome,
 } from "../src/runtime/durable-queue.js";
 
@@ -55,16 +54,6 @@ describe("durable-queue substrate", () => {
   it("the age gauge reflects the oldest ready item", () => {
     expect(oldestReadyAgeMs([8_000, 3_000, 9_000], 10_000)).toBe(7_000);
     expect(oldestReadyAgeMs([], 10_000)).toBeNull();
-  });
-
-  it("priority ordering puts meeting notes ahead of capture cards", () => {
-    const rows = [
-      readySortKey({ priority: 2, createdAt: 1, itemId: "capture", enablePriority: true }),
-      readySortKey({ priority: 0, createdAt: 1, itemId: "meeting", enablePriority: true }),
-    ];
-    expect([...rows].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)))[0]?.[3]).toBe("meeting");
-    expect(readySortKey({ priority: 0, createdAt: 1, itemId: "meeting", enablePriority: true }) <
-      readySortKey({ priority: 2, createdAt: 1, itemId: "capture", enablePriority: true })).toBe(true);
   });
 
   it("retryable backend codes stay retrying and 4xx-class codes dead-letter", () => {

@@ -15,7 +15,9 @@ from database.durable_queue import (
     ready_sort_key,
     redrive_patch,
 )
-from utils.durable_queue_metrics import observe_oldest_ready_age
+from database.durable_queue_age import QUEUE_AGE_SAMPLERS, sample_store_wide_oldest_ready_ages
+from utils.durable_queue_metrics import publish_sampled_queue_oldest_ready_ages
+from utils.metrics import OMI_QUEUE_NAMES, generate_latest
 from utils.memory.daily_memory_sweep_queue import drain_sweep_uids
 
 NOW = datetime(2026, 9, 3, 12, tzinfo=timezone.utc)
@@ -117,12 +119,99 @@ def test_daily_sweep_poison_uid_does_not_block_the_uid_behind_it():
             raise RuntimeError('malformed payload')
         return ProcessOutcome.ack()
 
-    acked = drain_sweep_uids(['poison', 'healthy'], process, ready_created_at=[NOW - timedelta(hours=2)], now=NOW)
+    acked = drain_sweep_uids(['poison', 'healthy'], process)
     assert processed == ['poison', 'healthy']
     assert acked == ['healthy']
 
 
 def test_daily_sweep_age_gauge_reflects_oldest_ready_item():
     age = oldest_ready_age_seconds([NOW - timedelta(hours=2), NOW - timedelta(minutes=3)], now=NOW)
-    observe_oldest_ready_age('daily_memory_sweep', age)
     assert age == pytest.approx(2 * 3600)
+
+
+def test_queue_names_match_store_wide_samplers():
+    assert set(OMI_QUEUE_NAMES) == set(QUEUE_AGE_SAMPLERS)
+
+
+def test_store_wide_age_is_min_created_at_across_the_bounded_page():
+    class _Snap:
+        def __init__(self, payload: dict):
+            self._payload = payload
+
+        def to_dict(self) -> dict:
+            return self._payload
+
+    class _Query:
+        def where(self, *args, **kwargs):
+            return self
+
+        def limit(self, _limit: int):
+            return self
+
+        def stream(self):
+            return [
+                _Snap(
+                    {
+                        'created_at': NOW - timedelta(hours=4),
+                        'status': 'pending',
+                        'delivery_state': 'ready',
+                        'event_type': 'vector_repair_purge',
+                    }
+                ),
+                _Snap(
+                    {
+                        'created_at': NOW - timedelta(hours=1),
+                        'status': 'pending',
+                        'delivery_state': 'ready',
+                        'event_type': 'vector_repair_purge',
+                    }
+                ),
+            ]
+
+    class _Client:
+        def collection_group(self, _name: str) -> _Query:
+            return _Query()
+
+    ages = sample_store_wide_oldest_ready_ages(
+        now=NOW,
+        firestore_client=_Client(),
+        finalization_summary={'oldest_nonterminal_age_seconds': 12},
+    )
+    assert ages['memory_outbox'] == pytest.approx(4 * 3600)
+    assert ages['daily_summary_hour_groups'] == 0.0
+    assert ages['daily_memory_sweep'] == 0.0
+    assert ages['conversation_finalization_jobs'] == 12.0
+
+
+def test_sampler_failure_leaves_the_queue_absent():
+    class _Boom:
+        def collection_group(self, _name: str):
+            raise RuntimeError('firestore unavailable')
+
+    ages = sample_store_wide_oldest_ready_ages(
+        now=NOW,
+        firestore_client=_Boom(),
+        finalization_summary={'oldest_nonterminal_age_seconds': 1},
+    )
+    assert 'memory_outbox' not in ages
+    assert ages['daily_memory_sweep'] == 0.0
+    assert ages['conversation_finalization_jobs'] == 1.0
+
+
+def test_publisher_emits_labeled_samples_only_after_a_sample():
+    publish_sampled_queue_oldest_ready_ages({'memory_outbox': 99.5})
+    exported = generate_latest().decode()
+    assert 'omi_queue_oldest_ready_age_seconds{' in exported
+    assert 'memory_outbox' in exported
+
+
+def test_chat_first_fetch_order_uses_ready_sort_key():
+    from database.chat_first_intent_queue import sort_ready_intents
+    from types import SimpleNamespace
+
+    intents = [
+        SimpleNamespace(intent_id='capture', created_at=NOW),
+        SimpleNamespace(intent_id='meeting', created_at=NOW),
+    ]
+    ordered = sort_ready_intents(intents, priority_of=lambda intent: 0 if intent.intent_id == 'meeting' else 2)
+    assert [intent.intent_id for intent in ordered] == ['meeting', 'capture']

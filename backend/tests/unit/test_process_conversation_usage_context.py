@@ -617,7 +617,13 @@ def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch)
     result = process_conversation.process_conversation('uid', 'en', new_request)
 
     assert result is completed_conversation
-    created.assert_called_once_with('uid', completed_conversation.dict(), idempotent=True)
+    # Imported here, not at module scope: sibling suites stub utils.conversations.
+    from utils.conversations.projection_payload import strip_client_processing
+
+    # The create path strips the untrusted client projection before persisting:
+    # a projection is display, so it must not reach a stored conversation payload.
+    created.assert_called_once_with('uid', strip_client_processing(completed_conversation.dict()), idempotent=True)
+    assert 'client_processing' not in created.call_args.args[1]
     persisted.assert_not_called()
 
 

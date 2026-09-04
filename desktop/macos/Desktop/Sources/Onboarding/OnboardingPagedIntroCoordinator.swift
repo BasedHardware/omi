@@ -337,9 +337,12 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
     let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(
       rawText, source: source)
-    guard case .imported(let memories, let profileSummary) = result else {
-      lastActionError =
-        "Couldn’t extract durable memories from the pasted \(source.displayName) log."
+    guard case .imported(let memories, _, let profileSummary) = result else {
+      if case .failure(let message, failureClass: _) =
+        ConnectorImportOperations.memoryLogOutcome(result, source: source)
+      {
+        lastActionError = message
+      }
       return
     }
 

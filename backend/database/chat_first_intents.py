@@ -12,6 +12,8 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
 from database import chat_first_delivery_attempts as delivery_attempts
+from database.chat_first_intent_queue import drain_intent_batch, sort_ready_intents
+from database.durable_queue import ProcessOutcome
 from database.firestore_index_registry import (
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
@@ -1011,7 +1013,7 @@ def fetch_ready_intent_batch(
             candidates.append(intent)
     if deliverable_capture is not None:
         candidates.append(deliverable_capture)
-    candidates.sort(key=lambda intent: (_fetch_priority(intent), intent.created_at, intent.intent_id))
+    candidates = sort_ready_intents(candidates, priority_of=_fetch_priority)
 
     hydrated_attempts: dict[str, ProactiveIntent] = {}
     stall_age_candidates: list[tuple[datetime, ProactiveIntent]] = []
@@ -1037,59 +1039,55 @@ def fetch_ready_intent_batch(
                 stall_age_from = max(intent.created_at, hydrated.last_deferral_at or intent.created_at)
         stall_age_candidates.append((stall_age_from, intent))
     malformed_scan_count = min(len(malformed_intent_ids), candidate_scan_limit)
-    for intent_id in malformed_intent_ids[:malformed_scan_count]:
-        try:
-            _dead_letter_malformed_intent(
-                uid,
-                intent_id,
-                account_generation=account_generation,
-                firestore_client=client,
-            )
-        except Exception:
-            # A concurrently deleted or repaired malformed row is isolated from
-            # every independent ready intent in this fetch.
-            continue
+
+    def dead_letter_one(intent_id: str) -> ProcessOutcome:
+        _dead_letter_malformed_intent(
+            uid,
+            intent_id,
+            account_generation=account_generation,
+            firestore_client=client,
+        )
+        return ProcessOutcome.ack()
+
+    drain_intent_batch(malformed_intent_ids[:malformed_scan_count], dead_letter_one)
     # Process beyond the response limit when earlier candidates terminalize,
     # but never let a poison backlog amplify point reads and transactions
     # without bound on every device poll.
     remaining_scan_limit = candidate_scan_limit - malformed_scan_count
-    for intent in candidates[:remaining_scan_limit]:
+
+    def advance_one(intent: ProactiveIntent) -> ProcessOutcome:
+        if len(ready) >= limit:
+            return ProcessOutcome.ack()
         try:
-            intent = hydrated_attempts.get(intent.intent_id) or _intent_with_delivery_attempt(
+            current = hydrated_attempts.get(intent.intent_id) or _intent_with_delivery_attempt(
                 intent, _delivery_attempt_ref(uid, intent.intent_id, firestore_client=client).get()
             )
         except ChatFirstMalformedDocument:
             # Advancement repairs the derived sibling transactionally and
             # returns the valid intent on this same poll.
-            pass
-        if deferred_intent_ids and intent.intent_id in deferred_intent_ids:
+            current = intent
+        if deferred_intent_ids and current.intent_id in deferred_intent_ids:
             if len(ready) < limit:
-                ready.append(intent)
-            if len(ready) >= limit:
-                break
-            continue
-        reconcile = intent.fetch_count >= 2 and _message_has_intent_identity(
-            uid, intent.intent_id, firestore_client=client
+                ready.append(current)
+            return ProcessOutcome.ack()
+        reconcile = current.fetch_count >= 2 and _message_has_intent_identity(
+            uid, current.intent_id, firestore_client=client
         )
-        try:
-            advanced, event = _advance_fetched_intent(
-                uid,
-                intent.intent_id,
-                account_generation=account_generation,
-                now=fetched_at,
-                reconcile=reconcile,
-                firestore_client=client,
-            )
-        except Exception:
-            # One concurrently malformed or otherwise unadvanceable row is
-            # never allowed to block independent ready intents.
-            continue
+        advanced, event = _advance_fetched_intent(
+            uid,
+            current.intent_id,
+            account_generation=account_generation,
+            now=fetched_at,
+            reconcile=reconcile,
+            firestore_client=client,
+        )
         if event is not None:
             lifecycle_events.append(event)
         if advanced is not None and len(ready) < limit:
             ready.append(advanced)
-        if len(ready) >= limit:
-            break
+        return ProcessOutcome.ack()
+
+    drain_intent_batch(candidates[:remaining_scan_limit], advance_one)
 
     oldest_stall = min(
         stall_age_candidates,

@@ -73,6 +73,19 @@ void main() {
     expect(telemetry.recordingId, isNull);
   });
 
+  test('failStart without a prepared session emits nothing', () {
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-unprepared',
+    );
+
+    telemetry.failStart(failureClass: 'capture_unavailable');
+
+    expect(events, isEmpty);
+    expect(telemetry.recordingId, isNull);
+  });
+
   test('a denied capture emits a bounded start failure and no started event', () {
     final events = <({String name, Map<String, dynamic> properties})>[];
     final telemetry = RecordingLifecycleTelemetry(
@@ -88,6 +101,24 @@ void main() {
       'recording_id': 'recording-denied',
       'recording_source': 'phone_mic_batch',
       'failure_class': 'permission_denied',
+    });
+  });
+
+  test('a prepared device start that never reaches capture emits capture_unavailable', () {
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-unavailable',
+    );
+
+    telemetry.prepare(source: 'pendant_live');
+    telemetry.failStart(failureClass: 'capture_unavailable');
+
+    expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
+    expect(events.single.properties, {
+      'recording_id': 'recording-unavailable',
+      'recording_source': 'pendant_live',
+      'failure_class': 'capture_unavailable',
     });
   });
 

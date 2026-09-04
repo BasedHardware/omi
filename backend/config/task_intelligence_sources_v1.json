@@ -32,6 +32,7 @@
       "policy_class": "direct_command",
       "owner_paths": [
         "desktop/macos/Desktop/Sources/Stores/TasksStore.swift",
+        "desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift",
         "desktop/macos/Desktop/Sources/APIClient.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Dashboard/WhatMattersNowSection.swift",
@@ -47,6 +48,8 @@
       "test_adapter": "direct_command_contract",
       "writer_anchors": [
         {"path": "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift", "symbol": "client.createTask", "discover": true},
+        {"path": "desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift", "symbol": "client.createTask", "discover": true},
+        {"path": "desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift", "symbol": "client.deleteTask", "discover": true},
         {"path": "backend/routers/desktop_core.py", "symbol": "action_items_db.create_action_item", "discover": true}
       ]
     },

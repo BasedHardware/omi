@@ -13,7 +13,7 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
       previewData: Data([0x00, 0x01, 0x02]),
       grounding: SuggestionGrounding(
         memories: ["memory content must never leave the device"],
-        openCommitments: ["private commitment"],
+        commitmentRecords: [SuggestionCommitment(id: "c1", text: "private commitment")],
         relatedScreens: ["screen text"]
       )
     )
@@ -281,7 +281,7 @@ final class SuggestionAssistantTelemetryBoundaryTests: XCTestCase {
   func testGoalOnlyGroundingIsCountedAsASpentSource() throws {
     let goalOnly = SuggestionGrounding(
       memories: [],
-      openCommitments: [],
+      commitmentRecords: [],
       relatedScreens: [],
       goals: ["Reach 200k total users by month-end"]
     )

@@ -182,7 +182,7 @@ def test_durable_queue_oldest_ready_alert_pages_on_age_or_absent_gauge():
         assert 'omi_queue_oldest_ready_age_seconds' in expr
         assert 'absent(omi_queue_oldest_ready_age_seconds)' in expr
         assert '21600' in expr
-        assert rule['noDataState'] == 'OK'
+        assert rule['noDataState'] == 'Alerting'
         assert rule['labels']['alert_identity'] == 'omi-queue-oldest-ready'
 
 

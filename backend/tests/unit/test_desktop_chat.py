@@ -2350,6 +2350,83 @@ def test_gateway_body_drops_client_params_the_gateway_would_reject():
     assert result['messages'][0]['role'] == 'user'
 
 
+def test_thinking_escalation_routes_managed_and_drops_tools():
+    body = {
+        'model': 'omi-luna-think',
+        'messages': [{'role': 'user', 'content': 'hello'}],
+        'reasoning_effort': 'high',
+        'tools': [{'type': 'function', 'function': {'name': 'noop', 'parameters': {}}}],
+        'stream': False,
+    }
+
+    assert desktop_chat._uses_managed_chat_agent(body) is True
+    assert desktop_chat._managed_lane_id(body) == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
+
+    result = desktop_chat._gateway_body(body, desktop_chat._managed_lane_id(body))
+    assert result['model'] == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
+    assert result['reasoning_effort'] == 'high'
+    # OpenAI rejects function tools combined with a non-none effort on
+    # gpt-5.6-luna, so the escalation lane never carries client tools.
+    assert 'tools' not in result
+    assert 'tool_choice' not in result
+
+
+def test_thinking_escalation_maps_effort_levels_and_rejects_unknown():
+    base = {
+        'model': 'omi-luna-think',
+        'messages': [{'role': 'user', 'content': 'hello'}],
+    }
+
+    # Missing effort defaults to the product `normal` level (Luna high).
+    assert desktop_chat._gateway_body(dict(base))['reasoning_effort'] == 'high'
+    assert desktop_chat._gateway_body({**base, 'reasoning_effort': 'high'})['reasoning_effort'] == 'high'
+    assert desktop_chat._gateway_body({**base, 'reasoning_effort': 'xhigh'})['reasoning_effort'] == 'xhigh'
+
+    for invalid in ('low', 'medium', 'max', 'ultra', 'none', 7):
+        with pytest.raises(ValueError):
+            desktop_chat._gateway_body({**base, 'reasoning_effort': invalid})
+
+
+def test_thinking_escalation_forwards_image_url_parts_to_the_gateway():
+    data_uri = 'data:image/jpeg;base64,' + 'A' * 16
+    body = {
+        'model': 'omi-luna-think',
+        'reasoning_effort': 'xhigh',
+        'messages': [
+            {'role': 'system', 'content': 'speak only the conclusion'},
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': 'What is on my screen?'},
+                    {'type': 'image_url', 'image_url': {'url': data_uri}},
+                ],
+            },
+        ],
+    }
+
+    result = desktop_chat._gateway_body(body, desktop_chat._managed_lane_id(body))
+    user = result['messages'][1]
+    assert user['content'] == [
+        {'type': 'text', 'text': 'What is on my screen?'},
+        {'type': 'image_url', 'image_url': {'url': data_uri}},
+    ]
+
+
+def test_regular_chat_aliases_still_drop_client_reasoning_effort():
+    """The generic projection must keep dropping SDK-set reasoning_effort.
+
+    Only the validated thinking alias injects a server-authored effort; a
+    regular pi-mono turn with an SDK-set effort still forwards none.
+    """
+    body = {
+        'model': 'omi-sonnet',
+        'messages': [{'role': 'user', 'content': 'hello'}],
+        'reasoning_effort': 'low',
+    }
+    result = desktop_chat._gateway_body(body)
+    assert 'reasoning_effort' not in result
+
+
 def _capture_client_journeys(monkeypatch):
     accepted = []
     terminal = []

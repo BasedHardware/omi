@@ -996,6 +996,28 @@ ACTION_ITEMS_CREATED_RANGE_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('created_at'), _asc('__name__')),
 )
 
+MEMORIES_CREATED_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='memories_created_range',
+    collection_group='memories',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('created_at', '>=', 'start'),
+        FirestoreQueryFilter('created_at', '<=', 'end'),
+    ),
+    index_fields=(_asc('created_at'), _asc('__name__')),
+)
+
+CANONICAL_MEMORIES_CAPTURED_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='canonical_memories_captured_range',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('captured_at', '>=', 'start'),
+        FirestoreQueryFilter('captured_at', '<=', 'end'),
+    ),
+    index_fields=(_asc('captured_at'), _asc('__name__')),
+)
+
 ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY = FirestoreQuerySpec(
     identifier='action_items_completed_created_range',
     collection_group='action_items',
@@ -1283,6 +1305,8 @@ QUERY_SPECS = (
     ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
     ACTION_ITEMS_CREATED_RANGE_QUERY,
     ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY,
+    MEMORIES_CREATED_RANGE_QUERY,
+    CANONICAL_MEMORIES_CAPTURED_RANGE_QUERY,
     CANDIDATES_COMPATIBILITY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,

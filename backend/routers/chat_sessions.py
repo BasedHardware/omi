@@ -27,6 +27,7 @@ from models.chat_session import (
 )
 from models.shared import StatusResponse
 from utils.chat import initial_message_util
+from utils.chat_rating_triage import extract_rating_triage_fields
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
 from utils.other import endpoints as auth
@@ -275,25 +276,30 @@ def rate_message(
 ):
     if request.rating is not None and request.rating not in (1, -1):
         raise HTTPException(status_code=400, detail='Rating must be 1, -1, or null')
-    if not chat_db.update_message_rating(uid, message_id, request.rating):
+    snapshot = chat_db.update_message_rating(uid, message_id, request.rating)
+    if snapshot is None:
         raise HTTPException(status_code=404, detail='Message not found')
     # Also write to analytics collection (same as mobile endpoint) so ratings
     # appear in the admin dashboard chat ratings chart.
     value = request.rating if request.rating is not None else 0
+    triage = extract_rating_triage_fields(snapshot)
+    reason = request.reason.value if request.reason else None
     set_chat_message_rating_score(
         uid,
         message_id,
         value,
-        reason=request.reason.value if request.reason else None,
+        reason=reason,
         platform='desktop',
         app_version=request.app_version,
+        notification_kind=triage.get('notification_kind'),
+        app_id=triage.get('app_id'),
     )
     record_chat_message_feedback(
         uid,
         message_id,
         value,
         surface=_LEDGER_SURFACES.get(request.surface, FeedbackSurface.chat_text),
-        reason=request.reason.value if request.reason else None,
+        reason=reason,
         comment=request.comment,
         platform='desktop',
         app_version=request.app_version,

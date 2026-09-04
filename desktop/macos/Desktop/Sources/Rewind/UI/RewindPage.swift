@@ -484,7 +484,7 @@ struct RewindPage: View {
           text: $viewModel.searchQuery,
           accessibilityID: "rewind-search-field",
           placeholder: "Search screen history…",
-          focus: $isSearchFocused
+          focus: $isSearchFocused, searchSurface: .rewind
         )
         .onChange(of: viewModel.searchQuery) { _, query in
           if query.isEmpty { searchViewMode = nil }

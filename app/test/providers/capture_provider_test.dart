@@ -23,6 +23,7 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
+import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
@@ -411,11 +412,42 @@ void main() {
 
   test('homepage no-device streamDeviceRecording is check-only', () async {
     final locationCapture = _CountingConversationLocationCapture();
-    final provider = CaptureProvider(conversationLocationCapture: locationCapture);
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-check-only',
+    );
+    final provider = CaptureProvider(
+      conversationLocationCapture: locationCapture,
+      recordingTelemetry: telemetry,
+    );
 
     await provider.streamDeviceRecording();
     expect(locationCapture.calls, 1);
     expect(locationCapture.promptIfDeniedArgs, [false]);
+    expect(events, isEmpty, reason: 'a no-device homepage entry must not emit Recording Start Failed');
+    expect(telemetry.recordingId, isNull);
+    provider.dispose();
+  });
+
+  test('failed device streamDeviceRecording emits capture_unavailable', () async {
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-device-fail',
+    );
+    // Batch mode skips the transcription socket, so this stays hermetic: a
+    // device is requested, but no BLE connection exists, so start cannot
+    // reach deviceRecord.
+    SharedPreferencesUtil().batchModeEnabled = true;
+    addTearDown(() => SharedPreferencesUtil().batchModeEnabled = false);
+    final provider = CaptureProvider(recordingTelemetry: telemetry);
+
+    await provider.streamDeviceRecording(device: _device(id: 'omi-1', type: DeviceType.omi));
+
+    expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
+    expect(events.single.properties['failure_class'], 'capture_unavailable');
+    expect(events.single.properties['recording_id'], 'recording-device-fail');
     provider.dispose();
   });
 

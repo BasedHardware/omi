@@ -10,6 +10,7 @@ struct QuerySearchBar: View {
   var accessibilityID: String = "query-search-field"
   var placeholder: String = RewindSearchMetrics.placeholder
   var focus: FocusState<Bool>.Binding? = nil
+  var searchSurface: SearchSurface? = nil
   @FocusState private var internalFocus: Bool
   @State private var isClearHovered = false
 
@@ -26,6 +27,15 @@ struct QuerySearchBar: View {
           .stroke(isFocused ? Ink.primary.opacity(0.28) : Color.clear, lineWidth: 1)
           .allowsHitTesting(false)
       }
+      .onChange(of: internalFocus) { _, focused in
+        guard focus == nil else { return }
+        reportFocus(focused)
+      }
+  }
+
+  private func reportFocus(_ focused: Bool) {
+    guard focused, let searchSurface else { return }
+    SearchAnalytics.barFocused(surface: searchSurface)
   }
 
   private var searchRow: some View {
@@ -64,6 +74,9 @@ struct QuerySearchBar: View {
         .foregroundStyle(Ink.primary)
         .focused(focus)
         .accessibilityIdentifier(accessibilityID)
+        .onChange(of: focus.wrappedValue) { _, focused in
+          reportFocus(focused)
+        }
     } else {
       TextField(placeholder, text: $text)
         .textFieldStyle(.plain)

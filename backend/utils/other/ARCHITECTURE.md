@@ -15,7 +15,7 @@ source files.
 | Local dev storage adapter | `local_storage.py` | Filesystem stand-in for `storage.py` used only by the owned local dev harness; never selected in a deployed image. |
 | Chat file attachments | `chat_file.py` | Provider upload/expiry of files attached to chat turns, and the typed errors the chat route maps to user-facing failures. |
 | Daily summary job | `notifications.py` | The scheduled daily-summary job: per-user fan-out, isolation, budgets, checkpoint cursor, FCM send, `day_summary` webhook. |
-| Daily summary bounds | `daily_summary_budget.py` | Pure helpers the job uses: bounded conversation selection for the generator input and the Redis checkpoint cursor encoding. No I/O. |
+| Daily summary bounds | `daily_summary_budget.py` | Bounds the job uses: bounded conversation selection for the generator input (pure) and the resume checkpoint. The cursor helpers do synchronous Redis I/O and must be called through `run_blocking(db_executor, ...)`; every one of them is fail-soft, so losing the checkpoint costs a re-walk and never a summary. |
 | Bounded list reads | `list_budget.py` | Request-scoped time and document budget for list GET reads (`FC-bounded-read-exceeds-request-budget`). |
 | Request timeout | `timeout.py` | `TimeoutMiddleware`, the per-request wall-clock budget. |
 | Background execution primitives | `task.py`, `jobs.py`, `deferred_delete.py`, `backoff.py` | `safe_create_task`, job start helper, single-thread deferred deletion, jittered backoff. Small and dependency-free. |

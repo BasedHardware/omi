@@ -35,6 +35,23 @@ ServerMessage _aiMessage({
   );
 }
 
+/// Built through the wire decoder, so the content-block fallback that fills an
+/// empty `text` actually runs. The direct constructor above bypasses it.
+ServerMessage _decodedAiMessage({
+  required String text,
+  required String type,
+  List<Map<String, dynamic>> contentBlocks = const [],
+}) {
+  return ServerMessage.fromJson({
+    'id': 'ai-1',
+    'created_at': '2026-09-01T23:00:00Z',
+    'text': text,
+    'sender': 'ai',
+    'type': type,
+    'content_blocks': contentBlocks,
+  });
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -150,6 +167,74 @@ void main() {
     expect(find.byKey(const Key('memory_review_accept_mem-1')), findsOneWidget);
     expect(find.byKey(const Key('memory_review_reject_mem-1')), findsOneWidget);
     expect(find.byKey(const Key('memory_review_fix_mem-1')), findsOneWidget);
+  });
+
+  testWidgets('an answer that is only a follow-up asks it once, as the chip', (tester) async {
+    // With no prose of its own the message text falls back to its content
+    // blocks. The chip renders the question natively, so a prose copy would put
+    // the same words on screen twice.
+    await pumpMessage(
+      tester,
+      message: _decodedAiMessage(
+        text: '',
+        type: 'text',
+        contentBlocks: const [
+          {'type': 'followUp', 'id': 'ai-1:followup', 'text': 'Want the rest of what she said?'},
+        ],
+      ),
+    );
+
+    expect(find.byKey(const Key('chat_followup_chip')), findsOneWidget);
+    expect(find.text('Want the rest of what she said?'), findsOneWidget);
+  });
+
+  testWidgets('a memoryReviewCard heading is not also rendered as prose', (tester) async {
+    await pumpMessage(
+      tester,
+      message: _decodedAiMessage(
+        text: '',
+        type: 'day_summary',
+        contentBlocks: const [
+          {
+            'type': 'memoryReviewCard',
+            'id': 'summary-2:memories',
+            'items': [
+              {'memoryId': 'mem-dup', 'content': 'Prefers async standups', 'category': 'work'},
+            ],
+          },
+        ],
+      ),
+      memories: [
+        Memory(
+          id: 'mem-dup',
+          uid: 'chat-block-user',
+          content: 'Prefers async standups',
+          category: MemoryCategory.system,
+          createdAt: DateTime.utc(2026, 9, 1),
+          updatedAt: DateTime.utc(2026, 9, 1),
+          visibility: MemoryVisibility.private,
+        ),
+      ],
+    );
+
+    expect(find.byType(MemoryReviewCard), findsOneWidget);
+    expect(find.text('Things I learned today'), findsOneWidget);
+  });
+
+  testWidgets('a memoryReviewCard with no usable items leaves no heading behind', (tester) async {
+    await pumpMessage(
+      tester,
+      message: _decodedAiMessage(
+        text: '',
+        type: 'day_summary',
+        contentBlocks: const [
+          {'type': 'memoryReviewCard', 'id': 'summary-3:memories', 'items': []},
+        ],
+      ),
+    );
+
+    expect(find.byType(MemoryReviewCard), findsNothing);
+    expect(find.text('Things I learned today'), findsNothing);
   });
 
   testWidgets('a plain answer with no blocks gains neither a chip nor a card', (tester) async {

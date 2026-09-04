@@ -61,7 +61,10 @@ struct DailySummaryRecord: Decodable, Identifiable, Equatable {
 
     init(from decoder: Decoder) throws {
       let container = try decoder.container(keyedBy: CodingKeys.self)
-      memoryID = try container.decodeIfPresent(String.self, forKey: .memoryID) ?? ""
+      // Trimmed at the wire: every reader treats a blank id as "not a review row", and a
+      // whitespace-only id would otherwise pass each of those emptiness checks.
+      memoryID = (try container.decodeIfPresent(String.self, forKey: .memoryID) ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
       content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
       category = try container.decodeIfPresent(String.self, forKey: .category) ?? ""
       capturedAt = try container.decodeIfPresent(String.self, forKey: .capturedAt)
@@ -111,10 +114,13 @@ struct DailySummaryRecord: Decodable, Identifiable, Equatable {
     highlights = try container.decodeIfPresent([Highlight].self, forKey: .highlights)
     actionItems = try container.decodeIfPresent([ActionItem].self, forKey: .actionItems)
     // A malformed entry must not cost the reader the whole summary, and a memory with no id
-    // cannot be voted on or corrected, so it is not a review row at all.
+    // cannot be voted on or corrected, so it is not a review row at all. Entries decode
+    // independently: one bad element drops itself, not every valid row beside it. The outer
+    // `try?` still absorbs a `memories_learned` that is not an array at all.
     memoriesLearned =
-      (try? container.decodeIfPresent([LearnedMemory].self, forKey: .memoriesLearned))
+      (try? container.decodeIfPresent([LenientLearnedMemory].self, forKey: .memoriesLearned))
       .flatMap { $0 }?
+      .compactMap(\.value)
       .filter { !$0.memoryID.isEmpty && !$0.content.isEmpty } ?? []
   }
 
@@ -133,6 +139,15 @@ struct DailySummaryRecord: Decodable, Identifiable, Equatable {
     self.highlights = highlights
     self.actionItems = actionItems
     self.memoriesLearned = memoriesLearned
+  }
+}
+
+/// One `memories_learned` element, decoded so that its own failure is local to it.
+private struct LenientLearnedMemory: Decodable {
+  let value: DailySummaryRecord.LearnedMemory?
+
+  init(from decoder: Decoder) throws {
+    value = try? DailySummaryRecord.LearnedMemory(from: decoder)
   }
 }
 

@@ -856,6 +856,10 @@ class MemoryGraphViewModel: ObservableObject {
         needle.isEmpty || node.label.localizedCaseInsensitiveContains(needle) ? node.id : nil
       })
     searchMatchCount = needle.isEmpty ? nil : matchingIDs.count
+    if !needle.isEmpty {
+      let resultsCount = matchingIDs.count
+      SearchAnalytics.scheduleQueryEntered(surface: .brainMap, query: needle) { resultsCount }
+    }
 
     for (id, node) in nodeSceneNodes {
       node.isHidden = !needle.isEmpty && !matchingIDs.contains(id)

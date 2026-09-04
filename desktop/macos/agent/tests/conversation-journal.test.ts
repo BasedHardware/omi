@@ -20,6 +20,7 @@ import {
   drainBackendConversationDeleteOutbox,
   drainBackendTurnOutbox,
   drainChatFirstDeferralOutbox,
+  enqueueChatFirstDeferral,
   failBackendTurnOutbox,
   failBackendReconcile,
   getJournalObservability,
@@ -336,6 +337,38 @@ describe("kernel conversation journal", () => {
     });
     expect(second.continuityKey).toBe(first.continuityKey);
     expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM chat_first_deferral_outbox").count).toBe(1);
+    fixture.store.close();
+  });
+
+  it("adopts a reused continuity key with a different payload and keeps the first question", () => {
+    const fixture = newSurface("main_chat", "chat", "deferral-adopt-mismatch-payload");
+    const firstQuestion = {
+      type: "questionCard" as const,
+      id: "question-card-1",
+      questionId: "question-1",
+      text: "first payload",
+      subject: { kind: "goal" as const, id: "goal-1" },
+      options: [{ optionId: "later", label: "Ask me later", preparedAnswer: "Ask me again later.", defer: true }],
+    };
+    enqueueChatFirstDeferral(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 11,
+      continuityKey: "shared-continuity",
+      question: firstQuestion,
+      nowMs: 200,
+    });
+    expect(() => enqueueChatFirstDeferral(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 11,
+      continuityKey: "shared-continuity",
+      question: { ...firstQuestion, text: "second payload" },
+      nowMs: 201,
+    })).not.toThrow();
+    const row = fixture.store.getRow("SELECT question_json AS question_json, COUNT(*) AS count FROM chat_first_deferral_outbox");
+    expect(row.count).toBe(1);
+    expect(JSON.parse(String(row.question_json)).text).toBe("first payload");
     fixture.store.close();
   });
 

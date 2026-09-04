@@ -545,7 +545,34 @@ class ChatToolExecutor {
       if toolCall.name == "get_local_status" {
         return await executeLocalStatus(expectedOwnerID: expectedOwnerID)
       }
+      if toolCall.name == "web_search" {
+        return await executeWebSearch(
+          toolCall.arguments, expectedOwnerID: expectedOwnerID)
+      }
       return "Unknown tool: \(toolCall.name)"
+    }
+  }
+
+  private static func executeWebSearch(
+    _ arguments: [String: Any],
+    expectedOwnerID: String?
+  ) async -> String {
+    guard NegativeFeedbackRemediationFeature.isEnabled else {
+      return "Unknown tool: web_search"
+    }
+    guard !AppState.isPaywalledEffective else {
+      return "Web search is only available on paid Omi plans."
+    }
+    guard let query = arguments["query"] as? String, !query.isEmpty else {
+      return "Error: query is required"
+    }
+    guard let expectedOwnerID else { return authorizedOwnerChangedResult() }
+    do {
+      return try await APIClient.shared.searchPublicWebForVoice(
+        query: query,
+        expectedOwnerID: expectedOwnerID)
+    } catch {
+      return "The web lookup failed. Please try again."
     }
   }
 

@@ -1404,7 +1404,9 @@ class ChatProvider: ObservableObject {
   // MARK: - Streaming Buffer
   /// Accumulates text and thinking deltas during streaming and flushes them to
   /// the published messages array in batches, reducing SwiftUI re-render frequency.
-  private let streamingBuffer = ChatStreamingBuffer(flushInterval: 0.035)
+  // Not private: the journal projection extension releases the turn's raw
+  // accumulator when the authoritative answer lands.
+  let streamingBuffer = ChatStreamingBuffer(flushInterval: 0.035)
 
   // MARK: - Filtered Sessions
   var filteredSessions: [ChatSession] {

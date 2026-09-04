@@ -24,6 +24,7 @@ from database.durable_queue import (
     ProcessOutcome,
     QueuePolicy,
     decide_attempt,
+    drain_isolated,
     oldest_ready_age_seconds,
 )
 from database.firestore_index_registry import (
@@ -194,7 +195,8 @@ def run_canonical_memory_outbox_worker_tick(
         lease.raw_event.get("created_at") for lease in leases if isinstance(lease.raw_event.get("created_at"), datetime)
     ]
     summary["oldest_ready_age_seconds"] = oldest_ready_age_seconds(created_ats, now=observed_now)
-    for lease in leases:
+
+    def process_one(lease: Any) -> ProcessOutcome:
         try:
             outcome = _process_leased_event(
                 db_client=db_client,
@@ -211,7 +213,7 @@ def run_canonical_memory_outbox_worker_tick(
                 now=observed_now,
                 summary=summary,
             )
-            continue
+            return ProcessOutcome.retry(exc.code, reason=exc.code)
         except Exception:
             _settle_failure(
                 db_client=db_client,
@@ -221,7 +223,7 @@ def run_canonical_memory_outbox_worker_tick(
                 now=observed_now,
                 summary=summary,
             )
-            continue
+            return ProcessOutcome.retry("processing_failed", reason="processing_failed")
 
         delivered = _ack_leased_event(
             db_client=db_client,
@@ -247,7 +249,7 @@ def run_canonical_memory_outbox_worker_tick(
                     "code": "lease_ownership_lost",
                 }
             )
-            continue
+            return ProcessOutcome.retry("lease_ownership_lost", reason="lease_ownership_lost")
 
         summary["delivered_count"] += 1
         summary["stale_settled_count"] += int(outcome.stale)
@@ -258,6 +260,9 @@ def run_canonical_memory_outbox_worker_tick(
                 "action": outcome.side_effect_action or outcome.settled_reason,
             }
         )
+        return ProcessOutcome.ack()
+
+    drain_isolated(leases, process_one)
     return summary
 
 

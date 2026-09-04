@@ -81,9 +81,7 @@ def test_chat_file_imports_against_the_suite_gateway_stub():
     saved = {k: v for k, v in sys.modules.items()}
     try:
         _install_stack(_chat_file_gateway_stub())
-        module = harness.load_real_module(
-            "utils.other.chat_file", BACKEND_DIR / "utils" / "other" / "chat_file.py"
-        )
+        module = harness.load_real_module("utils.other.chat_file", BACKEND_DIR / "utils" / "other" / "chat_file.py")
         assert module is not None
         # The module's real public surface: the typed errors the router maps
         # to HTTP codes, present since the suite's founding.
@@ -109,13 +107,10 @@ def test_a_stale_stub_fails_on_the_exact_missing_attribute():
         del stale.is_gateway_model_not_found
         _install_stack(stale)
         try:
-            harness.load_real_module(
-                "utils.other.chat_file", BACKEND_DIR / "utils" / "other" / "chat_file.py"
-            )
+            harness.load_real_module("utils.other.chat_file", BACKEND_DIR / "utils" / "other" / "chat_file.py")
         except ImportError as e:
             assert "is_gateway_model_not_found" in str(e), (
-                "import must fail on the exact missing attribute so the stub "
-                "fix is actionable, got: %s" % e
+                "import must fail on the exact missing attribute so the stub " "fix is actionable, got: %s" % e
             )
         else:
             raise AssertionError(

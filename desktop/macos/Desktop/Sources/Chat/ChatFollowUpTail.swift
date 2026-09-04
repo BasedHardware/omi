@@ -26,41 +26,27 @@ enum ChatFollowUpTail {
   static let maxCharacters = 160
 
   /// A generic tail is worse than no tail: it teaches the reader the chip is
-  /// filler. Matched against the lowercased, punctuation-trimmed question.
-  private static let genericPrefixes = [
-    "anything else",
-    "is there anything else",
-    "want more detail",
-    "want any more detail",
-    "do you want more detail",
-    "want more info",
-    "want more information",
-    "want me to go on",
-    "want me to continue",
-    "want me to keep going",
-    "want me to elaborate",
-    "want me to explain more",
-    "would you like to know more",
-    "do you want to know more",
-    "does that help",
-    "did that help",
-    "does that make sense",
-    "does that answer",
-    "any questions",
-    "any other questions",
-    "got any questions",
-    "let me know",
-    "can i help",
-    "could i help",
-    "how can i help",
-    "sound good",
-    "sounds good",
-    "shall i continue",
-    "shall i go on",
-    "need anything else",
-    "want anything else",
-    "what else",
-  ]
+  /// filler. These are the backend's `_GENERIC_PATTERNS` verbatim — same
+  /// anchors, same word boundaries, and the same end-anchor on "what else" —
+  /// because the two rules have to agree. Prefix matching, which this replaced,
+  /// dropped every specific chip that opened with a generic phrase ("What else
+  /// did Priya flag?"), on the client, after the server had already built it.
+  private static let genericPatterns: [NSRegularExpression] = [
+    #"^anything else\b"#,
+    #"^is there anything else\b"#,
+    #"^(do you )?want (more|any more|additional|further) (detail|details|info|information|context)\b"#,
+    #"^want me to (go on|continue|keep going|elaborate|explain more)\b"#,
+    #"^(would you like|do you want) (me )?to (know more|hear more|continue|elaborate)\b"#,
+    #"^(does|did) that (help|make sense|answer)\b"#,
+    #"^(any|got any) (other )?questions\b"#,
+    #"^let me know\b"#,
+    #"^(can|could) i help\b"#,
+    #"^(sound|sounds) good\b"#,
+    #"^shall i (continue|go on)\b"#,
+    #"^(need|want) anything else\b"#,
+    #"^how can i help\b"#,
+    #"^what else\??$"#,
+  ].compactMap { try? NSRegularExpression(pattern: $0) }
 
   /// Split a raw model answer into its visible text and its follow-up question.
   ///
@@ -93,10 +79,19 @@ enum ChatFollowUpTail {
     return question
   }
 
+  /// Mirrors the backend's `_is_generic`: collapse whitespace, lowercase, then
+  /// strip trailing `?!. ` only — the leading end is left alone there, so it is
+  /// left alone here.
   static func isGeneric(_ question: String) -> Bool {
-    let probe = question.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: " ?!."))
+    var probe =
+      question
+      .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+    while let last = probe.last, "?!. ".contains(last) { probe.removeLast() }
     guard !probe.isEmpty else { return true }
-    return genericPrefixes.contains { probe.hasPrefix($0) }
+    let range = NSRange(probe.startIndex..<probe.endIndex, in: probe)
+    return genericPatterns.contains { $0.firstMatch(in: probe, options: [], range: range) != nil }
   }
 
   /// What the reader should see while the answer is still streaming.
@@ -106,6 +101,17 @@ enum ChatFollowUpTail {
   /// completed delimiter (and everything after it) is dropped, and so is a
   /// trailing partial delimiter — but only once it is unambiguous (`<<<` or
   /// longer), so ordinary text ending in `<` is never eaten.
+  ///
+  /// - Precondition: `text` is the **raw** accumulated answer, delimiter and
+  ///   all — never this function's own previous output plus the next delta.
+  ///   The projection is one-way: both the completed-delimiter branch and the
+  ///   partial-delimiter branch delete characters the next call needs. Feed it
+  ///   its own output and the delimiter is gone from the only buffer left, so
+  ///   every token of the question that arrives after that flush is prose with
+  ///   nothing left to mark it — the exact leak this function exists to
+  ///   prevent, now permanent for the rest of the stream. The backend's
+  ///   `FollowUpTailStreamFilter` holds that same state in `_pending` /
+  ///   `_suppressing`; on this side the raw accumulator belongs to the caller.
   static func strippingPendingTail(_ text: String) -> String {
     if let range = text.range(of: delimiter) {
       return String(text[text.startIndex..<range.lowerBound])

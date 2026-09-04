@@ -572,7 +572,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("toolContext: toolContext"))
     XCTAssertTrue(hubSource.contains("prefetchedVoiceContextOwnerScope"))
     XCTAssertTrue(hubSource.contains("kernelContext: topLevelContext.rendered"))
-    XCTAssertTrue(hubSource.contains("askChatLaneForSpokenAnswer("))
+    XCTAssertTrue(hubSource.contains("thinkDeeperForVoice("))
     XCTAssertFalse(hubSource.contains("prefetchedFloatingAgentStatus"))
     XCTAssertFalse(hubSource.contains("voiceTurnScreenContextEnvelopeJSON"))
     XCTAssertTrue(bridgeSource.contains("func getContextSnapshot("))

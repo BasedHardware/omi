@@ -560,20 +560,7 @@ struct ChatBubble: View {
           palette: .standard,
           action: {
             Task { @MainActor in
-              // Analytics commit at the provider's own acceptance boundary: a
-              // send it refuses emits nothing and mislabels nothing later.
-              _ = await provider.sendMessage(
-                question,
-                surfaceRef: provider.mainChatSurfaceReference(),
-                turnOwner: .mainChat,
-                onAccepted: {
-                  AnalyticsManager.shared.questionOriginating(.followUp)
-                  AnalyticsManager.shared.chatMessageSent(
-                    messageLength: question.count,
-                    source: "follow_up_chip"
-                  )
-                }
-              )
+              await FollowUpChipTap.send(question: question, provider: provider)
             }
           }
         )
@@ -713,6 +700,8 @@ struct ChatBubble: View {
 
       if showReasonPicker {
         ChatFeedbackReasonPicker(
+          reasons: ChatFeedbackReason.chips(
+            isProactiveNotification: ChatContinuityInvariants.isProactiveNotification(message)),
           selected: submittedReason,
           onSelect: submitReason,
           onSkip: { showReasonPicker = false }

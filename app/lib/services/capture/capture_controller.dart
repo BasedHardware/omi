@@ -1824,9 +1824,15 @@ class CaptureController extends ChangeNotifier
     if (device != null) _updateRecordingDevice(device);
     _sessionRecordingDevice = _recordingDevice;
 
-    _recordingTelemetry.prepare(
-      source: SharedPreferencesUtil().batchModeEnabled ? 'pendant_batch' : 'pendant_live',
-    );
+    // HomePage calls this with device == null on every entry as a check-only
+    // path. That must not mint a recording ID or emit Recording Start Failed —
+    // a missing pendant is not a failed start.
+    final deviceRequested = device != null || _recordingDevice != null;
+    if (deviceRequested) {
+      _recordingTelemetry.prepare(
+        source: SharedPreferencesUtil().batchModeEnabled ? 'pendant_batch' : 'pendant_live',
+      );
+    }
 
     bool wasPaused = _isPaused;
 
@@ -1847,7 +1853,7 @@ class CaptureController extends ChangeNotifier
 
     if (recordingState == RecordingState.deviceRecord) {
       _recordingTelemetry.markStarted();
-    } else {
+    } else if (deviceRequested) {
       _recordingTelemetry.failStart(failureClass: 'capture_unavailable');
     }
 

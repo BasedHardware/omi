@@ -23,7 +23,9 @@ export async function GET(
     request.nextUrl.searchParams.get("report_date") || undefined;
 
   try {
-    return NextResponse.json(await getEventContext(authResult.uid, eventId, reportDate));
+    return NextResponse.json(
+      await getEventContext(authResult.uid, eventId, reportDate)
+    );
   } catch (error) {
     const status = error instanceof FeedbackApiError ? error.status : 502;
     console.error("Feedback context fetch error:", error);

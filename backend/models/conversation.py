@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from models.audio_file import AudioFile
 from models.calendar_context import CalendarMeetingContext
 from models.chat import Message
+from models.client_processing import ClientProcessing
 from models.conversation_enums import (
     CategoryEnum,
     ConversationSource,
@@ -300,6 +301,9 @@ class Conversation(BaseModel):
     uses_custom_stt: bool = False
 
     structured: Structured
+    # Untrusted client-authored display projection. Sibling of structured, never
+    # inside it or external_data. Display only — never an input to intelligence.
+    client_processing: Optional[ClientProcessing] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None

@@ -67,6 +67,19 @@ enum ChatContinuityInvariants {
     return key.hasPrefix(proactiveNotificationContinuityKeyPrefix)
   }
 
+  /// Last UUID segment of `notification:` / `notification:<kind>:<uuid>`.
+  static func notificationID(fromContinuityKey key: String?) -> UUID? {
+    guard let key, key.hasPrefix(proactiveNotificationContinuityKeyPrefix) else { return nil }
+    let suffix = key.dropFirst(proactiveNotificationContinuityKeyPrefix.count)
+    let raw: Substring
+    if let separator = suffix.lastIndex(of: ":") {
+      raw = suffix[suffix.index(after: separator)...]
+    } else {
+      raw = suffix
+    }
+    return UUID(uuidString: String(raw))
+  }
+
   static func proactiveNotificationKind(_ message: ChatMessage) -> ProactiveNotificationKind? {
     guard isProactiveNotification(message), let key = message.clientTurnId else { return nil }
     let suffix = key.dropFirst(proactiveNotificationContinuityKeyPrefix.count)

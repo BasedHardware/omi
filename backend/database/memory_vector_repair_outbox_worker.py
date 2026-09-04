@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, cast
 
 from google.cloud import firestore
 
-from database.durable_queue import ProcessOutcome, QueuePolicy, decide_attempt, oldest_ready_age_seconds
+from database.durable_queue import ProcessOutcome, QueuePolicy, decide_attempt, drain_isolated, oldest_ready_age_seconds
 from database.memory_collections import MemoryCollections
 from database.memory_vector_repair_outbox_telemetry import (
     VectorRepairOutboxTelemetryConfig,
@@ -445,7 +445,8 @@ def process_vector_repair_purge_outbox_records(
     failed_count = 0
     created_ats: List[datetime] = []
 
-    for record in records:
+    def process_one(record: Dict[str, Any]) -> ProcessOutcome:
+        nonlocal processed_count, skipped_count, failed_count
         created_at = record.get("created_at")
         if isinstance(created_at, datetime):
             created_ats.append(created_at)
@@ -454,13 +455,13 @@ def process_vector_repair_purge_outbox_records(
         status = record.get("status")
         if status != VECTOR_REPAIR_OUTBOX_PENDING_STATUS:
             skipped_count += 1
-            continue
+            return ProcessOutcome.ack()
         if record.get("event_type") != VECTOR_REPAIR_PURGE_EVENT_TYPE:
             skipped_count += 1
-            continue
+            return ProcessOutcome.ack()
         if idempotency_key in seen_idempotency_keys:
             skipped_count += 1
-            continue
+            return ProcessOutcome.ack()
         seen_idempotency_keys.add(idempotency_key)
 
         action = "delete" if _should_delete_without_authoritative_load(record) else None
@@ -494,6 +495,7 @@ def process_vector_repair_purge_outbox_records(
             )
             processed_count += 1
             actions.append({"record_id": record_id, "idempotency_key": idempotency_key, "action": action})
+            return ProcessOutcome.ack()
         except Exception as exc:
             failed_count += 1
             observed_dt = now if isinstance(now, datetime) else datetime.now(timezone.utc)
@@ -519,6 +521,9 @@ def process_vector_repair_purge_outbox_records(
             if decision.available_at is not None:
                 patch["available_at"] = decision.available_at
             outbox_updater(record, patch)
+            return ProcessOutcome.retry(decision.error_text, reason=decision.reason)
+
+    drain_isolated(list(records), process_one)
 
     observed_dt = now if isinstance(now, datetime) else datetime.now(timezone.utc)
     return {
