@@ -3,6 +3,14 @@
 User-managed agent extensions for the macOS app. Everything is on disk under
 `~/.omi`, hand-editable, and never touches the backend.
 
+**Scope.** User skills and user MCP tools are available wherever chat turns run
+through the kernel agent runtime — typed chat (main, floating, and notch),
+task chat, and onboarding. They are deliberately **not** part of the PTT
+realtime voice session: Gemini Live is offered the fixed realtime tool
+manifest (`RealtimeHubTools`), and neither the `mcp_tools_info` / `mcp_call`
+proxies nor the skill catalog is registered there. That is the current
+design, not a known bug.
+
 ## MCP servers
 
 ~/.omi/mcp.json in the standard client format:
@@ -22,8 +30,10 @@ awaited** — it races the runtime spawn, so a session can begin on a token that
 is still refreshing. That is deliberate: awaiting it would put a network round
 trip per expired token in front of every launch. It is safe because the path
 fails open (a stale token means one server answers 401 and is skipped, never a
-broken session) and because the runtime re-reads mcp.json per session, so the
-refreshed token applies from the next one.
+broken session), and because the refresh writes through the same
+save-and-notify seam as any other change (see "Applying changes" below), so
+the desktop respawns the runtime and the fresh token applies without waiting
+for a later session.
 
 Tokens are stored **in plaintext** in ~/.omi/mcp.json, under the server
 entry's `auth` key — the same trust model as other local MCP clients, in a
@@ -90,9 +100,12 @@ returns is untrusted tool-result data: it is handed back as tool output,
 never interpolated into system instructions.
 
 `notifications/tools/list_changed` is still not acted on; pi's extension API
-has `registerTool` with no counterpart, and config and tools are read per
-session, so changes land on the next one. Elicitation, sampling and roots
+has `registerTool` with no counterpart. Elicitation, sampling and roots
 are likewise unimplemented — the client declares no capabilities of its own.
+MCP **resources** are unsupported too: only tools and published prompts are
+discovered and exposed. The client never declares the resources capability,
+a server's resources are ignored, and `mcp_call` dispatches tools and prompts
+only.
 
 ### Spawning and lifecycle
 
@@ -124,6 +137,28 @@ servers still connecting keep connecting in the background — pi's
 `registerTool` cannot revise a description after the fact, but the proxies
 read live state, so a late server becomes callable without re-registration
 and the index reports `connecting` / `unavailable` per server.
+
+### Applying changes
+
+The pi-mono extension reads `~/.omi/mcp.json` **once per process spawn**
+(when it registers the proxy tools), so a change to the file does not reach a
+running session by itself. The desktop closes that gap: every write to the
+file — a save, a removal, a key change, an OAuth sign-in, and the unawaited
+token refresh — posts `.omiUserMcpDidChange`, and ChatProvider respawns the
+shared runtime in response. The respawn is debounced (a marketplace-install
+burst, or one refresh sweeping several tokens, costs one restart) and never
+lands mid-turn: a change noticed while a reply is streaming stays pending
+until the next turn's bridge-readiness check, which is the safe point between
+turns. The runtime's own restart refuses while requests are active (a
+background agent mid-run, for example), which defers the respawn the same
+way — so the change lands right away when the app is idle, and with the next
+message when it is not. Hand-edits are caught without a filesystem watcher:
+the Apps page stats the file each time the server section appears
+(`LocalMcpStore.checkForExternalChanges()`), and a stat is also how the store
+tells its own writes from an outside one. The ACP lane needs none of this —
+its harness re-reads the config per session — and skills need no respawn at
+all, because the compact catalog is rebuilt from disk when a skill changes
+and at every prompt-context warm-up.
 
 ## Marketplace
 
@@ -197,18 +232,29 @@ README imported without one is a skill that can never be selected. Text typed
 or pasted into the editor is still normalized, because there the user is
 authoring the skill rather than claiming a file already is one.
 
+A skill the user disables (`OMI_DISABLED_SKILLS`, exported to the runtime) is
+refused by `load_skill` / `search_skills` and filtered from the compact
+catalog, so the toggle binds the tools and not just the prompt text. The
+compact catalog has **one source per lane**: on pi-mono it rides the prompt
+(also indexing task-chat workspaces), while the ACP lane receives skills
+natively through the plugin — and the catalog is withheld there, so the model
+never sees the same index twice.
+
 ## Runtime contract
 
-`AgentRuntimeProcess` exports `OMI_USER_SKILLS_DIR` (`~/.omi`) and
-`OMI_LOCAL_MCP_FILE`.
+`AgentRuntimeProcess` exports `OMI_USER_SKILLS_DIR` (`~/.omi`),
+`OMI_LOCAL_MCP_FILE`, and `OMI_DISABLED_SKILLS`.
 
 | Lane | MCP servers | Skills |
 |---|---|---|
-| ACP | `buildMcpServers()` (stdio and `type: "http"` shapes), handed to the harness at `session/new` — harness-managed, no progressive disclosure | `plugins` option |
-| pi-mono | progressive disclosure via the `mcp_tools_info` / `mcp_call` proxy tools, registered in `pi-mono-extension` at startup over `McpHttpClient` / `McpSseClient` / `McpStdioClient` (10s http cap per server, 30s stdio cap for npx cold starts), non-blocking for the first prompt behind a short global budget | native catalog (`PI_CODING_AGENT_DIR` = `~/.omi`), `search_skills` / `load_skill`, and the compact catalog in `ChatProvider.loadClaudeConfigFromDisk` |
+| ACP | `buildMcpServers()` (stdio and `type: "http"` shapes), re-read per session and handed to the harness at `session/new` — harness-managed, no progressive disclosure | plugin-only (`plugins` option, gated on `.claude-plugin/plugin.json`) |
+| pi-mono | progressive disclosure via the `mcp_tools_info` / `mcp_call` proxy tools, registered in `pi-mono-extension` at startup over `McpHttpClient` / `McpSseClient` / `McpStdioClient` (10s http cap per server, 30s stdio cap for npx cold starts), non-blocking for the first prompt behind a short global budget | native catalog (`PI_CODING_AGENT_DIR` = `~/.omi`), `search_skills` / `load_skill` — which returns the overview (table of contents plus first section) by default and pages sections through `part` — and the compact catalog in `ChatProvider.loadClaudeConfigFromDisk` |
 
 ## Failure behavior
 
 Fail-open throughout: a missing or invalid file, a bad entry, or an unreachable
-server means those extensions are absent, never a broken chat. New servers and
-skills reach the pi lane on its next process spawn.
+server means those extensions are absent, never a broken chat. A saved server
+reaches the pi lane through the `.omiUserMcpDidChange` respawn (right away
+when idle, with the next message when a turn is in flight — see "Applying
+changes" above) and the ACP lane on its next session; a skill reaches the
+prompt catalog on its next rebuild.
