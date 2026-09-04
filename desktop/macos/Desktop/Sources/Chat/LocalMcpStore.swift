@@ -41,10 +41,10 @@ enum LocalMcpStore {
   /// Add a stdio server from a single command line ("npx @playwright/mcp@latest").
   static func addCommandServer(name: String, commandLine: String) throws {
     let slug = LocalSkillsStore.slugify(name)
-    let parts = commandLine.split(separator: " ").map(String.init)
     guard !slug.isEmpty else {
       throw storeError("Server name must contain letters or numbers")
     }
+    let parts = try splitCommandLine(commandLine)
     guard let command = parts.first, !command.isEmpty else {
       throw storeError("Enter the command to run, e.g. npx @playwright/mcp@latest")
     }
@@ -53,6 +53,50 @@ enum LocalMcpStore {
     if parts.count > 1 { entry["args"] = Array(parts.dropFirst()) }
     servers[slug] = entry
     try writeServers(servers)
+  }
+
+  /// Split a command line into argv the way a shell would for the cases users
+  /// hit: bare words, and runs quoted with `"` or `'` kept whole — a quoted
+  /// path with spaces stays one argument, and a quote toggles quoting from
+  /// anywhere in a word, so `--filter="App Store"` survives as one argument
+  /// too. Backslash escapes are not interpreted; quote a path instead of
+  /// escaping it. Runs of spaces or tabs separate words outside quotes. An
+  /// unterminated quote is a typo that would mangle the command at spawn, so
+  /// it throws rather than guessing.
+  static func splitCommandLine(_ line: String) throws -> [String] {
+    var parts: [String] = []
+    var current = ""
+    var inWord = false
+    var quote: Character?
+    for character in line {
+      switch character {
+      case "\"", "'":
+        if let open = quote {
+          if open == character { quote = nil } else { current.append(character) }
+        } else {
+          quote = character
+          inWord = true
+        }
+      case " ", "\t":
+        guard quote == nil else {
+          current.append(character)
+          continue
+        }
+        if inWord {
+          parts.append(current)
+          current = ""
+          inWord = false
+        }
+      default:
+        current.append(character)
+        inWord = true
+      }
+    }
+    guard quote == nil else {
+      throw storeError("The command has an unmatched quote")
+    }
+    if inWord { parts.append(current) }
+    return parts
   }
 
   static func removeServer(name: String) {
@@ -89,9 +133,20 @@ enum LocalMcpStore {
     }
     root["mcpServers"] = servers
     let fm = FileManager.default
-    try fm.createDirectory(at: LocalSkillsStore.rootURL, withIntermediateDirectories: true)
+    try fm.createDirectory(
+      at: LocalSkillsStore.rootURL, withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700])
+    // The directory also holds auth material (token-bearing mcp.json, skills),
+    // so it must not be world-listable — a directory that predates this
+    // hardening keeps its looser mode, so re-assert on every write.
+    try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: LocalSkillsStore.rootURL.path)
     let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+    // The file carries OAuth access/refresh tokens and client secrets, so it
+    // is user-only. The atomic rename replaces the file wholesale, so the
+    // chmod must run on every write — it both sets the new file's mode and
+    // tightens a file written by an older build.
     try data.write(to: fileURL, options: .atomic)
+    try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
     recordWriteFingerprint()
     notifyChanged()
   }
