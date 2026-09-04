@@ -472,6 +472,23 @@ class AnalyticsManager {
     )
   }
 
+  func listeningToggled(isListening: Bool, source: String) {
+    let state = isListening ? "on" : "off"
+
+    let breadcrumb = Breadcrumb(level: .info, category: "listening")
+    breadcrumb.message = "toggled to \(state)"
+    breadcrumb.data = ["state": state, "source": source]
+    SentrySDK.addBreadcrumb(breadcrumb)
+
+    PostHogManager.shared.track(
+      "listening_toggled",
+      properties: [
+        "state": state,
+        "source": source,
+      ]
+    )
+  }
+
   func conversationReconciliationFailed(
     error: String,
     reason: String,
