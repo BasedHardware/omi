@@ -1,3 +1,0 @@
-{
-  "change": "Tightened permissions on ~/.omi and its mcp.json, which can hold OAuth tokens, so they are now readable only by your user account"
-}

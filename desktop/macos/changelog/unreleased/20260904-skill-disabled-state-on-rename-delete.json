@@ -1,3 +1,0 @@
-{
-  "change": "Renaming or deleting a skill now keeps its disabled state in sync instead of silently re-enabling it or leaving stale entries"
-}

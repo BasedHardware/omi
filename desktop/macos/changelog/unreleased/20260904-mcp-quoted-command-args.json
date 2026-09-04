@@ -1,3 +1,0 @@
-{
-  "change": "Quoted paths and arguments now survive when adding a local command server instead of being split at every space"
-}

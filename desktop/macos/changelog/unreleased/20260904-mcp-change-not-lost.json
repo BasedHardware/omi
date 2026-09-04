@@ -1,3 +1,0 @@
-{
-  "change": "Fixed an MCP server change being dropped when it landed while the agent runtime was already restarting, and task chat now applies pending server changes too"
-}

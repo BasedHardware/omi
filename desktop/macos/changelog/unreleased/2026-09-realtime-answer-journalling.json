@@ -1,5 +1,0 @@
-{
-  "changes": [
-    "An answer that Omi speaks after deferring a voice question (\"Let me verify...\") is now written to the conversation journal, so a follow-up no longer gets answered from the earlier reply it already corrected."
-  ]
-}
