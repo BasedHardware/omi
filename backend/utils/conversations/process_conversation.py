@@ -88,6 +88,10 @@ from utils.observability.finalization import FinalizationFailureReason, record_f
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
+from utils.free_tier_memory_policy import (
+    free_tier_memory_suppression_enabled,
+    memory_formation_verdict,
+)
 from utils.free_tier_processing_policy import (
     FreeTierProcessingPlan,
     free_tier_local_processing_enabled,
@@ -971,6 +975,19 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
             conversation.id,
         )
         return
+    # §1.8: plan denial is a second early return in this same boundary, not a
+    # parallel branch. Everything below spends `get_llm('memories')`, so the
+    # gate has to sit above it rather than inside the extractor.
+    if free_tier_memory_suppression_enabled():
+        verdict = memory_formation_verdict(decision_for=_managed_compute_decision_for(uid))
+        if verdict.suppressed:
+            logger.info(
+                'memory extraction skipped: plan denies managed formation uid=%s conv=%s reason=%s',
+                uid,
+                conversation.id,
+                verdict.reason,
+            )
+            return
     source = source_for_conversation(conversation)
     parity_capture = SurfaceParityCapture.from_environ(
         principal_id=uid,

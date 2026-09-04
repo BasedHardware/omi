@@ -71,6 +71,11 @@ from models.product_memory import (
     MemorySubjectScope,
     normalized_memory_content_key,
 )
+from utils.free_tier_memory_policy import (
+    free_tier_memory_suppression_enabled,
+    memory_formation_verdict,
+)
+from utils.managed_compute import authorize_managed_compute
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item
 from utils.memory.daily_memory_sweep_queue import ProcessOutcome, drain_sweep_uids
 from utils.memory.knowledge_ledger import (
@@ -4898,6 +4903,27 @@ def run_daily_memory_sweep_scheduler(
                 blocked_users += 1
                 completed_uids.append(uid)
                 return ProcessOutcome.ack()
+            if free_tier_memory_suppression_enabled():
+                # §1.8: a basic account is not admitted to the sweep at all, so
+                # an account that downgrades stops being swept rather than
+                # having its already-claimed day fail late. Ack like the
+                # disabled-cohort branch above: a definite plan answer is a
+                # successful bounded decision and may advance the fair page
+                # cursor. Rejecting instead would burn receipt leases and
+                # strand the tail. The sweep is a cron with no request, so the
+                # funding owner is always the platform.
+                verdict = memory_formation_verdict(
+                    decision_for=lambda feature: authorize_managed_compute(uid, feature, "omi")
+                )
+                if verdict.suppressed:
+                    logger.info(
+                        "daily-memory-sweep skipping uid=%s: plan denies managed formation reason=%s",
+                        uid,
+                        verdict.reason,
+                    )
+                    blocked_users += 1
+                    completed_uids.append(uid)
+                    return ProcessOutcome.ack()
             timezone_name = str(timezone_resolver(uid) or "UTC")
             cursor = _read_cursor(db_client, uid, control)
             if cursor.last_completed_local_date is not None and cursor.timezone_name != timezone_name:
