@@ -31,6 +31,7 @@ from utils.conversations.wake_word import (
 )
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
+from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
 from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_MINIMUM_TOKENS,
     EXPLICIT_CACHE_OPTIONS,
@@ -1164,7 +1165,11 @@ def sanitize_structured_speaker_placeholders(structured: Structured) -> Structur
 # /reprocess ended at 15.2-15.8s of request latency chained from `openai.APITimeoutError`, leaving
 # the conversation with no summary; successful requests on those routes already run to ~55s, inside
 # the route's own 120s TimeoutMiddleware budget.
-CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = 60.0
+#
+# The deadline now belongs to the feature route (model_config._FOREGROUND_TIMEOUT_FEATURES), which
+# is what get_llm applies when a caller passes none; this constant names the same budget for the
+# call sites that state it explicitly.
+CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
 
 
 def get_conversation_notes(
@@ -1573,6 +1578,11 @@ def get_app_result(
     {full_context}
     '''
 
+    # Both branches below run while the user waits on POST /v1/conversations/{id}/reprocess?app_id=,
+    # applying a user-authored app/template prompt to a whole conversation, so they need the same
+    # foreground deadline whole-transcript structuring needed. get_llm supplies it for the
+    # conv_app_result feature; on the background transport deadline this call returned
+    # `openai.APITimeoutError: Request timed out.` and the reprocess failed with no summary at all.
     if prompt_prefix is not None:
         cache_enabled = shared_conversation_cache_supported() and prompt_prefix.cache_eligible
         instructions = f'''Apply this explicitly selected summarization app to the shared conversation above.
@@ -1778,7 +1788,7 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
 # background feature calls. A whole-transcript summary regularly needs longer than that: in prod on
 # 2026-08-19 the same conversation failed three times at 15.2s / 15.3s / 15.4s. The route's own
 # budget is the 120s default of TimeoutMiddleware, so a foreground attempt fits with headroom.
-SUMMARY_WITH_PROMPT_TIMEOUT_SECONDS = 60.0
+SUMMARY_WITH_PROMPT_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
 
 
 class SummaryProviderError(Exception):

@@ -46,6 +46,7 @@ from utils.llm.model_config import (
     get_byok_profile_name,
     get_model,
     get_provider,
+    feature_request_timeout,
     get_route_options,
     is_anthropic_only_feature,
     is_perplexity_only_feature,
@@ -651,6 +652,13 @@ def get_llm(
             f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
         )
 
+    if request_timeout is None:
+        # The deadline is a property of the feature, not of the call site: a feature that
+        # summarizes a whole conversation while a user waits cannot answer inside the
+        # background gateway transport deadline. Three separate call-site fixes proved that
+        # leaving this to each caller loses the user's summary (see model_config).
+        request_timeout = feature_request_timeout(feature)
+
     model, provider = _get_model_config(feature)
     # The feature lane (feature_auto_lane_id) is pinned to the feature's
     # resolved provider. When BYOK selection below switches providers, the
@@ -736,11 +744,20 @@ def get_llm(
     # OpenAI-compatible client, not the gateway lane.
     gateway_accepts_byok = effective_provider != "gemini"
     if byok_key and route_through_gateway and effective_provider == lane_provider and gateway_accepts_byok:
+        # A BYOK user's request runs the same feature prompt on the same lane, so it needs the
+        # same deadline as the omi-managed branch below; without this it silently kept the
+        # background transport deadline.
+        byok_gateway_options: Dict[str, Any] = {}
+        if request_timeout is not None:
+            byok_gateway_options["request_timeout"] = request_timeout
+        if max_retries is not None:
+            byok_gateway_options["max_retries"] = max_retries
         result = get_or_create_omi_gateway_llm_for_byok(
             feature_auto_lane_id(feature),
             provider=effective_provider,
             api_key=byok_key,
             streaming=streaming,
+            options=byok_gateway_options or None,
             feature=feature,
         )
     elif byok_key:
