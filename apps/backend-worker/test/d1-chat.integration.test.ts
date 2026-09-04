@@ -3,8 +3,6 @@ import { env } from "cloudflare:workers";
 import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { beforeEach, describe, expect, test } from "vitest";
 
-import { parseSynthesizedPageJson } from "@omi-core/ratified-contracts/projections/synthesized";
-
 import { MAIN_CONVERSATION_ID } from "../src/conversations";
 import handler from "../src/index";
 
@@ -434,17 +432,18 @@ describe("D1 chat projects an honest conversation list", () => {
     ]);
   });
 
-  test("memories remain an empty recall page because D1 has no memories store", async () => {
+  test("memories remain retryably unavailable because D1 has no memories store", async () => {
     const response = await fetchWorker("/v1/memories", {
       headers: authenticatedHeaders,
     });
-    expect(response.status).toBe(200);
-    const body = await response.text();
-    const page = parseSynthesizedPageJson(body);
-    expect(page).not.toBeNull();
-    expect(page?.items).toEqual([]);
-    expect(page?.completeness.status).toBe("complete");
-    expect(page?.absence).toEqual({ kind: "query_gap" });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "projection_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
   });
 });
 
