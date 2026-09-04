@@ -34,7 +34,9 @@ from database._client import db
 from database.vector_db import upsert_x_post_vectors_batch
 from models.memories import MemoryDB
 from models.memory_contracts import MemoryExtractionError
+from utils.free_tier_memory_policy import free_tier_memory_suppression_enabled, memory_formation_verdict
 from utils.llm.memories import extract_memories_from_text
+from utils.managed_compute import managed_compute_decision_for
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.promotion_flex import PromotionFlexDeferred, PromotionFlexRunRouter
@@ -339,6 +341,23 @@ def _extract_and_index(
     vector-index the resulting memories. Returns memories created."""
     if not posts:
         return 0
+    # §1.8 (flip-review F-3): the X connector is one of the managed
+    # memory-formation doors that ran ungated for basic. The plan gate sits
+    # above every chunk's extractor spend, exactly like the coordinator's
+    # extraction boundary. Skipped posts stay pending — unformed memories are
+    # never backfilled (the eager-extraction asymmetry), so a later upgrade
+    # forms them on the next sync instead of a suppression window mass-forming
+    # a backlog.
+    if free_tier_memory_suppression_enabled():
+        verdict = memory_formation_verdict(decision_for=managed_compute_decision_for(uid))
+        if verdict.suppressed:
+            logger.info(
+                'memory extraction skipped: plan denies managed formation uid=%s source=x_connector posts=%d reason=%s',
+                uid,
+                len(posts),
+                verdict.reason,
+            )
+            return 0
 
     chunks: List[Tuple[str, List[str]]] = []
     buf: List[str] = []
