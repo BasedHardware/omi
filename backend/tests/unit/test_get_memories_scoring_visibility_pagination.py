@@ -36,11 +36,15 @@ class _FakeQuery:
         filters: Optional[List] = None,
         requested_offset: int = 0,
         requested_limit: Optional[int] = None,
+        batches: Optional[List[int]] = None,
     ):
         self._docs = docs
         self._filters = list(filters or [])
         self.requested_offset = requested_offset
         self.requested_limit = requested_limit
+        # Shared across derived queries: one entry per raw Firestore read, so a test
+        # can see how many documents the scan actually streamed and in how many batches.
+        self.batches = batches if batches is not None else []
 
     def where(self, *args, **kwargs):
         filt = kwargs.get('filter') or (args[0] if args else None)
@@ -49,6 +53,7 @@ class _FakeQuery:
             filters=self._filters + [filt],
             requested_offset=self.requested_offset,
             requested_limit=self.requested_limit,
+            batches=self.batches,
         )
 
     def order_by(self, *args, **kwargs):
@@ -63,6 +68,7 @@ class _FakeQuery:
             filters=self._filters,
             requested_offset=value,
             requested_limit=self.requested_limit,
+            batches=self.batches,
         )
 
     def limit(self, value: int):
@@ -71,6 +77,7 @@ class _FakeQuery:
             filters=self._filters,
             requested_offset=self.requested_offset,
             requested_limit=value,
+            batches=self.batches,
         )
 
     def start_after(self, document):
@@ -80,19 +87,23 @@ class _FakeQuery:
             filters=self._filters,
             requested_offset=start,
             requested_limit=self.requested_limit,
+            batches=self.batches,
         )
 
     def stream(self):
         rows = self._docs
         start = self.requested_offset
         end = start + (self.requested_limit if self.requested_limit is not None else len(rows))
-        for doc in rows[start:end]:
+        page = rows[start:end]
+        self.batches.append(len(page))
+        for doc in page:
             yield _FakeDoc({'id': doc.id, **doc._data})
 
 
 class _FakeDB:
     def __init__(self, docs: List[_FakeDoc]):
         self._docs = docs
+        self.batches: List[int] = []
 
     def collection(self, _name: str):
         return self
@@ -101,7 +112,7 @@ class _FakeDB:
         return SimpleNamespace(collection=self._user_collection)
 
     def _user_collection(self, _name: str):
-        return _FakeQuery(self._docs)
+        return _FakeQuery(self._docs, batches=self.batches)
 
 
 def _memory_row(memory_id: str, **fields: Any) -> Dict[str, Any]:
@@ -118,16 +129,21 @@ def _memory_row(memory_id: str, **fields: Any) -> Dict[str, Any]:
     return row
 
 
-def _call_scoring_page(docs: List[_FakeDoc], *, limit: int, offset: int = 0):
+def _call_scoring_page(docs: List[_FakeDoc], *, limit: int, offset: int = 0, db_out: Optional[List] = None):
+    # No decrypt stub here: @prepare_for_read binds _prepare_memory_for_read into its
+    # wrapper closure at decoration time, so patching the module attribute would do
+    # nothing. These rows carry no data_protection_level='enhanced', so the real read
+    # path is a pass-through and the fixtures exercise it unmodified.
     fake_db = _FakeDB(docs)
-    with patch.object(memories_db, '_prepare_memory_for_read', side_effect=lambda data, _uid: data):
-        return memories_db.get_memories(
-            'uid-scoring-vis',
-            limit=limit,
-            offset=offset,
-            sort='scoring_desc',
-            firestore_client=fake_db,
-        )
+    if db_out is not None:
+        db_out.append(fake_db)
+    return memories_db.get_memories(
+        'uid-scoring-vis',
+        limit=limit,
+        offset=offset,
+        sort='scoring_desc',
+        firestore_client=fake_db,
+    )
 
 
 def test_rejected_row_in_middle_of_page_does_not_shorten_visible_limit():
@@ -176,3 +192,63 @@ def test_offset_advances_by_visible_rows_not_raw_firestore_slots():
     second = _call_scoring_page(docs, limit=2, offset=2)
     assert [row['id'] for row in first] == ['visible-a', 'visible-b']
     assert [row['id'] for row in second] == ['visible-c', 'visible-d']
+
+
+def test_scan_continues_across_batches_through_a_dense_block_of_hidden_rows():
+    """The cursor continuation is the fix, so a page must be filled across batches.
+
+    Every earlier fixture fits in one batch, so the loop exited after the first read
+    and start_after was never called -- the mechanism was untested. Here 150 rejected
+    rows sit ahead of the visible ones, which exceeds the 100-document batch ceiling
+    and forces the scan to resume from the cursor.
+    """
+    docs = [_FakeDoc(_memory_row(f'rejected-{i}', user_review=False)) for i in range(150)]
+    docs += [_FakeDoc(_memory_row('visible-a')), _FakeDoc(_memory_row('visible-b'))]
+
+    seen: List[Any] = []
+    page = _call_scoring_page(docs, limit=2, offset=0, db_out=seen)
+
+    assert [row['id'] for row in page] == ['visible-a', 'visible-b']
+    assert len(seen[0].batches) > 1, 'the page must have required more than one raw read'
+
+
+def test_a_clean_page_streams_no_more_documents_than_it_returns():
+    """Nothing hidden means no slack: the read costs exactly what the page needs.
+
+    The first version floored the budget at 100 and read a flat 100-document first
+    batch, so every small page streamed 100 full documents on an endpoint with a
+    documented 504 history (#11831).
+    """
+    docs = [_FakeDoc(_memory_row(f'visible-{i}')) for i in range(500)]
+
+    seen: List[Any] = []
+    page = _call_scoring_page(docs, limit=5, offset=0, db_out=seen)
+
+    assert [row['id'] for row in page] == [f'visible-{i}' for i in range(5)]
+    assert sum(seen[0].batches) == 5
+
+
+def test_a_deep_offset_is_still_serviced_rather_than_reported_as_end_of_data():
+    """A deep offset must return its page, not a short one callers read as EOF.
+
+    Capping the *total* scan at 2000 meant offset + limit past the cap could never be
+    reached, so the page came back empty -- the same "later visible rows are never
+    fetched" defect this scan exists to fix, reintroduced at depth, and a regression
+    against the raw .offset() it replaced.
+    """
+    docs = [_FakeDoc(_memory_row(f'visible-{i}')) for i in range(2300)]
+
+    page = _call_scoring_page(docs, limit=5, offset=2200)
+
+    assert [row['id'] for row in page] == [f'visible-{i}' for i in range(2200, 2205)]
+
+
+def test_slack_stays_bounded_when_every_scanned_row_is_hidden():
+    """Flooring the budget at the page must not become an unbounded stream."""
+    docs = [_FakeDoc(_memory_row(f'rejected-{i}', user_review=False)) for i in range(9000)]
+
+    seen: List[Any] = []
+    page = _call_scoring_page(docs, limit=10, offset=0, db_out=seen)
+
+    assert page == []
+    assert sum(seen[0].batches) <= 10 + memories_db._MEMORY_SCORING_VISIBLE_PAGE_SCAN_SLACK

@@ -231,7 +231,14 @@ _MEMORY_LIST_CANDIDATE_WINDOW_MAX = 5000
 # Cap for the scoring_desc visible-page scan. Covers skip+page plus slack for
 # user-rejected / invalidated rows between visible ones; one request must not
 # stream an unbounded historical collection.
-_MEMORY_SCORING_VISIBLE_PAGE_SCAN_CAP = 2000
+# Extra documents the scoring scan may stream *beyond* the rows the page needs when
+# nothing is hidden. The floor is the page itself, never this: the previous raw
+# ``.limit(n).offset(m)`` query already streamed n + m documents, so budgeting
+# ``needed + slack`` can only read more than before by the slack, and can never fail
+# to service an offset the old query serviced. Capping the total instead returned a
+# short page at depth, which callers read as end-of-data -- the same defect this scan
+# exists to fix.
+_MEMORY_SCORING_VISIBLE_PAGE_SCAN_SLACK = 2000
 
 
 def _memory_passes_list_visibility(memory: Dict[str, Any], *, include_invalidated: bool) -> bool:
@@ -431,17 +438,27 @@ def get_memories(
     # ``limit`` visible rows are collected.
     visible_limit = max(0, int(limit))
     visible_offset = max(0, int(offset))
-    scan_budget = min(
-        _MEMORY_SCORING_VISIBLE_PAGE_SCAN_CAP,
-        max(100, (visible_offset + visible_limit) * 4),
-    )
+    # A page with nothing hidden needs exactly this many documents, which is what the
+    # old raw query streamed. Bound the slack on top of it, not the page itself.
+    needed = visible_offset + visible_limit
+    # Flat slack, not proportional. Scaling it with the page size gave a small page a
+    # tiny allowance (limit=2 -> 6 documents), so a dense run of hidden rows still
+    # returned an empty page that callers read as end-of-data. The read cost is set by
+    # the batch sizing below, not by this ceiling, so a flat allowance costs a clean
+    # page nothing and only bounds how far a page that meets hidden rows may scan.
+    scan_budget = needed + _MEMORY_SCORING_VISIBLE_PAGE_SCAN_SLACK
     scanned = 0
     visible_skipped = 0
     result: List[Dict[str, Any]] = []
     cursor_snapshot: Any = None
 
     while scanned < scan_budget and len(result) < visible_limit:
+        # Read exactly what the page needs before reading any slack. The 100-document
+        # floor made every small page stream 100 full documents on an endpoint with a
+        # 504 history (#11831); slack is now paid only by a page that meets a hidden row.
         batch_limit = min(100, scan_budget - scanned)
+        if scanned == 0:
+            batch_limit = min(batch_limit, max(1, needed))
         page_query = memories_ref.start_after(cursor_snapshot) if cursor_snapshot is not None else memories_ref
         documents = list(page_query.limit(batch_limit).stream())
         if not documents:
