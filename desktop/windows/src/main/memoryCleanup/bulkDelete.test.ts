@@ -62,8 +62,7 @@ describe('bulkDeleteMemories', () => {
       return jsonResponse(200)
     }
     const ids = Array.from({ length: 101 }, (_, i) => `m${i}`)
-    const result = await bulkDeleteMemories(fetchImpl, {
-      baseURL: 'https://api.example',
+    const result = await bulkDeleteMemories(fetchImpl, 'https://api.example', {
       token: 'tok',
       ids
     })
@@ -90,7 +89,8 @@ describe('bulkDeleteMemories', () => {
 
     const result = await bulkDeleteMemories(
       fetchImpl,
-      { baseURL: 'https://api.example', token: 'tok', ids: ['a', 'b'] },
+      'https://api.example',
+      { token: 'tok', ids: ['a', 'b'] },
       { sleep }
     )
 
@@ -100,17 +100,64 @@ describe('bulkDeleteMemories', () => {
     expect(sleep).toHaveBeenCalledWith(2000)
   })
 
-  it('falls back to per-id deletes when the batch is 404 (all-or-nothing missing id)', async () => {
-    const fetchImpl: BulkDeleteFetch = async (url) => {
-      if (url.endsWith('/v3/memories/batch')) return jsonResponse(404)
-      return jsonResponse(200)
+  it('bisects a 404 batch instead of fanning out per-id single deletes', async () => {
+    // All-or-nothing validation: one stale id 404s the whole chunk. The chunk
+    // must be split and retried as batches so only the stale id reaches the
+    // single-delete route (the 60/hour per-UID limiter).
+    const batchCalls: string[][] = []
+    const singleIds: string[] = []
+    const fetchImpl: BulkDeleteFetch = async (url, init) => {
+      if (url.endsWith('/v3/memories/batch')) {
+        const chunk = JSON.parse((init as { body?: string }).body ?? '{}').memory_ids as string[]
+        batchCalls.push(chunk)
+        // The first chunk contains the stale id 'stale'; once it is bisected
+        // away, every remaining batch succeeds.
+        return chunk.includes('stale') ? jsonResponse(404) : jsonResponse(200)
+      }
+      singleIds.push(url.split('/').pop() ?? '')
+      // The stale id is already gone server-side; its single delete 404s too,
+      // which counts as idempotent success.
+      return jsonResponse(404)
     }
-    const result = await bulkDeleteMemories(fetchImpl, {
-      baseURL: 'https://api.example',
+
+    const result = await bulkDeleteMemories(fetchImpl, 'https://api.example', {
       token: 'tok',
-      ids: ['a', 'b']
+      ids: ['a', 'b', 'stale', 'c', 'd']
     })
+
+    expect(result.deleted).toBe(5)
+    expect(result.failed).toBe(0)
+    expect(singleIds).toEqual(['stale'])
+    // First the whole chunk, then at least one bisect round before the stale
+    // id is isolated.
+    expect(batchCalls.length).toBeGreaterThanOrEqual(3)
+    expect(batchCalls[0]).toHaveLength(5)
+  })
+
+  it('bisects down to lone ids without any per-id fallback when a whole chunk 404s', async () => {
+    // Pathological case: every id stale. Bisection must still resolve via
+    // batch calls until chunks are size 1, then single deletes (gone = ok).
+    const batchCalls: string[][] = []
+    const singleIds: string[] = []
+    const fetchImpl: BulkDeleteFetch = async (url, init) => {
+      if (url.endsWith('/v3/memories/batch')) {
+        const chunk = JSON.parse((init as { body?: string }).body ?? '{}').memory_ids as string[]
+        batchCalls.push(chunk)
+        return jsonResponse(404)
+      }
+      singleIds.push(url.split('/').pop() ?? '')
+      return jsonResponse(404)
+    }
+
+    const result = await bulkDeleteMemories(fetchImpl, 'https://api.example', {
+      token: 'tok',
+      ids: ['x', 'y']
+    })
+
     expect(result.deleted).toBe(2)
     expect(result.failed).toBe(0)
+    expect(singleIds.sort()).toEqual(['x', 'y'])
+    // ['x','y'] -> 404 -> bisect into ['x'] and ['y'], each 404 -> singles.
+    expect(batchCalls).toEqual([['x', 'y'], ['x'], ['y']])
   })
 })

@@ -8,7 +8,7 @@ export const MEMORIES_DELETE_BATCH_SIZE = 100
 export const MAX_ATTEMPTS = 6
 export const REQUEST_TIMEOUT_MS = 15_000
 
-export type BulkDeleteArgs = { baseURL: string; token: string; ids: string[] }
+export type BulkDeleteArgs = { token: string; ids: string[] }
 export type BulkDeleteResult = { deleted: number; failed: number; firstError?: string }
 
 export type BulkDeleteResponse = {
@@ -101,10 +101,11 @@ function authHeaders(token: string, jsonBody = false): Record<string, string> {
 // Drain ids through DELETE /v3/memories/batch in chunks of ≤100, sequentially.
 // The account destructive-operation gate is exclusive per uid, so a 4-wide
 // single-delete fan-out collides with itself. One batch request holds the gate
-// once for the whole chunk. 404 on a batch falls back to per-id deletes
-// because the server rejects the whole chunk if any id is already gone.
+// once for the whole chunk. 404 on a batch (some id already gone) is bisected
+// recursively so only genuinely stale ids reach the single-delete route.
 export async function bulkDeleteMemories(
   fetchImpl: BulkDeleteFetch,
+  baseURL: string,
   args: BulkDeleteArgs,
   hooks: BulkDeleteHooks = {}
 ): Promise<BulkDeleteResult> {
@@ -126,7 +127,7 @@ export async function bulkDeleteMemories(
   const deleteOne = async (id: string): Promise<void> => {
     const result = await requestWithRetry(
       fetchImpl,
-      `${args.baseURL}/v3/memories/${encodeURIComponent(id)}`,
+      `${baseURL}/v3/memories/${encodeURIComponent(id)}`,
       { method: 'DELETE', headers: authHeaders(args.token) },
       sleep
     )
@@ -134,10 +135,17 @@ export async function bulkDeleteMemories(
     else noteFail(result.reason)
   }
 
+  // The server rejects a whole batch when any id is already gone (all-or-nothing
+  // validation -> 404). Bisect instead of falling back to per-id deletes: a
+  // chunk that 404s with more than one id is split in half and each half is
+  // retried as a batch, so only ids that are individually stale ever reach the
+  // single-delete route. This keeps large cleanups off the 60-per-hour
+  // per-UID single-delete limiter (#12707 review).
   const deleteChunk = async (chunk: string[]): Promise<void> => {
+    if (chunk.length === 0) return
     const result = await requestWithRetry(
       fetchImpl,
-      `${args.baseURL}/v3/memories/batch`,
+      `${baseURL}/v3/memories/batch`,
       {
         method: 'DELETE',
         headers: authHeaders(args.token, true),
@@ -150,7 +158,15 @@ export async function bulkDeleteMemories(
       return
     }
     if (result.outcome === 'gone') {
-      for (const id of chunk) await deleteOne(id)
+      if (chunk.length === 1) {
+        // The lone id in the chunk is the stale one; a single delete resolves
+        // it idempotently (404 gone counts as deleted).
+        await deleteOne(chunk[0])
+        return
+      }
+      const mid = Math.floor(chunk.length / 2)
+      await deleteChunk(chunk.slice(0, mid))
+      await deleteChunk(chunk.slice(mid))
       return
     }
     noteFail(result.reason, chunk.length)
