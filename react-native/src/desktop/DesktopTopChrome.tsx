@@ -34,22 +34,26 @@ const navIcons: Record<DesktopNavItem, typeof Search> = {
 };
 
 type Props = {
+  activeGenerationId: string | null;
   route: DesktopRoute;
   onNavigate: (route: DesktopRoute) => void;
   draft: string;
   onDraftChange: (value: string) => void;
   onSend: () => void;
+  onStop: () => void;
   chatNotice: string | null;
   omnibarRef: React.RefObject<TextInput | null>;
 };
 
 export function DesktopChrome({
+  activeGenerationId,
   chatNotice,
   draft,
   omnibarRef,
   onDraftChange,
   onNavigate,
   onSend,
+  onStop,
   route,
 }: Props) {
   const reduceMotion = useReduceMotion();
@@ -211,11 +215,13 @@ export function DesktopChrome({
           value={draft}
         />
         <FocusPressable
-          accessibilityLabel="Send"
+          accessibilityLabel={activeGenerationId === null ? 'Send' : 'Stop'}
           accessibilityRole="button"
-          onPress={onSend}
+          onPress={activeGenerationId === null ? onSend : onStop}
           style={({pressed}) => [styles.send, pressed && styles.pressed]}>
-          <Text style={styles.sendText}>Ask</Text>
+          <Text style={styles.sendText}>
+            {activeGenerationId === null ? 'Ask' : 'Stop'}
+          </Text>
         </FocusPressable>
       </View>
       {chatNotice === null ? null : (

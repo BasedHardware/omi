@@ -17,7 +17,7 @@ import {
   type DesktopSession,
 } from './desktopChrome';
 import {DesktopChrome, type DesktopRoute} from './DesktopTopChrome';
-import {DesktopHome} from './DesktopHome';
+import {DesktopHome, DesktopReadBanner} from './DesktopHome';
 import {AppsPage, LibraryPage, TasksPage} from './DesktopPages';
 import {DesktopSettings} from './DesktopSettings';
 import {ShippingStage} from './ShippingStage';
@@ -35,6 +35,8 @@ export function DesktopSessionProbe() {
 }
 
 type Props = {
+  activeGenerationId: string | null;
+  authError: string | null;
   outcomes: DesktopReadOutcomes | null;
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
@@ -42,24 +44,34 @@ type Props = {
   signingIn: boolean;
   draft: string;
   messages: ChatMessage[];
+  hasOlderChat: boolean;
+  loadingOlderChat: boolean;
   chatBusy: boolean;
   chatError: string | null;
   onRefresh: () => void;
   onSignIn: () => void;
   onSignOut: () => void;
   onDraftChange: (value: string) => void;
+  onLoadOlderChat: () => void;
   onSend: () => void;
+  onStop: () => void;
   onWorkspaceReload?: () => void;
 };
 
 export function DesktopApp({
+  activeGenerationId,
+  authError,
   chatBusy,
   chatError,
   draft,
+  hasOlderChat,
+  loadingOlderChat,
   messages,
   onDraftChange,
+  onLoadOlderChat,
   onRefresh,
   onSend,
+  onStop,
   onSignIn,
   onSignOut,
   onWorkspaceReload,
@@ -71,6 +83,11 @@ export function DesktopApp({
 }: Props) {
   const [route, setRoute] = useState<DesktopRoute>('Home');
   const omnibarRef = useRef<TextInput>(null);
+  useEffect(() => {
+    if (session !== 'ready') {
+      setRoute('Home');
+    }
+  }, [session]);
   useEffect(() => {
     const subscription = subscribeDesktopSearchCommand(() => {
       setRoute('Home');
@@ -87,7 +104,11 @@ export function DesktopApp({
   if (session === 'signed-out') {
     return (
       <View accessibilityLabel="Omi desktop" style={styles.root}>
-        <Onboarding onSignIn={onSignIn} signingIn={signingIn} />
+        <Onboarding
+          error={authError}
+          onSignIn={onSignIn}
+          signingIn={signingIn}
+        />
       </View>
     );
   }
@@ -101,20 +122,31 @@ export function DesktopApp({
   return (
     <View accessibilityLabel="Omi desktop" style={styles.root}>
       <DesktopChrome
+        activeGenerationId={activeGenerationId}
         chatNotice={chatNotice}
         draft={draft}
         omnibarRef={omnibarRef}
         onDraftChange={onDraftChange}
         onNavigate={setRoute}
-        onSend={onSend}
+        onSend={() => {
+          setRoute('Home');
+          onSend();
+        }}
+        onStop={onStop}
         route={route}
       />
+      {route === 'Home' ? null : (
+        <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
+      )}
       <ShippingStage stageKey={route} variant="page">
         {route === 'Home' ? (
           <DesktopHome
             chatBusy={chatBusy}
             draft={draft}
+            hasOlderChat={hasOlderChat}
+            loadingOlderChat={loadingOlderChat}
             messages={messages}
+            onLoadOlderChat={onLoadOlderChat}
             onRefresh={onRefresh}
             outcomes={outcomes}
             reads={reads}

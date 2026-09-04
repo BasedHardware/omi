@@ -8,9 +8,11 @@ import {tokens} from './tokens';
 const DOTS_SIZE = 104;
 
 export function Onboarding({
+  error,
   onSignIn,
   signingIn,
 }: {
+  error?: string | null;
   onSignIn: () => void;
   signingIn: boolean;
 }) {
@@ -67,6 +69,11 @@ export function Onboarding({
         <Text style={styles.copy}>
           Sign in to access your conversations and memories.
         </Text>
+        {error == null ? null : (
+          <Text accessibilityLabel="Sign-in error" style={styles.error}>
+            {error}
+          </Text>
+        )}
         <Button
           accessibilityLabel="Sign in"
           accessibilityRole="button"
@@ -111,6 +118,12 @@ const styles = StyleSheet.create({
     color: tokens.color.menuText,
     fontSize: 15,
     lineHeight: 22,
+    textAlign: 'center',
+  },
+  error: {
+    color: tokens.color.menuText,
+    fontSize: 13,
+    lineHeight: 18,
     textAlign: 'center',
   },
   signIn: {marginTop: tokens.space.sm, paddingHorizontal: 28},

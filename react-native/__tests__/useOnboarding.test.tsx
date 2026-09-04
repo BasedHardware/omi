@@ -128,6 +128,7 @@ test('a cancelled sign-in stays on Welcome without faking a session', async () =
 
   expect(mockAuth.markOnboardingComplete).not.toHaveBeenCalled();
   expect(hook.latest().onboardingRequired).toBe(true);
+  expect(hook.latest().authError).toBe('Sign in was not completed. Try again.');
   expect(refreshReads).not.toHaveBeenCalled();
 });
 
@@ -148,6 +149,7 @@ test('a rejected sign-in stays on Welcome and stops the busy flag', async () => 
 
   expect(hook.latest().onboardingRequired).toBe(true);
   expect(hook.latest().signingIn).toBe(false);
+  expect(hook.latest().authError).toBe('Sign in was not completed. Try again.');
 });
 
 test('sign-out returns the desktop to Welcome without firing cloud reads', async () => {

@@ -178,11 +178,15 @@ export function DesktopSettings({
     Record<PermissionKind, PermissionState>
   >({microphone: 'unknown', notifications: 'unknown', screen: 'unknown'});
   const [account, setAccount] = useState<AccountSettingsSnapshot | null>(null);
+  const reloadSeqRef = useRef(0);
   const backend = omiBackend;
 
   const reload = useCallback(async () => {
-    const nextPrefs = await loadDesktopPreferences();
-    const nextPermissions = await loadPermissionStatus();
+    const seq = ++reloadSeqRef.current;
+    const [nextPrefs, nextPermissions] = await Promise.all([
+      loadDesktopPreferences(),
+      loadPermissionStatus(),
+    ]);
     let nextAccount: AccountSettingsSnapshot | null = null;
     if (backend !== undefined && backend !== null && session === 'ready') {
       try {
@@ -191,23 +195,18 @@ export function DesktopSettings({
         nextAccount = null;
       }
     }
-    return {nextAccount, nextPermissions, nextPrefs};
+    if (seq !== reloadSeqRef.current) {
+      return;
+    }
+    setPrefs(nextPrefs);
+    setPermissions(nextPermissions);
+    setAccount(nextAccount);
   }, [backend, session]);
 
   useEffect(() => {
-    let active = true;
-    reload()
-      .then(snapshot => {
-        if (!active) {
-          return;
-        }
-        setPrefs(snapshot.nextPrefs);
-        setPermissions(snapshot.nextPermissions);
-        setAccount(snapshot.nextAccount);
-      })
-      .catch(() => undefined);
+    reload().catch(() => undefined);
     return () => {
-      active = false;
+      reloadSeqRef.current += 1;
     };
   }, [reload]);
 
@@ -217,7 +216,8 @@ export function DesktopSettings({
     key: Key,
     value: DesktopPreferences[Key],
   ) => {
-    setPrefs(await setDesktopPreference(key, value));
+    await setDesktopPreference(key, value);
+    await reload();
   };
 
   const request = async (kind: PermissionKind) => {
@@ -229,6 +229,7 @@ export function DesktopSettings({
     if (kind === 'notifications' && next === 'granted') {
       await setPref('notificationsEnabled', true);
     }
+    return next;
   };
 
   const general = (
@@ -259,10 +260,14 @@ export function DesktopSettings({
         trailing={
           <Segmented<AudioRecordingMode>
             onChange={value => {
-              if (value !== 'off') {
-                request('microphone').catch(() => undefined);
-              }
-              setPref('audioMode', value).catch(() => undefined);
+              (async () => {
+                if (
+                  value === 'off' ||
+                  (await request('microphone')) === 'granted'
+                ) {
+                  await setPref('audioMode', value);
+                }
+              })().catch(() => undefined);
             }}
             options={['off', 'always', 'meetings']}
             value={prefs.audioMode}
@@ -392,13 +397,18 @@ export function DesktopSettings({
     <>
       <Row
         copy={
-          account?.storeRecordingPermission
+          account?.storeRecordingPermission === null || account === null
+            ? account?.storeRecordingError ??
+              'Cloud recording storage status is unavailable.'
+            : account.storeRecordingPermission
             ? 'Cloud recording storage is on.'
             : 'Cloud recording storage is off until you allow it.'
         }
         title="Store Recordings"
         action={
-          session === 'ready' && backend != null
+          session === 'ready' &&
+          backend != null &&
+          typeof account?.storeRecordingPermission === 'boolean'
             ? () => {
                 setStoreRecordingPermission(
                   backend,
@@ -413,13 +423,18 @@ export function DesktopSettings({
       />
       <Row
         copy={
-          account?.privateCloudSync
+          account?.privateCloudSync === null || account === null
+            ? account?.privateCloudSyncError ??
+              'Private cloud sync status is unavailable.'
+            : account.privateCloudSync
             ? 'Private cloud sync is on.'
             : 'Private cloud sync is off.'
         }
         title="Private Cloud Sync"
         action={
-          session === 'ready' && backend != null
+          session === 'ready' &&
+          backend != null &&
+          typeof account?.privateCloudSync === 'boolean'
             ? () => {
                 setPrivateCloudSync(
                   backend,
@@ -441,7 +456,7 @@ export function DesktopSettings({
         prefs.softwarePlane === 'new'
           ? prefs.stampedV5Origin != null
             ? 'New uses the stamped v5 origin with the same OmiAuth keychain session as the shipping Mac app.'
-            : 'New is selected, but no stamped v5 origin is configured, so requests stay on production api.omi.me with the same OmiAuth session.'
+            : 'New is selected, but no valid stamped v5 origin is configured.'
           : 'Old uses production api.omi.me. Session is the same OmiAuth keychain as the shipping Mac app.'
       }
       title="Backend"

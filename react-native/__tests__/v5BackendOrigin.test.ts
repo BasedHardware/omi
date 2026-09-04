@@ -109,8 +109,13 @@ test('old plane keeps every software path on api.omi.me', () => {
       softwarePlane: 'new',
       v5BackendUrl: workerOrigin,
     }),
-  ).toEqual({ok: true, origin: workerOrigin});
+  ).toEqual({ok: true, origin: CLOUD_BACKEND_ORIGIN});
   expect(isCaptureBackendPath('/v1/device-sessions')).toBe(true);
   expect(isCaptureBackendPath('/v1/device-sessions-extra')).toBe(false);
-  expect(isCaptureBackendPath('/v1/settings')).toBe(false);
+  expect(isCaptureBackendPath('/v1/settings')).toBe(true);
+  expect(isCaptureBackendPath('/v1/chat-messages')).toBe(true);
+  expect(isCaptureBackendPath('/v1/conversations')).toBe(true);
+  expect(isCaptureBackendPath('/v1/memories')).toBe(true);
+  expect(isCaptureBackendPath('/v1/tasks')).toBe(true);
+  expect(isCaptureBackendPath('/v1/apps')).toBe(false);
 });

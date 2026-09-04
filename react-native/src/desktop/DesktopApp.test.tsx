@@ -9,6 +9,10 @@ jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => true,
 }));
 
+jest.mock('../omiNative', () => ({
+  omiBackend: {request: jest.fn()},
+}));
+
 jest.mock('./ShippingPressable', () => {
   const ReactModule = require('react');
   const {FocusPressable} = require('../ui/Pressable');
@@ -193,6 +197,22 @@ function renderedText(renderer: ReactTestRenderer.ReactTestRenderer): string {
     .join(' ');
 }
 
+function pressText(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  label: string,
+) {
+  let node: ReactTestRenderer.ReactTestInstance | null = renderer.root.find(
+    candidate => candidate.type === Text && candidate.props.children === label,
+  );
+  while (node !== null && typeof node.props.onPress !== 'function') {
+    node = node.parent;
+  }
+  if (node === null) {
+    throw new Error(`No pressable contains ${label}`);
+  }
+  node.props.onPress();
+}
+
 const renderers: ReactTestRenderer.ReactTestRenderer[] = [];
 
 afterEach(() => {
@@ -208,15 +228,21 @@ function renderDesktop(
   act(() => {
     renderer = ReactTestRenderer.create(
       <DesktopApp
+        activeGenerationId={null}
+        authError={null}
         chatBusy={false}
         chatError={null}
         draft=""
+        hasOlderChat={false}
+        loadingOlderChat={false}
         messages={[]}
         onDraftChange={jest.fn()}
+        onLoadOlderChat={jest.fn()}
         onRefresh={jest.fn()}
         onSend={jest.fn()}
         onSignIn={jest.fn()}
         onSignOut={jest.fn()}
+        onStop={jest.fn()}
         outcomes={outcomes}
         reads={[
           ...outcomes.conversations.value.items,
@@ -287,6 +313,91 @@ test('omnibar send uses the existing chat send path', () => {
   expect(onSend).toHaveBeenCalledTimes(2);
 });
 
+test('sending from another page returns to Home and an active response can stop', async () => {
+  const onSend = jest.fn();
+  const onStop = jest.fn();
+  const renderer = renderDesktop({onSend, onStop});
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).not.toContain('Screen history');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send')
+      .props.onPress();
+  });
+  expect(onSend).toHaveBeenCalledTimes(1);
+  expect(renderedText(renderer)).toContain('Screen history');
+
+  await act(async () => {
+    renderer.update(
+      <DesktopApp
+        activeGenerationId="generation-1"
+        authError={null}
+        chatBusy
+        chatError={null}
+        draft=""
+        hasOlderChat={false}
+        loadingOlderChat={false}
+        messages={[]}
+        onDraftChange={jest.fn()}
+        onLoadOlderChat={jest.fn()}
+        onRefresh={jest.fn()}
+        onSend={onSend}
+        onSignIn={jest.fn()}
+        onSignOut={jest.fn()}
+        onStop={onStop}
+        outcomes={outcomes}
+        reads={[]}
+        readsPhase="ready"
+        session="ready"
+        signingIn={false}
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Stop')
+      .props.onPress();
+  });
+  expect(onStop).toHaveBeenCalledTimes(1);
+  expect(onSend).toHaveBeenCalledTimes(1);
+});
+
+test('desktop chat renders a truthful failed terminal state', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'failed-1',
+        text: '',
+        sender: 'ai',
+        createdAt: 1,
+        generationOutcome: 'failed',
+        generationRetryable: true,
+      },
+    ],
+  });
+  expect(renderedText(renderer)).toContain('Response failed. Try again.');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Failed response',
+    ),
+  ).not.toHaveLength(0);
+});
+
+test('desktop chat can load earlier messages', () => {
+  const onLoadOlderChat = jest.fn();
+  const renderer = renderDesktop({hasOlderChat: true, onLoadOlderChat});
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load earlier messages')
+      .props.onPress();
+  });
+  expect(onLoadOlderChat).toHaveBeenCalledTimes(1);
+});
+
 test('signed-out Mac sees only the Welcome, never product chrome', () => {
   const onSignIn = jest.fn();
   const renderer = renderDesktop({
@@ -326,6 +437,16 @@ test('signed-out Mac sees only the Welcome, never product chrome', () => {
       .props.onPress();
   });
   expect(onSignIn).toHaveBeenCalled();
+});
+
+test('signed-out Mac shows a safe sign-in failure', () => {
+  const renderer = renderDesktop({
+    authError: 'Sign in was not completed. Try again.',
+    session: 'signed-out',
+  });
+  expect(renderedText(renderer)).toContain(
+    'Sign in was not completed. Try again.',
+  );
 });
 
 test('the session probe holds an empty window with no product copy', () => {
@@ -381,6 +502,48 @@ test('keeps an unavailable read as an inline shell state', () => {
   expect(tree).not.toContain('Saved data unavailable');
   expect(tree).not.toContain('Sign in to Omi cloud');
   expect(tree).not.toContain('Offline · showing what is available on this Mac');
+});
+
+test('keeps degraded read state visible away from Home', () => {
+  const renderer = renderDesktop({readsPhase: 'saved-but-refresh-failed'});
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    "Some of your history isn't loaded yet.",
+  );
+});
+
+test('reports when a desktop read page is only the first window', () => {
+  const renderer = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      conversations: {
+        ...outcomes.conversations,
+        value: {
+          ...outcomes.conversations.value,
+          page: {
+            ...outcomes.conversations.value.page,
+            windowStatus: 'unknown',
+            complete: false,
+            hasMore: true,
+            completenessStatus: 'unknown',
+            reasons: ['limit_reached'],
+          },
+        },
+      },
+    },
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Conversations')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'Showing the first 50 conversations. More may be available.',
+  );
 });
 
 test('signed-out first paint shows no chat transport error and no shell', () => {
@@ -475,6 +638,39 @@ test('searches real projections instead of a fake timeline', () => {
   expect(tree).not.toContain('🧠');
 });
 
+test('Home renders real memories alongside conversations', () => {
+  const memory = {
+    kind: 'memory' as const,
+    id: 'memory-1',
+    title: 'Prefers concise release notes',
+    summary: 'Release notes should lead with the outcome.',
+    searchableText:
+      'prefers concise release notes release notes should lead with the outcome',
+    citations: [],
+    timestamp: 1788492408,
+    provenance: {
+      label: null,
+      synthesisVersion: 'v1',
+      inputDigest: 'input',
+      outputDigest: 'output',
+    },
+  };
+  const renderer = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      memories: {
+        status: 'success',
+        value: {...outcomes.memories.value, items: [memory]},
+      },
+    },
+    reads: [...outcomes.conversations.value.items, memory],
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Conversations & memories');
+  expect(tree).toContain('Prefers concise release notes');
+  expect(tree).toContain('Memory');
+});
+
 test('Home keeps screen-history copy without a Rewind tab', () => {
   const renderer = renderDesktop();
   const homeTree = renderedText(renderer);
@@ -533,6 +729,7 @@ test('chrome keeps a sliding nav pill, structured home cards, and a field omniba
   expect(chrome).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
   expect(home).toMatch(/section:\s*\{[^}]*borderRadius:\s*16/);
   expect(home).not.toMatch(/filterRow:\s*\{/);
+  expect(home).toContain('chatScrollRef.current?.scrollToEnd');
   expect(settings).toContain('const PANE_ITEM_GAP = 12');
   expect(settings).toMatch(/paneItem:\s*\{[^}]*alignItems:\s*'flex-start'/);
   expect(settings).toMatch(/paneText:\s*\{[^}]*textAlign:\s*'left'/);
@@ -650,7 +847,7 @@ test('a successful empty read is the only path to the empty claims', async () =>
   );
 });
 
-test('Apps is a wrapped gallery of tiles', async () => {
+test('Apps is a wrapped gallery that does not invent catalog entries', async () => {
   const pages = kitSources['DesktopPages.tsx'];
   expect(pages).toMatch(/appGrid:\s*\{[^}]*flexWrap:\s*'wrap'/);
   expect(pages).toMatch(/appSlot:\s*\{[^}]*width:\s*'50%'/);
@@ -665,9 +862,103 @@ test('Apps is a wrapped gallery of tiles', async () => {
     await Promise.resolve();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Calendar');
-  expect(tree).toContain('Google Calendar');
-  expect(tree).toContain('Not connected');
-  expect(tree).toContain('ChatGPT');
-  expect(tree).not.toContain('Installed');
+  expect(tree).toContain('No apps are available.');
+  expect(tree).not.toContain('Calendar');
+  expect(tree).not.toContain('ChatGPT');
+});
+
+test('Apps reports a catalog failure instead of showing invented data', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockRejectedValueOnce(new Error('offline'));
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(renderedText(renderer)).toContain('Apps could not be loaded.');
+  expect(renderedText(renderer)).not.toContain('Google Calendar');
+});
+
+test('Settings persists a plane switch before reloading the workspace', async () => {
+  const onWorkspaceReload = jest.fn();
+  const {setDesktopPreference} = jest.requireMock(
+    '../desktopSettingsClient',
+  ) as {setDesktopPreference: jest.Mock};
+  setDesktopPreference.mockClear();
+  const renderer = renderDesktop({onWorkspaceReload});
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  await act(async () => {
+    pressText(renderer, 'new');
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(setDesktopPreference).toHaveBeenCalledWith('softwarePlane', 'new');
+  expect(onWorkspaceReload).toHaveBeenCalledTimes(1);
+});
+
+test('Settings does not persist audio capture when microphone access is denied', async () => {
+  const settings = jest.requireMock('../desktopSettingsClient') as {
+    requestDesktopPermission: jest.Mock;
+    setDesktopPreference: jest.Mock;
+  };
+  settings.requestDesktopPermission.mockResolvedValueOnce('denied');
+  settings.setDesktopPreference.mockClear();
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    pressText(renderer, 'always');
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(settings.requestDesktopPermission).toHaveBeenCalledWith('microphone');
+  expect(settings.setDesktopPreference).not.toHaveBeenCalledWith(
+    'audioMode',
+    'always',
+  );
+});
+
+test('Settings does not expose cloud mutations when account values failed to load', async () => {
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Alerts & Privacy')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'Cloud recording storage status is unavailable.',
+  );
+  expect(renderedText(renderer)).toContain(
+    'Private cloud sync status is unavailable.',
+  );
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Update'),
+  ).toHaveLength(0);
 });

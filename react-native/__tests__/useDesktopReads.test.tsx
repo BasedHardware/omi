@@ -146,6 +146,19 @@ test('a successful refresh inside the live session lands as saved rows', async (
   reads.unmount();
 });
 
+test('a task failure makes the read phase unavailable even when other domains succeed', async () => {
+  const outcomes = successOutcomes([]);
+  outcomes.tasks = {
+    status: 'error',
+    error: 'Tasks could not be loaded.',
+  };
+  readsMock.mockResolvedValue(outcomes);
+
+  const reads = await renderReads({enabled: true});
+  expect(reads.latest().readsPhase).toBe('unavailable');
+  reads.unmount();
+});
+
 test('a late refresh from a dropped session cannot seed the next session', async () => {
   // The session drops (enabled false) while its refresh is still in flight.
   // When that refresh resolves afterwards, its rows must be discarded —

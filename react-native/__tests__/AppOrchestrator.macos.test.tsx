@@ -334,6 +334,7 @@ test('a send still in flight when the session dies never seeds the next session'
   expect(labelsOf(renderer)).toContain('Omi desktop chrome');
   expect(textOf(renderer)).not.toContain('PRIVATE IN-FLIGHT MESSAGE');
   expect(textOf(renderer)).not.toContain('PRIVATE REPLY FROM THE DEAD SESSION');
+  expect(labelsOf(renderer)).toContain('Send');
 
   // The retired send did not brick the composer: a fresh message still
   // starts a new admission.
@@ -451,5 +452,133 @@ test('the previous session transcript never survives a sign-out', async () => {
     await Promise.resolve();
   });
   expect(labelsOf(renderer)).toContain('Omi desktop chrome');
+  expect(labelsOf(renderer)).toContain('Home currents');
   expect(textOf(renderer)).not.toContain('PRIVATE PRIOR SESSION');
+});
+
+test('a stale older-history recovery cannot overwrite a newer desktop send', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  let historyCall = 0;
+  let resolveStaleRecovery:
+    | ((value: {id: string; status: number; body: string}) => void)
+    | undefined;
+  const canonicalMessages = [
+    {
+      id: 'fresh-human',
+      text: 'fresh question',
+      sender: 'human',
+      createdAt: 2,
+      generationOutcome: null,
+    },
+    {
+      id: 'fresh-ai',
+      text: 'fresh answer',
+      sender: 'ai',
+      createdAt: 3,
+      generationOutcome: 'completed',
+    },
+  ];
+  mockBackend.request.mockImplementation(
+    (value: {id: string; path?: string}) => {
+      if (value.id === 'chat-history') {
+        historyCall += 1;
+        if (historyCall === 1) {
+          return Promise.resolve({
+            id: value.id,
+            status: 200,
+            body: JSON.stringify({
+              messages: [],
+              page: {olderCursor: 'older-1', hasOlder: true},
+            }),
+          });
+        }
+        if (historyCall === 2) {
+          return Promise.resolve({
+            id: value.id,
+            status: 410,
+            body: JSON.stringify({
+              error: {
+                code: 'cursor_expired',
+                retryable: false,
+                action: 'refresh_history',
+              },
+            }),
+          });
+        }
+        if (historyCall === 3) {
+          return new Promise(resolve => {
+            resolveStaleRecovery = resolve;
+          });
+        }
+        return Promise.resolve({
+          id: value.id,
+          status: 200,
+          body: JSON.stringify({
+            messages: canonicalMessages,
+            page: {olderCursor: null, hasOlder: false},
+          }),
+        });
+      }
+      if (value.id.startsWith('admit-')) {
+        return Promise.resolve({
+          id: value.id,
+          status: 201,
+          body: JSON.stringify({
+            message: canonicalMessages[0],
+            generation: {id: 'fresh-generation'},
+          }),
+        });
+      }
+      return Promise.resolve({id: value.id, status: 501, body: null});
+    },
+  );
+  mockBackend.generationEvents.mockResolvedValue({
+    id: 'fresh-generation',
+    status: 200,
+    body: `data: ${JSON.stringify({
+      kind: 'done',
+      message: canonicalMessages[1],
+    })}\n\n`,
+  });
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load earlier messages')
+      .props.onPress();
+    await flushAsyncQueue();
+  });
+  expect(resolveStaleRecovery).toBeDefined();
+
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('fresh question');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain('fresh answer');
+
+  await act(async () => {
+    resolveStaleRecovery!({
+      id: 'chat-history',
+      status: 200,
+      body: JSON.stringify({
+        messages: [],
+        page: {olderCursor: null, hasOlder: false},
+      }),
+    });
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain('fresh question');
+  expect(textOf(renderer)).toContain('fresh answer');
 });
