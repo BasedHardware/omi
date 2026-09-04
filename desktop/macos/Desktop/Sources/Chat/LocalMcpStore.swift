@@ -1,5 +1,13 @@
 import Foundation
 
+extension Notification.Name {
+  /// Posted after ~/.omi/mcp.json changes on disk — a server added, removed,
+  /// retargeted, or re-authed from the UI, and a hand-edit noticed by
+  /// `checkForExternalChanges()`. The agent runtime reads the file once per
+  /// process spawn, so ChatProvider respawns it in response.
+  static let omiUserMcpDidChange = Notification.Name("omiUserMcpDidChange")
+}
+
 /// Local MCP servers at `~/.omi/mcp.json`, in the standard client format:
 /// `{"mcpServers": {"<name>": {"command", "args", "env"} | {"url", ...}}}`.
 /// Hand-edits are respected: reads and writes go through read-modify-write on
@@ -84,9 +92,156 @@ enum LocalMcpStore {
     try fm.createDirectory(at: LocalSkillsStore.rootURL, withIntermediateDirectories: true)
     let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
     try data.write(to: fileURL, options: .atomic)
+    recordWriteFingerprint()
+    notifyChanged()
+  }
+
+  // MARK: - Change notification
+
+  private static let fingerprintLock = NSLock()
+  // Guarded by `fingerprintLock`.
+  private nonisolated(unsafe) static var lastWriteFingerprint: (modified: Date, size: Int)?
+
+  /// Records the just-written file state so `checkForExternalChanges()` does
+  /// not read our own write back as a hand-edit.
+  private static func recordWriteFingerprint() {
+    fingerprintLock.lock()
+    defer { fingerprintLock.unlock() }
+    lastWriteFingerprint = fileFingerprint()
+  }
+
+  private static func fileFingerprint() -> (modified: Date, size: Int)? {
+    guard let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+      let modified = attributes[.modificationDate] as? Date
+    else { return nil }
+    return (modified, attributes[.size] as? Int ?? 0)
+  }
+
+  /// Cheap source-of-truth check for edits made outside this process (the file
+  /// is hand-editable by design, and nothing watches it). Call when the Apps
+  /// page shows the server section: a stat, and a notification only when the
+  /// file actually moved under us. The first observation in a process adopts
+  /// the file silently — there is no earlier baseline to diff against.
+  /// Returns whether an external change was detected.
+  @discardableResult
+  static func checkForExternalChanges() -> Bool {
+    fingerprintLock.lock()
+    defer { fingerprintLock.unlock() }
+    let current = fileFingerprint()
+    if current?.modified == lastWriteFingerprint?.modified, current?.size == lastWriteFingerprint?.size {
+      return false
+    }
+    let hadBaseline = lastWriteFingerprint != nil
+    lastWriteFingerprint = current
+    guard hadBaseline else { return false }
+    notifyChanged()
+    return true
+  }
+
+  /// Test seam: clears the recorded fingerprint so a test process does not
+  /// inherit another test's baseline.
+  static func resetChangeDetectionForTesting() {
+    fingerprintLock.lock()
+    defer { fingerprintLock.unlock() }
+    lastWriteFingerprint = nil
+  }
+
+  private static func notifyChanged() {
+    if Thread.isMainThread {
+      NotificationCenter.default.post(name: .omiUserMcpDidChange, object: nil)
+    } else {
+      DispatchQueue.main.async {
+        NotificationCenter.default.post(name: .omiUserMcpDidChange, object: nil)
+      }
+    }
   }
 
   static func storeError(_ message: String) -> Error {
     NSError(domain: "LocalMcpStore", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+  }
+}
+
+/// Applies changes to ~/.omi/mcp.json to the running agent runtime.
+///
+/// Unlike the skills catalog — which the runtime re-reads per turn to build the
+/// prompt — the pi-mono extension registers its `mcp_tools_info` / `mcp_call`
+/// proxy tools once at process spawn, so a saved, removed, or re-authed server
+/// reaches chat only after the shared bridge respawns. Respawns are debounced
+/// (a marketplace install burst, or one OAuth refresh sweeping several tokens,
+/// costs one respawn) and never land mid-turn: a change noticed while a query
+/// is streaming stays pending until the next turn's bridge-readiness check,
+/// which is the safe point between turns. The runtime's own restart refuses
+/// while requests are active (a background agent mid-run, for example), which
+/// defers the respawn the same way.
+///
+/// The closures exist so the decision logic is testable without a runtime.
+@MainActor
+final class UserMcpRuntimeRefresh {
+  static let debounceNanoseconds: UInt64 = 500_000_000
+
+  private let debounce: (UInt64) async -> Void
+  private let isTurnActive: () -> Bool
+  private let isRuntimeStarted: () -> Bool
+  private let respawn: () async throws -> Void
+  private var pendingChange = false
+  private var debounceInFlight = false
+  private var cycleTask: Task<Void, Never>?
+
+  init(
+    debounce: @escaping (UInt64) async -> Void = { try? await Task.sleep(nanoseconds: $0) },
+    isTurnActive: @escaping () -> Bool,
+    isRuntimeStarted: @escaping () -> Bool,
+    respawn: @escaping () async throws -> Void
+  ) {
+    self.debounce = debounce
+    self.isTurnActive = isTurnActive
+    self.isRuntimeStarted = isRuntimeStarted
+    self.respawn = respawn
+  }
+
+  /// A `.omiUserMcpDidChange` notification arrived. Coalesces while a debounced
+  /// cycle is already in flight; the in-flight cycle picks the change up.
+  func changeDetected() {
+    pendingChange = true
+    guard !debounceInFlight else { return }
+    debounceInFlight = true
+    cycleTask = Task { [weak self] in
+      await self?.runDebounceCycle()
+    }
+  }
+
+  private func runDebounceCycle() async {
+    await debounce(Self.debounceNanoseconds)
+    debounceInFlight = false
+    await applyPendingChange(onlyWhenIdle: true)
+  }
+
+  /// Test seam: awaits the debounced cycle so tests observe its outcome
+  /// deterministically instead of sleeping on the wall clock.
+  func awaitDebouncedCycleForTesting() async {
+    await cycleTask?.value
+  }
+
+  /// Turn-boundary retry, called from the bridge-readiness check before a turn
+  /// issues any runtime work. Not gated on the send lock the way the idle path
+  /// is: at this point the caller's turn has produced no requests, and the
+  /// runtime's restart still refuses if some other surface's requests are
+  /// active.
+  func applyAtTurnBoundary() async {
+    await applyPendingChange(onlyWhenIdle: false)
+  }
+
+  private func applyPendingChange(onlyWhenIdle: Bool) async {
+    guard pendingChange else { return }
+    if onlyWhenIdle, isTurnActive() { return }  // stays pending; retried at the next boundary
+    pendingChange = false
+    guard isRuntimeStarted() else { return }  // nothing warm to respawn; the next start reads the file
+    do {
+      try await respawn()
+    } catch {
+      // The respawn did not happen. Keep the change pending so the next turn
+      // boundary retries once the refusal clears.
+      pendingChange = true
+    }
   }
 }

@@ -2669,9 +2669,13 @@ actor AgentRuntimeProcess {
       env.removeValue(forKey: "PLAYWRIGHT_MCP_EXTENSION_TOKEN")
     }
 
-    // User-managed local skills and MCP servers (~/.omi). The runtime reads
-    // both per session, so a file change is enough to apply. The OAuth refresh is unawaited:
-    // a stale token costs one server a 401 (fail-open) and applies from the next session.
+    // User-managed local skills and MCP servers (~/.omi). Skills re-read per
+    // turn for the prompt catalog, but the pi-mono extension registers its MCP
+    // proxy tools once per spawn, so a file change reaches chat through the
+    // ChatProvider respawn on .omiUserMcpDidChange (debounced, never mid-turn).
+    // The OAuth refresh is unawaited: a stale token costs one server a 401
+    // (fail-open), and its write notifies, so the refreshed token applies
+    // without waiting for the next session.
     env["OMI_USER_SKILLS_DIR"] = LocalSkillsStore.rootURL.path
     // The disabled toggle must bind the tools too, not just the prompt catalog:
     // load_skill/search_skills refuse names on this list.

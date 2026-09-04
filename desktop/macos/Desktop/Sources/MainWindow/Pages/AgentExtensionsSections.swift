@@ -81,6 +81,11 @@ struct McpServersSection: View {
       await appProvider.fetchMcpCatalog(search: searchText)
     }
     .task(id: appProvider.localMcpServers.map(\.name)) {
+      // The file is hand-editable by design and nothing watches it; each visit
+      // here stats it once and notifies the runtime when it moved under us.
+      if LocalMcpStore.checkForExternalChanges() {
+        await appProvider.fetchUserExtensions()
+      }
       await appProvider.refreshMcpStatuses()
     }
   }
@@ -793,7 +798,7 @@ struct AddMcpServerSheet: View {
             .frame(width: 20, height: 20)
         },
         title: "Server saved to ~/.omi/mcp.json",
-        detail: "Its tools are discovered when the assistant starts its next chat session."
+        detail: "Its tools reach chat automatically — right away, or with your next message if a reply is in flight."
       )
 
       HStack {
@@ -1223,10 +1228,12 @@ struct LocalMcpDetailSheet: View {
           .fixedSize(horizontal: false, vertical: true)
       }
 
-      Text("Configured in ~/.omi/mcp.json. Tools are discovered when the assistant starts its next chat session.")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(Ink.secondary)
-        .fixedSize(horizontal: false, vertical: true)
+      Text(
+        "Configured in ~/.omi/mcp.json. Changes reach chat automatically — right away, or with your next message if a reply is in flight."
+      )
+      .scaledFont(size: OmiType.caption)
+      .foregroundColor(Ink.secondary)
+      .fixedSize(horizontal: false, vertical: true)
 
       HStack {
         Spacer()
@@ -1267,7 +1274,7 @@ struct LocalMcpDetailSheet: View {
         try await LocalMcpStore.signIn(name: server.name)
         await appProvider.fetchUserExtensions()
         await appProvider.refreshMcpStatuses()
-        notice = "Signed in. Tools arrive with the assistant's next chat session."
+        notice = "Signed in. Its tools reach chat automatically."
       } catch {
         errorText = error.localizedDescription
       }
