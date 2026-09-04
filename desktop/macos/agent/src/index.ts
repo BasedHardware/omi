@@ -2451,6 +2451,7 @@ async function main(): Promise<void> {
             runId: request.runId,
             attemptId: request.attemptId,
             terminalStatus: request.terminalStatus,
+            finalText: request.finalText,
             errorCode: request.errorCode,
           });
           send({

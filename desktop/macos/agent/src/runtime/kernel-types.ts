@@ -125,6 +125,8 @@ export interface CompleteExternalSurfaceRunInput {
   runId: string;
   attemptId: string;
   terminalStatus: "completed" | "failed" | "cancelled";
+  /** Text the external surface streamed, persisted to `runs.final_text` (#12731). */
+  finalText?: string;
   errorCode?: string;
 }
 

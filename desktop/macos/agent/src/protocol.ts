@@ -127,6 +127,17 @@ export interface ExternalSurfaceRunCompleteMessage extends ProtocolEnvelope {
   runId: string;
   attemptId: string;
   terminalStatus: "completed" | "failed" | "cancelled";
+  /**
+   * The response text the external surface streamed to the user.
+   *
+   * An external surface owns its own streaming, so the kernel never observes this
+   * run's output — it has to be handed back at terminalization or it is lost.
+   * Without it `runs.final_text` stays null and every consumer that reads a run's
+   * answer is content-free: the completion lane can only report that an agent
+   * finished, and a spawn receipt that delegates its journal exchange to the run
+   * result writes no assistant row at all (#12731).
+   */
+  finalText?: string;
   errorCode?: string;
 }
 

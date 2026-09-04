@@ -1522,6 +1522,133 @@ describe("external realtime surface authority", () => {
     expect(store.getRow("SELECT COUNT(*) AS count FROM runs").count).toBe(1);
     store.close();
   });
+
+  // #12731: the kernel never observes an external surface's stream, so unless the
+  // text comes back at terminalization `runs.final_text` stays null and every
+  // consumer of a run's answer — the completion lane, spawn-receipt journaling —
+  // is structurally content-free.
+  it("persists the text an external surface streamed into runs.final_text", () => {
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "The hopper recipe is three parts sand to one part clay.",
+    });
+
+    expect(fixture.store.getRow(
+      "SELECT final_text FROM runs WHERE run_id = ?",
+      [run.runId],
+    ).final_text).toBe("The hopper recipe is three parts sand to one part clay.");
+    fixture.store.close();
+  });
+
+  it("puts the streamed text on the message.completed event, not an empty payload", () => {
+    // The trace in #12731 shows these events carrying literally {"text":""}. The
+    // event is emitted from finishAttemptAndRun off the same finalText the run row
+    // stores, so both the completion lane and the journal starve together.
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "Three parts sand to one part clay.",
+    });
+
+    const completed = fixture.store.allRows(
+      "SELECT payload_json FROM events WHERE run_id = ? AND type = 'message.completed'",
+      [run.runId],
+    );
+    expect(completed).toHaveLength(1);
+    expect(JSON.parse(String(completed[0].payload_json))).toEqual({ text: "Three parts sand to one part clay." });
+    fixture.store.close();
+  });
+
+  it("leaves final_text null when the surface reports no text", () => {
+    const fixture = createFixture();
+    const omitted = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: omitted.runId,
+      attemptId: omitted.attemptId,
+      terminalStatus: "completed",
+    });
+
+    // An empty string means the same thing as an absent field, so both land as
+    // null and no consumer has to special-case "" separately.
+    const empty = fixture.kernel.beginExternalSurfaceRun({
+      ...beginInput(fixture.sessionId),
+      turnId: "voice-turn-2",
+      requestId: "begin-2",
+    });
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: empty.runId,
+      attemptId: empty.attemptId,
+      terminalStatus: "completed",
+      finalText: "",
+    });
+
+    for (const runId of [omitted.runId, empty.runId]) {
+      expect(fixture.store.getRow("SELECT final_text FROM runs WHERE run_id = ?", [runId]).final_text).toBeNull();
+    }
+    fixture.store.close();
+  });
+
+  it("keeps text produced before a failed terminalization", () => {
+    // Matches the internal adapter path, which stores whatever text was produced
+    // and signals failure through errorCode rather than by discarding the answer.
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "failed",
+      finalText: "Partial answer before the surface gave up.",
+      errorCode: "external_surface_failed",
+    });
+
+    const row = fixture.store.getRow(
+      "SELECT final_text, status, error_code FROM runs WHERE run_id = ?",
+      [run.runId],
+    );
+    expect(row.final_text).toBe("Partial answer before the surface gave up.");
+    expect(row.status).toBe("failed");
+    expect(row.error_code).toBe("external_surface_failed");
+    fixture.store.close();
+  });
+
+  it("rejects a non-string finalText", () => {
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+
+    expectCode(() => fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: { text: "not a string" } as unknown as string,
+    }), "invalid_external_request");
+
+    // The rejection must leave the run terminalizable, not half-sealed.
+    expect(fixture.store.getRow("SELECT status FROM runs WHERE run_id = ?", [run.runId]).status).not.toBe("succeeded");
+    fixture.store.close();
+  });
 });
 
 function createFixture() {

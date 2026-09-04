@@ -650,13 +650,23 @@ export class KernelCore {
     if (errorCode && !/^[a-z0-9_]{1,64}$/.test(errorCode)) {
       throw new ExternalSurfaceAuthorityError("invalid_external_request", "External surface errorCode is invalid");
     }
+    if (input.finalText !== undefined && typeof input.finalText !== "string") {
+      throw new ExternalSurfaceAuthorityError("invalid_external_request", "External surface finalText must be a string");
+    }
+    // The kernel never observes an external surface's stream, so terminalization is
+    // the only point at which this run's answer can be captured. Persisted for every
+    // terminal status, matching the internal adapter path, which likewise stores
+    // whatever text was produced and marks failure through errorCode instead. An
+    // empty string collapses to null so "produced no text" reads identically whether
+    // the surface omitted the field or sent "" (#12731).
+    const finalText = input.finalText ? input.finalText : null;
     this.withTransaction(() => {
       this.finishAttemptAndRun({
         sessionId: input.sessionId,
         runId: input.runId,
         attemptId: input.attemptId,
         status: persistedStatus,
-        finalText: null,
+        finalText,
         errorCode: persistedStatus === "failed" ? errorCode ?? "external_surface_failed" : null,
         errorMessage: persistedStatus === "failed" ? "External surface execution failed" : null,
       });
