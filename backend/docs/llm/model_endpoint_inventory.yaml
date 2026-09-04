@@ -142,8 +142,6 @@ surfaces:
   - utils/llm/persona.py::feature:<dynamic>
   - utils/llm/persona.py::feature:persona_clone
   - utils/llm/proactive_notification.py::feature:proactive_notification
-  - utils/llm/promotion_proposals.py::feature:memory_l2
-  - utils/llm/promotion_routes.py::feature:memory_l2
   - utils/llm/trends.py::feature:trends
   - utils/llm/wake_word_adjudication.py::feature:wake_word_adjudication
   - utils/llm/working_observations.py::feature:memory_l1
