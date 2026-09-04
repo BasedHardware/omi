@@ -3454,7 +3454,7 @@
   {
     "name": "load_skill",
     "label": "Load Skill",
-    "description": "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    "description": "Load a relevant skill progressively: the first call returns metadata, the body's section table of contents, and only the first section's content; additional sections load one at a time with a part number.",
     "promptSnippet": "load_skill - Load a relevant skill returned by the catalog or search_skills",
     "latency": "fast local",
     "inputSchema": {
@@ -3463,6 +3463,10 @@
         "name": {
           "type": "string",
           "description": "Skill name returned by the compact catalog or search_skills"
+        },
+        "part": {
+          "type": "number",
+          "description": "1-based body section to read. Omit for the overview, section list, and first section."
         }
       },
       "required": [
@@ -3481,7 +3485,8 @@
     },
     "intendedForAgents": true,
     "runtimePreconditions": [
-      "Requires a local SKILL.md under the configured skill roots."
+      "Requires a local SKILL.md under the configured skill roots.",
+      "Skills the user disabled in the desktop app are refused."
     ],
     "adapters": {
       "pi-mono": {
@@ -3496,9 +3501,10 @@
     ],
     "capabilityDoc": {
       "title": "Load Skill",
-      "summary": "Load the full instructions for a named skill listed in available_skills.",
+      "summary": "Load a skill progressively: the first call returns metadata, a section table of contents, and the first section; further sections load by part.",
       "bullets": [
-        "Use the exact skill name from available_skills."
+        "Use the exact skill name from available_skills.",
+        "Read additional sections with part only when the first section is relevant."
       ]
     }
   },
@@ -3536,7 +3542,8 @@
     },
     "intendedForAgents": true,
     "runtimePreconditions": [
-      "Requires a local SKILL.md under the configured skill roots."
+      "Requires a local SKILL.md under the configured skill roots.",
+      "Skills the user disabled in the desktop app never match."
     ],
     "adapters": {
       "pi-mono": {
