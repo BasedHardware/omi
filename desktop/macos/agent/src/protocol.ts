@@ -128,14 +128,18 @@ export interface ExternalSurfaceRunCompleteMessage extends ProtocolEnvelope {
   attemptId: string;
   terminalStatus: "completed" | "failed" | "cancelled";
   /**
-   * The response text the external surface streamed to the user.
+   * The answer text the external surface reports for this run.
    *
    * An external surface owns its own streaming, so the kernel never observes this
    * run's output — it has to be handed back at terminalization or it is lost.
    * Without it `runs.final_text` stays null and every consumer that reads a run's
    * answer is content-free: the completion lane can only report that an agent
-   * finished, and a spawn receipt that delegates its journal exchange to the run
-   * result writes no assistant row at all (#12731).
+   * finished, and a spawn-agent child's receipt, which builds its journal block
+   * from the child's final text, has nothing to write (#12731).
+   *
+   * What a surface can actually report is its own problem: for a realtime voice
+   * deferral the text must be accumulated over the turn stream, because the
+   * turn-end hub property is already cleared by the time terminalization runs.
    */
   finalText?: string;
   errorCode?: string;
@@ -764,6 +768,12 @@ export interface ExternalSurfaceRunCompleteResultMessage extends OutboundEnvelop
   ok: boolean;
   terminalStatus?: "completed" | "failed" | "cancelled";
   duplicate?: boolean;
+  /**
+   * Whether the kernel stored `finalText` for this run. Absent from an older
+   * kernel, which lets a surface keep its own journal fallback instead of
+   * trusting a silent no-op (#12731).
+   */
+  finalTextPersisted?: boolean;
   error?: ExternalAuthorityError;
 }
 

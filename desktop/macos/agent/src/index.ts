@@ -2465,6 +2465,7 @@ async function main(): Promise<void> {
             ok: true,
             terminalStatus: result.terminalStatus,
             duplicate: result.duplicate,
+            finalTextPersisted: result.finalTextPersisted,
           });
         } catch (error) {
           send({

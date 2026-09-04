@@ -137,6 +137,8 @@ export interface CompleteExternalSurfaceRunResult {
   attemptId: string;
   terminalStatus: "completed" | "failed" | "cancelled";
   duplicate: boolean;
+  /** Whether this call wrote `finalText`, so an older kernel is detectable by its absence. */
+  finalTextPersisted: boolean;
 }
 
 export type ExternalSurfaceAuthorityErrorCode =
