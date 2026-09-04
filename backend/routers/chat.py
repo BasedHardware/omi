@@ -873,14 +873,18 @@ def create_voice_message_stream(
             )
 
         # Daily budget check (first file only — matches actual DG usage).
-        # A quota rejection is not an STT attempt and therefore is not an
-        # invalid-input or provider-outcome metric.
+        # Unreadable duration must fail closed before paid STT (PCM always meters).
         first_wav = wav_paths[0]
         duration_ms = read_wav_duration_ms(first_wav)
-        if duration_ms is not None:
-            allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
-            if not allowed:
-                raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
+        if duration_ms is None:
+            raise TranscriptionFailure(
+                TranscriptionOutcome.INVALID_INPUT,
+                provider=stt_provider,
+                retryable=False,
+            )
+        allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
+        if not allowed:
+            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
     except TranscriptionFailure as failure:
         _record_preparation_failure(failure)
         _cleanup_temp_voice_wavs(paths + wav_paths, uid)
@@ -1176,17 +1180,20 @@ async def transcribe_voice_message(
                 retryable=False,
             )
 
-        # Daily budget check (sum all files). This is not a provider outcome,
-        # so do it before recording an accepted transcription attempt.
+        # Daily budget check (sum all files). Fail closed if any duration is unreadable.
         total_duration_ms = 0
         for wav_path in wav_paths:
             duration_ms = await run_blocking(storage_executor, read_wav_duration_ms, wav_path)
-            if duration_ms is not None:
-                total_duration_ms += duration_ms
-        if total_duration_ms > 0:
-            allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
-            if not allowed:
-                raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
+            if duration_ms is None:
+                raise TranscriptionFailure(
+                    TranscriptionOutcome.INVALID_INPUT,
+                    provider=stt_provider,
+                    retryable=False,
+                )
+            total_duration_ms += duration_ms
+        allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
+        if not allowed:
+            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
         is_multi = resolved_language == 'multi'
         attempt = TranscriptionAttempt(

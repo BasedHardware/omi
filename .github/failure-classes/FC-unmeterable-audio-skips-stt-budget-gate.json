@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-unmeterable-audio-skips-stt-budget-gate",
+  "violated_contract": "Voice STT routes that bill against the rolling daily duration budget must not invoke a paid transcription provider when audio duration cannot be metered. Skipping try_consume_budget when read_wav_duration_ms returns None (or omitting an unreadable file from a multi-file sum) lets paid STT run free; the PCM REST path always meters via compute_pcm_duration_ms and must remain the contrast.",
+  "canonical_prevention": "Before any paid STT call on WAV/multipart/SSE voice routes, require a readable duration for every file that will be transcribed; reject with TranscriptionOutcome.INVALID_INPUT (HTTP 400) when duration is unreadable, then call try_consume_budget with the full metered sum. Pin with hermetic tests that assert STT helpers are not called when duration is None.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_desktop_transcribe.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/chat.py",
+    "backend/utils/voice_duration_limiter.py",
+    "backend/tests/unit/test_desktop_transcribe.py"
+  ],
+  "status": "open"
+}

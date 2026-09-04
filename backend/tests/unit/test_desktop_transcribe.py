@@ -1913,6 +1913,28 @@ class TestDurationBudgetEnforcement:
         finally:
             _cleanup_chat_client(saved)
 
+    def test_multipart_unreadable_duration_rejects_before_stt(self):
+        """Unreadable WAV duration must fail closed before paid STT — not skip the budget gate."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'read_wav_duration_ms', return_value=None):
+                with patch.object(module, 'try_consume_budget') as mock_budget:
+                    with patch.object(
+                        module, 'transcribe_voice_message_segment', return_value=('hello', 'en')
+                    ) as mock_stt:
+                        resp = client.post(
+                            '/v2/voice-message/transcribe',
+                            files=[('files', ('test.wav', io.BytesIO(b'\x00' * 100), 'audio/wav'))],
+                        )
+                        assert resp.status_code == 400
+                        assert resp.json()['detail']['outcome'] == 'invalid_input'
+                        mock_budget.assert_not_called()
+                        mock_stt.assert_not_called()
+        finally:
+            _cleanup_chat_client(saved)
+
 
 class TestVoiceMessagesEndpointBudget:
     """Test /v2/voice-messages daily budget enforcement."""
@@ -1933,6 +1955,28 @@ class TestVoiceMessagesEndpointBudget:
                             )
                             assert resp.status_code == 429
                             assert 'budget exhausted' in resp.json()['detail']
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_voice_messages_unreadable_duration_rejects_before_stt(self):
+        """Unreadable first-WAV duration must fail closed before streaming paid STT."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/test_vm.wav']):
+                with patch.object(module, 'decode_files_to_wav', return_value=['/tmp/test_vm_decoded.wav']):
+                    with patch.object(module, 'read_wav_duration_ms', return_value=None):
+                        with patch.object(module, 'try_consume_budget') as mock_budget:
+                            with patch.object(module, 'process_voice_message_segment_stream') as mock_stt:
+                                resp = client.post(
+                                    '/v2/voice-messages',
+                                    files=[('files', ('test.wav', io.BytesIO(b'\x00' * 100), 'audio/wav'))],
+                                )
+                                assert resp.status_code == 400
+                                assert resp.json()['detail']['outcome'] == 'invalid_input'
+                                mock_budget.assert_not_called()
+                                mock_stt.assert_not_called()
         finally:
             _cleanup_chat_client(saved)
 
@@ -2189,11 +2233,10 @@ class TestMultipartBudgetAggregation:
 
         client, module, saved = _make_chat_client()
         try:
-            # Simulate 3 files: 1000ms, None (unreadable), 2000ms → budget call with 3000
-            duration_values = iter([1000, None, 2000])
+            duration_values = iter([1000, 2000, 500])
 
             with patch.object(module, 'read_wav_duration_ms', side_effect=lambda p: next(duration_values)):
-                with patch.object(module, 'try_consume_budget', return_value=(True, 3000, 7197000)) as mock_budget:
+                with patch.object(module, 'try_consume_budget', return_value=(True, 3500, 7196500)) as mock_budget:
                     with patch.object(module, 'transcribe_voice_message_segment', return_value=('hello', 'en')):
                         resp = client.post(
                             '/v2/voice-message/transcribe',
@@ -2204,11 +2247,38 @@ class TestMultipartBudgetAggregation:
                             ],
                         )
                         assert resp.status_code == 200
-                        # Budget consumed with sum: 1000 + 2000 = 3000 (None skipped)
                         mock_budget.assert_called_once()
                         call_args = mock_budget.call_args[0]
                         assert call_args[0] == 'test-uid'
-                        assert call_args[1] == 3000
+                        assert call_args[1] == 3500
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_multipart_any_unreadable_duration_rejects_before_stt(self):
+        """One unreadable file in a multi-file upload must not leave that file unmetered."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+            duration_values = iter([1000, None, 2000])
+
+            with patch.object(module, 'read_wav_duration_ms', side_effect=lambda p: next(duration_values)):
+                with patch.object(module, 'try_consume_budget') as mock_budget:
+                    with patch.object(
+                        module, 'transcribe_voice_message_segment', return_value=('hello', 'en')
+                    ) as mock_stt:
+                        resp = client.post(
+                            '/v2/voice-message/transcribe',
+                            files=[
+                                ('files', ('a.wav', io.BytesIO(b'\x00' * 100), 'audio/wav')),
+                                ('files', ('b.wav', io.BytesIO(b'\x00' * 100), 'audio/wav')),
+                                ('files', ('c.wav', io.BytesIO(b'\x00' * 100), 'audio/wav')),
+                            ],
+                        )
+                        assert resp.status_code == 400
+                        assert resp.json()['detail']['outcome'] == 'invalid_input'
+                        mock_budget.assert_not_called()
+                        mock_stt.assert_not_called()
         finally:
             _cleanup_chat_client(saved)
 
