@@ -96,7 +96,7 @@ def conversation_tools_module(monkeypatch: pytest.MonkeyPatch):
         "database.vector_db": (),
         "models.other": ("Person",),
         "utils.conversations.factory": ("deserialize_conversation",),
-        "utils.conversations.render": ("conversations_to_string",),
+        "utils.conversations.render": ("conversation_to_citation_card", "conversations_to_string"),
         "utils.conversations.mcp_transcript_search": ("build_transcript_match_snippets",),
         "utils.conversations.search": (
             "conversation_matches_date_range",

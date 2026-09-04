@@ -1058,6 +1058,14 @@ export interface ClickUpTeamsResponse {
   teams?: Array<Record<string, unknown>>;
 }
 
+export interface ClientProcessing {
+  action_items?: Array<ProjectedActionItem>;
+  provenance: ProjectionProvenance;
+  schema_version: 1;
+  structure: ProjectedStructure;
+  transcript_sha256: string;
+}
+
 export interface ColdStartSequence {
   sequence_id: string;
   step: number;
@@ -1114,6 +1122,7 @@ export interface Conversation {
   call_id?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
+  client_processing?: ClientProcessing | null;
   conversation_audio?: ConversationAudio | null;
   created_at: string;
   data_protection_level?: string | null;
@@ -1290,6 +1299,7 @@ export interface ConversationSearchItem {
   call_id?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
+  client_processing?: ClientProcessing | null;
   conversation_audio?: ConversationAudio | null;
   created_at: string;
   data_protection_level?: string | null;
@@ -1387,6 +1397,7 @@ export interface CreateCheckoutRequest {
 export interface CreateConversationFromTranscriptRequest {
   client_device_id?: string | null;
   client_platform?: string | null;
+  client_processing?: unknown | null;
   client_session_id?: string | null;
   conversation_finalization_reason?: "user_stop" | "finish_and_continue" | "meeting_started" | "meeting_ended" | "max_duration_rotation" | "crash_recovery" | "retry" | null;
   conversation_role?: "ambient" | "meeting";
@@ -1421,6 +1432,10 @@ export interface CreateConversationTranscriptSegment {
   speaker_id?: number | null;
   start: number;
   text: string;
+}
+
+export interface CreateDailySummaryRequest {
+  date: string;
 }
 
 export interface CreateFolderRequest {
@@ -2827,18 +2842,22 @@ export interface MeetingParticipant {
 
 export interface Memory {
   arguments?: Record<string, unknown>;
+  belief_class?: string | null;
   capture_confidence?: number | null;
   category?: MemoryCategory;
   content: string;
   durability?: string | null;
+  half_life_days?: number | null;
   headline?: string | null;
   object_entity_ids?: Array<string>;
   predicate?: string | null;
   qualifiers?: Record<string, unknown>;
   subject_attribution?: SubjectAttribution;
   subject_entity_id?: string | null;
+  subject_scope?: MemorySubjectScope | null;
   tags?: Array<string>;
   uncertainty_reasons?: Array<string>;
+  valid_to?: string | null;
   veracity?: number | null;
   visibility?: string | null;
 }
@@ -2857,6 +2876,8 @@ export type MemoryCategory = "interesting" | "system" | "manual" | "workflow" | 
 export interface MemoryDB {
   app_id?: string | null;
   arguments?: Record<string, unknown>;
+  as_of?: string | null;
+  belief_class?: string | null;
   body?: string | null;
   canonical_memory_id?: string | null;
   capture_confidence?: number | null;
@@ -2866,10 +2887,13 @@ export interface MemoryDB {
   conversation_id?: string | null;
   created_at: string;
   curation_weight?: number;
+  currency?: number | null;
+  currency_band?: string | null;
   data_protection_level?: string | null;
   durability?: string | null;
   edited?: boolean;
   evidence?: Array<Evidence>;
+  half_life_days?: number | null;
   headline?: string | null;
   id: string;
   intent_backed?: boolean;
@@ -2904,6 +2928,7 @@ export interface MemoryDB {
   updated_at: string;
   user_review?: boolean | null;
   valid_at?: string | null;
+  valid_to?: string | null;
   veracity?: number | null;
   visibility?: string | null;
   write_reason?: LedgerWriteReason | null;
@@ -3324,6 +3349,7 @@ export interface ProactiveNotification {
 
 export interface ProcessConversationRequest {
   calendar_meeting_context?: CalendarMeetingContext | null;
+  client_processing?: unknown | null;
 }
 
 export interface ProgressExtractRequest {
@@ -3342,6 +3368,39 @@ export interface ProgressExtractUpdateResponse {
   new_value?: number | number | string | null;
   previous_value?: number | number | string | null;
   reasoning?: string;
+}
+
+export interface ProjectedActionItem {
+  completed?: boolean;
+  description: string;
+}
+
+export interface ProjectedEvent {
+  description?: string;
+  duration: number;
+  start: string;
+  title: string;
+}
+
+export interface ProjectedSection {
+  body_markdown: string;
+  heading: string;
+}
+
+export interface ProjectedStructure {
+  category?: CategoryEnum;
+  emoji?: string;
+  events?: Array<ProjectedEvent>;
+  overview?: string;
+  sections?: Array<ProjectedSection>;
+  title: string;
+}
+
+export interface ProjectionProvenance {
+  device_class: string;
+  generated_at: string;
+  model_id: string;
+  runtime: string;
 }
 
 export interface PublicFairUseCaseStatusResponse {
@@ -4908,6 +4967,7 @@ export interface OmiApiSchemas {
   "ClickUpListsResponse": ClickUpListsResponse;
   "ClickUpSpacesResponse": ClickUpSpacesResponse;
   "ClickUpTeamsResponse": ClickUpTeamsResponse;
+  "ClientProcessing": ClientProcessing;
   "ColdStartSequence": ColdStartSequence;
   "ColdStartSequenceTerminalReceipt": ColdStartSequenceTerminalReceipt;
   "ConnectorSynthesisRequest": ConnectorSynthesisRequest;
@@ -4951,6 +5011,7 @@ export interface OmiApiSchemas {
   "CreateConversationRequest": CreateConversationRequest;
   "CreateConversationResponse": CreateConversationResponse;
   "CreateConversationTranscriptSegment": CreateConversationTranscriptSegment;
+  "CreateDailySummaryRequest": CreateDailySummaryRequest;
   "CreateFolderRequest": CreateFolderRequest;
   "CreateFrameRequest": CreateFrameRequest;
   "CreateGoalRequest": CreateGoalRequest;
@@ -5211,6 +5272,11 @@ export interface OmiApiSchemas {
   "ProgressExtractRequest": ProgressExtractRequest;
   "ProgressExtractResponse": ProgressExtractResponse;
   "ProgressExtractUpdateResponse": ProgressExtractUpdateResponse;
+  "ProjectedActionItem": ProjectedActionItem;
+  "ProjectedEvent": ProjectedEvent;
+  "ProjectedSection": ProjectedSection;
+  "ProjectedStructure": ProjectedStructure;
+  "ProjectionProvenance": ProjectionProvenance;
   "PublicFairUseCaseStatusResponse": PublicFairUseCaseStatusResponse;
   "QuestionCardSpec": QuestionCardSpec;
   "QuestionOption": QuestionOption;
@@ -8599,6 +8665,14 @@ export interface OmiApiPaths {
       operationId: "get_daily_summaries_v1_users_daily_summaries_get";
       responses: {
         "200": DailySummariesResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "create_user_daily_summary_v1_users_daily_summaries_post";
+      responses: {
+        "200": DailySummaryResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -15956,6 +16030,27 @@ export async function get_daily_summaries_v1_users_daily_summaries_get(query: { 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function create_user_daily_summary_v1_users_daily_summaries_post(header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CreateDailySummaryRequest, init?: OmiApiClientInit): Promise<DailySummaryResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/daily-summaries`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_daily_summary_v1_users_daily_summaries__summary_id__get(path: { summary_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<DailySummaryResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/daily-summaries/${path.summary_id}`;
@@ -18404,4 +18499,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 434 client methods generated.
+// Total: 435 client methods generated.

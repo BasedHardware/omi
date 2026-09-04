@@ -1,0 +1,7 @@
+{
+  "version": "0.12.282",
+  "date": "2026-09-04",
+  "changes": [
+    "Desktop thumbs-down now asks why, and Focus/memory cards stop repeating the same mistake."
+  ]
+}

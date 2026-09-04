@@ -21,8 +21,8 @@ DESKTOP_BACKEND_SERVICE = "omi-desktop-backend"
 CHAT_CONTRACT_VERSION = "1"
 
 
-def health_response() -> dict[str, str]:
-    response = {
+def health_response() -> dict[str, str | None]:
+    response: dict[str, str | None] = {
         "status": "healthy",
         "service": DESKTOP_BACKEND_SERVICE,
         "version": DESKTOP_BACKEND_VERSION,
@@ -39,6 +39,12 @@ def health_response() -> dict[str, str]:
         value = os.getenv(environment_name)
         if value is not None:
             response[response_field] = value
+    if "backend_release_sha" not in response:
+        # Shared Python backend publishes the same /health via this router and
+        # stamps OMI_BACKEND_RELEASE_SHA on the Cloud Run revision. Absent env
+        # stays null so callers never 500 for missing provenance.
+        fallback = os.getenv("OMI_BACKEND_RELEASE_SHA")
+        response["backend_release_sha"] = fallback or None
     return response
 
 
@@ -75,7 +81,7 @@ def redis_readiness_response(configured: bool, probe: bool | Exception | None) -
 
 @router.get("/")
 @router.get("/health")
-def health_check() -> dict[str, str]:
+def health_check() -> dict[str, str | None]:
     return health_response()
 
 

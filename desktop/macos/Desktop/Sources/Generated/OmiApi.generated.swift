@@ -1274,6 +1274,40 @@ public enum OmiAPI {
   }
 
 
+  public struct ClientProcessing: Codable {
+    public let actionItems: [ProjectedActionItem]?
+    public let provenance: ProjectionProvenance
+    public let schemaVersion: Int
+    public let structure: ProjectedStructure
+    public let transcriptSha256: String
+
+    private enum CodingKeys: String, CodingKey {
+      case actionItems = "action_items"
+      case provenance
+      case schemaVersion = "schema_version"
+      case structure
+      case transcriptSha256 = "transcript_sha256"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      actionItems = try c.decodeIfPresent([ProjectedActionItem].self, forKey: .actionItems)
+      provenance = try c.decode(ProjectionProvenance.self, forKey: .provenance)
+      schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
+      structure = try c.decode(ProjectedStructure.self, forKey: .structure)
+      transcriptSha256 = try c.decode(String.self, forKey: .transcriptSha256)
+    }
+
+    public init(actionItems: [ProjectedActionItem]? = nil, provenance: ProjectionProvenance, schemaVersion: Int, structure: ProjectedStructure, transcriptSha256: String) {
+      self.actionItems = actionItems
+      self.provenance = provenance
+      self.schemaVersion = schemaVersion
+      self.structure = structure
+      self.transcriptSha256 = transcriptSha256
+    }
+  }
+
+
   public enum ContextMatchSignal: String, Codable, CaseIterable {
     case app
     case person
@@ -1371,6 +1405,7 @@ public enum OmiAPI {
     public let callId: String?
     public let clientDeviceId: String?
     public let clientPlatform: String?
+    public let clientProcessing: ClientProcessing?
     public let conversationAudio: ConversationAudio?
     public let createdAt: String
     public let dataProtectionLevel: String?
@@ -1414,6 +1449,7 @@ public enum OmiAPI {
       case callId = "call_id"
       case clientDeviceId = "client_device_id"
       case clientPlatform = "client_platform"
+      case clientProcessing = "client_processing"
       case conversationAudio = "conversation_audio"
       case createdAt = "created_at"
       case dataProtectionLevel = "data_protection_level"
@@ -1459,6 +1495,7 @@ public enum OmiAPI {
       callId = try c.decodeIfPresent(String.self, forKey: .callId)
       clientDeviceId = try c.decodeIfPresent(String.self, forKey: .clientDeviceId)
       clientPlatform = try c.decodeIfPresent(String.self, forKey: .clientPlatform)
+      clientProcessing = try c.decodeIfPresent(ClientProcessing.self, forKey: .clientProcessing)
       conversationAudio = try c.decodeIfPresent(ConversationAudio.self, forKey: .conversationAudio)
       createdAt = try c.decode(String.self, forKey: .createdAt)
       dataProtectionLevel = try c.decodeIfPresent(String.self, forKey: .dataProtectionLevel)
@@ -1495,7 +1532,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, imported: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
+    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, imported: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
       self.appId = appId
       self.appsResults = appsResults
       self.audioFiles = audioFiles
@@ -1503,6 +1540,7 @@ public enum OmiAPI {
       self.callId = callId
       self.clientDeviceId = clientDeviceId
       self.clientPlatform = clientPlatform
+      self.clientProcessing = clientProcessing
       self.conversationAudio = conversationAudio
       self.createdAt = createdAt
       self.dataProtectionLevel = dataProtectionLevel
@@ -3126,6 +3164,8 @@ public enum OmiAPI {
   public struct MemoryDB: Codable {
     public let appId: String?
     public let arguments: [String: OmiAnyCodable]?
+    public let asOf: String?
+    public let beliefClass: String?
     public let body: String?
     public let canonicalMemoryId: String?
     public let captureConfidence: Double?
@@ -3135,10 +3175,13 @@ public enum OmiAPI {
     public let conversationId: String?
     public let createdAt: String
     public let curationWeight: Int?
+    public let currency: Double?
+    public let currencyBand: String?
     public let dataProtectionLevel: String?
     public let durability: String?
     public let edited: Bool?
     public let evidence: [Evidence]?
+    public let halfLifeDays: Double?
     public let headline: String?
     public let id: String
     public let intentBacked: Bool?
@@ -3173,6 +3216,7 @@ public enum OmiAPI {
     public let updatedAt: String
     public let userReview: Bool?
     public let validAt: String?
+    public let validTo: String?
     public let veracity: Double?
     public let visibility: String?
     public let writeReason: LedgerWriteReason?
@@ -3180,6 +3224,8 @@ public enum OmiAPI {
     private enum CodingKeys: String, CodingKey {
       case appId = "app_id"
       case arguments
+      case asOf = "as_of"
+      case beliefClass = "belief_class"
       case body
       case canonicalMemoryId = "canonical_memory_id"
       case captureConfidence = "capture_confidence"
@@ -3189,10 +3235,13 @@ public enum OmiAPI {
       case conversationId = "conversation_id"
       case createdAt = "created_at"
       case curationWeight = "curation_weight"
+      case currency
+      case currencyBand = "currency_band"
       case dataProtectionLevel = "data_protection_level"
       case durability
       case edited
       case evidence
+      case halfLifeDays = "half_life_days"
       case headline
       case id
       case intentBacked = "intent_backed"
@@ -3227,6 +3276,7 @@ public enum OmiAPI {
       case updatedAt = "updated_at"
       case userReview = "user_review"
       case validAt = "valid_at"
+      case validTo = "valid_to"
       case veracity
       case visibility
       case writeReason = "write_reason"
@@ -3236,6 +3286,8 @@ public enum OmiAPI {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       appId = try c.decodeIfPresent(String.self, forKey: .appId)
       arguments = try c.decodeIfPresent([String: OmiAnyCodable].self, forKey: .arguments)
+      asOf = try c.decodeIfPresent(String.self, forKey: .asOf)
+      beliefClass = try c.decodeIfPresent(String.self, forKey: .beliefClass)
       body = try c.decodeIfPresent(String.self, forKey: .body)
       canonicalMemoryId = try c.decodeIfPresent(String.self, forKey: .canonicalMemoryId)
       captureConfidence = try c.decodeIfPresent(Double.self, forKey: .captureConfidence)
@@ -3245,10 +3297,13 @@ public enum OmiAPI {
       conversationId = try c.decodeIfPresent(String.self, forKey: .conversationId)
       createdAt = try c.decode(String.self, forKey: .createdAt)
       curationWeight = try c.decodeIfPresent(Int.self, forKey: .curationWeight)
+      currency = try c.decodeIfPresent(Double.self, forKey: .currency)
+      currencyBand = try c.decodeIfPresent(String.self, forKey: .currencyBand)
       dataProtectionLevel = try c.decodeIfPresent(String.self, forKey: .dataProtectionLevel)
       durability = try c.decodeIfPresent(String.self, forKey: .durability)
       edited = try c.decodeIfPresent(Bool.self, forKey: .edited)
       evidence = try c.decodeIfPresent([Evidence].self, forKey: .evidence)
+      halfLifeDays = try c.decodeIfPresent(Double.self, forKey: .halfLifeDays)
       headline = try c.decodeIfPresent(String.self, forKey: .headline)
       id = try c.decode(String.self, forKey: .id)
       intentBacked = try c.decodeIfPresent(Bool.self, forKey: .intentBacked)
@@ -3283,14 +3338,17 @@ public enum OmiAPI {
       updatedAt = try c.decode(String.self, forKey: .updatedAt)
       userReview = try c.decodeIfPresent(Bool.self, forKey: .userReview)
       validAt = try c.decodeIfPresent(String.self, forKey: .validAt)
+      validTo = try c.decodeIfPresent(String.self, forKey: .validTo)
       veracity = try c.decodeIfPresent(Double.self, forKey: .veracity)
       visibility = try c.decodeIfPresent(String.self, forKey: .visibility)
       writeReason = try c.decodeIfPresent(LedgerWriteReason.self, forKey: .writeReason)
     }
 
-    public init(appId: String? = nil, arguments: [String: OmiAnyCodable]? = nil, body: String? = nil, canonicalMemoryId: String? = nil, captureConfidence: Double? = nil, captureDeviceIds: [String]? = nil, category: MemoryCategory? = nil, content: String, conversationId: String? = nil, createdAt: String, curationWeight: Int? = nil, dataProtectionLevel: String? = nil, durability: String? = nil, edited: Bool? = nil, evidence: [Evidence]? = nil, headline: String? = nil, id: String, intentBacked: Bool? = nil, invalidAt: String? = nil, isBaseline: Bool? = nil, isDismissed: Bool? = nil, isLocked: Bool? = nil, isRead: Bool? = nil, kgExtracted: Bool? = nil, kind: MemoryKind? = nil, layer: String? = nil, ledgerSchemaVersion: String? = nil, ledgerStatus: MemoryItemStatus? = nil, manuallyAdded: Bool? = nil, memoryId: String? = nil, memoryTier: MemoryLayer? = nil, objectEntityIds: [String]? = nil, predicate: String? = nil, primaryCaptureDevice: String? = nil, qualifiers: [String: OmiAnyCodable]? = nil, reviewed: Bool? = nil, scoring: String? = nil, slot: String? = nil, subjectAttribution: SubjectAttribution? = nil, subjectEntityId: String? = nil, subjectScope: MemorySubjectScope? = nil, supersededBy: String? = nil, tags: [String]? = nil, triggerCondition: [String: OmiAnyCodable]? = nil, uid: String, uncertaintyReasons: [String]? = nil, updatedAt: String, userReview: Bool? = nil, validAt: String? = nil, veracity: Double? = nil, visibility: String? = nil, writeReason: LedgerWriteReason? = nil) {
+    public init(appId: String? = nil, arguments: [String: OmiAnyCodable]? = nil, asOf: String? = nil, beliefClass: String? = nil, body: String? = nil, canonicalMemoryId: String? = nil, captureConfidence: Double? = nil, captureDeviceIds: [String]? = nil, category: MemoryCategory? = nil, content: String, conversationId: String? = nil, createdAt: String, curationWeight: Int? = nil, currency: Double? = nil, currencyBand: String? = nil, dataProtectionLevel: String? = nil, durability: String? = nil, edited: Bool? = nil, evidence: [Evidence]? = nil, halfLifeDays: Double? = nil, headline: String? = nil, id: String, intentBacked: Bool? = nil, invalidAt: String? = nil, isBaseline: Bool? = nil, isDismissed: Bool? = nil, isLocked: Bool? = nil, isRead: Bool? = nil, kgExtracted: Bool? = nil, kind: MemoryKind? = nil, layer: String? = nil, ledgerSchemaVersion: String? = nil, ledgerStatus: MemoryItemStatus? = nil, manuallyAdded: Bool? = nil, memoryId: String? = nil, memoryTier: MemoryLayer? = nil, objectEntityIds: [String]? = nil, predicate: String? = nil, primaryCaptureDevice: String? = nil, qualifiers: [String: OmiAnyCodable]? = nil, reviewed: Bool? = nil, scoring: String? = nil, slot: String? = nil, subjectAttribution: SubjectAttribution? = nil, subjectEntityId: String? = nil, subjectScope: MemorySubjectScope? = nil, supersededBy: String? = nil, tags: [String]? = nil, triggerCondition: [String: OmiAnyCodable]? = nil, uid: String, uncertaintyReasons: [String]? = nil, updatedAt: String, userReview: Bool? = nil, validAt: String? = nil, validTo: String? = nil, veracity: Double? = nil, visibility: String? = nil, writeReason: LedgerWriteReason? = nil) {
       self.appId = appId
       self.arguments = arguments
+      self.asOf = asOf
+      self.beliefClass = beliefClass
       self.body = body
       self.canonicalMemoryId = canonicalMemoryId
       self.captureConfidence = captureConfidence
@@ -3300,10 +3358,13 @@ public enum OmiAPI {
       self.conversationId = conversationId
       self.createdAt = createdAt
       self.curationWeight = curationWeight
+      self.currency = currency
+      self.currencyBand = currencyBand
       self.dataProtectionLevel = dataProtectionLevel
       self.durability = durability
       self.edited = edited
       self.evidence = evidence
+      self.halfLifeDays = halfLifeDays
       self.headline = headline
       self.id = id
       self.intentBacked = intentBacked
@@ -3338,6 +3399,7 @@ public enum OmiAPI {
       self.updatedAt = updatedAt
       self.userReview = userReview
       self.validAt = validAt
+      self.validTo = validTo
       self.veracity = veracity
       self.visibility = visibility
       self.writeReason = writeReason
@@ -3713,6 +3775,139 @@ public enum OmiAPI {
     public init(content: String, pluginId: String? = nil) {
       self.content = content
       self.pluginId = pluginId
+    }
+  }
+
+
+  public struct ProjectedActionItem: Codable {
+    public let completed: Bool?
+    public let description_: String
+
+    private enum CodingKeys: String, CodingKey {
+      case completed
+      case description_ = "description"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      completed = try c.decodeIfPresent(Bool.self, forKey: .completed)
+      description_ = try c.decode(String.self, forKey: .description_)
+    }
+
+    public init(completed: Bool? = nil, description_: String) {
+      self.completed = completed
+      self.description_ = description_
+    }
+  }
+
+
+  public struct ProjectedEvent: Codable {
+    public let description_: String?
+    public let duration: Int
+    public let start: String
+    public let title: String
+
+    private enum CodingKeys: String, CodingKey {
+      case description_ = "description"
+      case duration
+      case start
+      case title
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      description_ = try c.decodeIfPresent(String.self, forKey: .description_)
+      duration = try c.decode(Int.self, forKey: .duration)
+      start = try c.decode(String.self, forKey: .start)
+      title = try c.decode(String.self, forKey: .title)
+    }
+
+    public init(description_: String? = nil, duration: Int, start: String, title: String) {
+      self.description_ = description_
+      self.duration = duration
+      self.start = start
+      self.title = title
+    }
+  }
+
+
+  public struct ProjectedSection: Codable {
+    public let bodyMarkdown: String
+    public let heading: String
+
+    private enum CodingKeys: String, CodingKey {
+      case bodyMarkdown = "body_markdown"
+      case heading
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      bodyMarkdown = try c.decode(String.self, forKey: .bodyMarkdown)
+      heading = try c.decode(String.self, forKey: .heading)
+    }
+
+    public init(bodyMarkdown: String, heading: String) {
+      self.bodyMarkdown = bodyMarkdown
+      self.heading = heading
+    }
+  }
+
+
+  public struct ProjectedStructure: Codable {
+    public let category: CategoryEnum?
+    public let emoji: String?
+    public let events: [ProjectedEvent]?
+    public let overview: String?
+    public let sections: [ProjectedSection]?
+    public let title: String
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      category = try c.decodeIfPresent(CategoryEnum.self, forKey: .category)
+      emoji = try c.decodeIfPresent(String.self, forKey: .emoji)
+      events = try c.decodeIfPresent([ProjectedEvent].self, forKey: .events)
+      overview = try c.decodeIfPresent(String.self, forKey: .overview)
+      sections = try c.decodeIfPresent([ProjectedSection].self, forKey: .sections)
+      title = try c.decode(String.self, forKey: .title)
+    }
+
+    public init(category: CategoryEnum? = nil, emoji: String? = nil, events: [ProjectedEvent]? = nil, overview: String? = nil, sections: [ProjectedSection]? = nil, title: String) {
+      self.category = category
+      self.emoji = emoji
+      self.events = events
+      self.overview = overview
+      self.sections = sections
+      self.title = title
+    }
+  }
+
+
+  public struct ProjectionProvenance: Codable {
+    public let deviceClass: String
+    public let generatedAt: String
+    public let modelId: String
+    public let runtime: String
+
+    private enum CodingKeys: String, CodingKey {
+      case deviceClass = "device_class"
+      case generatedAt = "generated_at"
+      case modelId = "model_id"
+      case runtime
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      deviceClass = try c.decode(String.self, forKey: .deviceClass)
+      generatedAt = try c.decode(String.self, forKey: .generatedAt)
+      modelId = try c.decode(String.self, forKey: .modelId)
+      runtime = try c.decode(String.self, forKey: .runtime)
+    }
+
+    public init(deviceClass: String, generatedAt: String, modelId: String, runtime: String) {
+      self.deviceClass = deviceClass
+      self.generatedAt = generatedAt
+      self.modelId = modelId
+      self.runtime = runtime
     }
   }
 
@@ -13277,6 +13472,32 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func createUserDailySummaryV1UsersDailySummariesPost(client: OmiApiClient, xAppPlatform: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/users/daily-summaries"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func getDailySummaryV1UsersDailySummariesSummaryIdGet(client: OmiApiClient, summaryId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/daily-summaries/\(summaryId)"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -16463,5 +16684,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 434 Swift client methods generated.
+  // Total: 435 Swift client methods generated.
 }
