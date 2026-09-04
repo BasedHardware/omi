@@ -946,9 +946,14 @@ extension AppState {
     }
   }
 
-  /// Check if accessibility permission was explicitly denied
+  /// Check if accessibility permission was denied. Onboarding writes a durable skip
+  /// marker, so a deliberate "Skip for now" never reads as denied — macOS exposes no
+  /// denied/notDetermined distinction for AX to ask the system directly.
   func isAccessibilityPermissionDenied() -> Bool {
-    return hasCompletedOnboarding && (!hasAccessibilityPermission || isAccessibilityBroken)
+    SBOnboardingPermissionIntentPolicy.accessibilityDenied(
+      hasCompletedOnboarding: hasCompletedOnboarding,
+      accessibilityUsable: hasAccessibilityPermission && !isAccessibilityBroken,
+      skippedInOnboarding: UserDefaults.standard.bool(forKey: .onboardingAccessibilitySkipped))
   }
 
   /// Trigger accessibility permission prompt

@@ -898,7 +898,8 @@ class AppState: ObservableObject {
           // Brief delay to let audio subsystem settle after wake
           try? await Task.sleep(for: .seconds(2))
           if !self.isTranscribing {
-            self.startTranscription(conversationRole: self.conversationRoleBeforeSleep)
+            self.startTranscription(
+              conversationRole: self.conversationRoleBeforeSleep, userInitiated: false)
           }
         }
         self.wasTranscribingBeforeSleep = false
@@ -955,7 +956,7 @@ class AppState: ObservableObject {
           if self.isTranscribing {
             await self.reconcileCapture()
           } else {
-            self.startTranscription()
+            self.startTranscription(userInitiated: false)
           }
         }
       }

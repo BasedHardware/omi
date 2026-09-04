@@ -854,13 +854,22 @@ final class SBOnboardingModel: ObservableObject {
     if AppBuild.usesLazyDevPermissions {
       AssistantSettings.shared.screenAnalysisEnabled = false
     } else {
-      AssistantSettings.shared.screenAnalysisEnabled = true
-      if !ProactiveAssistantsPlugin.shared.isMonitoring {
+      // Skipping Screen Recording is a durable off for the automatic path: never
+      // force the intent on for a user who just declined it (the sidebar and the
+      // restore path then stop treating "onboarded but not granted" as denied).
+      appState.checkScreenRecordingPermission()
+      let screenGranted = appState.hasScreenRecordingPermission
+      AssistantSettings.shared.screenAnalysisEnabled =
+        Self.screenAnalysisIntentAtCompletion(screenRecordingGranted: screenGranted)
+      if screenGranted, !ProactiveAssistantsPlugin.shared.isMonitoring {
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
       }
     }
     Task { [appState] in
-      appState.startTranscription()
+      // Automatic start: with the mic granted this behaves exactly as before; with
+      // it skipped (audioRecordingMode == .off, or still undetermined) it must not
+      // raise the TCC sheet — the user asked to skip, not to be asked again.
+      appState.startTranscription(userInitiated: false)
       await appState.reconcileCapture()
       // Ambient transcription opens the shared input device on its way in and
       // releases any parked push-to-talk capture to avoid two IOProcs on one
@@ -889,6 +898,14 @@ final class SBOnboardingModel: ObservableObject {
     if setEnabled(enabled) {
       report(enabled)
     }
+  }
+
+  /// The durable screen-analysis intent onboarding leaves behind. A granted Screen
+  /// Recording keeps the capture intent on; a skipped or denied one turns it off —
+  /// "not forced on" is not enough, because every automatic restore path and the
+  /// sidebar's denied pulse read this flag as the user's standing intent.
+  static func screenAnalysisIntentAtCompletion(screenRecordingGranted: Bool) -> Bool {
+    screenRecordingGranted
   }
 
   /// Cancel every live task/monitor this model owns. Safe to call repeatedly.

@@ -661,7 +661,7 @@ struct OnboardingView: View {
       log("OnboardingView: Lazy dev permissions enabled, skipping monitoring/transcription autostart")
     } else {
       startMonitoringIfNeeded()
-      appState.startTranscription()
+      appState.startTranscription(userInitiated: false)
     }
   }
 
