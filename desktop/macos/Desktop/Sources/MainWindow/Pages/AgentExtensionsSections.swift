@@ -1069,8 +1069,6 @@ struct LocalMcpDetailSheet: View {
           Text(server.name)
             .scaledFont(size: OmiType.title, weight: .semibold)
             .foregroundColor(Ink.primary)
-          // "Local" here used to mean "configured locally", which read as a claim about where a
-          // remote server runs.
           Text(subtitle)
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
