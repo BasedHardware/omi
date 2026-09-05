@@ -3911,18 +3911,18 @@ struct HomeListeningStatusButton: View {
   let systemImage: String
   let status: HomeStatusState
   let modeTitle: String
-  /// Only Meetings wait: the session is armed, the mic is paused, and a click turns
-  /// listening off. Help/VoiceOver must not reuse the "Off" sentence for that.
+  /// Only Meetings wait: the session is armed, the mic opens on the next call, and a click
+  /// turns listening off. Help/VoiceOver must not reuse the "Off" sentence for that.
   let isAwaitingMeeting: Bool
   let isToggling: Bool
   let action: () -> Void
 
-  /// Hover / VoiceOver copy. An armed Only Meetings wait is inactive (mic paused)
-  /// but not off — a click turns listening off, it does not start it.
+  /// Hover / VoiceOver copy. An armed Only Meetings wait reads as on (green dot) while
+  /// nothing is transcribed yet — a click turns listening off, it does not start it.
   static func helpText(
     status: HomeStatusState, modeTitle: String, isAwaitingMeeting: Bool
   ) -> String {
-    if status == .inactive && isAwaitingMeeting {
+    if status != .blocked && isAwaitingMeeting {
       return
         "Listening: waiting for a call (\(modeTitle)). Nothing is being transcribed. Click to turn off."
     }

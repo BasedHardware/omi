@@ -19,21 +19,26 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertFalse(appState.isLiveCapturing)
   }
 
+  /// An armed Only Meetings wait is switched on — the next call is recorded — so the control wears
+  /// the green dot and no off-slash. Off is only the state where nothing will be recorded.
   @MainActor
-  func testListeningStatusIsInactiveWhileAwaitingAMeeting() {
+  func testListeningStatusIsActiveWhileArmedForAMeeting() {
     let appState = AppState()
     appState.isTranscribing = true
     appState.isAwaitingMeeting = true
-    XCTAssertEqual(CaptureListeningLogic.listeningStatus(appState: appState), .inactive)
+    XCTAssertEqual(CaptureListeningLogic.listeningStatus(appState: appState), .active)
 
     appState.isAwaitingMeeting = false
     XCTAssertEqual(CaptureListeningLogic.listeningStatus(appState: appState), .active)
+
+    appState.isTranscribing = false
+    XCTAssertEqual(CaptureListeningLogic.listeningStatus(appState: appState), .inactive)
   }
 
   @MainActor
   func testHomeListeningHelpDoesNotClaimOffWhileAwaitingAMeeting() {
     let help = HomeListeningStatusButton.helpText(
-      status: .inactive, modeTitle: "Only Meetings", isAwaitingMeeting: true)
+      status: .active, modeTitle: "Only Meetings", isAwaitingMeeting: true)
     XCTAssertTrue(help.contains("waiting for a call"))
     XCTAssertTrue(help.contains("Only Meetings"))
     XCTAssertTrue(help.contains("Click to turn off"))
@@ -130,7 +135,7 @@ final class DashboardCaptureStateTests: XCTestCase {
     // omi-test-quality: source-inspection -- static contract: which predicate the Live card and listening dot name is not observable from a running view without a window server
     let shell = try String(contentsOf: shellURL, encoding: .utf8)
 
-    XCTAssertTrue(logic.contains("return appState.isLiveCapturing ? .active : .inactive"))
+    XCTAssertTrue(logic.contains("return appState.isLiveCapturing || appState.isAwaitingMeeting ? .active : .inactive"))
     XCTAssertTrue(dashboard.contains("CaptureListeningLogic.listeningStatus(appState: appState)"))
     XCTAssertTrue(dashboard.contains("isAwaitingMeeting: appState.isAwaitingMeeting"))
     XCTAssertTrue(shell.contains("CaptureListeningLogic.listeningStatus(appState: appState)"))
