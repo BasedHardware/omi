@@ -518,33 +518,27 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                           // exactly (fontSize 20, full-white, taller viewport), hidden
                           // entirely until the first words arrive.
                           if (provider.text.isNotEmpty) ...[
-                            // Exactly three lines of 20px text at 1.5 line height,
-                            // bottom-anchored: whole lines scroll off the top rather
-                            // than being cut through or faded.
+                            // A fixed three-line area (20px text at 1.5 line height)
+                            // that fills from the bottom; the widget itself keeps only
+                            // the last three whole lines, so nothing is clipped.
                             SizedBox(
                               height: 3 * 20 * 1.5,
                               child: Align(
                                 alignment: Alignment.bottomCenter,
-                                child: ListView(
-                                  controller: _scrollController,
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  children: [
-                                    FadeInWordsText(
-                                      text: provider.text,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w400,
-                                        height: 1.5,
-                                        fontFamily: 'Manrope',
-                                      ),
-                                    ),
-                                  ],
+                                child: FadeInWordsText(
+                                  text: provider.text,
+                                  visibleLines: 3,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w400,
+                                    height: 1.5,
+                                    fontFamily: 'Manrope',
+                                  ),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 28),
                           ],
 
                           const SpeechTopicsCard(),

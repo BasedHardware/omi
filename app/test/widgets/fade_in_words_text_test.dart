@@ -69,4 +69,50 @@ void main() {
     await tester.pumpWidget(host('   '));
     expect(find.byType(AnimatedOpacity), findsNothing);
   });
+
+  testWidgets('visibleLines keeps only the last whole lines', (tester) async {
+    // 120px wide at 20px/word-ish: 'w0' .. 'w11' wrap onto several lines.
+    Widget narrow(String text) => MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 120,
+                child: FadeInWordsText(
+                  text: text,
+                  visibleLines: 3,
+                  style: const TextStyle(fontSize: 20),
+                  wordDuration: Duration.zero,
+                  stagger: Duration.zero,
+                ),
+              ),
+            ),
+          ),
+        );
+
+    final words = List.generate(12, (i) => 'w$i');
+    await tester.pumpWidget(narrow(words.take(4).join(' ')));
+    await tester.pumpAndSettle();
+    expect(find.text('w0'), findsOneWidget, reason: 'short text shows everything');
+
+    await tester.pumpWidget(narrow(words.join(' ')));
+    await tester.pumpAndSettle();
+    expect(find.text('w0'), findsNothing, reason: 'earlier lines drop off whole');
+    expect(find.text('w11'), findsOneWidget);
+
+    // The words still shown never exceed three Wrap lines.
+    final wrap = tester.widget<Wrap>(find.byType(Wrap));
+    final shown = wrap.children.length;
+    final firstShown = 12 - shown;
+    final start = FadeInWordsText.firstVisibleWord(
+      words: words,
+      style: const TextStyle(fontSize: 20),
+      gap: 6,
+      maxWidth: 120,
+      visibleLines: 3,
+      textScaler: TextScaler.noScaling,
+      textDirection: TextDirection.ltr,
+    );
+    expect(firstShown, start);
+    expect(start, greaterThan(0));
+  });
 }

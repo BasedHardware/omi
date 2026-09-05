@@ -11,10 +11,18 @@ import 'package:flutter/material.dart';
 /// rewrote earlier words) every word is treated as new and revealed again.
 /// Layout is a centered [Wrap], so it reads the same as a centered [Text] but
 /// each word can carry its own opacity.
+///
+/// With [visibleLines] set, only the words on the last that many lines are
+/// built: earlier lines drop off whole, so the widget never needs a clipped
+/// or scrolled viewport (which would show a sliver of the line above) and
+/// words keep their reveal state while they stay on screen.
 class FadeInWordsText extends StatefulWidget {
   final String text;
   final TextStyle? style;
   final WrapAlignment alignment;
+
+  /// Show only the last this-many lines of text; null shows everything.
+  final int? visibleLines;
 
   /// How long one word takes to fade from transparent to opaque.
   final Duration wordDuration;
@@ -27,9 +35,45 @@ class FadeInWordsText extends StatefulWidget {
     required this.text,
     this.style,
     this.alignment = WrapAlignment.center,
+    this.visibleLines,
     this.wordDuration = const Duration(milliseconds: 350),
     this.stagger = const Duration(milliseconds: 90),
-  });
+  }) : assert(visibleLines == null || visibleLines > 0);
+
+  /// Index of the first word on the last [visibleLines] lines, replaying the
+  /// [Wrap] line breaking with measured word widths. Breaks a hair early
+  /// (1 px) so the real Wrap never ends up with one line more than allowed.
+  static int firstVisibleWord({
+    required List<String> words,
+    required TextStyle style,
+    required double gap,
+    required double maxWidth,
+    required int visibleLines,
+    required TextScaler textScaler,
+    required TextDirection textDirection,
+  }) {
+    if (!maxWidth.isFinite) return 0;
+    final lineStarts = <int>[0];
+    var lineWidth = 0.0;
+    for (var i = 0; i < words.length; i++) {
+      final painter = TextPainter(
+        text: TextSpan(text: words[i], style: style),
+        textDirection: textDirection,
+        textScaler: textScaler,
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      final needed = lineWidth == 0 ? width : lineWidth + gap + width;
+      if (lineWidth > 0 && needed > maxWidth - 1) {
+        lineStarts.add(i);
+        lineWidth = width;
+      } else {
+        lineWidth = needed;
+      }
+    }
+    if (lineStarts.length <= visibleLines) return 0;
+    return lineStarts[lineStarts.length - visibleLines];
+  }
 
   @override
   State<FadeInWordsText> createState() => _FadeInWordsTextState();
@@ -110,12 +154,31 @@ class _FadeInWordsTextState extends State<FadeInWordsText> {
     final style = widget.style ?? DefaultTextStyle.of(context).style;
     // A regular space glyph keeps word gaps identical to a plain Text run.
     final gap = (style.fontSize ?? 14) * 0.3;
+    final visibleLines = widget.visibleLines;
+    if (visibleLines == null) return _wrap(from: 0, style: style, gap: gap);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final from = FadeInWordsText.firstVisibleWord(
+          words: _words,
+          style: style,
+          gap: gap,
+          maxWidth: constraints.maxWidth,
+          visibleLines: visibleLines,
+          textScaler: MediaQuery.textScalerOf(context),
+          textDirection: Directionality.of(context),
+        );
+        return _wrap(from: from, style: style, gap: gap);
+      },
+    );
+  }
+
+  Widget _wrap({required int from, required TextStyle style, required double gap}) {
     return Wrap(
       alignment: widget.alignment,
       spacing: gap,
       runSpacing: 0,
       children: [
-        for (var i = 0; i < _words.length; i++)
+        for (var i = from; i < _words.length; i++)
           AnimatedOpacity(
             key: ValueKey('fade-word-$i'),
             opacity: _revealed.contains(i) ? 1.0 : 0.0,
