@@ -44,6 +44,7 @@ import {
   registerBarIpc,
   destroyBar,
   handleSummonPress,
+  summonFromTray,
   setSummonGestureAccelerator,
   setBarEnabled,
   setPeekWatchSuspended,
@@ -1070,6 +1071,13 @@ app.whenReady().then(async () => {
       surfaceMainWindow()
       withMainWindow((win) => win.webContents.send('tray:open-settings'))
     },
+    // Manual bar fallback: the bar is otherwise summon-only via the global
+    // hotkey (see bar/window.ts), which can't register on native Wayland
+    // (no XWayland grab semantics) — see AGENTS.md's Linux dev environment
+    // section. Uses summonFromTray() rather than handleSummonPress() so the
+    // click does not enter the gesture machine or emit PTT phases — a tray
+    // click has no physical key to sample.
+    openBar: () => summonFromTray(),
     // Manual update check (mirrors Settings → About and Mac's "Check for Updates").
     // checkForUpdatesNow never throws; log the outcome for a manual tester.
     checkForUpdates: () => {
