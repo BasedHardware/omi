@@ -417,7 +417,8 @@ actor JITProactivityDelivery {
           eventID: paidPlan.notificationAdmission.eventID,
           candidateID: paidPlan.notificationAdmission.candidateID,
           accountGeneration: execution.accountGeneration,
-          authorizationGeneration: authorizationSnapshot.authorizationGeneration)
+          authorizationGeneration: authorizationSnapshot.authorizationGeneration,
+          authorizationNonce: authorizationSnapshot.authorizationNonce)
         : nil
       try await store.completeDelivery(
         id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,

@@ -312,7 +312,8 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       eventID: eventID,
       candidateID: candidateID,
       accountGeneration: currentGeneration + 1,
-      authorizationGeneration: 0)
+      authorizationGeneration: 0,
+      authorizationNonce: UUID(uuidString: "00000000-0000-0000-0000-000000000201") ?? UUID())
     var droppedCount = 0
     let service = NotificationService(registerWithSystemNotificationCenter: false)
 

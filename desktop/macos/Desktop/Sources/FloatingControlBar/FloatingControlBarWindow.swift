@@ -3521,8 +3521,8 @@ class FloatingControlBarManager {
   }
 
   /// A feedback task may outlive the card that launched it. Callers use this
-  /// main-actor check immediately before mutation so a replacement cannot be
-  /// credited to the dismissed card (or dismiss the replacement afterward).
+  /// main-actor check before entering the asynchronous mutation and again before
+  /// dismissal; the feedback actor remains the owner and generation authority.
   func isCurrentNotification(_ notificationID: UUID) -> Bool {
     window?.state.currentNotification?.id == notificationID
   }

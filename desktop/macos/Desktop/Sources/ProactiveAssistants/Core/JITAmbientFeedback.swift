@@ -10,6 +10,7 @@ struct JITAmbientFeedbackContext: Equatable, Sendable {
   let candidateID: String
   let accountGeneration: Int
   let authorizationGeneration: UInt64
+  let authorizationNonce: UUID
   let suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity
 
   init(
@@ -18,6 +19,7 @@ struct JITAmbientFeedbackContext: Equatable, Sendable {
     candidateID: String,
     accountGeneration: Int,
     authorizationGeneration: UInt64,
+    authorizationNonce: UUID,
     suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     self.ownerID = ownerID
@@ -25,6 +27,7 @@ struct JITAmbientFeedbackContext: Equatable, Sendable {
     self.candidateID = candidateID
     self.accountGeneration = accountGeneration
     self.authorizationGeneration = authorizationGeneration
+    self.authorizationNonce = authorizationNonce
     self.suggestionIdentity =
       suggestionIdentity
       ?? Self.stableSuggestionIdentity(
@@ -32,7 +35,8 @@ struct JITAmbientFeedbackContext: Equatable, Sendable {
         eventID: eventID,
         candidateID: candidateID,
         accountGeneration: accountGeneration,
-        authorizationGeneration: authorizationGeneration)
+        authorizationGeneration: authorizationGeneration,
+        authorizationNonce: authorizationNonce)
   }
 
   /// Ambient candidates do not have the suggestion assistant's evaluation
@@ -44,10 +48,11 @@ struct JITAmbientFeedbackContext: Equatable, Sendable {
     eventID: String,
     candidateID: String,
     accountGeneration: Int,
-    authorizationGeneration: UInt64
+    authorizationGeneration: UInt64,
+    authorizationNonce: UUID
   ) -> SuggestionAssistantTelemetry.NotificationIdentity {
     let seed =
-      "\(ownerID)\u{1f}\(eventID)\u{1f}\(candidateID)\u{1f}\(accountGeneration)\u{1f}\(authorizationGeneration)"
+      "\(ownerID)\u{1f}\(eventID)\u{1f}\(candidateID)\u{1f}\(accountGeneration)\u{1f}\(authorizationGeneration)\u{1f}\(authorizationNonce.uuidString)"
     return SuggestionAssistantTelemetry.NotificationIdentity(
       evaluationID: deterministicUUID("evaluation\u{1f}\(seed)"),
       suggestionID: deterministicUUID("suggestion\u{1f}\(seed)"))
@@ -118,6 +123,7 @@ enum JITAmbientFeedbackActionRouter {
     guard context.isValid,
       context.ownerID == authorizationSnapshot.ownerID,
       context.authorizationGeneration == authorizationSnapshot.authorizationGeneration,
+      context.authorizationNonce == authorizationSnapshot.authorizationNonce,
       context.accountGeneration == currentAccountGeneration,
       authorizationCurrent(authorizationSnapshot),
       visibleActions.contains(action)

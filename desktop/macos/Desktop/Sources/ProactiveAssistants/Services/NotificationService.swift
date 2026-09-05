@@ -557,6 +557,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         "candidate_id": context.candidateID,
         "account_generation": context.accountGeneration,
         "authorization_generation": context.authorizationGeneration,
+        "authorization_nonce": context.authorizationNonce.uuidString,
         "evaluation_id": context.suggestionIdentity.evaluationID.uuidString,
         "suggestion_id": context.suggestionIdentity.suggestionID.uuidString,
       ]
@@ -601,10 +602,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       let candidateID = payload["candidate_id"] as? String,
       let accountGeneration = payload["account_generation"] as? Int,
       let authorizationGenerationNumber = payload["authorization_generation"] as? NSNumber,
+      let authorizationNonceRaw = payload["authorization_nonce"] as? String,
       let evaluationRaw = payload["evaluation_id"] as? String,
       let suggestionRaw = payload["suggestion_id"] as? String,
       let evaluationID = UUID(uuidString: evaluationRaw),
       let suggestionID = UUID(uuidString: suggestionRaw),
+      let authorizationNonce = UUID(uuidString: authorizationNonceRaw),
       authorizationGenerationNumber.int64Value >= 0,
       let authorizationGeneration = UInt64(exactly: authorizationGenerationNumber.int64Value)
     else { return nil }
@@ -614,6 +617,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       candidateID: candidateID,
       accountGeneration: accountGeneration,
       authorizationGeneration: authorizationGeneration,
+      authorizationNonce: authorizationNonce,
       suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity(
         evaluationID: evaluationID, suggestionID: suggestionID))
     return context.isValid ? context : nil

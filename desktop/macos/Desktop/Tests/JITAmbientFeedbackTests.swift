@@ -4,6 +4,9 @@ import XCTest
 @testable import Omi_Computer
 
 final class JITAmbientFeedbackTests: XCTestCase {
+  private static let fixtureAuthorizationNonce =
+    UUID(uuidString: "00000000-0000-0000-0000-000000000201") ?? UUID()
+
   private actor SuspensionGate {
     private var entered = false
     private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
@@ -63,7 +66,8 @@ final class JITAmbientFeedbackTests: XCTestCase {
   private func context(
     ownerID: String = "owner",
     accountGeneration: Int = 4,
-    authorizationGeneration: UInt64 = 0
+    authorizationGeneration: UInt64 = 0,
+    authorizationNonce: UUID = JITAmbientFeedbackTests.fixtureAuthorizationNonce
   ) -> JITAmbientFeedbackContext {
     let candidateID = JITProactivityReservation.opaqueIdentifier(
       ["candidate", "ambient-feedback"], installationIdentity: "fixture")
@@ -75,6 +79,7 @@ final class JITAmbientFeedbackTests: XCTestCase {
       candidateID: candidateID,
       accountGeneration: accountGeneration,
       authorizationGeneration: authorizationGeneration,
+      authorizationNonce: authorizationNonce,
       suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity(
         evaluationID: UUID(uuidString: "00000000-0000-0000-0000-000000000101") ?? UUID(),
         suggestionID: UUID(uuidString: "00000000-0000-0000-0000-000000000102") ?? UUID()
@@ -103,13 +108,15 @@ final class JITAmbientFeedbackTests: XCTestCase {
       eventID: eventID,
       candidateID: candidateID,
       accountGeneration: 4,
-      authorizationGeneration: 0)
+      authorizationGeneration: 0,
+      authorizationNonce: Self.fixtureAuthorizationNonce)
     let retry = JITAmbientFeedbackContext(
       ownerID: "owner",
       eventID: eventID,
       candidateID: candidateID,
       accountGeneration: 4,
-      authorizationGeneration: 0)
+      authorizationGeneration: 0,
+      authorizationNonce: Self.fixtureAuthorizationNonce)
     XCTAssertEqual(
       first.suggestionIdentity,
       retry.suggestionIdentity,
@@ -122,13 +129,14 @@ final class JITAmbientFeedbackTests: XCTestCase {
       eventID: eventID,
       candidateID: changedCandidateID,
       accountGeneration: 4,
-      authorizationGeneration: 0)
+      authorizationGeneration: 0,
+      authorizationNonce: Self.fixtureAuthorizationNonce)
     XCTAssertNotEqual(first.suggestionIdentity, changed.suggestionIdentity)
   }
 
   func testAmbientRouterRecordsOnlyUsefulAndNotRelevant() async throws {
     let authorization = try authorization()
-    let context = context()
+    let context = context(authorizationNonce: authorization.authorizationNonce)
     let recorder = Recorder()
 
     for action in JITAmbientFeedbackActionRouter.visibleActions {
@@ -160,7 +168,7 @@ final class JITAmbientFeedbackTests: XCTestCase {
 
   func testAmbientRouterDropsStaleOwnerGenerationAndAuthorization() async throws {
     let authorization = try authorization()
-    let context = context()
+    let context = context(authorizationNonce: authorization.authorizationNonce)
     let recorder = Recorder()
     let record: JITAmbientFeedbackActionRouter.Record = { context, action, _ in
       recorder.append(context, action)
@@ -199,7 +207,9 @@ final class JITAmbientFeedbackTests: XCTestCase {
     authority.endTransition(ownerID: "owner")
     let oldSnapshot = try XCTUnwrap(
       authority.capture(ownerID: "owner", expectedOwnerID: "owner"))
-    let context = context(authorizationGeneration: oldSnapshot.authorizationGeneration)
+    let context = context(
+      authorizationGeneration: oldSnapshot.authorizationGeneration,
+      authorizationNonce: oldSnapshot.authorizationNonce)
 
     authority.beginTransition()
     authority.endTransition(ownerID: "owner")
@@ -222,9 +232,76 @@ final class JITAmbientFeedbackTests: XCTestCase {
       "old-session feedback must not use a fresh same-owner snapshot")
   }
 
-  func testAmbientRouterDropsFeedbackWhenCardWasReplacedBeforeMutation() async throws {
+  func testAmbientRouterRejectsSameOwnerAndGenerationFromFreshAuthority() async throws {
+    let previousAuthority = RuntimeOwnerAuthorizationAuthority()
+    previousAuthority.endTransition(ownerID: "owner")
+    let previousSnapshot = try XCTUnwrap(
+      previousAuthority.capture(ownerID: "owner", expectedOwnerID: "owner"))
+    let freshAuthority = RuntimeOwnerAuthorizationAuthority()
+    freshAuthority.endTransition(ownerID: "owner")
+    let freshSnapshot = try XCTUnwrap(
+      freshAuthority.capture(ownerID: "owner", expectedOwnerID: "owner"))
+    XCTAssertEqual(previousSnapshot.authorizationGeneration, freshSnapshot.authorizationGeneration)
+    XCTAssertNotEqual(previousSnapshot.authorizationNonce, freshSnapshot.authorizationNonce)
+    XCTAssertFalse(freshAuthority.isCurrent(previousSnapshot, ownerID: "owner"))
+
+    let context = context(
+      authorizationGeneration: previousSnapshot.authorizationGeneration,
+      authorizationNonce: previousSnapshot.authorizationNonce)
+    let recorder = Recorder()
+    await JITAmbientFeedbackActionRouter.record(
+      .useful,
+      context: context,
+      authorizationSnapshot: freshSnapshot,
+      currentAccountGeneration: context.accountGeneration,
+      authorizationCurrent: { snapshot in freshAuthority.isCurrent(snapshot, ownerID: "owner") },
+      recorder: { context, action, _ in recorder.append(context, action) }
+    )
+
+    XCTAssertTrue(
+      recorder.calls.isEmpty,
+      "a payload from a previous authority must not collide with generation zero")
+  }
+
+  @MainActor
+  func testAmbientBannerPayloadFromFreshAuthorityRejectsGenerationCollision() async throws {
+    let previousAuthority = RuntimeOwnerAuthorizationAuthority()
+    previousAuthority.endTransition(ownerID: "owner")
+    let previousSnapshot = try XCTUnwrap(
+      previousAuthority.capture(ownerID: "owner", expectedOwnerID: "owner"))
+    let context = context(
+      authorizationGeneration: previousSnapshot.authorizationGeneration,
+      authorizationNonce: previousSnapshot.authorizationNonce)
+    let payload = NotificationService.jitAmbientFeedbackUserInfo(for: context)
+    let reconstructed = try XCTUnwrap(NotificationService.jitAmbientFeedbackContext(from: payload))
+
+    let freshAuthority = RuntimeOwnerAuthorizationAuthority()
+    freshAuthority.endTransition(ownerID: "owner")
+    let freshSnapshot = try XCTUnwrap(
+      freshAuthority.capture(ownerID: "owner", expectedOwnerID: "owner"))
+    XCTAssertEqual(previousSnapshot.authorizationGeneration, freshSnapshot.authorizationGeneration)
+    XCTAssertNotEqual(previousSnapshot.authorizationNonce, freshSnapshot.authorizationNonce)
+
+    let recorder = Recorder()
+    await JITAmbientFeedbackActionRouter.record(
+      .useful,
+      context: reconstructed,
+      authorizationSnapshot: freshSnapshot,
+      currentAccountGeneration: reconstructed.accountGeneration,
+      authorizationCurrent: { snapshot in freshAuthority.isCurrent(snapshot, ownerID: "owner") },
+      recorder: { context, action, _ in recorder.append(context, action) }
+    )
+
+    XCTAssertTrue(
+      recorder.calls.isEmpty,
+      "a relaunch payload with a reset generation must fail the authority nonce fence")
+  }
+
+  func testAmbientRouterRechecksCardIdentityBeforeMutation() async throws {
     let authorization = try authorization()
-    let context = context(authorizationGeneration: authorization.authorizationGeneration)
+    let context = context(
+      authorizationGeneration: authorization.authorizationGeneration,
+      authorizationNonce: authorization.authorizationNonce)
     let recorder = Recorder()
     let checks = LockedCounter()
 
@@ -238,15 +315,17 @@ final class JITAmbientFeedbackTests: XCTestCase {
       recorder: { context, action, _ in recorder.append(context, action) }
     )
 
-    XCTAssertEqual(checks.value, 2, "the live-card identity must be rechecked at the write seam")
-    XCTAssertTrue(recorder.calls.isEmpty, "a replaced card must not write feedback")
+    XCTAssertEqual(checks.value, 2, "the live-card identity must be checked before async work and dismissal")
+    XCTAssertTrue(
+      recorder.calls.isEmpty,
+      "a failed live-card check must stop before entering the feedback recorder")
   }
 
   func testAmbientMutationRechecksOwnerAfterSuspendedRecorderHop() async throws {
     let authority = RuntimeOwnerAuthorizationAuthority()
     authority.endTransition(ownerID: "owner")
     let authorization = try XCTUnwrap(authority.capture(ownerID: "owner", expectedOwnerID: "owner"))
-    let context = context()
+    let context = context(authorizationNonce: authorization.authorizationNonce)
     let store = InterjectSuggestionFeedbackStore()
     let gate = SuspensionGate()
 
@@ -291,7 +370,7 @@ final class JITAmbientFeedbackTests: XCTestCase {
     authorizationAuthority.endTransition(ownerID: "owner")
     let authorization = try XCTUnwrap(
       authorizationAuthority.capture(ownerID: "owner", expectedOwnerID: "owner"))
-    let context = context()
+    let context = context(authorizationNonce: authorization.authorizationNonce)
     let store = InterjectSuggestionFeedbackStore()
     let generationAuthority = AccountCutoverGenerationAuthority(
       generation: context.accountGeneration)
@@ -343,7 +422,7 @@ final class JITAmbientFeedbackTests: XCTestCase {
     authorizationAuthority.endTransition(ownerID: "owner")
     let authorization = try XCTUnwrap(
       authorizationAuthority.capture(ownerID: "owner", expectedOwnerID: "owner"))
-    let context = context()
+    let context = context(authorizationNonce: authorization.authorizationNonce)
     let store = InterjectSuggestionFeedbackStore()
     let generationAuthority = AccountCutoverGenerationAuthority(
       generation: context.accountGeneration)
