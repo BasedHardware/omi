@@ -3373,6 +3373,10 @@ class PushToTalkManager: ObservableObject {
   /// pasted, so the hint saying so can be read. Terminating the turn clears
   /// every hint with it.
   nonisolated static let voiceTypingCopiedHintSeconds: TimeInterval = 1.5
+  /// How long the closing turn waits for the journal to accept the dictation
+  /// before ending anyway. The paste has already landed; this only bounds
+  /// how long the bar keeps showing the turn as in progress.
+  nonisolated static let voiceTypingJournalWaitSeconds: TimeInterval = 3
 
   /// Closes a dictation on any route: the key came up, the whole turn is
   /// transcribed once with the best recognizer that can be reached, cleaned
@@ -3471,7 +3475,22 @@ class PushToTalkManager: ObservableObject {
       AnalyticsManager.shared.floatingBarPTTEnded(
         mode: self.finalizedMode, committed: true, transcriptLength: self.voiceTypingLastOutcome.characters)
       self.terminateVoiceTypingLifecycle(disposition: .committed, totalSec: totalSec)
-      self.recordVoiceTypingExchange(utterance: run.transcript ?? "", completion: run.completion, turnID: turnID)
+      // The journal write is awaited before the turn ends, so a lifecycle
+      // change at turn end cannot drop it; the wait is bounded so a slow
+      // bridge cannot hold the bar, and the write itself is not cancelled
+      // at the bound — it finishes in the background.
+      let utterance = run.transcript ?? ""
+      let completion = run.completion
+      let journal = Task { @MainActor in
+        await self.recordVoiceTypingExchange(utterance: utterance, completion: completion, turnID: turnID)
+      }
+      let journaled =
+        (try? await DeadlinedOperation.run(seconds: Self.voiceTypingJournalWaitSeconds) { await journal.value })
+        ?? false
+      if !journaled {
+        log("PushToTalkManager: voice typing exchange not confirmed journaled before the turn ended")
+      }
+      guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
       if case .copied = run.completion {
         self.voiceTurnCoordinator.publish(.hintChanged(turnID: turnID, text: "Copied — press ⌘V to paste"))
         try? await Task.sleep(nanoseconds: UInt64(Self.voiceTypingCopiedHintSeconds * 1_000_000_000))
@@ -3547,11 +3566,12 @@ class PushToTalkManager: ObservableObject {
   /// and enters conversation context exactly like every other voice turn. The
   /// continuity key is derived from the turn, so a retry cannot write a second
   /// copy.
+  /// Returns whether the journal accepted the exchange.
   private func recordVoiceTypingExchange(
     utterance: String, completion: VoiceTypeSession.Completion, turnID: VoiceTurnID
-  ) {
+  ) async -> Bool {
     guard let delivered = completion.text?.trimmingCharacters(in: .whitespacesAndNewlines), !delivered.isEmpty
-    else { return }
+    else { return false }
     let assistantText: String
     if case .copied = completion {
       assistantText = "Copied to clipboard: \(delivered)"
@@ -3559,21 +3579,20 @@ class PushToTalkManager: ObservableObject {
       assistantText = "Typed: \(delivered)"
     }
     let manager = FloatingControlBarManager.shared
-    Task { @MainActor in
-      // `realtime_voice`, not a voice-typing origin of its own: the journal
-      // runtime accepts a closed set of origins (agent/src/index.ts), and a
-      // dictation is a realtime voice turn — one that types instead of asking.
-      // The "Typed:" prefix is what distinguishes it in the transcript.
-      let recorded = await manager.recordExchange(
-        surface: manager.realtimeVoiceSurfaceReference(),
-        userText: utterance,
-        assistantText: assistantText,
-        origin: "realtime_voice",
-        continuityKey: "voice-typing-\(turnID)")
-      if !recorded {
-        log("PushToTalkManager: voice typing exchange not journaled")
-      }
+    // `realtime_voice`, not a voice-typing origin of its own: the journal
+    // runtime accepts a closed set of origins (agent/src/index.ts), and a
+    // dictation is a realtime voice turn — one that types instead of asking.
+    // The "Typed:" prefix is what distinguishes it in the transcript.
+    let recorded = await manager.recordExchange(
+      surface: manager.realtimeVoiceSurfaceReference(),
+      userText: utterance,
+      assistantText: assistantText,
+      origin: "realtime_voice",
+      continuityKey: "voice-typing-\(turnID)")
+    if !recorded {
+      log("PushToTalkManager: voice typing exchange not journaled")
     }
+    return recorded
   }
 
   private func handleTranscriptSegments(_ segments: [TranscriptionService.BackendSegment]) {
