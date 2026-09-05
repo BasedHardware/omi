@@ -1784,13 +1784,20 @@ class PushToTalkManager: ObservableObject {
     }
     let hasQuery = !query.isEmpty
     let wasFollowUp = isCurrentSessionFollowUp
+    // "Type <text>" dictates into whatever app owns the caret. Decided here,
+    // before the terminal bookkeeping, because a dictation's analytics and
+    // lifecycle snapshot are owned by `finishVoiceTypingTurn` — emitting them
+    // here too recorded every backend-transcribed dictation twice.
+    let dictates = hasQuery && voiceTypeSession.claim(transcript: query)
 
-    AnalyticsManager.shared.floatingBarPTTEnded(
-      mode: finalizedMode,
-      committed: hasQuery,
-      transcriptLength: query.count
-    )
-    if hasQuery {
+    if dictates {
+      // Bookkeeping deferred to the dictation close.
+    } else if hasQuery {
+      AnalyticsManager.shared.floatingBarPTTEnded(
+        mode: finalizedMode,
+        committed: true,
+        transcriptLength: query.count
+      )
       DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: false)
       pttLifecycle.terminate(
         disposition: .committed,
@@ -1803,6 +1810,7 @@ class PushToTalkManager: ObservableObject {
         voicedAudioSeconds: nil,
         judgeable: true)
     } else {
+      AnalyticsManager.shared.floatingBarPTTEnded(mode: finalizedMode, committed: false, transcriptLength: 0)
       // Empty transcript after the turn reached finalization (e.g. a live-Deepgram
       // turn that returned nothing). The recorder's tracked capture state
       // (first-audio / first-usable-frame) classifies it; this resolves any pending
@@ -1834,11 +1842,10 @@ class PushToTalkManager: ObservableObject {
 
     voiceTurnCoordinator.publish(.transcriptionFinal(turnID: turnID, text: query))
 
-    // "Type <text>" dictates into whatever app owns the caret. This route's
-    // transcript already came from the backend, so it is the one pasted: the
-    // turn asks Omi nothing, so no query is dispatched and no response is
-    // awaited.
-    if voiceTypeSession.claim(transcript: query) {
+    // This route's transcript already came from the backend, so it is the one
+    // pasted: the turn asks Omi nothing, so no query is dispatched and no
+    // response is awaited.
+    if dictates {
       log("PushToTalkManager: voice typing consumed turn (\(query.count) chars)")
       finishVoiceTypingTurn(turnID: turnID, audio: nil, knownTranscript: query)
       return
@@ -3418,21 +3425,27 @@ class PushToTalkManager: ObservableObject {
         isCurrent: { [weak self] in self?.voiceTurnCoordinator.activeTurnID == turnID })
       guard !run.abandoned, self.voiceTurnCoordinator.activeTurnID == turnID else { return }
       self.voiceTypingLastOutcome.transcriber = run.transcriber
+      // Every outcome below terminates the capture lifecycle exactly once, so
+      // a dictation that could not be delivered is still a classified attempt
+      // rather than a hole in the telemetry.
       guard run.transcript != nil else {
         log("PushToTalkManager: dictation produced no transcript from any recognizer")
         self.voiceTypeSession.abandon()
         AnalyticsManager.shared.floatingBarPTTEnded(mode: self.finalizedMode, committed: false, transcriptLength: nil)
+        self.terminateVoiceTypingLifecycle(disposition: .silentRejected, totalSec: totalSec)
         let reason: VoiceTurnTerminalReason =
-          wasClaimed ? .transcriptionFailed : (offlineRoute ? .providerFailed : .silentRejected)
+          wasClaimed ? .transcriptionFailed : (offlineRoute ? .noNetwork : .silentRejected)
         self.voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: reason))
         return
       }
       if run.notADictation {
         // Only the offline route reaches here unclaimed: its closing transcript
-        // is the first anyone has read. Nothing offline can answer a question.
+        // is the first anyone has read. Nothing offline can answer a question,
+        // and the turn says so rather than reporting a provider that failed.
         log("PushToTalkManager: offline turn was not a dictation — no provider to answer it")
         AnalyticsManager.shared.floatingBarPTTEnded(mode: self.finalizedMode, committed: false, transcriptLength: nil)
-        self.voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .providerFailed))
+        self.terminateVoiceTypingLifecycle(disposition: .cancelled, totalSec: totalSec)
+        self.voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .noNetwork))
         return
       }
       self.voiceTypingLastOutcome.polished = run.polished
@@ -3441,6 +3454,7 @@ class PushToTalkManager: ObservableObject {
       case .none:
         log("PushToTalkManager: dictation had nothing to paste (\(elapsed)ms)")
         AnalyticsManager.shared.floatingBarPTTEnded(mode: self.finalizedMode, committed: false, transcriptLength: nil)
+        self.terminateVoiceTypingLifecycle(disposition: .cancelled, totalSec: totalSec)
         self.voiceTurnCoordinator.publish(.cancel(turnID: turnID, reason: .cancelled))
         return
       case .pasted(let delivered):
@@ -3456,14 +3470,7 @@ class PushToTalkManager: ObservableObject {
           + "\(run.polished ? ", polished" : "") in \(elapsed)ms")
       AnalyticsManager.shared.floatingBarPTTEnded(
         mode: self.finalizedMode, committed: true, transcriptLength: self.voiceTypingLastOutcome.characters)
-      self.pttLifecycle.terminate(
-        disposition: .committed,
-        source: "voice_typing",
-        peak: nil,
-        rms: nil,
-        turnAudioSeconds: totalSec,
-        voicedAudioSeconds: nil,
-        judgeable: true)
+      self.terminateVoiceTypingLifecycle(disposition: .committed, totalSec: totalSec)
       self.recordVoiceTypingExchange(utterance: run.transcript ?? "", completion: run.completion, turnID: turnID)
       if case .copied = run.completion {
         self.voiceTurnCoordinator.publish(.hintChanged(turnID: turnID, text: "Copied — press ⌘V to paste"))
@@ -3472,6 +3479,19 @@ class PushToTalkManager: ObservableObject {
       }
       self.voiceTurnCoordinator.publish(.cancel(turnID: turnID, reason: .cancelled))
     }
+  }
+
+  private func terminateVoiceTypingLifecycle(
+    disposition: PTTAttemptLifecycleRecorder.TurnDisposition, totalSec: Double
+  ) {
+    pttLifecycle.terminate(
+      disposition: disposition,
+      source: "voice_typing",
+      peak: nil,
+      rms: nil,
+      turnAudioSeconds: totalSec,
+      voicedAudioSeconds: nil,
+      judgeable: true)
   }
 
   /// Runs the dictation pipeline on a recording without a voice turn, for the
