@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "On Linux, Omi now detects niri, Sway, and Hyprland and launches under native Wayland automatically instead of the default XWayland mode, which could otherwise leave the window invisible on those compositors. Set OMI_OZONE=x11 or OMI_OZONE=wayland to override."
+  ]
+}

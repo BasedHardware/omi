@@ -48,27 +48,11 @@ for this alone.
   can't reach (live ASR, agent spawning, OAuth flows, Rewind semantics). Specs
   live under `e2e/`. Run the relevant one manually before shipping a change
   in that area; don't assume `pnpm test` alone covers it.
-
-### Linux dev environment (niri / Wayland compositors)
-
-On native Wayland compositors with limited XWayland support (e.g. niri), the
-default XWayland path (`ozone-platform=x11`, chosen deliberately for global
-shortcuts + active-window support — see `src/main/index.ts`) can fail to map
-the main window at all (tray icon appears, window never does). Set
-`OMI_OZONE=wayland` to run under native Wayland instead, at the cost of global
-shortcuts (push-to-talk / overlay summon) and active-window detection not
-working. See `docs/multi-worktree-dev.md`'s environment-overrides table for
-this and other dev-only env vars (`OMI_DEV_HW_GPU`, etc.).
-
-`OMI_OZONE=wayland` alone can still leave the main window mapped but blank
-(tray works fine) — `pnpm dev`'s software-render default has known
-presentation bugs on native Wayland; add `OMI_DEV_HW_GPU=1` alongside it. See
-`docs/multi-worktree-dev.md`'s
-troubleshooting section for the confirmed repro (Asahi Fedora + niri) and a
-second known limitation: the bar and the focus-halo glow window both
-position themselves via explicit `setBounds`, which native Wayland ignores,
-so they float in the screen center instead of staying parked off-screen —
-functional, just misplaced.
+- **Linux Wayland compositors (niri/Sway/Hyprland)**: `pnpm dev` auto-detects
+  these and defaults to native Wayland instead of XWayland; see
+  `docs/multi-worktree-dev.md`'s environment-overrides and troubleshooting
+  sections for the detection mechanism, `OMI_OZONE` override, and known
+  limitations.
 
 ## CI
 
