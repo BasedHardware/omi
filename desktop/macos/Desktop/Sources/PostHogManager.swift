@@ -1111,10 +1111,20 @@ extension PostHogManager {
 
   func suggestionFeedbackRecorded(
     verb: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    provenance: InterjectFeedbackProvenance? = nil
   ) {
     var properties: [String: Any] = ["verb": verb]
     appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
+    if let provenance {
+      // Keep account identity out of event properties; PostHog already binds
+      // events to the authenticated installation. These opaque joins are
+      // sufficient for receipt correlation without copying owner IDs.
+      properties["feedback_lane"] = provenance.lane
+      properties["feedback_delivery_id"] = provenance.deliveryID
+      properties["feedback_candidate_id"] = provenance.candidateID
+      properties["feedback_account_generation"] = provenance.accountGeneration
+    }
     track("Suggestion Feedback Recorded", properties: properties)
   }
 

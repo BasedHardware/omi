@@ -3533,6 +3533,7 @@ class FloatingControlBarManager {
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     jitFeedbackContext: JITTriggerFeedbackContext? = nil,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
@@ -3560,7 +3561,8 @@ class FloatingControlBarManager {
       context: context,
       action: action,
       jitFeedbackContext: jitFeedbackContext,
-      suggestionTelemetryIdentity: suggestionTelemetryIdentity,
+      jitAmbientFeedbackContext: jitAmbientFeedbackContext,
+      suggestionTelemetryIdentity: suggestionTelemetryIdentity ?? jitAmbientFeedbackContext?.suggestionIdentity,
       insightDeliveryID: insightDeliveryID,
       screenshotData: screenshotData,
       isPersistent: isPersistent
@@ -3869,7 +3871,7 @@ class FloatingControlBarManager {
     verb: InterjectFeedbackVerb
   ) async {
     guard InterjectFeature.isEnabled else { return }
-    await InterjectSuggestionFeedbackMutation.record(
+    _ = await InterjectSuggestionFeedbackMutation.record(
       evaluationID: identity.evaluationID,
       suggestionID: identity.suggestionID,
       verb: verb
@@ -3883,7 +3885,7 @@ class FloatingControlBarManager {
     guard let verb = parsed.verb,
       let identity = recentNotchCardFeedbackIdentity()
     else { return }
-    await InterjectSuggestionFeedbackMutation.record(
+    _ = await InterjectSuggestionFeedbackMutation.record(
       evaluationID: identity.evaluationID,
       suggestionID: identity.suggestionID,
       verb: verb
