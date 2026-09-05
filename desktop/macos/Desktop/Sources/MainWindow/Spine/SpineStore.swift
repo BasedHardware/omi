@@ -29,7 +29,7 @@ final class SpineStore: ObservableObject {
   @Published private(set) var matchCount = 0
 
   /// Which kind the shell's chips have soloed. Read by the stream to decide whether attached rows
-  /// still indent.
+  /// still tuck in close under their conversation.
   private(set) var kind: SpineKind = .everything
 
   /// The calendar the days were composed in. Recap lookups must format `SpineDay.id` with this

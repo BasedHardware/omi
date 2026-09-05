@@ -8,13 +8,14 @@
 //  actually happened in, newest first.
 //
 //  **Conversations stay dominant and every extracted record stays first-class.** Memories, tasks,
-//  and screen moments
-//  render *indented under* the conversation that produced them, which is what keeps a conversation
-//  the thing your eye lands on. They are not children of a card, though: they are rows of the same
-//  spine, so filtering to one kind is a real filter over the whole stream rather than a different
-//  screen. When one kind is soloed the indent collapses and every row states its own time (see
-//  `SpineRow.isAttached` and `SpineComposer.compose`), so the spine stays a clock rather than
-//  degrading into a flat list.
+//  and screen moments render *close under* the conversation that produced them — tighter air, no
+//  timestamp of their own — which is what keeps a conversation the thing your eye lands on. They
+//  are not children of a card, though: they are rows of the same spine, and every row sits on the
+//  same leading grid, so a strip of frames starts at the same left edge whether it hangs under a
+//  conversation or stands on its own. Filtering to one kind is a real filter over the whole stream
+//  rather than a different screen. When one kind is soloed the closeness collapses and every row
+//  states its own time (see `SpineRow.isAttached` and `SpineComposer.compose`), so the spine stays
+//  a clock rather than degrading into a flat list.
 //
 //  Everything here is a pure function of its inputs, deliberately: the composition is the part with
 //  rules in it (what attaches to what, what a day header counts, where the brain map is filed), and
@@ -245,8 +246,9 @@ struct SpineRow: Identifiable, Equatable {
   let anchor: Date
   /// Never `.everything`: a row is one kind of thing.
   let kind: SpineKind
-  /// True when this row was produced by the conversation directly above it. Indented while the
-  /// whole spine is shown; flattened — and given its own timestamp — the moment one kind is soloed.
+  /// True when this row was produced by the conversation directly above it. Set close under it —
+  /// on the same leading grid as every other row — while the whole spine is shown; flattened, and
+  /// given its own timestamp, the moment one kind is soloed.
   let isAttached: Bool
   let content: Content
 
@@ -631,7 +633,7 @@ enum SpineComposer {
 
     // Re-seat every attached row directly under its conversation. Sorting by anchor alone would
     // interleave them with anything that happened mid-conversation, which is the exact reading
-    // failure the indent exists to prevent.
+    // failure the attachment exists to prevent.
     rows = reseatAttachments(rows)
 
     // The brain map is filed under memories at the foot of the day, never as a destination.
