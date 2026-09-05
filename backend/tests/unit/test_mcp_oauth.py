@@ -520,6 +520,48 @@ def test_public_client_uses_pkce_without_shared_secret():
     )
 
 
+def test_dynamic_public_client_persists_exact_redirects_and_uses_pkce():
+    redirect_uri = 'https://accounts.google.com/gemini-oauth-cb'
+
+    registered = mcp_oauth.register_dynamic_public_client('Gemini Spark', [redirect_uri, redirect_uri])
+    loaded = mcp_oauth.get_client(registered['id'])
+
+    assert registered['id'].startswith('omi-dcr-')
+    assert loaded['registration_mode'] == 'dynamic_public_pkce'
+    assert loaded['allowed_redirect_uris'] == [redirect_uri]
+    assert mcp_oauth.verify_client_auth(loaded, None)
+    assert mcp_oauth.validate_redirect_uri(loaded, redirect_uri)
+    assert not mcp_oauth.validate_redirect_uri(loaded, 'https://attacker.example/callback')
+
+
+@pytest.mark.parametrize(
+    'redirect_uri',
+    [
+        'http://example.com/callback',
+        'https://user:password@example.com/callback',
+        'https://example.com/callback#fragment',
+        'custom-scheme://callback',
+    ],
+)
+def test_dynamic_public_client_rejects_unsafe_redirects(redirect_uri):
+    with pytest.raises(ValueError, match='redirect_uri'):
+        mcp_oauth.register_dynamic_public_client('Unsafe client', [redirect_uri])
+
+
+def test_dynamic_public_client_allows_native_loopback_redirect():
+    redirect_uri = 'http://127.0.0.1:49152/oauth/callback'
+    registered = mcp_oauth.register_dynamic_public_client('Native client', [redirect_uri])
+
+    assert mcp_oauth.validate_redirect_uri(registered, redirect_uri)
+
+
+def test_dynamic_public_client_allows_localhost_redirect():
+    redirect_uri = 'http://localhost:49152/oauth/callback'
+    registered = mcp_oauth.register_dynamic_public_client('Local client', [redirect_uri])
+
+    assert mcp_oauth.validate_redirect_uri(registered, redirect_uri)
+
+
 def test_delete_user_oauth_credentials_removes_unconsumed_authorization_codes():
     grant = mcp_oauth.create_or_update_grant(
         'deleted-user', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']

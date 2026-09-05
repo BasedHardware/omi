@@ -54,9 +54,17 @@ https://api.omi.me/.well-known/oauth-authorization-server
 ```
 
 OAuth uses browser sign-in, explicit consent, authorization code + PKCE, and refresh
-tokens. Omi currently provides registered public clients for its ChatGPT and Claude setup
-flows. A generic MCP client cannot invent a client ID; if it is not one of those supported
-flows, use an MCP key instead.
+tokens. Omi provides registered public clients for its ChatGPT and Claude setup flows and
+advertises RFC 7591 Dynamic Client Registration at:
+
+```text
+https://api.omi.me/api/oauth/register
+```
+
+MCP clients that support dynamic registration obtain a public PKCE client ID automatically.
+The registration endpoint accepts exact HTTPS redirect URIs and loopback HTTP redirects; it
+does not issue client secrets. Clients that support neither dynamic registration nor one of
+Omi's registered flows should use an MCP key instead.
 
 <Tabs>
   <Tab title="ChatGPT" icon="robot">
@@ -84,6 +92,15 @@ flows, use an MCP key instead.
     Click **Add**, then **Connect**, and approve Omi's OAuth consent screen. The Omi macOS
     app exposes the same flow under **Use omi memory anywhere → Claude / Claude Code →
     Claude (cloud)**.
+  </Tab>
+  <Tab title="Gemini Spark" icon="sparkles">
+    In Gemini, open **Settings & help → Connected Apps → Custom apps for Spark**, then use:
+
+    - **Name:** Omi Memory
+    - **Remote MCP server URL:** `https://api.omi.me/v1/mcp/sse`
+
+    Spark discovers Omi's OAuth metadata, registers its public PKCE client automatically,
+    and opens the Omi consent screen. You do not need to create or paste a client secret.
   </Tab>
 </Tabs>
 
