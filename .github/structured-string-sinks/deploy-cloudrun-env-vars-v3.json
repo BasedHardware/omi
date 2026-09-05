@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "deploy-cloudrun-env-vars-v3",
+  "kind": "action-delimited-map",
+  "failure_class": "FC-deploy-input-serialization",
+  "evidence_prs": [9986],
+  "safe_encoding": "backslash-escape commas and backslashes in each value before flattening the map",
+  "scope": {
+    "globs": [
+      ".github/actions/*/action.yml",
+      ".github/actions/*/action.yaml",
+      ".github/workflows/*.yml",
+      ".github/workflows/*.yaml"
+    ]
+  },
+  "selector": {
+    "uses": "google-github-actions/deploy-cloudrun@v3",
+    "input": "env_vars"
+  },
+  "grammar": {
+    "assignment_delimiter": "=",
+    "pair_delimiters": [",", "\n"],
+    "escape": "\\"
+  },
+  "dynamic_values": {
+    "owner": "backend deploy runtime serializers and their workflow contract tests",
+    "reason": "GitHub expressions resolve after this static check; their producing renderer owns separator encoding, while this entry validates every literal fragment at the action boundary."
+  },
+  "fixtures": {
+    "passing": ".github/scripts/fixtures/structured_string_sinks/deploy-cloudrun-env-vars.pass.yml",
+    "failing": ".github/scripts/fixtures/structured_string_sinks/deploy-cloudrun-env-vars.fail.yml"
+  }
+}
