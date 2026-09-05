@@ -169,8 +169,17 @@ for key in ("python_image_digest", "desktop_image_digest"):
         print(f"ERROR: JIT QA target: cloud receipt {key} must be a sha256 image digest", file=sys.stderr)
         raise SystemExit(2)
 dependency_vector = receipt.get("dependency_vector")
-if not isinstance(dependency_vector, dict) or not dependency_vector:
-    print("ERROR: JIT QA target: cloud receipt must carry a nonempty dependency vector", file=sys.stderr)
+expected_dependencies = {
+    "firestore": "based-hardware-dev",
+    "redis": "jit-qa-redis:basic-1GiB",
+    "gateway": "llm-gateway-jit-qa:service-token",
+    "firebase_auth": "based-hardware:verify-only",
+    "storage": "none",
+    "pubsub": "none",
+    "scheduler": "none",
+}
+if dependency_vector != expected_dependencies:
+    print("ERROR: JIT QA target: cloud receipt dependencies do not match the isolated QA contract", file=sys.stderr)
     raise SystemExit(2)
 PY
 }

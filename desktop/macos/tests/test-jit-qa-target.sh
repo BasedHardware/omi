@@ -194,6 +194,24 @@ export OMI_JIT_QA_CLOUD_DESKTOP_URL="https://desktop-backend-jit-qa-rev123-uc.a.
 unset OMI_JIT_QA_CLOUD_RECEIPT_PATH
 expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
 export OMI_JIT_QA_CLOUD_RECEIPT_PATH="$cloud_receipt"
+export OMI_JIT_QA_CLOUD_PYTHON_URL="https://backend-jit-qa-rev456-uc.a.run.app"
+expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
+export OMI_JIT_QA_CLOUD_PYTHON_URL="https://backend-jit-qa-rev123-uc.a.run.app"
+export OMI_JIT_QA_CLOUD_DESKTOP_URL="https://desktop-backend-jit-qa-rev456-uc.a.run.app"
+expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
+export OMI_JIT_QA_CLOUD_DESKTOP_URL="https://desktop-backend-jit-qa-rev123-uc.a.run.app"
+for dependency in firestore redis gateway firebase_auth storage pubsub scheduler; do
+    cp "$ROOT/tests/fixtures/jit-qa/cloud-receipt-v1.json" "$cloud_receipt"
+    python3 - "$cloud_receipt" "$dependency" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+receipt = json.loads(path.read_text())
+receipt["dependency_vector"][sys.argv[2]] = "shared-production-dependency"
+path.write_text(json.dumps(receipt))
+PY
+    expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
+done
+cp "$ROOT/tests/fixtures/jit-qa/cloud-receipt-v1.json" "$cloud_receipt"
 export OMI_JIT_QA_CLOUD_RECEIPT_PATH="${cloud_receipt}.missing"
 expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
 cloud_symlink="${cloud_receipt}.link"
