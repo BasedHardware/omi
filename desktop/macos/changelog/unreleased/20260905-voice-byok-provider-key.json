@@ -1,0 +1,3 @@
+{
+  "change": "Voice replies now use your own OpenAI or Gemini key when you pick that model under Advanced → Voice Model, instead of falling back to Omi's managed service and failing on billing — and a billing error now says which service declined and what to do about it"
+}
