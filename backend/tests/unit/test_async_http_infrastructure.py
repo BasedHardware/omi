@@ -517,7 +517,13 @@ class TestExecutorConfiguration:
 
 
 class TestNotificationWebhookWiring:
-    """Verify async webhook is correctly wired through storage_executor."""
+    """Pin how the daily-summary webhook is owned: run inline, never submitted to a pool.
+
+    The name predates two rewirings. It was storage_executor, then postprocess_executor
+    (#7387), and is now an inline awaited call bounded by its own budget (#12530) --
+    because the coordinator was already running on postprocess_executor, so submitting
+    back into it made the function its own child and left the coroutine unowned at exit.
+    """
 
     def test_day_summary_webhook_is_awaited_inline_not_submitted(self):
         """The daily-summary webhook must run inline, never be submitted to a pool.
