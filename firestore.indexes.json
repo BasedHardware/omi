@@ -747,6 +747,16 @@
       ]
     },
     {
+      "collectionGroup": "photos",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "candidates",
       "queryScope": "COLLECTION",
       "fields": [
