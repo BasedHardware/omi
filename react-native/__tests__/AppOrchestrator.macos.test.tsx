@@ -800,3 +800,146 @@ test('a send during the initial history load still receives the transcript', asy
   expect(textOf(renderer)).toContain('reply while history pending');
   expect(labelsOf(renderer)).toContain('Load earlier messages');
 });
+
+test('a send during an older-history load still keeps the earlier page', async () => {
+  // send() bumps chatMutationSeqRef. That used to discard a successfully
+  // fetched older page entirely — losing those messages and leaving the same
+  // olderCursor with no applied progress. Merge the page; only a session epoch
+  // change retires it. 410 recovery stays mutation-fenced separately.
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+
+  const olderResolvers: Array<
+    (value: {id: string; status: number; body: string | null}) => void
+  > = [];
+  mockBackend.request.mockImplementation(
+    async (value: {id: string; body?: string; path?: string}) => {
+      if (value.id === 'chat-history') {
+        if (value.path != null && value.path.includes('olderCursor=')) {
+          return new Promise(resolve => {
+            olderResolvers.push(resolve);
+          });
+        }
+        return {
+          id: value.id,
+          status: 200,
+          body: historyBody(
+            [
+              {
+                id: 'recent-1',
+                text: 'RECENT HISTORY',
+                sender: 'human',
+                createdAt: 10,
+                generationOutcome: null,
+              },
+            ],
+            {olderCursor: 'older-pending', hasOlder: true},
+          ),
+        };
+      }
+      if (value.id.startsWith('admit-')) {
+        const body = JSON.parse(value.body ?? '{}') as {
+          id: string;
+          text: string;
+          at: number;
+        };
+        return {
+          id: value.id,
+          status: 201,
+          body: admissionBody(
+            {
+              id: body.id,
+              text: body.text,
+              sender: 'human',
+              createdAt: body.at,
+              generationOutcome: null,
+            },
+            'gen-during-older',
+          ),
+        };
+      }
+      return {id: value.id, status: 501, body: null};
+    },
+  );
+  mockBackend.generationEvents.mockResolvedValue({
+    id: 'gen-during-older',
+    status: 200,
+    body: `event: done\nid: terminal\ndata: ${JSON.stringify({
+      kind: 'done',
+      message: wireMessage({
+        id: 'gen-during-older',
+        text: 'reply while older pending',
+        sender: 'ai',
+        createdAt: 30,
+        generationOutcome: 'completed',
+      }),
+    })}\n\n`,
+  });
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain('RECENT HISTORY');
+  expect(labelsOf(renderer)).toContain('Load earlier messages');
+
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load earlier messages')
+      .props.onPress();
+    await flushAsyncQueue();
+  });
+  expect(olderResolvers.length).toBeGreaterThan(0);
+
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('sent while older loading');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain('sent while older loading');
+  expect(textOf(renderer)).toContain('reply while older pending');
+
+  const olderPage = historyBody(
+    [
+      {
+        id: 'older-1',
+        text: 'OLDER HISTORY MESSAGE',
+        sender: 'human',
+        createdAt: 1,
+        generationOutcome: null,
+      },
+      {
+        id: 'older-2',
+        text: 'OLDER HISTORY REPLY',
+        sender: 'ai',
+        createdAt: 2,
+        generationOutcome: 'completed',
+      },
+    ],
+    {olderCursor: 'older-next', hasOlder: true},
+  );
+  await act(async () => {
+    olderResolvers.splice(0).forEach(resolve => {
+      resolve({
+        id: 'chat-history',
+        status: 200,
+        body: olderPage,
+      });
+    });
+    await flushAsyncQueue();
+  });
+
+  expect(textOf(renderer)).toContain('OLDER HISTORY MESSAGE');
+  expect(textOf(renderer)).toContain('OLDER HISTORY REPLY');
+  expect(textOf(renderer)).toContain('RECENT HISTORY');
+  expect(textOf(renderer)).toContain('sent while older loading');
+  expect(textOf(renderer)).toContain('reply while older pending');
+  expect(labelsOf(renderer)).toContain('Load earlier messages');
+});
