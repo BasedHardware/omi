@@ -38,6 +38,18 @@ final class JITAmbientFeedbackTests: XCTestCase {
     }
   }
 
+  private final class LockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func increment() -> Int {
+      lock.withLock {
+        value += 1
+        return value
+      }
+    }
+  }
+
   private func authorization(ownerID: String = "owner") throws -> RuntimeOwnerAuthorizationSnapshot {
     let authority = RuntimeOwnerAuthorizationAuthority()
     authority.endTransition(ownerID: ownerID)
@@ -187,6 +199,97 @@ final class JITAmbientFeedbackTests: XCTestCase {
     XCTAssertNil(record, "old-owner feedback must not cross an account transition")
   }
 
+  func testAmbientMutationRechecksAccountGenerationAfterSuspendedRecorderHop() async throws {
+    let authorizationAuthority = RuntimeOwnerAuthorizationAuthority()
+    authorizationAuthority.endTransition(ownerID: "owner")
+    let authorization = try XCTUnwrap(
+      authorizationAuthority.capture(ownerID: "owner", expectedOwnerID: "owner"))
+    let context = context()
+    let store = InterjectSuggestionFeedbackStore()
+    let generationAuthority = AccountCutoverGenerationAuthority(
+      generation: context.accountGeneration)
+    let gate = SuspensionGate()
+
+    let task = Task {
+      await JITAmbientFeedbackActionRouter.record(
+        .useful,
+        context: context,
+        authorizationSnapshot: authorization,
+        currentAccountGeneration: context.accountGeneration,
+        authorizationCurrent: { snapshot in
+          authorizationAuthority.isCurrent(snapshot, ownerID: "owner")
+        },
+        recorder: { context, action, snapshot in
+          await gate.suspend()
+          _ = await InterjectSuggestionFeedbackMutation.record(
+            evaluationID: context.suggestionIdentity.evaluationID,
+            suggestionID: context.suggestionIdentity.suggestionID,
+            verb: action.interjectVerb,
+            provenance: context.provenance,
+            store: store,
+            emitAnalytics: false,
+            authorizationSnapshot: snapshot,
+            authorizationCurrent: { candidate in
+              authorizationAuthority.isCurrent(candidate, ownerID: "owner")
+            },
+            accountGeneration: context.accountGeneration,
+            accountGenerationCurrent: generationAuthority.isCurrent
+          )
+        }
+      )
+    }
+
+    await gate.waitUntilEntered()
+    generationAuthority.update(context.accountGeneration + 1)
+    await gate.release()
+    await task.value
+
+    let record = await store.current(
+      evaluationID: context.suggestionIdentity.evaluationID,
+      suggestionID: context.suggestionIdentity.suggestionID
+    )
+    XCTAssertNil(record, "feedback from an older cutover generation must be rejected")
+  }
+
+  func testAmbientMutationRollsBackWhenAccountGenerationChangesAtTelemetrySeam() async throws {
+    let authorizationAuthority = RuntimeOwnerAuthorizationAuthority()
+    authorizationAuthority.endTransition(ownerID: "owner")
+    let authorization = try XCTUnwrap(
+      authorizationAuthority.capture(ownerID: "owner", expectedOwnerID: "owner"))
+    let context = context()
+    let store = InterjectSuggestionFeedbackStore()
+    let generationAuthority = AccountCutoverGenerationAuthority(
+      generation: context.accountGeneration)
+    let generationCheck = LockedCounter()
+
+    let didRecord = await InterjectSuggestionFeedbackMutation.record(
+      evaluationID: context.suggestionIdentity.evaluationID,
+      suggestionID: context.suggestionIdentity.suggestionID,
+      verb: .useful,
+      provenance: context.provenance,
+      store: store,
+      authorizationSnapshot: authorization,
+      authorizationCurrent: { snapshot in
+        authorizationAuthority.isCurrent(snapshot, ownerID: "owner")
+      },
+      accountGeneration: context.accountGeneration,
+      accountGenerationCurrent: { expectedGeneration in
+        let check = generationCheck.increment()
+        if check == 3 {
+          generationAuthority.update(expectedGeneration + 1)
+        }
+        return generationAuthority.isCurrent(expectedGeneration)
+      }
+    )
+
+    XCTAssertFalse(didRecord)
+    let record = await store.current(
+      evaluationID: context.suggestionIdentity.evaluationID,
+      suggestionID: context.suggestionIdentity.suggestionID
+    )
+    XCTAssertNil(record, "a stale generation must not survive the telemetry recheck")
+  }
+
   @MainActor
   func testAmbientSystemBannerRoundTripsOpaqueContext() throws {
     let context = context()
@@ -205,5 +308,23 @@ final class JITAmbientFeedbackTests: XCTestCase {
   func testAmbientBannerGenerationFenceRejectsStaleControl() {
     XCTAssertTrue(NotificationService.jitFeedbackGenerationMatches(4, currentGeneration: 4))
     XCTAssertFalse(NotificationService.jitFeedbackGenerationMatches(4, currentGeneration: 5))
+  }
+
+  @MainActor
+  func testAccountCutoverGenerationAuthorityTracksAuthoritativeControl() {
+    let manager = AccountCutoverControlManager(
+      fetchControl: { .legacyDefault },
+      currentOwnerID: { "owner" })
+    manager.resetForTesting()
+    XCTAssertTrue(manager.generationAuthority.isCurrent(0))
+
+    var control = AccountCutoverControl.legacyDefault
+    control.accountGeneration = 4
+    manager.apply(control)
+    XCTAssertTrue(manager.generationAuthority.isCurrent(4))
+    XCTAssertFalse(manager.generationAuthority.isCurrent(0))
+
+    manager.resetForTesting()
+    XCTAssertTrue(manager.generationAuthority.isCurrent(0))
   }
 }

@@ -76,9 +76,12 @@ enum JITAmbientFeedbackActionRouter {
       return
     }
 
+    let generationAuthority = await MainActor.run {
+      AccountCutoverControlManager.shared.generationAuthority
+    }
     let generationMatches = await MainActor.run {
       guard authorizationCurrent(authorizationSnapshot) else { return false }
-      return AccountCutoverControlManager.shared.control.accountGeneration == context.accountGeneration
+      return generationAuthority.isCurrent(context.accountGeneration)
     }
     guard generationMatches else { return }
     _ = await InterjectSuggestionFeedbackMutation.record(
@@ -87,7 +90,9 @@ enum JITAmbientFeedbackActionRouter {
       verb: action.interjectVerb,
       provenance: context.provenance,
       authorizationSnapshot: authorizationSnapshot,
-      authorizationCurrent: authorizationCurrent
+      authorizationCurrent: authorizationCurrent,
+      accountGeneration: context.accountGeneration,
+      accountGenerationCurrent: generationAuthority.isCurrent
     )
   }
 }

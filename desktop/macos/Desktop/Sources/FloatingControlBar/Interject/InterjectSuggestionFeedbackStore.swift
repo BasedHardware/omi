@@ -62,9 +62,12 @@ actor InterjectSuggestionFeedbackStore {
   func recordIfAuthorized(
     _ record: InterjectFeedbackRecord,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
-    authorizationCurrent: @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool
+    authorizationCurrent: @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool,
+    accountGeneration: Int? = nil,
+    accountGenerationCurrent: @Sendable (Int) -> Bool = { _ in true }
   ) -> Bool {
     guard authorizationCurrent(authorizationSnapshot) else { return false }
+    if let accountGeneration, !accountGenerationCurrent(accountGeneration) { return false }
     self.record(record)
     return true
   }
@@ -102,12 +105,15 @@ enum InterjectSuggestionFeedbackMutation {
     emitAnalytics: Bool = true,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     authorizationCurrent: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool =
-      RuntimeOwnerIdentity.isAuthorizationCurrent
+      RuntimeOwnerIdentity.isAuthorizationCurrent,
+    accountGeneration: Int? = nil,
+    accountGenerationCurrent: @escaping @Sendable (Int) -> Bool = { _ in true }
   ) async -> Bool {
     guard verb.recordsAsTeachSignal else { return false }
     if let authorizationSnapshot {
       guard authorizationCurrent(authorizationSnapshot) else { return false }
     }
+    if let accountGeneration, !accountGenerationCurrent(accountGeneration) { return false }
     let record = InterjectFeedbackRecord(
       evaluationID: evaluationID,
       suggestionID: suggestionID,
@@ -120,7 +126,9 @@ enum InterjectSuggestionFeedbackMutation {
       didRecord = await store.recordIfAuthorized(
         record,
         authorizationSnapshot: authorizationSnapshot,
-        authorizationCurrent: authorizationCurrent
+        authorizationCurrent: authorizationCurrent,
+        accountGeneration: accountGeneration,
+        accountGenerationCurrent: accountGenerationCurrent
       )
     } else {
       await store.record(record)
@@ -135,6 +143,7 @@ enum InterjectSuggestionFeedbackMutation {
       if let authorizationSnapshot {
         guard authorizationCurrent(authorizationSnapshot) else { return false }
       }
+      if let accountGeneration, !accountGenerationCurrent(accountGeneration) { return false }
       AnalyticsManager.shared.suggestionFeedbackRecorded(
         verb: verb.rawValue, suggestionIdentity: identity, provenance: provenance)
       return true
