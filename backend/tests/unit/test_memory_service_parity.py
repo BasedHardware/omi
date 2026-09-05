@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -205,6 +206,51 @@ def test_canonical_failure_does_not_fall_back_to_historical_writer(monkeypatch, 
             operation="create",
         )
     legacy_create.assert_not_called()
+
+
+def test_manual_memory_without_route_capability_stays_on_external_contract(service_mod):
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    memory_db = service_mod.MemoryDB.model_validate(
+        _sample_memory_dict(memory_id="manual-memory", locked=False) | {"category": "manual", "manually_added": True}
+    )
+    compatibility_result = MagicMock(return_value=memory_db)
+    direct_result = MagicMock(return_value=memory_db)
+    service._canonical_write = compatibility_result
+    service._write_direct_user_fact = direct_result
+
+    result = service.create_external_memory(
+        "uid-test",
+        memory_db,
+        memory_system=service_mod.MemorySystem.CANONICAL,
+        consumer="internal-test",
+        operation="create",
+        direct_user_authority=None,
+    )
+
+    assert result is memory_db
+    compatibility_result.assert_called_once()
+    direct_result.assert_not_called()
+
+
+def test_direct_user_ledger_admission_requires_fresh_ingress_and_ledger_mode(monkeypatch, service_mod):
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    authority = object()
+    calls = []
+    monkeypatch.setattr(service_mod, "is_direct_user_write_authority", lambda value: value is authority)
+
+    def resolve(uid, *, stage, force_refresh):
+        calls.append((uid, stage, force_refresh))
+        return SimpleNamespace(permits_work=True)
+
+    monkeypatch.setattr(service_mod, "resolve_jit_rollout_sync", resolve)
+    monkeypatch.setattr(
+        service_mod,
+        "ensure_canonical_apply_control_state",
+        lambda uid, *, db_client: SimpleNamespace(writer_mode=service_mod.WriterMode.ledger),
+    )
+
+    assert service._direct_user_ledger_admitted("uid-test", authority) is True
+    assert calls == [("uid-test", service_mod.JITDecisionStage.INGRESS, True)]
 
 
 def test_canonical_backend_preserves_released_adapter_signatures(service_mod):

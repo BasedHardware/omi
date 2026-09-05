@@ -5,8 +5,9 @@
 **Scope:** the universal canonical writer, dual-format reader, historical
 compatibility adapter, and Short-term maintenance job.
 
-There is no UID enrollment, allowlist, dogfood activation, or general account
-backfill. Every authenticated user follows one memory/task authority. Existing
+There is no product UID enrollment, dogfood activation, or general account
+backfill. The drain's dev-only operational allowlist is a safety fence, not
+product enrollment. Every authenticated user follows one memory/task authority. Existing
 historical documents are read in place and materialized only when that item is
 mutated.
 
@@ -19,6 +20,10 @@ mutated.
 | `MEMORY_CANONICAL_MAINTENANCE_ENABLED` | `memory-maintenance-job` only | Enables scheduled Short-term normalization, TTL audit, consolidation, and outbox drain. |
 | `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` | maintenance job | Global L2 cost/incident switch. Required processing, TTL audit, and outbox ownership remain independent. |
 | consolidation batch/candidate caps | maintenance job | Bound one L2 call and one pass. |
+| `KNOWLEDGE_LEDGER_DRAIN_ENABLED` | `knowledge-ledger-drain-job` | Explicit operational gate; development and production manifests default off. A one-shot development execution may override the gate only after read-only preflight and direct-user ledger-write proof. |
+| `KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST` | `knowledge-ledger-drain-job` | Development retains one named QA owner for an explicit override; production is empty. It is a safety fence, not product enrollment, and the gate-off default prevents scheduled mutation. |
+| shared JIT admission + kill switch | `knowledge-ledger-drain-job` | Re-authorizes every account and row before migration; unavailable authority fails closed. |
+| ledger drain page cap/cursor | `knowledge-ledger-drain-job` | Global rollout scans at most 20 apply-control documents per hourly run and advances only after every account in the page completes without an error; the dev allowlist reads only its named controls and has no global cursor side effects. |
 | cursor secret/version/TTL | backend | Unused by the live route; removal requires confirming no separate consumer owns the binding. |
 
 `MEMORY_ENABLED_USERS` and code-owned product UID lists are retired. Runtime
@@ -37,9 +42,13 @@ validation rejects a reintroduced per-user memory inventory.
 4. Verify the dedicated maintenance job and Scheduler identity/cadence. The job
    must advance the bounded, content-free account-registry cursor without
    scanning the users collection or repeating one fixed page.
-5. Exercise the global stop and restore path. Record revision, image digest,
+5. Verify `knowledge-ledger-drain-job` and `knowledge-ledger-drain-hourly` are
+   independent of maintenance and the scheduler principal has `run.invoker` on
+   the job, then confirm its content-free counters show bounded cursor progress
+   and compatibility-to-ledger cutovers.
+6. Exercise the global stop and restore path. Record revision, image digest,
    project/database identity, Scheduler/job result, and content-free counters.
-6. Deploy the same universal reader before enabling canonical intake or
+7. Deploy the same universal reader before enabling canonical intake or
    maintenance in production. Do not add a canary UID or enrollment document.
 
 ## Content-free observations

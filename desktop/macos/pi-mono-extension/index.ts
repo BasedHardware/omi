@@ -816,16 +816,24 @@ function searchSkillsTool() {
   });
 }
 
-const executionRole = process.env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator";
-const chatFirstControlGeneration = Number(process.env.OMI_CHAT_FIRST_CONTROL_GENERATION);
-const projectionContext = {
-  executionRole,
-  surfaceKind: process.env.OMI_SURFACE_KIND,
-  chatFirstUi: process.env.OMI_CHAT_FIRST_UI === "true" && process.env.OMI_SURFACE_KIND === "main_chat",
-  controlGeneration: Number.isSafeInteger(chatFirstControlGeneration) && chatFirstControlGeneration >= 0
-    ? chatFirstControlGeneration
-    : null,
-} as const;
+export function omiToolProjectionContextFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): OmiToolProjectionContext {
+  const chatFirstControlGeneration = Number(env.OMI_CHAT_FIRST_CONTROL_GENERATION);
+  return {
+    executionRole: env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator",
+    surfaceKind: env.OMI_SURFACE_KIND,
+    chatFirstUi: env.OMI_CHAT_FIRST_UI === "true" && env.OMI_SURFACE_KIND === "main_chat",
+    controlGeneration: Number.isSafeInteger(chatFirstControlGeneration) && chatFirstControlGeneration >= 0
+      ? chatFirstControlGeneration
+      : null,
+    // Only an explicit string true can widen the client-side catalog. The
+    // backend still authorizes every relay independently.
+    jitKnowledgeToolsEnabled: env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED === "true",
+  };
+}
+
+const projectionContext = omiToolProjectionContextFromEnv();
 
 export function omiToolsForExecutionRole(role: "coordinator" | "leaf") {
   return omiToolsForProjectionContext({ executionRole: role });

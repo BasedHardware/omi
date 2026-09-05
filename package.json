@@ -8,6 +8,7 @@
     "test:memory-knowledge-ledger-correction:emulator": "MEMORY_ENABLED=on npx --no-install firebase emulators:exec --only firestore --project demo-memory \"backend/.venv/bin/python backend/scripts/knowledge_ledger_correction_emulator_test.py\"",
     "test:memory-daily-sweep:emulator": "MEMORY_ENABLED=on npx --no-install firebase emulators:exec --only firestore --project demo-daily-memory-sweep \"backend/.venv/bin/python backend/scripts/daily_memory_sweep_emulator_test.py\"",
     "test:memory-jit-proactivity-reservations:emulator": "MEMORY_ENABLED=on npx --no-install firebase emulators:exec --only firestore --project demo-memory \"backend/.venv/bin/python backend/scripts/jit_proactivity_reservation_emulator_test.py\"",
+    "test:memory-jit-ledger-user-write:emulator": "MEMORY_ENABLED=on npx --no-install firebase emulators:exec --only firestore --project demo-memory \"PYTHONPATH=backend MEMORY_MODE=read ENCRYPTION_SECRET=omi_jit_user_write_emulator_key_32_bytes backend/.venv/bin/python backend/scripts/jit_ledger_user_write_emulator_test.py\"",
     "test:listen-lifecycle:emulator": "firebase emulators:exec --only firestore --project demo-listen \"backend/.venv/bin/python backend/scripts/listen_lifecycle_emulator_test.py\"",
     "test:desktop-beta-admission:emulator": "bash backend/testing/desktop_beta_admission/run.sh",
     "test:listen-pusher-stack:emulator": "backend/testing/listen_pusher_stack/run.sh",

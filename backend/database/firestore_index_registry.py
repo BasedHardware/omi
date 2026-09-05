@@ -1311,14 +1311,6 @@ CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('__name__'),),
 )
 
-CONTEXT_BUCKET_FACTS_BY_GENERATION_QUERY = FirestoreQuerySpec(
-    identifier='context_bucket_facts_generation_updated',
-    collection_group='context_bucket_facts',
-    query_scope='COLLECTION',
-    filters=(FirestoreQueryFilter('account_generation', '==', 'account_generation'),),
-    index_fields=(_asc('account_generation'), _desc('updated_at'), _desc('__name__')),
-)
-
 QUERY_SPECS = (
     ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
     CONVERSATION_PHOTOS_NAME_RANGE_QUERY,
@@ -1387,7 +1379,6 @@ QUERY_SPECS = (
     DAY3_REENGAGEMENT_SIGNUP_COHORT_QUERY,
     DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY,
     DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY,
-    CONTEXT_BUCKET_FACTS_BY_GENERATION_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
@@ -1442,6 +1433,21 @@ def _query_spec_index_requirements() -> tuple[FirestoreIndexRequirement, ...]:
             query_filter.field_path == '__name__' and query_filter.operator not in ('==', 'in')
             for query_filter in spec.filters
         )
+        document_id_only_range = (
+            document_id_range
+            and bool(spec.filters)
+            and all(query_filter.field_path == '__name__' for query_filter in spec.filters)
+            and len(spec.index_fields) == 1
+            and spec.index_fields[0].field_path == '__name__'
+            and spec.index_fields[0].order in {'ASCENDING', 'DESCENDING'}
+        )
+        if document_id_only_range:
+            # Firestore serves collection-group ranges on the document key from
+            # its built-in key index. A one-field __name__ composite is not a
+            # valid Firestore composite definition (composites require at least
+            # two fields); keep the query registered for coverage without
+            # turning it into an impossible provisioning requirement.
+            continue
         if not _index_fields_need_composite_manifest(spec.index_fields) and not document_id_range:
             continue
         signature = spec.index_requirement.signature

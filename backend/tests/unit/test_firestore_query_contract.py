@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 from google.cloud.firestore_v1 import FieldFilter
 
+import database.firestore_index_registry as firestore_index_registry
 import database.action_items as action_items_db
 import database.chat as chat_db
 import database.conversations as conversations_db
@@ -17,6 +18,7 @@ from database.firestore_index_registry import (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
+    CONVERSATION_PHOTOS_NAME_RANGE_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
@@ -24,6 +26,7 @@ from database.firestore_index_registry import (
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
     INDEX_ONLY_REQUIREMENTS,
+    INDEX_REQUIREMENTS,
     MESSAGES_BY_APP_ORDERED_QUERY,
     MESSAGES_BY_SESSION_ORDERED_QUERY,
     POLICY_EXPIRED_SHORT_TERM_QUERY,
@@ -42,6 +45,8 @@ from database.firestore_index_registry import (
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
     QUERY_SPECS,
     FirestoreIndexField,
+    FirestoreQueryFilter,
+    FirestoreQuerySpec,
     _index_fields_need_composite_manifest,
     firebase_index_manifest,
 )
@@ -827,3 +832,36 @@ def test_every_composite_requiring_query_spec_is_declared_in_the_checked_in_mani
         if _platform_requires_composite(spec.index_fields) and spec.index_requirement.signature not in declared
     ]
     assert missing == []
+
+
+def test_document_id_only_collection_group_range_has_no_impossible_composite_requirement():
+    assert CONVERSATION_PHOTOS_NAME_RANGE_QUERY in QUERY_SPECS
+    assert all(
+        requirement.identifier != CONVERSATION_PHOTOS_NAME_RANGE_QUERY.identifier for requirement in INDEX_REQUIREMENTS
+    )
+
+    manifest = firebase_index_manifest()
+    assert not any(
+        index['collectionGroup'] == 'photos'
+        and index['queryScope'] == 'COLLECTION_GROUP'
+        and index['fields'] == [{'fieldPath': '__name__', 'order': 'ASCENDING'}]
+        for index in manifest['indexes']
+    )
+
+
+def test_document_id_range_with_additional_ordering_field_still_requires_composite(monkeypatch):
+    spec = FirestoreQuerySpec(
+        identifier='synthetic_document_id_range_with_order',
+        collection_group='photos',
+        query_scope='COLLECTION_GROUP',
+        filters=(
+            FirestoreQueryFilter('__name__', '>=', 'start_key'),
+            FirestoreQueryFilter('__name__', '<=', 'end_key'),
+        ),
+        index_fields=(_asc('created_at'), _asc('__name__')),
+    )
+    monkeypatch.setattr(firestore_index_registry, 'QUERY_SPECS', (spec,))
+
+    requirements = firestore_index_registry._query_spec_index_requirements()
+
+    assert [requirement.identifier for requirement in requirements] == [spec.identifier]

@@ -25,7 +25,6 @@ from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.temporal import MAX_EXTRACTED_DATE_LOOKAHEAD_DAYS, date_in_tz, normalize_extracted_dates
-from utils.llm.work_context import get_work_context_section
 
 from .clients import get_llm
 import logging
@@ -618,8 +617,6 @@ Keep these goals in mind when giving advice or suggestions.
 
 """
 
-    work_context_section = get_work_context_section(uid, user_name)
-
     # Add page context if provided. Conversation id and/or start/end dates hard-scope
     # retrieval tools (#4515); the prompt must match that fail-closed contract.
     context_section = ""
@@ -678,7 +675,7 @@ Keep these goals in mind when giving advice or suggestions.
             f"📝 Using prompt: {cached_prompt.prompt_name} (commit: {cached_prompt.prompt_commit}, source: {cached_prompt.source})"
         )
 
-        return base_prompt.strip() + work_context_section + platform_section
+        return base_prompt.strip() + platform_section
 
     except Exception as e:
         logger.error(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
@@ -902,7 +899,7 @@ When the user asks about specific dates/times, they are ALWAYS referring to date
 Remember: Use tools strategically to provide the best possible answers. For questions about specific EVENTS or INCIDENTS (e.g., "when did X happen?", "what happened at Y?"), use search_conversations_tool to find relevant conversations. For questions about static FACTS/PREFERENCES (e.g., "what's my favorite X?", "do I like Y?"), use get_memories_tool. Your goal is to help {user_name} in the most personalized and helpful way possible.
 """
 
-    return base_prompt.strip() + work_context_section + platform_section
+    return base_prompt.strip() + platform_section
 
 
 def _get_agentic_qa_prompt_fallback(variables: dict[str, Any]) -> str:  # type: ignore[reportUnusedFunction]  # offline/CI fallback when LangSmith prompt fetch fails

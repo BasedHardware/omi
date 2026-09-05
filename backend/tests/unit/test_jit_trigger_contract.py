@@ -1,6 +1,9 @@
+import json
 from datetime import datetime, time, timedelta, timezone
+from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.product_memory import (
@@ -26,8 +29,21 @@ from utils.memory.jit_trigger_contract import (
     evaluate_memory_item_trigger,
     evaluate_trigger,
 )
+from utils.retrieval.tools.knowledge_ledger_write_tools import build_paid_trigger_condition
 
 NOW = datetime(2026, 8, 23, 14, 30, tzinfo=timezone.utc)
+SHARED_TRIGGER_MATRIX = (
+    Path(__file__).resolve().parents[2].parent / "contracts" / "parity" / "jit_trigger_condition_matrix.json"
+)
+ADVERTISED_TOOL_MANIFEST = (
+    Path(__file__).resolve().parents[2].parent
+    / "desktop"
+    / "macos"
+    / "agent"
+    / "tests"
+    / "fixtures"
+    / "tool-manifest.json"
+)
 EMBEDDING = {
     "prototype_id": "release-review",
     "prototype_revision": "prototype-v1",
@@ -153,6 +169,43 @@ def test_trigger_action_is_bounded_typed_and_round_trips_with_selectors():
 def test_compiler_rejects_unbounded_or_ambiguous_schema(condition):
     with pytest.raises((TypeError, ValueError)):
         compile_trigger_condition(condition)
+
+
+def test_shared_model_facing_trigger_payloads_compile_in_backend():
+    matrix = json.loads(SHARED_TRIGGER_MATRIX.read_text(encoding="utf-8"))
+
+    for payload in matrix["valid_payloads"]:
+        compiled = build_paid_trigger_condition(payload["description"], payload["condition"])
+        assert compiled["action"] == {"type": "agent_prompt", "prompt": payload["description"]}
+        assert compiled["schema_version"] == "jit_trigger.v1"
+
+
+def test_shared_model_facing_trigger_payloads_validate_against_advertised_schema():
+    matrix = json.loads(SHARED_TRIGGER_MATRIX.read_text(encoding="utf-8"))
+    manifest = json.loads(ADVERTISED_TOOL_MANIFEST.read_text(encoding="utf-8"))
+    tool = next(entry for entry in manifest if entry["name"] == "create_standing_trigger")
+    validator = Draft202012Validator(tool["inputSchema"])
+    Draft202012Validator.check_schema(tool["inputSchema"])
+
+    for payload in matrix["valid_payloads"]:
+        errors = sorted(validator.iter_errors(payload), key=lambda error: list(error.path))
+        assert errors == [], [error.message for error in errors]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"description": "Watch for an incident", "condition": {"match_mode": "exact", "keywords": ["incident"]}},
+        {"description": "Watch for an incident", "condition": {"regex": {"pattern": "incident"}}},
+        {"description": "Watch for an incident", "condition": {"keywords": []}},
+    ],
+)
+def test_advertised_schema_rejects_historical_malformed_trigger_shapes(payload):
+    manifest = json.loads(ADVERTISED_TOOL_MANIFEST.read_text(encoding="utf-8"))
+    tool = next(entry for entry in manifest if entry["name"] == "create_standing_trigger")
+    validator = Draft202012Validator(tool["inputSchema"])
+
+    assert list(validator.iter_errors(payload))
 
 
 def test_all_conditions_match_and_double_run_is_byte_stable():

@@ -37,6 +37,7 @@ from models.product_memory import (
 )
 from utils.memory.canonical_memory_adapter import (
     close_canonical_ledger_item,
+    is_direct_user_write_authority,
     memory_item_to_memorydb,
     read_canonical_memory_item,
     write_canonical_direct_user_knowledge_ledger_memory,
@@ -242,9 +243,14 @@ def save_ledger_write(
     }
     if ledger_reopen_receipt is not None:
         write_kwargs["ledger_reopen_receipt"] = ledger_reopen_receipt
+    direct_user_authorized = _direct_user_authority is _DIRECT_USER_AMEND_AUTHORITY or is_direct_user_write_authority(
+        _direct_user_authority
+    )
+    if _direct_user_authority is not None and not direct_user_authorized:
+        raise ValueError("unrecognized direct user write authority")
     write_memory = (
         write_canonical_direct_user_knowledge_ledger_memory
-        if _direct_user_authority is _DIRECT_USER_AMEND_AUTHORITY
+        if direct_user_authorized
         else write_canonical_knowledge_ledger_memory
     )
     return write_memory(
@@ -288,7 +294,12 @@ def save_fact(
     subject_scope: MemorySubjectScope = MemorySubjectScope.primary_user,
     subject_entity_id: Optional[str] = None,
     curation_weight: int = 0,
+    predicate: Optional[str] = None,
+    arguments: Optional[Dict[str, Any]] = None,
+    valid_from: Optional[datetime] = None,
+    visibility: Literal["private", "public", "shared"] = "private",
     db_client: Any = None,
+    _direct_user_authority: object | None = None,
 ) -> str:
     return save_ledger_write(
         uid,
@@ -301,8 +312,13 @@ def save_fact(
             subject_scope=subject_scope,
             subject_entity_id=subject_entity_id,
             curation_weight=curation_weight,
+            predicate=predicate,
+            arguments=dict(arguments or {}),
+            valid_from=valid_from,
+            visibility=visibility,
         ),
         db_client=db_client,
+        _direct_user_authority=_direct_user_authority,
     )
 
 
