@@ -1517,20 +1517,29 @@ final class DesktopAutomationActionRegistry {
     // routing decision, realtime admission, warm buffering, and replay seam.
     // Unlike `ptt_test_turn`, it does not bypass PushToTalkManager; unlike a
     // physical test, it needs neither microphone permission nor a device.
+    // `pace_ms` spaces the 100 ms chunks in wall time (pass 100 for a real-time
+    // hold), which is what lets the wake-word probes and the hub's warm
+    // deadline run on the timeline a physical hold has. `settle_ms` waits after
+    // release for the closing transcription, polish, and paste to land.
     register(
       name: "ptt_manager_turn",
       summary:
         "Inject a PCM16/16k mono hold through PushToTalkManager and realtime admission; returns lifecycle diagnostics",
-      params: ["pcm"]
+      params: ["pcm", "pace_ms", "settle_ms", "chunk_bytes"]
     ) { params in
       guard let path = params["pcm"],
         let pcm16k = try? Data(contentsOf: URL(fileURLWithPath: path)),
         !pcm16k.isEmpty
       else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
+      let paceMs = UInt64(params["pace_ms"] ?? "") ?? 0
+      let settleMs = UInt64(params["settle_ms"] ?? "") ?? 0
+      // Default 100 ms. Pass 342 to mimic what the CoreAudio IOProc hands a
+      // 48 kHz device's capture after resampling — chunk size has already
+      // hidden one bug that only a real microphone showed.
+      let chunkSize = max(2, Int(params["chunk_bytes"] ?? "") ?? 3_200)
 
       var result = PushToTalkManager.shared.beginRealtimePushToTalkForAutomation()
       guard result["listening"] == "true" else { return result }
-      let chunkSize = 3_200
       var offset = 0
       var injected = 0
       while offset < pcm16k.count {
@@ -1539,14 +1548,37 @@ final class DesktopAutomationActionRegistry {
           injected += end - offset
         }
         offset = end
+        if paceMs > 0 { try? await Task.sleep(nanoseconds: paceMs * 1_000_000) }
       }
       let stopped = PushToTalkManager.shared.endPushToTalkForAutomation()
+      if settleMs > 0 { try? await Task.sleep(nanoseconds: settleMs * 1_000_000) }
       result["injected_bytes"] = "\(injected)"
       result["finalized"] = stopped["finalized"] ?? "false"
       for (key, value) in RealtimeHubController.shared.automationPTTDiagnostics() {
         result[key] = value
       }
+      for (key, value) in PushToTalkManager.shared.voiceTypingAutomationDiagnostics() {
+        result[key] = value
+      }
       return result
+    }
+
+    // The dictation pipeline without a voice turn: transcribe a recording the
+    // way a key-up does (backend, then on-device; on-device only with
+    // network=false), clean it up, and paste it into the frontmost app. Lets a
+    // harness verify the paste and the fallback order with no microphone and,
+    // with network=false, no sign-in.
+    register(
+      name: "voice_typing_dictate",
+      summary: "Run a PCM16/16k recording through the dictation pipeline and paste the result into the frontmost app",
+      params: ["pcm", "network"]
+    ) { params in
+      guard let path = params["pcm"],
+        let pcm16k = try? Data(contentsOf: URL(fileURLWithPath: path)),
+        !pcm16k.isEmpty
+      else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
+      let allowNetwork = (params["network"] ?? "true").lowercased() != "false"
+      return await PushToTalkManager.shared.dictateForAutomation(pcm16k: pcm16k, allowNetwork: allowNetwork)
     }
 
     register(
