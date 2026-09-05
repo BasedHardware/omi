@@ -16,8 +16,6 @@ from __future__ import annotations
 import unicodedata
 from typing import Any
 
-from models.client_processing import PROJECTION_FAMILY_FIELDS
-
 PROVENANCE_LOG_MAX_CHARS = 64
 _UNSAFE_LOG_CHAR_CATEGORIES = frozenset({'Cc', 'Cf', 'Cs', 'Co', 'Cn', 'Zl', 'Zp'})
 
@@ -51,6 +49,14 @@ def strip_client_processing(payload: dict[str, Any]) -> dict[str, Any]:
     ``client_processing_mutation`` at an ingest-owner site — never by a
     processor persist of a conversation that already exists.
     """
+    # Imported here, not at module scope. This module is deliberately import-light
+    # (see the module docstring), and a module-scope `from models.client_processing
+    # import ...` makes merely *collecting* an unrelated test file fail whenever any
+    # earlier test has stubbed the `models` package in sys.modules -- seven suites in
+    # tests/unit currently do. The import then resolves at call time, by which point
+    # the stub is long torn down. See #12779.
+    from models.client_processing import PROJECTION_FAMILY_FIELDS
+
     for field in PROJECTION_FAMILY_FIELDS:
         payload.pop(field, None)
     return payload
