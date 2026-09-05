@@ -491,7 +491,8 @@ export class PiMonoAdapter implements HarnessAdapter {
     surfaceKind?: string;
     chatFirstUi: boolean;
     controlGeneration: number | null;
-  } = { chatFirstUi: false, controlGeneration: null };
+    jitKnowledgeToolsEnabled: boolean;
+  } = { chatFirstUi: false, controlGeneration: null, jitKnowledgeToolsEnabled: false };
   private readonly sessionPrefix: string;
   /** True when a token refresh was deferred because a prompt was active */
   private pendingTokenRefresh = false;
@@ -588,6 +589,13 @@ export class PiMonoAdapter implements HarnessAdapter {
       delete env.OMI_SURFACE_KIND;
       delete env.OMI_CHAT_FIRST_UI;
       delete env.OMI_CHAT_FIRST_CONTROL_GENERATION;
+    }
+    // JIT knowledge-ledger tools are projected into Pi's process-local
+    // extension at spawn time. Always scrub the inherited environment first:
+    // an ambient true value must never survive a false per-turn gate.
+    delete env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED;
+    if (this.currentToolProjection.jitKnowledgeToolsEnabled) {
+      env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED = "true";
     }
     env.OMI_CONTEXT_FILE = this.contextFilePath;
     // User-authored skills from the Apps page: point pi's agent dir at the
@@ -723,11 +731,13 @@ export class PiMonoAdapter implements HarnessAdapter {
     surfaceKind?: string;
     chatFirstUi: boolean;
     controlGeneration: number | null;
+    jitKnowledgeToolsEnabled?: boolean;
   }): Promise<void> {
     const normalized: {
       surfaceKind?: string;
       chatFirstUi: boolean;
       controlGeneration: number | null;
+      jitKnowledgeToolsEnabled: boolean;
     } = projection.surfaceKind === "main_chat" || projection.surfaceKind === "floating_chat"
       ? {
           surfaceKind: projection.surfaceKind,
@@ -739,12 +749,18 @@ export class PiMonoAdapter implements HarnessAdapter {
             && (projection.controlGeneration ?? -1) >= 0
             ? projection.controlGeneration
             : null,
+          jitKnowledgeToolsEnabled: projection.jitKnowledgeToolsEnabled === true,
         }
-      : { chatFirstUi: false, controlGeneration: null };
+      : {
+          chatFirstUi: false,
+          controlGeneration: null,
+          jitKnowledgeToolsEnabled: projection.jitKnowledgeToolsEnabled === true,
+        };
     if (
       normalized.surfaceKind === this.currentToolProjection.surfaceKind
       && normalized.chatFirstUi === this.currentToolProjection.chatFirstUi
       && normalized.controlGeneration === this.currentToolProjection.controlGeneration
+      && normalized.jitKnowledgeToolsEnabled === this.currentToolProjection.jitKnowledgeToolsEnabled
     ) return;
     this.currentToolProjection = normalized;
     if (this.process) await this.stop();
@@ -1492,10 +1508,11 @@ function relayReasoningEffort(metadata: Record<string, unknown> | undefined): st
   return raw === "adaptive" || raw === "fast" ? raw : undefined;
 }
 
-function toolProjectionFromMetadata(metadata: Record<string, unknown> | undefined): {
+export function toolProjectionFromMetadata(metadata: Record<string, unknown> | undefined): {
   surfaceKind?: string;
   chatFirstUi: boolean;
   controlGeneration: number | null;
+  jitKnowledgeToolsEnabled: boolean;
 } {
   const generation = Number(metadata?.chatFirstControlGeneration);
   const typedSurface = metadata?.surfaceKind === "main_chat"
@@ -1508,8 +1525,17 @@ function toolProjectionFromMetadata(metadata: Record<string, unknown> | undefine
     && Number.isSafeInteger(generation)
     && generation >= 0;
   return typedSurface
-    ? { surfaceKind: typedSurface, chatFirstUi: enabled, controlGeneration: enabled ? generation : null }
-    : { chatFirstUi: false, controlGeneration: null };
+    ? {
+        surfaceKind: typedSurface,
+        chatFirstUi: enabled,
+        controlGeneration: enabled ? generation : null,
+        jitKnowledgeToolsEnabled: metadata?.jitKnowledgeToolsEnabled === true,
+      }
+    : {
+        chatFirstUi: false,
+        controlGeneration: null,
+        jitKnowledgeToolsEnabled: metadata?.jitKnowledgeToolsEnabled === true,
+      };
 }
 
 export class PiMonoRuntimeAdapter implements RuntimeAdapter {

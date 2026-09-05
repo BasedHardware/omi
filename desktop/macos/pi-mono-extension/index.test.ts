@@ -34,6 +34,7 @@ import {
   __omiRelayCapabilityRefForTest,
   __omiPendingCallsForTest,
   __registerOmiToolsForTest,
+  omiToolProjectionContextFromEnv,
   __registerUserMcpToolsForTest,
   __resetOmiPipeForTest,
   __resetUserMcpForTest,
@@ -1168,6 +1169,26 @@ test("OMI_TOOLS: exact pi-mono projection from canonical manifest", () => {
     OMI_TOOLS.map((tool) => tool.name),
     toolNamesForAdapter("pi-mono"),
   );
+});
+
+test("OMI_TOOLS: the child env gate projects the JIT ledger catalog", () => {
+  const enabled = omiToolProjectionContextFromEnv({
+    OMI_EXECUTION_ROLE: "coordinator",
+    OMI_SURFACE_KIND: "main_chat",
+    OMI_JIT_KNOWLEDGE_TOOLS_ENABLED: "true",
+  });
+  const enabledNames = omiToolsForProjectionContext(enabled).map((tool) => tool.name);
+  assert.equal(enabled.jitKnowledgeToolsEnabled, true);
+  assert.ok(enabledNames.includes("create_standing_trigger"));
+
+  const disabled = omiToolProjectionContextFromEnv({
+    OMI_EXECUTION_ROLE: "coordinator",
+    OMI_SURFACE_KIND: "main_chat",
+    OMI_JIT_KNOWLEDGE_TOOLS_ENABLED: "false",
+  });
+  const disabledNames = omiToolsForProjectionContext(disabled).map((tool) => tool.name);
+  assert.equal(disabled.jitKnowledgeToolsEnabled, false);
+  assert.ok(!disabledNames.includes("create_standing_trigger"));
 });
 
 test("OMI_TOOLS: leaf projection omits every agent-management tool", () => {
