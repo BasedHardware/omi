@@ -1,0 +1,30 @@
+{
+  "name": "@basedhardware/omi-integration",
+  "version": "0.1.0",
+  "description": "Omi Integration API client (OpenAPI-generated)",
+  "type": "module",
+  "main": "./src/client.ts",
+  "types": "./src/client.ts",
+  "exports": {
+    ".": "./src/client.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BasedHardware/omi.git",
+    "directory": "sdks/integration/typescript"
+  },
+  "keywords": [
+    "omi",
+    "integration",
+    "openapi",
+    "sdk"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}
