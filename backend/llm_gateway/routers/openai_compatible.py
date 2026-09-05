@@ -41,6 +41,7 @@ from llm_gateway.gateway.errors import (
 from llm_gateway.gateway.executor import (
     ProviderRegistry,
     _jit_reservation_units,
+    _reserve_jit_attempt,  # type: ignore[reportPrivateUsage]  # shared gateway JIT budget boundary
     _settle_jit_attempt,
     execute_chat_completion,
     _map_provider_failure,  # type: ignore[reportPrivateUsage]  # shared gateway failure mapper
@@ -61,7 +62,7 @@ from llm_gateway.gateway.metrics import (
 )
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, completion_size_bucket, output_budget_bucket
 from llm_gateway.gateway.providers import ProviderFailure
-from llm_gateway.gateway.jit_budget import JITAttemptReservation, reserve_jit_provider_attempt
+from llm_gateway.gateway.jit_budget import JITAttemptReservation
 from llm_gateway.gateway.request_context import JITBudgetHeaders, jit_budget_headers_for, request_id_for
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, resolve_chat_completion_route
 from llm_gateway.gateway.schemas import FailureClass, RouteArtifact, RouteServingClass
@@ -524,19 +525,19 @@ async def _prepared_streaming_iterator(
         if jit_run_id is not None:
             try:
                 units = _jit_reservation_units(provider_request)
-                reservation = reserve_jit_provider_attempt(
-                    owner_uid=jit_owner_uid,
+                reservation = await _reserve_jit_attempt(
+                    owner_uid=cast(str, jit_owner_uid),
                     run_id=jit_run_id,
-                    contract_version=jit_contract_version,
-                    max_attempts=max_provider_attempts,
+                    contract_version=cast(str, jit_contract_version),
+                    max_attempts=cast(int, max_provider_attempts),
                     max_spend_micro_usd=jit_max_spend_micro_usd or 50_000,
                     provider=provider_ref.provider,
                     model=provider_ref.model,
-                    input_tokens=int(units['input_tokens']),
-                    cached_input_tokens=int(units['cached_input_tokens']),
-                    output_tokens=int(units['output_tokens']),
-                    cache_write_tokens=int(units['cache_write_tokens']),
-                    cache_ttl=units['cache_ttl'],
+                    input_tokens=int(cast(int | str, units['input_tokens'])),
+                    cached_input_tokens=int(cast(int | str, units['cached_input_tokens'])),
+                    output_tokens=int(cast(int | str, units['output_tokens'])),
+                    cache_write_tokens=int(cast(int | str, units['cache_write_tokens'])),
+                    cache_ttl=cast(str | None, units['cache_ttl']),
                 )
             except ValueError as exc:
                 raise GatewayInvalidRequestError(str(exc)) from exc
@@ -556,7 +557,7 @@ async def _prepared_streaming_iterator(
                 if first_chunk:
                     break
         except StopAsyncIteration:
-            _settle_jit_attempt(
+            await _settle_jit_attempt(
                 reservation,
                 provider=provider_ref.provider,
                 model=provider_ref.model,
@@ -573,7 +574,7 @@ async def _prepared_streaming_iterator(
                 cache_requested=cache_requested_for_openai_request(provider_request),
             )
         except ProviderFailure as exc:
-            _settle_jit_attempt(
+            await _settle_jit_attempt(
                 reservation,
                 provider=provider_ref.provider,
                 model=provider_ref.model,
@@ -662,7 +663,7 @@ async def _stream_with_terminal_metrics(
         )
         if accounting_context is not None:
             schedule_attempt_trace(accounting_context, trace)
-        _settle_jit_attempt(
+        await _settle_jit_attempt(
             prepared.reservation,
             provider=prepared.provider,
             model=prepared.model,

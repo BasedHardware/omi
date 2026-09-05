@@ -723,16 +723,17 @@ def test_jit_stream_route_binds_authenticated_owner_to_reservation(monkeypatch):
     )
     reservations: list[dict[str, object]] = []
     settlements: list[dict[str, object]] = []
-    monkeypatch.setattr(
-        openai_compatible,
-        'reserve_jit_provider_attempt',
-        lambda **kwargs: reservations.append(kwargs) or object(),
-    )
-    monkeypatch.setattr(
-        openai_compatible,
-        '_settle_jit_attempt',
-        lambda _reservation, **kwargs: settlements.append(kwargs) or True,
-    )
+
+    async def reserve_jit_attempt(**kwargs):
+        reservations.append(kwargs)
+        return object()
+
+    async def settle_jit_attempt(_reservation, **kwargs):
+        settlements.append(kwargs)
+        return True
+
+    monkeypatch.setattr(openai_compatible, '_reserve_jit_attempt', reserve_jit_attempt)
+    monkeypatch.setattr(openai_compatible, '_settle_jit_attempt', settle_jit_attempt)
     app.dependency_overrides[dependencies.get_gateway_config] = _streaming_enabled_gateway_config
     app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
     try:
@@ -1013,11 +1014,12 @@ async def test_streaming_successful_fallback_is_classified_as_actual_fallback(mo
 )
 async def test_jit_stream_receipt_reframes_split_and_coalesced_sse(monkeypatch, chunks):
     settled: list[dict[str, object]] = []
-    monkeypatch.setattr(
-        openai_compatible,
-        '_settle_jit_attempt',
-        lambda reservation, **kwargs: settled.append(kwargs) or True,
-    )
+
+    async def settle_jit_attempt(_reservation, **kwargs):
+        settled.append(kwargs)
+        return True
+
+    monkeypatch.setattr(openai_compatible, '_settle_jit_attempt', settle_jit_attempt)
     config = _streaming_enabled_gateway_config()
     resolved = resolve_chat_completion_route(config, valid_request(stream=True))
     route = openai_compatible.selected_serving_route(resolved)

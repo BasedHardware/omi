@@ -41,6 +41,52 @@ LKG_ROUTE = 'route.chat_structured.2026_06_20.001'
 
 
 @pytest.mark.asyncio
+async def test_jit_budget_reserve_and_settle_use_db_executor(monkeypatch):
+    reservation = object()
+    calls: list[tuple[object, object, tuple[object, ...], dict[str, object]]] = []
+
+    async def fake_run_blocking(pool, function, *args, **kwargs):
+        calls.append((pool, function, args, kwargs))
+        if function is executor.reserve_jit_provider_attempt:
+            return reservation
+        return True
+
+    monkeypatch.setattr(executor, 'run_blocking', fake_run_blocking)
+
+    assert (
+        await executor._reserve_jit_attempt(
+            owner_uid='user-123',
+            run_id='jit-run',
+            contract_version='jit-cloud-qa-v1',
+            max_attempts=3,
+            max_spend_micro_usd=50_000,
+            provider='openai',
+            model='gpt-5.6-luna',
+            input_tokens=10,
+            cached_input_tokens=0,
+            output_tokens=20,
+            cache_write_tokens=0,
+            cache_ttl=None,
+        )
+        is reservation
+    )
+    assert await executor._settle_jit_attempt(
+        reservation,
+        provider='openai',
+        model='gpt-5.6-luna',
+        metadata=None,
+        status='failed',
+    )
+
+    assert [call[0] for call in calls] == [executor.db_executor, executor.db_executor]
+    assert calls[0][1] is executor.reserve_jit_provider_attempt
+    assert calls[1][1] is executor.settle_jit_provider_attempt
+    assert calls[0][3]['owner_uid'] == 'user-123'
+    assert calls[0][3]['run_id'] == 'jit-run'
+    assert calls[1][3]['reservation'] is reservation
+
+
+@pytest.mark.asyncio
 async def test_executor_success_uses_active_primary_and_exposes_lane_model():
     config = config_with_active_route(active_route_with_fallbacks([]))
     resolved = resolve_chat_completion_route(config, valid_request())
