@@ -46,6 +46,8 @@ enum RewindPalette {
     let hueStart: Double
     let hueEnd: Double
     let brightness: Double
+    /// The brightness the timeline track draws this family at — see `trackSaturation`.
+    let trackBrightness: Double
   }
 
   /// A colour this palette can emit, as the three numbers that produce it.
@@ -103,13 +105,13 @@ enum RewindPalette {
   /// *lightness as well as hue* whichever pair of apps happen to sit next to each other, which is
   /// what the eye actually reads at 4 pt wide.
   static let bands: [Band] = [
-    Band(name: "red", hueStart: 2, hueEnd: 16, brightness: 1.00),  // bright
-    Band(name: "orange", hueStart: 26, hueEnd: 36, brightness: 0.68),  // deep
-    Band(name: "lime", hueStart: 90, hueEnd: 104, brightness: 0.65),  // bright
-    Band(name: "green", hueStart: 126, hueEnd: 142, brightness: 0.50),  // deep
-    Band(name: "teal", hueStart: 156, hueEnd: 170, brightness: 0.65),  // bright
-    Band(name: "cyan", hueStart: 188, hueEnd: 200, brightness: 0.65),  // deep
-    Band(name: "blue", hueStart: 206, hueEnd: 218, brightness: 0.99),  // bright
+    Band(name: "red", hueStart: 2, hueEnd: 16, brightness: 1.00, trackBrightness: 1.00),  // bright
+    Band(name: "orange", hueStart: 26, hueEnd: 36, brightness: 0.68, trackBrightness: 0.94),  // deep
+    Band(name: "lime", hueStart: 90, hueEnd: 104, brightness: 0.65, trackBrightness: 0.85),  // bright
+    Band(name: "green", hueStart: 126, hueEnd: 142, brightness: 0.50, trackBrightness: 0.86),  // deep
+    Band(name: "teal", hueStart: 156, hueEnd: 170, brightness: 0.65, trackBrightness: 0.85),  // bright
+    Band(name: "cyan", hueStart: 188, hueEnd: 200, brightness: 0.65, trackBrightness: 0.92),  // deep
+    Band(name: "blue", hueStart: 206, hueEnd: 218, brightness: 0.99, trackBrightness: 1.00),  // bright
   ]
 
   /// The wall no band may reach, in degrees.
@@ -215,8 +217,44 @@ enum RewindPalette {
   /// per-app border or badge accent should use.
   static func color(forApp appName: String) -> Color { color(swatch(forApp: appName)) }
 
-  /// The same colour for the AppKit layers that draw the timeline track.
+  /// The same colour for AppKit — the timeline badge's monogram disc.
   static func nsColor(forApp appName: String) -> NSColor { nsColor(swatch(forApp: appName)) }
+
+  // MARK: - The track's pastel
+
+  /// The saturation the timeline **track** draws every hue at; brightness is per band.
+  ///
+  /// The vivid swatches above are tuned for white type sitting on them; nothing sits on a track
+  /// segment (badges carry their own vivid disc inside a white ring), so the track is free to be
+  /// what the glass it lies on asks for: pale and light, a pastel rainbow rather than a test card.
+  /// Hue is the palette's — an app keeps its identity — and only the two axes the type cap was
+  /// pinning move.
+  ///
+  /// **Brightness is per band for the same reason it is above: HSB brightness is not lightness.**
+  /// One brightness for every family put lime and teal at a relative luminance near 0.8 — a
+  /// hair off the glass they lie on, reading as empty stretches — while red and blue sat near 0.45.
+  /// Each band's `trackBrightness` is the value that lands its span's mean luminance on 0.58 at
+  /// this saturation; red and blue cannot get there and take the largest brightness there is.
+  /// Measured over all 2 503 emittable swatches the track spans luminance 0.457–0.632, and
+  /// `RewindTrackGradientTests` pins that window.
+  static let trackSaturation: Double = 0.42
+
+  /// The pastel projection of a bucket: the palette's hue, the track's saturation, the band's
+  /// track brightness.
+  static func trackSwatch(bucket: UInt64) -> Swatch {
+    Swatch(
+      hue: swatch(bucket: bucket).hue,
+      saturation: trackSaturation,
+      brightness: band(bucket: bucket).trackBrightness)
+  }
+
+  static func trackSwatch(forApp appName: String) -> Swatch {
+    let key = appName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return trackSwatch(bucket: stableHash(key) % hueBuckets)
+  }
+
+  /// The colour a track segment is drawn in.
+  static func trackNSColor(forApp appName: String) -> NSColor { nsColor(trackSwatch(forApp: appName)) }
 
   /// Both renderers, keyed on a swatch rather than on a name, so a guard can render a colour it
   /// chose rather than hunting for a name that hashes to one.
