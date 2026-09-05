@@ -104,7 +104,11 @@ export function HeaderRecordingIndicator() {
 
   return (
     <motion.div
-      className="fixed top-6 z-[9999]"
+      // Above page chrome, below every takeover surface: the mobile menu rail
+      // (z-[70]) and its backdrop (z-[60]) must dim and cover this button, so
+      // it cannot stay tappable underneath an open menu. The old z-[9999]
+      // existed to beat the deleted MobileBlockOverlay.
+      className="fixed top-6 z-[55]"
       style={{ right: RECORD_CONTROL_EDGE_OFFSET }}
       animate={{ transform: `translateX(-${horizontalShift}px)` }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
