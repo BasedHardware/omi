@@ -447,7 +447,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       currentGeneration: AccountCutoverControlManager.shared.control.accountGeneration)
   }
 
-  private static func jitFeedbackAuthorizationGenerationMatches(
+  static func jitFeedbackAuthorizationGenerationMatches(
     jitFeedbackContext: JITTriggerFeedbackContext?,
     jitAmbientFeedbackContext: JITAmbientFeedbackContext?,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
@@ -456,6 +456,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     return jitFeedbackContext == nil
       && jitAmbientFeedbackContext.authorizationGeneration
         == authorizationSnapshot.authorizationGeneration
+      && jitAmbientFeedbackContext.authorizationNonce == authorizationSnapshot.authorizationNonce
   }
 
   /// Testable generation fence shared by relaunch routing and the in-process

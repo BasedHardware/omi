@@ -476,6 +476,36 @@ final class JITAmbientFeedbackTests: XCTestCase {
     XCTAssertFalse(NotificationService.jitFeedbackGenerationMatches(4, currentGeneration: 5))
   }
 
+  @MainActor
+  func testNotificationServicePresentationFenceRejectsFreshAuthorityNonce() throws {
+    let previousAuthority = RuntimeOwnerAuthorizationAuthority()
+    previousAuthority.endTransition(ownerID: "owner")
+    let previousSnapshot = try XCTUnwrap(
+      previousAuthority.capture(ownerID: "owner", expectedOwnerID: "owner"))
+    let ambient = context(
+      authorizationGeneration: previousSnapshot.authorizationGeneration,
+      authorizationNonce: previousSnapshot.authorizationNonce)
+
+    let freshAuthority = RuntimeOwnerAuthorizationAuthority()
+    freshAuthority.endTransition(ownerID: "owner")
+    let freshSnapshot = try XCTUnwrap(
+      freshAuthority.capture(ownerID: "owner", expectedOwnerID: "owner"))
+    XCTAssertEqual(previousSnapshot.authorizationGeneration, freshSnapshot.authorizationGeneration)
+    XCTAssertNotEqual(previousSnapshot.authorizationNonce, freshSnapshot.authorizationNonce)
+
+    XCTAssertTrue(
+      NotificationService.jitFeedbackAuthorizationGenerationMatches(
+        jitFeedbackContext: nil,
+        jitAmbientFeedbackContext: ambient,
+        authorizationSnapshot: previousSnapshot))
+    XCTAssertFalse(
+      NotificationService.jitFeedbackAuthorizationGenerationMatches(
+        jitFeedbackContext: nil,
+        jitAmbientFeedbackContext: ambient,
+        authorizationSnapshot: freshSnapshot),
+      "the presentation seam must reject a relaunch payload with a reset generation")
+  }
+
   func testJITPresentationFenceChecksBothProvenanceForms() {
     let ambient = context(accountGeneration: 4)
     XCTAssertTrue(
