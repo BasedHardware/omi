@@ -557,9 +557,9 @@ overlay:
           MEMORY_ENABLED:
             value: 'on'
           KNOWLEDGE_LEDGER_DRAIN_ENABLED:
-            value: 'true'
+            value: 'false'
           KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23,9OqYLlKJv4hmeYpIhwJcHBR975i2
+            value: 9OqYLlKJv4hmeYpIhwJcHBR975i2
       day3-reengagement-email-job:
         flags:
           --task-timeout: 900s

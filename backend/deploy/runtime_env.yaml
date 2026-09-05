@@ -1226,10 +1226,10 @@ environments:
               value: 'on'
               category: memory_rollout
             KNOWLEDGE_LEDGER_DRAIN_ENABLED:
-              value: 'true'
+              value: 'false'
               category: memory_rollout
             KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23,9OqYLlKJv4hmeYpIhwJcHBR975i2
+              value: 9OqYLlKJv4hmeYpIhwJcHBR975i2
               category: memory_rollout
         day3-reengagement-email-job:
           flags:
