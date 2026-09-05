@@ -67,6 +67,7 @@ from utils.conversations.deterministic_minimum import build_deterministic_minimu
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
     client_processing_mutation,
+    omit_null_processing_state,
     sanitize_untrusted_provenance_field,
     strip_client_processing,
 )
@@ -1985,8 +1986,9 @@ def _store_deferred_conversation(
     conversation.status = ConversationStatus.processing
     # Generic persist: never write ``client_processing``. A later ingest
     # mutation (or a genuine clear) must not be last-writer-loser to this
-    # in-memory snapshot.
-    payload = strip_client_processing(conversation.dict())
+    # in-memory snapshot. A None ``processing_state`` is likewise never
+    # stamped: merge=True would write the explicit null as a real key.
+    payload = omit_null_processing_state(strip_client_processing(conversation.dict()))
     if is_initial_creation:
         persisted = lifecycle_service.create_processing_conversation(uid, payload, idempotent=True)
     else:
@@ -2019,11 +2021,16 @@ def _terminal_persist_payload(conversation: Conversation) -> dict[str, Any]:
     minimum that then fails receipt/keyframe/fanout-completion is retried by
     Cloud Tasks against ``status=completed``, which skips process_conversation
     and would otherwise default the request-scoped disposition to RUN.
+
+    ``processing_state`` follows the dark discipline: a real value (the
+    flag-on minimum's ``local_pending``) passes through, but the modeled
+    field's None default is omitted — merge=True would stamp the explicit
+    null onto every conversation with both flags off.
     """
     payload = conversation.dict()
     payload['jit_first_open'] = None
     payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
-    return strip_client_processing(payload)
+    return omit_null_processing_state(strip_client_processing(payload))
 
 
 def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker: bool) -> dict[str, Any]:
@@ -2041,10 +2048,22 @@ def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker
     non-desktop, and any path that never consulted the policy must omit the
     key entirely: missing versus explicit-null is a real Firestore distinction,
     and the dark rollout must not stamp a new field onto every conversation.
+
+    ``processing_state`` is the same distinction with the polarity reversed:
+    the modeled field's None default is omitted (never stamped), while a real
+    deserialized value — a ``local_pending`` minimum enriched after an upgrade
+    — is written back as an explicit None. Enrichment must clear the state
+    (the model promises it is absent on every enriched conversation), and
+    merge=True keeps an omitted key, so the explicit null is the only write
+    that lands the clear.
     """
     payload = conversation.dict()
     if clear_terminal_marker:
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = None
+    if payload.get('processing_state') is None:
+        payload.pop('processing_state', None)
+    else:
+        payload['processing_state'] = None
     return strip_client_processing(payload)
 
 
@@ -2483,6 +2502,11 @@ def process_conversation(
     # calendar links, usage, or webhooks from a stale in-memory snapshot.
     conversation.status = ConversationStatus.completed
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
+    if conversation.processing_state is not None:
+        # The payload merge-clears the stale state (an upgraded-then-reprocessed
+        # minimum's local_pending); the object the caller returns must agree,
+        # not answer the stale pending state back to the client.
+        conversation.processing_state = None
     if is_initial_creation:
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
     else:

@@ -912,7 +912,12 @@ def test_non_desktop_minimum_is_none_because_no_projection_is_coming(stack) -> N
 
 # red-proof: set a processing_state when a projection is already in hand
 def test_projected_conversation_carries_no_processing_state(stack) -> None:
-    """Nothing is pending: the projection IS the summary."""
+    """Nothing is pending: the projection IS the summary.
+
+    The field is absent from the persist payload, not an explicit null —
+    persist is merge=True, and a dumped null is a real Firestore key that
+    stamps every projected conversation (flip-review F-1).
+    """
     pc, _dev = stack
     created = pc.lifecycle_service.create_completed_conversation
     created.reset_mock()
@@ -921,7 +926,7 @@ def test_projected_conversation_carries_no_processing_state(stack) -> None:
     )
     assert persisted is True
     assert stored.processing_state is None
-    assert _persisted_payload(created)['processing_state'] is None
+    assert 'processing_state' not in _persisted_payload(created)
 
 
 # red-proof: revert `_store_deterministic_minimum` to `_build_deferred_structured`
