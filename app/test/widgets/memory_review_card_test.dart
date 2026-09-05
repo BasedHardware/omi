@@ -445,4 +445,82 @@ void main() {
     final accept = tester.widget<InkWell>(find.byKey(const Key('memory_review_accept_mem-beyond')));
     expect(accept.onTap, isNotNull);
   });
+
+  testWidgets('a persisted verdict on an unresolved row survives card State recreation', (tester) async {
+    // A chat-list card scrolled out and back rebuilds its State; the settled
+    // verdict lives on the provider, so the recreated card must not re-offer
+    // a vote the server already recorded.
+    final provider = _provider(rows: const [], reviewMemoryRequest: (id, value) async => true);
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-missing')]));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('memory_review_accept_mem-missing')));
+    await tester.pumpAndSettle();
+    expect(find.text("Confirmed. I'll act on this."), findsOneWidget);
+
+    // Recreate the State exactly as scrolling away and back does.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(_harness(provider, [_item('mem-missing')]));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Confirmed. I'll act on this."), findsOneWidget);
+    expect(find.byKey(const Key('memory_review_accept_mem-missing')), findsNothing);
+  });
+
+  testWidgets('a failed hydration load is retried and resolves once the backend recovers', (tester) async {
+    var fetches = 0;
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+        fetches++;
+        if (fetches == 1) {
+          return const GetMemoriesResult([], true,
+              statusCode: 503, failureReason: MemoriesFetchFailureReason.httpError);
+        }
+        return GetMemoriesResult([_memory(id: 'mem-flaky')], true);
+      },
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
+      reviewMemoryRequest: (id, value) async => true,
+      editMemoryRequest: (id, value) async => const EditMemoryResult(persisted: true),
+    );
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-flaky')]));
+    await tester.pumpAndSettle();
+
+    // The first ask failed; the card observed the settled failure on rebuild
+    // and spent its capped retry, which resolved the row.
+    expect(fetches, 2);
+    expect(provider.loadFailed, isFalse);
+    expect(provider.memories.single.id, 'mem-flaky');
+  });
+
+  testWidgets('a persistently failing backend is not retried past the cap', (tester) async {
+    var fetches = 0;
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+        fetches++;
+        return const GetMemoriesResult([], true, statusCode: 503, failureReason: MemoriesFetchFailureReason.httpError);
+      },
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
+      reviewMemoryRequest: (id, value) async => true,
+      editMemoryRequest: (id, value) async => const EditMemoryResult(persisted: true),
+    );
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-down')]));
+    await tester.pumpAndSettle();
+
+    // First ask plus one capped retry; the budget is spent and the row stays
+    // actionable by id instead of fetching forever.
+    expect(fetches, 2);
+    expect(provider.loadFailed, isTrue);
+    final accept = tester.widget<InkWell>(find.byKey(const Key('memory_review_accept_mem-down')));
+    expect(accept.onTap, isNotNull);
+  });
 }

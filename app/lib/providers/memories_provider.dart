@@ -56,6 +56,25 @@ class MemoriesProvider extends ChangeNotifier {
   final Set<String> _revertingMemoryIds = {};
   final Map<String, String> _revertOperationIds = {};
 
+  /// Verdicts persisted this session for ids the loaded list does not resolve
+  /// (cold provider, truncated bulk list, or rows GET /v3/memories filters
+  /// out). A live row always wins; this only keeps recap rows honest while
+  /// nothing answers for the id.
+  final Map<String, bool> _settledUnresolvedReviews = {};
+
+  /// Hydration asks review cards have made, per id. Instance state so a card
+  /// State rebuilt by scrolling does not re-count, and `clearUserData()` can
+  /// reset the budget when the account changes.
+  final Map<String, int> _externalHydrateAttempts = {};
+  static const int _maxExternalHydrateAttempts = 2;
+
+  /// The load currently in flight, with the parameters it was started with.
+  /// Concurrent same-parameter callers join it instead of starting races the
+  /// sequence guard would discard.
+  Future<void>? _inFlightLoad;
+  int _inFlightLoadLimit = 100;
+  bool _inFlightLoadDeviceScoped = false;
+
   MemoriesProvider({
     FetchMemoriesRequest? fetchMemoriesRequest,
     FetchLedgerHistoryRequest? fetchLedgerHistoryRequest,
@@ -89,6 +108,24 @@ class MemoriesProvider extends ChangeNotifier {
   /// `loading && hasLoaded`.
   bool get hasLoaded => _hasLoaded;
   bool get showLoadError => _loadFailed && _memories.isEmpty;
+
+  /// The verdict this session persisted for [memoryId] when no live row
+  /// resolves the id, or null when no verdict has been recorded. A live row's
+  /// `userReview` always wins over this.
+  bool? settledReviewFor(String memoryId) => _settledUnresolvedReviews[memoryId];
+
+  /// Consume one hydration ask for [memoryId]: true while the id is still
+  /// eligible (first ask free, then retries only while loads keep failing).
+  /// Instance-scoped so `clearUserData()` restores eligibility for a new
+  /// account session.
+  bool consumeHydrationAsk(String memoryId) {
+    final attempts = _externalHydrateAttempts[memoryId] ?? 0;
+    final allowed = attempts == 0 || (attempts < _maxExternalHydrateAttempts && _loadFailed);
+    if (allowed) {
+      _externalHydrateAttempts[memoryId] = attempts + 1;
+    }
+    return allowed;
+  }
 
   bool isRevertingMemory(String memoryId) => _revertingMemoryIds.contains(memoryId);
 
@@ -251,6 +288,8 @@ class MemoriesProvider extends ChangeNotifier {
     _isSyncing = false;
     _revertingMemoryIds.clear();
     _revertOperationIds.clear();
+    _settledUnresolvedReviews.clear();
+    _externalHydrateAttempts.clear();
     _cancelDeletionTimer();
     _lastDeletedMemory = null;
     _pendingDeletionId = null;
@@ -325,6 +364,32 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   Future<void> loadMemories({int limit = 100}) async {
+    // Coalesce concurrent callers: several review cards can mount while the
+    // first fetch is still in flight (before `hasLoaded` flips), and racing
+    // loads would be discarded one after another by the sequence guard. A
+    // caller with different parameters gets its own load, which supersedes the
+    // in-flight one via the sequence guard as before.
+    final inFlight = _inFlightLoad;
+    if (inFlight != null && _inFlightLoadLimit == limit && _inFlightLoadDeviceScoped == _filterThisDeviceOnly) {
+      try {
+        await inFlight;
+      } catch (_) {}
+      return;
+    }
+    final loadFuture = _loadMemoriesInternal(limit: limit);
+    _inFlightLoad = loadFuture;
+    _inFlightLoadLimit = limit;
+    _inFlightLoadDeviceScoped = _filterThisDeviceOnly;
+    try {
+      await loadFuture;
+    } finally {
+      if (identical(_inFlightLoad, loadFuture)) {
+        _inFlightLoad = null;
+      }
+    }
+  }
+
+  Future<void> _loadMemoriesInternal({int limit = 100}) async {
     final generation = _sessionGeneration;
     final loadSequence = ++_loadSequence;
     final ledgerProjectionRevision = _ledgerProjectionRevision;
@@ -492,18 +557,28 @@ class MemoriesProvider extends ChangeNotifier {
   /// reviewed by id: the request is id-addressed and the server stays the
   /// authority, so refusing to send it would strand the recap controls.
   Future<bool> reviewMemory(Memory memory, bool value) async {
+    // Locked rows are immutable everywhere, including cache misses: the flag
+    // travels on the memory itself, so a row absent from the loaded list is
+    // still refused before any request is sent.
+    if (memory.isLocked) return false;
     final index = _memories.indexWhere((candidate) => candidate.id == memory.id);
     if (index == -1) {
       final generation = _sessionGeneration;
       try {
         final persisted = await _reviewMemoryRequest(memory.id, value);
-        return generation == _sessionGeneration && persisted;
+        if (generation != _sessionGeneration || !persisted) return false;
+        // No live row will ever answer for this id from the loaded list, so
+        // remember the persisted verdict for recap rows reading this id. A
+        // live row (a later refresh, another surface) still wins: this map is
+        // only consulted when the id does not resolve.
+        _settledUnresolvedReviews[memory.id] = value;
+        notifyListeners();
+        return true;
       } catch (error) {
         Logger.warning('MemoriesProvider: review persistence failed for ${memory.id}: $error');
         return false;
       }
     }
-    if (memory.isLocked) return false;
     final generation = _sessionGeneration;
     final previousReview = memory.userReview;
     final previousReviewed = memory.reviewed;

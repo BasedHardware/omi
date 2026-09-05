@@ -69,17 +69,6 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
   /// fall back to the original learned text under an "Updated." status.
   final Map<String, String> _settledEdits = {};
 
-  /// Verdicts persisted this session for rows the provider never resolved.
-  /// Like [_settledEdits]: the live memory always wins once it answers for
-  /// the id; this only keeps the row honest while nothing does.
-  final Map<String, bool> _settledReviews = {};
-
-  /// Per-id hydrate attempts this card type has started in this process.
-  /// Static so a State rebuilt by scrolling does not re-count, and capped so
-  /// a failing backend is not retried forever.
-  static final Map<String, int> _hydrateAttempts = {};
-  static const int _maxHydrateAttempts = 2;
-
   /// Card identities already counted as shown in this process.
   static final Set<String> _seenImpressions = {};
 
@@ -121,6 +110,10 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
   /// controls act by id regardless, and only settled verdicts need the live
   /// row.
   void _ensureMemoriesLoaded() {
+    _startHydrationIfNeeded();
+  }
+
+  void _startHydrationIfNeeded() {
     if (!mounted) return;
     final provider = _memoriesProvider(listen: false);
     if (provider == null) return;
@@ -132,23 +125,13 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     final eligible = _rows
         .where((item) => _memoryFor(provider, item.memoryId) == null)
         .map((item) => item.memoryId)
-        .where((id) => _hydrateAttemptAllowed(provider, id))
+        // The provider owns the attempt budget (session-scoped, reset on user
+        // data clear), so a State rebuilt by scrolling does not re-count and
+        // a failing backend is not retried forever.
+        .where(provider.consumeHydrationAsk)
         .toList(growable: false);
     if (eligible.isEmpty) return;
-    for (final id in eligible) {
-      _hydrateAttempts[id] = (_hydrateAttempts[id] ?? 0) + 1;
-    }
     provider.loadMemories();
-  }
-
-  /// First ask is always free. After that, retry only while loads keep
-  /// failing: a settled load that still misses the id means it is absent from
-  /// (or beyond) the list the account returns, and the controls mutate by id
-  /// regardless, so re-asking on every rebuild would fetch forever.
-  static bool _hydrateAttemptAllowed(MemoriesProvider provider, String id) {
-    final attempts = _hydrateAttempts[id] ?? 0;
-    if (attempts == 0) return true;
-    return attempts < _maxHydrateAttempts && provider.loadFailed;
   }
 
   Memory? _memoryFor(MemoriesProvider provider, String memoryId) {
@@ -157,7 +140,7 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
 
   /// Live state first: an optimistic verdict only survives until its request
   /// returns, after which `userReview`/`edited` on the memory are authoritative.
-  _RowState _stateFor(Memory? memory, String memoryId) {
+  _RowState _stateFor(MemoriesProvider? provider, Memory? memory, String memoryId) {
     final optimistic = _optimistic[memoryId];
     if (optimistic != null) return optimistic;
     if (memory == null) {
@@ -168,7 +151,7 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
       // the same way; anything else is pending, because the controls act by
       // id and no verdict has been read.
       if (_settledEdits.containsKey(memoryId)) return _RowState.updated;
-      final settled = _settledReviews[memoryId];
+      final settled = provider?.settledReviewFor(memoryId);
       if (settled != null) return settled ? _RowState.confirmed : _RowState.dropped;
       return _RowState.pending;
     }
@@ -211,9 +194,7 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
       // already applied the verdict to the memory this row reads, and when no
       // live memory answers for the id the settled verdict below does.
       _optimistic.remove(item.memoryId);
-      if (persisted) {
-        _settledReviews[item.memoryId] = accepted;
-      } else {
+      if (!persisted) {
         _failed.add(item.memoryId);
       }
     });
@@ -297,6 +278,12 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     final rows = _rows;
     if (rows.isEmpty) return const SizedBox.shrink();
     final provider = _memoriesProvider(listen: true);
+    // A load that already settled in failure is the card's cue to spend its
+    // capped retry: the initState ask started this load, and only a rebuild
+    // observes how it settled.
+    if (provider != null && provider.hasLoaded && provider.loadFailed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _startHydrationIfNeeded());
+    }
 
     return Column(
       key: const Key('memory_review_card'),
@@ -310,14 +297,15 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
         const SizedBox(height: 10),
         ...rows.map((item) {
           final memory = provider == null ? null : _memoryFor(provider, item.memoryId);
-          return _buildRow(item, memory, provider != null);
+          return _buildRow(item, provider, memory);
         }),
       ],
     );
   }
 
-  Widget _buildRow(MemoryReviewItem item, Memory? memory, bool interactive) {
-    final state = _stateFor(memory, item.memoryId);
+  Widget _buildRow(MemoryReviewItem item, MemoriesProvider? provider, Memory? memory) {
+    final interactive = provider != null;
+    final state = _stateFor(provider, memory, item.memoryId);
     final editing = _editors.containsKey(item.memoryId);
     final dimmed = state == _RowState.dropped;
     final content = _contentOf(item, memory);
