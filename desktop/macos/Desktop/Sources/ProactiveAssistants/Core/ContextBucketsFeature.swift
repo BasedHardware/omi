@@ -183,4 +183,23 @@ enum ContextBucketsFeature {
 
   static let factWritePolicyKillSwitchFlagName = "context_buckets_fact_write_policy_kill"
   private static let localFactWritePolicyOverrideName = "OMI_FORCE_FACT_WRITE_POLICY"
+
+  /// Evaluates the active context visit when a fresh user utterance is spoken
+  /// during it, grounding the director on live speech instead of waiting for
+  /// the next dwell.
+  ///
+  /// Non-production dogfood defaults to on with the same inverted env override
+  /// as the flags above (`OMI_FORCE_SPEECH_PROACTIVITY=0` turns it off).
+  /// Production and beta stay off until the speech path is validated in
+  /// dogfood — like departure evaluation there is deliberately no remote stop
+  /// yet, because nothing ships dark to users this way.
+  @MainActor static var isTranscriptProactivityEnabled: Bool {
+    guard isEnabled else { return false }
+    if AppBuild.isNonProduction {
+      return ProcessInfo.processInfo.environment[localTranscriptProactivityOverrideName] != "0"
+    }
+    return false
+  }
+
+  private static let localTranscriptProactivityOverrideName = "OMI_FORCE_SPEECH_PROACTIVITY"
 }
