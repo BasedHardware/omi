@@ -3117,6 +3117,9 @@ class PushToTalkManager: ObservableObject {
       of: voiceTypingTurnAudio(), maxBytes: VoiceTypeWakeWordProbeSchedule.maxProbeBytes)
     // Below ~0.4 s the decoder has nothing to say.
     guard clip.count >= 12_800 else { return }
+    // The slot is spent here, not when it fell due: a decode still running
+    // from the last probe keeps it owed until the decoder is free.
+    voiceTypingProbeSchedule.beginProbe()
     voiceTypingProbeInFlight = true
     Task { @MainActor [weak self] in
       let started = Date()
