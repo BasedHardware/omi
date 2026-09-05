@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -79,10 +80,10 @@ def test_receipt_has_activation_shape_and_dependency_vector():
     assert receipt["status"] == "ready"
     assert receipt["reviewed"] is False
     assert receipt["dependency_vector"]["redis"] == "jit-qa-redis:basic-1GiB"
-    assert receipt["source_sha"] == "a" * 40
-    assert receipt["python_url"] == "https://backend-jit-qa.run.app"
+    assert receipt["full_source_sha"] == "a" * 40
+    assert receipt["exact_python_url"] == "https://backend-jit-qa.run.app"
     assert receipt["python_image_digest"] == "sha256:" + "a" * 64
-    assert receipt["firestore_database"] == "jit-qa"
+    assert receipt["firestore_database_id"] == "jit-qa"
 
 
 def test_receipt_does_not_call_a_resource_ready_without_probes():
@@ -117,3 +118,34 @@ def test_receipt_rejects_latest_ready_revision_without_full_traffic():
             app_probe=True,
             gateway_probe=True,
         )
+
+
+def test_receipt_round_trips_activation_fixture_when_consumer_tree_is_present():
+    fixture_path = ROOT.parent / "desktop" / "macos" / "tests" / "fixtures" / "jit-qa" / "cloud-receipt-v1.json"
+    if not fixture_path.exists():
+        pytest.skip("activation receipt fixture lands with the consumer change")
+    expected = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    def resource(profile: str, name: str, image_digest: str, revision: str) -> dict:
+        result = _resource(profile, name, name, revision)
+        result["spec"]["template"]["spec"]["containers"][0][
+            "image"
+        ] = f"gcr.io/based-hardware-dev/{name}@{image_digest}"
+        return result
+
+    actual = RECEIPT.build_receipt(
+        source_sha=expected["full_source_sha"],
+        python_resource=resource(
+            "backend", expected["python_service"], expected["python_image_digest"], expected["python_revision"]
+        ),
+        desktop_resource=resource(
+            "desktop", expected["desktop_service"], expected["desktop_image_digest"], expected["desktop_revision"]
+        ),
+        python_url=expected["exact_python_url"],
+        desktop_url=expected["exact_desktop_url"],
+        gateway_url=expected["exact_gateway_url"],
+        app_probe=True,
+        gateway_probe=True,
+    )
+    expected = {**expected, "reviewed": False}
+    assert actual == expected
