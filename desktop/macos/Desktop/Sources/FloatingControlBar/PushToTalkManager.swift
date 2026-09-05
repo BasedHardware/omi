@@ -3185,7 +3185,14 @@ class PushToTalkManager: ObservableObject {
     Task { @MainActor [weak self] in
       let decoded = await PTTLanguageIdentifier.shared.transcribe(pcm16k: opening)
       guard let self, self.voiceTurnCoordinator.activeTurnID == turnID else { return }
-      if let decoded, self.voiceTypeSession.claim(transcript: decoded) {
+      // Lenient, like the probes: this is the same on-device model reading the
+      // same opening, and it mishears "type" the same ways ("Tie", "Typed").
+      // A strict test here would re-open exactly the gap the probes' lenient
+      // test closes. The false-positive cost is the one already accepted
+      // mid-hold — a rare question opening "tap …" is pasted rather than
+      // answered — and the false-negative cost is the model acting on
+      // "type …" as an instruction, which was observed live.
+      if let decoded, self.voiceTypeSession.claim(transcript: decoded, lenient: true) {
         log("PushToTalkManager: closing decode caught a dictation the probes missed — not committing")
         self.finishVoiceTypingTurn(turnID: turnID, audio: turnAudio, knownTranscript: nil)
         return
@@ -3404,7 +3411,10 @@ class PushToTalkManager: ObservableObject {
         keywords: keywords,
         language: language,
         appName: appName,
-        allowNetwork: true,
+        // The route latched offline at key-down stays offline: connectivity
+        // that returned mid-hold does not send a turn the user began with no
+        // network to the backend.
+        allowNetwork: !offlineRoute,
         isCurrent: { [weak self] in self?.voiceTurnCoordinator.activeTurnID == turnID })
       guard !run.abandoned, self.voiceTurnCoordinator.activeTurnID == turnID else { return }
       self.voiceTypingLastOutcome.transcriber = run.transcriber
