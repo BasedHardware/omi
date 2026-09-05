@@ -69,6 +69,8 @@ class GeneratedEvidence {
 class GeneratedMemoryDB {
   final String? appId;
   final Map<String, dynamic>? arguments;
+  final DateTime? asOf;
+  final String? beliefClass;
   final String? body;
   final String? canonicalMemoryId;
   final double? captureConfidence;
@@ -78,10 +80,13 @@ class GeneratedMemoryDB {
   final String? conversationId;
   final DateTime createdAt;
   final int curationWeight;
+  final double? currency;
+  final String? currencyBand;
   final String? dataProtectionLevel;
   final String? durability;
   final bool edited;
   final List<GeneratedEvidence>? evidence;
+  final double? halfLifeDays;
   final String? headline;
   final String id;
   final bool intentBacked;
@@ -116,6 +121,7 @@ class GeneratedMemoryDB {
   final DateTime updatedAt;
   final bool? userReview;
   final DateTime? validAt;
+  final DateTime? validTo;
   final double? veracity;
   final String? visibility;
   final String? writeReason;
@@ -123,6 +129,8 @@ class GeneratedMemoryDB {
   const GeneratedMemoryDB({
     this.appId,
     this.arguments,
+    this.asOf,
+    this.beliefClass,
     this.body,
     this.canonicalMemoryId,
     this.captureConfidence,
@@ -132,10 +140,13 @@ class GeneratedMemoryDB {
     this.conversationId,
     required this.createdAt,
     this.curationWeight = 0,
+    this.currency,
+    this.currencyBand,
     this.dataProtectionLevel,
     this.durability,
     this.edited = false,
     this.evidence,
+    this.halfLifeDays,
     this.headline,
     required this.id,
     this.intentBacked = false,
@@ -170,6 +181,7 @@ class GeneratedMemoryDB {
     required this.updatedAt,
     this.userReview,
     this.validAt,
+    this.validTo,
     this.veracity,
     this.visibility = "public",
     this.writeReason,
@@ -179,6 +191,8 @@ class GeneratedMemoryDB {
     return GeneratedMemoryDB(
       appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
       arguments: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["arguments"]), "arguments", _readMap, requiredField: false, nullable: true),
+      asOf: _readFieldValue<DateTime>(_readField(json, const ["as_of"]), "as_of", _readDateTime, requiredField: false, nullable: true),
+      beliefClass: _readFieldValue<String>(_readField(json, const ["belief_class"]), "belief_class", _readString, requiredField: false, nullable: true),
       body: _readFieldValue<String>(_readField(json, const ["body"]), "body", _readString, requiredField: false, nullable: true),
       canonicalMemoryId: _readFieldValue<String>(_readField(json, const ["canonical_memory_id"]), "canonical_memory_id", _readString, requiredField: false, nullable: true),
       captureConfidence: _readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: false, nullable: true),
@@ -188,10 +202,13 @@ class GeneratedMemoryDB {
       conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       curationWeight: _required(_readFieldValue<int>(_readField(json, const ["curation_weight"]), "curation_weight", _readInt, requiredField: false, nullable: false, defaultValue: 0), "curation_weight"),
+      currency: _readFieldValue<double>(_readField(json, const ["currency"]), "currency", _readDouble, requiredField: false, nullable: true),
+      currencyBand: _readFieldValue<String>(_readField(json, const ["currency_band"]), "currency_band", _readString, requiredField: false, nullable: true),
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
       durability: _readFieldValue<String>(_readField(json, const ["durability"]), "durability", _readString, requiredField: false, nullable: true),
       edited: _required(_readFieldValue<bool>(_readField(json, const ["edited"]), "edited", _readBool, requiredField: false, nullable: false, defaultValue: false), "edited"),
       evidence: _readFieldValue<List<GeneratedEvidence>>(_readField(json, const ["evidence"]), "evidence", (value) => _readObjectList(value, GeneratedEvidence.fromJson), requiredField: false, nullable: true),
+      halfLifeDays: _readFieldValue<double>(_readField(json, const ["half_life_days"]), "half_life_days", _readDouble, requiredField: false, nullable: true),
       headline: _readFieldValue<String>(_readField(json, const ["headline"]), "headline", _readString, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       intentBacked: _required(_readFieldValue<bool>(_readField(json, const ["intent_backed"]), "intent_backed", _readBool, requiredField: false, nullable: false, defaultValue: false), "intent_backed"),
@@ -226,6 +243,7 @@ class GeneratedMemoryDB {
       updatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: true, nullable: false), "updated_at"),
       userReview: _readFieldValue<bool>(_readField(json, const ["user_review"]), "user_review", _readBool, requiredField: false, nullable: true),
       validAt: _readFieldValue<DateTime>(_readField(json, const ["valid_at"]), "valid_at", _readDateTime, requiredField: false, nullable: true),
+      validTo: _readFieldValue<DateTime>(_readField(json, const ["valid_to"]), "valid_to", _readDateTime, requiredField: false, nullable: true),
       veracity: _readFieldValue<double>(_readField(json, const ["veracity"]), "veracity", _readDouble, requiredField: false, nullable: true),
       visibility: _readFieldValue<String>(_readField(json, const ["visibility"]), "visibility", _readString, requiredField: false, nullable: true, defaultValue: "public"),
       writeReason: _readFieldValue<String>(_readField(json, const ["write_reason"]), "write_reason", _readString, requiredField: false, nullable: true),
@@ -236,6 +254,8 @@ class GeneratedMemoryDB {
     return {
       'app_id': appId,
       'arguments': arguments,
+      'as_of': asOf?.toUtc().toIso8601String(),
+      'belief_class': beliefClass,
       'body': body,
       'canonical_memory_id': canonicalMemoryId,
       'capture_confidence': captureConfidence,
@@ -245,10 +265,13 @@ class GeneratedMemoryDB {
       'conversation_id': conversationId,
       'created_at': createdAt.toUtc().toIso8601String(),
       'curation_weight': curationWeight,
+      'currency': currency,
+      'currency_band': currencyBand,
       'data_protection_level': dataProtectionLevel,
       'durability': durability,
       'edited': edited,
       'evidence': evidence?.map((value) => value.toJson()).toList(),
+      'half_life_days': halfLifeDays,
       'headline': headline,
       'id': id,
       'intent_backed': intentBacked,
@@ -283,6 +306,7 @@ class GeneratedMemoryDB {
       'updated_at': updatedAt.toUtc().toIso8601String(),
       'user_review': userReview,
       'valid_at': validAt?.toUtc().toIso8601String(),
+      'valid_to': validTo?.toUtc().toIso8601String(),
       'veracity': veracity,
       'visibility': visibility,
       'write_reason': writeReason,

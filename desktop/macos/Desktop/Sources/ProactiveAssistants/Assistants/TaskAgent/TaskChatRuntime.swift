@@ -277,7 +277,7 @@ enum TaskChatRuntime {
       (
         .workspace,
         workspacePath.isEmpty ? .empty : .available,
-        workspacePath.isEmpty ? [:] : ["workingDirectory": workspacePath]
+        await taskWorkspaceContext(workspacePath: workspacePath, adapterId: routing.adapterId).value
       ),
       (
         .surface,
@@ -330,6 +330,28 @@ enum TaskChatRuntime {
       onAuthRequired: onAuthRequired,
       onAuthSuccess: onAuthSuccess
     )
+  }
+
+  /// Task chat has skill tools but no ChatProvider instance to index skills for
+  /// them, so the run carries the same compact catalog main chat injects —
+  /// unless the resolved lane owns its own skills source (the ACP plugin).
+  /// The return is boxed: a nonisolated async function's result crosses back
+  /// to the caller's isolation, and `[String: Any]` is not Sendable.
+  nonisolated static func taskWorkspaceContext(
+    workspacePath: String,
+    adapterId: String
+  ) async -> TaskToolInputBox {
+    guard !workspacePath.isEmpty else { return TaskToolInputBox([:]) }
+    var payload: [String: Any] = ["workingDirectory": workspacePath]
+    guard ChatProvider.shouldInjectSkillCatalog(adapterId: adapterId) else {
+      return TaskToolInputBox(payload)
+    }
+    // The projection is dictionary-valued (never Sendable), so it crosses the
+    // detachment boundary boxed, exactly like the tool-input payloads above.
+    payload["skillCatalog"] = await Task.detached(priority: .utility) {
+      TaskToolInputBox(ChatProvider.skillCatalogProjectionFromDisk(workspace: workspacePath))
+    }.value.value
+    return TaskToolInputBox(payload)
   }
 
   nonisolated static func queryRouting(
@@ -431,7 +453,21 @@ enum TaskChatRuntime {
     }
   #endif
 
+  /// Consumes a pending ~/.omi/mcp.json change at this surface's turn
+  /// boundary. Task chat never goes through ChatProvider.ensureBridgeStarted —
+  /// the only other consumer — so a change deferred mid-turn, or noticed while
+  /// a respawn was already in flight, would otherwise wait for a main-chat
+  /// turn a task-chat-only session never runs. Both bridges drive
+  /// `AgentRuntimeProcess.shared`, so the coordinator's respawn reaches this
+  /// surface too. Internal so tests drive exactly what `sharedBridge` runs.
+  static func applyPendingUserMcpChangeAtTurnBoundary() async {
+    await UserMcpRuntimeRefresh.shared.applyAtTurnBoundary()
+  }
+
   private static func sharedBridge() async throws -> AgentBridge {
+    // See applyPendingUserMcpChangeAtTurnBoundary: no runtime work is issued
+    // before this point, and the restart refuses while requests are active.
+    await applyPendingUserMcpChangeAtTurnBoundary()
     if let agentBridge { return agentBridge }
 
     let mode = UserDefaults.standard.string(forKey: .chatBridgeMode) ?? "piMono"

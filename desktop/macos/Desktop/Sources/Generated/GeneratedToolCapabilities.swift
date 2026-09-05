@@ -377,9 +377,10 @@ enum GeneratedToolCapabilities {
       title: "Load Skill",
       latency: .fastLocal,
       surfaces: Set([.desktopChat]),
-      summary: "Load the full instructions for a named skill listed in available_skills.",
+      summary: "Load a skill progressively: the first call returns metadata, a section table of contents, and the first section; further sections load by part.",
       bullets: [
-      "Use the exact skill name from available_skills."
+      "Use the exact skill name from available_skills.",
+      "Read additional sections with part only when the first section is relevant."
     ]
     ),
     Capability(
@@ -577,7 +578,23 @@ enum GeneratedToolCapabilities {
       summary: "Create a new task, to-do, or reminder.",
       bullets: [
       "Use when the user explicitly asks to add something to their list.",
-      "Pass a concise description and due_at only when the user gave a time."
+      "Pass a concise description and due_at only when the user gave a time.",
+      "For 'next time I'm here' or 'when I open this', use create_context_reminder."
+    ]
+    ),
+    Capability(
+      toolName: "create_context_reminder",
+      title: "Create Context Reminder",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat, .realtimeHub]),
+      summary: "Bind a reminder to the user's current app or document, not to a time.",
+      bullets: [
+      "Use when the user says 'remind me next time I'm here', 'next time I open this', or 'when I'm back in this'.",
+      "The place is captured from the frontmost window automatically; pass only the reminder text.",
+      "Do not use for timed reminders ('tomorrow', 'at 3pm') — those are create_action_item.",
+      "Call when the user asks to be reminded the next time they are in the current app, document, or page.",
+      "Pass only the reminder text. The current frontmost window is captured automatically.",
+      "Do not use for timed reminders; those are create_action_item."
     ]
     ),
     Capability(
@@ -758,6 +775,18 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
+      toolName: "record_interject_feedback",
+      title: "Record Interject Feedback",
+      latency: .fastLocal,
+      surfaces: Set([.realtimeHub]),
+      summary: "Silently record how the user's utterance relates to the proactive card.",
+      bullets: [
+      "Call silently when the latest utterance is a reply to the quoted card, then speak only the user-facing answer.",
+      "For a question or continuation, use riff or omit this tool; the first audio must be the answer.",
+      "Never speak the verb, a heads-up, or the tool result."
+    ]
+    ),
+    Capability(
       toolName: "point_click",
       title: "Point Click",
       latency: .fastLocal,
@@ -809,6 +838,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","read_tool_output","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","search_tool_output","set_desktop_attention_override","spawn_agent","think_deeper","update_action_item","update_agent_artifact_lifecycle","web_search"]
+    ["cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","create_context_reminder","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","read_tool_output","record_interject_feedback","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","search_tool_output","set_desktop_attention_override","spawn_agent","think_deeper","update_action_item","update_agent_artifact_lifecycle","web_search"]
   }
 }

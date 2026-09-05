@@ -554,6 +554,17 @@ def test_consolidation_messages_cache_the_planner_prefix_not_the_batch_json():
     assert "Enjoys hiking" in suffix
 
 
+def test_consolidation_prompt_forbids_age_alone_when_belief_flag_on(monkeypatch):
+    item = _item("mem_a", "Enjoys hiking")
+    monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED", raising=False)
+    off = build_consolidation_llm_messages(_context([item], {}))[0].content[0]["text"]
+    assert "age or elapsed time alone" not in off
+
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    on = build_consolidation_llm_messages(_context([item], {}))[0].content[0]["text"]
+    assert "Do not archive or supersede a row because of age or elapsed time alone" in on
+
+
 def test_promote_decision_requires_structured_graph_and_durable_basis():
     item = _item("mem_a", "Enjoys hiking")
     with pytest.raises(ValueError, match="graph|subject|predicate"):

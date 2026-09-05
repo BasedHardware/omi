@@ -839,12 +839,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/eb/a3/68d476e978930d6f1
 wheels = [{ url = "https://files.pythonhosted.org/packages/06/f0/0b875419fa7ddfa6c4a07954f4991e50b37dcc9922bc502f023b12be67e1/twilio-9.5.0-py2.py3-none-any.whl", upload-time = 2025-03-11T12:56:28Z, size = 1882103, hashes = { sha256 = "e6d0ccf9162a83acfa6d21a02e90a22fdbc53f4269be3402ba579f13b2a259fc" } }]
 
 [[packages]]
-name = "typesense"
-version = "0.21.0"
-sdist = { url = "https://files.pythonhosted.org/packages/73/c4/b9ee39e15503c7e284bdb8afb5f2b8d06ee06e7abc33ed56c17388ab24e6/typesense-0.21.0.tar.gz", upload-time = 2024-05-10T04:42:42Z, size = 14030, hashes = { sha256 = "24470525b577300bd81fe43029dddd9269b942b20b49236edf049f6ecead7c8e" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/88/2c/e3f25e6e2c5ddb0c8b6e78115f6acd1be3167da1bbe361ae0bcff5c90512/typesense-0.21.0-py3-none-any.whl", upload-time = 2024-05-10T04:42:40Z, size = 21143, hashes = { sha256 = "e4330f103a40af98ba2b0ffd817392a84a537e04816221c9a283faadea7718f0" } }]
-
-[[packages]]
 name = "typing-extensions"
 version = "4.15.0"
 sdist = { url = "https://files.pythonhosted.org/packages/72/94/1a15dd82efb362ac84269196e94cf00f187f7ed21c242792a923cdb1c61f/typing_extensions-4.15.0.tar.gz", upload-time = 2025-08-25T13:49:26Z, size = 109391, hashes = { sha256 = "0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466" } }

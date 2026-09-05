@@ -69,6 +69,7 @@ const TASK_WRITE_TOOLS = new Set([
   "complete_task",
   "delete_task",
   "create_action_item",
+  "create_context_reminder",
   "update_action_item",
   "save_knowledge_graph",
   "set_user_preferences",

@@ -13,6 +13,11 @@ import SwiftUI
 /// A sheet that can be dismissed by clicking outside the content area.
 /// This provides macOS-friendly modal behavior where clicking the dimmed background dismisses the sheet.
 struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
+  /// Breathing room kept between a sheet and the edge of its host surface.
+  static var hostInset: CGFloat { 48 }
+  /// Floor for very short hosts, so a cramped window shows a scrollable sheet rather than none.
+  static var minimumSheetSide: CGFloat { 240 }
+
   @Binding var isPresented: Bool
   let sheetContent: () -> SheetContent
 
@@ -39,14 +44,32 @@ struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
 
             // Force the sheet into a centered full-size overlay so it
             // does not end up clipped or visually hidden behind the scrim.
-            sheetContent()
-              .background(Ink.surface)
-              .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
-              .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-              .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-              .transition(.scale(scale: 0.95).combined(with: .opacity))
-              .accessibilityAddTraits(.isModal)
-              .zIndex(1)
+            //
+            // The clamp is the point: this is an in-window overlay, not a real window, so a call
+            // site's fixed `.frame(height:)` taller than the host simply runs off it — and every
+            // call site had picked its number against one window size. Bounding here means no
+            // sheet can outgrow the surface it is mounted in, at any window size or on resize.
+            //
+            // The clamp alone only decided how much of an oversized sheet is *drawn*: the rest was
+            // cut off with no way to reach it — a short window, a long error, or a larger text size
+            // could hide a sheet's own buttons. The scroll is what makes the bound survivable; it
+            // still sizes to its content, so a sheet that fits neither scrolls nor grows.
+            GeometryReader { proxy in
+              ScrollView(.vertical) { sheetContent() }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(
+                  maxWidth: max(Self.minimumSheetSide, proxy.size.width - Self.hostInset),
+                  maxHeight: max(Self.minimumSheetSide, proxy.size.height - Self.hostInset)
+                )
+                .fixedSize()
+                .background(Ink.surface)
+                .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
+                .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
+            }
+            .transition(.scale(scale: 0.95).combined(with: .opacity))
+            .accessibilityAddTraits(.isModal)
+            .zIndex(1)
 
             OverlayModalEscapeCatcher {
               log("DISMISSABLE_SHEET: Escape pressed, dismissing")

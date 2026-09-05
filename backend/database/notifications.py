@@ -336,10 +336,9 @@ def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) ->
                 if legacy_token and legacy_token not in tokens:
                     tokens.append(str(legacy_token))
 
-                # Skip users with no tokens
-                if not tokens:
-                    continue
-
+                # Tokenless users still get a record written. Generation is not
+                # push delivery: a desktop-only owner has no FCM token and must
+                # not be dropped here.
                 time_zone = user_data.get('time_zone')
                 chunk_users.append((uid, tokens, time_zone))
 

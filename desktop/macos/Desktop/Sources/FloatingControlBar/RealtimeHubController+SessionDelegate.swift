@@ -934,6 +934,14 @@ extension RealtimeHubController {
         expectedTurnEpoch: toolTurnEpoch)
       return
     }
+    if name == HubTool.recordInterjectFeedback.rawValue {
+      handleInterjectFeedbackReport(
+        source: source,
+        callId: callId,
+        arguments: arguments,
+        expectedTurnEpoch: toolTurnEpoch)
+      return
+    }
     invokeExternallyAuthorizedTool(
       source: source,
       turnID: turnID,
@@ -1114,6 +1122,17 @@ extension RealtimeHubController {
       let candidates = AssistantSettings.shared.voiceBaseLanguages
       let fullTask = fullLIDTask
       let provider = providerTag
+      // The optimistic `.success` seal is scheduled now, so its revision marker
+      // is registered synchronously now: the persist closure below first
+      // awaits transcript resolution (bounded by the 20s LID deadline), and a
+      // playback failure or barge-in terminalizing in that window must find
+      // the marker, or the `.completed` seal becomes permanent (#12743).
+      registerSealedCompletedVoiceJournalRow(
+        ownerID: completedTurnOwnerID,
+        assistantText: reply,
+        terminal: .success,
+        acceptedSpawnOwnerID: acceptedSpawnOwnerID,
+        idempotencyKey: completedTurnIdempotencyKey)
       enqueueTurnPersistence(
         idempotencyKey: completedTurnIdempotencyKey,
         retainingReceipt: true

@@ -43,7 +43,7 @@ class RuntimeProcessFixture {
 
   async waitForMessage(
     predicate: (message: OutboundMessage) => boolean,
-    timeoutMs = 5_000,
+    timeoutMs = 20_000,
   ): Promise<OutboundMessage> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {

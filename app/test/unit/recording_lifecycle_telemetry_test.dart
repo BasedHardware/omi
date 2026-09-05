@@ -61,15 +61,8 @@ void main() {
       RecordingLifecycleTelemetry.startedEvent,
       RecordingLifecycleTelemetry.completedEvent,
     ]);
-    expect(events.first.properties, {
-      'recording_id': 'recording-1',
-      'recording_source': 'phone_mic_live',
-    });
-    expect(events.last.properties, {
-      ...events.first.properties,
-      'duration_seconds': 2.75,
-      'reason': 'user_stopped',
-    });
+    expect(events.first.properties, {'recording_id': 'recording-1', 'recording_source': 'phone_mic_live'});
+    expect(events.last.properties, {...events.first.properties, 'duration_seconds': 2.75, 'reason': 'user_stopped'});
     expect(telemetry.recordingId, isNull);
   });
 

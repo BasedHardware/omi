@@ -764,6 +764,8 @@ def _privacy_tombstoned_memory_item(
             "primary_capture_device": None,
             "corroboration_count": 0,
             "last_corroborated_at": None,
+            "half_life_days": None,
+            "belief_class": None,
             "confidence": None,
             "subject_entity_id": None,
             "predicate": None,

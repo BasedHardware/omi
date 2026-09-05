@@ -1952,6 +1952,17 @@ class PushToTalkManager: ObservableObject {
     // Always re-check permission (it can be granted at any time via System Settings)
     hasMicPermission = AudioCaptureService.checkPermission()
 
+    // A denied grant is spent — `requestAccess` never resurfaces it — so end the
+    // turn instead of re-running the same dead request on every press.
+    if MicrophoneCaptureAuthorizationPolicy.action(for: AudioCaptureService.authorizationStatus())
+      == .surfacePermissionAlert
+    {
+      log("PushToTalkManager: microphone permission denied — ending turn without a re-request")
+      if let turnID = currentVoiceTurnID {
+        voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .permissionDenied))
+      }
+      return
+    }
     guard hasMicPermission else {
       log("PushToTalkManager: no microphone permission, requesting")
       let permissionTurnID = currentVoiceTurnID

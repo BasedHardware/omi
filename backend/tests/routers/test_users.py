@@ -610,6 +610,41 @@ def test_usage_quota_endpoint_reads_customer_firestore_like_desktop_enforcement(
     )
 
 
+@pytest.mark.parametrize(
+    'plan,expected_overage',
+    [
+        (users_router.PlanType.basic, False),
+        (users_router.PlanType.plus, False),
+        (users_router.PlanType.unlimited_v2, False),
+        (users_router.PlanType.operator, True),
+        (users_router.PlanType.unlimited, True),
+        (users_router.PlanType.architect, True),
+    ],
+)
+def test_usage_quota_endpoint_reports_catalog_exhaustion_policy(plan, expected_overage):
+    # Desktop gates sends on this payload. Going past `limit` on an overage plan
+    # accrues a charge rather than blocking (enforce_chat_quota returns without
+    # raising), so `allowed: false` alone is not a block signal and the client
+    # needs the catalog's own predicate to tell the two apart.
+    snapshot_mock = MagicMock(
+        return_value={
+            'plan': plan,
+            'used': 500.0,
+            'limit': 500.0,
+            'unit': 'questions',
+            'allowed': False,
+            'reset_at': 1_760_000_000,
+        }
+    )
+    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.object(
+        users_router, 'get_customer_firestore_client', MagicMock(return_value=object())
+    ), patch.object(users_router, 'get_chat_quota_snapshot', snapshot_mock):
+        quota = users_router.get_user_chat_usage_quota(uid='uid1', x_app_platform='desktop')
+
+    assert quota.is_overage_plan is expected_overage
+    assert quota.allowed is False
+
+
 def test_subscription_snapshot_carries_the_one_transcription_allowance_answer():
     """The startup snapshot exposes exactly what the listen socket will enforce (free tier S16),
     resolved with the app platform standing in for the listen `source`."""

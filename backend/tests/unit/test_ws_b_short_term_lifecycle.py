@@ -811,3 +811,64 @@ def test_expired_short_term_remains_visible_until_ttl_disposition_is_applied(mon
         "projection_sync": "delete",
         "vector_sync": "delete",
     }
+
+
+def test_expired_short_term_is_not_rejected_on_age_alone_when_belief_flag_on(monkeypatch, caplog):
+    uid = "uid-expired-belief"
+    _set_canonical(monkeypatch, uid)
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    db = _Db(uid)
+    evidence = MemoryEvidence(
+        evidence_id="ev-expired-belief",
+        source_type="conversation",
+        source_id="conv-expired-belief",
+        source_version="v1",
+        artifact_preservation=ArtifactPreservationState.preserved,
+    )
+    item = MemoryItem(
+        memory_id="mem-expired-belief",
+        uid=uid,
+        version=1,
+        tier=MemoryTier.short_term,
+        status=MemoryItemStatus.active,
+        processing_state=ProcessingState.processed,
+        content="Expired context kept by belief model",
+        evidence=[evidence],
+        source_state=SourceState.active,
+        sensitivity_labels=[],
+        visibility="private",
+        user_asserted=False,
+        captured_at=NOW - timedelta(days=31),
+        updated_at=NOW - timedelta(days=31),
+        expires_at=NOW - timedelta(days=1),
+        ledger_commit_id="head0",
+        ledger_sequence=0,
+        item_revision=1,
+        content_hash=memory_content_hash(
+            content="Expired context kept by belief model", evidence_ids=[evidence.evidence_id]
+        ),
+        account_generation=1,
+    )
+    db.docs[f"users/{uid}/memory_items/{item.memory_id}"] = item.model_dump(mode="json")
+    db.docs[f"users/{uid}/memory_evidence/{evidence.evidence_id}"] = evidence.model_dump(mode="json")
+    caplog.set_level("INFO", logger="utils.memory.short_term_promotion")
+
+    with pytest.MonkeyPatch.context() as local_patch:
+        local_patch.setattr(
+            "utils.memory.short_term_promotion.resolve_memory_system",
+            lambda *args, **kwargs: MemorySystem.CANONICAL,
+        )
+        report = run_canonical_short_term_ttl_lifecycle(
+            uid,
+            db_client=db,
+            now=NOW,
+            run_id="run-expiry-belief",
+        )
+
+    assert [memory.id for memory in read_canonical_memories(uid, db_client=db, now=NOW)] == [item.memory_id]
+    assert report.lifecycle_terminal_count == 0
+    assert "skipped_time_only_reject" in caplog.text
+    assert "expired_terminal_disposition_applied" not in caplog.text
+    settled = db.docs[f"users/{uid}/memory_items/{item.memory_id}"]
+    assert settled["status"] == MemoryItemStatus.active.value
+    assert settled["tier"] == MemoryTier.short_term.value

@@ -128,7 +128,7 @@ class ChatToolExecutor {
 
   // MARK: - Onboarding State
 
-  /// Set by OnboardingChatView before starting the chat
+  /// Set by the live onboarding flow before starting the chat
   static var onboardingAppState: AppState?
   /// Called when AI invokes complete_onboarding
   static var onCompleteOnboarding: (() -> Void)?
@@ -143,7 +143,7 @@ class ChatToolExecutor {
   /// Called when request_permission returns "pending" — used to trigger the permission help timer
   static var onPermissionPending: ((_ permissionType: String) -> Void)?
 
-  /// Email/calendar insights from background reading (set by OnboardingChatView)
+  /// Email/calendar insights from background reading (set by the live onboarding flow)
   static var emailInsightsText: String?
   static var calendarInsightsText: String?
 
@@ -360,6 +360,13 @@ class ChatToolExecutor {
         expectedOwnerID: expectedOwnerID,
         authorizationSnapshot: currentOwnerAuthorizationSnapshot,
         api: backendAPIClient)
+
+    case .createContextReminder:
+      let text = (toolCall.arguments["text"] as? String) ?? ""
+      return await ContextReminderCoordinator.shared.createFromCurrentContext(
+        text: text,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
 
     case .showRewindEvidence:
       return await executeShowRewindEvidence(
@@ -2220,6 +2227,18 @@ class ChatToolExecutor {
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
+      // A denied grant is spent: `requestAccess` never resurfaces it, and forcing
+      // System Settings from a chat turn repeats the auto-reprompt class. Report it.
+      if MicrophoneCaptureAuthorizationPolicy.action(for: AudioCaptureService.authorizationStatus())
+        == .surfacePermissionAlert
+      {
+        appState?.hasMicrophonePermission = false
+        return permissionRequestResult(
+          type: type, granted: false,
+          pendingMessage:
+            "Microphone permission is denied at the system level; tell the user to re-enable it in System Settings › Privacy & Security › Microphone.",
+          requiresRestart: false)
+      }
       NSApp.activate()
       guard let granted = await requestMicrophonePermissionDirectly(),
         isPermissionAuthorizationCurrent(
@@ -2248,13 +2267,29 @@ class ChatToolExecutor {
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
+      // Same rule as microphone: a denied authorization is spent — no re-request,
+      // no forced System Settings jump from a chat turn.
+      let preStatus = await withCheckedContinuation {
+        (continuation: CheckedContinuation<UNAuthorizationStatus, Never>) in
+        UserNotificationCallbackBridge.authorizationStatus { status in
+          continuation.resume(returning: status)
+        }
+      }
+      if preStatus == .denied {
+        appState?.hasNotificationPermission = false
+        return permissionRequestResult(
+          type: type, granted: false,
+          pendingMessage:
+            "Notifications are denied at the system level; tell the user to re-enable Omi in System Settings › Notifications.",
+          requiresRestart: false)
+      }
       guard let granted = await requestNotificationPermissionDirectly(),
         isPermissionAuthorizationCurrent(
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
       appState?.hasNotificationPermission = granted
-      if !granted {
+      if !granted, preStatus == .notDetermined {
         _ = openNotificationPrivacySettings(
           expectedOwnerID: expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
