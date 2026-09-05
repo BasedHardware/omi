@@ -9,6 +9,8 @@ on:
 env:
   SERVICE: daily-memory-sweep-job
   SCHEDULER_JOB: daily-memory-sweep-hourly
+  LEDGER_DRAIN_SERVICE: knowledge-ledger-drain-job
+  LEDGER_DRAIN_SCHEDULER_JOB: knowledge-ledger-drain-hourly
   SCHEDULER_SERVICE_ACCOUNT: memory-maintenance-scheduler@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
   REGION: us-central1
 
@@ -152,12 +154,29 @@ jobs:
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
+      - name: Build ledger drain runtime image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./backend/modal/Dockerfile.knowledge_ledger_drain_job
+          push: false
+          load: true
+          tags: |
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.LEDGER_DRAIN_SERVICE }}:latest
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.LEDGER_DRAIN_SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.LEDGER_DRAIN_SERVICE }}:buildcache
+          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.LEDGER_DRAIN_SERVICE }}:buildcache,mode=max
+
       - name: Verify built runtime image before publish
         run: |
           image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           python3 backend/scripts/runtime_image_contracts.py smoke \
             --dockerfile backend/modal/Dockerfile.daily_memory_sweep_job \
             --image "$image"
+          ledger_image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.LEDGER_DRAIN_SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile backend/modal/Dockerfile.knowledge_ledger_drain_job \
+            --image "$ledger_image"
 
       - name: Recheck admitted main before image publication
         env:
@@ -175,6 +194,8 @@ jobs:
         run: |
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.LEDGER_DRAIN_SERVICE }}:latest
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.LEDGER_DRAIN_SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
 
       - name: Probe memory L2 gateway lane from the Cloud Run VPC
         run: |
@@ -197,6 +218,7 @@ jobs:
           OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}
         run: |
           python3 backend/scripts/render_backend_runtime_env.py --env dev --job daily-memory-sweep-job >> "$GITHUB_OUTPUT"
+          python3 backend/scripts/render_backend_runtime_env.py --env dev --job knowledge-ledger-drain-job >> "$GITHUB_OUTPUT"
 
       - name: Validate backend runtime env before deploy
         run: |
@@ -226,6 +248,27 @@ jobs:
           env_vars: ${{ steps.runtime-env.outputs.daily_memory_sweep_job_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.daily_memory_sweep_job_secrets }}
 
+      - name: Deploy independent ledger drain to Cloud Run
+        id: deploy-ledger-drain
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          job: ${{ env.LEDGER_DRAIN_SERVICE }}
+          region: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.LEDGER_DRAIN_SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} ${{ steps.runtime-env.outputs.knowledge_ledger_drain_job_flags }}
+          env_vars: ${{ steps.runtime-env.outputs.knowledge_ledger_drain_job_env_vars }}
+          secrets: ${{ steps.runtime-env.outputs.knowledge_ledger_drain_job_secrets }}
+
+      - name: Authorize ledger drain Scheduler invocations
+        run: |
+          gcloud run jobs add-iam-policy-binding "$LEDGER_DRAIN_SERVICE" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="$REGION" \
+            --member="serviceAccount:${SCHEDULER_SERVICE_ACCOUNT}" \
+            --role="roles/run.invoker" \
+            --quiet
+
       - name: Provision hourly Scheduler trigger from admitted source
         run: |
           python3 backend/scripts/provision_daily_memory_sweep_scheduler.py \
@@ -234,11 +277,18 @@ jobs:
             --scheduler-job "$SCHEDULER_JOB" \
             --cloud-run-job "$SERVICE" \
             --service-account "$SCHEDULER_SERVICE_ACCOUNT"
+          python3 backend/scripts/provision_daily_memory_sweep_scheduler.py \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "$REGION" \
+            --scheduler-job "$LEDGER_DRAIN_SCHEDULER_JOB" \
+            --cloud-run-job "$LEDGER_DRAIN_SERVICE" \
+            --service-account "$SCHEDULER_SERVICE_ACCOUNT"
 
       - name: Validate hourly Scheduler trigger
         run: |
           scheduler_state_file=$(mktemp)
-          trap 'rm -f "$scheduler_state_file"' EXIT
+          ledger_scheduler_state_file=$(mktemp)
+          trap 'rm -f "$scheduler_state_file" "$ledger_scheduler_state_file"' EXIT
           gcloud scheduler jobs describe "$SCHEDULER_JOB" \
             --location="$REGION" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
@@ -249,6 +299,16 @@ jobs:
             --region "$REGION" \
             --scheduler-job "$SCHEDULER_JOB" \
             --cloud-run-job "$SERVICE"
+          gcloud scheduler jobs describe "$LEDGER_DRAIN_SCHEDULER_JOB" \
+            --location="$REGION" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format=json > "$ledger_scheduler_state_file"
+          python3 backend/scripts/validate_memory_maintenance_scheduler.py \
+            --state-file "$ledger_scheduler_state_file" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "$REGION" \
+            --scheduler-job "$LEDGER_DRAIN_SCHEDULER_JOB" \
+            --cloud-run-job "$LEDGER_DRAIN_SERVICE"
 
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}

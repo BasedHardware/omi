@@ -127,6 +127,16 @@ default-readable until canonical apply records a terminal disposition. This
 prevents a missed maintenance pass from silently deleting memory while the
 expiry queue continues to prioritize it.
 
+Knowledge-ledger account cutover is not part of this serial maintenance pass.
+`knowledge-ledger-drain-job` reads at most 20 canonical apply-control documents
+per hourly execution with its own generation-fenced cursor, rechecks the shared
+JIT rollout authority before every account and row mutation, and publishes the
+cutover only after the complete-union proof succeeds. A maintenance timeout
+therefore cannot starve writer-mode convergence, and a killed drain execution
+or any account-level failure does not advance its page cursor. The deploy lane
+grants the scheduler service account `run.invoker` on the drain job before it
+creates or resumes the hourly trigger.
+
 The text-free `canonical_memory_decision_path.v1` log joins capture regime and
 grounded attribution to later applied or blocked routes by UID and memory ID.
 It emits only categorical decision fields and counts, never transcript, quote,
