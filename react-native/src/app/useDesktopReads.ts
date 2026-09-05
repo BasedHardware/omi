@@ -182,10 +182,14 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       ...(readOutcomes.memories.status === 'success'
         ? readOutcomes.memories.value.items
         : []),
-    ].sort(
-      (left, right) =>
-        (projectionTimestamp(right) ?? 0) - (projectionTimestamp(left) ?? 0),
-    );
+    ].sort((left, right) => {
+      const leftTs = projectionTimestamp(left);
+      const rightTs = projectionTimestamp(right);
+      return (
+        (rightTs ?? Number.NEGATIVE_INFINITY) -
+        (leftTs ?? Number.NEGATIVE_INFINITY)
+      );
+    });
   }, [readOutcomes]);
 
   const allHomeReadsUnavailable =
