@@ -237,7 +237,51 @@ def test_regular_firestore_factory_uses_named_qa_database(monkeypatch):
     monkeypatch.setattr(client_module.firestore, "Client", firestore_client_ctor)
 
     assert client_module._build_firestore_client() is fake_client
-    firestore_client_ctor.assert_called_once_with(database="jit-qa")
+    firestore_client_ctor.assert_called_once_with(project="based-hardware-dev", database="jit-qa")
+
+
+@pytest.mark.parametrize("database", [None, "(default)"])
+def test_qa_firestore_factory_requires_named_database(monkeypatch, database):
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
+    monkeypatch.setenv("OMI_FIRESTORE_DATA_PLANE_PROJECT", "based-hardware-dev")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware-dev")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setenv("OMI_JIT_QA_AUTH_ONLY", "true")
+    if database is None:
+        monkeypatch.delenv("FIRESTORE_DATABASE_ID", raising=False)
+    else:
+        monkeypatch.setenv("FIRESTORE_DATABASE_ID", database)
+    monkeypatch.setattr(client_module, "customer_data_service_account", MagicMock(return_value=None))
+    monkeypatch.setattr(client_module, "prepare_google_credentials", MagicMock())
+    with pytest.raises(RuntimeError, match="requires FIRESTORE_DATABASE_ID=jit-qa"):
+        client_module._build_firestore_client()
+
+
+def test_qa_customer_factory_requires_named_database(monkeypatch):
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
+    monkeypatch.setenv("OMI_FIRESTORE_DATA_PLANE_PROJECT", "based-hardware-dev")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware-dev")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setenv("OMI_JIT_QA_AUTH_ONLY", "true")
+    monkeypatch.delenv("FIRESTORE_DATABASE_ID", raising=False)
+    monkeypatch.setattr(
+        client_module,
+        "customer_entitlement_service_account",
+        MagicMock(return_value=(object(), "based-hardware-dev")),
+    )
+    with pytest.raises(RuntimeError, match="requires FIRESTORE_DATABASE_ID=jit-qa"):
+        client_module._build_customer_firestore_client()
+
+
+def test_qa_data_plane_factory_rejects_default_database(monkeypatch):
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
+    monkeypatch.setenv("OMI_FIRESTORE_DATA_PLANE_PROJECT", "based-hardware-dev")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware-dev")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setenv("OMI_JIT_QA_AUTH_ONLY", "true")
+    monkeypatch.setenv("FIRESTORE_DATABASE_ID", "(default)")
+    with pytest.raises(RuntimeError, match="requires FIRESTORE_DATABASE_ID=jit-qa"):
+        client_module._build_data_plane_firestore_client()
 
 
 def test_customer_entitlement_factory_uses_named_qa_database(monkeypatch):

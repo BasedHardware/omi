@@ -117,18 +117,22 @@ def _firestore_database_id() -> str | None:
     """
 
     database = (os.getenv("FIRESTORE_DATABASE_ID") or "").strip()
+    qa_auth_only = (os.getenv("OMI_JIT_QA_AUTH_ONLY") or "").strip().casefold() in {"1", "true", "yes", "on"}
+    if qa_auth_only:
+        if database != "jit-qa":
+            raise RuntimeError("isolated JIT QA requires FIRESTORE_DATABASE_ID=jit-qa")
+        if (
+            (os.getenv("OMI_ENV_STAGE") or "").strip().casefold() != "dev"
+            or (os.getenv("GOOGLE_CLOUD_PROJECT") or "").strip() != "based-hardware-dev"
+            or (os.getenv("OMI_FIRESTORE_DATA_PLANE_PROJECT") or "").strip() != "based-hardware-dev"
+        ):
+            raise RuntimeError("FIRESTORE_DATABASE_ID=jit-qa requires the isolated development JIT QA fence")
+        return database
     if not database or database == "(default)":
         return None
-    if database != "jit-qa":
-        raise RuntimeError("FIRESTORE_DATABASE_ID is restricted to the jit-qa database")
-    if (
-        (os.getenv("OMI_ENV_STAGE") or "").strip().casefold() != "dev"
-        or (os.getenv("GOOGLE_CLOUD_PROJECT") or "").strip() != "based-hardware-dev"
-        or (os.getenv("OMI_FIRESTORE_DATA_PLANE_PROJECT") or "").strip() != "based-hardware-dev"
-        or (os.getenv("OMI_JIT_QA_AUTH_ONLY") or "").strip().casefold() not in {"1", "true", "yes", "on"}
-    ):
+    if database == "jit-qa":
         raise RuntimeError("FIRESTORE_DATABASE_ID=jit-qa requires the isolated development JIT QA fence")
-    return database
+    raise RuntimeError("FIRESTORE_DATABASE_ID is restricted to the isolated JIT QA database")
 
 
 def _build_firestore_client() -> Any:
@@ -160,7 +164,9 @@ def _build_firestore_client() -> Any:
 
     prepare_google_credentials()
     database = _firestore_database_id()
-    return firestore.Client(**({"database": database} if database else {}))
+    if database:
+        return firestore.Client(project="based-hardware-dev", database=database)
+    return firestore.Client()
 
 
 def get_firestore_client() -> Any:

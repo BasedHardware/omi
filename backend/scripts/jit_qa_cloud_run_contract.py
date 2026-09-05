@@ -350,6 +350,8 @@ def resource_environment(
         return (
             {
                 **identity,
+                "OMI_JIT_QA_AUTH_ONLY": "true",
+                "OMI_JIT_QA_UID_ALLOWLIST": QA_UID,
                 "OMI_LLM_GATEWAY_PROD": "false",
                 "LLM_GATEWAY_ALLOWED_CALLERS": "backend,desktop",
                 "OMI_LLM_GATEWAY_BUILD_IDENTITY": "jit-qa",

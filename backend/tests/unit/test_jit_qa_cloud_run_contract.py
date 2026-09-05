@@ -201,6 +201,12 @@ def test_gateway_route_and_qa_http_contract_reject_direct_fallback():
         )
 
 
+def test_gateway_resource_is_fenced_to_the_fixed_qa_uid():
+    literals, _ = CONTRACT.resource_environment("gateway")
+    assert literals["OMI_JIT_QA_AUTH_ONLY"] == "true"
+    assert literals["OMI_JIT_QA_UID_ALLOWLIST"] == CONTRACT.QA_UID
+
+
 def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "workflow_dispatch:" in text

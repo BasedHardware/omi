@@ -248,7 +248,7 @@ jobs:
           IMAGE: ${{ needs.build.outputs.gateway_image }}
         run: |
           set -euo pipefail
-          gcloud run deploy "$QA_GATEWAY_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --image "$IMAGE" --command uvicorn --args 'llm_gateway.main:app,--host=0.0.0.0,--port=8080' --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --set-env-vars "OMI_ENV_STAGE=dev,GOOGLE_CLOUD_PROJECT=${QA_PROJECT},OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT},FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE},FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT},OMI_LLM_GATEWAY_PROD=false,LLM_GATEWAY_ALLOWED_CALLERS=backend,desktop,OMI_LLM_GATEWAY_BUILD_IDENTITY=jit-qa" --set-secrets "OPENAI_API_KEY=OPENAI_API_KEY:latest,ANTHROPIC_API_KEY=${QA_ANTHROPIC_SECRET}:latest,PERPLEXITY_API_KEY=${QA_PERPLEXITY_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
+          gcloud run deploy "$QA_GATEWAY_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --image "$IMAGE" --command uvicorn --args 'llm_gateway.main:app,--host=0.0.0.0,--port=8080' --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --set-env-vars "OMI_ENV_STAGE=dev,GOOGLE_CLOUD_PROJECT=${QA_PROJECT},OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT},FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE},FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT},OMI_JIT_QA_AUTH_ONLY=true,OMI_JIT_QA_UID_ALLOWLIST=${QA_UID},OMI_LLM_GATEWAY_PROD=false,LLM_GATEWAY_ALLOWED_CALLERS=backend,desktop,OMI_LLM_GATEWAY_BUILD_IDENTITY=jit-qa" --set-secrets "OPENAI_API_KEY=OPENAI_API_KEY:latest,ANTHROPIC_API_KEY=${QA_ANTHROPIC_SECRET}:latest,PERPLEXITY_API_KEY=${QA_PERPLEXITY_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
       - name: Resolve exact gateway URL
         id: gateway
         run: |
@@ -354,7 +354,7 @@ jobs:
           curl --fail --silent --show-error "$GATEWAY_URL/health" >/dev/null
           curl --silent --show-error -o /dev/null -w '%{http_code}' "$GATEWAY_URL/ready" | grep -Eq '^(401|403)$'
           gateway_token="$(gcloud secrets versions access latest --secret "$QA_GATEWAY_TOKEN_SECRET" --project "$QA_PROJECT")"
-          curl --fail --silent --show-error -H "Authorization: Bearer ${gateway_token}" -H 'X-Omi-Service-Caller: backend' "$GATEWAY_URL/ready" >/dev/null
+          curl --fail --silent --show-error -H "Authorization: Bearer ${gateway_token}" -H 'X-Omi-Service-Caller: backend' -H "X-Omi-User-Uid: ${QA_UID}" "$GATEWAY_URL/ready" >/dev/null
           curl --fail --silent --show-error "$PYTHON_URL/openapi.json" >/dev/null
           curl --fail --silent --show-error "$DESKTOP_URL/openapi.json" >/dev/null
           curl --silent --show-error -o /dev/null -w '%{http_code}' -X POST -H 'Authorization: Bearer invalid-qa-token' "$PYTHON_URL/v2/messages" | grep -Eq '^(401|403)$'

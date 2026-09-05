@@ -28,6 +28,8 @@ USER_UID_HEADER = 'x-omi-user-uid'
 TENANT_ID_HEADER = 'x-omi-tenant-id'
 USAGE_FEATURE_HEADER = 'x-omi-llm-feature'
 APP_PLATFORM_HEADER = 'x-omi-app-platform'
+QA_AUTH_ONLY_ENV_VAR = 'OMI_JIT_QA_AUTH_ONLY'
+QA_UID_ALLOWLIST_ENV_VAR = 'OMI_JIT_QA_UID_ALLOWLIST'
 # Closed enum. Anything else is unattributed rather than stored as free-form
 # client text, so the cost ledger's platform dimension stays aggregatable.
 ALLOWED_APP_PLATFORMS = frozenset({'desktop', 'mobile', 'web'})
@@ -110,6 +112,12 @@ def require_service_auth(request: Request) -> ServiceCaller:
     if caller.name not in allowed_service_callers():
         _record_auth_rejection(request, 'caller_not_allowed')
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='service caller is not allowed')
+    if _qa_auth_only_enabled() and caller.user_uid not in _qa_uid_allowlist():
+        _record_auth_rejection(request, 'qa_uid_not_allowed')
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='user is not admitted to the isolated QA plane',
+        )
 
     return caller
 
@@ -135,6 +143,15 @@ def allowed_service_callers() -> frozenset[str]:
         return DEFAULT_ALLOWED_CALLERS
     callers = frozenset(item.strip().lower() for item in configured.split(',') if item.strip())
     return callers or DEFAULT_ALLOWED_CALLERS
+
+
+def _qa_auth_only_enabled() -> bool:
+    return (os.getenv(QA_AUTH_ONLY_ENV_VAR) or '').strip().casefold() in {'1', 'true', 'yes', 'on'}
+
+
+def _qa_uid_allowlist() -> frozenset[str]:
+    configured = os.getenv(QA_UID_ALLOWLIST_ENV_VAR, '')
+    return frozenset(item.strip() for item in configured.split(',') if item.strip())
 
 
 def _configured_service_token() -> str | None:
