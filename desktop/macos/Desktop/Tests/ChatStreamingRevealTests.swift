@@ -84,39 +84,76 @@ final class ChatStreamingRevealTests: XCTestCase {
   /// period stays `flushInterval` while a flush still fits inside one — late
   /// in a long answer is exactly when a completion-anchored cadence slows the
   /// reveal down and the stream starts to stutter.
+  ///
+  /// Driven against `nextBeatDeadline` with simulated work instead of a real
+  /// `Thread.sleep`: the property is the scheduling math, and a sleep's actual
+  /// duration is whatever the host scheduler feels like — on a loaded CI
+  /// runner the sleep itself overshot the beat budget and the test failed on
+  /// machines whose streaming was fine.
   func testBeatsHoldTheirPeriodWhenFlushWorkEatsIntoTheInterval() {
-    let interval = 0.08
-    let buffer = ChatStreamingBuffer(flushInterval: interval)
-    var messages = makeMessages()
+    let interval = UInt64(0.08 * 1_000_000_000)
+    // Work that occupies three quarters of the interval, the way a growing
+    // transcript render does late in an answer.
+    let work = UInt64(0.06 * 1_000_000_000)
 
-    var beatStarts: [UInt64] = []
-    let drained = expectation(description: "the backlog drained")
-    func flushBeat() {
-      beatStarts.append(DispatchTime.now().uptimeNanoseconds)
-      // Work that occupies three quarters of the interval, the way a growing
-      // transcript render does late in an answer.
-      // omi-test-quality: wall-clock-wait -- the beat period under real elapsed time is the subject; a fake clock would test the fake.
-      Thread.sleep(forTimeInterval: interval * 0.75)
-      if buffer.flushPaced(messages: &messages) {
-        buffer.scheduleFlush { flushBeat() }
-      } else {
-        drained.fulfill()
+    var scheduledBeat: UInt64? = nil
+    var fireAt: UInt64? = nil
+    var now: UInt64 = 1_000_000_000
+    var periods: [UInt64] = []
+    for _ in 0..<20 {
+      let deadline = ChatStreamingBuffer.nextBeatDeadline(
+        scheduledBeat: scheduledBeat, now: now, interval: interval)
+      if let previous = fireAt {
+        periods.append(deadline - previous)
       }
+      fireAt = deadline
+      scheduledBeat = deadline
+      now = deadline &+ work  // the flush's render work runs past its start
     }
-    // Arm exactly the way the provider does: the append schedules the flush.
-    buffer.appendText(messageId: "m", text: String(repeating: "a", count: 2000), scheduleFlush: { flushBeat() })
-    wait(for: [drained], timeout: 10)
 
-    XCTAssertGreaterThanOrEqual(
-      beatStarts.count, 3, "precondition: enough backlog for several beats")
-    let intervalNanos = Int(interval * 1_000_000_000)
-    for (index, start) in beatStarts.enumerated().dropFirst() {
-      let period = Int(start - beatStarts[index - 1])
-      let drift = period - intervalNanos
-      XCTAssertLessThan(
-        drift, intervalNanos / 2,
-        "beat \(index) drifted to \(String(format: "%.0f", Double(period) / 1e6)) ms; "
-          + "completion-anchored beats run at interval + work")
+    XCTAssertEqual(periods.count, 19, "precondition: a long beat chain")
+    // Anchored beats hold the grid exactly. A completion-anchored cadence
+    // would run every beat at interval + work (140 ms here) — the stutter
+    // this scheduling exists to prevent.
+    XCTAssertTrue(
+      periods.allSatisfy { $0 == interval },
+      "beats left the \(String(format: "%.0f", Double(interval) / 1e6)) ms grid: "
+        + periods.map { String(format: "%.0f", Double($0) / 1e6) }.joined(separator: ", "))
+  }
+
+  /// A beat whose work overran its interval resynchronizes — it fires at once
+  /// and the grid restarts from there — instead of compounding the overrun.
+  func testAnOverrunningBeatResynchronizesToNow() {
+    let interval = UInt64(0.08 * 1_000_000_000)
+    // Work that overshoots the interval by half again.
+    let work = UInt64(0.12 * 1_000_000_000)
+
+    var scheduledBeat: UInt64? = nil
+    var now: UInt64 = 1_000_000_000
+    var firstResyncPeriod: UInt64? = nil
+    var periodsAfterResync: [UInt64] = []
+    for _ in 0..<10 {
+      let deadline = ChatStreamingBuffer.nextBeatDeadline(
+        scheduledBeat: scheduledBeat, now: now, interval: interval)
+      if let previous = scheduledBeat {
+        let period = deadline - previous
+        if firstResyncPeriod == nil {
+          firstResyncPeriod = period
+        } else {
+          periodsAfterResync.append(period)
+        }
+      }
+      scheduledBeat = deadline
+      now = deadline &+ work
     }
+
+    // The first re-arm after the overrun fires at the overrun's end (period ==
+    // work, not work + interval); from there work still overruns, so every
+    // period is exactly the work duration — the grid never accumulates debt.
+    XCTAssertEqual(firstResyncPeriod, work)
+    XCTAssertTrue(
+      periodsAfterResync.allSatisfy { $0 == work },
+      "overrunning beats compounded: "
+        + periodsAfterResync.map { String(format: "%.0f", Double($0) / 1e6) }.joined(separator: ", "))
   }
 }

@@ -326,13 +326,22 @@ final class ChatStreamingBuffer {
     // cadence back with it.
     let now = DispatchTime.now().uptimeNanoseconds
     let interval = UInt64(flushInterval * 1_000_000_000)
-    let deadline = max((scheduledBeat ?? now) &+ interval, now)
+    let deadline = Self.nextBeatDeadline(scheduledBeat: scheduledBeat, now: now, interval: interval)
     scheduledBeat = deadline
     let workItem = DispatchWorkItem(block: scheduleFlush)
     flushWorkItem = workItem
     DispatchQueue.main.asyncAfter(
       deadline: .now() + DispatchTimeInterval.nanoseconds(Int(deadline - now)),
       execute: workItem)
+  }
+
+  /// The anchoring contract, pure so it holds without a real clock: a beat
+  /// whose flush work stays inside the interval keeps the grid (the next
+  /// deadline is one interval after the scheduled beat, no matter when the
+  /// work finished), and a beat that overran resynchronizes to now instead of
+  /// compounding the overrun into every later beat.
+  static func nextBeatDeadline(scheduledBeat: UInt64?, now: UInt64, interval: UInt64) -> UInt64 {
+    max((scheduledBeat ?? now) &+ interval, now)
   }
 }
 
