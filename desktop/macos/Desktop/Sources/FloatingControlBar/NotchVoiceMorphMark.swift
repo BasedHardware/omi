@@ -299,7 +299,7 @@ struct NotchVoiceMorphMark: View {
     }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(
-      isListening ? "Listening" : isSpeaking ? "Speaking" : isThinking ? "Thinking" : "Omi")
+      isDictating ? "Dictating" : isListening ? "Listening" : isSpeaking ? "Speaking" : isThinking ? "Thinking" : "Omi")
   }
 
   private func setMorphProgress(_ progress: CGFloat) {
@@ -379,8 +379,10 @@ struct NotchVoiceMorphMark: View {
       let dictationBlend = NotchVoiceMorphGeometry.dictationBlend(
         elapsed: dictationTintStart.map { date.timeIntervalSince($0) },
         reduceMotion: reduceMotion)
+      // Branch on the state, not the blend: the first dictation frame has a
+      // zero blend, and it must start from white, never from a status colour.
       let color =
-        dictationBlend > 0
+        isDictating
         ? NotchVoiceMorphGeometry.dictationDotColor(blend: dictationBlend)
         : isListening || speakingPresentation
           ? NotchGlass.primary.opacity(0.98)
