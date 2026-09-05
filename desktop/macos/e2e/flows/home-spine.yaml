@@ -6,8 +6,8 @@ description: >-
   produced and the screen moments from the same minutes, grouped by day with sticky day headers.
   Verifies the spine renders real account data, that the type chips and the query field both
   narrow it in place, that a soloed kind flattens the indent and gives every row its own
-  timestamp, that the hour rail tracks the topmost visible row, and that every row hands off to
-  the page that owns it (INV-NAV-1).
+  timestamp, that the hour ribbon runs unbroken across every loaded day and can scroll the list
+  itself, and that every row hands off to the page that owns it (INV-NAV-1).
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineModel.swift
@@ -16,6 +16,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineRowViews.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineDayRecapRow.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHourRail.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineRibbon.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineScrollLink.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineScreenIndex.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHydration.swift
   - desktop/macos/Desktop/Sources/MainWindow/ServerPaging.swift
@@ -39,6 +41,23 @@ steps:
         - Conversations
         - Memories
         - Rewind
+
+  - id: S1b
+    name: The ribbon runs through midnight instead of restarting at it
+    do: >-
+      Scroll the spine until the list crosses from one day into the next. The rail does not swap
+      its contents: the hours continue past midnight into a thin rule labelled with the next day's
+      name, and then that day's hours, as one strip sliding under a fixed reading position. The
+      heavy, labelled bar hands over to its neighbour as the strip moves rather than jumping
+      between them, and only ever one hour states its time.
+
+  - id: S1c
+    name: The ribbon is the scrollbar
+    do: >-
+      Put the pointer over the ribbon itself — not the list — and scroll with the wheel or a
+      two-finger swipe. The list scrolls, at the same speed and with the same momentum as
+      scrolling the list directly, and the ribbon follows it. Nothing is dragged: press and drag
+      on the ribbon does not scrub.
 
   - id: S2
     name: Memories and screen moments sit under the conversation that produced them

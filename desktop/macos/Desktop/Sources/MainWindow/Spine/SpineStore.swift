@@ -21,6 +21,14 @@ import Foundation
 final class SpineStore: ObservableObject {
   /// What the list renders: composed, then narrowed by the chip and the query.
   @Published private(set) var days: [SpineDay] = []
+  /// The same days, as the ribbon draws them: title plus hour histogram, in the same order and with
+  /// the same indices as `days`.
+  ///
+  /// Derived here rather than in the rail because the rail redraws several times a second while
+  /// scrolling, and rebuilding a histogram per day per redraw is the class of waste this store
+  /// exists to avoid. It moves only when `days` does.
+  @Published private(set) var ribbonDays: [SpineRibbonDay] = []
+
   /// True only for the first fill. A refresh behind an already-populated spine is not a spinner.
   @Published private(set) var isPreparing = true
 
@@ -291,6 +299,11 @@ final class SpineStore: ObservableObject {
       composed, kind: kind, query: request.term, earliest: request.range.earliest())
     days = filtered
     matchCount = filtered.reduce(0) { $0 + $1.matchCount }
+    // Histograms stay full-day even when the list is narrowed — the ribbon is a timeline navigator,
+    // not a result count. `SpineRailColumn.railDayTitle` is what says so on screen.
+    ribbonDays = filtered.map {
+      SpineRibbonDay(id: $0.id, title: $0.title, density: density(for: $0.id))
+    }
   }
 
   // MARK: - Digests

@@ -41,36 +41,82 @@ import SwiftUI
 /// because of.
 @MainActor
 final class SpineViewport: ObservableObject {
-  @Published private(set) var dayID: Date?
-  @Published private(set) var hour: Int?
+  /// Where the list is being read, continuously. `nil` before the list has reported anything.
+  @Published private(set) var position: SpineReadingPosition?
 
-  func report(dayID: Date, hour: Int) {
+  /// The day under the reading line, for everything that is still a per-day question — the
+  /// headline's count, its scope line, the footer.
+  var dayID: Date? { position?.row.dayID }
+
+  func report(_ position: SpineReadingPosition) {
     // Assign only on a real change: an identical publish is a redraw of the rail for nothing.
-    if self.dayID != dayID { self.dayID = dayID }
-    if self.hour != hour { self.hour = hour }
+    guard self.position != position else { return }
+    self.position = position
   }
 }
 
-/// What one row tells the viewport about itself. The row nearest the top of the list wins.
-private struct SpineRowAnchor: Equatable {
+/// What one row tells the viewport about itself, in the list's own coordinate space.
+struct SpineRowAnchor: Equatable {
   let dayID: Date
   let hour: Int
-  /// The row's bottom edge in the list's coordinate space. A row whose bottom is above the reading
-  /// line has scrolled behind the sticky header; among the rest, the smallest bottom is the topmost
-  /// visible row.
+  let minute: Int
+  /// The row's edges. A row whose bottom is above the reading line has scrolled behind the sticky
+  /// header; among the rest, the smallest bottom is the topmost visible row. `top` is what makes the
+  /// position between two rows knowable — see `SpineReadingPosition.fraction`.
+  let top: CGFloat
   let bottom: CGFloat
 }
 
-private struct SpineTopRowKey: PreferenceKey {
-  static let defaultValue: SpineRowAnchor? = nil
+/// **Where the list is being read, as a continuous quantity rather than a row index.**
+///
+/// The rail used to be told only *which* row was under the reading line. That is a step function:
+/// it holds still for the whole height of a row and then changes all at once, so the ribbon stalled
+/// and jumped, stalled and jumped, however smoothly the list itself was moving. Softening it with an
+/// animation only traded the jump for a lag — the strip was then always a beat behind, which is
+/// worse, because a position indicator that disagrees with the thing it indicates is not a position
+/// indicator.
+///
+/// So the viewport reports the row at the reading line **and the one after it**, plus how far the
+/// first has travelled past that line. Blending between their two positions gives a value that moves
+/// every frame the list moves, lands exactly on the next row's position at the moment that row takes
+/// over, and needs no animation at all — the smoothness is the data, not an easing curve laid over
+/// a coarse one.
+struct SpineReadingPosition: Equatable {
+  /// The row at the reading line.
+  let row: SpineRowAnchor
+  /// The row after it, when there is one. `nil` at the very end of the loaded stream, where there is
+  /// nothing further to blend towards.
+  let next: SpineRowAnchor?
 
-  static func reduce(value: inout SpineRowAnchor?, nextValue: () -> SpineRowAnchor?) {
-    guard let next = nextValue(), next.bottom > SpineLayout.readingLine else { return }
-    guard let current = value else {
-      value = next
-      return
+  /// `0` when `row` has just reached the reading line, `1` when it is about to leave it.
+  var fraction: CGFloat {
+    let span = row.bottom - row.top
+    guard span > 0 else { return 0 }
+    return min(1, max(0, (SpineLayout.readingLine - row.top) / span))
+  }
+
+  /// Keeps the two rows nearest the reading line out of everything the list reported.
+  ///
+  /// At most four candidates ever meet here — two from each side of a `reduce` — so the sort is on
+  /// a fixed, tiny array and this stays proportional to the rows on screen, not to the corpus.
+  static func merge(_ lhs: SpineReadingPosition?, _ rhs: SpineReadingPosition?) -> SpineReadingPosition? {
+    var candidates: [SpineRowAnchor] = []
+    for side in [lhs, rhs] {
+      guard let side else { continue }
+      candidates.append(side.row)
+      if let next = side.next { candidates.append(next) }
     }
-    if next.bottom < current.bottom { value = next }
+    guard !candidates.isEmpty else { return nil }
+    candidates.sort { $0.bottom < $1.bottom }
+    return SpineReadingPosition(row: candidates[0], next: candidates.count > 1 ? candidates[1] : nil)
+  }
+}
+
+private struct SpineTopRowKey: PreferenceKey {
+  static let defaultValue: SpineReadingPosition? = nil
+
+  static func reduce(value: inout SpineReadingPosition?, nextValue: () -> SpineReadingPosition?) {
+    value = SpineReadingPosition.merge(value, nextValue())
   }
 }
 
@@ -112,13 +158,16 @@ struct SpineStream: View {
   /// Which days are folded shut. Lives with the view rather than with the store because it is a
   /// reading position, not data: it is worth exactly as long as this list is on screen.
   @State private var collapse = SpineDayCollapse()
+  /// The list's scroll view, so a wheel over the ribbon scrolls the list. See `SpineScrollLink`.
+  @State private var scrollLink = SpineScrollLink()
 
   var body: some View {
     GeometryReader { proxy in
       HStack(spacing: 0) {
         if proxy.size.width >= SpineLayout.railBreakpoint {
           SpineRailColumn(
-            store: store, viewport: viewport, collapse: collapse, request: request)
+            store: store, viewport: viewport, collapse: collapse, request: request,
+            scrollLink: scrollLink)
           Rectangle().fill(Ink.separator).frame(width: 1)
         }
         Group {
@@ -264,11 +313,15 @@ struct SpineStream: View {
       }
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.bottom, OmiSpacing.md)
+      .background(SpineScrollAnchor(link: scrollLink))
     }
     .coordinateSpace(name: SpineLayout.coordinateSpace)
-    .onPreferenceChange(SpineTopRowKey.self) { anchor in
-      guard let anchor else { return }
-      Task { @MainActor in viewport.report(dayID: anchor.dayID, hour: anchor.hour) }
+    // `assumeIsolated` rather than a `Task`: SwiftUI delivers preference changes on the main thread
+    // during a view update, and with a continuous position this fires on every frame of a scroll —
+    // one `Task` allocation per frame, to hop to the actor it is already on.
+    .onPreferenceChange(SpineTopRowKey.self) { position in
+      guard let position else { return }
+      MainActor.assumeIsolated { viewport.report(position) }
     }
     .glassScrollFade(bottom: 18)
   }
@@ -278,13 +331,21 @@ struct SpineStream: View {
   /// thousand.
   private func anchor(for row: SpineRow, in day: SpineDay) -> some View {
     GeometryReader { proxy in
+      let frame = proxy.frame(in: .named(SpineLayout.coordinateSpace))
       Color.clear.preference(
         key: SpineTopRowKey.self,
-        value: SpineRowAnchor(
-          dayID: day.id,
-          hour: Calendar.current.component(.hour, from: row.anchor),
-          bottom: proxy.frame(in: .named(SpineLayout.coordinateSpace)).maxY
-        )
+        // A row entirely above the reading line is behind the sticky header and is not what anybody
+        // is looking at, so it offers nothing rather than competing to be the position.
+        value: frame.maxY > SpineLayout.readingLine
+          ? SpineReadingPosition(
+            row: SpineRowAnchor(
+              dayID: day.id,
+              hour: Calendar.current.component(.hour, from: row.anchor),
+              minute: Calendar.current.component(.minute, from: row.anchor),
+              top: frame.minY,
+              bottom: frame.maxY
+            ), next: nil)
+          : nil
       )
     }
   }
@@ -456,6 +517,7 @@ private struct SpineRailColumn: View {
   @ObservedObject var viewport: SpineViewport
   let collapse: SpineDayCollapse
   let request: QueryShellRequest
+  let scrollLink: SpineScrollLink
 
   /// The day the rail describes.
   ///
@@ -471,11 +533,36 @@ private struct SpineRailColumn: View {
 
   private var day: SpineDay? { store.days.first { $0.id == dayID } }
 
-  /// The hour marker belongs to the day the list actually reported. Carrying it onto a day chosen by
-  /// the fallback above would light up an hour on a rail for a day nobody is reading.
-  private var currentHour: Int? {
+  /// The reading position, but only while it belongs to the day the rail is describing. A folded
+  /// day still reports nothing, so a position left over from before it folded would light an hour on
+  /// a strip for a day nobody is reading.
+  private var position: SpineReadingPosition? {
     guard let dayID, dayID == viewport.dayID else { return nil }
-    return viewport.hour
+    return viewport.position
+  }
+
+  /// Where a row sits in the strip. `store.ribbonDays` is `store.days` in the same order, so one
+  /// index serves both; a row whose day has gone from the list under us falls back to the newest.
+  private func depth(of anchor: SpineRowAnchor, viewport height: CGFloat) -> CGFloat {
+    SpineRibbonGeometry.depth(
+      dayIndex: store.days.firstIndex { $0.id == anchor.dayID } ?? 0,
+      hour: anchor.hour, minute: anchor.minute, viewport: height)
+  }
+
+  /// **The blend that makes the strip continuous.** Between the row at the reading line and the one
+  /// after it, by how far the first has travelled past that line — so the strip arrives at the next
+  /// row's position exactly as that row takes over, and never has to jump to catch up.
+  ///
+  /// With nothing reported it parks on the day the headline is describing, at that day's latest
+  /// minute: the top of its block, which is where reading it would start.
+  private func depth(viewport height: CGFloat) -> CGFloat {
+    guard let position else {
+      let index = store.days.firstIndex { $0.id == dayID } ?? 0
+      return SpineRibbonGeometry.depth(dayIndex: index, hour: 23, minute: 59, viewport: height)
+    }
+    let from = depth(of: position.row, viewport: height)
+    guard let next = position.next else { return from }
+    return from + (depth(of: next, viewport: height) - from) * position.fraction
   }
 
   /// The rail remains a timeline navigator while the list narrows. Its capture histogram and
@@ -491,8 +578,11 @@ private struct SpineRailColumn: View {
 
   var body: some View {
     SpineHourRail(
-      density: dayID.map(store.density(for:)) ?? Array(repeating: 0, count: 24),
-      currentHour: currentHour,
+      days: store.ribbonDays,
+      depth: { depth(viewport: $0) },
+      highlightsMarker: position != nil,
+      readingHour: position?.row.hour,
+      scrollLink: scrollLink,
       momentCount: dayID.flatMap(store.momentCount(for:)),
       dayTitle: railDayTitle,
       // Filtered results no longer carry the complete day's conversation count. The footer is
