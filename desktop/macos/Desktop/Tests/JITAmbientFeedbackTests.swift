@@ -1,8 +1,32 @@
+@preconcurrency import UserNotifications
 import XCTest
 
 @testable import Omi_Computer
 
 final class JITAmbientFeedbackTests: XCTestCase {
+  private actor SuspensionGate {
+    private var entered = false
+    private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+    func suspend() async {
+      entered = true
+      enteredWaiters.forEach { $0.resume() }
+      enteredWaiters.removeAll()
+      await withCheckedContinuation { releaseContinuation = $0 }
+    }
+
+    func waitUntilEntered() async {
+      if entered { return }
+      await withCheckedContinuation { enteredWaiters.append($0) }
+    }
+
+    func release() {
+      releaseContinuation?.resume()
+      releaseContinuation = nil
+    }
+  }
+
   private final class Recorder: @unchecked Sendable {
     private let lock = NSLock()
     private(set) var calls: [(JITAmbientFeedbackContext, JITTriggerFeedbackAction)] = []
@@ -119,26 +143,67 @@ final class JITAmbientFeedbackTests: XCTestCase {
     XCTAssertEqual(recorder.calls.count, 1)
   }
 
+  func testAmbientMutationRechecksOwnerAfterSuspendedRecorderHop() async throws {
+    let authority = RuntimeOwnerAuthorizationAuthority()
+    authority.endTransition(ownerID: "owner")
+    let authorization = try XCTUnwrap(authority.capture(ownerID: "owner", expectedOwnerID: "owner"))
+    let context = context()
+    let store = InterjectSuggestionFeedbackStore()
+    let gate = SuspensionGate()
+
+    let task = Task {
+      await JITAmbientFeedbackActionRouter.record(
+        .useful,
+        context: context,
+        authorizationSnapshot: authorization,
+        currentAccountGeneration: context.accountGeneration,
+        authorizationCurrent: { snapshot in authority.isCurrent(snapshot, ownerID: "owner") },
+        recorder: { context, action, snapshot in
+          await gate.suspend()
+          _ = await InterjectSuggestionFeedbackMutation.record(
+            evaluationID: context.suggestionIdentity.evaluationID,
+            suggestionID: context.suggestionIdentity.suggestionID,
+            verb: action.interjectVerb,
+            provenance: context.provenance,
+            store: store,
+            emitAnalytics: false,
+            authorizationSnapshot: snapshot,
+            authorizationCurrent: { candidate in authority.isCurrent(candidate, ownerID: "owner") }
+          )
+        }
+      )
+    }
+
+    await gate.waitUntilEntered()
+    authority.beginTransition()
+    authority.endTransition(ownerID: "new-owner")
+    await gate.release()
+    await task.value
+
+    let record = await store.current(
+      evaluationID: context.suggestionIdentity.evaluationID,
+      suggestionID: context.suggestionIdentity.suggestionID
+    )
+    XCTAssertNil(record, "old-owner feedback must not cross an account transition")
+  }
+
   @MainActor
   func testAmbientSystemBannerRoundTripsOpaqueContext() throws {
     let context = context()
-    let userInfo: [AnyHashable: Any] = [
-      "omi.jit.ambient-feedback.v1": [
-        "owner_id": context.ownerID,
-        "event_id": context.eventID,
-        "candidate_id": context.candidateID,
-        "account_generation": context.accountGeneration,
-        "evaluation_id": context.suggestionIdentity.evaluationID.uuidString,
-        "suggestion_id": context.suggestionIdentity.suggestionID.uuidString,
-      ]
-    ]
+    let content = UNMutableNotificationContent()
+    content.userInfo = NotificationService.jitAmbientFeedbackUserInfo(for: context)
 
-    XCTAssertEqual(NotificationService.jitAmbientFeedbackContext(from: userInfo), context)
+    XCTAssertEqual(NotificationService.jitAmbientFeedbackContext(from: content.userInfo), context)
     XCTAssertEqual(
       NotificationService.openAction(
         assistantId: "context-director",
         title: "A useful reminder",
         jitAmbientFeedbackContext: context),
       .openJITDetail)
+  }
+
+  func testAmbientBannerGenerationFenceRejectsStaleControl() {
+    XCTAssertTrue(NotificationService.jitFeedbackGenerationMatches(4, currentGeneration: 4))
+    XCTAssertFalse(NotificationService.jitFeedbackGenerationMatches(4, currentGeneration: 5))
   }
 }

@@ -46,7 +46,7 @@ enum InterjectHubFeedbackTool {
       let currentIdentity,
       currentIdentity == admitted.identity
     else { return }
-    await InterjectSuggestionFeedbackMutation.record(
+    _ = await InterjectSuggestionFeedbackMutation.record(
       evaluationID: admitted.identity.evaluationID,
       suggestionID: admitted.identity.suggestionID,
       verb: verb,

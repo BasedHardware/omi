@@ -27,7 +27,9 @@ struct InterjectFeedbackProvenance: Codable, Equatable, Sendable {
 
 /// One canonical suggestion-feedback row. Identity is the existing
 /// `evaluation_id` / `suggestion_id` pair — other surfaces read this, they
-/// never keep a parallel tally (FC-split-mutation-authority).
+/// never keep a parallel tally (FC-split-mutation-authority). The store is
+/// process-scoped today; provenance is retained for the matching analytics
+/// event, but this row is not yet a durable JIT evaluator input.
 struct InterjectFeedbackRecord: Codable, Equatable, Sendable {
   let evaluationID: UUID
   let suggestionID: UUID
@@ -52,6 +54,31 @@ actor InterjectSuggestionFeedbackStore {
     records[key] = record
   }
 
+  /// Linearization point for owner-bound feedback. The authorization check is
+  /// deliberately inside the store actor, immediately before the write, so an
+  /// account transition during an earlier suspension cannot commit the old
+  /// owner's feedback under a reused suggestion identity.
+  @discardableResult
+  func recordIfAuthorized(
+    _ record: InterjectFeedbackRecord,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    authorizationCurrent: @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool
+  ) -> Bool {
+    guard authorizationCurrent(authorizationSnapshot) else { return false }
+    self.record(record)
+    return true
+  }
+
+  func removeIfMatching(
+    evaluationID: UUID,
+    suggestionID: UUID,
+    record expected: InterjectFeedbackRecord
+  ) {
+    let key = Self.identityKey(evaluationID: evaluationID, suggestionID: suggestionID)
+    guard records[key] == expected else { return }
+    records.removeValue(forKey: key)
+  }
+
   func current(evaluationID: UUID, suggestionID: UUID) -> InterjectFeedbackRecord? {
     records[Self.identityKey(evaluationID: evaluationID, suggestionID: suggestionID)]
   }
@@ -72,26 +99,53 @@ enum InterjectSuggestionFeedbackMutation {
     recordedAt: Date = Date(),
     provenance: InterjectFeedbackProvenance? = nil,
     store: InterjectSuggestionFeedbackStore = .shared,
-    emitAnalytics: Bool = true
-  ) async {
-    guard verb.recordsAsTeachSignal else { return }
+    emitAnalytics: Bool = true,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    authorizationCurrent: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool =
+      RuntimeOwnerIdentity.isAuthorizationCurrent
+  ) async -> Bool {
+    guard verb.recordsAsTeachSignal else { return false }
+    if let authorizationSnapshot {
+      guard authorizationCurrent(authorizationSnapshot) else { return false }
+    }
+    let record = InterjectFeedbackRecord(
+      evaluationID: evaluationID,
+      suggestionID: suggestionID,
+      verb: verb,
+      recordedAt: recordedAt,
+      provenance: provenance
+    )
+    let didRecord: Bool
+    if let authorizationSnapshot {
+      didRecord = await store.recordIfAuthorized(
+        record,
+        authorizationSnapshot: authorizationSnapshot,
+        authorizationCurrent: authorizationCurrent
+      )
+    } else {
+      await store.record(record)
+      didRecord = true
+    }
+    guard didRecord else { return false }
+
     let identity = SuggestionAssistantTelemetry.NotificationIdentity(
       evaluationID: evaluationID, suggestionID: suggestionID)
-    if emitAnalytics {
-      await MainActor.run {
-        AnalyticsManager.shared.suggestionFeedbackRecorded(
-          verb: verb.rawValue, suggestionIdentity: identity)
+    guard emitAnalytics else { return true }
+    let didEmitAnalytics = await MainActor.run {
+      if let authorizationSnapshot {
+        guard authorizationCurrent(authorizationSnapshot) else { return false }
       }
+      AnalyticsManager.shared.suggestionFeedbackRecorded(
+        verb: verb.rawValue, suggestionIdentity: identity, provenance: provenance)
+      return true
     }
-    await store.record(
-      InterjectFeedbackRecord(
-        evaluationID: evaluationID,
-        suggestionID: suggestionID,
-        verb: verb,
-        recordedAt: recordedAt,
-        provenance: provenance
-      )
-    )
+    if !didEmitAnalytics, authorizationSnapshot != nil {
+      // Do not leave a stale owner row behind when the transition won the
+      // race after the actor write but before the telemetry seam.
+      await store.removeIfMatching(
+        evaluationID: evaluationID, suggestionID: suggestionID, record: record)
+    }
+    return didEmitAnalytics
   }
 
   /// Journaled proactive-card thumbs-down. Analytics is a side effect of this
@@ -114,7 +168,7 @@ enum InterjectSuggestionFeedbackMutation {
         SuggestionAssistantTelemetry.NotificationIdentity(evaluationID: $0, suggestionID: $0)
       }
     guard let identity else { return }
-    await record(
+    _ = await record(
       evaluationID: identity.evaluationID,
       suggestionID: identity.suggestionID,
       verb: verb,

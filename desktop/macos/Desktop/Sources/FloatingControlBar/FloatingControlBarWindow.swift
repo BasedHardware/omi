@@ -3871,7 +3871,7 @@ class FloatingControlBarManager {
     verb: InterjectFeedbackVerb
   ) async {
     guard InterjectFeature.isEnabled else { return }
-    await InterjectSuggestionFeedbackMutation.record(
+    _ = await InterjectSuggestionFeedbackMutation.record(
       evaluationID: identity.evaluationID,
       suggestionID: identity.suggestionID,
       verb: verb
@@ -3885,7 +3885,7 @@ class FloatingControlBarManager {
     guard let verb = parsed.verb,
       let identity = recentNotchCardFeedbackIdentity()
     else { return }
-    await InterjectSuggestionFeedbackMutation.record(
+    _ = await InterjectSuggestionFeedbackMutation.record(
       evaluationID: identity.evaluationID,
       suggestionID: identity.suggestionID,
       verb: verb

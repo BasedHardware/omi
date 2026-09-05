@@ -63,19 +63,7 @@ enum JITAmbientFeedbackActionRouter {
     currentAccountGeneration: Int,
     authorizationCurrent: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool =
       RuntimeOwnerIdentity.isAuthorizationCurrent,
-    recorder: @escaping Record = { context, action, authorizationSnapshot in
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
-      let generationMatches = await MainActor.run {
-        AccountCutoverControlManager.shared.control.accountGeneration == context.accountGeneration
-      }
-      guard generationMatches else { return }
-      await InterjectSuggestionFeedbackMutation.record(
-        evaluationID: context.suggestionIdentity.evaluationID,
-        suggestionID: context.suggestionIdentity.suggestionID,
-        verb: action.interjectVerb,
-        provenance: context.provenance
-      )
-    }
+    recorder: Record? = nil
   ) async {
     guard context.isValid,
       context.ownerID == authorizationSnapshot.ownerID,
@@ -83,6 +71,23 @@ enum JITAmbientFeedbackActionRouter {
       authorizationCurrent(authorizationSnapshot),
       visibleActions.contains(action)
     else { return }
-    await recorder(context, action, authorizationSnapshot)
+    if let recorder {
+      await recorder(context, action, authorizationSnapshot)
+      return
+    }
+
+    let generationMatches = await MainActor.run {
+      guard authorizationCurrent(authorizationSnapshot) else { return false }
+      return AccountCutoverControlManager.shared.control.accountGeneration == context.accountGeneration
+    }
+    guard generationMatches else { return }
+    _ = await InterjectSuggestionFeedbackMutation.record(
+      evaluationID: context.suggestionIdentity.evaluationID,
+      suggestionID: context.suggestionIdentity.suggestionID,
+      verb: action.interjectVerb,
+      provenance: context.provenance,
+      authorizationSnapshot: authorizationSnapshot,
+      authorizationCurrent: authorizationCurrent
+    )
   }
 }

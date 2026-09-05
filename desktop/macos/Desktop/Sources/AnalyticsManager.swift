@@ -1538,11 +1538,13 @@ class AnalyticsManager {
 
   func suggestionFeedbackRecorded(
     verb: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    provenance: InterjectFeedbackProvenance? = nil
   ) {
     if let suggestionIdentity {
       var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
       properties["verb"] = verb
+      appendInterjectFeedbackProvenance(provenance, to: &properties)
       captureSuggestionAssistantTelemetryForTests(
         "Suggestion Feedback Recorded",
         properties: properties
@@ -1550,8 +1552,23 @@ class AnalyticsManager {
     }
     PostHogManager.shared.suggestionFeedbackRecorded(
       verb: verb,
-      suggestionIdentity: suggestionIdentity
+      suggestionIdentity: suggestionIdentity,
+      provenance: provenance
     )
+  }
+
+  private func appendInterjectFeedbackProvenance(
+    _ provenance: InterjectFeedbackProvenance?,
+    to properties: inout [String: Any]
+  ) {
+    guard let provenance else { return }
+    // Owner identity remains in the local owner fence and is never sent as an
+    // analytics property. The opaque delivery/candidate joins are enough to
+    // correlate the event with the bounded JIT receipt.
+    properties["feedback_lane"] = provenance.lane
+    properties["feedback_delivery_id"] = provenance.deliveryID
+    properties["feedback_candidate_id"] = provenance.candidateID
+    properties["feedback_account_generation"] = provenance.accountGeneration
   }
 
   func notificationWillPresent(notificationId: String, title: String) {

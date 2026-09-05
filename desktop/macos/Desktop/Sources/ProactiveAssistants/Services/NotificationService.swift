@@ -400,7 +400,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   private func presentJITDetailCard(_ metadata: NotificationMetadata) -> Bool {
     guard let ownerID = metadata.jitFeedbackContext?.ownerID ?? metadata.jitAmbientFeedbackContext?.ownerID,
       ownerID == metadata.authorizationSnapshot.ownerID,
-      RuntimeOwnerIdentity.isAuthorizationCurrent(metadata.authorizationSnapshot)
+      RuntimeOwnerIdentity.isAuthorizationCurrent(metadata.authorizationSnapshot),
+      Self.isCurrentJITAccountGeneration(metadata)
     else { return false }
 
     if let feedbackContext = metadata.jitFeedbackContext, let jitDetailPresenter {
@@ -430,6 +431,29 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       isPersistent: true,
       authorizationSnapshot: metadata.authorizationSnapshot)
     return true
+  }
+
+  /// A valid auth snapshot can still outlive a newer server cutover control.
+  /// Refuse to resurrect a banner whose JIT generation belongs to that older
+  /// control, including after a relaunch where only native userInfo remains.
+  private static func isCurrentJITAccountGeneration(_ metadata: NotificationMetadata) -> Bool {
+    let feedbackGeneration =
+      metadata.jitFeedbackContext?.accountGeneration
+      ?? metadata.jitAmbientFeedbackContext?.accountGeneration
+    guard let feedbackGeneration else { return true }
+    return jitFeedbackGenerationMatches(
+      feedbackGeneration,
+      currentGeneration: AccountCutoverControlManager.shared.control.accountGeneration)
+  }
+
+  /// Testable generation fence shared by relaunch routing and the in-process
+  /// presenter. The server control's generation is authoritative for both
+  /// planned and ambient JIT cards.
+  nonisolated static func jitFeedbackGenerationMatches(
+    _ feedbackGeneration: Int,
+    currentGeneration: Int
+  ) -> Bool {
+    feedbackGeneration >= 0 && feedbackGeneration == currentGeneration
   }
 
   /// Route a system-banner tap through the same owner-fenced persistent-card
@@ -493,7 +517,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     ]
   }
 
-  private static func jitAmbientFeedbackUserInfo(
+  static func jitAmbientFeedbackUserInfo(
     for context: JITAmbientFeedbackContext
   ) -> [AnyHashable: Any] {
     [
