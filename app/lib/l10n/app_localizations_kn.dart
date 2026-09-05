@@ -9964,4 +9964,8 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'ಜ್ಞಾನ ಗ್ರಾಫ್ ಅನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

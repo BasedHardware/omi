@@ -9941,4 +9941,8 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Não foi possível carregar o grafo de conhecimento';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

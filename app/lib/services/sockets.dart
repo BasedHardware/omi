@@ -25,6 +25,9 @@ abstract class ISocketService {
     Geolocation? geolocation,
   });
 
+  /// [customSttConfig] switches the session to on-device transcription
+  /// (see TranscriptSocketServiceFactory.createSpeechProfileOnDevice); null
+  /// uses the backend's streaming STT.
   Future<TranscriptSegmentSocketService?> speechProfile({
     required BleAudioCodec codec,
     required int sampleRate,
@@ -32,6 +35,7 @@ abstract class ISocketService {
     bool force = false,
     String? source,
     bool speechProfileRedo = false,
+    CustomSttConfig? customSttConfig,
   });
 }
 
@@ -153,22 +157,34 @@ class SocketServicePool extends ISocketService {
     bool force = false,
     String? source,
     bool speechProfileRedo = false,
+    CustomSttConfig? customSttConfig,
   }) async {
-    Logger.debug("socket speech profile > $codec $sampleRate $force source: $source");
+    Logger.debug(
+      "socket speech profile > $codec $sampleRate $force source: $source localStt: ${customSttConfig?.provider.name}",
+    );
 
     await _mutex.acquire();
     try {
       // Use separate socket for speech profile to avoid conflicts with conversation socket
       await _speechProfileSocket?.stop();
 
-      _speechProfileSocket = SpeechProfileTranscriptSegmentSocketService.create(
-        sampleRate,
-        codec,
-        language,
-        source: source,
-        onboardingMode: true,
-        speechProfileRedo: speechProfileRedo,
-      );
+      _speechProfileSocket = customSttConfig != null
+          ? TranscriptSocketServiceFactory.createSpeechProfileOnDevice(
+              sampleRate,
+              codec,
+              language,
+              customSttConfig,
+              source: source,
+              speechProfileRedo: speechProfileRedo,
+            )
+          : SpeechProfileTranscriptSegmentSocketService.create(
+              sampleRate,
+              codec,
+              language,
+              source: source,
+              onboardingMode: true,
+              speechProfileRedo: speechProfileRedo,
+            );
 
       await _speechProfileSocket?.start();
       if (_speechProfileSocket?.state != SocketServiceState.connected) {

@@ -9911,4 +9911,8 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'नॉलेज ग्राफ़ लोड नहीं हो सका';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

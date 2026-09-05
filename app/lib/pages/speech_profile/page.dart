@@ -22,6 +22,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
+import 'package:omi/widgets/fade_in_words_text.dart';
 import 'percentage_bar_progress.dart';
 
 class SpeechProfilePage extends StatefulWidget {
@@ -158,8 +159,12 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
       // question/progress ever arrives (see STT_UNAVAILABLE handling below,
       // which only fires after already sitting in a dead recording screen).
       final available = await isSttAvailable();
+      // Backend STT down: transcribe on-device instead when this platform can,
+      // rather than dead-ending in a dialog. The voice print comes from the
+      // uploaded audio either way.
+      final useLocalStt = !available && await provider.enableLocalStt();
       if (mounted) setState(() => _isCheckingAvailability = false);
-      if (!available) {
+      if (!available && !useLocalStt) {
         if (!context.mounted) return;
         await showDialog(
           context: context,
@@ -168,7 +173,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
             () => Navigator.pop(context),
             () {},
             context.l10n.connectionError,
-            context.l10n.connectionErrorDesc,
+            context.l10n.speechToTextUnavailableDesc,
             okButtonText: context.l10n.ok,
             singleButton: true,
           ),
@@ -385,15 +390,15 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                 // instead of a separate bar meter.
                                 AnimatedContainer(
                                   duration: const Duration(milliseconds: 150),
-                                  width: 180 + provider.micLevel * 140,
-                                  height: 180 + provider.micLevel * 140,
+                                  width: 180 + provider.micLevel * 40,
+                                  height: 180 + provider.micLevel * 40,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.white.withValues(alpha: 0.12 + provider.micLevel * 0.35),
-                                        blurRadius: 50 + provider.micLevel * 60,
-                                        spreadRadius: 8 + provider.micLevel * 36,
+                                        color: Colors.white.withValues(alpha: 0.08 + provider.micLevel * 0.18),
+                                        blurRadius: 32 + provider.micLevel * 24,
+                                        spreadRadius: 2 + provider.micLevel * 10,
                                       ),
                                     ],
                                   ),
@@ -489,9 +494,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                             shrinkWrap: true,
                                             physics: const NeverScrollableScrollPhysics(),
                                             children: [
-                                              Text(
-                                                provider.text,
-                                                textAlign: TextAlign.center,
+                                              FadeInWordsText(
+                                                text: provider.text,
                                                 style: const TextStyle(
                                                   color: Colors.white,
                                                   fontSize: 20,

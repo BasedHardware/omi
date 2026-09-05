@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -48,6 +49,41 @@ void main() {
     expect(socket.bufferingSince, isNull);
   });
 
+  // Regression coverage: a transcribe() that never completed left
+  // _isProcessing set forever, so every later flush returned early and
+  // transcription silently stopped for the rest of the session with no error
+  // (seen with the native on-device recognizer never reporting a final result).
+  test('a transcribe that never returns times out, keeps the audio, and lets the next flush proceed', () async {
+    final provider = _HangingSttProvider();
+    final socket = PurePollingSocket(
+      config: const AudioPollingConfig(minBufferSizeBytes: 1, transcribeTimeout: Duration(milliseconds: 50)),
+      sttProvider: provider,
+    );
+    final listener = _FakeListener();
+    socket.setListener(listener);
+    await socket.connect();
+
+    socket.send(Uint8List.fromList([1, 2, 3]));
+    await socket.flushNow(); // hangs until the timeout, then must return
+
+    expect(provider.calls, 1);
+    expect(socket.isBuffering, isTrue, reason: 'a timed-out attempt is a failed flush, not a success');
+    expect(socket.bufferedBytes, 3, reason: 'audio from the timed-out attempt must be requeued, not lost');
+    expect(listener.errors, isEmpty);
+    expect(socket.status, PureSocketStatus.connected);
+
+    // The provider recovers: the next flush must actually run (the processing
+    // flag was released) and deliver the transcript for the retained audio.
+    provider.hang = false;
+    socket.send(Uint8List.fromList([4]));
+    await socket.flushNow();
+
+    expect(provider.calls, 2);
+    expect(provider.lastAudio, [1, 2, 3, 4]);
+    expect(listener.messages, hasLength(1));
+    expect(socket.isBuffering, isFalse);
+  });
+
   test('keeps retrying on every subsequent flush while the endpoint stays down', () async {
     final provider = _FakeSttProvider()..alwaysThrow(Exception('still down'));
 
@@ -89,6 +125,24 @@ void main() {
     // Newest audio survives; oldest was dropped.
     expect(provider.receivedCalls.last.last, 7);
   });
+}
+
+/// Never completes while [hang] is true; answers with a fixed segment once it is false.
+class _HangingSttProvider implements ISttProvider {
+  bool hang = true;
+  int calls = 0;
+  List<int>? lastAudio;
+
+  @override
+  Future<SttTranscriptionResult?> transcribe(Uint8List audioData, {double audioOffsetSeconds = 0}) {
+    calls++;
+    lastAudio = audioData.toList();
+    if (hang) return Completer<SttTranscriptionResult?>().future;
+    return Future.value(SttTranscriptionResult(segments: [SttSegment(text: 'hi', start: 0, end: 1)]));
+  }
+
+  @override
+  void dispose() {}
 }
 
 class _FakeSttProvider implements ISttProvider {

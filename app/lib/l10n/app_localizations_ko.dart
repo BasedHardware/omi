@@ -9766,4 +9766,8 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => '지식 그래프를 불러올 수 없습니다';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }
