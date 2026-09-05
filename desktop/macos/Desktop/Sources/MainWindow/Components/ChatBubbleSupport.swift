@@ -565,11 +565,20 @@ enum ChatBubbleIdentity {
       && lhs.text == rhs.text
       && lhs.rating == rhs.rating
       && lhs.isSynced == rhs.isSynced
-      && lhs.copyableText == rhs.copyableText
+      // `copyableText` is deliberately absent: it derives purely from
+      // `(contentBlocks, text, isStreaming)` — every one of which this
+      // conjunction already compares — so its term was logically redundant.
+      // It was also ruinous: SwiftUI re-runs this equality for every bubble on
+      // every transcript body pass, and each evaluation re-derived and
+      // whitespace-normalized the full answer text, dominating sampled switch
+      // mounts (~600 ms of a ~1.3 s navigate-to-chat).
       && lhs.displayResources == rhs.displayResources
       && lhs.journalStatus == rhs.journalStatus
       && lhs.citations.map(\.id) == rhs.citations.map(\.id)
       && (lhs.metadata != nil) == (rhs.metadata != nil)
+      // The blocks term is what keeps block-only edits visible; it re-encodes
+      // per call, so it must stay last among the content terms — everything
+      // cheap above it short-circuits the common equal-row case.
       && ChatContentBlockCodec.comparisonData(lhs.contentBlocks)
         == ChatContentBlockCodec.comparisonData(rhs.contentBlocks)
       && appIDs.0 == appIDs.1

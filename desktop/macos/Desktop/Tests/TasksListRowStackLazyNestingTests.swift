@@ -37,9 +37,6 @@ final class TasksListRowStackLazyNestingTests: XCTestCase {
   func testCategoryRowsAreNotLaidOutInALazyContainer() throws {
     let section = try taskCategorySectionSource()
 
-    // omi-test-quality: source-inspection -- static contract: no lazy container may nest
-    // inside the outer list's lazy items; the livelock it causes is invisible to a
-    // value-level unit test.
     for lazyContainer in ["LazyVStack", "LazyHStack", "LazyVGrid", "LazyHGrid"] {
       XCTAssertFalse(
         section.contains(lazyContainer),
@@ -72,6 +69,7 @@ final class TasksListRowStackLazyNestingTests: XCTestCase {
       .deletingLastPathComponent()
       .appendingPathComponent("Sources")
       .appendingPathComponent(relativePath)
+    // omi-test-quality: source-inspection -- static contract: lazy-in-lazy nesting is a SwiftUI layout-livelock property no value-level unit test can observe, so only the page source can hold the no-nesting shape.
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }

@@ -211,6 +211,32 @@ final class ChatBubbleIdentityTests: XCTestCase {
       bubble(isSynced: false, metadata: Self.sampleMetadata))
   }
 
+  /// `copyableText` is not an equality term: it derives purely from
+  /// `(contentBlocks, text, isStreaming)`, which the conjunction already
+  /// compares, and re-deriving it normalized the whole answer on every
+  /// SwiftUI diff pass. Block-only edits stay visible through the blocks
+  /// term — this pins that the blocks term alone still separates two rows
+  /// whose derived copy text differs.
+  func testBlockOnlyEditsStayVisibleWithoutTheCopyableTextTerm() {
+    let plain = bubble(isSynced: false, metadata: nil)
+    let withBlock = ChatBubble(
+      message: ChatMessage(
+        id: "live-tail",
+        text: "On it — I'll look up the backend IDs and delete the duplicates now.",
+        sender: .ai,
+        isStreaming: false,
+        isSynced: false,
+        contentBlocks: [
+          .text(id: "b1", text: "On it — I'll look up the backend IDs and delete the duplicates now.")
+        ]),
+      app: nil,
+      showsOmiMark: true,
+      onRate: { _, _ in })
+    // Same id, same text, and the same derived copyable text — but the blocks
+    // term must still tell the row bodies apart.
+    XCTAssertNotEqual(plain, withBlock)
+  }
+
   func testLateArtifactsAreVisibleIdentity() {
     let withoutArtifact = bubble(isSynced: false, metadata: nil)
     let withArtifact = ChatBubble(
