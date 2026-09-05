@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-compatibility-writer-survives-ledger-cutover",
+  "violated_contract": "When an authenticated explicit user fact reaches an account with fresh JIT ingress and stable ledger mode, the write route must select the canonical knowledge-ledger writer. Leaving that route on the compatibility writer reports an unavailable service and prevents the user's fact from becoming durable canonical state even though the account has completed cutover.",
+  "canonical_prevention": "Require an opaque direct-user route capability together with a fresh per-account JIT ingress decision and stable ledger control before selecting the direct ledger writer; preserve required-processing behavior for external, connector, and system writes. Prove the route through a real Firestore emulator with a manual POST that creates and reads back a ledger fact, plus fail-closed kill, unknown, mixed-batch, malformed-batch, forged-authority, and lifecycle cases.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/jit_ledger_user_write_emulator_test.py",
+    "backend/utils/memory/memory_service.py",
+    "backend/utils/memory/knowledge_ledger.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/memories.py",
+    "backend/scripts/jit_ledger_user_write_emulator_test.py",
+    "backend/utils/memory/canonical_memory_adapter.py",
+    "backend/utils/memory/knowledge_ledger.py",
+    "backend/utils/memory/memory_service.py"
+  ],
+  "status": "open"
+}
