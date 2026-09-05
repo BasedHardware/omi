@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: devkit-offline-storage-startup-tests
+    command: ["bash", "omi/firmware/devkit/tests/offline_storage/run.sh"]
+    triggers: ["omi/firmware/devkit/src/startup.c", "omi/firmware/devkit/src/startup.h", "omi/firmware/devkit/tests/offline_storage/**", "omi/firmware/devkit/CMakeLists.txt", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9771: a DevKit 2 SD mount failure returned from main before BLE transport startup; this hermetic test links the real startup.c and asserts the optional-storage boundary stays non-fatal and reports an unavailable state via transport_start()'s argument (main.c and transport.c's own use of that argument are not exercised by this check)"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
