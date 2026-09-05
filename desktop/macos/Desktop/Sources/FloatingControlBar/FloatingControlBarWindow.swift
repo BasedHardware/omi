@@ -3953,8 +3953,10 @@ class FloatingControlBarManager {
           for: nextNotification, outcome: .suppressed, reason: .staleOwner)
         continue
       }
-      presentNotification(nextNotification, in: window)
-      return
+      if presentNotification(nextNotification, in: window) { return }
+      // The final presentation seam can reject a card after it has left the
+      // queue (for example, when its JIT account generation became stale).
+      // Keep draining so one rejected card cannot strand newer work.
     }
   }
   /// Detach the floating UI from any in-flight chat streaming.
@@ -4545,6 +4547,17 @@ class FloatingControlBarManager {
       Self.recordInsightDeliveryOutcome(for: notification, outcome: .suppressed, reason: .staleOwner)
       return false
     }
+    guard
+      NotificationService.jitFeedbackGenerationsMatch(
+        jitFeedbackContext: notification.jitFeedbackContext,
+        jitAmbientFeedbackContext: notification.jitAmbientFeedbackContext,
+        currentGeneration: AccountCutoverControlManager.shared.control.accountGeneration)
+    else {
+      notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onDropped()
+      notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
+      log("FloatingControlBarManager: refusing to present stale JIT generation")
+      return false
+    }
     persistNotificationMessageIfNeeded(notification)
     clearInterjectGrace()
 
@@ -4667,8 +4680,10 @@ class FloatingControlBarManager {
             for: nextNotification, outcome: .suppressed, reason: .staleOwner)
           continue
         }
-        presentNotification(nextNotification, in: window)
-        return
+        if presentNotification(nextNotification, in: window) { return }
+        // The final presentation seam can reject a card after it has left the
+        // queue (for example, when its JIT account generation became stale).
+        // Keep draining so one rejected card cannot strand newer work.
       }
     }
 

@@ -87,6 +87,36 @@ final class JITAmbientFeedbackTests: XCTestCase {
     XCTAssertEqual(context.provenance.accountGeneration, context.accountGeneration)
   }
 
+  func testAmbientContextDerivesStableIdentityFromDeliveryProvenance() {
+    let candidateID = JITProactivityReservation.opaqueIdentifier(
+      ["candidate", "stable-ambient-feedback"], installationIdentity: "fixture")
+    let eventID = JITProactivityReservation.opaqueIdentifier(
+      ["notification", candidateID], installationIdentity: "fixture")
+    let first = JITAmbientFeedbackContext(
+      ownerID: "owner",
+      eventID: eventID,
+      candidateID: candidateID,
+      accountGeneration: 4)
+    let retry = JITAmbientFeedbackContext(
+      ownerID: "owner",
+      eventID: eventID,
+      candidateID: candidateID,
+      accountGeneration: 4)
+    XCTAssertEqual(
+      first.suggestionIdentity,
+      retry.suggestionIdentity,
+      "retries and system-banner reconstruction must address one feedback identity")
+
+    let changedCandidateID = JITProactivityReservation.opaqueIdentifier(
+      ["candidate", "different-ambient-feedback"], installationIdentity: "fixture")
+    let changed = JITAmbientFeedbackContext(
+      ownerID: "owner",
+      eventID: eventID,
+      candidateID: changedCandidateID,
+      accountGeneration: 4)
+    XCTAssertNotEqual(first.suggestionIdentity, changed.suggestionIdentity)
+  }
+
   func testAmbientRouterRecordsOnlyUsefulAndNotRelevant() async throws {
     let authorization = try authorization()
     let context = context()
@@ -308,6 +338,33 @@ final class JITAmbientFeedbackTests: XCTestCase {
   func testAmbientBannerGenerationFenceRejectsStaleControl() {
     XCTAssertTrue(NotificationService.jitFeedbackGenerationMatches(4, currentGeneration: 4))
     XCTAssertFalse(NotificationService.jitFeedbackGenerationMatches(4, currentGeneration: 5))
+  }
+
+  func testJITPresentationFenceChecksBothProvenanceForms() {
+    let ambient = context(accountGeneration: 4)
+    XCTAssertTrue(
+      NotificationService.jitFeedbackGenerationsMatch(
+        jitFeedbackContext: nil,
+        jitAmbientFeedbackContext: ambient,
+        currentGeneration: 4))
+    XCTAssertFalse(
+      NotificationService.jitFeedbackGenerationsMatch(
+        jitFeedbackContext: nil,
+        jitAmbientFeedbackContext: ambient,
+        currentGeneration: 5))
+
+    let planned = JITTriggerFeedbackContext(
+      ownerID: ambient.ownerID,
+      eventID: ambient.eventID,
+      triggerMemoryID: "memory",
+      accountGeneration: ambient.accountGeneration + 1,
+      triggerRevision: 1)
+    XCTAssertFalse(
+      NotificationService.jitFeedbackGenerationsMatch(
+        jitFeedbackContext: planned,
+        jitAmbientFeedbackContext: ambient,
+        currentGeneration: 4),
+      "a malformed card carrying two generations must fail closed")
   }
 
   @MainActor

@@ -299,6 +299,37 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     XCTAssertNil(presented)
   }
 
+  @MainActor
+  func testDirectorRejectsStaleJITGenerationBeforePresentation() async throws {
+    let owner = "owner-jit-generation-gate-\(UUID().uuidString)"
+    let fixture = try XCTUnwrap(ownerFixture)
+    await fixture.establish(authOwnerID: owner)
+    let currentGeneration = AccountCutoverControlManager.shared.control.accountGeneration
+    let candidateID = JITProactivityReservation.identifier("candidate", "stale-generation")
+    let eventID = JITProactivityReservation.identifier("notification", candidateID)
+    let context = JITAmbientFeedbackContext(
+      ownerID: owner,
+      eventID: eventID,
+      candidateID: candidateID,
+      accountGeneration: currentGeneration + 1)
+    var droppedCount = 0
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+
+    let result = service.presentContextDirectorNotification(
+      ownerID: owner,
+      title: "Stale ambient card",
+      message: "This card must not cross a cutover.",
+      decisionType: "suggest",
+      context: FloatingBarNotificationContext(
+        sourceTitle: "Context director",
+        assistantId: "context-director"),
+      jitAmbientFeedbackContext: context,
+      onDropped: { droppedCount += 1 })
+
+    XCTAssertEqual(result, .suppressed)
+    XCTAssertEqual(droppedCount, 1)
+  }
+
   /// Behavioral guard for the category taxonomy: the director's real entry point must
   /// refuse a delivery whose category toggle is off. A "suggest" decision is a generic
   /// tip, which the taxonomy files under Insight. Every upstream gate is pinned open

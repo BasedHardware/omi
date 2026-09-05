@@ -437,12 +437,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// Refuse to resurrect a banner whose JIT generation belongs to that older
   /// control, including after a relaunch where only native userInfo remains.
   private static func isCurrentJITAccountGeneration(_ metadata: NotificationMetadata) -> Bool {
-    let feedbackGeneration =
-      metadata.jitFeedbackContext?.accountGeneration
-      ?? metadata.jitAmbientFeedbackContext?.accountGeneration
-    guard let feedbackGeneration else { return true }
-    return jitFeedbackGenerationMatches(
-      feedbackGeneration,
+    jitFeedbackGenerationsMatch(
+      jitFeedbackContext: metadata.jitFeedbackContext,
+      jitAmbientFeedbackContext: metadata.jitAmbientFeedbackContext,
       currentGeneration: AccountCutoverControlManager.shared.control.accountGeneration)
   }
 
@@ -454,6 +451,24 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     currentGeneration: Int
   ) -> Bool {
     feedbackGeneration >= 0 && feedbackGeneration == currentGeneration
+  }
+
+  /// A notification may carry either planned or ambient JIT provenance. Keep
+  /// the generation check at the presentation seams, where a queued card or
+  /// an async system-banner callback can outlive the generation that admitted
+  /// it. Both fields are accepted for the shared notification type, but if a
+  /// caller accidentally supplies both they must agree with the same control.
+  nonisolated static func jitFeedbackGenerationsMatch(
+    jitFeedbackContext: JITTriggerFeedbackContext?,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext?,
+    currentGeneration: Int
+  ) -> Bool {
+    [
+      jitFeedbackContext?.accountGeneration,
+      jitAmbientFeedbackContext?.accountGeneration,
+    ]
+    .compactMap { $0 }
+    .allSatisfy { jitFeedbackGenerationMatches($0, currentGeneration: currentGeneration) }
   }
 
   /// Route a system-banner tap through the same owner-fenced persistent-card
@@ -657,6 +672,19 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
     else {
       log("NotificationService: rejecting notification from stale runtime owner")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .staleOwner
+      )
+      return
+    }
+    guard
+      Self.jitFeedbackGenerationsMatchCurrent(
+        jitFeedbackContext: jitFeedbackContext,
+        jitAmbientFeedbackContext: jitAmbientFeedbackContext)
+    else {
+      log("NotificationService: rejecting notification from stale JIT generation")
       recordInsightDeliveryOutcome(
         insightDeliveryID,
         outcome: .suppressed,
@@ -1014,6 +1042,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       onDropped?()
       return .rejectedOwnerChange
     }
+    guard
+      Self.jitFeedbackGenerationsMatchCurrent(
+        jitFeedbackContext: jitFeedbackContext,
+        jitAmbientFeedbackContext: jitAmbientFeedbackContext)
+    else {
+      onDropped?()
+      return .suppressed
+    }
     guard contextDirectorMayPresent(authorizationSnapshot: authorizationSnapshot, now: Date()) else {
       onDropped?()
       return .suppressed
@@ -1092,6 +1128,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       }
       guard let self,
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+        Self.jitFeedbackGenerationsMatchCurrent(
+          jitFeedbackContext: jitFeedbackContext,
+          jitAmbientFeedbackContext: jitAmbientFeedbackContext),
         self.contextDirectorMayPresent(authorizationSnapshot: authorizationSnapshot, now: Date()),
         NotificationPermissionPolicy.hasVisibleAlertSurface(
           status: settings.authorizationStatus,
@@ -1272,7 +1311,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     onPresented: (() -> Void)? = nil,
     onDropped: (() -> Void)? = nil
   ) {
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      Self.jitFeedbackGenerationsMatchCurrent(
+        jitFeedbackContext: jitFeedbackContext,
+        jitAmbientFeedbackContext: jitAmbientFeedbackContext)
+    else {
       recordInsightDeliveryOutcome(insightFailureDeliveryID, outcome: .suppressed, reason: .staleOwner)
       onDropped?()
       return
@@ -1351,6 +1394,16 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         onPresented?()
       }
     }
+  }
+
+  private static func jitFeedbackGenerationsMatchCurrent(
+    jitFeedbackContext: JITTriggerFeedbackContext?,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext?
+  ) -> Bool {
+    jitFeedbackGenerationsMatch(
+      jitFeedbackContext: jitFeedbackContext,
+      jitAmbientFeedbackContext: jitAmbientFeedbackContext,
+      currentGeneration: AccountCutoverControlManager.shared.control.accountGeneration)
   }
 
   private func recordInsightDeliveryOutcome(

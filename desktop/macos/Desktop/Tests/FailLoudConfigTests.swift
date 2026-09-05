@@ -118,6 +118,27 @@ final class FailLoudConfigTests: XCTestCase {
     // Behavioral contract (BL-047): status follows OBSERVED tap outcomes and
     // an idle refresh cannot discard the last real observation.
     let state = AppState()
+    // `missingPermissions` only reports a denial when the selected recording
+    // policy can use system audio and the platform advertises support. Keep
+    // those inputs explicit so this test remains deterministic across test
+    // ordering and host capabilities.
+    let previousMode = AssistantSettings.shared.audioRecordingMode
+    let previousSupport = state.isSystemAudioSupported
+    let captureDisabledKey = DefaultsKey.disableSystemAudioCapture.rawValue
+    let previousCaptureDisabled = UserDefaults.standard.object(forKey: captureDisabledKey)
+    defer {
+      AssistantSettings.shared.audioRecordingMode = previousMode
+      state.isSystemAudioSupported = previousSupport
+      if let previousCaptureDisabled {
+        UserDefaults.standard.set(previousCaptureDisabled, forKey: captureDisabledKey)
+      } else {
+        UserDefaults.standard.removeObject(forKey: captureDisabledKey)
+      }
+    }
+    AssistantSettings.shared.audioRecordingMode = .onlyMeetings
+    state.isSystemAudioSupported = true
+    UserDefaults.standard.set(false, forKey: DefaultsKey.disableSystemAudioCapture.rawValue)
+
     state.recordSystemAudioCaptureOutcome(.granted)
     XCTAssertEqual(state.systemAudioPermissionStatus, .granted)
     XCTAssertTrue(state.hasSystemAudioPermission)

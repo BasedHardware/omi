@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Opaque provenance for an ambient JIT notification. Ambient work has no
@@ -15,14 +16,49 @@ struct JITAmbientFeedbackContext: Equatable, Sendable {
     eventID: String,
     candidateID: String,
     accountGeneration: Int,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity =
-      SuggestionAssistantTelemetry.NotificationIdentity(evaluationID: UUID(), suggestionID: UUID())
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     self.ownerID = ownerID
     self.eventID = eventID
     self.candidateID = candidateID
     self.accountGeneration = accountGeneration
-    self.suggestionIdentity = suggestionIdentity
+    self.suggestionIdentity =
+      suggestionIdentity
+      ?? Self.stableSuggestionIdentity(
+        ownerID: ownerID,
+        eventID: eventID,
+        candidateID: candidateID,
+        accountGeneration: accountGeneration)
+  }
+
+  /// Ambient candidates do not have the suggestion assistant's evaluation
+  /// object to supply an identity. Derive the pair from the admitted delivery
+  /// provenance so retries and a system-banner round trip refer to the same
+  /// feedback row instead of minting a fresh random pair.
+  private static func stableSuggestionIdentity(
+    ownerID: String,
+    eventID: String,
+    candidateID: String,
+    accountGeneration: Int
+  ) -> SuggestionAssistantTelemetry.NotificationIdentity {
+    let seed = "\(ownerID)\u{1f}\(eventID)\u{1f}\(candidateID)\u{1f}\(accountGeneration)"
+    return SuggestionAssistantTelemetry.NotificationIdentity(
+      evaluationID: deterministicUUID("evaluation\u{1f}\(seed)"),
+      suggestionID: deterministicUUID("suggestion\u{1f}\(seed)"))
+  }
+
+  private static func deterministicUUID(_ seed: String) -> UUID {
+    let digest = SHA256.hash(data: Data(seed.utf8))
+    let hex = digest.map { String(format: "%02x", $0) }.joined()
+    let characters = Array(hex)
+    let uuidString = [
+      String(characters[0..<8]),
+      String(characters[8..<12]),
+      String(characters[12..<16]),
+      String(characters[16..<20]),
+      String(characters[20..<32]),
+    ].joined(separator: "-")
+    return UUID(uuidString: uuidString)!
   }
 
   var isValid: Bool {
