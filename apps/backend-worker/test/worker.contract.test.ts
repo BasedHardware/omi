@@ -975,6 +975,21 @@ describe("worker request contract", () => {
     expect(extra.status).toBe(400);
   });
 
+  test("tasks validate pagination like conversations", async () => {
+    const emptyCursor = await fetchWorker("/v1/tasks?cursor=", {
+      headers: authenticatedHeaders,
+    });
+    const invalidLimit = await fetchWorker("/v1/tasks?limit=0", {
+      headers: authenticatedHeaders,
+    });
+    const extra = await fetchWorker("/v1/tasks?limit=1&extra=1", {
+      headers: authenticatedHeaders,
+    });
+    expect(emptyCursor.status).toBe(400);
+    expect(invalidLimit.status).toBe(400);
+    expect(extra.status).toBe(400);
+  });
+
   test("chat history validates pagination before resolving the account", async () => {
     const invalidLimit = await fetchWorker("/v1/chat-messages?limit=0", {
       headers: authenticatedHeaders,
