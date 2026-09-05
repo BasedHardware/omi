@@ -97,6 +97,11 @@ class JITTriggerSnapshotEnvelope(BaseModel):
     rows: list[JITTriggerSnapshotRowEnvelope]
     policy: TriggerRuntimePolicy = DEFAULT_TRIGGER_RUNTIME_POLICY
     failure_reason: str | None = None
+    # Matches the timezone authority used by the reservation transaction. Both
+    # are optional for old/synthetic user records; reservations still fail
+    # closed when the profile has no usable timezone.
+    budget_day: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    budget_timezone: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class JITTriggerFeedbackRequest(BaseModel):
@@ -233,6 +238,8 @@ async def get_jit_trigger_snapshot(
         ],
         policy=snapshot.policy,
         failure_reason=snapshot.failure_reason,
+        budget_day=snapshot.budget_day,
+        budget_timezone=snapshot.budget_timezone,
     )
 
 
