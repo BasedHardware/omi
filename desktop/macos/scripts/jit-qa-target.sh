@@ -80,7 +80,7 @@ omi_jit_qa_validate_cloud_receipt() {
         return $?
     fi
     if [ ! -f "$receipt_path" ] || [ -L "$receipt_path" ]; then
-        omi_jit_qa_fail "$OMI_JIT_QA_RECEIPT_ENV must name a regular deployment receipt file"
+        omi_jit_qa_fail "$OMI_JIT_QA_CLOUD_RECEIPT_ENV must name a regular deployment receipt file"
         return $?
     fi
     omi_jit_qa_validate_cloud_url "$python_url" "$OMI_JIT_QA_CLOUD_PYTHON_SERVICE" || return $?
