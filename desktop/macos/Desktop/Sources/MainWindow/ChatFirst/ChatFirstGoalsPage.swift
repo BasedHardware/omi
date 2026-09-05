@@ -307,7 +307,7 @@ private struct ChatFirstFocusedGoalSection: View {
       .scaledFont(size: OmiType.caption, weight: .semibold)
     }
     .padding(OmiSpacing.xl)
-    .frame(maxWidth: 680, alignment: .leading)
+    .frame(maxWidth: .infinity, alignment: .leading)
     // The focused goal is the emphasised card on the page; no drop shadow, because
     // the panel already carries the one ambient shadow in this system.
     .glassCard(emphasized: true)
@@ -368,10 +368,16 @@ private struct ChatFirstGoalRow: View {
         Text(goal.title)
           .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundStyle(Ink.primary)
-        Text(goal.desiredOutcome)
-          .scaledFont(size: OmiType.caption)
-          .foregroundStyle(Ink.secondary)
-          .lineLimit(2)
+        // Goals created without an outcome carry the title in `desiredOutcome`;
+        // echoing it under the title reads as a rendering bug.
+        if goal.desiredOutcome.trimmingCharacters(in: .whitespacesAndNewlines)
+          .compare(goal.title, options: .caseInsensitive) != .orderedSame
+        {
+          Text(goal.desiredOutcome)
+            .scaledFont(size: OmiType.caption)
+            .foregroundStyle(Ink.secondary)
+            .lineLimit(2)
+        }
         Text(ChatFirstGoalProgressPolicy.summary(for: goal))
           .scaledFont(size: OmiType.caption, weight: .medium)
           .foregroundStyle(Ink.secondary)
@@ -398,7 +404,7 @@ private struct ChatFirstGoalRow: View {
       .scaledFont(size: OmiType.caption, weight: .medium)
     }
     .padding(OmiSpacing.md)
-    .frame(maxWidth: 680, alignment: .leading)
+    .frame(maxWidth: .infinity, alignment: .leading)
     .glassCard(cornerRadius: PageGlass.rowRadius)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("chat-first-goal-row-\(goal.goalId)")
@@ -411,6 +417,14 @@ private struct ChatFirstGoalRow: View {
 enum ChatFirstGoalProgressPolicy {
   static func summary(for goal: OmiAPI.GoalResponse) -> String {
     let unit = goal.unit.map { " \($0)" } ?? ""
+    // A goal created without an explicit target keeps the creation default
+    // (1.0) while progress updates push `currentValue` past it — "20 of 1"
+    // reads as impossible because the target was never meaningfully set. When
+    // the current value has overshot that unconfigured default, the target
+    // carries no information; report the value alone.
+    if goal.unit == nil, goal.targetValue <= 1, goal.currentValue > goal.targetValue {
+      return "Progress: \(formatted(goal.currentValue))"
+    }
     return "Progress: \(formatted(goal.currentValue)) of \(formatted(goal.targetValue))\(unit)"
   }
 
