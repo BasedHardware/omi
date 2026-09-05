@@ -1308,6 +1308,36 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "computer_use",
+      summary:
+        "Read or set computer control: the switch, the grants behind it, and whether a Screen Recording grant is still waiting on a relaunch",
+      params: ["enabled", "suspend"]
+    ) { params in
+      let store = CuaControlStatusStore.shared
+      if let enabled = params["enabled"] {
+        store.isEnabled = boolParam(enabled, default: true)
+      }
+      if let suspend = params["suspend"] {
+        if boolParam(suspend, default: true) { store.stopNow() } else { store.rearm() }
+      }
+      store.refreshPermissions()
+      // Named by what each grant lets Omi do, the same way the sheet names
+      // them, so a harness assertion reads like the surface it is checking.
+      var out: [String: String] = [
+        "enabled": store.isEnabled ? "true" : "false",
+        "suspended": store.isSuspended ? "true" : "false",
+        "status": store.cardStatusText,
+        "active": store.cardStatusActive ? "true" : "false",
+        "screen_needs_relaunch": store.screenNeedsRelaunch ? "true" : "false",
+      ]
+      for entry in CuaControlStatusStore.listed {
+        out["grant_\(entry.permission.rawValue)"] = (store.granted[entry.permission] ?? false)
+          ? "true" : "false"
+      }
+      return out
+    }
+
+    register(
       name: "capture_test_transcript",
       summary: "Hermetic capture seam: start/inject/stop a test recording session without mic/STT",
       params: ["phase", "text", "segments"]
