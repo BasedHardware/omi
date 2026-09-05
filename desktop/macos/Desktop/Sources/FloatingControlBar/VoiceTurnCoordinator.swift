@@ -629,6 +629,7 @@ final class VoiceTurnCoordinator {
     case .omniSTT: return "omni_stt"
     case .deepgramBatch: return "deepgram_batch"
     case .deepgramLive: return "deepgram_live"
+    case .onDeviceASR: return "on_device_asr"
     }
   }
 

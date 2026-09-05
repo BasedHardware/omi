@@ -102,6 +102,31 @@ actor PTTLanguageIdentifier {
     }
   }
 
+  /// Decode a PTT turn buffer to text on-device, with no language verdict.
+  ///
+  /// Voice typing uses this to hear the wake word in the opening of a hold and,
+  /// with no network, to transcribe the whole turn at key-up — the realtime hub
+  /// does not transcribe the user's own speech until after commit, which is far
+  /// too late to decide that a turn dictates instead of asks. This reuses the
+  /// already-loaded multilingual model rather than standing up a second one.
+  func transcribe(pcm16k: Data) async -> String? {
+    guard let manager = await loadedManager() else { return nil }
+    let samples = Self.int16ToFloat32(pcm16k)
+    guard samples.count >= 6_400 else { return nil }
+    do {
+      var ds = try TdtDecoderState()
+      let result = try await manager.transcribe(samples, decoderState: &ds, language: nil)
+      let text = result.text
+        .replacingOccurrences(of: "<unk>", with: "")
+        .replacingOccurrences(of: "  ", with: " ")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      return text.contains(where: { $0.isLetter }) ? text : nil
+    } catch {
+      logError("PTTLanguageIdentifier: voice-typing decode failed", error: error)
+      return nil
+    }
+  }
+
   /// Text-level language detection, biased toward (but not constrained to) `candidates`.
   /// Returns the base code only when the dominant language IS one of the candidates —
   /// anything else means "no match" and the caller leaves the provider on auto-detect.

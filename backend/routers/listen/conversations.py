@@ -17,6 +17,7 @@ from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
 from utils.transcribe_decisions import (
     ConversationLifecycleAction,
@@ -310,7 +311,10 @@ class LiveConversationController:
         await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,
             request.uid,
-            conversation.model_dump(),
+            # The modeled field's None default is omitted, never stamped:
+            # persist is merge=True, so a dumped None would become an
+            # explicit Firestore key on every fresh recording.
+            omit_null_processing_state(conversation.model_dump()),
             idempotent=bool(self.host.client_conversation_id and conversation_id == self.host.client_conversation_id),
         )
         await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)

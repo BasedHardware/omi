@@ -34,9 +34,6 @@ enum SpineMetrics {
   static let gutterWidth: CGFloat = 68
   /// Between the gutter's hairline and the content.
   static let gutterGap: CGFloat = 16
-  /// How far an attached row is indented past the conversation that produced it. Zero when one kind
-  /// is soloed, which is what turns the spine back into a flat clock.
-  static let attachmentIndent: CGFloat = 12
   /// The strip's thumbnail. 118 × 74 is 16:10, which is the shape of the screens these came off.
   static let thumbnailWidth: CGFloat = 118
   static let thumbnailHeight: CGFloat = 74
@@ -93,8 +90,8 @@ enum SpineMetrics {
 /// One spine row: its place on the clock, then whatever it is.
 struct SpineRowView: View {
   let row: SpineRow
-  /// True while the whole spine is shown, so attached rows indent. Soloed rows pass `false` and
-  /// state their own time instead.
+  /// True while the whole spine is shown, so an attached row tucks in close under the conversation
+  /// above it. Soloed rows pass `false` and state their own time instead.
   let showsIndent: Bool
   let onOpenConversation: (ServerConversation) -> Void
   let onOpenMemory: (SpineMemory) -> Void
@@ -108,8 +105,9 @@ struct SpineRowView: View {
   /// the moment it is soloed it needs one, because there is no longer anything above it to inherit.
   private var showsTimestamp: Bool { !row.isAttached }
 
-  /// True while this row is a child of the conversation above it — which decides both how far it
-  /// indents and how much air it gets, because those are the same statement made twice.
+  /// True while this row is a child of the conversation above it, which decides how much air it
+  /// gets. Every row sits on the one leading grid — attachment is air and the rail, never a
+  /// horizontal offset, so the same kind of row reads as the same kind of row wherever it lands.
   private var isNested: Bool { row.isAttached && showsIndent }
 
   /// A card row starts with its own padding before any type; an inline row starts with the type.
@@ -125,7 +123,7 @@ struct SpineRowView: View {
     HStack(alignment: .top, spacing: 0) {
       gutter
       content
-        .padding(.leading, SpineMetrics.gutterGap + (isNested ? SpineMetrics.attachmentIndent : 0))
+        .padding(.leading, SpineMetrics.gutterGap)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     // The whole rhythm, in one place. Every row's content view draws from its own top edge, so the
