@@ -56,17 +56,25 @@ final class IntegrationNudgeCoordinator {
     ) -> OwnerBoundNotificationPresentationResult
 
   /// The default presenter: the real floating-bar card.
+  ///
+  /// Goes through `NotificationService` rather than the floating-bar primitive
+  /// so the card is subject to the master toggle, frequency throttle, snooze and
+  /// presence gates. An integration pitch is a suggestion, not a functional
+  /// notice: a user who silenced suggestions, or who is on a call with their
+  /// screen shared, is exactly who should not be offered one. The budget is
+  /// unaffected by a suppression — `onPresented` only fires on a real
+  /// presentation, so a withheld offer stays unspent.
   static let floatingBarPresenter: Presenter = { ownerID, match, onPresented, onDropped in
-    FloatingControlBarManager.shared.showNotification(
+    NotificationService.shared.presentActionableProactiveNotification(
       ownerID: ownerID,
       title: "Connect \(match.entry.displayName)",
       message: match.entry.pitch,
       assistantId: IntegrationNudgeCoordinator.assistantID,
-      sound: .none,
       action: .connectIntegration(
         telemetryID: match.entry.telemetryID,
         triggerID: match.trigger.id
       ),
+      sound: .none,
       onPresented: onPresented,
       onDropped: onDropped
     )
