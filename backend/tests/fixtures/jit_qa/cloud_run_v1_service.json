@@ -13,6 +13,7 @@
             "image": "gcr.io/based-hardware-dev/backend-jit-qa@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "env": [
               {"name": "OMI_ENV_STAGE", "value": "dev"},
+              {"name": "OMI_JIT_PROACTIVITY_BUDGET_CONTRACT", "value": "jit-cloud-qa-v1"},
               {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware-dev"},
               {"name": "OMI_FIRESTORE_DATA_PLANE_PROJECT", "value": "based-hardware-dev"},
               {"name": "FIRESTORE_DATABASE_ID", "value": "jit-qa"},
