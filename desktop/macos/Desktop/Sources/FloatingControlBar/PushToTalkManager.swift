@@ -3190,7 +3190,9 @@ class PushToTalkManager: ObservableObject {
       return
     }
     Task { @MainActor [weak self] in
+      let started = Date()
       let decoded = await PTTLanguageIdentifier.shared.transcribe(pcm16k: opening)
+      let decodeMs = Int(Date().timeIntervalSince(started) * 1000)
       guard let self, self.voiceTurnCoordinator.activeTurnID == turnID else { return }
       // Lenient, like the probes: this is the same on-device model reading the
       // same opening, and it mishears "type" the same ways ("Tie", "Typed").
@@ -3200,10 +3202,14 @@ class PushToTalkManager: ObservableObject {
       // answered — and the false-negative cost is the model acting on
       // "type …" as an instruction, which was observed live.
       if let decoded, self.voiceTypeSession.claim(transcript: decoded, lenient: true) {
-        log("PushToTalkManager: closing decode caught a dictation the probes missed — not committing")
+        log(
+          "PushToTalkManager: closing decode (\(decodeMs)ms) caught a dictation the probes missed — not committing")
         self.finishVoiceTypingTurn(turnID: turnID, audio: turnAudio, knownTranscript: nil)
         return
       }
+      // The one serial cost every committed hub turn pays; logged so the
+      // latency is measurable from a real turn rather than estimated.
+      log("PushToTalkManager: closing decode (\(decodeMs)ms) heard no wake word — committing")
       commit()
     }
   }
