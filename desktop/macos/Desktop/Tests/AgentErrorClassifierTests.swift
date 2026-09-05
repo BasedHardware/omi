@@ -277,4 +277,25 @@ final class AgentErrorClassifierTests: XCTestCase {
     XCTAssertNotEqual(notice?.text, ChatTurnFailureNotice.unclassifiedText)
     XCTAssertEqual(notice?.text, classified.userMessage)
   }
+
+  /// A 402 from the Omi proxy means the managed lane ran, which is exactly the case a
+  /// BYOK user needs told apart from their own provider billing. The shipped copy said
+  /// only "Omi's AI service" and pointed at Plan and Usage, so a user holding a funded
+  /// OpenRouter key read it as their key failing and spent the investigation on the
+  /// wrong account entirely.
+  func testBillingCopyNamesTheManagedLaneAndBothRemedies() {
+    let classified = AgentErrorClassifier.classify("HTTP 402 status code (no body)")
+
+    XCTAssertEqual(classified.code, .providerBillingExhausted)
+    XCTAssertFalse(classified.retryable)
+    XCTAssertTrue(
+      classified.userMessage.contains("managed"),
+      "the copy must say which lane declined, not just \"Omi's AI service\"")
+    XCTAssertTrue(
+      classified.userMessage.contains("Plan and Usage"),
+      "the managed remedy stays")
+    XCTAssertTrue(
+      classified.userMessage.lowercased().contains("key"),
+      "a BYOK user needs the second remedy named too")
+  }
 }

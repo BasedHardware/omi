@@ -205,4 +205,36 @@ import XCTest
     XCTAssertNil(APIKeyService.selectedRealtimeBYOKKey(for: .gemini))
     XCTAssertEqual(APIKeyService.selectedRealtimeBYOKKey(for: .openrouter), "sk-or")
   }
+
+  /// The realtime hub speaks through OpenAI Realtime or Gemini Live and nothing else, so
+  /// choosing one of those under Advanced → Voice Model is choosing that provider for
+  /// voice. Withholding the key because the *text* provider is something the hub can
+  /// never use — OpenRouter has no realtime API, and is the default — sent the turn to
+  /// the managed lane, where it failed on Omi billing with the user's own key unspent.
+  func testVoiceModelChoiceUnlocksItsOwnKeyWhileTextProviderDiffers() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    UserDefaults.standard.set("sk-or", forKey: BYOKProvider.openrouter.storageKey)
+    UserDefaults.standard.set("sk-gemini-chosen", forKey: BYOKProvider.gemini.storageKey)
+
+    XCTAssertEqual(APIKeyService.selectedBYOKLLMProvider, .openrouter)
+    XCTAssertEqual(
+      APIKeyService.selectedRealtimeBYOKKey(for: .gemini, chosenForVoice: true),
+      "sk-gemini-chosen",
+      "a provider chosen as the Voice Model must be able to use its own key")
+  }
+
+  /// The other direction, which is the whole reason the guard exists: the failover path
+  /// does not pass `chosenForVoice`, so a key belonging to a provider the user picked
+  /// nowhere is still never spent.
+  func testFailoverStillRefusesAnUnchosenKey() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    UserDefaults.standard.set("sk-or", forKey: BYOKProvider.openrouter.storageKey)
+    UserDefaults.standard.set("sk-openai-leftover", forKey: BYOKProvider.openai.storageKey)
+
+    XCTAssertNil(
+      APIKeyService.selectedRealtimeBYOKKey(for: .openai),
+      "the failover must not spend a key the user chose neither for text nor for voice")
+  }
 }

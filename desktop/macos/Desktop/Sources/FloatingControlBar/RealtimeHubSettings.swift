@@ -79,6 +79,7 @@ final class RealtimeHubSettings {
   /// (BYOK / dev key). Managed users without a key connect via a minted ephemeral
   /// token instead (see RealtimeHubController.ensureWarm); both reach the hub.
   var canConnect: Bool {
-    APIKeyService.selectedRealtimeBYOKKey(for: provider.byokProvider) != nil
+    // `provider` is the Voice Model selection itself, so this is never a leftover key.
+    APIKeyService.selectedRealtimeBYOKKey(for: provider.byokProvider, chosenForVoice: true) != nil
   }
 }
