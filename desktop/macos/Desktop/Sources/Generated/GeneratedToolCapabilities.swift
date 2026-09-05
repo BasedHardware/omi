@@ -553,7 +553,9 @@ enum GeneratedToolCapabilities {
       "Only from explicit standing intent the user stated in this conversation, never an inferred habit.",
       "Call this for an explicit standing-intent request such as 'watch for X and tell me' or 'let me know whenever Y happens'.",
       "Never call it from a pattern you merely noticed in passive behavior; an inferred habit is not standing intent.",
-      "Embedding/semantic selectors are not supported; use keywords, regex, apps, windows, time, or calendar selectors instead."
+      "Embedding/semantic selectors are not supported; use keywords, regex, apps, windows, time, or calendar selectors instead.",
+      "Use match_mode 'all' or 'any' (never 'exact'); regex must be an array of safe patterns; entity_aliases must be an object; time requires start and end; calendar requires event_keywords or event_types.",
+      "For an exact marker, use a keyword selector such as condition={keywords:[\"JIT-QA-20260905-1853\"]} and describe the notification in description."
     ]
     ),
     Capability(
