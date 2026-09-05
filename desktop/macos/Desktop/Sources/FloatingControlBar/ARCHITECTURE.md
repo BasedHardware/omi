@@ -130,7 +130,10 @@ owns the dictate-or-ask decision and the delivery, and nothing else does.
 - A finished turn is journaled as `Typed: <text>` (or `Copied to clipboard:
   <text>`) through the ordinary `recordExchange` on the realtime voice
   surface, so a dictation persists and enters conversation context exactly
-  like a spoken question. The continuity key is derived from the turn.
+  like a spoken question. The continuity key is derived from the turn. The
+  write is awaited before the turn ends (bounded to 3 s; at the bound the
+  write finishes in the background and the miss is logged), so a lifecycle
+  change at turn end cannot drop it.
 - Every dictation close terminates the capture lifecycle exactly once
   (`terminateVoiceTypingLifecycle`), whatever the outcome, and a
   backend-transcribed dictation's terminal bookkeeping belongs to that close
