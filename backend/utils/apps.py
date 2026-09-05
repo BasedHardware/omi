@@ -88,6 +88,21 @@ _reviewers_env: Optional[str] = os.getenv('MARKETPLACE_APP_REVIEWERS')
 MarketplaceAppReviewUIDs: List[str] = _reviewers_env.split(',') if _reviewers_env else []
 
 
+def _records_with_ids(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Drop marketplace records with no id, logging how many were skipped.
+
+    `_safe_build_app` already skips a record the `App` model rejects, but every list builder reads
+    `app['id']` first — to batch the installs and reviews lookups, and again per app — on the raw
+    dicts the Redis cache hands back. That is upstream of any model construction, so one legacy
+    document without an id raises KeyError out of a builder that is cached and shared across users.
+    """
+    usable = [record for record in records if record.get('id')]
+    skipped = len(records) - len(usable)
+    if skipped:
+        logger.warning("Skipping %d marketplace app record(s) without an id", skipped)
+    return usable
+
+
 def _safe_build_app(app_dict: dict[str, Any]) -> Optional[App]:
     """Build an App from a raw marketplace record, skipping (not raising on) a malformed one.
 
@@ -370,7 +385,9 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     tester_apps: List[Dict[str, Any]] = cast(List[Dict[str, Any]], user_slice.get('tester_apps', []))
 
     user_enabled: Set[str] = set(get_enabled_apps(uid))
-    all_apps: List[Dict[str, Any]] = private_data + public_approved_data + public_unapproved_data + tester_apps
+    all_apps: List[Dict[str, Any]] = _records_with_ids(
+        private_data + public_approved_data + public_unapproved_data + tester_apps
+    )
     apps: List[App] = []
 
     app_ids = [app['id'] for app in all_apps]
@@ -383,7 +400,7 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         # Copy dict to avoid mutating cached objects
         app_dict = dict(app)
         app_dict['enabled'] = app['id'] in user_enabled
-        app_dict['rejected'] = app['approved'] is False
+        app_dict['rejected'] = app.get('approved') is False
         app_dict['installs'] = apps_install.get(app['id'], 0)
         if include_reviews:
             reviews = apps_review.get(app['id'], {})
@@ -519,13 +536,15 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
             set_generic_cache(redis_cache_key, reduced_apps, 60 * 10)  # 10 minutes cached
             all_apps = reduced_apps
 
+        usable_apps = _records_with_ids(all_apps)
+
         # Process apps (add installs, reviews, etc.)
-        app_ids = [app['id'] for app in all_apps]
+        app_ids = [app['id'] for app in usable_apps]
         apps_installs = get_apps_installs_count(app_ids)
         apps_reviews = get_apps_reviews(app_ids) if include_reviews else {}
 
         apps: List[App] = []
-        for app in all_apps:
+        for app in usable_apps:
             if app.get('disabled'):
                 continue
             app_dict = app
