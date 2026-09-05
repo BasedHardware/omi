@@ -179,6 +179,34 @@ def test_fixture_exclusivity_fails_closed_without_a_queryable_collection():
         operator._assert_fixture_exclusive(PointOnlyDB(), run_id="proof-20260905")
 
 
+def test_fixture_exclusivity_fails_closed_without_metadata_projection():
+    class NoProjectionCollection:
+        def limit(self, _value):
+            return self
+
+        def stream(self):
+            return []
+
+    class NoProjectionDB:
+        def collection(self, _path):
+            return NoProjectionCollection()
+
+    with pytest.raises(operator.JITQAVerificationError, match="project fixture ownership metadata"):
+        operator._assert_fixture_exclusive(NoProjectionDB(), run_id="proof-20260905")
+
+
+def test_bootstrap_empty_inventory_fails_closed_without_bound():
+    class UnboundedCollection:
+        id = "users"
+
+    class UnboundedDB:
+        def collections(self):
+            return [UnboundedCollection()]
+
+    with pytest.raises(operator.JITQAVerificationError, match="bound the named Firestore database"):
+        operator._assert_named_database_empty(UnboundedDB())
+
+
 def test_bootstrap_is_create_only_and_idempotent(monkeypatch):
     db = _DB(include_control=False)
 

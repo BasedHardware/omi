@@ -221,7 +221,9 @@ def _assert_named_database_empty(db_client: Any) -> None:
         if collection_id not in BOOTSTRAP_COLLECTIONS:
             raise JITQAVerificationError(f"bootstrap found an unsupported top-level collection: {collection_id!r}")
         limited = getattr(collection, "limit", None)
-        stream = getattr(limited(2) if callable(limited) else collection, "stream", None)
+        if not callable(limited):
+            raise JITQAVerificationError("bootstrap cannot bound the named Firestore database inventory")
+        stream = getattr(limited(2), "stream", None)
         if not callable(stream):
             raise JITQAVerificationError("bootstrap cannot prove the named Firestore database is empty")
         try:
@@ -373,8 +375,11 @@ def _assert_fixture_exclusive(db_client: Any, *, run_id: str) -> None:
         raise JITQAVerificationError("QA Firestore client cannot prove fixture exclusivity")
     collection = collection_factory(f"users/{QA_UID}/memory_items")
     selector = getattr(collection, "select", None)
-    if callable(selector):
-        collection = selector(["memory_id", "uid", "jit_qa_fixture", "jit_qa_run_id", "jit_qa_row"])
+    if not callable(selector):
+        raise JITQAVerificationError("QA Firestore client cannot project fixture ownership metadata")
+    collection = selector(
+        ["memory_id", "uid", "jit_qa_fixture", "jit_qa_run_id", "jit_qa_row", "promotion", "ledger_schema_version"]
+    )
     limiter = getattr(collection, "limit", None)
     if not callable(limiter):
         raise JITQAVerificationError("QA Firestore client cannot bound fixture exclusivity inventory")
@@ -390,10 +395,11 @@ def _assert_fixture_exclusive(db_client: Any, *, run_id: str) -> None:
             raise JITQAVerificationError("QA fixture exclusivity inventory exceeded its hard bound")
         snapshot_id = str(getattr(snapshot, "id", ""))
         payload = _as_dict(snapshot)
+        expected_index = int(snapshot_id.rsplit("-", 1)[-1]) if snapshot_id in expected_ids else -1
         if snapshot_id not in expected_ids or not _owned_fields_match(
             payload,
             run_id=run_id,
-            index=int(payload.get("jit_qa_row", -1)) if str(payload.get("jit_qa_row", "")).isdigit() else -1,
+            index=expected_index,
         ):
             # Stop at the first foreign row.  The query is deliberately capped
             # at 101 + 1 so a malicious/accidental large collection cannot turn
@@ -445,10 +451,18 @@ def _fixture_item(
         ledger_sequence=0,
         item_revision=1,
         account_generation=account_generation,
+        promotion={
+            "jit_qa_fixture": FIXTURE_MARKER,
+            "jit_qa_run_id": run_id,
+            "jit_qa_row": index,
+        },
         predicate="resides_in" if index == 0 else "likes",
     )
-    # These are the exact fields used to prove ownership without reading the
-    # synthetic content back.  They are ignored by MemoryItem validation.
+    # Keep the marker in a typed model field as well as the legacy top-level
+    # projection.  Canonical migration rewrites a MemoryItem through
+    # model_dump(), which intentionally drops unknown top-level fields; the
+    # promotion marker therefore survives the migration and keeps the
+    # post-cutover exclusivity proof content-free.
     payload = _stored_model(item)
     payload.update(
         {
@@ -471,10 +485,20 @@ def _item_payload(item: MemoryItem) -> dict[str, Any]:
 
 
 def _owned_fields_match(payload: Mapping[str, Any], *, run_id: str, index: int) -> bool:
-    return (
+    top_level_marker = (
         payload.get("jit_qa_fixture") == FIXTURE_MARKER
         and payload.get("jit_qa_run_id") == run_id
         and payload.get("jit_qa_row") == index
+    )
+    promotion = payload.get("promotion")
+    promoted_marker = (
+        isinstance(promotion, Mapping)
+        and promotion.get("jit_qa_fixture") == FIXTURE_MARKER
+        and promotion.get("jit_qa_run_id") == run_id
+        and promotion.get("jit_qa_row") == index
+    )
+    return (
+        (top_level_marker or promoted_marker)
         and payload.get("uid") == QA_UID
         and payload.get("memory_id") == f"jitqa-{run_id}-legacy-{index:03d}"
     )
@@ -529,7 +553,15 @@ def seed_fixture(db_client: Any, *, run_id: str) -> dict[str, int | str]:
         memory_ref = db_client.document(_memory_path(run_id, index))
         existing = _get_selected(
             memory_ref,
-            ("memory_id", "uid", "jit_qa_fixture", "jit_qa_run_id", "jit_qa_row", "ledger_schema_version"),
+            (
+                "memory_id",
+                "uid",
+                "jit_qa_fixture",
+                "jit_qa_run_id",
+                "jit_qa_row",
+                "promotion",
+                "ledger_schema_version",
+            ),
         )
         if existing:
             if not _owned_fields_match(existing, run_id=run_id, index=index):
@@ -545,8 +577,44 @@ def seed_fixture(db_client: Any, *, run_id: str) -> dict[str, int | str]:
         }:
             raise JITQAVerificationError(f"refusing to overwrite non-owned QA evidence {index:03d}")
         if not evidence:
-            evidence_ref.set(expected_evidence)
-        memory_ref.set(expected)
+            create_evidence = getattr(evidence_ref, "create", None)
+            if not callable(create_evidence):
+                raise JITQAVerificationError("QA fixture requires create-only Firestore writes for evidence")
+            try:
+                create_evidence(expected_evidence)
+            except Exception as exc:
+                raced_evidence = _get_selected(
+                    evidence_ref, ("evidence_id", "source_id", "source_state", "source_type")
+                )
+                if raced_evidence != {
+                    key: expected_evidence.get(key)
+                    for key in ("evidence_id", "source_id", "source_state", "source_type")
+                }:
+                    raise JITQAVerificationError(
+                        f"QA fixture evidence creation raced with an unowned document {index:03d}"
+                    ) from exc
+        create_memory = getattr(memory_ref, "create", None)
+        if not callable(create_memory):
+            raise JITQAVerificationError("QA fixture requires create-only Firestore writes for memory rows")
+        try:
+            create_memory(expected)
+        except Exception as exc:
+            raced_memory = _get_selected(
+                memory_ref,
+                (
+                    "memory_id",
+                    "uid",
+                    "jit_qa_fixture",
+                    "jit_qa_run_id",
+                    "jit_qa_row",
+                    "promotion",
+                    "ledger_schema_version",
+                ),
+            )
+            if not _owned_fields_match(raced_memory, run_id=run_id, index=index):
+                raise JITQAVerificationError(
+                    f"QA fixture memory creation raced with an unowned document {index:03d}"
+                ) from exc
         created_rows += 1
 
     return {
@@ -613,6 +681,7 @@ def inspect_fixture(db_client: Any, *, run_id: str, allow_ledger: bool = True) -
                 "jit_qa_fixture",
                 "jit_qa_run_id",
                 "jit_qa_row",
+                "promotion",
                 "ledger_schema_version",
                 "status",
                 "write_reason",

@@ -24,6 +24,10 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_jit_qa_emulator_key_32_bytes")  # pragma: allowlist secret
+# Canonical migration is fenced by the deployment intake mode.  This local
+# proof opts into write mode only inside the emulator process; cloud operators
+# still read the real deployment environment and admission decision.
+os.environ.setdefault("MEMORY_MODE", "write")
 
 from models.memory_apply import WriterMode  # noqa: E402
 from scripts import jit_qa_seed_and_verify as operator  # noqa: E402
