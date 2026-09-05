@@ -799,12 +799,17 @@ def set_memory_summary_rating(
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/analytics/memory_summary', tags=['v1'], response_model=MemorySummaryRatingResponse)
-def get_memory_summary_rating(
-    memory_id: str,
-    _: str = Depends(auth.get_current_user_uid),
-):
-    return {'has_rating': False}
+@router.get(
+    '/v1/users/analytics/memory_summary',
+    tags=['v1'],
+    response_model=MemorySummaryRatingResponse,
+    dependencies=[Depends(auth.get_current_user_uid)],
+)
+def get_memory_summary_rating(memory_id: str):
+    rating = get_conversation_summary_rating_score(memory_id)
+    if not rating:
+        return {'has_rating': False}
+    return {'has_rating': rating.get('value', -1) != -1, 'rating': rating.get('value', -1)}
 
 
 @router.post('/v1/users/analytics/chat_message', tags=['v1'], response_model=UserStatusResponse)
