@@ -205,19 +205,11 @@ final class ShellListeningCycleTests: XCTestCase {
       "Off is stopped by the session teardown, not by this pause")
   }
 
-  /// The hint exists because Only Meetings is the one mode whose behaviour is invisible: the
-  /// control reads as on while nothing is being recorded. If it stops saying so, it is decoration.
-  func testTheMeetingsHintExplainsThatTheMicrophoneStaysClosed() {
-    let hint = ShellStatusIcons.meetingsHint
-    XCTAssertTrue(
-      hint.localizedCaseInsensitiveContains("until"),
-      """
-      the Only Meetings hint reads "\(hint)" and no longer says the microphone waits for something. \
-      That wait is the whole of what distinguishes this mode from Always On.
-      """)
-    XCTAssertTrue(
-      hint.localizedCaseInsensitiveContains("call")
-        || hint.localizedCaseInsensitiveContains("meeting"),
-      "the hint has to name what the microphone is waiting for: \(hint)")
+  /// The hint names the mode the click landed on and nothing more; the explanation of what the
+  /// mode does is the tooltip's job. A sentence in a popover under a 13 pt icon reads as an error.
+  func testTheMeetingsHintIsJustTheModeName() {
+    XCTAssertEqual(
+      ShellStatusIcons.meetingsHint,
+      CaptureListeningLogic.audioRecordingModeTitle(.onlyMeetings))
   }
 }

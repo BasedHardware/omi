@@ -245,9 +245,9 @@ enum ShellStatusTooltip {
   /// mode is not decoration: "listening" with no qualifier is a claim the meetings-only mode does not
   /// actually make.
   ///
-  /// `isAwaitingMeeting` is the Only Meetings wait: the session is armed, the mic is paused, and a
-  /// click turns listening *off* rather than starting it. That must not reuse the "off / click to
-  /// start" sentence.
+  /// `isAwaitingMeeting` is the Only Meetings wait: the control is on and the mic opens when a call
+  /// starts, so the sentence says that rather than "listening" (nothing is transcribed yet) or
+  /// "off / click to start" (a click turns it off).
   /// `next` names the mode a click moves to. It is a parameter rather than the fixed "Click to
   /// stop" / "Click to start" this shipped with, because the control is a three-mode cycle: from
   /// Always On a click does not stop anything, it selects Only Meetings, and a tooltip on a
@@ -260,6 +260,8 @@ enum ShellStatusTooltip {
     switch state {
     case .blocked:
       return "Audio — transcription unavailable. Open Settings to reconnect."
+    case .active where isAwaitingMeeting:
+      return "Audio — on (\(mode)). Recording starts when a call is detected. Click for \(next)."
     case .active:
       return "Audio — listening (\(mode)). Click for \(next)."
     case .inactive:
@@ -267,9 +269,6 @@ enum ShellStatusTooltip {
       // does not move, so promising the next mode here would be a promise the click cannot keep.
       guard hasMicrophonePermission else {
         return "Audio — off. Omi needs microphone access. Click to grant it."
-      }
-      if isAwaitingMeeting {
-        return "Audio — waiting for a call (\(mode)). Nothing is being transcribed. Click for \(next)."
       }
       return "Audio — off. Nothing is being transcribed. Click for \(next)."
     }
@@ -352,9 +351,11 @@ struct ShellStatusIconButton: View {
       }
       .overlay(alignment: .bottomLeading) {
         if let badge {
+          // Pushed clear of the glyph's foot: at (-5, 4) the mark sat on the mic's stand and read as
+          // a second silhouette fused to the first — additive ink has to stay outside the shape.
           Image(systemName: badge)
             .scaledFont(size: OmiType.micro, weight: .bold)
-            .offset(x: -5, y: 4)
+            .offset(x: -9, y: 6)
         }
       }
     }
@@ -379,9 +380,8 @@ struct ShellStatusIcons: View {
   @State private var isTogglingCapture = false
   @State private var isTogglingListening = false
   /// Shown for a beat when a click *selects* Only Meetings, never on hover and never at rest.
-  /// Only Meetings is the one mode whose behaviour no glyph can state — the control is switched
-  /// on while the microphone is deliberately held shut until a call starts — so selecting it is
-  /// the one moment that earns a sentence. Tying it to the transition keeps the cluster wordless.
+  /// The three modes cycle under one glyph, so landing on the third one names it; the tooltip
+  /// carries the explanation. Tying it to the transition keeps the cluster wordless.
   @State private var showsMeetingsHint = false
   @State private var meetingsHintDismissal: DispatchWorkItem?
 
@@ -402,10 +402,8 @@ struct ShellStatusIcons: View {
       .accessibilityIdentifier("shell-status-listening")
       .popover(isPresented: $showsMeetingsHint, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
         Text(Self.meetingsHint)
-          .scaledFont(size: OmiType.caption)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
           .foregroundStyle(Ink.primary)
-          .multilineTextAlignment(.leading)
-          .frame(width: 232, alignment: .leading)
           .padding(OmiSpacing.sm)
       }
 
@@ -440,10 +438,9 @@ struct ShellStatusIcons: View {
     CaptureListeningLogic.audioRecordingMode(raw: audioRecordingModeRaw)
   }
 
-  /// The sentence Only Meetings earns, kept beside the mode it explains. Static so a test can
-  /// read the wording without standing up an `AppState`.
-  static let meetingsHint =
-    "Only Meetings — the microphone stays closed until Omi detects a call, then records until it ends."
+  /// The name of the mode the click just selected — the label, not an explanation, which lives in
+  /// the tooltip. Static so a test can read the wording without standing up an `AppState`.
+  static let meetingsHint = "Only Meetings"
 
   private var listeningTooltip: String {
     ShellStatusTooltip.audio(
