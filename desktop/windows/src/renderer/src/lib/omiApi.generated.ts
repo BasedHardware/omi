@@ -1014,6 +1014,7 @@ export interface ChatTool {
 
 export interface ChatUsageQuota {
   allowed?: boolean;
+  is_overage_plan?: boolean;
   limit?: number | null;
   percent?: number;
   plan: string;
@@ -10512,7 +10513,7 @@ export async function get_app_categories_v1_app_categories_get(init?: OmiApiClie
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function generate_app_endpoint_v1_app_generate_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: GenerateAppRequest, init?: OmiApiClientInit): Promise<AppGenerationResponse> {
+export async function generate_app_endpoint_v1_app_generate_post(header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: GenerateAppRequest, init?: OmiApiClientInit): Promise<AppGenerationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/app/generate`;
   const _search = "";
@@ -10522,8 +10523,8 @@ export async function generate_app_endpoint_v1_app_generate_post(header: { autho
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
@@ -10575,7 +10576,7 @@ export async function generate_description_and_emoji_endpoint_v1_app_generate_de
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function generate_app_icon_endpoint_v1_app_generate_icon_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: GenerateAppIconRequest, init?: OmiApiClientInit): Promise<AppIconGenerationResponse> {
+export async function generate_app_icon_endpoint_v1_app_generate_icon_post(header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: GenerateAppIconRequest, init?: OmiApiClientInit): Promise<AppIconGenerationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/app/generate-icon`;
   const _search = "";
@@ -10585,8 +10586,8 @@ export async function generate_app_icon_endpoint_v1_app_generate_icon_post(heade
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },

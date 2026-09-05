@@ -5,7 +5,13 @@ str(summary_data.get('overview', 'Tap to see your daily summary')). get's defaul
 an ABSENT key. DailySummaryPayload.overview defaults to "", so a thin day yields a present-but-empty
 overview -> get returns "" -> the fallback string is dead code -> an empty daily-summary push. The
 body now falls back to the default text when overview is empty.
+
+The day under test carries a conversation with a real overview so the pre-LLM summary-content
+gate (flip-review F-12) lets generation through: this file pins the *delivery* fallback for a
+generator that returned an empty overview, not the titles-only decline.
 """
+
+from types import SimpleNamespace
 
 import utils.other.notifications as notif
 
@@ -13,6 +19,10 @@ import utils.other.notifications as notif
 class _FakeConvo:
     transcript_segments = [object()]
     discarded = False
+    apps_results: list = []
+
+    def __init__(self) -> None:
+        self.structured = SimpleNamespace(overview='You had 3 conversations today.')
 
 
 def _drive(monkeypatch, overview):

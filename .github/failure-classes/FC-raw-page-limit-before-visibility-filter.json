@@ -2,17 +2,21 @@
   "schema_version": 1,
   "id": "FC-raw-page-limit-before-visibility-filter",
   "violated_contract": "A list page whose store query cannot express the caller's visibility rule must measure limit and offset in visible rows. Applying limit/offset on the raw store stream and only then dropping hidden rows (for example user-rejected or invalidated memories, or reported chat messages) returns a short page and advances past visible rows the client never saw, so single-page callers and len < limit EOF checks stop early while older visible rows still exist.",
-  "canonical_prevention": "Scan the ordered raw stream with a bounded budget, skip hidden rows without consuming page capacity, and stop only when the visible limit is filled or the collection is exhausted. Prove it with a hermetic page whose middle row is hidden: the returned page must still contain limit visible ids, and the next visible offset must continue at the next visible row rather than a raw Firestore slot.",
+  "canonical_prevention": "Scan the ordered raw stream with a bounded budget, skip hidden rows without consuming page capacity, and stop only when the visible limit is filled or the collection is exhausted - the same pattern get_messages_reconcile_page already uses. Floor that budget at the rows the page needs (offset + limit, which is what the raw query already streamed) and bound only the slack above it, so a deep offset stays serviceable and a clean page reads no more than it returns. Prove it with a hermetic page whose middle row is hidden: the returned page must still contain limit visible ids, and the next visible offset must continue at the next visible row rather than a raw store slot.",
   "canonical_prevention_artifact": [
+    "backend/tests/unit/test_get_messages_reported_pagination.py",
     "backend/tests/unit/test_get_memories_scoring_visibility_pagination.py"
   ],
-  "evidence_prs": [],
+  "evidence_prs": [
+    12712,
+    12714
+  ],
   "scope_hints": [
-    "backend/database/memories.py",
-    "backend/utils/memory/memory_service.py",
     "backend/database/chat.py",
+    "backend/database/memories.py",
     "backend/routers/chat.py",
-    "backend/routers/chat_sessions.py"
+    "backend/routers/chat_sessions.py",
+    "backend/utils/memory/memory_service.py"
   ],
   "status": "open"
 }

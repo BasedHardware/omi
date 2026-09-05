@@ -19,6 +19,11 @@
 # silently dropped: a guardrail that starts failing is fixed or removed with a
 # stated reason, not un-listed.
 #
+# Removed: tests/unit/test_ws_g_module_aliases.py — the file itself was deleted
+# in a7bc5fd0c2 (WS-G11 dead-code removal) the day before this manifest was
+# built, so it was never actually green under this lane; there is no guardrail
+# left to track.
+#
 # NOT YET LISTED — red on `main` at the time this lane was built, each needs its
 # own fix and its own PR. They are named rather than omitted so the gap stays
 # countable:
@@ -44,4 +49,3 @@ tests/unit/test_subscription_import_cycle.py
 tests/unit/test_sync_ordered_assignment.py
 tests/unit/test_thread_join_elimination.py
 tests/unit/test_vad_gate.py
-tests/unit/test_ws_g_module_aliases.py

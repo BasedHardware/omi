@@ -29,6 +29,7 @@ from utils.memory.retraction_scope import (
     retraction_can_be_skipped,
 )
 from utils.conversations.datetime_utils import coerce_utc_datetime
+from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations import lifecycle as lifecycle_service
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
@@ -328,8 +329,10 @@ def perform_merge_async(
             external_data={"merge_metadata": merge_metadata},
         )
 
-        # 7. Save stub conversation to database
-        lifecycle_service.create_processing_conversation(uid, new_conversation.model_dump())
+        # 7. Save stub conversation to database. The modeled field's None
+        # default is omitted, never stamped: persist is merge=True, so a
+        # dumped None would become an explicit Firestore key.
+        lifecycle_service.create_processing_conversation(uid, omit_null_processing_state(new_conversation.model_dump()))
 
         # Build the conversation-level playback artifact for the merged conversation.
         # Fingerprint-named task: dedups with the enqueue process_conversation may

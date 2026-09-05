@@ -79,6 +79,7 @@ enum IntegrationConnectTelemetry {
     case permission = "permission"
     case authentication = "authentication"
     case conflict = "conflict"
+    case server = "server"
     case invalidResponse = "invalid_response"
     case resourceExhausted = "resource_exhausted"
     case unknown = "unknown"
@@ -140,7 +141,7 @@ enum IntegrationConnectTelemetry {
     case .notSignedIn, .sessionExpired, .noBrowser, .decryptFailed, .authentication:
       return true
     case .configuration, .storeNotFound, .authorizationDenied, .network, .timeout,
-      .cancelled, .noContent, .rateLimit, .permission, .conflict, .invalidResponse,
+      .cancelled, .noContent, .rateLimit, .permission, .conflict, .server, .invalidResponse,
       .resourceExhausted, .unknown:
       return false
     }

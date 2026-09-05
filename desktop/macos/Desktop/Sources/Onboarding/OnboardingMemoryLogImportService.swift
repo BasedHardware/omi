@@ -177,12 +177,20 @@ actor OnboardingMemoryLogImportService {
     var memories: [String] = []
     var seen: Set<String> = []
     for rawLine in rawText.components(separatedBy: .newlines) {
+      let trimmedLine = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmedLine.isEmpty, !trimmedLine.hasPrefix("```") else { continue }
+
       let range = NSRange(rawLine.startIndex..<rawLine.endIndex, in: rawLine)
       guard
         let match = regex.firstMatch(in: rawLine, range: range),
         let tagRange = Range(match.range(at: 1), in: rawLine),
         let contentRange = Range(match.range(at: 2), in: rawLine)
-      else { continue }
+      else {
+        // A mixed-format paste is not safe to import locally: silently ignoring
+        // its untagged lines could lose durable memories. Let the managed
+        // extractor interpret the complete paste instead.
+        return nil
+      }
 
       let tag = String(rawLine[tagRange]).lowercased()
       let content = String(rawLine[contentRange])

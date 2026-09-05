@@ -24,6 +24,7 @@ from models.import_job import ImportJob, ImportJobStatus, ImportSourceType
 from models.transcript_segment import TranscriptSegment
 from utils.notifications import send_notification
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.projection_payload import omit_null_processing_state
 import logging
 
 logger = logging.getLogger(__name__)
@@ -396,7 +397,9 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                     if legacy_id and legacy_id != conversation_id:
                         conversations_skipped += 1
                         logger.info("[Limitless Import] Skipped already-imported lifelog")
-                    elif lifecycle_service.persist_imported_conversation(uid, conversation.model_dump()):
+                    elif lifecycle_service.persist_imported_conversation(
+                        uid, omit_null_processing_state(conversation.model_dump())
+                    ):
                         conversations_created += 1
                     else:
                         conversations_skipped += 1

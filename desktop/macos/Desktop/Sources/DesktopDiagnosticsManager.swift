@@ -1436,6 +1436,7 @@ final class DesktopDiagnosticsManager {
     "local_llm",
     "ptt_input_routing",
     "account_cutover",
+    "voice_typing",
     "other",
   ]
 
