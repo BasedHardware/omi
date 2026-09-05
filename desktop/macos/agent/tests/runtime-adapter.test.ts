@@ -558,7 +558,7 @@ describe("adapter capability matrix", () => {
     expect(Object.keys(ADAPTER_CAPABILITY_MATRIX).sort()).toEqual(
       [...PRODUCTION_ADAPTER_IDS, ...PLACEHOLDER_ADAPTER_IDS].sort()
     );
-    expect(PRODUCTION_ADAPTER_IDS).toEqual(["acp", "pi-mono", "hermes", "openclaw"]);
+    expect(PRODUCTION_ADAPTER_IDS).toEqual(["acp", "pi-mono", "hermes", "openclaw", "codex"]);
     expect(PLACEHOLDER_ADAPTER_IDS).toEqual(["a2a"]);
     expect(Object.fromEntries(PRODUCTION_ADAPTER_IDS.map((adapterId) => [
       adapterId,
@@ -568,6 +568,7 @@ describe("adapter capability matrix", () => {
       "pi-mono": "managed_cloud",
       hermes: "local_user",
       openclaw: "local_user",
+      codex: "local_user",
     });
 
     expect(ADAPTER_CAPABILITY_MATRIX.acp.expectations).toMatchObject({
@@ -608,6 +609,16 @@ describe("adapter capability matrix", () => {
       modelSwitching: { status: "unsupported" },
       artifactEmission: { status: "unsupported" },
       toolSupport: { status: "unsupported" },
+      restartOrphanSemantics: { status: "required" },
+    });
+    expect(ADAPTER_CAPABILITY_MATRIX.codex.expectations).toMatchObject({
+      nativeResume: { status: "known_limitation", followUpTicket: "win-agents-codex-verify" },
+      cancellationDispatch: { status: "required" },
+      cancellationAck: { status: "known_limitation", followUpTicket: "win-agents-cancel-ack" },
+      pinnedWorker: { status: "required" },
+      modelSwitching: { status: "known_limitation", followUpTicket: "win-agents-codex-verify" },
+      artifactEmission: { status: "unsupported" },
+      toolSupport: { status: "required" },
       restartOrphanSemantics: { status: "required" },
     });
 

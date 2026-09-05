@@ -22,6 +22,7 @@ cross-platform decision instead of a single-platform drive-by.
 | `wire_action_item.json` | Action item wire decode: due_at instant equality across ISO offset forms, and the null / missing / unparseable agreement set |
 | `section_labels.json` | Relative day labels (Today / Yesterday / Tomorrow) as calendar-day relationships, including DST transition days |
 | `jit_runtime_contract_matrix.json` | Additive JIT ledger/evidence compatibility across legacy, v1, and future-version payloads |
+| `agent_routing.json` | Which coding agent a spoken task names: alias matching on word boundaries, and clause-scoped negation |
 
 ## Conformance suites
 
@@ -46,6 +47,19 @@ all text while recognizing only the v1 ledger authority, and `ChatMessageDB`
 keeps chat text while ignoring the unrecognized evidence envelope rather than
 projecting it into metadata or content blocks. This proves inert compatibility;
 it does not claim that macOS renders structured chat evidence.
+
+`agent_routing.json` is a runtime rule rather than a renderer one, so it has its own
+per-platform suites alongside the table above:
+
+| Platform | Suite | Runs |
+|---|---|---|
+| macOS agent runtime | `desktop/macos/agent/tests/parity-agent-routing.test.ts` | `npm test` in `desktop/macos/agent` |
+| Windows main process | `desktop/windows/src/main/codingAgent/parityAgentRouting.test.ts` | `npm test` in `desktop/windows` |
+
+Its first run earned the contract: the Windows port compiled its alias table from
+`PRODUCTION_ADAPTER_IDS`, which deliberately omits `pi-mono`, so Windows was deaf to
+"pi mono" while macOS still heard it. Fixed by iterating the alias table itself —
+recognising a spoken name is separate from being allowed to run the task.
 
 The backend suite validates every fixture file structurally (parseable, complete
 expectations, self-consistent day-key arithmetic) so a malformed fixture cannot pass
