@@ -268,6 +268,14 @@ DAILY_SUMMARY_JOB_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_JOB_BUDGET_SECONDS'
 # One account cannot own the job. A recap is one LLM call plus Firestore reads;
 # 90s is generous for that and still bounds a wedged provider call.
 DAILY_SUMMARY_USER_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_USER_BUDGET_SECONDS', 90.0)
+# The webhook's own slice of that per-user budget. Running it inline gave it an owner
+# but also moved its cost onto the user: day_summary_webhook posts through the shared
+# client (30s read timeout, retries at 1/5/30s), so a slow receiver could burn most of
+# the 90s and get a user whose push had already been delivered marked
+# reason=user_budget_exceeded -- which counts toward DAILY_SUMMARY_MAX_ABANDONED_USERS
+# and can abort the rest of the hour group. A developer webhook must never be able to
+# cost anyone else their recap, so it is bounded well inside the budget it now shares.
+DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS', 20.0)
 # Rendered-character budget for the conversation material fed to the summary
 # prompt. ~360k chars is roughly 90k tokens, comfortably inside the 272k-token
 # model limit even alongside the prompt scaffolding and the user's memories.
@@ -577,18 +585,53 @@ def _deliver_current_day_summary(uid, date_str: str, summary_data: dict, tokens)
         content_blocks=[review_block] if review_block else None,
     )
 
-    # Also send webhook with the full summary data (day_summary_webhook is async, so wrap in asyncio.run).
-    # ``summary`` is the legacy str(...) form, kept for backward compatibility; ``summary_json``
-    # carries the same payload as a real JSON object for receivers to migrate to.
-    postprocess_executor.submit(asyncio.run, day_summary_webhook(uid, str(summary_data), summary_data))
-
-    if not tokens:
+    if tokens:
+        send_notification(
+            uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
+        )
+    else:
         logger.info(f"Skipping daily summary push for uid={uid}: no FCM tokens")
-        return
 
-    send_notification(
-        uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
-    )
+
+def _deliver_day_summary_webhook(uid, summary_data: dict) -> None:
+    """Send the developer webhook for a freshly generated day.
+
+    Runs inline rather than submitted (#12530). The old
+    ``postprocess_executor.submit(asyncio.run, ...)`` had two defects:
+    ``_send_summary_notification`` is already executing *on* postprocess_executor
+    (dispatched through ``run_blocking``), so the submit made the function its own
+    child on that pool -- the arrangement backend/AGENTS.md forbids -- and nothing
+    owned the result, so a webhook still queued when the Cloud Run Job exited was
+    never scheduled at all. That is the "coroutine 'day_summary_webhook' was never
+    awaited" logged immediately before container exit in #12530's evidence.
+
+    Called *after* the backfill walk, and last in the per-user budget. Inline
+    execution moved the webhook's cost onto the user, and this function shares the
+    90s ``DAILY_SUMMARY_USER_BUDGET_SECONDS`` with the owner's own work. Running it
+    before the backfill let a slow receiver spend seconds the owner's missing days
+    needed, which is the opposite of the rule this fix exists to uphold: a
+    developer webhook must never cost the owner their recap. Last means it can only
+    ever spend budget nobody else still wants.
+
+    Bounded, contained and logged for the same reason. day_summary_webhook handles
+    its own HTTP failures but not the work around them (URL assembly, the
+    webhook-status reads); left bare, one of those would propagate out of a user
+    whose push had already been delivered and count them as failed. The discarded
+    Future used to provide that containment by accident -- this makes it a decision,
+    and reports it, where the old path reported nothing at all.
+
+    ``summary`` is the legacy str(...) form, kept for backward compatibility;
+    ``summary_json`` carries the same payload as a real JSON object.
+    """
+    try:
+        asyncio.run(
+            asyncio.wait_for(
+                day_summary_webhook(uid, str(summary_data), summary_data),
+                timeout=DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS,
+            )
+        )
+    except Exception as e:
+        logger.error('daily_summary_webhook_failed uid=%s error=%s', uid, e, exc_info=e)
 
 
 def _backfill_recent_daily_summaries(uid, display_date, tz_name: Optional[str]) -> None:
@@ -625,27 +668,39 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     date_str = display_date.strftime('%Y-%m-%d')
 
     summary_data, created, declined = _generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc)
+    pending_webhook: Optional[dict] = None
     if created and summary_data:
         tokens = user_data[1] if len(user_data) > 1 else None
         _deliver_current_day_summary(uid, date_str, summary_data, tokens)
+        # Deferred to the end of this user's work. See _deliver_day_summary_webhook.
+        pending_webhook = summary_data
 
-    # Backfill only for owners who are actually still recording. Dropping the FCM-token filter in
-    # get_users_for_daily_summary widened this fan-out to every user in the timezone, and an
-    # unconditional 7-day walk would spend 7 lock writes + 7 by-date reads + 7 conversation queries
-    # per dormant account per day chasing holes it can never fill.
-    #
-    # The reason comes from the attempt above rather than from a second query: re-reading
-    # conversations here would undo the "lose the lock, do no work" guarantee that keeps a
-    # contended user from being read twice.
-    #
-    # Only an *empty* window means dormant. A day whose conversations were all `is_locked`, or
-    # carried no transcript, still proves the owner was recording — those are the accounts whose
-    # earlier days most need walking back — so `_DECLINE_NOTHING_TO_SUMMARIZE` is deliberately
-    # absent from this set.
-    if declined in (_DECLINE_LOCKED, _DECLINE_NO_CONVERSATIONS):
-        return
+    try:
 
-    _backfill_recent_daily_summaries(uid, display_date, user_tz_name)
+        # Backfill only for owners who are actually still recording. Dropping the FCM-token filter in
+        # get_users_for_daily_summary widened this fan-out to every user in the timezone, and an
+        # unconditional 7-day walk would spend 7 lock writes + 7 by-date reads + 7 conversation queries
+        # per dormant account per day chasing holes it can never fill.
+        #
+        # The reason comes from the attempt above rather than from a second query: re-reading
+        # conversations here would undo the "lose the lock, do no work" guarantee that keeps a
+        # contended user from being read twice.
+        #
+        # Only an *empty* window means dormant. A day whose conversations were all `is_locked`, or
+        # carried no transcript, still proves the owner was recording — those are the accounts whose
+        # earlier days most need walking back — so `_DECLINE_NOTHING_TO_SUMMARIZE` is deliberately
+        # absent from this set.
+        if declined in (_DECLINE_LOCKED, _DECLINE_NO_CONVERSATIONS):
+            return
+
+        _backfill_recent_daily_summaries(uid, display_date, user_tz_name)
+    finally:
+        # finally, not a trailing call: the dormant-owner branch above returns early
+        # and backfill can raise. Either would drop the webhook for a user whose
+        # summary was already stored and pushed, which is the exact loss this fix
+        # exists to stop -- just moved to a different exit.
+        if pending_webhook is not None:
+            _deliver_day_summary_webhook(uid, pending_webhook)
 
 
 async def _send_bulk_summary_notification(
