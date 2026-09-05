@@ -328,7 +328,13 @@ async function handleJsonRpc(
         }
       } else if (toolName === "load_skill") {
         const name = (args.name as string || "").trim();
-        const content = await loadSkillInstructions(name);
+        const rawPart = args.part;
+        const part = rawPart === "all" ? "all" as const : typeof rawPart === "number" ? rawPart : undefined;
+        const content = await loadSkillInstructions(
+          name,
+          process.env.OMI_WORKSPACE ?? "",
+          part === undefined ? {} : { part }
+        );
 
         if (!isNotification) {
           send({

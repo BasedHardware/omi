@@ -1400,6 +1400,8 @@ class ChatProvider: ObservableObject {
   private var sessionInvalidateObserver: AnyCancellable?
 
   private var refreshAllObserver: AnyCancellable?
+  private var userSkillsObserver: AnyCancellable?
+  private var userMcpObserver: AnyCancellable?
 
   // MARK: - Streaming Buffer
   /// Accumulates text and thinking deltas during streaming and flushes them to
@@ -1585,6 +1587,40 @@ class ChatProvider: ObservableObject {
         }
       }
 
+    // A skill saved or toggled in the Apps page changed the on-disk catalog;
+    // re-discover so the next message's compact catalog includes it.
+    userSkillsObserver = NotificationCenter.default.publisher(for: .omiUserSkillsDidChange)
+      .receive(on: DispatchQueue.main)
+      .sink { [weak self] _ in
+        Task { @MainActor in
+          await self?.discoverClaudeConfig()
+        }
+      }
+
+    // Applies ~/.omi/mcp.json changes to the shared runtime — debounced and
+    // never mid-turn. The pi-mono extension registers its MCP proxy tools once
+    // per process spawn, so unlike skills a file change needs a respawn. The
+    // coordinator is process-wide (task chat consumes it at its own boundary)
+    // and is bound here to this provider's bridge state.
+    UserMcpRuntimeRefresh.shared.bindRuntime(
+      isTurnActive: { [weak self] in self?.isSending ?? false },
+      isRuntimeStarted: { [weak self] in self?.agentBridgeStarted ?? false },
+      respawn: { [weak self] in
+        guard let self else { throw BridgeError.stopped }
+        try await self.respawnBridgeForUserMcpChange()
+      })
+
+    // A server was added, removed, or re-authed in ~/.omi/mcp.json. The runtime
+    // reads the file once per process spawn, so the shared bridge respawns
+    // (debounced, never mid-turn — see UserMcpRuntimeRefresh).
+    userMcpObserver = NotificationCenter.default.publisher(for: .omiUserMcpDidChange)
+      .receive(on: DispatchQueue.main)
+      .sink { _ in
+        Task { @MainActor in
+          UserMcpRuntimeRefresh.shared.changeDetected()
+        }
+      }
+
     // Observe changes to Playwright extension mode setting — restart bridge to pick up new env vars
     playwrightExtensionObserver = UserDefaults.standard.publisher(for: \.playwrightUseExtension)
       .dropFirst()
@@ -1702,6 +1738,11 @@ class ChatProvider: ObservableObject {
   private func ensureBridgeStarted(
     authoritativeGeneration: Int? = nil
   ) async -> Bool {
+    // Apply a pending ~/.omi/mcp.json change here — the safe point between
+    // turns: this turn has issued no runtime work yet, and the runtime's
+    // restart still refuses while some other surface's requests are active.
+    // Task chat applies the same pending state at its own boundary.
+    await UserMcpRuntimeRefresh.shared.applyAtTurnBoundary()
     guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
       await presentBridgeStartupFailure(
         BridgeError.authMissing, authoritativeGeneration: authoritativeGeneration)
@@ -1716,6 +1757,29 @@ class ChatProvider: ObservableObject {
       await presentBridgeStartupFailure(error, authoritativeGeneration: authoritativeGeneration)
       return false
     }
+  }
+
+  /// Respawns the shared runtime so a ~/.omi/mcp.json change reaches the
+  /// pi-mono extension, which registers its MCP proxy tools once per spawn.
+  /// Mirrors the Playwright-setting restart: mark the warm bridge stale,
+  /// restart the process, and rebuild readiness. A refused restart (requests
+  /// active elsewhere) leaves the old process alive and serving, so it keeps
+  /// counting as started and the caller's pending change retries later.
+  private func respawnBridgeForUserMcpChange() async throws {
+    log("ChatProvider: user MCP servers changed — restarting agent bridge")
+    agentBridgeStarted = false
+    do {
+      try await resolvedAgentClient().restart()
+    } catch {
+      if await resolvedAgentClient().isAlive {
+        agentBridgeStarted = true
+      }
+      throw error
+    }
+    guard await ensureBridgeStarted() else {
+      throw BridgeError.stopped
+    }
+    log("ChatProvider: agent bridge restarted with current user MCP servers")
   }
 
   private func performBridgeReadinessStartup() async throws -> Bool {
@@ -1943,6 +2007,7 @@ class ChatProvider: ObservableObject {
     notificationContext: String?,
     screenPayload: [String: Any]?,
     includeScreenSource: Bool = true,
+    includeSkillCatalog: Bool = true,
     includePromptCitations: Bool = true,
     requestedModelProfile: String? = nil,
     pinnedSession: AgentSurfaceSession? = nil,
@@ -2028,6 +2093,15 @@ class ChatProvider: ObservableObject {
     }
     let capturedAtMs = Int(Date().timeIntervalSince1970 * 1_000)
     let screenOutcome: AgentContextSourceOutcome = screenPayload == nil ? .empty : .available
+    // One catalog per lane: the ACP lane's user-skills plugin already indexes the
+    // same skills natively, so the compact catalog would reach the model twice.
+    var workspacePayload: [String: Any] = [
+      "workingDirectory": workspacePath,
+      "databaseSchema": cachedDatabaseSchema,
+    ]
+    if includeSkillCatalog, Self.shouldInjectSkillCatalog(adapterId: session.profile.adapterId) {
+      workspacePayload["skillCatalog"] = skillContextProjection()
+    }
     var sources: [(AgentContextSource, AgentContextSourceOutcome, [String: Any], Int?)] = [
       (
         .identity,
@@ -2053,16 +2127,7 @@ class ChatProvider: ObservableObject {
         taskText.isEmpty ? [:] : ["content": taskText],
         nil
       ),
-      (
-        .workspace,
-        .available,
-        [
-          "workingDirectory": workspacePath,
-          "databaseSchema": cachedDatabaseSchema,
-          "skillCatalog": skillContextProjection(),
-        ],
-        nil
-      ),
+      (.workspace, .available, workspacePayload, nil),
       (.surface, .available, surfacePayload, nil),
     ]
     if includeScreenSource {
@@ -2112,6 +2177,9 @@ class ChatProvider: ObservableObject {
         notificationContext: nil,
         screenPayload: nil,
         includeScreenSource: false,
+        // The realtime renderer drops the workspace source entirely, so building
+        // and uploading a skill catalog here is dead work the model never sees.
+        includeSkillCatalog: false,
         includePromptCitations: false
       )
       return KernelTurnProjection.voiceContextSnapshot(
@@ -3257,7 +3325,7 @@ class ChatProvider: ObservableObject {
   // MARK: - CLAUDE.md & Skills Discovery
 
   /// Results from background Claude config discovery
-  private struct ClaudeConfigResult: Sendable {
+  struct ClaudeConfigResult: Sendable {
     let claudeMdContent: String?
     let claudeMdPath: String?
     let skills: [(name: String, description: String, path: String)]
@@ -3268,7 +3336,7 @@ class ChatProvider: ObservableObject {
   }
 
   /// Perform all file I/O for Claude config discovery off the main thread
-  private nonisolated static func loadClaudeConfigFromDisk(workspace: String) -> ClaudeConfigResult {
+  nonisolated static func loadClaudeConfigFromDisk(workspace: String) -> ClaudeConfigResult {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
     let claudeDir = "\(home)/.claude"
     let fm = FileManager.default
@@ -3290,6 +3358,21 @@ class ChatProvider: ObservableObject {
     if let skillDirs = try? fm.contentsOfDirectory(atPath: skillsDir) {
       for dir in skillDirs.sorted() {
         let skillPath = "\(skillsDir)/\(dir)/SKILL.md"
+        if fm.fileExists(atPath: skillPath),
+          let content = try? String(contentsOfFile: skillPath, encoding: .utf8)
+        {
+          let desc = extractSkillDescription(from: content)
+          skills.append((name: dir, description: desc, path: skillPath))
+        }
+      }
+    }
+
+    // Skills the user created in Omi's Apps page, stored locally at
+    // ~/.omi/skills. Same layout as ~/.claude/skills.
+    let userSkillsDir = LocalSkillsStore.skillsDirURL.path
+    if let skillDirs = try? fm.contentsOfDirectory(atPath: userSkillsDir) {
+      for dir in skillDirs.sorted() where !skills.contains(where: { $0.name == dir }) {
+        let skillPath = "\(userSkillsDir)/\(dir)/SKILL.md"
         if fm.fileExists(atPath: skillPath),
           let content = try? String(contentsOfFile: skillPath, encoding: .utf8)
         {
@@ -3418,12 +3501,7 @@ class ChatProvider: ObservableObject {
 
   /// Get the set of explicitly disabled skill names from UserDefaults
   func getDisabledSkillNames() -> Set<String> {
-    guard let data = disabledSkillsJSON.data(using: .utf8),
-      let names = try? JSONDecoder().decode([String].self, from: data)
-    else {
-      return []  // Default: nothing disabled = all enabled
-    }
-    return Set(names)
+    Self.disabledSkillNamesFromDefaults()
   }
 
   /// Save the set of disabled skill names to UserDefaults

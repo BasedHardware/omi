@@ -140,7 +140,8 @@ enum KernelAgentLifecycleMutation {
       appendResourcesJSON: ChatResource.encodeResourcesForPersistence(
         result.resources
       ) ?? "[]",
-      metadataJSON: nil
+      metadataJSON: nil,
+      terminalRevision: false
     )
   }
 
@@ -620,6 +621,37 @@ final class KernelTurnProjection {
       return turn
     } catch {
       log("KernelTurnProjection: journal status update failed (code=journal_status_update_failed)")
+      return nil
+    }
+  }
+
+  /// Revises a row this client sealed `.completed` before delivery resolved,
+  /// downgrading it to `.failed` with its truncation cause when the answer
+  /// never reached the user (#12743). Payload-free by construction: the row's
+  /// content, blocks, resources, and existing metadata (model attribution,
+  /// continuity) are preserved; the kernel merges the terminal reason into
+  /// the row's metadata rather than replacing it.
+  @discardableResult
+  func reviseSealedTerminalTurn(
+    surface: AgentSurfaceReference,
+    turnId: String,
+    terminalReason: String,
+    ownerID: String? = nil
+  ) async -> KernelJournalTurn? {
+    guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return nil }
+    do {
+      let turn = try await client.updateJournalTurn(
+        surface: surface,
+        ownerID: lease.ownerID,
+        update: .sealedTerminalRevision(turnId: turnId, terminalReason: terminalReason)
+      )
+      guard isCurrent(lease) else { return nil }
+      _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
+      guard isCurrent(lease) else { return nil }
+      return turn
+    } catch {
+      log("KernelTurnProjection: journal terminal revision failed (code=journal_terminal_revision_failed)")
       return nil
     }
   }

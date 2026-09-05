@@ -205,6 +205,8 @@ env:
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_ENABLED
     value: "on"
+  - name: MEMORY_BELIEF_MODEL_ENABLED
+    value: "true"
   - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
     value: "false"
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS

@@ -104,6 +104,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   let turnPersistenceLedger = RealtimeTurnPersistenceLedger()
   let streamingJournalWriteLedger = RealtimeStreamingJournalWriteLedger()
   var streamingJournalFlushTasks: [String: Task<Void, Never>] = [:]
+  /// Assistant rows this process sealed `.completed` at provider-response-finish
+  /// (delivery still pending), keyed by the turn's continuity key. Consumed by
+  /// the reducer's terminal, which revises a row whose answer never reached the
+  /// user (#12743). In-memory journal-write bookkeeping only.
+  var sealedCompletedVoiceJournalRows: [String: SealedCompletedVoiceJournalRow] = [:]
   /// (c) Shadow truth: mirrors a kernel-accepted spawn exchange for this process.
   /// Authoritative owner is the kernel journal / voice-context turn IDs; restore
   /// through `RealtimeHubContinuityRestore` + `RealtimeTurnJournalAuthority`.
@@ -408,6 +413,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     ownerBoundaryGeneration &+= 1
     turnPersistenceLedger.cancelAll()
+    sealedCompletedVoiceJournalRows.removeAll()
     cancelStreamingJournalWrites()
     turnEpoch &+= 1
     realtimePlaybackEpoch &+= 1

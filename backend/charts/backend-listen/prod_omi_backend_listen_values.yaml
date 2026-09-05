@@ -167,6 +167,8 @@ env:
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_ENABLED
     value: "on"
+  - name: MEMORY_BELIEF_MODEL_ENABLED
+    value: "false"
   - name: MEMORY_V3_CURSOR_SECRET
     valueFrom:
       secretKeyRef:

@@ -143,6 +143,11 @@ _load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm"
 # cache floor the preflight assertions below depend on.
 _load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" / "prompt_cache.py")
 
+# model_config pulls in gateway_client; stub the one constant conversation_processing
+# imports so the isolated load does not need the real module tree.
+model_config_stub = _stub_module("utils.llm.model_config")
+model_config_stub.FOREGROUND_REQUEST_TIMEOUT_SECONDS = 60.0
+
 prompt_prefix_stub = _stub_module("utils.llm.conversation_prompt_prefix")
 prompt_prefix_stub.ConversationPromptPrefix = MagicMock
 prompt_prefix_stub.shared_conversation_cache_supported = MagicMock(return_value=False)

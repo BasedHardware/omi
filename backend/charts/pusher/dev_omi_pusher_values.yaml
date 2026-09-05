@@ -142,6 +142,8 @@ env:
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_ENABLED
     value: "on"
+  - name: MEMORY_BELIEF_MODEL_ENABLED
+    value: "true"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:

@@ -106,6 +106,14 @@ final class ConnectorImportOperationsTests: XCTestCase {
     XCTAssertEqual(failureClass, .network)
   }
 
+  func testMemoryLogServerFailureKeepsDistinctTelemetryClass() {
+    let outcome = ConnectorImportOperations.memoryLogOutcome(.failed(.server), source: .chatgpt)
+    guard case .failure(_, failureClass: let failureClass) = outcome else {
+      return XCTFail("expected failure, got \(outcome)")
+    }
+    XCTAssertEqual(failureClass, .server)
+  }
+
   func testCompletedXImportWithZeroPostsDoesNotSayStillRunning() {
     let message = ConnectorImportOperations.xImportCompletionMessage(
       handle: "omi",

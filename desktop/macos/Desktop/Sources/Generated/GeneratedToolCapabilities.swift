@@ -377,9 +377,10 @@ enum GeneratedToolCapabilities {
       title: "Load Skill",
       latency: .fastLocal,
       surfaces: Set([.desktopChat]),
-      summary: "Load the full instructions for a named skill listed in available_skills.",
+      summary: "Load a skill progressively: the first call returns metadata, a section table of contents, and the first section; further sections load by part.",
       bullets: [
-      "Use the exact skill name from available_skills."
+      "Use the exact skill name from available_skills.",
+      "Read additional sections with part only when the first section is relevant."
     ]
     ),
     Capability(

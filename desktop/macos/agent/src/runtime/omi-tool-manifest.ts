@@ -377,9 +377,11 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
   },
   load_skill: {
     surfaces: ["desktop_chat"],
-    capabilityDoc: doc("Load Skill", "Load the full instructions for a named skill listed in available_skills.", [
-      "Use the exact skill name from available_skills.",
-    ]),
+    capabilityDoc: doc(
+      "Load Skill",
+      "Load a skill progressively: the first call returns metadata, a section table of contents, and the first section; further sections load by part.",
+      ["Use the exact skill name from available_skills.", "Read additional sections with part only when the first section is relevant."],
+    ),
   },
   search_skills: {
     surfaces: ["desktop_chat"],
@@ -1114,15 +1116,21 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
     name: "load_skill",
     label: "Load Skill",
-    description: "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    description: "Load a relevant skill progressively: the first call returns metadata, the body's section table of contents, and only the first section's content; additional sections load one at a time with a part number.",
     promptSnippet: "load_skill - Load a relevant skill returned by the catalog or search_skills",
     latency: "fast local",
-    inputSchema: schema({ name: { type: "string", description: "Skill name returned by the compact catalog or search_skills" } }, ["name"]),
+    inputSchema: schema(
+      {
+        name: { type: "string", description: "Skill name returned by the compact catalog or search_skills" },
+        part: { type: "number", description: "1-based body section to read. Omit for the overview, section list, and first section." },
+      },
+      ["name"]
+    ),
     annotations: readOnlyLocal,
     timeoutClass: "normal",
     executor: { kind: "nodeTool" },
     intendedForAgents: true,
-    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots."],
+    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots.", "Skills the user disabled in the desktop app are refused."],
     adapters: piAndStdio(),
   },
   {
@@ -1140,7 +1148,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     timeoutClass: "normal",
     executor: { kind: "nodeTool" },
     intendedForAgents: true,
-    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots."],
+    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots.", "Skills the user disabled in the desktop app never match."],
     adapters: piAndStdio(),
   },
   {

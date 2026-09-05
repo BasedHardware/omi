@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import copy
+import io
 import runpy
+import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -88,6 +90,88 @@ def test_rejects_unprotected_live_alert_paths(verifier: SimpleNamespace, mutatio
     )
     assert any(expected in error for error in errors)
     assert "must-never-be-logged" not in " ".join(errors)
+
+
+@pytest.mark.parametrize(
+    ("code", "reason", "expected"),
+    [
+        (401, "Unauthorized", "HTTP 401 Unauthorized"),
+        (404, "Not Found", "HTTP 404 Not Found"),
+        (503, "Service Unavailable", "HTTP 503 Service Unavailable"),
+    ],
+)
+def test_request_failure_names_the_http_status(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, code: int, reason: str, expected: str
+) -> None:
+    """#12668: 401 and 404 have different owners — a revoked token vs an unprovisioned
+    rule — so the failure line has to distinguish them. Collapsing both into `HTTPError`
+    turned a one-line diagnosis into a multi-hour one across 13 consecutive red deploys."""
+
+    def _raise(*_args, **_kwargs):
+        raise urllib.error.HTTPError(url="https://monitor.example/api", code=code, msg=reason, hdrs=None, fp=None)
+
+    monkeypatch.setattr(verifier.urllib.request, "urlopen", _raise)
+
+    with pytest.raises(verifier.AlertRouteError) as excinfo:
+        verifier._request_json("https://monitor.example", "/api/v1/provisioning/alert-rules/x", "token")
+
+    assert expected in str(excinfo.value)
+
+
+def test_request_failure_names_the_url_error_reason(verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`URLError` sits between the other two handlers on purpose: it subclasses `OSError`
+    and is the superclass of `HTTPError`. Catching `OSError` first would swallow both
+    specific cases and report a bare type name, so the ordering needs its own pin."""
+
+    def _raise(*_args, **_kwargs):
+        raise urllib.error.URLError("nodename nor servname provided")
+
+    monkeypatch.setattr(verifier.urllib.request, "urlopen", _raise)
+
+    with pytest.raises(verifier.AlertRouteError) as excinfo:
+        verifier._request_json("https://monitor.example", "/api/v1/provisioning/alert-rules/x", "token")
+
+    message = str(excinfo.value)
+    assert "URLError" in message
+    assert "nodename nor servname provided" in message
+
+
+def test_request_failure_falls_back_to_the_type_name_for_a_plain_os_error(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A socket-level failure that is not a URLError keeps the original behaviour."""
+
+    def _raise(*_args, **_kwargs):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(verifier.urllib.request, "urlopen", _raise)
+
+    with pytest.raises(verifier.AlertRouteError) as excinfo:
+        verifier._request_json("https://monitor.example", "/api/v1/provisioning/alert-rules/x", "token")
+
+    assert "TimeoutError" in str(excinfo.value)
+
+
+def test_request_failure_does_not_leak_the_response_body(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Grafana error bodies can carry detail that must not reach a public CI log."""
+
+    def _raise(*_args, **_kwargs):
+        raise urllib.error.HTTPError(
+            url="https://monitor.example/api",
+            code=401,
+            msg="Unauthorized",
+            hdrs=None,
+            fp=io.BytesIO(b'{"message":"must-never-be-logged"}'),
+        )
+
+    monkeypatch.setattr(verifier.urllib.request, "urlopen", _raise)
+
+    with pytest.raises(verifier.AlertRouteError) as excinfo:
+        verifier._request_json("https://monitor.example", "/api/v1/provisioning/alert-rules/x", "token")
+
+    assert "must-never-be-logged" not in str(excinfo.value)
 
 
 def test_rejects_world_readable_token_file(verifier: SimpleNamespace, tmp_path: Path) -> None:

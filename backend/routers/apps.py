@@ -1581,12 +1581,19 @@ Be creative, fun, and varied. No generic ideas."""
 
 
 @router.post('/v1/app/generate', tags=['v1'], response_model=AppGenerationResponse)
-async def generate_app_endpoint(data: GenerateAppRequest, uid: str = Depends(auth.get_current_user_uid)):
+async def generate_app_endpoint(
+    data: GenerateAppRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
     """
     Generate an app configuration from a natural language prompt.
     This is an experimental feature that uses AI to create app configurations.
     """
     from utils.llm.app_generator import generate_app_from_prompt
+
+    # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    enforce_chat_quota(uid, platform=x_app_platform)
 
     prompt = data.prompt.strip()
     if not prompt:
@@ -1620,13 +1627,20 @@ async def generate_app_endpoint(data: GenerateAppRequest, uid: str = Depends(aut
 
 
 @router.post('/v1/app/generate-icon', tags=['v1'], response_model=AppIconGenerationResponse)
-async def generate_app_icon_endpoint(data: GenerateAppIconRequest, uid: str = Depends(auth.get_current_user_uid)):
+async def generate_app_icon_endpoint(
+    data: GenerateAppIconRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
     """
     Generate an app icon using AI (DALL-E).
     Returns the icon as a base64 encoded PNG image.
     """
     from utils.llm.app_generator import generate_app_icon
     import base64
+
+    # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    enforce_chat_quota(uid, platform=x_app_platform)
 
     app_name = data.name.strip()
     app_description = data.description.strip()
