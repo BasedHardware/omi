@@ -1077,6 +1077,8 @@ version = "0.2.3"
 sdist = { url = "https://files.pythonhosted.org/packages/cd/05/0a34433a064256a578f1783a10da6df098ceaa4a57bbeaa96a6c0352786b/pure_eval-0.2.3.tar.gz", upload-time = 2024-07-21T12:58:21Z, size = 19752, hashes = { sha256 = "5f4e983f40564c576c7c8635ae88db5956bb2229d7e9237d03b3c0b0190eaf42" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/8e/37/efad0257dc6e593a18957422533ff0f87ede7c9c6ea010a2177d738fb82f/pure_eval-0.2.3-py3-none-any.whl", upload-time = 2024-07-21T12:58:20Z, size = 11842, hashes = { sha256 = "1db8e35b67b3d218d818ae653e27f06c3aa420901fa7b081ca98cbedc874e0d0" } }]
 
+# TODO(#12758): pyarrow pinned at 19.0.1 for GCP buildpack/rmgpgab manylinux2014
+# (23.x is manylinux_2_28-only → sdist fail). Drop when trigger uses Dockerfile/uv.
 [[packages]]
 name = "pyarrow"
 version = "19.0.1"
