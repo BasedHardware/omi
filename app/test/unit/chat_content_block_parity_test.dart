@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:omi/backend/schema/chat_content_block.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/chat_content_block_list.dart';
 

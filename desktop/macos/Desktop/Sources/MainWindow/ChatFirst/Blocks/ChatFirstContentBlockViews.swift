@@ -195,31 +195,15 @@ struct TaskCardView: View {
     "\(taskID):\(liveTask == nil)"
   }
 
+  // The body's branches are extracted so release optimization can type-check
+  // each in reasonable time; the whole expression as one literal timed out the
+  // compiler ("unable to type-check this expression in reasonable time").
   var body: some View {
     Group {
       if let task {
-        card(task)
-          .onAppear {
-            retainCompletedTaskIfNeeded(liveTask)
-            AnalyticsManager.shared.chatFirst(
-              .richBlock(kind: .taskCard, outcome: .rendered, action: .none)
-            )
-          }
+        renderedCard(task)
       } else if hydrationFinished {
-        ChatFirstUnavailableBlockView(entityName: "Task")
-          .onAppear {
-            log(
-              "TaskCardView: \(taskID) unavailable — store=\(tasksStore.tasks.count)"
-                + " incomplete=\(tasksStore.incompleteTasks.count)"
-                + " completed=\(tasksStore.completedTasks.count)"
-                + " deleted=\(tasksStore.deletedTasks.count)"
-                + " present=\(tasksStore.tasks.contains { $0.id == taskID })"
-                + " retiredHere=\(isExplicitlyRetired)"
-                + " retained=\(retainedCompletedTask?.id ?? "none")")
-            AnalyticsManager.shared.chatFirst(
-              .richBlock(kind: .taskCard, outcome: .stalePlaceholder, action: .none)
-            )
-          }
+        unavailableBlock
       } else {
         ChatFirstLoadingBlockView(entityName: "Task")
       }
@@ -263,6 +247,37 @@ struct TaskCardView: View {
         hydrationFinished = true
       }
     }
+  }
+
+  private func renderedCard(_ task: TaskActionItem) -> some View {
+    card(task)
+      .onAppear {
+        retainCompletedTaskIfNeeded(liveTask)
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .taskCard, outcome: .rendered, action: .none)
+        )
+      }
+  }
+
+  private var unavailableBlock: some View {
+    ChatFirstUnavailableBlockView(entityName: "Task")
+      .onAppear {
+        log(unavailableDescription)
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .taskCard, outcome: .stalePlaceholder, action: .none)
+        )
+      }
+  }
+
+  private var unavailableDescription: String {
+    "TaskCardView: \(taskID) unavailable"
+      + " store=\(tasksStore.tasks.count)"
+      + " incomplete=\(tasksStore.incompleteTasks.count)"
+      + " completed=\(tasksStore.completedTasks.count)"
+      + " deleted=\(tasksStore.deletedTasks.count)"
+      + " present=\(tasksStore.tasks.contains { $0.id == taskID })"
+      + " retiredHere=\(isExplicitlyRetired)"
+      + " retained=\(retainedCompletedTask?.id ?? "none")"
   }
 
   @ViewBuilder
