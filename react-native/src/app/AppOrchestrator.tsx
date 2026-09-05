@@ -494,16 +494,19 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     ) {
       return;
     }
+    // Capture the session this page belongs to. send() bumps mutation so a
+    // replace-style write cannot clobber optimistic rows — but that same bump
+    // must not discard a successfully fetched older page (cursor + messages).
+    // Merge into the live transcript; only a session epoch change retires it.
+    // 410 recovery still respects mutation: a full newest-history replace can
+    // wipe a newer send (covered by the stale-recovery test).
     const session = chatSessionEpochRef.current;
     const mutation = chatMutationSeqRef.current;
     setLoadingOlderChat(true);
     setChatError(null);
     try {
       const page = await loadOlderChatHistory(backend, cursor);
-      if (
-        chatSessionEpochRef.current !== session ||
-        chatMutationSeqRef.current !== mutation
-      ) {
+      if (chatSessionEpochRef.current !== session) {
         return;
       }
       page.messages.forEach(message => stableChatMessageIds.add(message.id));
