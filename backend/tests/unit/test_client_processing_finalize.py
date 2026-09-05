@@ -75,6 +75,7 @@ from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.conversations.transcript_hash import transcript_sha256
+import utils.managed_compute as managed_compute
 from utils.managed_compute import Decision
 
 _BACKEND = Path(__file__).resolve().parents[2]
@@ -432,8 +433,8 @@ def _enable_flag(monkeypatch: pytest.MonkeyPatch, pc: Any) -> None:
 
 
 def _authorize(monkeypatch: pytest.MonkeyPatch, pc: Any, decision: Decision) -> None:
-    monkeypatch.setattr(pc, 'authorize_managed_compute', lambda *_args, **_kwargs: decision)
-    monkeypatch.setattr(pc, 'request_carries_validated_byok_key', lambda _feature: False)
+    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', lambda *_args, **_kwargs: decision)
+    monkeypatch.setattr(managed_compute, 'request_carries_validated_byok_key', lambda _feature: False)
 
 
 def _spy_managed_effects(monkeypatch: pytest.MonkeyPatch, pc: Any) -> dict[str, MagicMock]:

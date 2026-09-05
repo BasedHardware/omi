@@ -10801,6 +10801,16 @@
     "pendantFullSyncBlocked": "האחסון של ה-Pendant מלא והוא עדיין במצב הקלטה, ולכן לא ניתן להעביר את השמע השמור. לחצו על כפתור ה-Pendant כדי לעצור את ההקלטה, ולאחר מכן סנכרנו שוב.",
     "conversationsNotCapturedCount": "לא הוקלט ({count})",
     "transcriptionNoAudio": "התמליל אינו מקבל שמע",
+    "chatBlockTask": "משימה",
+    "chatBlockGoal": "יעד",
+    "chatBlockConversation": "שיחה",
+    "chatBlockMemory": "זיכרון",
+    "chatBlockQuestion": "שאלה",
+    "chatBlockOpenInGoals": "פתיחה ביעדים",
+    "chatBlockOpenConversation": "פתיחת השיחה",
+    "chatBlockOpenInMemories": "פתיחה בזיכרונות",
+    "chatBlockUnavailable": "אינו זמין עוד",
+    "chatBlockRecommendedNextSteps": "השלבים הבאים המומלצים",
     "couldNotLoadMemories": "לא ניתן לטעון את הזיכרונות",
     "couldNotLoadKnowledgeGraph": "לא ניתן לטעון את גרף הידע"
 }

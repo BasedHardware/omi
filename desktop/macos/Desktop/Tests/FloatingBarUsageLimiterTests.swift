@@ -13,7 +13,8 @@ final class FloatingBarUsageLimiterTests: XCTestCase {
     limit: Double? = 30,
     percent: Double = 0,
     allowed: Bool = true,
-    resetAt: Int? = nil
+    resetAt: Int? = nil,
+    isOveragePlan: Bool? = nil
   ) throws -> APIClient.ChatUsageQuota {
     var json: [String: Any] = [
       "plan": plan,
@@ -25,6 +26,7 @@ final class FloatingBarUsageLimiterTests: XCTestCase {
     ]
     if let limit { json["limit"] = limit }
     if let resetAt { json["reset_at"] = resetAt }
+    if let isOveragePlan { json["is_overage_plan"] = isOveragePlan }
     let data = try JSONSerialization.data(withJSONObject: json)
     return try JSONDecoder().decode(APIClient.ChatUsageQuota.self, from: data)
   }
@@ -242,5 +244,38 @@ final class FloatingBarUsageLimiterTests: XCTestCase {
 
     XCTAssertFalse(limiter.isLimitReached, "reset clears the reached limit (dev-resettable)")
     XCTAssertEqual(limiter.remainingQueries, .max, "reset returns to the no-quota baseline")
+  }
+
+  // MARK: - Overage plans are never blocked locally
+
+  func testOveragePlanIsNotBlockedAtItsLimit() throws {
+    // Operator/Neo/Architect bill the excess: enforce_chat_quota returns without
+    // raising for them, so the server would have answered this send. Blocking on
+    // `allowed == false` refused a request the backend never refused.
+    let limiter = FloatingBarUsageLimiter()
+    limiter.applyQuota(
+      try makeQuota(
+        plan: "Operator", used: 500, limit: 500, percent: 100, allowed: false,
+        isOveragePlan: true))
+
+    XCTAssertFalse(limiter.isLimitReached, "an overage plan past its allowance still sends")
+  }
+
+  func testHardCappedPlanIsStillBlockedAtItsLimit() throws {
+    let limiter = FloatingBarUsageLimiter()
+    limiter.applyQuota(
+      try makeQuota(
+        plan: "Free", used: 30, limit: 30, percent: 100, allowed: false, isOveragePlan: false))
+
+    XCTAssertTrue(limiter.isLimitReached, "a hard-capped plan past its allowance is blocked")
+  }
+
+  func testMissingOverageFieldKeepsHardCapReading() throws {
+    // A server predating `is_overage_plan` must not silently unblock every plan.
+    let limiter = FloatingBarUsageLimiter()
+    limiter.applyQuota(
+      try makeQuota(plan: "Free", used: 30, limit: 30, percent: 100, allowed: false))
+
+    XCTAssertTrue(limiter.isLimitReached)
   }
 }

@@ -397,6 +397,22 @@ def get_conversation_photos(uid: str, conversation_id: str):
     return photos
 
 
+def iter_all_conversation_photos(uid: str):
+    start_key = db.document(f'users/{uid}/conversations/ /photos/ ')
+    end_key = db.document(f'users/{uid}/conversations//photos/')
+    query = (
+        db.collection_group('photos')
+        .where(filter=FieldFilter('__name__', '>=', start_key))
+        .where(filter=FieldFilter('__name__', '<=', end_key))
+    )
+    for doc in query.stream():
+        # Path format: users/{uid}/conversations/{conversation_id}/photos/{photo_id}
+        parts = doc.reference.path.split('/')
+        if len(parts) >= 6 and parts[-2] == 'photos' and parts[-4] == 'conversations':
+            conversation_id = parts[-3]
+            yield conversation_id, doc.to_dict()
+
+
 # *****************************
 # ********** CRUD *************
 # *****************************

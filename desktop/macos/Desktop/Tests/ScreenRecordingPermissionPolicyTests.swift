@@ -45,10 +45,11 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     // register-first helper (each of these files had an open-then-register path).
     for path in [
       "Sources/MainWindow/Pages/PermissionsPage.swift",
-      "Sources/MainWindow/SidebarView.swift",
       "Sources/Rewind/UI/RewindPage.swift",
-      // DashboardPage's capture toggle now delegates to CaptureListeningLogic,
-      // which owns the register-first screen-recording grant.
+      // The legacy sidebar shell (SidebarView.swift) and DashboardPage were
+      // deleted with the one-chat-shell migration; ChatFirstShell's capture
+      // toggle now delegates to CaptureListeningLogic, which owns the
+      // register-first screen-recording grant.
       "Sources/MainWindow/CaptureListeningLogic.swift",
       // OmiApp's menu-bar toggle now delegates to SystemCaptureControls, which owns the
       // register-first screen-recording grant for both the menu bar and the notch cluster.
@@ -63,9 +64,7 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     // Negative guard: the register-after-open-Settings anti-pattern is gone.
     for path in [
       "Sources/MainWindow/Pages/PermissionsPage.swift",
-      "Sources/MainWindow/SidebarView.swift",
       "Sources/Rewind/UI/RewindPage.swift",
-      "Sources/MainWindow/Pages/DashboardPage.swift",
       "Sources/MainWindow/CaptureListeningLogic.swift",
     ] {
       let src = try sourceFile(path)

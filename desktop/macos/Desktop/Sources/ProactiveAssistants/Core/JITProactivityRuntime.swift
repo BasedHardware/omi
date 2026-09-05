@@ -226,7 +226,9 @@ actor JITProactivityRuntime {
         guard let snoozedUntil = trigger.snoozedUntil else { return true }
         return now >= snoozedUntil
       }
-      let day = day(for: now)
+      guard let day = day(for: now, budgetTimezone: snapshot.budgetTimezone) else {
+        return .suppressed(reason: "budget_authority_unavailable")
+      }
       let counts = try await wakeupCounts(
         triggerIDs: eligibleTriggers.map(\.id), budgetDay: day, now: now)
       let receiptMatchesSnapshot =
@@ -266,6 +268,7 @@ actor JITProactivityRuntime {
           context: ambient,
           observation: observation,
           receipt: receipt,
+          budgetTimezone: snapshot.budgetTimezone,
           authorizationSnapshot: authorizationSnapshot)
       case .boundedPlannedTriage:
         guard let ambiguous = runtimeResult.ambiguous.first,
@@ -283,6 +286,7 @@ actor JITProactivityRuntime {
             context: ambient,
             observation: observation,
             receipt: receipt,
+            budgetTimezone: snapshot.budgetTimezone,
             authorizationSnapshot: authorizationSnapshot)
         }
         return .suppressed(reason: "planned_runtime_rejected")
@@ -458,6 +462,7 @@ actor JITProactivityRuntime {
     context: JITAmbientRuntimeContext?,
     observation: KnowledgeLedgerTriggerObservation,
     receipt: JITTriggerMirrorReceipt,
+    budgetTimezone: String?,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async -> JITProactivityDecision {
     guard let context, context.permitsNanoTriage else {
@@ -471,7 +476,9 @@ actor JITProactivityRuntime {
       locallyRelevant: context.locallyRelevant,
       boundedEvidence: context.boundedEvidence)
     let now = observation.occurredAt ?? Date()
-    let day = day(for: now)
+    guard let day = day(for: now, budgetTimezone: budgetTimezone) else {
+      return .suppressed(reason: "budget_authority_unavailable")
+    }
     if let deniedAt = ambientServerDenials[day],
       now.timeIntervalSince(deniedAt) < Self.ambientServerDenialBackoff
     {
@@ -678,8 +685,14 @@ actor JITProactivityRuntime {
     JITProactivityReservation.identifier("ambient-context", contextID)
   }
 
-  private func day(for date: Date) -> String {
-    let timezone = TimeZone.current
+  private func day(for date: Date, budgetTimezone: String? = nil) -> String? {
+    let timezone: TimeZone
+    if let budgetTimezone {
+      guard let resolved = TimeZone(identifier: budgetTimezone) else { return nil }
+      timezone = resolved
+    } else {
+      timezone = TimeZone.current
+    }
     if let cached = cachedDayFormatter, cached.timezone == timezone {
       return cached.formatter.string(from: date)
     }
@@ -691,4 +704,5 @@ actor JITProactivityRuntime {
     cachedDayFormatter = (timezone, formatter)
     return formatter.string(from: date)
   }
+
 }

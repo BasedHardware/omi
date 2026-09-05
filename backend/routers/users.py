@@ -50,7 +50,6 @@ from database.users import (
     claim_deletion_wipe_for_task,
     get_user_transcription_preferences,
     resolve_deletion_wipe_job_id,
-    resolve_legacy_deletion_wipe_uid,
     set_user_transcription_preferences,
 )
 from config.stt_provider_policy import supports_live_multilingual_mode
@@ -96,6 +95,7 @@ from utils.subscription import (
     get_paid_plan_definitions,
     get_plan_display_name,
     get_plan_limits,
+    plan_uses_overage,
     get_plan_features,
     get_monthly_usage_for_subscription,
     is_trial_paywalled,
@@ -376,34 +376,16 @@ async def run_account_deletion_wipe(
         payload = await request.json()
         if not isinstance(payload, dict):
             raise ValueError('payload must be a JSON object')
-        if 'job_id' in payload:
-            wipe_job_id = payload['job_id']
-            if not isinstance(wipe_job_id, str) or not wipe_job_id:
-                raise ValueError('job_id must be a non-empty string')
-            resolution_fn = resolve_deletion_wipe_job_id
-            resolution_arg = wipe_job_id
-            payload_kind = 'job_id'
-        else:
-            # TODO(#9760): Remove this legacy branch after the Cloud Tasks max-retry window has elapsed.
-            legacy_uid = payload.get('uid')
-            if not isinstance(legacy_uid, str) or not legacy_uid:
-                raise ValueError('job_id must be a non-empty string')
-            resolution_fn = resolve_legacy_deletion_wipe_uid
-            resolution_arg = legacy_uid
-            payload_kind = 'legacy_uid'
+        if 'job_id' not in payload:
+            raise ValueError('job_id must be a non-empty string')
+        wipe_job_id = payload['job_id']
+        if not isinstance(wipe_job_id, str) or not wipe_job_id:
+            raise ValueError('job_id must be a non-empty string')
+        resolution_fn = resolve_deletion_wipe_job_id
+        resolution_arg = wipe_job_id
     except Exception as e:
         logger.error(f'account_deletion handler: invalid payload, dropping task: {sanitize(str(e))}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
-
-    if task_authentication.audience == 'legacy_sync' and payload_kind != 'legacy_uid':
-        logger.warning('account_deletion handler: dropping job-ID payload with legacy sync audience')
-        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'legacy_audience_for_job_id'})
-
-    if payload_kind == 'legacy_uid' and task_authentication.audience != 'legacy_sync':
-        logger.warning('account_deletion handler: dropping legacy uid payload with non-legacy audience')
-        return JSONResponse(
-            status_code=200, content={'status': 'dropped', 'reason': 'legacy_uid_requires_legacy_audience'}
-        )
 
     try:
         resolution = await run_blocking(db_executor, resolution_fn, resolution_arg)
@@ -414,9 +396,7 @@ async def run_account_deletion_wipe(
     resolution_outcome = resolution.get('outcome') if isinstance(resolution, dict) else None
     uid = resolution.get('uid') if isinstance(resolution, dict) else None
     if resolution_outcome != 'resolved' or not isinstance(uid, str) or not uid:
-        logger.warning(
-            'account_deletion handler: dropping task payload_kind=%s resolution=%s', payload_kind, resolution_outcome
-        )
+        logger.warning('account_deletion handler: dropping task resolution=%s', resolution_outcome)
         return JSONResponse(
             status_code=200, content={'status': 'dropped', 'reason': resolution_outcome or 'invalid_job'}
         )
@@ -798,12 +778,17 @@ def set_memory_summary_rating(
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/analytics/memory_summary', tags=['v1'], response_model=MemorySummaryRatingResponse)
-def get_memory_summary_rating(
-    memory_id: str,
-    _: str = Depends(auth.get_current_user_uid),
-):
-    return {'has_rating': False}
+@router.get(
+    '/v1/users/analytics/memory_summary',
+    tags=['v1'],
+    response_model=MemorySummaryRatingResponse,
+    dependencies=[Depends(auth.get_current_user_uid)],
+)
+def get_memory_summary_rating(memory_id: str):
+    rating = get_conversation_summary_rating_score(memory_id)
+    if not rating:
+        return {'has_rating': False}
+    return {'has_rating': rating.get('value', -1) != -1, 'rating': rating.get('value', -1)}
 
 
 @router.post('/v1/users/analytics/chat_message', tags=['v1'], response_model=UserStatusResponse)
@@ -1505,6 +1490,7 @@ def get_user_chat_usage_quota(
             percent=0.0,
             allowed=True,
             reset_at=None,
+            is_overage_plan=False,
         )
 
     # This is the desktop-only quota display (see docstring), so it must read the
@@ -1531,6 +1517,7 @@ def get_user_chat_usage_quota(
         percent=percent,
         allowed=snapshot['allowed'],
         reset_at=snapshot['reset_at'],
+        is_overage_plan=plan_uses_overage(plan),
     )
 
 
@@ -1790,6 +1777,10 @@ def test_daily_summary(
 DesktopUsageSeconds = Annotated[int, Field(strict=True, ge=0, le=86400)]
 DesktopUsageCount = Annotated[int, Field(strict=True, ge=0, le=10000)]
 
+# How long the desktop-usage heartbeat may assume the user document's ``time_zone`` state is
+# unchanged before it checks again.
+_DESKTOP_TIME_ZONE_RECHECK_SECONDS = 6 * 60 * 60
+
 
 class DesktopDailyUsageRequest(BaseModel):
     date: str
@@ -1859,6 +1850,15 @@ def record_desktop_daily_usage(
             'ptt_turns': data.ptt_turns,
         },
     )
+    # The daily-summary cron selects owners by the user document's ``time_zone``, and the only
+    # other writer of that field is the mobile FCM registration — so a desktop-only owner was
+    # never scheduled, and their on-demand recap was bounded to the UTC day. This heartbeat already
+    # carries a validated IANA zone; fill the gap once. The Redis flag keeps a five-minute heartbeat
+    # from re-reading the user document all day; a zone mobile already wrote is left alone.
+    time_zone_known_key = f'desktop_usage_time_zone_known:{uid}'
+    if not get_generic_cache(time_zone_known_key):
+        notification_db.set_user_time_zone_if_missing(uid, data.timezone)
+        set_generic_cache(time_zone_known_key, {'time_zone': data.timezone}, ttl=_DESKTOP_TIME_ZONE_RECHECK_SECONDS)
     return {'ok': True}
 
 

@@ -417,10 +417,7 @@ void main() {
       emitter: (name, properties) => events.add((name: name, properties: properties)),
       idFactory: () => 'recording-check-only',
     );
-    final provider = CaptureProvider(
-      conversationLocationCapture: locationCapture,
-      recordingTelemetry: telemetry,
-    );
+    final provider = CaptureProvider(conversationLocationCapture: locationCapture, recordingTelemetry: telemetry);
 
     await provider.streamDeviceRecording();
     expect(locationCapture.calls, 1);
@@ -443,7 +440,9 @@ void main() {
     addTearDown(() => SharedPreferencesUtil().batchModeEnabled = false);
     final provider = CaptureProvider(recordingTelemetry: telemetry);
 
-    await provider.streamDeviceRecording(device: _device(id: 'omi-1', type: DeviceType.omi));
+    await provider.streamDeviceRecording(
+      device: _device(id: 'omi-1', type: DeviceType.omi),
+    );
 
     expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
     expect(events.single.properties['failure_class'], 'capture_unavailable');

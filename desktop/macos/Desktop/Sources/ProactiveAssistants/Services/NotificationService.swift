@@ -417,6 +417,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       message: metadata.message,
       assistantId: metadata.assistantId,
       sound: .none,
+      // Explicit at the producer edge — the assistant's own declared category.
+      // `FloatingBarNotification` no longer derives one for a caller that omits it.
+      kind: ProactiveNotificationKind.from(assistantId: metadata.assistantId),
       context: metadata.context,
       jitFeedbackContext: feedbackContext,
       isPersistent: true,
@@ -715,6 +718,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         message: message,
         assistantId: assistantId,
         sound: sound,
+        // The same category this delivery was already gated on a few lines up.
+        kind: ProactiveNotificationKind.from(assistantId: assistantId),
         context: context,
         action: action,
         jitFeedbackContext: jitFeedbackContext,
@@ -1051,7 +1056,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     case .insight, .resurface, .goal: return insightEnabled
     case .memory: return memoryEnabled
     case .integration: return integrationEnabled
-    case .general: return true
+    // Functional system notices and the two never-journaled product cards sit
+    // outside the five-category taxonomy and are ungated by it.
+    case .general, .functional, .trial, .onboarding: return true
     }
   }
 

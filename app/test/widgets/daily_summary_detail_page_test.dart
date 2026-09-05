@@ -133,6 +133,57 @@ void main() {
     );
   });
 
+  testWidgets('memories learned are tappable on a cold provider without the id loaded', (tester) async {
+    final reviews = <String>[];
+    final memoriesProvider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
+      reviewMemoryRequest: (id, value) async {
+        reviews.add(id);
+        return true;
+      },
+      editMemoryRequest: (id, value) async => const EditMemoryResult(persisted: true),
+    );
+    addTearDown(memoriesProvider.dispose);
+    // Cold start: nothing has initialised the provider and the bulk list never
+    // contains the recap id.
+    expect(memoriesProvider.loading, isTrue);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<MemoriesProvider>.value(
+        value: memoriesProvider,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: ThemeData.dark(),
+          home: DailySummaryDetailPage(
+            summaryId: 'summary-cold',
+            summary: _summary(
+              locations: const [],
+              memoriesLearned: const [
+                MemoryReviewItem(memoryId: 'mem-cold', content: 'Prefers async standups', category: 'work'),
+              ],
+            ),
+            tileProvider: _MemoryTileProvider(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+
+    final accept = tester.widget<InkWell>(find.byKey(const Key('memory_review_accept_mem-cold')));
+    expect(accept.onTap, isNotNull);
+
+    await tester.tap(find.byKey(const Key('memory_review_accept_mem-cold')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+
+    expect(reviews, ['mem-cold']);
+  });
+
   testWidgets('shows positive desktop watching and proactive stats', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

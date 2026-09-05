@@ -645,7 +645,15 @@ class TranscriptionService: @unchecked Sendable {
 
       case .failure(let error):
         guard self.isConnected else { return }
-        logError("TranscriptionService: Receive error", error: error)
+        // The server's close frame, when there was one, is the only thing that
+        // says *why* the socket went away; `handleDisconnection` drops the task
+        // and its delegate, so it has to be read here or not at all.
+        let task = self.webSocketTask
+        let reason = task?.closeReason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        logError(
+          "TranscriptionService: Receive error (closeCode=\(task?.closeCode.rawValue ?? -1)"
+            + (reason.isEmpty ? ")" : " reason=\(reason))"),
+          error: error)
         self.handleDisconnection()
       }
     }

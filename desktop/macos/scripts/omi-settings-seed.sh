@@ -46,7 +46,6 @@ KEYS = [
     "fontScale",
     "multiChatEnabled",
     "conversationsCompactView",
-    "useLegacyHomeDesign",
     "chatBridgeMode",
     "realtimeOmniProvider",
     "askModeEnabled",

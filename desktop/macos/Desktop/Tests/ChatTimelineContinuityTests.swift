@@ -254,6 +254,55 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(settled.copyableText, "You filmed the launch video and tested the memory graph.")
   }
 
+  /// A turn that answers with cards writes no prose, so the runtime synthesizes
+  /// one line per block for clients that cannot draw them and puts it on the
+  /// message's ordinary text field. The desktop draws the cards, so printing
+  /// that line too rendered the goal card, three task cards, and then
+  /// "Goal - Make Omi Great Again / Task / Task / Task" underneath them.
+  func testTheCardsOwnDegradationIsNotPrintedUnderTheCards() {
+    let blocks: [ChatContentBlock] = [
+      .goalLink(id: "goal_1", goalId: "g-1", summary: "Make Omi Great Again"),
+      .taskCard(id: "task_1", taskId: "t-1"),
+      .taskCard(id: "task_2", taskId: "t-2"),
+      .taskCard(id: "task_3", taskId: "t-3"),
+    ]
+    let projection = "Goal - Make Omi Great Again\nTask\nTask\nTask"
+    XCTAssertEqual(
+      ChatStructuredFallbackText.projected(blocks), projection,
+      "the desktop has to recognize the exact text the runtime synthesizes")
+    XCTAssertEqual(
+      ChatAssistantAnswerText.visible(
+        contentBlocks: blocks, fallback: projection, isStreaming: false),
+      "")
+  }
+
+  /// The suppression is keyed on the body *being* that projection, not on the
+  /// turn merely having cards — an answer the model actually wrote still reads.
+  func testProseWrittenAlongsideCardsSurvives() {
+    let blocks: [ChatContentBlock] = [
+      .taskCard(id: "task_1", taskId: "t-1"),
+      .text(id: "text_1", text: "Start with the hackathon — the deadline is closest."),
+    ]
+    XCTAssertEqual(
+      ChatAssistantAnswerText.visible(
+        contentBlocks: blocks,
+        fallback: "Start with the hackathon — the deadline is closest.",
+        isStreaming: false),
+      "Start with the hackathon — the deadline is closest.")
+  }
+
+  /// Whitespace is normalized on both sides, the way mobile's
+  /// `textIsStructuredFallback` does it, so a re-wrapped body is still
+  /// recognized as the projection rather than printed back.
+  func testAReflowedProjectionIsStillRecognized() {
+    let blocks: [ChatContentBlock] = [
+      .memoryLink(id: "memory_1", memoryId: "m-1", summary: "Prefers dark mode")
+    ]
+    XCTAssertTrue(
+      ChatStructuredFallbackText.bodyIsBlockProjection(
+        text: "  Memory -   Prefers dark mode  ", contentBlocks: blocks))
+  }
+
   func testSettledPreToolTextRemainsWhenItIsTheOnlyAnswer() {
     let blocks: [ChatContentBlock] = [
       .text(id: "text_1", text: "I started a background agent for that."),
@@ -1531,29 +1580,28 @@ final class ChatTimelineContinuityTests: XCTestCase {
 
     // Home is the only main-window chat surface now, so the assertions the
     // standalone chat page used to carry move onto it rather than retiring.
-    let dashboard = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Pages/DashboardPage.swift"),
+    // `QueryAnswerThread` is that surface (`DashboardPage` and its inline chat
+    // are gone), and it now binds the provider directly — the goal-citation
+    // rewrite that used to sit between them belonged to the deleted shell.
+    let answerThread = try String(
+      contentsOf: root.appendingPathComponent("Sources/MainWindow/QueryShell/QueryAnswerThread.swift"),
       encoding: .utf8)
     XCTAssertGreaterThanOrEqual(
-      dashboard.components(separatedBy: "messages: chatProvider.messages,").count - 1,
-      2,
+      answerThread.components(separatedBy: "messages: chatProvider.messages,").count - 1,
+      1,
       "Home chat surfaces must bind the shared ChatProvider timeline"
     )
     XCTAssertFalse(
-      dashboard.contains("transcriptMessages"),
+      answerThread.contains("transcriptMessages"),
       "Home chat must not filter notch/PTT turns out of history"
     )
     XCTAssertTrue(
-      dashboard.contains("openAgentChatFromTimeline(agentID: agentID, completion: completion)"),
+      answerThread.contains("openAgentChatFromTimeline(\n            agentID: agentID, completion: completion)"),
       "Home chat must open spawned-agent links from the timeline with open result feedback"
     )
     XCTAssertTrue(
-      dashboard.contains("openAgentChatFromTimeline(ref: ref, completion: completion)"),
+      answerThread.contains("openAgentChatFromTimeline(\n            ref: ref, completion: completion)"),
       "Home chat must open structured agent refs with open result feedback"
-    )
-    XCTAssertFalse(
-      dashboard.contains("transcriptMessages"),
-      "Home chat must not filter notch/PTT turns out of history"
     )
 
     let floatingState = try String(

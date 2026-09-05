@@ -6,6 +6,7 @@ import { Check, Trash2, Clock, Calendar, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDueBadge } from '@/lib/taskDue';
 import type { ActionItem } from '@/types/conversation';
+import { SuccessCheck } from '@/components/ui/SuccessCheck';
 
 interface TaskRowProps {
   task: ActionItem;
@@ -193,7 +194,9 @@ export function TaskRow({
           )}
         >
           {(task.completed || isCompleting) && (
-            <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+            <SuccessCheck active={task.completed || isCompleting}>
+              <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+            </SuccessCheck>
           )}
         </button>
       )}

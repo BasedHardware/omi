@@ -16,7 +16,7 @@ import logging
 import hashlib
 import os
 import uuid
-from typing import Any, Dict, Literal, NamedTuple, Optional
+from typing import Any, Dict, NamedTuple, Optional
 
 from fastapi import HTTPException, Request
 from google.api_core.exceptions import AlreadyExists, NotFound
@@ -65,7 +65,6 @@ class AccountDeletionTaskAuthentication(NamedTuple):
     """Verified Cloud Tasks identity plus its narrowly scoped audience lane."""
 
     retry_count: int
-    audience: Literal['account_deletion', 'legacy_sync']
 
 
 def _get_tasks_client() -> tasks_v2.CloudTasksClient:
@@ -411,32 +410,15 @@ def verify_cloud_tasks_oidc(request: Request) -> int:
 
 
 def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletionTaskAuthentication:
-    """Verify deletion tasks, with a bounded compatibility path for queued legacy UID tasks.
-
-    Before opaque job IDs, account-deletion tasks inherited sync's OIDC
-    audience. Verify that former audience only during the queue drain window;
-    the route rejects it for new job-ID payloads before any lookup or mutation.
-    """
+    """Verify deletion tasks."""
     deletion_audience = _account_deletion_oidc_audience()
-    try:
-        retry_count = _verify_cloud_tasks_oidc(
-            request,
-            audience=deletion_audience,
-            invoker_sa=_invoker_sa(),
-            log_failure=False,
-        )
-        return AccountDeletionTaskAuthentication(retry_count=retry_count, audience='account_deletion')
-    except HTTPException as deletion_error:
-        legacy_sync_audience = _oidc_audience()
-        if not deletion_audience or not legacy_sync_audience or legacy_sync_audience == deletion_audience:
-            raise deletion_error
-
-        retry_count = _verify_cloud_tasks_oidc(
-            request,
-            audience=legacy_sync_audience,
-            invoker_sa=_invoker_sa(),
-        )
-        return AccountDeletionTaskAuthentication(retry_count=retry_count, audience='legacy_sync')
+    retry_count = _verify_cloud_tasks_oidc(
+        request,
+        audience=deletion_audience,
+        invoker_sa=_invoker_sa(),
+        log_failure=False,
+    )
+    return AccountDeletionTaskAuthentication(retry_count=retry_count)
 
 
 def verify_listen_finalization_cloud_tasks_oidc(request: Request) -> int:

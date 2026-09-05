@@ -541,7 +541,8 @@ struct FloatingControlBarView: View {
           barWindow: window,
           isVoiceListening: showingNotchWaveform,
           isThinking: showingNotchThinking,
-          isSpeaking: showingNotchSpeaking
+          isSpeaking: showingNotchSpeaking,
+          isDictating: state.isVoiceDictating
         )
         .scaleEffect(notchLogoHovering ? 1.06 : 1.0)
       }
@@ -2203,11 +2204,23 @@ private struct AgentMainChatView: View {
           case .discoveryCard(_, let title, let summary, let fullText):
             DiscoveryCard(title: title, summary: summary, fullText: fullText)
               .frame(maxWidth: .infinity, alignment: .leading)
-          // Rich controls are main-chat-only; floating/notch stays passive. The
-          // follow-up chip belongs to the answer surface, not this agent-pill
-          // transcript, which has no lane to send the next turn on.
-          case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
-            .followUp, .memoryReviewCard:
+          // The notch projects the same journal as the main window, so it
+          // renders the same interactable cards. Taps route the one shell and
+          // summon the main window (`ChatFirstRichBlockContext.auxiliary`).
+          case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
+            if let context = ChatFirstRichBlockContext.floatingSurface {
+              ChatFirstRichBlockGroupView(
+                group: group,
+                messageID: message.id,
+                context: context
+              )
+              .environment(\.colorScheme, .light)
+              .frame(maxWidth: .infinity, alignment: .leading)
+            }
+          // The follow-up chip belongs to the answer surface, not this agent-pill
+          // transcript, which has no lane to send the next turn on, and the review
+          // card is a rich editor this passive surface does not own.
+          case .followUp, .memoryReviewCard:
             EmptyView()
           case .agentSpawn(
             _, let pillId, let sessionId, let runId, let title, let objective, let provider
@@ -2240,7 +2253,6 @@ private struct AgentMainChatView: View {
       let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
       if !trimmed.isEmpty {
         OmiMarkdown(text: trimmed, sender: .ai, citations: message.inlineCitationReferences)
-          .textSelection(.enabled)
           .environment(\.fontScale, 0.88)
           .fixedSize(horizontal: false, vertical: true)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -2357,6 +2369,7 @@ private struct NotchAgentPillsRowView: View {
   let isVoiceListening: Bool
   let isThinking: Bool
   let isSpeaking: Bool
+  let isDictating: Bool
   @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
   @State private var pillStatusChangeToken = 0
 
@@ -2372,7 +2385,8 @@ private struct NotchAgentPillsRowView: View {
       },
       isListening: isVoiceListening,
       isThinking: isThinking,
-      isSpeaking: isSpeaking
+      isSpeaking: isSpeaking,
+      isDictating: isDictating
     )
     // Keep every PTT dot inside the same 21pt identity slot as the resting
     // Omi mark. The slot is frontmost and trails the visible left lobe, so the

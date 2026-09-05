@@ -276,7 +276,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     title: String,
     message: String,
     assistantId: String,
-    kind: ProactiveNotificationKind? = nil,
+    kind: ProactiveNotificationKind,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     jitFeedbackContext: JITTriggerFeedbackContext? = nil,
@@ -289,7 +289,10 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.title = title
     self.message = message
     self.assistantId = assistantId
-    self.kind = kind ?? ProactiveNotificationKind.from(assistantId: assistantId)
+    // Required, never derived here. Deriving it from `assistantId` meant every
+    // producer that forgot to say what its card was silently became `.general`
+    // and journaled a bare `notification:<uuid>` row badged "Notification".
+    self.kind = kind
     self.context = context
     self.action = action
     self.jitFeedbackContext = jitFeedbackContext
@@ -499,6 +502,8 @@ class FloatingControlBarState: NSObject, ObservableObject {
   var pttHintText: String { VoiceTurnUICopy.statusBannerText(for: voiceProjection) }
   var isVoiceResponseActive: Bool { voiceProjection.isResponseActive }
   var isVoiceResponseWaiting: Bool { voiceProjection.isResponseWaiting }
+  /// The current hold has been recognised as a dictation.
+  var isVoiceDictating: Bool { voiceProjection.isDictating }
   /// True while a committed Push-to-Talk query is being processed and no
   /// response output (voice glow or conversation surface) has surfaced yet.
   /// Drives the notch/pill "thinking" animation.

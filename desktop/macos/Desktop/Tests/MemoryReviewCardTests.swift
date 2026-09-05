@@ -93,7 +93,7 @@ final class MemoryReviewCardTests: XCTestCase {
     let summary = DailySummaryRecord(
       id: "ds_1", date: "2026-09-01", headline: nil, overview: nil,
       memoriesLearned: [DailySummaryRecord.LearnedMemory(memoryID: " ", content: "Real content.")])
-    XCTAssertTrue(ChatDailySummaryCard.memoriesLearned(in: summary).isEmpty)
+    XCTAssertTrue(ChatDailySummaryPresentation.memoriesLearned(in: summary).isEmpty)
   }
 
   func testRecordSurvivesAMemoriesLearnedFieldOfTheWrongShape() throws {
@@ -110,7 +110,7 @@ final class MemoryReviewCardTests: XCTestCase {
       memoriesLearned: (1...5).map {
         DailySummaryRecord.LearnedMemory(memoryID: "mem_\($0)", content: "Fact \($0)", category: "system")
       })
-    let rows = ChatDailySummaryCard.memoriesLearned(in: summary)
+    let rows = ChatDailySummaryPresentation.memoriesLearned(in: summary)
     XCTAssertEqual(rows.count, MemoryReviewSection.maxRows)
     XCTAssertEqual(rows.map(\.memoryID), ["mem_1", "mem_2", "mem_3"])
   }
@@ -119,12 +119,12 @@ final class MemoryReviewCardTests: XCTestCase {
   func testCardRendersNoReviewRowsWhenTheDayLearnedNothing() {
     let summary = DailySummaryRecord(
       id: "ds_1", date: "2026-09-01", headline: "Quiet", overview: "A quiet day.")
-    XCTAssertTrue(ChatDailySummaryCard.memoriesLearned(in: summary).isEmpty)
+    XCTAssertTrue(ChatDailySummaryPresentation.memoriesLearned(in: summary).isEmpty)
 
     let blank = DailySummaryRecord(
       id: "ds_2", date: "2026-09-01", headline: "Quiet", overview: nil,
       memoriesLearned: [DailySummaryRecord.LearnedMemory(memoryID: "mem_1", content: "   ")])
-    XCTAssertTrue(ChatDailySummaryCard.memoriesLearned(in: blank).isEmpty)
+    XCTAssertTrue(ChatDailySummaryPresentation.memoriesLearned(in: blank).isEmpty)
   }
 
   /// The section captures its rows when it is built, so a summary regenerated under the same id
@@ -135,15 +135,15 @@ final class MemoryReviewCardTests: XCTestCase {
     let corrected = [MemoryReviewItem(memoryID: "mem_1", content: "Prefers written standups.")]
     let added = first + [MemoryReviewItem(memoryID: "mem_2", content: "Ships on Wednesdays.")]
 
-    let identity = ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_1", items: first)
+    let identity = ChatDailySummaryPresentation.reviewSectionIdentity(summaryID: "ds_1", items: first)
     XCTAssertEqual(
-      identity, ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_1", items: first))
+      identity, ChatDailySummaryPresentation.reviewSectionIdentity(summaryID: "ds_1", items: first))
     XCTAssertNotEqual(
-      identity, ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_1", items: corrected))
+      identity, ChatDailySummaryPresentation.reviewSectionIdentity(summaryID: "ds_1", items: corrected))
     XCTAssertNotEqual(
-      identity, ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_1", items: added))
+      identity, ChatDailySummaryPresentation.reviewSectionIdentity(summaryID: "ds_1", items: added))
     XCTAssertNotEqual(
-      identity, ChatDailySummaryCard.reviewSectionIdentity(summaryID: "ds_2", items: first))
+      identity, ChatDailySummaryPresentation.reviewSectionIdentity(summaryID: "ds_2", items: first))
   }
 
   func testCategoryLabelIsBoundedButNeverInvented() {

@@ -15,7 +15,6 @@ struct ActionItemMetadataBox: @unchecked Sendable {
 /// Both Dashboard and Tasks tab observe this store
 ///
 /// Tasks are loaded separately for incomplete vs completed to minimize memory usage.
-/// By default, only recent (7 days) incomplete tasks are loaded.
 @MainActor
 class TasksStore: ObservableObject {
   static let shared = TasksStore()
@@ -438,16 +437,29 @@ class TasksStore: ObservableObject {
     return a.createdAt > b.createdAt
   }
 
-  /// Overdue tasks (due date in the past but within 7 days) — loaded from SQLite
+  /// Overdue tasks — every incomplete task due before today, loaded from SQLite.
+  /// Together with `todaysTasks` this is the Tasks page's "Today" category.
   @Published var overdueTasks: [TaskActionItem] = []
 
   /// Today's tasks (due today) — loaded from SQLite
   @Published var todaysTasks: [TaskActionItem] = []
 
-  /// Tasks without due date (created within last 7 days) — loaded from SQLite
+  /// Tasks without a due date — the Tasks page's "No Deadline", loaded from SQLite
   @Published var tasksWithoutDueDate: [TaskActionItem] = []
 
-  /// Load dashboard task lists directly from SQLite (avoids pagination issues)
+  /// How many rows a bucket may hold. The spoken answer reads the first 15, but
+  /// the bucket's *count* is spoken too ("Overdue (82)"), so the cap has to sit
+  /// well clear of a real backlog or the assistant states a number the Tasks
+  /// page contradicts — at the old 50 it did. These are small rows, and the
+  /// Tasks page already materializes every incomplete dated task.
+  static let dashboardBucketLimit = 500
+
+  /// Load dashboard task lists directly from SQLite (avoids pagination issues).
+  ///
+  /// These three buckets are what the assistant knows about the user's tasks:
+  /// the voice `get_tasks` tool, the About-user card, and `SuggestionAssistant`
+  /// grounding all read them. They must partition the same rows the Tasks page
+  /// shows, or the assistant contradicts the list the user is looking at.
   func loadDashboardTasks(
     expectedOwnerID: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
@@ -462,30 +474,32 @@ class TasksStore: ObservableObject {
     let calendar = Calendar.current
     let startOfToday = calendar.startOfDay(for: Date())
     let endOfToday = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
-    let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: Date()) ?? Date()
 
     do {
       let snapshot: DashboardTaskSnapshot
       if let loader {
         snapshot = try await loader()
       } else {
+        // No lower bound. The Tasks page buckets by `dueAt < startOfTomorrow`
+        // alone (`TasksViewModel.categoryFor`), so a task overdue by more than a
+        // week is still on the user's list — it was only missing from this one.
         async let overdueResult = ActionItemStorage.shared.getFilteredActionItems(
-          limit: 50,
+          limit: Self.dashboardBucketLimit,
           completedStates: [false],
-          dueDateAfter: sevenDaysAgo,
           dueDateBefore: startOfToday
         )
         async let todayResult = ActionItemStorage.shared.getFilteredActionItems(
-          limit: 50,
+          limit: Self.dashboardBucketLimit,
           completedStates: [false],
           dueDateAfter: startOfToday,
           dueDateBefore: endOfToday
         )
+        // Likewise no creation cutoff: "No Deadline" on the Tasks page is every
+        // undated incomplete task, however long it has been sitting there.
         async let noDueDateResult = ActionItemStorage.shared.getFilteredActionItems(
-          limit: 50,
+          limit: Self.dashboardBucketLimit,
           completedStates: [false],
-          dueDateIsNull: true,
-          createdAfter: sevenDaysAgo
+          dueDateIsNull: true
         )
         let (overdue, today, noDueDate) = try await (
           overdueResult,
@@ -499,15 +513,19 @@ class TasksStore: ObservableObject {
         )
       }
       guard isCurrent(lease) else { return }
-      // Unreviewed AI captures stay out of dashboard / nudge / realtime lanes.
-      // The Tasks page uses incompleteTasks and shows those rows as ordinary
-      // due-date tasks after Candidate review replaced the sparkle list.
-      let sortedOverdue = snapshot.overdue.filter(DashboardTaskLanePolicy.admits)
-        .sorted(by: Self.sortByDueDateThenSource)
-      let sortedToday = snapshot.today.filter(DashboardTaskLanePolicy.admits)
-        .sorted(by: Self.sortByDueDateThenSource)
-      let sortedNoDueDate = snapshot.noDueDate.filter(DashboardTaskLanePolicy.admits)
-        .sorted(by: Self.sortByDueDateThenSource)
+      // These lanes carry the same rows the Tasks page shows. They used to drop
+      // AI-capture sources, on the reasoning that a capture is unreviewed until
+      // the user accepts it — but INV-TASK-2 has since made capture
+      // suggestion-only (`TaskCaptureModePolicy.usesLegacyStaging` is false for
+      // every mode), so a capture never reaches `action_items` at all. It stays
+      // a Candidate until an explicit gesture accepts it. Everything in this
+      // table is therefore already the user's, and the filter had stopped
+      // separating reviewed from unreviewed: it only hid the backlog they can
+      // see on Tasks, plus anything they created by voice, since
+      // `create_action_item` comes back stamped `conversation`.
+      let sortedOverdue = snapshot.overdue.sorted(by: Self.sortByDueDateThenSource)
+      let sortedToday = snapshot.today.sorted(by: Self.sortByDueDateThenSource)
+      let sortedNoDueDate = snapshot.noDueDate.sorted(by: Self.sortByDueDateThenSource)
       // Only update @Published properties if values actually changed to avoid unnecessary objectWillChange
       if overdueTasks != sortedOverdue { overdueTasks = sortedOverdue }
       if todaysTasks != sortedToday { todaysTasks = sortedToday }
@@ -1422,13 +1440,27 @@ class TasksStore: ObservableObject {
       )
       page = .init(items: response.items, hasMore: response.hasMore)
     }
-    // The lane is the authority on retirement, not `isRetired`'s re-derivation
-    // from whatever fields this response happened to carry. Stamping it here —
-    // after both transports, so neither can skip it — is what stops a retired
-    // row being written to the local cache as live and resurfacing as a live
-    // task. Every caller of this page (first load and auto-refresh) syncs it
-    // into SQLite, so normalizing anywhere later would leave one path wrong.
-    return .init(items: page.items.map { $0.retired() }, hasMore: page.hasMore)
+    // Keep only the rows the response itself reports retired, and let the lane
+    // stamp settle the ones that carry retirement through a field this decode
+    // did not read (#11460: a retired row written to the cache as live
+    // resurfaces as a live task).
+    //
+    // The lane used to be treated as the authority and stamped `.retired()`
+    // over the whole page — but `GET /v1/action-items` has no `deleted`
+    // parameter. FastAPI drops the unknown query item, and the handler's
+    // stream skips soft-deleted documents outright, so what came back was the
+    // user's *live* first page. Every caller of this page syncs it into
+    // SQLite, so each visit to Removed tombstoned a hundred live tasks
+    // locally: `deleted = 1` with no `deletedBy` and a canonical status still
+    // `active`. Completing any of them from a chat task card then read the
+    // tombstone back and rendered "Task is no longer available" over the task
+    // the reader had just ticked.
+    //
+    // Until the backend can scope a page to retired rows, Removed shows the
+    // deletions made on this Mac (those carry a local tombstone and a
+    // `deletedBy`) and not another device's. Showing fewer rows is a gap;
+    // manufacturing retirement is data loss.
+    return .init(items: page.items.filter(\.isRetired).map { $0.retired() }, hasMore: page.hasMore)
   }
 
   func syncPage(

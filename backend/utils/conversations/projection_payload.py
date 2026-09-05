@@ -5,14 +5,16 @@ needed by two routers as well as the coordinator, and importing them must not
 drag in the coordinator's module graph — a test that stubs
 ``utils.conversations.process_conversation`` would otherwise silently receive a
 MagicMock in place of a security-relevant helper and still pass.
+
+The module is the shared home of the generic persist-payload discipline: every
+builder that serializes a Conversation for a Firestore persist passes its dict
+through these helpers, wherever it lives.
 """
 
 from __future__ import annotations
 
 import unicodedata
 from typing import Any
-
-from models.client_processing import PROJECTION_FAMILY_FIELDS
 
 PROVENANCE_LOG_MAX_CHARS = 64
 _UNSAFE_LOG_CHAR_CATEGORIES = frozenset({'Cc', 'Cf', 'Cs', 'Co', 'Cn', 'Zl', 'Zp'})
@@ -47,8 +49,36 @@ def strip_client_processing(payload: dict[str, Any]) -> dict[str, Any]:
     ``client_processing_mutation`` at an ingest-owner site — never by a
     processor persist of a conversation that already exists.
     """
+    # Imported here, not at module scope. This module is deliberately import-light
+    # (see the module docstring), and a module-scope `from models.client_processing
+    # import ...` makes merely *collecting* an unrelated test file fail whenever any
+    # earlier test has stubbed the `models` package in sys.modules -- seven suites in
+    # tests/unit currently do. The import then resolves at call time, by which point
+    # the stub is long torn down. See #12779.
+    from models.client_processing import PROJECTION_FAMILY_FIELDS
+
     for field in PROJECTION_FAMILY_FIELDS:
         payload.pop(field, None)
+    return payload
+
+
+def omit_null_processing_state(payload: dict[str, Any]) -> dict[str, Any]:
+    """Generic persist payloads never write a null ``processing_state``.
+
+    ``Conversation.dict()`` / ``model_dump()`` always emit the modeled field,
+    including its None default. Persist is ``merge=True``, so that emitted None
+    is a real Firestore key: missing versus explicit-null is a distinction the
+    dark rollout must respect (``terminal_no_derived_effects`` is written only
+    by the branch that owns it; this field is the same discipline). Drop the
+    key whenever nothing wrote a real state. A real value — the flag-on
+    minimum's ``local_pending`` — passes through untouched.
+
+    Clearing a stale state on enrichment is the opposite write and cannot be
+    an omission: an omitted key survives the merge. The enrichment persist
+    writes the explicit null itself (see ``_normal_persist_payload``).
+    """
+    if payload.get('processing_state') is None:
+        payload.pop('processing_state', None)
     return payload
 
 

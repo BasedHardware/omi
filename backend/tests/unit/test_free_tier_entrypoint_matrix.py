@@ -20,6 +20,8 @@ red-proof (4): reprocess_force cell without overlaying force_process=True → fl
     listen would defer instead of bypassing, so _get_structured would not be called
 red-proof (5): desktop-sourced merge left on the legacy path (force bypasses deferral)
     → flag-ON basic merge would call _get_structured
+red-proof (6): payload builders keep Conversation.dict()'s null processing_state
+    default → flag-off / non-desktop / process_normally rows fail the persist contract
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
 from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import AutoMockModule, load_module_fresh, package_submodule_stubs, stub_modules
+import utils.managed_compute as managed_compute
 from utils.managed_compute import Decision
 
 _BACKEND = Path(__file__).resolve().parents[2]
@@ -407,14 +410,21 @@ _ENTRIES: list[dict[str, Any]] = [
         'scenario': 'merge',
     },
     {
-        'id': 'postprocess_164',
+        # The postprocess_conversation.py:164 row this replaces cited a module
+        # deleted from main by a7bc5fd0c2. routers/integration.py:173 is the
+        # live call site that was missing from the matrix entirely (the matrix
+        # must see it even though it is safe today only because the route
+        # forces source=external_integration).
+        'id': 'integration_173',
         'label': (
-            'utils/conversations/postprocess_conversation.py:164 '
-            '(coordinator-with-exact-args; force_process=True bypass_jit_first_open=True)'
+            'routers/integration.py:173 external-integration capture '
+            '(coordinator-with-exact-args; route forces source=external_integration '
+            ':165, no extra kwargs; replaces the postprocess_conversation.py:164 '
+            'row — module deleted by a7bc5fd0c2)'
         ),
-        'kind': 'existing',
-        'source': ConversationSource.omi,
-        'kwargs': {'force_process': True, 'bypass_jit_first_open': True},
+        'kind': 'external',
+        'source': ConversationSource.external_integration,
+        'kwargs': {},
     },
     {
         'id': 'sync_reprocess_785_omi',
@@ -742,6 +752,39 @@ def _assert_persist_marker_contract(
     assert field not in last, f'flag-off/non-desktop persist must omit {field!r} entirely; got {last.get(field)!r}'
 
 
+def _assert_persist_processing_state_contract(
+    pc: Any,
+    spies: dict[str, Any],
+    entry: dict[str, Any],
+    cell: str,
+    flag_on: bool,
+    kwargs: dict[str, Any],
+) -> None:
+    """The modeled ``processing_state`` follows the marker's dark discipline.
+
+    Missing versus explicit-null is a Firestore distinction and persist is
+    merge=True. The dumped None default must never reach a payload: only the
+    flag-on minimum writes a real value (``local_pending`` when no projection
+    was delivered, absent-with-key-omitted when one was), and every
+    process_normally persist leaves the key out entirely (the matrix drives
+    fresh conversations, so there is no stale state to merge-clear).
+    """
+    payloads = [p for p in spies['persist_payloads'] if isinstance(p, dict)]
+    assert payloads, 'coordinator must persist a payload'
+    last = payloads[-1]
+    if flag_on and _flag_on_denies(entry, cell):
+        # Every flag-on basic desktop deny lands at the minimum store, whose
+        # own has_projection is False in these rows (the basic_with_projection
+        # overlay forces the plan's flag, not a delivered projection), so the
+        # store writes the real local_pending state. A real value is never a
+        # darkness violation — only the null default is.
+        assert last.get('processing_state') == 'local_pending', 'the minimum is the one writer of a real state'
+        return
+    assert (
+        'processing_state' not in last
+    ), f'persist must omit a null processing_state entirely; got {last.get("processing_state")!r}'
+
+
 def _assert_observer_contract(
     pc: Any,
     capture: _ObserverCapture,
@@ -792,6 +835,8 @@ _MATRIX_ROWS = _rows()
 # red-proof: desktop merge left on the legacy path (flag-ON basic merge would call _get_structured)
 # red-proof: `_normal_persist_payload` always writes terminal_no_derived_effects=None
 #   (flag-off and non-desktop persist payloads would contain the key)
+# red-proof: the normal persist keeps Conversation.dict()'s null processing_state
+#   default (F-1) — flag-off dark rows fail the processing_state persist contract
 @pytest.mark.parametrize(
     'row_id, entry, cell, flag_on',
     _MATRIX_ROWS,
@@ -810,8 +855,10 @@ def test_entrypoint_matrix(
     def fake_authorize(uid: str, feature: str, funding_owner: str, **_kwargs: Any) -> Decision:
         return _decision_for_cell(cell, funding_owner)
 
-    monkeypatch.setattr(pc, 'authorize_managed_compute', fake_authorize)
-    monkeypatch.setattr(pc, 'request_carries_validated_byok_key', lambda _feature: cell == 'byok')
+    # The decision_for closure lives in utils.managed_compute (hoisted when the
+    # connector memory producers started sharing it), so its seams patch there.
+    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', fake_authorize)
+    monkeypatch.setattr(managed_compute, 'request_carries_validated_byok_key', lambda _feature: cell == 'byok')
 
     if flag_on and cell == 'basic_with_projection':
         real_resolve = pc.resolve_free_tier_processing_plan
@@ -843,6 +890,7 @@ def test_entrypoint_matrix(
     persisted, disposition = _expected_observer(entry, cell, flag_on, kwargs)
     _assert_observer_contract(pc, observer, persisted=persisted, disposition=disposition, kwargs=kwargs)
     _assert_persist_marker_contract(pc, spies, entry, cell, flag_on, kwargs)
+    _assert_persist_processing_state_contract(pc, spies, entry, cell, flag_on, kwargs)
 
     if cell == 'reprocess_force' and flag_on and _is_desktop(entry['source']):
         assert captured_resolve, 'reprocess_force must consult the policy with the overlay'
@@ -875,7 +923,7 @@ def test_red_proof_flag_on_ignoring_plan_makes_basic_desktop_call_structured(mon
     monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
     spies = _spy_managed_effects(monkeypatch, pc)
     monkeypatch.setattr(
-        pc,
+        managed_compute,
         'authorize_managed_compute',
         lambda *args, **kwargs: _decision_for_cell('basic_no_projection', 'omi'),
     )
@@ -906,7 +954,7 @@ def test_red_proof_minimum_must_report_actual_persistence(monkeypatch: Any, pc: 
     monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
     _spy_managed_effects(monkeypatch, pc)
     monkeypatch.setattr(
-        pc,
+        managed_compute,
         'authorize_managed_compute',
         lambda *args, **kwargs: _decision_for_cell('basic_no_projection', 'omi'),
     )
@@ -932,7 +980,7 @@ def test_red_proof_desktop_merge_flag_on_basic_is_minimum_not_legacy(monkeypatch
     monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
     spies = _spy_managed_effects(monkeypatch, pc)
     monkeypatch.setattr(
-        pc,
+        managed_compute,
         'authorize_managed_compute',
         lambda *args, **kwargs: _decision_for_cell('basic_no_projection', 'omi'),
     )
@@ -942,3 +990,18 @@ def test_red_proof_desktop_merge_flag_on_basic_is_minimum_not_legacy(monkeypatch
     spies['get_structured'].assert_not_called()
     assert observer.owned == [True]
     assert observer.dispositions == [pc.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS]
+
+
+# red-proof (6): the normal persist keeping Conversation.dict()'s null
+# processing_state default (the F-1 regression) → the flag-off dark row fails.
+# Exercises the real `_normal_persist_payload` (no builder monkeypatch): if the
+# builder regresses to a bare `conversation.dict()`, the key is present and
+# this goes red.
+def test_red_proof_null_processing_state_default_stamped_on_persist(monkeypatch: Any, pc: Any) -> None:
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    spies['should_defer'].return_value = False
+    entry = next(e for e in _ENTRIES if e['id'] == 'conversations_create_351')
+    _call_coordinator(pc, entry)
+    payloads = [p for p in spies['persist_payloads'] if isinstance(p, dict)]
+    assert payloads and 'processing_state' not in payloads[-1]

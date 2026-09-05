@@ -1014,6 +1014,7 @@ export interface ChatTool {
 
 export interface ChatUsageQuota {
   allowed?: boolean;
+  is_overage_plan?: boolean;
   limit?: number | null;
   percent?: number;
   plan: string;
@@ -2539,6 +2540,8 @@ export interface JITTriggerFeedbackRequest {
 
 export interface JITTriggerSnapshotEnvelope {
   account_generation: number;
+  budget_day?: string | null;
+  budget_timezone?: string | null;
   commit_sequence: number;
   complete: boolean;
   failure_reason?: string | null;
@@ -10611,7 +10614,7 @@ export async function generate_app_icon_endpoint_v1_app_generate_icon_post(heade
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function generate_sample_prompts_endpoint_v1_app_generate_prompts_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AppPromptsGenerationResponse> {
+export async function generate_sample_prompts_endpoint_v1_app_generate_prompts_get(header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AppPromptsGenerationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/app/generate-prompts`;
   const _search = "";
@@ -10620,8 +10623,8 @@ export async function generate_sample_prompts_endpoint_v1_app_generate_prompts_g
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },

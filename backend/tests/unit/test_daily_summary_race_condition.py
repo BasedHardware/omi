@@ -186,6 +186,14 @@ def notification_harness() -> Iterator[SimpleNamespace]:
             'models.notification_message',
             NotificationMessage=notification_message,
         ),
+        # Without this stub the scheduled path reaches the real MemoryService and
+        # issues a live Firestore query from a unit test, which hangs under
+        # api_core's retry (the empty-overview suite documents the same trap).
+        'utils.memory.learned_today': _module(
+            'utils.memory.learned_today',
+            memories_learned_payload=MagicMock(return_value=[]),
+            memory_review_card_block=MagicMock(return_value=None),
+        ),
         'utils.conversations.factory': conversation_factory,
         'utils.llm.external_integrations': external_integrations,
         'utils.notifications': notifications,

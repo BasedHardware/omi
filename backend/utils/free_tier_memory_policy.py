@@ -31,7 +31,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from utils.managed_compute import Decision
+from utils.managed_compute import Decision, managed_compute_decision_for
 
 logger = logging.getLogger(__name__)
 
@@ -91,10 +91,43 @@ def memory_formation_verdict(*, decision_for: DecisionFor) -> MemoryFormationVer
     return MemoryFormationVerdict(allowed=False, reason=decision.reason, decision=decision)
 
 
+def managed_memory_formation_suppressed(uid: str, source: str) -> bool:
+    """§1.8 producer gate: should this managed memory-formation producer skip?
+
+    The one shared gate shape for the sibling producers the coordinator's
+    extraction boundary does not cover (app-integration text, the twitter
+    persona, the X connector — flip-review F-3). Read the rollout flag first
+    so the flag-off path performs no lookups at all, then consult
+    ``memory_formation_verdict`` through the one shared
+    ``managed_compute_decision_for`` closure so BYOK keeps forming and a
+    raising lookup is suppressed by the policy instead of escaping into a
+    sync. Suppression is a skip, never a delete: memories formed while the
+    user was paid stay.
+
+    The coordinator (``process_conversation.extract_memories``) keeps its own
+    copy of this shape at its boundary because its log carries the
+    conversation id; every other producer funnels through here so the gate
+    shape, logging, and fail-closed behavior cannot drift between them.
+    """
+    if not free_tier_memory_suppression_enabled():
+        return False
+    verdict = memory_formation_verdict(decision_for=managed_compute_decision_for(uid))
+    if verdict.suppressed:
+        logger.info(
+            'memory extraction skipped: plan denies managed formation uid=%s source=%s reason=%s',
+            uid,
+            source,
+            verdict.reason,
+        )
+        return True
+    return False
+
+
 __all__ = [
     'FREE_TIER_MEMORY_SUPPRESSION',
     'MEMORY_FORMATION_FEATURE',
     'MemoryFormationVerdict',
     'free_tier_memory_suppression_enabled',
+    'managed_memory_formation_suppressed',
     'memory_formation_verdict',
 ]

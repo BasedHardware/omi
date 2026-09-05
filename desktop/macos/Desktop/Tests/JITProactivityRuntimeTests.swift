@@ -167,6 +167,50 @@ final class JITProactivityRuntimeTests: XCTestCase {
     XCTAssertEqual(days.count, 1, "pacing must read today's usage exactly once before spending")
   }
 
+  func testAmbientPacingUsesAuthoritativeProfileTimezoneForBudgetDay() async throws {
+    let usageReads = UsageReadProbe()
+    // 05:30 UTC is Aug 24 in New York but still Aug 23 in Los Angeles. The
+    // server reservation uses the profile timezone, so the local mirror must
+    // make the same day choice before it paces or claims nano work.
+    let runtime = try wiredRuntime(
+      triggers: [],
+      budgetTimezone: "America/Los_Angeles",
+      ambientNanoUsage: { day, _ in
+        await usageReads.record(day)
+        return JITAmbientNanoUsage(used: 8, lastSpentAt: nil)
+      })
+
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(
+        text: "lunch", occurredAt: Date(timeIntervalSince1970: 1_787_549_400)),
+      ambient: validAmbient())
+
+    XCTAssertEqual(decision, .suppressed(reason: "ambient_nano_budget"))
+    let days = await usageReads.days
+    XCTAssertEqual(days, ["2026-08-23"])
+  }
+
+  func testMalformedAuthoritativeTimezoneFailsClosedBeforeAmbientSpend() async throws {
+    let usageReads = UsageReadProbe()
+    let runtime = try wiredRuntime(
+      triggers: [],
+      budgetTimezone: "Mars/Olympus_Mons",
+      ambientNanoUsage: { day, _ in
+        await usageReads.record(day)
+        return JITAmbientNanoUsage(used: 0, lastSpentAt: nil)
+      })
+
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(text: "lunch", occurredAt: Date(timeIntervalSince1970: 1_787_549_400)),
+      ambient: validAmbient())
+
+    XCTAssertEqual(decision, .suppressed(reason: "budget_authority_unavailable"))
+    let days = await usageReads.days
+    XCTAssertTrue(days.isEmpty)
+  }
+
   func testAmbientPacingDefersUnmatchedContextInsideSpacingWithoutSpend() async throws {
     let now = Date(timeIntervalSince1970: 1_777_248_000)
     let runtime = try wiredRuntime(
@@ -703,6 +747,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
     triggers: [KnowledgeLedgerCompiledTrigger],
     receiptOwner: String = "owner",
     receiptRevision: String = "revision",
+    budgetTimezone: String? = nil,
     authorizationCurrent: Bool = true,
     claim: JITProactivityRuntime.ClaimWakeup? = nil,
     begin: JITProactivityRuntime.BeginPlannedExecution? = nil,
@@ -715,7 +760,8 @@ final class JITProactivityRuntimeTests: XCTestCase {
     claimAmbientNano: JITProactivityRuntime.ClaimAmbientNano? = nil
   ) throws -> JITProactivityRuntime {
     let rows = try triggers.map { try snapshotRow(for: $0) }
-    let serverSnapshot = serverSnapshot(sequence: 4, revision: "revision", rows: rows)
+    let serverSnapshot = serverSnapshot(
+      sequence: 4, revision: "revision", rows: rows, budgetTimezone: budgetTimezone)
     let receipt = JITTriggerMirrorReceipt(
       ownerID: receiptOwner,
       accountGeneration: 3,
@@ -794,12 +840,12 @@ final class JITProactivityRuntimeTests: XCTestCase {
   }
 
   private func serverSnapshot(
-    sequence: Int, revision: String, rows: [JITTriggerSnapshotRow]
+    sequence: Int, revision: String, rows: [JITTriggerSnapshotRow], budgetTimezone: String? = nil
   ) -> JITTriggerSnapshot {
     JITTriggerSnapshot(
       ownerID: "owner", accountGeneration: 3, headCommitID: "head-\(sequence)",
       commitSequence: sequence, snapshotRevision: revision, complete: true, rows: rows,
-      failureReason: nil)
+      failureReason: nil, budgetTimezone: budgetTimezone)
   }
 
   private func snapshotRow(

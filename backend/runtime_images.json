@@ -144,6 +144,28 @@
             }
         },
         {
+            "name": "knowledge-ledger-drain-job",
+            "dockerfile": "backend/modal/Dockerfile.knowledge_ledger_drain_job",
+            "deployment_workflows": [
+                ".github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml",
+                ".github/workflows/gcp_daily_memory_sweep_job.yml"
+            ],
+            "build_context": ".",
+            "source_root": "backend",
+            "entrypoint_source_root": "backend/modal",
+            "workdir": "/app",
+            "entrypoints": ["knowledge_ledger_drain_job"],
+            "image_import_smoke": true,
+            "smoke_environment": {
+                "ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef"
+            },
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": true,
+            "dependency_probe_exclusions": {
+                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; job images use its built-in fallback."
+            }
+        },
+        {
             "name": "day3-reengagement-email-job",
             "dockerfile": "backend/modal/Dockerfile.day3_reengagement_email_job",
             "deployment_workflows": [

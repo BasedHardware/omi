@@ -459,6 +459,48 @@ final class ProactiveLaneClientTests: XCTestCase {
     XCTAssertEqual(attempts, 1, "the ledger mirror must still be attempted exactly once")
   }
 
+  func testTriggerSnapshotDecodesServerBudgetAuthority() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try triggerSnapshotBody(
+        ownerID: "owner", budgetDay: "2026-08-23", budgetTimezone: "America/Los_Angeles"))
+    let client = makeJITAuthorityClient()
+
+    let snapshot = try await client.fetchJITTriggerSnapshot(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertEqual(snapshot.budgetDay, "2026-08-23")
+    XCTAssertEqual(snapshot.budgetTimezone, "America/Los_Angeles")
+  }
+
+  func testTriggerSnapshotRefreshAdoptsTimezoneChangeWithUnchangedRevision() async throws {
+    ProactiveLaneURLStub.reset()
+    // A profile timezone update does not necessarily change the ledger head or
+    // snapshot revision. The mirror must still consume the new budget authority
+    // returned by the next refresh rather than treating the revision as a cache key.
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try triggerSnapshotBody(
+        ownerID: "owner", budgetDay: "2026-08-23", budgetTimezone: "America/Los_Angeles"))
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try triggerSnapshotBody(
+        ownerID: "owner", budgetDay: "2026-08-24", budgetTimezone: "America/New_York"))
+    let client = makeJITAuthorityClient()
+
+    let first = try await client.fetchJITTriggerSnapshot(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+    let second = try await client.fetchJITTriggerSnapshot(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertEqual(first.snapshotRevision, second.snapshotRevision)
+    XCTAssertEqual(first.budgetTimezone, "America/Los_Angeles")
+    XCTAssertEqual(second.budgetTimezone, "America/New_York")
+    XCTAssertEqual(first.budgetDay, "2026-08-23")
+    XCTAssertEqual(second.budgetDay, "2026-08-24")
+  }
+
   func testDisabledTriggerSnapshotReturnsContentFreeReceiptWithoutTouchingTheMirror() async throws {
     ProactiveLaneURLStub.reset()
     ProactiveLaneURLStub.enqueue(
@@ -627,9 +669,10 @@ final class ProactiveLaneClientTests: XCTestCase {
   }
 
   private func triggerSnapshotBody(
-    ownerID: String, complete: Bool = true, failureReason: String? = nil
+    ownerID: String, complete: Bool = true, failureReason: String? = nil,
+    budgetDay: String? = nil, budgetTimezone: String? = nil
   ) throws -> Data {
-    try JSONSerialization.data(withJSONObject: [
+    var object: [String: Any] = [
       "owner_id": ownerID,
       "snapshot_revision": "revision-4",
       "account_generation": 3,
@@ -639,7 +682,10 @@ final class ProactiveLaneClientTests: XCTestCase {
       "rows": [] as [[String: Any]],
       "policy": ratifiedPolicyWireJSON(),
       "failure_reason": (failureReason as Any?) ?? NSNull(),
-    ])
+    ]
+    if let budgetDay { object["budget_day"] = budgetDay }
+    if let budgetTimezone { object["budget_timezone"] = budgetTimezone }
+    return try JSONSerialization.data(withJSONObject: object)
   }
   private func ratifiedPolicyWireJSON() -> [String: Any] {
     [

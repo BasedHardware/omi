@@ -3235,6 +3235,16 @@
     "pendantFullSyncBlocked": "Pendant atmintis pilna ir jis vis dar įrašymo režime, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite iš naujo.",
     "conversationsNotCapturedCount": "Neįrašyta ({count})",
     "transcriptionNoAudio": "Transkripcija negauna garso",
+    "chatBlockTask": "Užduotis",
+    "chatBlockGoal": "Tikslas",
+    "chatBlockConversation": "Pokalbis",
+    "chatBlockMemory": "Prisiminimas",
+    "chatBlockQuestion": "Klausimas",
+    "chatBlockOpenInGoals": "Atidaryti skiltyje „Tikslai“",
+    "chatBlockOpenConversation": "Atidaryti pokalbį",
+    "chatBlockOpenInMemories": "Atidaryti skiltyje „Prisiminimai“",
+    "chatBlockUnavailable": "Nebepasiekiama",
+    "chatBlockRecommendedNextSteps": "Rekomenduojami tolesni veiksmai",
     "couldNotLoadMemories": "Nepavyko įkelti prisiminimų",
     "couldNotLoadKnowledgeGraph": "Nepavyko įkelti žinių grafo"
 }

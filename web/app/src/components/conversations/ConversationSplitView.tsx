@@ -33,6 +33,7 @@ import { ConversationGallery, ConversationGallerySkeleton } from './Conversation
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { PageToolbar } from '@/components/layout/PageToolbar';
 import { useToast } from '@/components/ui/Toast';
+import { TextSwap } from '@/components/ui/TextSwap';
 import {
   mergeConversations,
   getFolders,
@@ -104,6 +105,7 @@ export function ConversationSplitView() {
     DEFAULT_PANEL_WIDTH,
   );
   const splitViewRef = useRef<HTMLDivElement>(null);
+  const [detailResizing, setDetailResizing] = useState(false);
 
   // Selection mode state (for merge feature)
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -707,17 +709,15 @@ export function ConversationSplitView() {
                   : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary',
               )}
             >
-              {isSelectionMode ? (
-                <>
-                  <X className="w-4 h-4" />
-                  <span>Cancel</span>
-                </>
-              ) : (
-                <>
+              <span className="t-icon-swap" data-state={isSelectionMode ? 'b' : 'a'}>
+                <span className="t-icon" data-icon="a">
                   <CheckSquare className="w-4 h-4" />
-                  <span>Select</span>
-                </>
-              )}
+                </span>
+                <span className="t-icon" data-icon="b">
+                  <X className="w-4 h-4" />
+                </span>
+              </span>
+              <TextSwap text={isSelectionMode ? 'Cancel' : 'Select'} />
             </button>
           </>
         }
@@ -841,6 +841,8 @@ export function ConversationSplitView() {
         {selection && (
           <ResizeHandle
             onResize={handleResize}
+            onResizeStart={() => setDetailResizing(true)}
+            onResizeEnd={() => setDetailResizing(false)}
             onDoubleClick={handleResetWidth}
             className="hidden lg:flex"
           />
@@ -852,7 +854,8 @@ export function ConversationSplitView() {
             style={{
               width: `min(${panelWidth}px, calc(100% - ${MIN_CONVERSATION_GALLERY_WIDTH}px))`,
             }}
-            className="w-full lg:w-auto flex-shrink-0 flex flex-col h-full overflow-hidden bg-bg-pane border-l border-stroke"
+            data-dragging={detailResizing ? 'true' : undefined}
+            className="t-resize w-full lg:w-auto flex-shrink-0 flex flex-col h-full overflow-hidden bg-bg-pane border-l border-stroke"
           >
             <AnimatePresence mode="wait">
               <motion.div

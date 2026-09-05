@@ -63,6 +63,15 @@ a backgrounded browser reads as permanently stuck at its initial frame —
 `transition: none` and read the resting value. This cost real time on this
 branch: a working menu was rewritten three times before the tab was the answer.
 
+## Chrome motion
+
+Page and chrome enter/leave use the copy-paste `t-*` snippets from
+[transitions.dev](https://transitions.dev) (`web/app/src/styles/transitions-dev*.css`).
+Do not invent easing curves — tune the semantic tokens. The ChatBubble on
+non-home routes is the liquid-gooey FAB: notifications fan out of the chat
+control. `framer-motion` stays for layout-id pills and existing springs; do
+not rip it out. Honor `prefers-reduced-motion` on anything new.
+
 ## Layout gotcha worth knowing
 
 The rail is a flex column whose nav takes the slack, so anything in the footer

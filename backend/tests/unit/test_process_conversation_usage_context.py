@@ -618,12 +618,22 @@ def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch)
 
     assert result is completed_conversation
     # Imported here, not at module scope: sibling suites stub utils.conversations.
-    from utils.conversations.projection_payload import strip_client_processing
+    from utils.conversations.projection_payload import (
+        omit_null_processing_state,
+        strip_client_processing,
+    )
 
     # The create path strips the untrusted client projection before persisting:
     # a projection is display, so it must not reach a stored conversation payload.
-    created.assert_called_once_with('uid', strip_client_processing(completed_conversation.dict()), idempotent=True)
+    # A null modeled processing_state is omitted too (flip-review F-1): persist is
+    # merge=True, so a dumped None is a real Firestore key.
+    created.assert_called_once_with(
+        'uid',
+        omit_null_processing_state(strip_client_processing(completed_conversation.dict())),
+        idempotent=True,
+    )
     assert 'client_processing' not in created.call_args.args[1]
+    assert 'processing_state' not in created.call_args.args[1]
     persisted.assert_not_called()
 
 

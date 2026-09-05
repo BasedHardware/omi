@@ -60,6 +60,7 @@ from utils.notifications import send_action_item_data_message, sync_action_item_
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.projection_payload import (
     client_processing_mutation,
+    omit_null_processing_state,
     sanitize_untrusted_provenance_field,
     strip_client_processing,
 )
@@ -1894,7 +1895,9 @@ def _create_conversation_from_segments(
             },
             status=ConversationStatus.processing,
         )
-        create_payload = strip_client_processing(create_conversation_obj.model_dump())
+        # A null modeled field must not become an explicit Firestore key
+        # (persist is merge=True); the generic-payload helper drops it.
+        create_payload = omit_null_processing_state(strip_client_processing(create_conversation_obj.model_dump()))
         if client_projection is not None:
             create_payload.update(client_processing_mutation(client_projection))
         if not lifecycle_service.create_processing_conversation(uid, create_payload, idempotent=True):
@@ -1967,7 +1970,9 @@ def _create_conversation_from_segments(
             request.client_session_id,
             conversation.id,
         )
-        lifecycle_service.persist_processed_conversation(uid, strip_client_processing(conversation.model_dump()))
+        lifecycle_service.persist_processed_conversation(
+            uid, omit_null_processing_state(strip_client_processing(conversation.model_dump()))
+        )
 
     conversation.external_data = {
         **(conversation.external_data or {}),

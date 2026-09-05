@@ -26,6 +26,11 @@ enum MemoryReviewSource {
 /// desktop shows here, and a vote cast here is not persisted in the chat
 /// message or in preferences. A tap paints optimistically only until the
 /// request returns, then the row goes back to reading the live memory.
+///
+/// A row whose id the provider has not loaded is still actionable: the item
+/// carries the id and the recap text, and the provider's review and edit
+/// requests are id-addressed. Such a row stays pending until a verdict is
+/// written, and the card never renders untappable control chrome.
 class MemoryReviewCard extends StatefulWidget {
   const MemoryReviewCard({
     super.key,
@@ -48,7 +53,7 @@ class MemoryReviewCard extends StatefulWidget {
   State<MemoryReviewCard> createState() => _MemoryReviewCardState();
 }
 
-enum _RowState { loading, pending, confirmed, dropped, updated }
+enum _RowState { pending, confirmed, dropped, updated }
 
 class _MemoryReviewCardState extends State<MemoryReviewCard> {
   static const _cardColor = Color(0xFF1A1A1F);
@@ -63,19 +68,6 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
   /// references stops resolving in the provider; without this the row would
   /// fall back to the original learned text under an "Updated." status.
   final Map<String, String> _settledEdits = {};
-
-  /// Ids this process has already asked the provider to go looking for. A card
-  /// scrolled in and out of the chat list rebuilds its State, and an id that is
-  /// genuinely absent from the account would otherwise re-trigger a full
-  /// memories fetch on every rebuild.
-  static final Set<String> _requestedIds = {};
-
-  /// Whether this process has already asked the provider to load its list.
-  /// Nothing in app start-up initialises [MemoriesProvider] — only the memories
-  /// page calls `init()` — and a provider that has never loaded still reports
-  /// `loading == true`, so "already loading" cannot be read as "a fetch is in
-  /// flight" until this card has started one itself.
-  static bool _loadRequested = false;
 
   /// Card identities already counted as shown in this process.
   static final Set<String> _seenImpressions = {};
@@ -111,25 +103,34 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     }
   }
 
-  /// A memory referenced by the card may not be in the provider's page yet.
+  /// A memory referenced by the card may not be in the provider's list (cold
+  /// provider, truncated bulk list, or an id this client never paged in).
   /// There is no by-id read on this client, so ask the provider — the single
-  /// owner of memory state — to load its list once. Until it resolves the row
-  /// renders its content with the controls disabled.
+  /// owner of memory state — to load its list. Hydration is best-effort: the
+  /// controls act by id regardless, and only settled verdicts need the live
+  /// row.
   void _ensureMemoriesLoaded() {
+    _startHydrationIfNeeded();
+  }
+
+  void _startHydrationIfNeeded() {
     if (!mounted) return;
     final provider = _memoriesProvider(listen: false);
     if (provider == null) return;
-    final unresolved = _rows
+    // A fetch the provider owns is already in flight (memories page, an
+    // earlier card); when it settles the rows re-read whatever it loaded.
+    // A never-loaded provider reports `loading == true` before any request
+    // exists, so that alone must not read as "a fetch is in flight".
+    if (provider.loading && provider.hasLoaded) return;
+    final eligible = _rows
         .where((item) => _memoryFor(provider, item.memoryId) == null)
         .map((item) => item.memoryId)
-        .where(_requestedIds.add)
+        // The provider owns the attempt budget (session-scoped, reset on user
+        // data clear), so a State rebuilt by scrolling does not re-count and
+        // a failing backend is not retried forever.
+        .where(provider.consumeHydrationAsk)
         .toList(growable: false);
-    if (unresolved.isEmpty) return;
-    // Only skip when a fetch this process started is still running. Chat and
-    // the daily summary are usually the first memory surface a session opens,
-    // and there `loading` is just the never-loaded initial value.
-    if (_loadRequested && provider.loading) return;
-    _loadRequested = true;
+    if (eligible.isEmpty) return;
     provider.loadMemories();
   }
 
@@ -139,13 +140,21 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
 
   /// Live state first: an optimistic verdict only survives until its request
   /// returns, after which `userReview`/`edited` on the memory are authoritative.
-  _RowState _stateFor(Memory? memory, String memoryId) {
+  _RowState _stateFor(MemoriesProvider? provider, Memory? memory, String memoryId) {
     final optimistic = _optimistic[memoryId];
     if (optimistic != null) return optimistic;
-    // A correction that appended a replacement row leaves this id unresolvable.
-    // That is settled, not still loading — but only while nothing live answers
-    // for the id, so a later refresh or another device still wins.
-    if (memory == null) return _settledEdits.containsKey(memoryId) ? _RowState.updated : _RowState.loading;
+    if (memory == null) {
+      // A correction that appended a replacement row leaves this id
+      // unresolvable; that is settled, not unknown — but only while nothing
+      // live answers for the id, so a later refresh or another device still
+      // wins. A verdict this card persisted while unresolved settles the row
+      // the same way; anything else is pending, because the controls act by
+      // id and no verdict has been read.
+      if (_settledEdits.containsKey(memoryId)) return _RowState.updated;
+      final settled = provider?.settledReviewFor(memoryId);
+      if (settled != null) return settled ? _RowState.confirmed : _RowState.dropped;
+      return _RowState.pending;
+    }
     if (memory.userReview == false) return _RowState.dropped;
     if (memory.userReview == true) return _RowState.confirmed;
     if (memory.edited) return _RowState.updated;
@@ -160,13 +169,12 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
         return "Dropped. I'll avoid facts like this.";
       case _RowState.updated:
         return 'Updated.';
-      case _RowState.loading:
       case _RowState.pending:
         return '';
     }
   }
 
-  Future<void> _review(MemoryReviewItem item, Memory memory, bool accepted) async {
+  Future<void> _review(MemoryReviewItem item, Memory? memory, bool accepted) async {
     if (_inFlight.contains(item.memoryId)) return;
     final provider = _memoriesProvider(listen: false);
     if (provider == null) return;
@@ -176,14 +184,19 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
       _optimistic[item.memoryId] = accepted ? _RowState.confirmed : _RowState.dropped;
     });
 
-    final persisted = await provider.reviewMemory(memory, accepted);
+    // A row the provider never loaded still mutates: the requests are
+    // id-addressed, and the item carries the identity to address it with.
+    final persisted = await provider.reviewMemory(memory ?? _standInMemory(item), accepted);
     if (!mounted) return;
     setState(() {
       _inFlight.remove(item.memoryId);
       // Drop the optimistic paint either way: on success the provider has
-      // already applied the verdict to the memory this row reads.
+      // already applied the verdict to the memory this row reads, and when no
+      // live memory answers for the id the settled verdict below does.
       _optimistic.remove(item.memoryId);
-      if (!persisted) _failed.add(item.memoryId);
+      if (!persisted) {
+        _failed.add(item.memoryId);
+      }
     });
     PlatformManager.instance.analytics.memoryReviewAction(
       source: widget.source.analyticsValue,
@@ -193,7 +206,7 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     );
   }
 
-  Future<void> _saveEdit(MemoryReviewItem item, Memory memory) async {
+  Future<void> _saveEdit(MemoryReviewItem item, Memory? memory) async {
     final controller = _editors[item.memoryId];
     final value = controller?.text.trim() ?? '';
     if (value.isEmpty || _inFlight.contains(item.memoryId)) return;
@@ -205,7 +218,7 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
       _optimistic[item.memoryId] = _RowState.updated;
     });
 
-    final persisted = await provider.editMemory(memory, value);
+    final persisted = await provider.editMemory(memory ?? _standInMemory(item), value);
     if (!mounted) return;
     setState(() {
       _inFlight.remove(item.memoryId);
@@ -237,11 +250,40 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     return memory?.category.name ?? '';
   }
 
+  /// The mutation carrier for a row whose live memory has not been loaded:
+  /// identity (the id) plus the recap text. Only the id-addressed review and
+  /// edit requests consume it; no list-mutating provider path reads anything
+  /// else off it.
+  Memory _standInMemory(MemoryReviewItem item) {
+    return Memory(
+      id: item.memoryId,
+      uid: '',
+      content: item.content,
+      category: MemoryCategory.system,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      visibility: MemoryVisibility.private,
+    );
+  }
+
+  /// What a row displays: the live memory when it resolves, otherwise the
+  /// last correction this card persisted, otherwise the recap text.
+  String _contentOf(MemoryReviewItem item, Memory? memory) {
+    final live = memory?.content.trim() ?? '';
+    return live.isNotEmpty ? live : (_settledEdits[item.memoryId] ?? item.content);
+  }
+
   @override
   Widget build(BuildContext context) {
     final rows = _rows;
     if (rows.isEmpty) return const SizedBox.shrink();
     final provider = _memoriesProvider(listen: true);
+    // A load that already settled in failure is the card's cue to spend its
+    // capped retry: the initState ask started this load, and only a rebuild
+    // observes how it settled.
+    if (provider != null && provider.hasLoaded && provider.loadFailed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _startHydrationIfNeeded());
+    }
 
     return Column(
       key: const Key('memory_review_card'),
@@ -253,17 +295,20 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
           style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 10),
-        ...rows.map((item) => _buildRow(item, provider == null ? null : _memoryFor(provider, item.memoryId))),
+        ...rows.map((item) {
+          final memory = provider == null ? null : _memoryFor(provider, item.memoryId);
+          return _buildRow(item, provider, memory);
+        }),
       ],
     );
   }
 
-  Widget _buildRow(MemoryReviewItem item, Memory? memory) {
-    final state = _stateFor(memory, item.memoryId);
+  Widget _buildRow(MemoryReviewItem item, MemoriesProvider? provider, Memory? memory) {
+    final interactive = provider != null;
+    final state = _stateFor(provider, memory, item.memoryId);
     final editing = _editors.containsKey(item.memoryId);
     final dimmed = state == _RowState.dropped;
-    final live = memory?.content.trim() ?? '';
-    final content = live.isNotEmpty ? live : (_settledEdits[item.memoryId] ?? item.content);
+    final content = _contentOf(item, memory);
 
     return Container(
       key: Key('memory_review_row_${item.memoryId}'),
@@ -295,7 +340,11 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
                   ),
                   const SizedBox(width: 12),
                 ],
-                Expanded(child: _buildTrailing(item, memory, state, editing)),
+                Expanded(
+                  // Without a MemoriesProvider there is no mutation owner, so
+                  // no controls render at all — never dead chrome.
+                  child: interactive ? _buildTrailing(item, memory, state, editing) : const SizedBox.shrink(),
+                ),
               ],
             ),
           ),
@@ -327,7 +376,7 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
         enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade700)),
         focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
       ),
-      onSubmitted: memory == null ? null : (_) => _saveEdit(item, memory),
+      onSubmitted: (_) => _saveEdit(item, memory),
     );
   }
 
@@ -346,13 +395,13 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
             key: Key('memory_review_save_${item.memoryId}'),
             label: 'Save',
             emphasized: true,
-            onTap: memory == null || _inFlight.contains(item.memoryId) ? null : () => _saveEdit(item, memory),
+            onTap: _inFlight.contains(item.memoryId) ? null : () => _saveEdit(item, memory),
           ),
         ],
       );
     }
 
-    if (state != _RowState.pending && state != _RowState.loading) {
+    if (state != _RowState.pending) {
       return Align(
         alignment: Alignment.centerLeft,
         child: Text(
@@ -363,7 +412,10 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
       );
     }
 
-    final enabled = memory != null && !_inFlight.contains(item.memoryId);
+    // Actionable by identity, not by list membership: the requests are
+    // id-addressed and the item carries the id, so a row the provider never
+    // loaded stays tappable. `_inFlight` only disables its own write.
+    final enabled = !_inFlight.contains(item.memoryId);
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
@@ -385,7 +437,7 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
           onTap: enabled
               ? () => setState(() {
                     _failed.remove(item.memoryId);
-                    _editors[item.memoryId] = TextEditingController(text: memory.content.trim());
+                    _editors[item.memoryId] = TextEditingController(text: _contentOf(item, memory));
                   })
               : null,
         ),

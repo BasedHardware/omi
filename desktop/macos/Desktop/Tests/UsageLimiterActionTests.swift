@@ -39,6 +39,19 @@ final class UsageLimiterActionTests: XCTestCase {
       "reset must acknowledge and return the post-reset state for before/after assertion")
   }
 
+  func testApplyQuotaActionIsNonProdGatedAndSeedsTheLimiter() throws {
+    let block = try actionBlock("apply_usage_quota")
+    XCTAssertTrue(
+      block.contains("guard AppBuild.isNonProduction"),
+      "seeding a quota must refuse to run on production bundles")
+    XCTAssertTrue(
+      block.contains("FloatingBarUsageLimiter.shared") && block.contains("applyQuota"),
+      "the action must seed the shared limiter's snapshot")
+    XCTAssertTrue(
+      block.contains("is_overage_plan"),
+      "the harness must be able to seed both exhaustion policies")
+  }
+
   // MARK: - Helpers
 
   private func actionBlock(_ name: String) throws -> String {

@@ -842,30 +842,9 @@ class TestVerifyCloudTasksOidc:
         ) as verify:
             assert cloud_tasks.verify_account_deletion_cloud_tasks_oidc(
                 _request_with({'authorization': 'Bearer t'})
-            ) == cloud_tasks.AccountDeletionTaskAuthentication(retry_count=0, audience='account_deletion')
+            ) == cloud_tasks.AccountDeletionTaskAuthentication(retry_count=0)
 
         assert verify.call_args.kwargs['audience'] == env['ACCOUNT_DELETION_HANDLER_URL']
-
-    def test_account_deletion_oidc_verification_accepts_only_the_legacy_sync_audience_as_compatibility(self):
-        cloud_tasks = _load_cloud_tasks()
-        env = {
-            'SYNC_TASKS_INVOKER_SA': 'invoker@project.iam.gserviceaccount.com',
-            'SYNC_TASKS_OIDC_AUDIENCE': 'https://backend-sync.example.com/v2/sync-jobs/run',
-            'ACCOUNT_DELETION_HANDLER_URL': 'https://backend-sync.example.com/v1/users/account-deletion-wipes/run',
-        }
-        claims = {'email': env['SYNC_TASKS_INVOKER_SA'], 'email_verified': True}
-
-        with patch.dict(os.environ, env), patch.object(
-            cloud_tasks.id_token, 'verify_oauth2_token', side_effect=[ValueError('wrong audience'), claims]
-        ) as verify:
-            assert cloud_tasks.verify_account_deletion_cloud_tasks_oidc(
-                _request_with({'authorization': 'Bearer t'})
-            ) == cloud_tasks.AccountDeletionTaskAuthentication(retry_count=0, audience='legacy_sync')
-
-        assert [call.kwargs['audience'] for call in verify.call_args_list] == [
-            env['ACCOUNT_DELETION_HANDLER_URL'],
-            env['SYNC_TASKS_OIDC_AUDIENCE'],
-        ]
 
     def test_account_deletion_dispatch_flag_default_inline(self):
         cloud_tasks = _load_cloud_tasks()
@@ -889,7 +868,8 @@ class TestVerifyCloudTasksOidc:
         }
 
         with patch.dict(os.environ, complete_prod_env, clear=True):
-            cloud_tasks.validate_account_deletion_dispatch_configuration()
+            with patch.object(cloud_tasks, 'assert_account_deletion_queue_exists'):
+                cloud_tasks.validate_account_deletion_dispatch_configuration()
 
         with patch.dict(os.environ, {**complete_prod_env, 'ACCOUNT_DELETION_DISPATCH_MODE': 'inline'}, clear=True):
             with pytest.raises(RuntimeError, match='ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks'):
