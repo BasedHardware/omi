@@ -1,0 +1,178 @@
+import importlib.util
+import json
+from pathlib import Path
+
+import pytest
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = BACKEND_ROOT / "scripts" / "jit_qa_cloud_run_contract.py"
+WORKFLOW = BACKEND_ROOT.parent / ".github" / "workflows" / "jit_qa_cloud_run.yml"
+
+
+def _load_contract():
+    spec = importlib.util.spec_from_file_location("jit_qa_cloud_run_contract_for_test", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CONTRACT = _load_contract()
+
+
+def _resource(profile: str, kind: str, image: str) -> dict:
+    literals, secrets = CONTRACT.resource_environment(profile)
+    env = [{"name": name, "value": value} for name, value in literals.items()]
+    env.extend(
+        {
+            "name": name,
+            "valueSource": {
+                "secretKeyRef": {"secret": reference.rsplit(":", 1)[0], "version": reference.rsplit(":", 1)[1]}
+            },
+        }
+        for name, reference in secrets.items()
+    )
+    if kind == "service":
+        template = {
+            "spec": {
+                "containers": [{"image": image, "env": env}],
+                "serviceAccountName": CONTRACT.RUNTIME_SERVICE_ACCOUNT,
+            }
+        }
+        spec = {"template": template}
+    else:
+        template = {
+            "template": {
+                "containers": [{"image": image, "env": env}],
+                "serviceAccount": CONTRACT.RUNTIME_SERVICE_ACCOUNT,
+            }
+        }
+        spec = {"template": template}
+    return {"metadata": {"name": "qa-resource"}, "spec": spec}
+
+
+def test_static_configuration_is_dev_only_and_requires_four_immutable_images():
+    images = {
+        name: f"gcr.io/based-hardware-dev/{name}@sha256:{'a' * 64}" for name in ("backend", "desktop", "drain", "sweep")
+    }
+    CONTRACT.validate_static_configuration(
+        project="based-hardware-dev",
+        region="us-central1",
+        auth_project="based-hardware",
+        uid=CONTRACT.QA_UID,
+        drain_enabled="false",
+        sweep_enabled="false",
+        sweep_kill_switch="false",
+        run_once="false",
+        confirmation="",
+        images=images,
+    )
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"project": "based-hardware"},
+        {"region": "europe-west1"},
+        {"auth_project": "based-hardware-dev"},
+        {"uid": "9OqYLlKJv4hmeYpIhwJcHBR975i2"},
+        {"drain_enabled": "true"},
+        {"sweep_enabled": "true"},
+        {"sweep_kill_switch": "true"},
+    ],
+)
+def test_static_configuration_rejects_non_qa_values(kwargs):
+    values = {
+        "project": "based-hardware-dev",
+        "region": "us-central1",
+        "auth_project": "based-hardware",
+        "uid": CONTRACT.QA_UID,
+        "drain_enabled": "false",
+        "sweep_enabled": "false",
+        "sweep_kill_switch": "false",
+        "run_once": "false",
+        "confirmation": "",
+    }
+    values.update(kwargs)
+    with pytest.raises(CONTRACT.JITQAContractError):
+        CONTRACT.validate_static_configuration(**values)
+
+
+def test_execution_requires_explicit_confirmation_and_keeps_kill_switch_closed():
+    with pytest.raises(CONTRACT.JITQAContractError):
+        CONTRACT.validate_execution(run_once="false", confirmation="RUN_ONCE")
+    with pytest.raises(CONTRACT.JITQAContractError):
+        CONTRACT.validate_execution(run_once="true", confirmation="NO")
+    with pytest.raises(CONTRACT.JITQAContractError):
+        CONTRACT.validate_execution(run_once="true", confirmation="RUN_ONCE", kill_switch="true")
+    CONTRACT.validate_execution(run_once="true", confirmation="RUN_ONCE")
+
+
+def test_environment_rejects_customer_credential_and_wrong_data_plane():
+    literals, _ = CONTRACT.resource_environment("drain")
+    with pytest.raises(CONTRACT.JITQAContractError):
+        CONTRACT.validate_environment({**literals, "SERVICE_ACCOUNT_JSON": "customer-json"})
+    with pytest.raises(CONTRACT.JITQAContractError):
+        CONTRACT.validate_environment({**literals, "OMI_FIRESTORE_DATA_PLANE_PROJECT": "based-hardware"})
+    CONTRACT.validate_environment({**literals})
+
+
+def test_cloud_run_resource_requires_exact_image_env_secrets_name_and_identity():
+    image = "gcr.io/based-hardware-dev/backend-jit-qa@sha256:" + "b" * 64
+    resource = _resource("backend", "service", image)
+    resource["metadata"]["name"] = CONTRACT.BACKEND_SERVICE
+    CONTRACT.validate_cloud_run_resource(
+        resource,
+        kind="service",
+        expected_image=image,
+        expected_environment=CONTRACT.resource_environment("backend")[0],
+        expected_secret_bindings=CONTRACT.resource_environment("backend")[1],
+        expected_name=CONTRACT.BACKEND_SERVICE,
+    )
+    resource["spec"]["template"]["spec"]["containers"][0]["image"] = image.replace("@sha256:", ":")
+    with pytest.raises(CONTRACT.JITQAContractError):
+        CONTRACT.validate_cloud_run_resource(
+            resource,
+            kind="service",
+            expected_image=image,
+            expected_environment=CONTRACT.resource_environment("backend")[0],
+            expected_secret_bindings=CONTRACT.resource_environment("backend")[1],
+        )
+
+
+def test_cloud_run_resource_rejects_inherited_cache_or_customer_binding():
+    image = "gcr.io/based-hardware-dev/knowledge-ledger-drain-qa-job@sha256:" + "c" * 64
+    resource = _resource("drain", "job", image)
+    resource["metadata"]["name"] = CONTRACT.LEDGER_DRAIN_JOB
+    resource["spec"]["template"]["template"]["containers"][0]["env"].append(
+        {"name": "REDIS_DB_HOST", "value": "shared-cache.internal"}
+    )
+    with pytest.raises(CONTRACT.JITQAContractError):
+        CONTRACT.validate_cloud_run_resource(
+            resource,
+            kind="job",
+            expected_image=image,
+            expected_environment=CONTRACT.resource_environment("drain")[0],
+            expected_secret_bindings=CONTRACT.resource_environment("drain")[1],
+        )
+
+
+def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "workflow_dispatch:" in text
+    assert '"refs/heads/main"' in text
+    assert '[[ "${GITHUB_REF}"' in text
+    assert "based-hardware-dev" in text
+    assert "backend-jit-qa" in text
+    assert "desktop-backend-jit-qa" in text
+    assert "knowledge-ledger-drain-qa-job" in text
+    assert "daily-memory-sweep-qa-job" in text
+    assert "runWithOverrides" in text
+    assert "actions/upload-artifact@v7" in text
+    assert "gcloud scheduler" not in text
+    assert "iam policy" not in text
+    assert "--max-retries 0" in text
+    assert "RUN_ONCE" in text
+    assert "gcr.io/${QA_PROJECT}" in text
+    assert "vars.GCP_PROJECT_ID" not in text
+    assert "environment: prod" not in text

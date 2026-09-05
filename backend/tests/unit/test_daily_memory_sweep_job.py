@@ -68,6 +68,21 @@ def test_closed_authority_exits_before_inventory_cleanup_or_scheduler_work(
     assert commit_calls == []
 
 
+def test_adc_firebase_initialization_pins_auth_audience(monkeypatch, daily_memory_sweep_job):
+    observed = {}
+    monkeypatch.delenv("SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.setattr(daily_memory_sweep_job, "firebase_admin_options", lambda: {"projectId": "based-hardware"})
+    monkeypatch.setattr(
+        daily_memory_sweep_job.firebase_admin,
+        "initialize_app",
+        lambda **kwargs: observed.update(kwargs),
+    )
+
+    daily_memory_sweep_job._init_firebase()
+
+    assert observed == {"options": {"projectId": "based-hardware"}}
+
+
 def test_truthy_malformed_authority_fails_closed(monkeypatch, daily_memory_sweep_job):
     job = daily_memory_sweep_job
     inventory_calls: list[bool] = []

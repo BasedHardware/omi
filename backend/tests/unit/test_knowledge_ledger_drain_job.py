@@ -74,6 +74,17 @@ def test_entrypoint_default_off_skips_firebase_and_inventory(monkeypatch):
     assert called == []
 
 
+def test_adc_firebase_initialization_pins_auth_audience(monkeypatch):
+    observed = {}
+    monkeypatch.delenv("SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.setattr(JOB, "firebase_admin_options", lambda: {"projectId": "based-hardware"})
+    monkeypatch.setattr(JOB.firebase_admin, "initialize_app", lambda **kwargs: observed.update(kwargs))
+
+    JOB._init_firebase()
+
+    assert observed == {"options": {"projectId": "based-hardware"}}
+
+
 def test_entrypoint_enabled_without_allowlist_fails_before_firebase(monkeypatch):
     job = JOB
     called = []

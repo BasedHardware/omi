@@ -16,6 +16,7 @@ import firebase_admin
 
 from database._client import db as default_db_client
 from database.notifications import get_user_time_zone
+from utils.env_loader import firebase_admin_options
 from utils.jit_rollout import JITDecisionStage, TriState, resolve_jit_rollout_sync
 from utils.memory.daily_memory_sweep import (
     DailySweepCohortDecision,
@@ -50,7 +51,7 @@ def _init_firebase() -> None:
     if service_account_json:
         firebase_admin.initialize_app(firebase_admin.credentials.Certificate(json.loads(service_account_json)))
     else:
-        firebase_admin.initialize_app()
+        firebase_admin.initialize_app(options=firebase_admin_options())
 
 
 def run_daily_memory_sweep_job() -> None:
