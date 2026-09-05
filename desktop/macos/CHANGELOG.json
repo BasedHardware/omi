@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.296",
+      "date": "2026-09-05",
+      "changes": [
+        "Daily recap generation now explains itself: days the backend declines say \"Nothing to summarize yet\" instead of a generic failure, and recap scheduling reaches owners who only use Omi on the Mac"
+      ]
+    },
+    {
       "version": "0.12.295",
       "date": "2026-09-05",
       "changes": [
