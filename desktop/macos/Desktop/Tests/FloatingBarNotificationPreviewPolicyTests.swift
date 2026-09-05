@@ -248,7 +248,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       ownerID: owner,
       eventID: JITProactivityReservation.identifier("event", "jit-banner-route"),
       triggerMemoryID: "memory-jit-banner-route",
-      accountGeneration: 5,
+      accountGeneration: AccountCutoverControlManager.shared.control.accountGeneration,
       triggerRevision: 9)
     let userInfo: [AnyHashable: Any] = [
       "omi.jit.feedback.v1": [
@@ -285,6 +285,18 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     XCTAssertEqual(
       JITTriggerFeedbackActionRouter.visibleActions,
       [.useful, .falsePositive, .snooze, .disable, .missedOrLate])
+
+    // A still-valid owner snapshot cannot authorize a banner from another
+    // cutover generation. Exercise the same presenter path as the positive.
+    var stalePayload = try XCTUnwrap(userInfo["omi.jit.feedback.v1"] as? [String: Any])
+    stalePayload["account_generation"] = context.accountGeneration + 1
+    presented = nil
+    XCTAssertFalse(
+      service.routeJITDetailCard(
+        title: "A useful reminder",
+        message: "The release is waiting on review.",
+        userInfo: ["omi.jit.feedback.v1": stalePayload]))
+    XCTAssertNil(presented)
   }
 
   /// Behavioral guard for the category taxonomy: the director's real entry point must
