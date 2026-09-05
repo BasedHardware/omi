@@ -159,6 +159,41 @@ test('ignoreEnabled loads while the gate is still closed', async () => {
   reads.unmount();
 });
 
+test('ignoreEnabled post-sign-in load is not retired by the enablement effect', async () => {
+  // signInAndRefresh awaits ignoreEnabled while enabled is still false; the
+  // gate then flips true. The enablement effect must not start a second
+  // refresh that retires the awaited one, or await would resolve without the
+  // rows it claimed to load.
+  let resolveSignIn!: (value: DesktopReadOutcomes) => void;
+  readsMock.mockImplementationOnce(
+    () =>
+      new Promise<DesktopReadOutcomes>(resolve => {
+        resolveSignIn = resolve;
+      }),
+  );
+  readsMock.mockResolvedValueOnce(successOutcomes(['EFFECT SHOULD NOT WIN']));
+
+  const reads = await renderReads({enabled: false});
+  let signInLoad!: Promise<void>;
+  await ReactTestRenderer.act(async () => {
+    signInLoad = reads.latest().refreshReads(false, {ignoreEnabled: true});
+  });
+  expect(readsMock).toHaveBeenCalledTimes(1);
+
+  await reads.rerender({enabled: true});
+  // Enablement must not fire a second cloud load.
+  expect(readsMock).toHaveBeenCalledTimes(1);
+
+  await ReactTestRenderer.act(async () => {
+    resolveSignIn(successOutcomes(['Sign-in rows']));
+    await signInLoad;
+  });
+  expect(reads.latest().reads.map(item => item.id)).toEqual(['Sign-in rows']);
+  expect(reads.latest().readsPhase).toBe('ready');
+  expect(readsMock).toHaveBeenCalledTimes(1);
+  reads.unmount();
+});
+
 test('orders Home timeline by normalized conversation and memory time', async () => {
   // Port of superseded #12141 — memories are epoch seconds; conversations are ms.
   const olderConversation = conversationItem('older-conversation', 'Older');

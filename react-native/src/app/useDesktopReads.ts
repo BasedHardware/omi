@@ -48,6 +48,11 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
   // newer refresh) can never write rows or phase into the session that
   // follows — including the merge source that "saved data" phases read from.
   const refreshSeqRef = useRef(0);
+  // signInAndRefresh flips the session gate then awaits refreshReads in the
+  // same turn, before React re-renders with enabled===true. ignoreEnabled
+  // makes that await load instead of no-op; this ref stops the enablement
+  // effect from starting a second refresh that would retire the awaited one.
+  const suppressEnableEffectLoadRef = useRef(false);
 
   const resetReads = useCallback(() => {
     refreshSeqRef.current += 1;
@@ -72,6 +77,9 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     ) => {
       if (!enabled && options?.ignoreEnabled !== true) {
         return;
+      }
+      if (options?.ignoreEnabled === true && !enabled) {
+        suppressEnableEffectLoadRef.current = true;
       }
       const backend = omiBackend;
       if (backend === undefined || backend === null) {
@@ -173,7 +181,12 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       // unavailable banner. Bumping the sequence also retires any refresh
       // still in flight from the session that just left, so its late rows
       // cannot seed the next session's "saved data" merge source.
+      suppressEnableEffectLoadRef.current = false;
       resetReads();
+      return;
+    }
+    if (suppressEnableEffectLoadRef.current) {
+      suppressEnableEffectLoadRef.current = false;
       return;
     }
     refreshReads(true).catch(() => undefined);
