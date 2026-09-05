@@ -576,11 +576,16 @@ enum ChatBubbleIdentity {
       && lhs.journalStatus == rhs.journalStatus
       && lhs.citations.map(\.id) == rhs.citations.map(\.id)
       && (lhs.metadata != nil) == (rhs.metadata != nil)
-      // The blocks term is what keeps block-only edits visible; it re-encodes
-      // per call, so it must stay last among the content terms — everything
-      // cheap above it short-circuits the common equal-row case.
-      && ChatContentBlockCodec.comparisonData(lhs.contentBlocks)
-        == ChatContentBlockCodec.comparisonData(rhs.contentBlocks)
+      // Direct field equality. This used to go through
+      // `ChatContentBlockCodec.comparisonData`, which JSON-encoded BOTH sides of
+      // every unchanged row — two serializations per bubble per transcript
+      // pass — for a comparison the enum can make field-by-field for free.
+      // It is deliberately slightly stricter than the old encode: toolCall
+      // status pairs the encoder collapsed (.running/.slow/.stalled all
+      // persisted as "running") now compare unequal, which only ever forces
+      // an extra re-render mid-turn — the isStreaming guard above already
+      // re-renders through those states anyway.
+      && lhs.contentBlocks == rhs.contentBlocks
       && appIDs.0 == appIDs.1
       && showsOmiMark.0 == showsOmiMark.1
       && isDuplicate.0 == isDuplicate.1

@@ -237,6 +237,34 @@ final class ChatBubbleIdentityTests: XCTestCase {
     XCTAssertNotEqual(plain, withBlock)
   }
 
+  /// Content blocks compare field-by-field now. Two deliberate consequences
+  /// are pinned here: question-card options deep-compare, and tool-call
+  /// in-flight distinctions (.running/.slow/.stalled) are no longer collapsed
+  /// the way the persistence encoder collapsed them.
+  func testChatContentBlockEqualityIsFieldWise() {
+    let options: [[String: Any]] = [["id": "a", "label": "Yes"], ["id": "b", "label": "No"]]
+    let sameOptions: [[String: Any]] = [["id": "a", "label": "Yes"], ["id": "b", "label": "No"]]
+
+    let question = ChatContentBlock.questionCard(
+      id: "q1", questionId: "q", text: "Go?", subjectKind: "plan", subjectId: "s",
+      options: options, selectedOptionId: nil)
+    let questionRebuilt = ChatContentBlock.questionCard(
+      id: "q1", questionId: "q", text: "Go?", subjectKind: "plan", subjectId: "s",
+      options: sameOptions, selectedOptionId: nil)
+    XCTAssertEqual(question, questionRebuilt)
+
+    let questionEdited = ChatContentBlock.questionCard(
+      id: "q1", questionId: "q", text: "Go?", subjectKind: "plan", subjectId: "s",
+      options: [["id": "a", "label": "Yes"], ["id": "b", "label": "Maybe"]],
+      selectedOptionId: nil)
+    XCTAssertNotEqual(question, questionEdited)
+
+    let running = ChatContentBlock.toolCall(id: "t1", name: "search", status: .running)
+    let slow = ChatContentBlock.toolCall(id: "t1", name: "search", status: .slow)
+    XCTAssertNotEqual(running, slow)
+    XCTAssertEqual(running, ChatContentBlock.toolCall(id: "t1", name: "search", status: .running))
+  }
+
   func testLateArtifactsAreVisibleIdentity() {
     let withoutArtifact = bubble(isSynced: false, metadata: nil)
     let withArtifact = ChatBubble(
