@@ -7,7 +7,7 @@
 //  (`queryShellMatchCount`), which is the whole of its contract with the shell.
 //
 //  **What it owns is the reading order.** One merged reverse-chronological stream grouped by day, with
-//  the conversation dominant and the memories and frames it produced indented beneath it — and an hour
+//  the conversation dominant and the memories and frames it produced attached beneath it — and an hour
 //  rail beside it running the same direction the list does.
 //
 //  A day can be **folded shut** from its own header. Folding is presentation and never a filter: the
