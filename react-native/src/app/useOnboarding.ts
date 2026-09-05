@@ -3,7 +3,10 @@ import {omiAuth, subscribeOmiBackendSessionInvalidated} from '../omiNative';
 
 export function useOnboarding(
   macDesktop: boolean,
-  refreshReads: (initial: boolean) => Promise<void>,
+  refreshReads: (
+    initial: boolean,
+    options?: {ignoreEnabled?: boolean},
+  ) => Promise<void>,
 ) {
   const [signingIn, setSigningIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -70,7 +73,7 @@ export function useOnboarding(
           return;
         }
         setOnboardingRequired(false);
-        await refreshReads(false);
+        await refreshReads(false, {ignoreEnabled: true});
       } else {
         setAuthError('Sign in was not completed. Try again.');
       }

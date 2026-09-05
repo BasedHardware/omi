@@ -119,11 +119,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   // useOnboarding owns the desktop session gate and needs a reads refresh;
   // useDesktopReads must stay idle until that gate is ready. A latest-ref
   // trampoline breaks the cycle without firing reads before the session.
-  const refreshReadsRef = useRef<(initial: boolean) => Promise<void>>(
-    async () => undefined,
-  );
+  const refreshReadsRef = useRef<
+    (initial: boolean, options?: {ignoreEnabled?: boolean}) => Promise<void>
+  >(async () => undefined);
   const refreshReadsViaRef = useCallback(
-    (initial: boolean) => refreshReadsRef.current(initial),
+    (initial: boolean, options?: {ignoreEnabled?: boolean}) =>
+      refreshReadsRef.current(initial, options),
     [],
   );
   const {
