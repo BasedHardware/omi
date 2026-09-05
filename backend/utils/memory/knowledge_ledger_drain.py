@@ -177,13 +177,14 @@ def _inventory_page_from_snapshots(
     )
 
 
-def _bounded_allowlist_inventory(db_client: Any, uid_allowlist: Collection[str]) -> LedgerDrainInventoryPage:
+def _bounded_allowlist_inventory(db_client: Any, uid_allowlist: Collection[object]) -> LedgerDrainInventoryPage:
     """Read only the explicitly scoped accounts, without touching the fair global cursor."""
 
     raw_uids = tuple(uid_allowlist)
-    if any(not isinstance(uid, str) for uid in raw_uids):
+    string_uids = tuple(uid for uid in raw_uids if isinstance(uid, str))
+    if len(string_uids) != len(raw_uids):
         raise LedgerDrainInventoryUnavailable("ledger drain UID allowlist is malformed")
-    uids = tuple(sorted({uid.strip() for uid in raw_uids}))
+    uids = tuple(sorted({uid.strip() for uid in string_uids}))
     if not uids:
         return LedgerDrainInventoryPage(uids=(), last_path="", cursor_generation=0, scanned_documents=0)
     if len(uids) > MAX_LEDGER_DRAIN_UIDS_PER_RUN:

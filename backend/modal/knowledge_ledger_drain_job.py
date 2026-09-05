@@ -9,7 +9,6 @@ import os
 
 import firebase_admin
 
-from utils.memory import knowledge_ledger_drain as ledger_drain
 from utils.memory.knowledge_ledger_drain import (
     ledger_drain_enabled_from_environment,
     ledger_drain_uid_allowlist_from_environment,

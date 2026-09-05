@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
+from utils.memory import knowledge_ledger_drain as ledger_drain
+
 
 def _load_job():
     path = Path(__file__).resolve().parents[2] / "modal" / "knowledge_ledger_drain_job.py"
@@ -34,8 +36,8 @@ def test_entrypoint_executes_independent_drain(monkeypatch):
         called.append(True)
         return SimpleNamespace(errors=[])
 
-    monkeypatch.setenv(job.ledger_drain.LEDGER_DRAIN_ENABLED_ENV, "true")
-    monkeypatch.setenv(job.ledger_drain.LEDGER_DRAIN_UID_ALLOWLIST_ENV, "uid-owner")
+    monkeypatch.setenv(ledger_drain.LEDGER_DRAIN_ENABLED_ENV, "true")
+    monkeypatch.setenv(ledger_drain.LEDGER_DRAIN_UID_ALLOWLIST_ENV, "uid-owner")
     monkeypatch.setattr(job, "_init_firebase", lambda: None)
     monkeypatch.setattr(job, "run_knowledge_ledger_drain", run)
 
@@ -50,8 +52,8 @@ def test_entrypoint_fails_when_a_page_reports_errors(monkeypatch):
     async def run(**_kwargs):
         return SimpleNamespace(errors=["uid=redacted:migration:RuntimeError"])
 
-    monkeypatch.setenv(job.ledger_drain.LEDGER_DRAIN_ENABLED_ENV, "true")
-    monkeypatch.setenv(job.ledger_drain.LEDGER_DRAIN_UID_ALLOWLIST_ENV, "uid-owner")
+    monkeypatch.setenv(ledger_drain.LEDGER_DRAIN_ENABLED_ENV, "true")
+    monkeypatch.setenv(ledger_drain.LEDGER_DRAIN_UID_ALLOWLIST_ENV, "uid-owner")
     monkeypatch.setattr(job, "_init_firebase", lambda: None)
     monkeypatch.setattr(job, "run_knowledge_ledger_drain", run)
 
@@ -63,7 +65,7 @@ def test_entrypoint_default_off_skips_firebase_and_inventory(monkeypatch):
     job = JOB
     called = []
 
-    monkeypatch.delenv(job.ledger_drain.LEDGER_DRAIN_ENABLED_ENV, raising=False)
+    monkeypatch.delenv(ledger_drain.LEDGER_DRAIN_ENABLED_ENV, raising=False)
     monkeypatch.setattr(job, "_init_firebase", lambda: called.append("firebase"))
     monkeypatch.setattr(job, "run_knowledge_ledger_drain", lambda **_kwargs: called.append("drain"))
 
@@ -76,8 +78,8 @@ def test_entrypoint_enabled_without_allowlist_fails_before_firebase(monkeypatch)
     job = JOB
     called = []
 
-    monkeypatch.setenv(job.ledger_drain.LEDGER_DRAIN_ENABLED_ENV, "true")
-    monkeypatch.delenv(job.ledger_drain.LEDGER_DRAIN_UID_ALLOWLIST_ENV, raising=False)
+    monkeypatch.setenv(ledger_drain.LEDGER_DRAIN_ENABLED_ENV, "true")
+    monkeypatch.delenv(ledger_drain.LEDGER_DRAIN_UID_ALLOWLIST_ENV, raising=False)
     monkeypatch.setattr(job, "_init_firebase", lambda: called.append("firebase"))
 
     with pytest.raises(RuntimeError, match="requires an explicit UID allowlist"):
