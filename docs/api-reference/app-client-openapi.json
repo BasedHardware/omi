@@ -24166,6 +24166,19 @@
         "title": "Structured",
         "type": "object"
       },
+      "SttAvailabilityResponse": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "title": "SttAvailabilityResponse",
+        "type": "object"
+      },
       "SubjectAttribution": {
         "enum": [
           "user",
@@ -67897,6 +67910,84 @@
           }
         ],
         "summary": "Get Speech Profile Status",
+        "tags": [
+          "v3"
+        ]
+      }
+    },
+    "/v3/speech-profile/stt-availability": {
+      "get": {
+        "description": "Pre-flight check the client uses before entering the recording UI, so a\nknown-down streaming primary (whichever provider STT_SERVICE_MODELS\ncurrently leads with) surfaces as an upfront error dialog instead of a\ndead recording screen with no questions/progress.",
+        "operationId": "get_speech_profile_stt_availability_v3_speech_profile_stt_availability_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SttAvailabilityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Speech Profile Stt Availability",
         "tags": [
           "v3"
         ]

@@ -1825,9 +1825,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get openSettings => '설정 열기';
 
   @override
-  String get wantDifferentName => '다른 이름으로 부르시겠습니까?';
-
-  @override
   String get whatsYourName => '이름이 무엇인가요?';
 
   @override
@@ -9748,6 +9745,17 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
   String get transcriptionNoAudio => '전사가 오디오를 받지 못하고 있습니다';
 
   @override
@@ -9758,4 +9766,8 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => '지식 그래프를 불러올 수 없습니다';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

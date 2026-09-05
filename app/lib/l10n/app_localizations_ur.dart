@@ -1858,9 +1858,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get openSettings => 'ترتیبات کھولیں';
 
   @override
-  String get wantDifferentName => 'کچھ اور نام سے جانا چاہتے ہیں؟';
-
-  @override
   String get whatsYourName => 'آپ کا نام کیا ہے؟';
 
   @override
@@ -9926,6 +9923,17 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
   String get transcriptionNoAudio => 'ٹرانسکرپشن آڈیو وصول نہیں کر رہی';
 
   @override
@@ -9936,4 +9944,8 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'نالج گراف لوڈ نہیں ہو سکا';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

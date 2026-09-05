@@ -674,11 +674,125 @@ class SpeechRecognitionHandler: NSObject {
             
             let language = args["language"] as? String ?? "en-US"
             transcribe(filePath: path, language: language, result: result)
+        } else if call.method == "onDeviceAvailable" {
+            let args = call.arguments as? [String: Any]
+            let language = args?["language"] as? String ?? "en-US"
+            probeOnDeviceRecognition(language: language, result: result)
         } else {
             result(FlutterMethodNotImplemented)
         }
     }
-    
+
+    /// Resolve the app's language setting to a locale whose recognizer can run
+    /// on-device. The app passes bare language codes ("en"); on-device assets
+    /// are installed per full locale ("en-US"), and a recognizer built from a
+    /// bare code fails every request with kAFAssistantErrorDomain 1101 once
+    /// `requiresOnDeviceRecognition` is set. Prefer the device's own locale
+    /// when it matches the language (that is the model most likely to be
+    /// installed), then any supported locale for that language.
+    static func onDeviceRecognizer(for language: String) -> SFSpeechRecognizer? {
+        let requested = language.isEmpty || language == "multi" ? "en" : language
+        let requestedLocale = Locale(identifier: requested)
+        let requestedLanguage = requestedLocale.languageCode ?? requested
+
+        var candidates: [Locale] = []
+        if requested.contains("-") || requested.contains("_") {
+            candidates.append(requestedLocale)
+        }
+        if Locale.current.languageCode == requestedLanguage {
+            candidates.append(Locale.current)
+        }
+        candidates.append(contentsOf: SFSpeechRecognizer.supportedLocales()
+            .filter { $0.languageCode == requestedLanguage }
+            .sorted { $0.identifier < $1.identifier })
+        candidates.append(requestedLocale)
+
+        var seen = Set<String>()
+        for locale in candidates {
+            guard seen.insert(locale.identifier).inserted else { continue }
+            guard let recognizer = SFSpeechRecognizer(locale: locale) else { continue }
+            if recognizer.isAvailable && recognizer.supportsOnDeviceRecognition {
+                return recognizer
+            }
+        }
+        return nil
+    }
+
+    /// Whether on-device recognition can actually run right now, checked by
+    /// recognizing a short silent clip. `supportsOnDeviceRecognition` alone is
+    /// not enough: with Siri and Dictation disabled in iOS Settings every
+    /// request fails at run time with kLSRErrorDomain 201 while the recognizer
+    /// still advertises on-device support. Reports true on "no speech" (1110,
+    /// the expected outcome for silence) and false on any other error, so a
+    /// caller never falls back onto a recognizer that cannot work.
+    private func probeOnDeviceRecognition(language: String, result: @escaping FlutterResult) {
+        guard let recognizer = SpeechRecognitionHandler.onDeviceRecognizer(for: language) else {
+            result(false)
+            return
+        }
+        guard let silence = SpeechRecognitionHandler.writeSilentWav(seconds: 0.6) else {
+            result(true) // Could not build a probe clip; do not block the fallback on that.
+            return
+        }
+
+        var finished = false
+        let finish: (Bool) -> Void = { value in
+            guard !finished else { return }
+            finished = true
+            try? FileManager.default.removeItem(at: silence)
+            result(value)
+        }
+
+        let request = SFSpeechURLRecognitionRequest(url: silence)
+        request.shouldReportPartialResults = false
+        request.requiresOnDeviceRecognition = true
+        var task: SFSpeechRecognitionTask?
+        task = recognizer.recognitionTask(with: request) { recognitionResult, error in
+            if let error = error {
+                let nsError = error as NSError
+                let noSpeech = nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110
+                if !noSpeech {
+                    NSLog("[SpeechRecognition] on-device probe failed: %@ %ld %@", nsError.domain, nsError.code, error.localizedDescription)
+                }
+                finish(noSpeech)
+                return
+            }
+            if recognitionResult?.isFinal == true {
+                finish(true)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            guard !finished else { return }
+            task?.cancel()
+            finish(true) // Slow but not failing; let the real request decide.
+        }
+    }
+
+    /// 16 kHz mono 16-bit PCM WAV of silence, for probing the recognizer.
+    static func writeSilentWav(seconds: Double) -> URL? {
+        let sampleRate = 16000
+        let sampleCount = Int(Double(sampleRate) * seconds)
+        let dataSize = sampleCount * 2
+        var data = Data(capacity: 44 + dataSize)
+        func append<T: FixedWidthInteger>(_ value: T) {
+            var little = value.littleEndian
+            data.append(Data(bytes: &little, count: MemoryLayout<T>.size))
+        }
+        data.append(contentsOf: Array("RIFF".utf8)); append(UInt32(36 + dataSize))
+        data.append(contentsOf: Array("WAVE".utf8))
+        data.append(contentsOf: Array("fmt ".utf8)); append(UInt32(16)); append(UInt16(1)); append(UInt16(1))
+        append(UInt32(sampleRate)); append(UInt32(sampleRate * 2)); append(UInt16(2)); append(UInt16(16))
+        data.append(contentsOf: Array("data".utf8)); append(UInt32(dataSize))
+        data.append(Data(count: dataSize))
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("omi_speech_probe_\(UUID().uuidString).wav")
+        do {
+            try data.write(to: url)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
     private func transcribe(filePath: String, language: String, result: @escaping FlutterResult) {
         // Request authorization first
         SFSpeechRecognizer.requestAuthorization { authStatus in
@@ -686,45 +800,66 @@ class SpeechRecognitionHandler: NSObject {
                 result(FlutterError(code: "UNAUTHORIZED", message: "Speech recognition not authorized", details: nil))
                 return
             }
-            
+
             let fileUrl = URL(fileURLWithPath: filePath)
-            let localeIdentifier = language.isEmpty ? "en-US" : language
-            let locale = Locale(identifier: localeIdentifier)
-            
-            guard let recognizer = SFSpeechRecognizer(locale: locale) else {
-                result(FlutterError(code: "UNAVAILABLE", message: "Speech recognizer not available for locale \(localeIdentifier)", details: nil))
+
+            guard let recognizer = SpeechRecognitionHandler.onDeviceRecognizer(for: language) else {
+                result(FlutterError(code: "UNAVAILABLE", message: "No on-device speech recognizer available for language \(language)", details: nil))
                 return
             }
-            
-            if !recognizer.isAvailable {
-                result(FlutterError(code: "UNAVAILABLE", message: "Speech recognizer service is currently unavailable", details: nil))
-                return
-            }
-            
+
             let request = SFSpeechURLRecognitionRequest(url: fileUrl)
-            request.shouldReportPartialResults = false
+            // Partial results are kept so a task that never reports `isFinal`
+            // (observed with on-device recognition on short clips) still
+            // yields its best transcription instead of hanging the caller.
+            request.shouldReportPartialResults = true
             request.requiresOnDeviceRecognition = true // Force on-device
             request.taskHint = .dictation
             if #available(iOS 16, *) {
                 request.addsPunctuation = true
             }
-            
-            let task = recognizer.recognitionTask(with: request) { (recognitionResult, error) in
-                if let error = error {
-                    // Check if it's just "No speech identified" which might happen with silence
-                    let nsError = error as NSError
-                    if nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110 {
-                         result("") // Treat as empty
-                    } else {
-                         result(FlutterError(code: "RECOGNITION_ERROR", message: error.localizedDescription, details: nil))
+
+            // The Dart caller awaits exactly one reply per clip, and its polling
+            // loop stays busy until that reply arrives — a task that never
+            // completes would silently stop all further transcription. Reply
+            // once, on the first of: final result, error, or timeout.
+            var finished = false
+            var latestText = ""
+            var task: SFSpeechRecognitionTask?
+            let finish: (Any?) -> Void = { value in
+                guard !finished else { return }
+                finished = true
+                result(value)
+            }
+
+            task = recognizer.recognitionTask(with: request) { (recognitionResult, error) in
+                if let recognitionResult = recognitionResult {
+                    latestText = recognitionResult.bestTranscription.formattedString
+                    if recognitionResult.isFinal {
+                        finish(latestText)
+                        return
                     }
-                    return
                 }
-                
-                if let recognitionResult = recognitionResult, recognitionResult.isFinal {
-                    let text = recognitionResult.bestTranscription.formattedString
-                    result(text)
+                if let error = error {
+                    let nsError = error as NSError
+                    // 1110 = no speech in the clip; a partial transcription before the
+                    // error is still the best answer for that clip. Only a failure that
+                    // produced nothing is reported as an error.
+                    if !latestText.isEmpty || (nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110) {
+                        finish(latestText)
+                    } else {
+                        finish(FlutterError(
+                            code: "RECOGNITION_ERROR",
+                            message: "\(nsError.domain) \(nsError.code): \(error.localizedDescription) (locale \(recognizer.locale.identifier))",
+                            details: nil))
+                    }
                 }
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
+                guard !finished else { return }
+                task?.cancel()
+                finish(latestText)
             }
         }
     }

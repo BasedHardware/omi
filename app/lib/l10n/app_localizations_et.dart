@@ -1858,9 +1858,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get openSettings => 'Ava seaded';
 
   @override
-  String get wantDifferentName => 'Soovite kasutada muud nime?';
-
-  @override
   String get whatsYourName => 'Mis on teie nimi?';
 
   @override
@@ -9908,6 +9905,17 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
   String get transcriptionNoAudio => 'Transkriptsioon ei saa heli';
 
   @override
@@ -9918,4 +9926,8 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Teadmiste graafi ei õnnestunud laadida';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

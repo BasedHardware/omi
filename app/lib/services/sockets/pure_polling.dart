@@ -21,6 +21,13 @@ class AudioPollingConfig {
   // mono PCM (32000 B/s); oldest frames are dropped past this to keep memory
   // bounded during a long outage instead of buffering forever.
   final int maxBufferBytes;
+  // Upper bound on a single transcribe() call. A flush holds the socket's
+  // processing flag until the provider answers, so a provider that never
+  // does (observed with a native on-device recognizer that never reported a
+  // final result) would otherwise freeze transcription for the rest of the
+  // session with no error. Past this, the attempt is treated as a failed
+  // flush: frames are requeued and the next tick retries.
+  final Duration transcribeTimeout;
 
   const AudioPollingConfig({
     this.bufferDuration = const Duration(seconds: 3),
@@ -28,6 +35,7 @@ class AudioPollingConfig {
     this.serviceId,
     this.transcoder,
     this.maxBufferBytes = 19200000,
+    this.transcribeTimeout = const Duration(seconds: 30),
   });
 }
 
@@ -167,7 +175,9 @@ class PurePollingSocket implements IPureSocket {
 
     final serviceId = config.serviceId ?? 'Polling';
     try {
-      final result = await sttProvider.transcribe(audioData, audioOffsetSeconds: _audioOffsetSeconds);
+      final result = await sttProvider
+          .transcribe(audioData, audioOffsetSeconds: _audioOffsetSeconds)
+          .timeout(config.transcribeTimeout);
       _bufferingSince = null;
       _consecutiveFailures = 0;
       if (result != null && result.isNotEmpty) {

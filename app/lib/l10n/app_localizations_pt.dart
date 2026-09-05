@@ -1841,9 +1841,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get openSettings => 'Abrir configurações';
 
   @override
-  String get wantDifferentName => 'Quer usar um nome diferente?';
-
-  @override
   String get whatsYourName => 'Qual é o seu nome?';
 
   @override
@@ -9923,6 +9920,17 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
   String get transcriptionNoAudio => 'A transcrição não está recebendo áudio';
 
   @override
@@ -9933,4 +9941,8 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Não foi possível carregar o grafo de conhecimento';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

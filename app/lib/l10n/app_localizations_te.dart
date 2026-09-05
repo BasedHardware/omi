@@ -1866,9 +1866,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get openSettings => 'సెట్టింగ్‌లను తెరండి';
 
   @override
-  String get wantDifferentName => 'వేరే పేరుతో వెళ్లాలనుకుంటున్నారా?';
-
-  @override
   String get whatsYourName => 'మీ పేరు ఏమిటి?';
 
   @override
@@ -9963,6 +9960,17 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
   String get transcriptionNoAudio => 'ట్రాన్స్‌క్రిప్షన్ ఆడియో స్వీకరించడం లేదు';
 
   @override
@@ -9973,4 +9981,8 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'నాలెడ్జ్ గ్రాఫ్‌ను లోడ్ చేయలేకపోయాం';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

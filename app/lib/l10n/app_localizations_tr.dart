@@ -1864,9 +1864,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get openSettings => 'Ayarları Aç';
 
   @override
-  String get wantDifferentName => 'Farklı bir isimle mi anılmak istiyorsunuz?';
-
-  @override
   String get whatsYourName => 'Adın ne?';
 
   @override
@@ -9926,6 +9923,17 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
   String get transcriptionNoAudio => 'Transkripsiyon ses almıyor';
 
   @override
@@ -9936,4 +9944,8 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Bilgi grafiği yüklenemedi';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

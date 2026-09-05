@@ -1823,9 +1823,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openSettings => '打开设置';
 
   @override
-  String get wantDifferentName => '想用不同的名字？';
-
-  @override
   String get whatsYourName => '您叫什么名字？';
 
   @override
@@ -9726,6 +9723,17 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
   String get transcriptionNoAudio => '转录未接收到音频';
 
   @override
@@ -9736,4 +9744,8 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => '无法加载知识图谱';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

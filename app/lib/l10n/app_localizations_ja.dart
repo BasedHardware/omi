@@ -1825,9 +1825,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get openSettings => '設定を開く';
 
   @override
-  String get wantDifferentName => '別の名前を使いますか？';
-
-  @override
   String get whatsYourName => 'お名前は何ですか？';
 
   @override
@@ -9745,6 +9742,17 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
   String get transcriptionNoAudio => '文字起こしが音声を受信していません';
 
   @override
@@ -9755,4 +9763,8 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'ナレッジグラフを読み込めませんでした';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

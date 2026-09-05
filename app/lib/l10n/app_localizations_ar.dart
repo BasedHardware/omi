@@ -1844,9 +1844,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get openSettings => 'فتح الإعدادات';
 
   @override
-  String get wantDifferentName => 'تريد أن يُناديك باسم آخر؟';
-
-  @override
   String get whatsYourName => 'ما اسمك؟';
 
   @override
@@ -9856,6 +9853,17 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
   String get transcriptionNoAudio => 'النسخ لا يستلم الصوت';
 
   @override
@@ -9866,4 +9874,8 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'تعذر تحميل الرسم البياني للمعرفة';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

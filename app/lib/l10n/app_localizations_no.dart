@@ -1858,9 +1858,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get openSettings => 'Åpne innstillinger';
 
   @override
-  String get wantDifferentName => 'Vil du bli kalt noe annet?';
-
-  @override
   String get whatsYourName => 'Hva heter du?';
 
   @override
@@ -9912,6 +9909,17 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
   String get transcriptionNoAudio => 'Transkripsjon mottar ikke lyd';
 
   @override
@@ -9922,4 +9930,8 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Kunne ikke laste kunnskapsgrafen';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }
