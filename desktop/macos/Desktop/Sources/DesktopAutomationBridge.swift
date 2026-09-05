@@ -179,6 +179,8 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var askOmiFocused: Bool
   var floatingBarFrame: String?
   var floatingBarVoiceListening: Bool
+  /// The current hold has been recognised as a dictation (the notch's red tint).
+  var floatingBarVoiceDictating: Bool
   var floatingBarVoiceResponseActive: Bool
   var floatingBarUsesNotchIsland: Bool
   var updatedAt: String
@@ -485,6 +487,7 @@ final class DesktopAutomationStateStore {
     askOmiFocused: false,
     floatingBarFrame: nil,
     floatingBarVoiceListening: false,
+    floatingBarVoiceDictating: false,
     floatingBarVoiceResponseActive: false,
     floatingBarUsesNotchIsland: false,
     updatedAt: ISO8601DateFormatter().string(from: Date())
@@ -583,6 +586,7 @@ private func liveAutomationSnapshotFromMainActor() async -> DesktopAutomationSna
       isAskOmiFocused: floating.isAskOmiFocused,
       frame: floating.frame,
       isVoiceListening: floating.isVoiceListening,
+      isVoiceDictating: floating.isVoiceDictating,
       isVoiceResponseActive: floating.isVoiceResponseActive,
       usesNotchIsland: floating.usesNotchIsland,
       isAppActive: NSApp.isActive
@@ -594,6 +598,7 @@ private func liveAutomationSnapshotFromMainActor() async -> DesktopAutomationSna
     snapshot.askOmiFocused = floating.isAskOmiFocused
     snapshot.floatingBarFrame = floating.frame
     snapshot.floatingBarVoiceListening = floating.isVoiceListening
+    snapshot.floatingBarVoiceDictating = floating.isVoiceDictating
     snapshot.floatingBarVoiceResponseActive = floating.isVoiceResponseActive
     snapshot.floatingBarUsesNotchIsland = floating.usesNotchIsland
     snapshot.isAppActive = floating.isAppActive
