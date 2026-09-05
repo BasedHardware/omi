@@ -1,0 +1,3 @@
+{
+  "change": "Computer control now presents as a regular MCP server on the Apps page — its card looks like every other server and shows Off, a missing-grants count, Ready, or Stopped, while the switch, permissions, and stop controls live in its detail sheet, and the separate Computer Control section is gone"
+}

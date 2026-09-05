@@ -4,6 +4,7 @@ import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { loadLocalMcpConfig, userSkillsPluginOptions } from "../src/runtime/user-extensions.js";
+import { textOf } from "../src/runtime/mcp-client.js";
 
 const cleanups: string[] = [];
 
@@ -112,7 +113,7 @@ describe("McpStdioClient", () => {
     try {
       const tools = await client.listTools();
       expect(tools.map((t) => t.name)).toEqual(["ping"]);
-      expect(await client.callTool("ping", {})).toBe("pong:on");
+      expect(textOf(await client.callTool("ping", {}))).toBe("pong:on");
     } finally {
       client.dispose();
     }

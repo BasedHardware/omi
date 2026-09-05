@@ -2275,6 +2275,35 @@ test("registerUserMcpTools: mcp_call surfaces unknown servers, unknown tools, an
   await server.close();
 });
 
+// A capture server's answer is the picture. mcp_call hands the model the blocks
+// the server returned, so an image arrives as an image and not as a note that
+// one exists.
+test("registerUserMcpTools: mcp_call passes a tool's image blocks through", async () => {
+  const server = await startFakeHttpMcpServer((message) => {
+    if (message.method === "initialize") return { protocolVersion: "2025-06-18", capabilities: {} };
+    if (message.method === "tools/list") return { tools: [{ name: "grab", inputSchema: { type: "object" } }] };
+    if (message.method === "tools/call") {
+      return { content: [
+        { type: "text", text: "the desk" },
+        { type: "image", data: "QUJD", mimeType: "image/png" },
+      ] };
+    }
+    return {};
+  });
+
+  await withMcpEnv({ eye: { url: server.url } }, async () => {
+    const registered: RegisteredTool[] = [];
+    await __registerUserMcpToolsForTest(fakePiCollecting(registered));
+
+    const result = await registered[1].execute("c1", { server: "eye", tool: "grab", arguments: {} });
+    assert.deepEqual(result.content, [
+      { type: "text", text: "the desk" },
+      { type: "image", data: "QUJD", mimeType: "image/png" },
+    ]);
+  });
+  await server.close();
+});
+
 test("registerUserMcpTools: a server's published prompts fold into the same pattern", async () => {
   const server = await startFakeHttpMcpServer((message) => {
     if (message.method === "initialize") return { protocolVersion: "2025-06-18", capabilities: { tools: {}, prompts: {} } };

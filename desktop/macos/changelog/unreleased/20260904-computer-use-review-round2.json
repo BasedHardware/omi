@@ -1,0 +1,3 @@
+{
+  "change": "Review round two: a control tool that failed can no longer be reported to the model as having succeeded when its result was too large to keep, a screenshot's size request is honored again, and a stdio client of computer control is told the server is gone instead of waiting forever when Omi stops"
+}

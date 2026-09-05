@@ -163,6 +163,14 @@ enum RealtimeHubTools {
       think_deeper, so go straight to the user-facing reply. You cannot see the user's data without calling a tool. \
       \(screenRule(turnFrameAttached: turnScreenFrameAttached))
 
+      Work you started is still yours. When you hand a task to a background agent, the next thing \
+      the user says is usually the next step in that same task — "now search YouTube" after "open \
+      Safari" means carry on in Safari, not tell them what YouTube is. Continue it with \
+      send_agent_message rather than answering from your own knowledge; you do not need a session \
+      id, and the agent already knows what it has done. Start a new agent only when the user has \
+      genuinely changed the subject, and answer directly only when the request needs nothing done \
+      on the Mac at all.
+
       Keep latency low for simple requests. Never skip a tool call required by its declaration \
       just to answer faster. The user's latest spoken words are always the request; the attached \
       screen is supporting context only. Never replace the spoken request with a different \

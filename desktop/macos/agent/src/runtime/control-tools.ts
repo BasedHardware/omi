@@ -299,8 +299,16 @@ const searchToolOutputSchema = strictObject({
 });
 
 const sendAgentMessageSchema = strictObject({
-  sessionId: z.string().min(1),
-  originSurfaceKind: originSurfaceKindSchema,
+  // Optional so a voice follow-up can continue the work in progress without
+  // knowing an id. `resolveContinuationSessionId` supplies it.
+  sessionId: z.string().min(1).optional(),
+  // A routing fact, not authority — the kernel re-resolves the caller's own
+  // persisted session and that wins. It had no default, so a surface that
+  // sensibly does not ask a *speaking user* which surface they are on failed
+  // validation on every call: the voice model called this correctly, got the
+  // same opaque error every time, and apologised for "an issue sending that
+  // command to the background agent".
+  originSurfaceKind: originSurfaceKindSchema.default("agent_control"),
   ownerId: z.string().min(1).optional(),
   prompt: z.string().min(1),
   mode: runModeSchema.default("ask"),
@@ -633,6 +641,57 @@ class PartialAgentSpawnError extends Error {
       cause: causeMessage,
     };
   }
+}
+
+/**
+ * How long a finished turn stays continuable when the caller names no session.
+ *
+ * Matches the desktop context packet's own TTL. Long enough that a user who
+ * looks away and comes back is still in the same piece of work; short enough
+ * that tomorrow's unrelated request cannot reopen yesterday's run.
+ */
+const CONTINUATION_RECENCY_MS = 30 * 60 * 1_000;
+
+/**
+ * The run a follow-up means when the user does not say.
+ *
+ * Voice could start background work and never continue it: the model had
+ * `spawn_agent` and no way to name the session it had just created, so the turn
+ * after "open Safari" was answered from the model's own knowledge while the run
+ * it started sat idle. A person does not repeat an id to carry on a sentence,
+ * and neither should the surface — the owner's most recently active open session
+ * is what "carry on" refers to.
+ *
+ * Ownership is not decided here. The kernel re-resolves the session against the
+ * active owner and its lifecycle before any effect lands; this only chooses
+ * which handle to offer it.
+ */
+function resolveContinuationSessionId(
+  context: AgentControlToolContext,
+  ownerId: string,
+  now: number = Date.now(),
+): string | undefined {
+  // Leaf sessions only. The owner's genuinely most recent session is the
+  // coordinator's own — the chat or voice surface asking the question — so a
+  // plain "most recent" resolves the caller to itself: the follow-up was
+  // accepted, ran in the chat session, and the agent actually driving the
+  // browser never heard it. The work handed off is a leaf, and its session is
+  // what "carry on" refers to.
+  const candidates = context.kernel.listSessions({
+    ownerId,
+    status: "open",
+    executionRole: "leaf",
+    limit: 4,
+  });
+  for (const candidate of candidates) {
+    if (candidate.session.sessionId === context.callerSessionId) continue;
+    const lastActivity = candidate.session.lastActivityAtMs ?? candidate.session.createdAtMs;
+    if (typeof lastActivity === "number" && now - lastActivity > CONTINUATION_RECENCY_MS) {
+      break;
+    }
+    return candidate.session.sessionId;
+  }
+  return undefined;
 }
 
 function controlRunRecovery(
@@ -1086,8 +1145,15 @@ export async function handleAgentControlToolCall(
         });
       }
       case "send_agent_message": {
-        const parsed = agentControlToolSchemas.send_agent_message.parse(input);
-        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const raw = agentControlToolSchemas.send_agent_message.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, raw.ownerId);
+        const sessionId = raw.sessionId ?? resolveContinuationSessionId(context, ownerId);
+        if (!sessionId) {
+          throw new Error(
+            "No recent run to continue. Start one with spawn_agent, or name a sessionId from list_agent_sessions.",
+          );
+        }
+        const parsed = { ...raw, sessionId };
         const targetPolicy = context.kernel.executionPolicyForOwnedSession(parsed.sessionId, ownerId);
         const adapterId = parsed.adapterId ?? targetPolicy.defaultAdapterId;
         assertAdapterAllowedForDirectSessionContinuation(context, adapterId, targetPolicy);
@@ -2225,7 +2291,10 @@ function stringifyToolResult(
       if (status === "cancelled") {
         return stringifyProjectedControlCancellation(toolName, originalBytes, null, scope?.context);
       }
-      return stringifyProjectedControlSuccess(toolName, fullJson, originalBytes, null, scope?.context);
+      // A failed result that could not be persisted is not delivered, and a
+      // success-shaped projection of it would tell the model a control effect
+      // worked when it did not.
+      return stringifyProviderBudgetFailure(toolName, originalBytes, null, scope?.context);
     }
     const toolResultEnvelope = makeToolResultEnvelope({
       status,
@@ -2251,8 +2320,10 @@ function stringifyToolResult(
       toolName, originalBytes, persistedFullOutputRef ?? null, scope?.context,
     );
   }
-  return stringifyProjectedControlSuccess(
-    toolName, fullJson, originalBytes, persistedFullOutputRef ?? null, scope?.context,
+  // Same invariant as the in-loop fallthrough: a failure that outgrew every
+  // bounded form stays a failure, with the artifact ref when one exists.
+  return stringifyProviderBudgetFailure(
+    toolName, originalBytes, persistedFullOutputRef ?? null, scope?.context,
   );
 }
 

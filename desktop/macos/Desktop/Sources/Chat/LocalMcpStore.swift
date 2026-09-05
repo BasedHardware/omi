@@ -19,7 +19,19 @@ enum LocalMcpStore {
     let summary: String
     let isCommand: Bool
     var id: String { name }
+
+    /// Omi itself serves this entry rather than a third party. It is written and
+    /// removed by its own feature's gate (`CuaMcpRegistration`), not added by
+    /// the user, so the UI shows it as built-in and offers no Remove.
+    var isBuiltIn: Bool { LocalMcpStore.builtInServerNames.contains(name) }
   }
+
+  /// Entries this app writes for its own features. They live in the same file
+  /// and the same list as user-added servers, but their presence follows the
+  /// feature's settings rather than the user's add/remove, so the generic
+  /// removal path refuses them: the registrar that wrote each entry is the one
+  /// that removes it, through `removeBuiltInServer`.
+  static var builtInServerNames: Set<String> { [CuaMcpRegistration.serverName] }
 
   static var fileURL: URL { LocalSkillsStore.rootURL.appendingPathComponent("mcp.json") }
 
@@ -100,6 +112,23 @@ enum LocalMcpStore {
   }
 
   static func removeServer(name: String) {
+    // Built-in entries follow their feature's gate, not this store's user-facing
+    // remove. A user's Remove — or any code treating mcp.json as purely user
+    // data — silently deleting Omi's own server is the failure this guards.
+    guard !builtInServerNames.contains(name) else {
+      log("LocalMcpStore: refusing to remove built-in server '\(name)'")
+      return
+    }
+    dropEntry(named: name)
+  }
+
+  /// The one way a built-in entry leaves the file: the registrar that wrote it
+  /// removing it as its feature turns off.
+  static func removeBuiltInServer(name: String) {
+    dropEntry(named: name)
+  }
+
+  private static func dropEntry(named name: String) {
     var servers = readServers()
     servers.removeValue(forKey: name)
     try? writeServers(servers)

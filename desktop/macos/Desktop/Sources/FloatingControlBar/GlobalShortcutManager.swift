@@ -76,9 +76,11 @@ class GlobalShortcutManager: @unchecked Sendable {
   private enum HotKeyID: UInt32 {
     case askOmi = 2
     case summonOmi = 3
+    case stopComputerControl = 4
   }
 
   private var shortcutObserver: NSObjectProtocol?
+  private var computerControlObserver: NSObjectProtocol?
 
   private init() {
     registrar = Self.registerWithCarbon
@@ -130,6 +132,15 @@ class GlobalShortcutManager: @unchecked Sendable {
     ) { [weak self] _ in
       self?.registerAskOmi()
     }
+    // The stop chord follows the control switch: held while control is on, given
+    // back to every other app as soon as it is off.
+    computerControlObserver = NotificationCenter.default.addObserver(
+      forName: CuaControlGate.stateChanged,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      self?.registerComputerControlStop()
+    }
   }
 
   #if DEBUG
@@ -137,6 +148,10 @@ class GlobalShortcutManager: @unchecked Sendable {
       if let shortcutObserver {
         NotificationCenter.default.removeObserver(shortcutObserver)
         self.shortcutObserver = nil
+      }
+      if let computerControlObserver {
+        NotificationCenter.default.removeObserver(computerControlObserver)
+        self.computerControlObserver = nil
       }
     }
   #endif
@@ -147,6 +162,34 @@ class GlobalShortcutManager: @unchecked Sendable {
     // Register Ask Omi shortcut from user settings
     registerAskOmi()
     registerSummonHotkey()
+    registerComputerControlStop()
+  }
+
+  /// ⌃⌥⌘. stops computer control, and is registered only while control is on.
+  ///
+  /// A Carbon hotkey preempts the frontmost app for as long as it is registered,
+  /// so a chord held unconditionally is taken away from every other app on the
+  /// Mac. This one is worth that cost exactly while something else is driving the
+  /// pointer — which is also the moment the user cannot reach a button, because
+  /// the agent is moving the cursor they would reach it with.
+  private func registerComputerControlStop() {
+    if let ref = hotKeyRefs.removeValue(forKey: .stopComputerControl) {
+      _ = unregisterHotKey(ref)
+    }
+    guard CuaControlGate.isEnabledForCurrentOwner() else { return }
+    var hotKeyRef: EventHotKeyRef?
+    let hotKeyID = EventHotKeyID(
+      signature: FourCharCode(0x4F4D_4921), id: HotKeyID.stopComputerControl.rawValue)
+    let status = RegisterEventHotKey(
+      UInt32(kVK_ANSI_Period), UInt32(controlKey | optionKey | cmdKey), hotKeyID,
+      GetApplicationEventTarget(), 0, &hotKeyRef
+    )
+    if status == noErr, let hotKeyRef {
+      hotKeyRefs[.stopComputerControl] = .carbon(hotKeyRef)
+      logger("GlobalShortcutManager: Registered ⌃⌥⌘. computer-control stop hotkey")
+    } else {
+      logger("GlobalShortcutManager: Failed to register ⌃⌥⌘. hotkey, error: \(status)")
+    }
   }
 
   /// Registers ⌃⌘O as a dedicated global Carbon hotkey that summons Omi (fronts the
@@ -359,6 +402,10 @@ class GlobalShortcutManager: @unchecked Sendable {
     switch id {
     case .askOmi, .summonOmi:
       openOmiFromShortcut()
+    case .stopComputerControl:
+      DispatchQueue.main.async {
+        CuaControlGate.shared.suspend(reason: "stopped with ⌃⌥⌘.")
+      }
     }
 
     return noErr

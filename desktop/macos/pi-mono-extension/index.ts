@@ -38,7 +38,12 @@ import {
   loadLocalMcpConfig,
   type UserMcpServer,
 } from "../agent/dist/runtime/user-extensions.js";
-import { type McpClient, type McpPrompt, type McpRemoteTool } from "../agent/dist/runtime/mcp-client.js";
+import {
+  type McpClient,
+  type McpPrompt,
+  type McpRemoteTool,
+  type McpToolBlock,
+} from "../agent/dist/runtime/mcp-client.js";
 import { McpHttpClient } from "../agent/dist/runtime/mcp-http-client.js";
 import { McpSseClient } from "../agent/dist/runtime/mcp-sse-client.js";
 import { McpStdioClient } from "../agent/dist/runtime/mcp-stdio-client.js";
@@ -1238,7 +1243,7 @@ function mcpCallTool() {
     label: "MCP Call",
     description:
       "Run a tool (or a published prompt) on one of the user's MCP servers, by its real server and tool " +
-      "names, and get the result content back as text.\n\n" +
+      "names, and get its result content back — text, and images when the tool answers with one.\n\n" +
       // Server names only: the tool index rides once, in mcp_tools_info's
       // description — duplicating it here cost its full size again per turn.
       `Configured servers right now: ${mcpServerNameLine()}\n` +
@@ -1265,27 +1270,34 @@ function mcpCallTool() {
         return mcpTextResult(`Error: MCP server '${entry.name}' is unavailable: ${entry.error ?? "unknown error"}`);
       }
       const args = (params.arguments ?? {}) as Record<string, unknown>;
-      let text: string;
       if (entry.tools.some((candidate) => candidate.name === params.tool)) {
         // A tool and a prompt sharing a name resolve to the tool; the prompt
         // stays reachable through its own listing.
+        let content: McpToolBlock[];
         try {
-          text = await withTimeout(entry.client.callTool(params.tool, args), CALL_TIMEOUT_MS);
+          // Blocks pass straight through: a capture server's image is the answer,
+          // and pi's tool result carries images alongside text.
+          content = await withTimeout(entry.client.callTool(params.tool, args), CALL_TIMEOUT_MS);
         } catch (err) {
-          text = `Error calling ${entry.name}/${params.tool}: ${err instanceof Error ? err.message : err}`;
+          return mcpTextResult(
+            `Error calling ${entry.name}/${params.tool}: ${err instanceof Error ? err.message : err}`,
+          );
         }
-      } else if (entry.prompts.some((candidate) => candidate.name === params.tool)) {
-        try {
-          text = await withTimeout(entry.client.getPrompt(params.tool, args), CALL_TIMEOUT_MS);
-        } catch (err) {
-          text = `Error getting prompt ${entry.name}/${params.tool}: ${err instanceof Error ? err.message : err}`;
-        }
-      } else {
-        text =
-          `Error: server '${entry.name}' has no tool or prompt named '${params.tool}'. ` +
-          "Call mcp_tools_info with this server's name for the full list.";
+        return { content, details: undefined };
       }
-      return mcpTextResult(text);
+      if (entry.prompts.some((candidate) => candidate.name === params.tool)) {
+        try {
+          return mcpTextResult(await withTimeout(entry.client.getPrompt(params.tool, args), CALL_TIMEOUT_MS));
+        } catch (err) {
+          return mcpTextResult(
+            `Error getting prompt ${entry.name}/${params.tool}: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+      }
+      return mcpTextResult(
+        `Error: server '${entry.name}' has no tool or prompt named '${params.tool}'. ` +
+          "Call mcp_tools_info with this server's name for the full list.",
+      );
     },
   });
 }

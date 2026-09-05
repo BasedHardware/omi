@@ -11,6 +11,7 @@ enum HubTool: String {
   case readToolOutput = "read_tool_output"
   case searchToolOutput = "search_tool_output"
   case updateAgentArtifactLifecycle = "update_agent_artifact_lifecycle"
+  case sendAgentMessage = "send_agent_message"
   case spawnAgent = "spawn_agent"
   case setDesktopAttentionOverride = "set_desktop_attention_override"
   case getConversations = "get_conversations"
@@ -291,6 +292,27 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "state"
+      ]
+    }
+  },
+  {
+    "type": "function",
+    "name": "send_agent_message",
+    "description": "Continue the background work already in progress instead of answering from your own knowledge. When the user's request follows on from a run you started — the next step in the same app, the same task, or a correction to it — send it here. Omit sessionId to continue the run this surface started most recently.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "description": "The follow-up instruction, in the user's terms."
+        },
+        "sessionId": {
+          "type": "string",
+          "description": "Optional. Omit to continue the most recent run started from this surface."
+        }
+      },
+      "required": [
+        "prompt"
       ]
     }
   },

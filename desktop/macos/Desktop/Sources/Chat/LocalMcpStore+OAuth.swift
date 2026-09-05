@@ -96,12 +96,7 @@ extension LocalMcpStore {
       let expiresAt = auth["expires_at"] as? Double ?? 0
       guard expiresAt > 0, expiresAt < Date().timeIntervalSince1970 + 300 else { continue }
       do {
-        var form = [
-          "grant_type": "refresh_token",
-          "refresh_token": refreshToken,
-          "client_id": clientId,
-        ]
-        if let secret = auth["client_secret"] as? String { form["client_secret"] = secret }
+        let form = refreshForm(auth: auth, refreshToken: refreshToken, clientId: clientId)
         let tokens = try await postForm(endpoint: tokenEndpoint, form: form)
         auth["access_token"] = tokens["access_token"]
         if let newRefresh = tokens["refresh_token"] as? String { auth["refresh_token"] = newRefresh }
@@ -114,6 +109,28 @@ extension LocalMcpStore {
         log("LocalMcpOAuth: token refresh failed for \(name): \(error)")
       }
     }
+  }
+
+  /// The refresh grant, built from what the authorization actually stored.
+  ///
+  /// `resource` (RFC 8707) is the half that is easy to lose: the authorization
+  /// and the code exchange both send it, so the token is audience-scoped, and a
+  /// refresh that omits it asks for an unscoped one that the MCP server then
+  /// rejects. It is absent for entries authorized before it was persisted, and
+  /// those must keep refreshing exactly as they did rather than fail closed.
+  static func refreshForm(auth: [String: Any], refreshToken: String, clientId: String)
+    -> [String: String]
+  {
+    var form = [
+      "grant_type": "refresh_token",
+      "refresh_token": refreshToken,
+      "client_id": clientId,
+    ]
+    if let secret = auth["client_secret"] as? String { form["client_secret"] = secret }
+    if let resource = auth["resource"] as? String, !resource.isEmpty {
+      form["resource"] = resource
+    }
+    return form
   }
 
   // MARK: - Flow pieces
@@ -281,6 +298,11 @@ extension LocalMcpStore {
       "access_token": accessToken,
       "token_endpoint": meta.tokenEndpoint,
       "client_id": clientId,
+      // The audience this token was minted for. A refresh that omits it asks an
+      // authorization server fronting several resources for an unscoped token,
+      // which the MCP server then rejects — so the grant has to be stored, not
+      // just sent once at exchange.
+      "resource": meta.resource,
     ]
     if let refresh = tokens["refresh_token"] as? String { auth["refresh_token"] = refresh }
     if let expiresIn = tokens["expires_in"] as? Double {

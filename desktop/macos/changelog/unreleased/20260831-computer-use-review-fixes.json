@@ -1,0 +1,3 @@
+{
+  "change": "Computer control is safer to leave on: the ⌃⌥⌘. stop now survives a relaunch and halts a gesture already in flight, a click measured against an expired screenshot is refused instead of landing somewhere else, typed text keeps its spaces, and a malformed tool argument can no longer crash Omi"
+}

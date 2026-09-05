@@ -89,6 +89,19 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
   }
   // Persistence is an observability/recovery concern, never execution
   // authority. A storage outage cannot rewrite executor success as failure.
+  // The full output is persisted at most once per finalized result: the
+  // projection loop below retries against shrinking byte targets, and
+  // re-persisting the same payload on every pass would leave one artifact
+  // row per iteration.
+  // `undefined` means "not attempted yet"; a persisted null is a real answer
+  // and must not trigger a second write on the next loop pass.
+  let recoveredRef: string | null | undefined = fullOutputRef ?? undefined;
+  const recoveryRef = (): string => {
+    if (recoveredRef === undefined) {
+      recoveredRef = persistRelayToolOutput(input, input.result);
+    }
+    return recoveredRef ?? "artifact:unavailable";
+  };
 
   const budget = toolResultBudgetBytes(
     input.identity.toolName,
@@ -134,7 +147,7 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
     if (truncated && projectedBytes >= executorBytes) continue;
     const projectedOriginalBytes = truncated ? executorBytes : projectedBytes;
     const projectedRef = truncated
-      ? fullOutputRef ?? persistRelayToolOutput(input, input.result) ?? "artifact:unavailable"
+      ? recoveryRef()
       : null;
     const projected = JSON.stringify({
       ok: status === "succeeded",
@@ -156,7 +169,6 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
       return projected;
     }
   }
-  const recoveredRef = fullOutputRef ?? persistRelayToolOutput(input, input.result) ?? "artifact:unavailable";
   const minimalProjection = { text: "Tool result available via fullOutputRef.", omitted: {} };
   const minimalBytes = Buffer.byteLength(JSON.stringify(minimalProjection), "utf8");
   const minimal = JSON.stringify({
@@ -167,7 +179,7 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
       truncated: true,
       originalBytes: executorBytes,
       projectedBytes: minimalBytes,
-      fullOutputRef: recoveredRef,
+      fullOutputRef: recoveryRef(),
       provenance: provenance(input.identity),
     }),
   });

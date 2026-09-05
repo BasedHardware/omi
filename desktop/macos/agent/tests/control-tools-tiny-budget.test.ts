@@ -48,7 +48,12 @@ describe("control-tool degenerate provider budgets", () => {
       },
     };
 
-    const raw = await handleAgentControlToolCall(context, "get_agent_run", {});
+    // A valid input keeps this a size-only degradation: an invalid one would
+    // fail the call outright, and a failure must stay a failure even when the
+    // only way to say so is the minimal artifact-backed projection.
+    const raw = await handleAgentControlToolCall(context, "get_agent_run", {
+      runId: run.run.runId,
+    });
     const projected = JSON.parse(raw) as {
       ok?: unknown;
       text?: unknown;

@@ -14,8 +14,22 @@ struct McpServersSection: View {
   let onSelectLocal: (LocalMcpStore.Entry) -> Void
   let onSelectCatalogEntry: (ExtensionCatalog.Entry) -> Void
 
+  /// Drives the built-in server card's status line; it renders through the same
+  /// card as every other server, with the gate's state standing in for a probe.
+  @ObservedObject private var cuaStatus = CuaControlStatusStore.shared
+
   private var servers: [LocalMcpStore.Entry] {
-    appProvider.localMcpServers.filter { matchesSearch($0.name, $0.summary, query: searchText) }
+    var listed = appProvider.localMcpServers.filter { matchesSearch($0.name, $0.summary, query: searchText) }
+    // The built-in entry is in mcp.json only while the gate is on, but its card
+    // — the status line naming what is missing — is how computer control is
+    // discovered at all, so it is synthesized when absent and pinned first.
+    let builtIn = LocalMcpStore.Entry(
+      name: CuaMcpRegistration.serverName, summary: CuaControlCopy.cardDetail, isCommand: false)
+    listed.removeAll { $0.name == builtIn.name }
+    if matchesSearch(builtIn.name, builtIn.summary, query: searchText) {
+      listed.insert(builtIn, at: 0)
+    }
+    return listed
   }
 
   var body: some View {
@@ -49,20 +63,7 @@ struct McpServersSection: View {
           spacing: OmiSpacing.md
         ) {
           ForEach(servers) { server in
-            let status = appProvider.mcpStatuses[server.name] ?? .checking
-            AgentExtensionCard(
-              icon: server.isCommand ? "terminal" : "server.rack",
-              imageUrl: "",
-              title: server.name,
-              subtitle: server.isCommand ? "Local command" : "Remote",
-              detail: status.detail ?? server.summary,
-              statusText: status.label,
-              statusActive: status.isHealthy,
-              actionTitle: status == .needsAuth ? "Sign In" : "Manage",
-              actionIsSecondary: status != .needsAuth
-            ) {
-              onSelectLocal(server)
-            }
+            serverCard(server)
           }
         }
       }
@@ -87,6 +88,38 @@ struct McpServersSection: View {
         await appProvider.fetchUserExtensions()
       }
       await appProvider.refreshMcpStatuses()
+    }
+    // The built-in card's status follows the gate and its TCC grants, so it
+    // watches the same live state the sheet's permissions block does — through
+    // the store's one timer, not a second copy of it.
+    .onAppear { cuaStatus.beginPolling() }
+    .onDisappear { cuaStatus.endPolling() }
+    // The detail sheet's switch writes or removes the mcp.json entry through
+    // the gate, so the list and its probes follow the gate rather than waiting
+    // for the next page visit.
+    .onReceive(NotificationCenter.default.publisher(for: CuaControlGate.stateChanged)) { _ in
+      Task { await appProvider.fetchUserExtensions() }
+    }
+  }
+
+  /// Every server renders through the one card. The built-in entry differs only
+  /// in where its parameters come from — badge and icon from the entry, status
+  /// from the gate instead of a probe — so it reads as what it is: a server
+  /// Omi ships, not a different kind of thing.
+  private func serverCard(_ server: LocalMcpStore.Entry) -> some View {
+    let status = appProvider.mcpStatuses[server.name] ?? .checking
+    return AgentExtensionCard(
+      icon: server.isBuiltIn ? "macbook" : (server.isCommand ? "terminal" : "server.rack"),
+      imageUrl: "",
+      title: server.name,
+      subtitle: server.isBuiltIn ? "Built-in" : (server.isCommand ? "Local command" : "Remote"),
+      detail: server.isBuiltIn ? server.summary : (status.detail ?? server.summary),
+      statusText: server.isBuiltIn ? cuaStatus.cardStatusText : status.label,
+      statusActive: server.isBuiltIn ? cuaStatus.cardStatusActive : status.isHealthy,
+      actionTitle: !server.isBuiltIn && status == .needsAuth ? "Sign In" : "Manage",
+      actionIsSecondary: server.isBuiltIn || status != .needsAuth
+    ) {
+      onSelectLocal(server)
     }
   }
 
@@ -1148,6 +1181,9 @@ struct SkillEditorSheet: View {
 struct LocalMcpDetailSheet: View {
   let server: LocalMcpStore.Entry
   @ObservedObject var appProvider: AppProvider
+  /// Only the built-in server uses this, to offer the relaunch a Screen
+  /// Recording grant needs before macOS hands it to this process.
+  var appState: AppState?
   let onDismiss: () -> Void
 
   @State private var confirmingDelete = false
@@ -1162,70 +1198,90 @@ struct LocalMcpDetailSheet: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-      HStack(alignment: .top) {
-        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text(server.name)
-            .scaledFont(size: OmiType.title, weight: .semibold)
+      header
+
+      // The built-in server's whole surface is its own block: switch, grants,
+      // tools, and how to reach the endpoint. Repeating the endpoint above it
+      // said the same thing the card already said, and its block sizes itself,
+      // so nothing here pins a height it does not need.
+      if server.isBuiltIn {
+        ComputerUsePermissionsBlock(appState: appState)
+      } else {
+        userServerContent
+        Spacer(minLength: 0)
+      }
+    }
+    .padding(OmiSpacing.lg)
+    .background(Ink.surface)
+  }
+
+  /// Everything a server the user added shows: where it runs, whether it
+  /// answers, how to sign in, and how to remove it.
+  private var userServerContent: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+      VStack(alignment: .leading, spacing: OmiSpacing.md) {
+        labelled(server.isCommand ? "Runs on your Mac" : "Endpoint") {
+          Text(server.summary)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.primary)
-          // "Local" here used to mean "configured locally", which read as a claim about where a
-          // remote server runs.
-          Text(server.isCommand ? "Local command" : "Remote server")
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
+        labelled("Status") {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text(status.label)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(status.isHealthy ? Ink.primary : Ink.secondary)
+            if let detail = status.detail {
+              Text(detail)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+          }
+        }
+
+        // A remote server can refuse us for two different reasons, and the fix differs: OAuth needs a
+        // browser round trip, an API key needs the key. Both live here because a card that reports
+        // "Needs sign-in" with nothing to press is a dead end.
+        if !server.isCommand {
+          labelled("Authentication") {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+              Button(action: signIn) {
+                ConnectionModalActionButton(title: isSigningIn ? "Signing in…" : "Sign In")
+              }
+              .buttonStyle(.plain)
+              .disabled(isSigningIn)
+              .accessibilityIdentifier("apps-mcp-sign-in")
+
+              HStack(spacing: OmiSpacing.sm) {
+                SecureField("Or paste an API key", text: $apiKey)
+                  .textFieldStyle(.roundedBorder)
+                Button("Save Key", action: saveAPIKey)
+                  .buttonStyle(.plain)
+                  .scaledFont(size: OmiType.caption, weight: .medium)
+                  .foregroundColor(Ink.primary)
+                  .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
+              }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+
+        if let notice {
+          Text(notice)
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
-        Spacer()
-        DismissButton(action: onDismiss)
-      }
 
-      Text(server.summary)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.primary)
-        .padding(OmiSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Ink.rowFill)
-        .cornerRadius(OmiChrome.smallControlRadius)
-
-      // A remote server can refuse us for two different reasons, and the fix differs: OAuth needs a
-      // browser round trip, an API key needs the key. Both live here because a card that reports
-      // "Needs sign-in" with nothing to press is a dead end.
-      if !server.isCommand {
-        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-          HStack(spacing: OmiSpacing.sm) {
-            Text(status.label)
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(status.isHealthy ? Ink.primary : Ink.secondary)
-            Spacer()
-            Button(action: signIn) {
-              ConnectionModalActionButton(title: isSigningIn ? "Signing in…" : "Sign In")
-            }
-            .buttonStyle(.plain)
-            .disabled(isSigningIn)
-            .accessibilityIdentifier("apps-mcp-sign-in")
-          }
-
-          HStack(spacing: OmiSpacing.sm) {
-            SecureField("Or paste an API key", text: $apiKey)
-              .textFieldStyle(.roundedBorder)
-            Button("Save Key", action: saveAPIKey)
-              .buttonStyle(.plain)
-              .foregroundColor(Ink.secondary)
-              .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
-          }
+        if let errorText {
+          Text(errorText)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.errorRed)
+            .fixedSize(horizontal: false, vertical: true)
         }
-      }
-
-      if let notice {
-        Text(notice)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-
-      if let errorText {
-        Text(errorText)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.errorRed)
-          .fixedSize(horizontal: false, vertical: true)
       }
 
       Text(
@@ -1258,11 +1314,64 @@ struct LocalMcpDetailSheet: View {
         }
         .buttonStyle(.plain)
       }
-
-      Spacer(minLength: 0)
     }
-    .padding(OmiSpacing.lg)
-    .background(Ink.surface)
+  }
+
+  /// The icon tile, name and subtitle, in the language the Add MCP Server sheet
+  /// already uses — the two are the same modal family.
+  private var header: some View {
+    HStack(alignment: .top, spacing: OmiSpacing.md) {
+      Image(systemName: icon)
+        .scaledFont(size: OmiType.subheading, weight: .medium)
+        .foregroundColor(Ink.primary)
+        .frame(width: 40, height: 40)
+        .background(
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+            .fill(Ink.rowFill)
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+            .strokeBorder(Ink.separator, lineWidth: 1)
+        )
+
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+        Text(server.name)
+          .scaledFont(size: OmiType.heading, weight: .semibold)
+          .foregroundColor(Ink.primary)
+        Text(subtitle)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
+      Spacer(minLength: OmiSpacing.md)
+
+      DismissButton(action: onDismiss)
+    }
+  }
+
+  private var icon: String {
+    if server.isBuiltIn { return "macbook" }
+    return server.isCommand ? "terminal" : "server.rack"
+  }
+
+  private var subtitle: String {
+    if server.isBuiltIn { return "Built-in · \(CuaToolCatalog.tools.count) tools" }
+    // "Local" here used to mean "configured locally", which read as a claim
+    // about where a remote server runs.
+    return server.isCommand ? "Local command" : "Remote server"
+  }
+
+  @ViewBuilder
+  private func labelled<Content: View>(_ label: String, @ViewBuilder content: () -> Content)
+    -> some View
+  {
+    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+      Text(label)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(Ink.secondary)
+      content()
+    }
   }
 
   private func signIn() {

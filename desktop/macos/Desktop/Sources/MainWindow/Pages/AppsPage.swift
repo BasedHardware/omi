@@ -266,9 +266,15 @@ struct AppsPage: View {
     }
     .dismissableSheet(item: $selectedLocalMcpServer) { server in
       LocalMcpDetailSheet(
-        server: server, appProvider: appProvider, onDismiss: { selectedLocalMcpServer = nil }
+        server: server, appProvider: appProvider, appState: appState,
+        onDismiss: { selectedLocalMcpServer = nil }
       )
-      .frame(width: 460, height: 420)
+      // The built-in server's block is only as tall as what still needs doing,
+      // so it hugs its content instead of being poured into a constant. It has
+      // to be `fixedSize` rather than a `maxHeight`: the overlay proposes the
+      // whole window, and a max frame takes all of it.
+      .frame(width: 460, height: server.isBuiltIn ? nil : 420)
+      .fixedSize(horizontal: false, vertical: server.isBuiltIn)
     }
     .dismissableSheet(isPresented: $showAddSkillSheet) {
       SkillEditorSheet(appProvider: appProvider, editingSkill: nil, onDismiss: { showAddSkillSheet = false })

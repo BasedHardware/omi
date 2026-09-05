@@ -1,0 +1,3 @@
+{
+  "change": "Computer control now says when a permission is missing instead of reporting an empty desk: listing windows asks for Screen Recording like a screenshot does, and a script that stalls on an unapproved Automation grant names it"
+}

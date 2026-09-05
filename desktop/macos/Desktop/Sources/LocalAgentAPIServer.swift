@@ -144,13 +144,15 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     // If the feature was enabled before team+bundle scoping, the old Keychain
     // token is intentionally unread (to avoid password prompts). Mint a fresh
     // scoped token so the server can authenticate again; clients must re-copy it.
+    let token: String
     do {
-      _ = try LocalAgentAPISettings.ensureToken()
+      token = try LocalAgentAPISettings.ensureToken()
     } catch {
       log("LocalAgentAPIServer: cannot start — token storage unavailable (\(error.localizedDescription))")
       LocalAgentAPISettings.isEnabled = false
       return
     }
+    republishComputerUseRegistration(token: token)
     guard listener == nil else { return }
 
     do {
@@ -178,6 +180,26 @@ final class LocalAgentAPIServer: @unchecked Sendable {
       log("LocalAgentAPIServer: listening on \(LocalAgentAPISettings.serverURL)")
     } catch {
       logError("LocalAgentAPIServer: failed to start listener", error: error)
+    }
+  }
+
+  /// Keep `~/.omi/mcp.json` pointing at a token this server will actually accept.
+  ///
+  /// The token lives in the Keychain under a service scoped to the signing
+  /// identity, so a rebuild signed with a different certificate cannot read the
+  /// old one and `ensureToken` mints a fresh one. The entry written when the user
+  /// turned computer control on then carries a token that no longer exists, and
+  /// the runtime's own client is turned away with a 401 — which it reports as a
+  /// server with no tools, so the feature is simply absent with no error the user
+  /// can see. Rewriting it at startup is what makes that self-healing.
+  private func republishComputerUseRegistration(token: String) {
+    guard CuaControlGate.isEnabledForCurrentOwner() else { return }
+    guard !CuaMcpRegistration.isRegistered(token: token) else { return }
+    do {
+      try CuaMcpRegistration.register(token: token)
+      log("LocalAgentAPIServer: refreshed the computer-use MCP registration with the current token")
+    } catch {
+      logError("LocalAgentAPIServer: could not refresh the computer-use MCP registration", error: error)
     }
   }
 
@@ -299,6 +321,13 @@ final class LocalAgentAPIServer: @unchecked Sendable {
       ])
     }
 
+    if request.method == "POST", request.path == "/mcp" {
+      guard authenticate(request.headers["authorization"]) else {
+        return errorResponse("invalid_or_missing_local_token", statusCode: 401)
+      }
+      return await mcpResponse(body: request.body)
+    }
+
     guard request.method == "POST", request.path == "/v1/local/tool" else {
       return errorResponse("unsupported_route", statusCode: 404)
     }
@@ -332,6 +361,48 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     let result = await ChatToolExecutor.execute(
       ToolCall(name: executorToolName, arguments: arguments, thoughtSignature: nil))
     return toolResponse(name: toolName, result: result)
+  }
+
+  /// The computer-use MCP endpoint.
+  ///
+  /// It shares this server's token — a client the user has already trusted with
+  /// the local API is the same client — but not its switch: driving the mouse
+  /// needs its own consent, and `CuaControlGate` holds it.
+  ///
+  /// The switch gates `tools/call` and nothing else. Refusing the handshake too
+  /// made a client's health probe report the server as broken ("Needs sign-in",
+  /// from a 403 it could not tell apart from an expired token) whenever control
+  /// happened to be off — which is its resting state. Answering `initialize` and
+  /// `tools/list` touches nothing on the Mac; every call that does is refused
+  /// with the reason.
+  private func mcpResponse(body: Data) async -> LocalHTTPResponse {
+    guard let message = try? JSONSerialization.jsonObject(with: body) else {
+      return errorResponse("invalid_json_body", statusCode: 400)
+    }
+
+    // A batch is a JSON-RPC array. Legacy revisions allow one; modern ones do
+    // not send one, and answering both costs a `map`.
+    if let batch = message as? [[String: Any]] {
+      var responses: [[String: Any]] = []
+      for entry in batch {
+        if let response = await CuaMcpEndpoint.handle(entry) { responses.append(response) }
+      }
+      return responses.isEmpty ? acceptedResponse() : compactJSONResponse(responses)
+    }
+    guard let single = message as? [String: Any] else {
+      return errorResponse("invalid_json_body", statusCode: 400)
+    }
+    guard let response = await CuaMcpEndpoint.handle(single) else {
+      return acceptedResponse()
+    }
+    return compactJSONResponse(response)
+  }
+
+  /// A notification has no reply. 202 with an empty body is what the Streamable
+  /// HTTP transport asks for.
+  private func acceptedResponse() -> LocalHTTPResponse {
+    LocalHTTPResponse(
+      statusCode: 202, headers: ["Content-Type": "application/json"], body: Data())
   }
 
   private func acceptsLoopbackHostAndOrigin(_ headers: [String: String]) -> Bool {
@@ -588,6 +659,19 @@ final class LocalAgentAPIServer: @unchecked Sendable {
       "content_type": "text/plain",
       "result": result,
     ])
+  }
+
+  /// One JSON object on one line.
+  ///
+  /// MCP's stdio framing is newline-delimited, and the shim that bridges a
+  /// stdio-only client to this endpoint copies the body through verbatim. A
+  /// pretty-printed body would arrive as a dozen frames, none of which parse.
+  private func compactJSONResponse(_ payload: Any) -> LocalHTTPResponse {
+    let body =
+      (try? JSONSerialization.data(withJSONObject: payload))
+      ?? Data("{\"error\":\"encode_failed\"}".utf8)
+    return LocalHTTPResponse(
+      statusCode: 200, headers: ["Content-Type": "application/json"], body: body)
   }
 
   private func jsonResponse(_ payload: Any, statusCode: Int = 200) -> LocalHTTPResponse {

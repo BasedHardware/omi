@@ -111,20 +111,29 @@ export class McpStdioClient extends McpClient {
     });
     this.readline = createInterface({ input: child.stdout! });
     this.readline.on("line", (line) => {
-      let message: { id?: number; result?: unknown; error?: { message?: string; code?: number } };
+      let message: unknown;
       try {
         message = JSON.parse(line);
       } catch {
         return; // non-JSON noise on stdout
       }
-      if (typeof message.id !== "number") return; // notification
-      const waiter = this.pending.get(message.id);
+      // `JSON.parse` answers every valid JSON document, not just objects, and a
+      // lone `null` is one of them — reading `.id` off it throws inside this
+      // callback, where there is no caller to catch it.
+      if (typeof message !== "object" || message === null) return;
+      const reply = message as {
+        id?: number
+        result?: unknown
+        error?: { message?: string; code?: number }
+      };
+      if (typeof reply.id !== "number") return; // notification
+      const waiter = this.pending.get(reply.id);
       if (!waiter) return;
-      this.pending.delete(message.id);
-      if (message.error) {
-        waiter.reject(new Error(String(message.error.message ?? message.error.code ?? "MCP error")));
+      this.pending.delete(reply.id);
+      if (reply.error) {
+        waiter.reject(new Error(String(reply.error.message ?? reply.error.code ?? "MCP error")));
       } else {
-        waiter.resolve(message.result);
+        waiter.resolve(reply.result);
       }
     });
   }

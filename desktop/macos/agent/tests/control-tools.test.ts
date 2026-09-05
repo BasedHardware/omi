@@ -18,7 +18,7 @@ import { agentControlCapabilityManifest, agentControlInputSchema } from "../src/
 import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
 import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
-import { toolNamesForAdapter } from "../src/runtime/omi-tool-manifest.js";
+import { omiToolManifest, toolNamesForAdapter } from "../src/runtime/omi-tool-manifest.js";
 import {
   RunToolCapabilityBroker,
   type AuthorizedRunToolInvocation,
@@ -1278,6 +1278,37 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("does not relabel a failed oversized provider result as success when the full output cannot be persisted", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const sentinel = "PROVIDER_FAILED_PERSIST_SENTINEL".repeat(26_000);
+    vi.spyOn(kernel, "getRun").mockImplementation(() => {
+      throw new Error(`control executor failed: ${sentinel}`);
+    });
+    vi.spyOn(kernel, "persistArtifact").mockImplementation(() => {
+      throw new Error("deterministic provider persistence failure");
+    });
+
+    const raw = await handleAgentControlToolCall(
+      ownerContext(kernel),
+      "get_agent_run",
+      { ownerId: "owner", runId: "run-1" },
+    );
+    const failed = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(128 * 1024);
+    expect(raw).not.toContain("PROVIDER_FAILED_PERSIST_SENTINEL");
+    expect(failed).toMatchObject({
+      ok: false,
+      error: { code: "tool_result_exceeded_provider_budget" },
+      toolResultEnvelope: {
+        status: "failed",
+        truncated: false,
+        fullOutputRef: null,
+      },
+    });
+    store.close();
+  });
+
   it("envelopes unknown and invalid control-tool errors", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const unknown = parseToolResult(await rawHandleAgentControlToolCall(ownerContext(kernel), "not_a_real_tool", {}));
@@ -1554,6 +1585,101 @@ describe("agent control tools", () => {
       error: { code: "control_tool_failed" },
     });
     expect(sent.error.message).toContain("does not match the active control owner");
+    store.close();
+  });
+
+  /// Voice could start background work and never continue it: `spawn_agent` was
+  /// the only handle it had, so the turn after "open Safari" was answered from
+  /// the model's own knowledge while the run it started sat idle. A follow-up
+  /// with no session names the work already in progress.
+  it("continues the owner's most recent run when no session is named", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const first = await kernel.executeRun({
+      ...baseRunInput,
+      ownerId: "owner-1",
+      surfaceKind: "background_agent",
+      executionRole: "leaf",
+    });
+    const context: AgentControlToolContext = { kernel, getOwnerId: () => "owner-1" };
+
+    const sent = parseToolResult(
+      await handleAgentControlToolCall(context, "send_agent_message", {
+        prompt: "now search YouTube",
+      }),
+    );
+    expect(sent.ok).toBe(true);
+    expect(sent.session.sessionId).toBe(first.session.sessionId);
+    expect(sent.routeDecision.intent).toBe("continue_run");
+    store.close();
+  });
+
+  /// A follow-up must never reach into another account's work, and the resolver
+  /// offers a handle rather than deciding ownership — the kernel still does that.
+  it("does not continue another owner's run", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    await kernel.executeRun({
+      ...baseRunInput,
+      ownerId: "other-owner",
+      surfaceKind: "background_agent",
+      executionRole: "leaf",
+    });
+    const context: AgentControlToolContext = { kernel, getOwnerId: () => "owner-1" };
+
+    const sent = parseToolResult(
+      await handleAgentControlToolCall(context, "send_agent_message", {
+        prompt: "carry on",
+      }),
+    );
+    expect(sent).toMatchObject({ ok: false, error: { code: "control_tool_failed" } });
+    expect(sent.error.message).toContain("No recent run to continue");
+    store.close();
+  });
+
+  /// The realtime surface publishes its own, smaller schema for a tool: a
+  /// speaking user cannot be asked for a session id or which surface they are
+  /// on. Nothing checked that what the model is allowed to send still satisfies
+  /// what the runtime demands, so `send_agent_message` reached the kernel
+  /// missing a required field and failed identically on every voice turn — the
+  /// model called it correctly and apologised for an error it could not see.
+  it("never requires a field its realtime schema cannot express", () => {
+    for (const tool of omiToolManifest) {
+      const voiceProperties = tool.voice?.schemaOverride?.properties;
+      const runtimeSchema = agentControlToolSchemas[tool.name as keyof typeof agentControlToolSchemas];
+      if (!voiceProperties || !runtimeSchema) continue;
+
+      const shape = (runtimeSchema as unknown as { shape: Record<string, { isOptional(): boolean }> }).shape;
+      for (const [field, fieldSchema] of Object.entries(shape)) {
+        if (fieldSchema.isOptional()) continue;
+        expect(
+          Object.keys(voiceProperties),
+          `${tool.name}: the runtime requires "${field}" and the realtime schema never offers it, so every voice call fails validation`,
+        ).toContain(field);
+      }
+    }
+  });
+
+  /// The first version of this resolver picked the owner's genuinely most
+  /// recent session, which is the coordinator asking the question. The follow-up
+  /// was accepted, ran in the chat session, and the agent actually driving the
+  /// browser never heard it — the user saw a reply and an unchanged screen.
+  it("never resolves the coordinator's own session as the continuation", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const coordinator = await kernel.executeRun({
+      ...baseRunInput,
+      ownerId: "owner-1",
+      surfaceKind: "main_chat",
+      executionRole: "coordinator",
+    });
+    const context: AgentControlToolContext = { kernel, getOwnerId: () => "owner-1" };
+
+    const sent = parseToolResult(
+      await handleAgentControlToolCall(context, "send_agent_message", {
+        prompt: "carry on",
+      }),
+    );
+    expect(sent).toMatchObject({ ok: false, error: { code: "control_tool_failed" } });
+    expect(sent.error.message).toContain("No recent run to continue");
+    expect(coordinator.session.executionRole).toBe("coordinator");
     store.close();
   });
 

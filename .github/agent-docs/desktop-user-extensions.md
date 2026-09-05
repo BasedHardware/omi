@@ -214,6 +214,54 @@ else a symbol. No third-party favicon proxy, which would leak which servers a
 user browses. `ExtensionLogo` decodes with `NSImage` rather than `AsyncImage`
 because many publishers serve SVG, which SwiftUI's decoder rejects.
 
+## Computer control
+
+`~/.omi` gains a second thing when the user turns on **Allow Omi to control this
+Mac** (Apps ▸ MCP): an `omi-computer-use` entry in mcp.json pointing at
+`http://127.0.0.1:47778/mcp`, and `~/.omi/omi-cua`, a 0700 shell shim for
+clients that only speak stdio. Both are rewritten on every enable, because a
+rotated token or a changed port leaves an entry that answers 401 to every call —
+which a client shows as a server with no tools, not as an auth failure.
+
+The endpoint is served by `LocalAgentAPIServer` on its existing loopback socket
+and behind its existing bearer token; `Desktop/Sources/ComputerUse/` holds
+everything else. It shares the token deliberately (a client the user already
+trusted with the local API is the same client) but not the switch: driving the
+pointer needs its own consent, held by `CuaControlGate`.
+
+| Piece | Owns |
+|---|---|
+| `CuaControlGate` | the switch, bound to the account that granted it; the sticky kill switch; the per-tool permission check. `@MainActor` so a check and the event it guards cannot be separated by an account switch |
+| `CuaPermission` | the four grants, each checked with the API that answers for it |
+| `CuaAppleScript` | `osascript` in a child process, with a timeout |
+| `CuaFrameGeometry` | every coordinate conversion. Global points (`CGDisplayBounds`, top-left origin — **not** `NSScreen.frame`), native pixels, and the delivered image are three different spaces |
+| `CuaFrameRegistry` | the last four frames, so "click 412, 288" means the same thing to both sides |
+| `CuaScreenObserver` | displays, windows, and ScreenCaptureKit capture at an explicit pixel size |
+| `CuaAxReader` | the accessibility tree, on one serial queue, never against our own pid (`AccessibilityProcessBoundary`) |
+| `CuaInputSynth` | `CGEvent` posting; `CuaKeyMap` resolves chords against the live keyboard layout |
+| `CuaMcpEndpoint` | JSON-RPC only, no networking, so the wire contract is testable without a socket |
+
+Captures are delivered at a **1568 px long edge**. The Claude API rejects an
+oversized image inside a `tool_result` rather than downscaling it the way it does
+for an ordinary message, so the scaling has to happen before the image is
+returned, and 1568 is the standard-resolution tier every model accepts.
+
+The endpoint is **dual-era**: `2026-07-28` removed the `initialize` handshake and
+moved the protocol version into per-request `_meta`, but every client shipping
+today still opens with `initialize`. So `initialize` selects legacy semantics,
+`server/discover` and per-request `_meta` select modern, and an unknown version
+returns `UnsupportedProtocolVersionError` (`-32022`) naming the supported list.
+
+**"Accessibility" is two grants.** `kTCCServiceAccessibility` (`AXIsProcessTrusted`) lets Omi *read* another app's UI tree; `kTCCServicePostEvent` (`CGPreflightPostEventAccess`) lets it *synthesise* a click or a keystroke. They share a System Settings pane and nothing else, and a process can hold either without the other — gating input on `AXIsProcessTrusted` posts events the window server then silently drops, which reads to a model as a click that worked. Each tool names the grants it needs, so a missing one refuses only what depends on it, and a grant the user has never been asked for is requested at the point of use rather than described in a sentence.
+
+**AppleScript runs out of process.** `NSAppleScript` has no timeout, and a model-written script that opens a dialog waits for a click nobody will make. In process that freezes the main thread, which is where the Stop button and the kill switch live. `osascript` is spawned instead and killed on timeout; TCC still holds Omi responsible, so the Automation prompt names Omi.
+
+The kill switch is ⌃⌥⌘., registered by `GlobalShortcutManager` **only while
+control is on**. A Carbon hotkey preempts the frontmost app for as long as it is
+registered, so the chord is taken from every other app on the Mac; that is worth
+it exactly while something else is moving the pointer the user would otherwise
+reach a button with.
+
 ## Server status
 
 `McpServerProbe` replaces an unconditional "Active in chat" badge. Remote

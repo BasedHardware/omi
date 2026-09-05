@@ -23,7 +23,33 @@ const DRIVER =
   'process.stdout.write(`TOOLS:${tools.length}\\n`);' +
   'client.dispose();';
 
+// A server that emits a bare `null` line before its real reply. `JSON.parse`
+// answers that with `null`, and the old handler read `.id` straight off it.
+const NULL_LINE_SERVER =
+  'const rl = require("readline").createInterface({ input: process.stdin });' +
+  'rl.on("line", (line) => { const msg = JSON.parse(line); if (msg.id === undefined) return;' +
+  ' process.stdout.write("null\\n");' +
+  ' process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id,' +
+  ' result: msg.method === "tools/list" ? { tools: [{ name: "add" }] } : {} }) + "\\n"); });';
+
+const NULL_LINE_DRIVER =
+  `import { McpStdioClient } from ${JSON.stringify(clientUrl)};` +
+  `const client = new McpStdioClient(process.execPath, ["-e", ${JSON.stringify(NULL_LINE_SERVER)}]);` +
+  'const tools = await client.listTools();' +
+  'process.stdout.write(`TOOLS:${tools.length}\\n`);' +
+  'client.dispose();';
+
 describe("McpStdioClient", () => {
+  // Regression: `JSON.parse("null")` is a successful parse, so the try/catch
+  // around it did not fire, and reading `.id` off null threw inside the readline
+  // callback — where nothing was waiting to catch it.
+  it("survives a literal null line from the server", async () => {
+    const { stdout } = await run(process.execPath, ["--input-type=module", "-e", NULL_LINE_DRIVER], {
+      cwd: fileURLToPath(new URL("..", import.meta.url)),
+    });
+    expect(stdout).toContain("TOOLS:1");
+  });
+
   // Regression: the client unref'd its child and every stdio stream, so a host
   // with nothing else pending exited mid-RPC and orphaned the reply.
   it("keeps the host process alive until a slow reply arrives", async () => {
