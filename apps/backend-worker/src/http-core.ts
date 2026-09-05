@@ -795,6 +795,8 @@ export async function handleTasks(context: CoreContext): Promise<Response> {
   if (db === undefined) return json(emptyPage("tasks-completeness-v1"));
   const limit = parseTaskLimit(query.get("limit"));
   const cursor = query.get("cursor") ?? undefined;
+  // Match conversations/memories: empty cursor is a bad request, not "no cursor".
+  if (cursor === "") return backendError("bad_request", "edit_request", 400);
   return json(await readTasks(db, context.get("accountId"), limit, cursor));
 }
 
