@@ -111,8 +111,11 @@ void main() {
 
     expect(message.followUpQuestion, 'Want the rest of what she said?');
     expect(message.text, 'You met Priya on Tuesday.');
-    // followUp is not desktop-only chrome; the answer still shows on mobile.
-    expect(message.hideFromMobileChat, isFalse);
+    // Mobile renders the desktop chat-first blocks now rather than hiding the
+    // messages that carry them, so `hideFromMobileChat` is gone. What this test
+    // was protecting — the answer still shows — is now that the body is real
+    // prose rather than fallback text the blocks would replace.
+    expect(message.textIsStructuredFallback, isFalse);
   });
 
   test('a blank follow-up question is not a chip', () {
@@ -130,9 +133,25 @@ void main() {
     expect(message.followUpQuestion, isNull);
   });
 
-  test('fallback text is sensible for both new block types', () {
+  test('neither natively rendered block invents fallback prose that repeats it', () {
+    // MemoryReviewCard draws "Things I learned today" itself and
+    // ChatFollowUpChip draws the question, so a prose copy would either say the
+    // same words twice or — when the block is too malformed to render a card —
+    // leave a heading standing over nothing.
     final reviewOnly = ServerMessage.fromJson(_fcmDaySummaryData(text: '', contentBlocks: [_reviewBlock]));
-    expect(reviewOnly.text, 'Things I learned today');
+    expect(reviewOnly.text, '');
+    expect(reviewOnly.memoryReviewCard, isNotNull);
+
+    final malformedReviewOnly = ServerMessage.fromJson(
+      _fcmDaySummaryData(
+        text: '',
+        contentBlocks: [
+          {'type': 'memoryReviewCard', 'id': 'summary-9:memories', 'items': []},
+        ],
+      ),
+    );
+    expect(malformedReviewOnly.memoryReviewCard, isNull);
+    expect(malformedReviewOnly.text, '');
 
     final followUpOnly = ServerMessage.fromJson({
       'id': 'message-4',
@@ -144,7 +163,8 @@ void main() {
         {'type': 'followUp', 'text': 'Should I pull the rest?'},
       ],
     });
-    expect(followUpOnly.text, 'Should I pull the rest?');
+    expect(followUpOnly.text, '');
+    expect(followUpOnly.followUpQuestion, 'Should I pull the rest?');
   });
 
   test('unknown and existing block types keep their previous fallback', () {

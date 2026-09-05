@@ -39,6 +39,11 @@ enum MicrophoneCaptureAuthorizationPolicy {
     /// The user (or MDM) said no — tell them the real problem instead of arming a
     /// zero-sample stream that ends in a hardware alert.
     case surfacePermissionAlert
+    /// This start was automatic (launch, reactivation, key load, settings sync, wake,
+    /// post-onboarding) and authorization is not settled in the app's favor. Automatic
+    /// paths never show a TCC sheet or an alert; they abandon the start and let the
+    /// persisted intent wait for an explicit Listen/Grant action.
+    case abandonAutomaticStart
   }
 
   static func action(for status: AVAuthorizationStatus) -> Action {
@@ -52,6 +57,15 @@ enum MicrophoneCaptureAuthorizationPolicy {
     @unknown default:
       return .proceed
     }
+  }
+
+  /// The single rule behind "skipped or denied permissions must not auto-reprompt":
+  /// only an explicit user action may raise the system sheet (or surface the denied
+  /// alert). Everything automatic abandons the start instead.
+  static func action(for status: AVAuthorizationStatus, userInitiated: Bool) -> Action {
+    let resolved = action(for: status)
+    if resolved == .proceed { return .proceed }
+    return userInitiated ? resolved : .abandonAutomaticStart
   }
 
   static func action(afterRequestGranted granted: Bool) -> Action {

@@ -48,7 +48,19 @@ jobs:
             and .service == "omi-desktop-backend"
             and .chat_contract_version == "1"
           ' /tmp/desktop-backend-health.json >/dev/null
-          rm -f /tmp/desktop-backend-health.json
+          if ! curl -fsS --max-time 15 https://api.omi.me/health > /tmp/api-backend-health.json; then
+            echo '{}' > /tmp/api-backend-health.json
+          fi
+
+      - name: Report backend drift
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          python3 .github/scripts/check_desktop_backend_drift.py \
+            --desktop-backend-health /tmp/desktop-backend-health.json \
+            --api-backend-health /tmp/api-backend-health.json \
+            --base origin/main \
+            --summary-file "$GITHUB_STEP_SUMMARY"
 
       - name: Validate stable promotion request
         env:
@@ -151,11 +163,41 @@ jobs:
           set -euo pipefail
           ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
           python3 - <<'PY' > /tmp/desktop-stable-pointer.json
-          import json, os
+          import json, os, re
+          from datetime import datetime, timezone
+
+          def sha(health):
+              value = health.get("backend_release_sha")
+              if isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40}", value):
+                  return value
+              return None
+
+          def optional_text(health, key):
+              value = health.get(key)
+              return value if isinstance(value, str) and value else None
+
+          desktop = json.load(open("/tmp/desktop-backend-health.json"))
+          try:
+              api = json.load(open("/tmp/api-backend-health.json"))
+          except OSError:
+              api = {}
           payload = {"platform": "macos", "channel": "stable", "release_id": os.environ["RELEASE_TAG"],
                      "expected_generation": int(os.environ["EXPECTED_GENERATION"])}
           if os.environ["EXPECTED_RELEASE_ID"]:
               payload["expected_current_release_id"] = os.environ["EXPECTED_RELEASE_ID"]
+          payload["serving_backends"] = {
+              "desktop_backend": {
+                  "release_sha": sha(desktop),
+                  "release_channel": optional_text(desktop, "backend_release_channel"),
+                  "chat_contract_version": optional_text(desktop, "chat_contract_version"),
+                  "health_url": "https://desktop-backend-hhibjajaja-uc.a.run.app/health",
+              },
+              "api_backend": {
+                  "release_sha": sha(api),
+                  "health_url": "https://api.omi.me/health",
+              },
+              "captured_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+          }
           print(json.dumps(payload))
           PY
           curl -fsS -X POST -H 'Content-Type: application/json' -H "secret-key: $ADMIN_KEY" \

@@ -98,6 +98,7 @@ import {
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { backendOutboxRetryAtMs } from "./runtime/durable-queue.js";
 import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
+import { pumpJournalOutboxDeliveries } from "./runtime/journal-outbox-pump.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
 import {
@@ -143,9 +144,6 @@ import {
   clearJournalConversation,
   chatFirstMaterializationDeferrals,
   classifyBackendTurnResultDisposition,
-  drainBackendConversationDeleteOutbox,
-  drainBackendTurnOutbox,
-  drainChatFirstDeferralOutbox,
   failBackendConversationDeleteOutbox,
   failBackendReconcile,
   failBackendTurnOutbox,
@@ -183,6 +181,7 @@ import type {
   ConversationTurnStatus,
 } from "./runtime/types.js";
 import { createStdoutLineSender } from "./stdout-line-sender.js";
+import { loadLocalMcpConfig, type UserMcpServer } from "./runtime/user-extensions.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1419,7 +1418,7 @@ function buildMcpServers(
   cwd?: string,
   sessionKey?: string,
   context?: McpServerBuildContext
-): McpServerConfig[] {
+): Array<McpServerConfig | UserMcpServer> {
   const servers: McpServerConfig[] = [];
 
   if (context?.includeSwiftBackedTools !== false) {
@@ -1488,7 +1487,16 @@ function buildMcpServers(
     });
   }
 
-  return servers;
+  // User-added MCP servers from ~/.omi/mcp.json (standard Claude Desktop
+  // format: stdio commands, plain URLs, API keys, and OAuth tokens the app
+  // keeps fresh). Read per session so changes apply without a restart.
+  const localServers = loadLocalMcpConfig(
+    process.env.OMI_LOCAL_MCP_FILE,
+    new Set(servers.map((s) => s.name)),
+    logErr,
+  );
+
+  return [...servers, ...localServers];
 }
 
 function requireControlSessionPolicy(sessionId: string | undefined, ownerId: string | undefined) {
@@ -1838,77 +1846,14 @@ async function main(): Promise<void> {
     pumpingJournalOutbox = true;
     try {
       const activeOwnerId = currentOwnerId;
-      for (const deletion of drainBackendConversationDeleteOutbox(store, {
+      pumpJournalOutboxDeliveries({
+        store,
         ownerId: activeOwnerId,
-        limit: 20,
-      })) {
-        send({
-          type: "journal_backend_delete",
-          requestId: `journal-delete:${deletion.operationId}:${deletion.deliveryGeneration}`,
-          clientId: "kernel-journal",
-          ownerId: deletion.ownerId,
-          operationId: deletion.operationId,
-          conversationId: deletion.conversationId,
-          conversationGeneration: deletion.conversationGeneration,
-          attemptCount: deletion.attemptCount,
-          deliveryGeneration: deletion.deliveryGeneration,
-          payloadHash: deletion.payloadHash,
-          targetKind: deletion.targetKind,
-          targetId: deletion.targetId,
-        });
-      }
-      for (const delivery of drainBackendTurnOutbox(store, {
-        ownerId: activeOwnerId,
-        limit: 20,
+        hasChatFirstMainCapability: kernel.hasChatFirstMainCapability(activeOwnerId),
+        send,
         onQuarantine: (turnId) =>
           logErr(`Journal outbox parked turn ${turnId}: canonical payload hash mismatch (not re-delivered)`),
-      })) {
-        send({
-          type: "journal_backend_sync",
-          requestId: `journal:${delivery.turnId}:${delivery.deliveryGeneration}`,
-          clientId: "kernel-journal",
-          ownerId: delivery.ownerId,
-          ...delivery.payload,
-          turnId: delivery.turnId,
-          conversationId: delivery.conversationId,
-          conversationGeneration: delivery.conversationGeneration,
-          attemptCount: delivery.attemptCount,
-          deliveryGeneration: delivery.deliveryGeneration,
-          payloadHash: delivery.payloadHash,
-        });
-      }
-      // This deliberately remains distinct from backend_turn_outbox: a
-      // deferral is task-intelligence state, never a second transcript write.
-      // Do not even claim an outbox row until the server-sampled Main Chat
-      // capability is present in this process. A fresh capability-off launch
-      // must leave chat-first background work entirely dormant.
-      if (kernel.hasChatFirstMainCapability(activeOwnerId)) {
-        for (const delivery of drainChatFirstDeferralOutbox(store, { ownerId: activeOwnerId, limit: 20 })) {
-          const deferredQuestionSubject = delivery.question.subject;
-          if (deferredQuestionSubject.kind === "cold_start") {
-            throw new Error("Cold-start sequence questions cannot enter the deferral outbox");
-          }
-          const deferralSubject = deferredQuestionSubject as { kind: "task" | "goal" | "capture"; id: string };
-          send({
-            type: "chat_first_deferral_delivery",
-            requestId: `chat-first-deferral:${delivery.continuityKey}:${delivery.deliveryGeneration}`,
-            clientId: "kernel-chat-first",
-            ownerId: delivery.ownerId,
-            continuityKey: delivery.continuityKey,
-            controlGeneration: delivery.controlGeneration,
-            subject: delivery.subject,
-            question: {
-              questionId: delivery.question.questionId,
-              text: delivery.question.text,
-              subject: deferralSubject,
-              options: delivery.question.options,
-            },
-            attemptCount: delivery.attemptCount,
-            deliveryGeneration: delivery.deliveryGeneration,
-            payloadHash: delivery.payloadHash,
-          });
-        }
-      }
+      });
       return true;
     } catch (error) {
       logErr(`Journal outbox pump failed: ${error}`);
@@ -2516,6 +2461,7 @@ async function main(): Promise<void> {
             runId: request.runId,
             attemptId: request.attemptId,
             terminalStatus: request.terminalStatus,
+            finalText: request.finalText,
             errorCode: request.errorCode,
           });
           send({
@@ -2529,6 +2475,7 @@ async function main(): Promise<void> {
             ok: true,
             terminalStatus: result.terminalStatus,
             duplicate: result.duplicate,
+            finalTextPersisted: result.finalTextPersisted,
           });
         } catch (error) {
           send({
@@ -2800,6 +2747,7 @@ async function main(): Promise<void> {
               ? update.appendResources as ConversationResource[]
               : undefined,
             metadataJson: typeof update.metadataJson === "string" ? update.metadataJson : undefined,
+            terminalRevision: update.terminalRevision === true,
           };
           assertPublicJournalUpdatePolicy(store, parsedUpdate);
           const turn = updateJournalTurn(store, parsedUpdate);

@@ -3253,6 +3253,16 @@
     "pendantFullSyncBlocked": "Din Pendants lager er fuldt, og den er stadig i optagetilstand, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser derefter igen.",
     "conversationsNotCapturedCount": "Ikke optaget ({count})",
     "transcriptionNoAudio": "Transskription modtager ikke lyd",
+    "chatBlockTask": "Opgave",
+    "chatBlockGoal": "Mål",
+    "chatBlockConversation": "Samtale",
+    "chatBlockMemory": "Minde",
+    "chatBlockQuestion": "Spørgsmål",
+    "chatBlockOpenInGoals": "Åbn i Mål",
+    "chatBlockOpenConversation": "Åbn samtale",
+    "chatBlockOpenInMemories": "Åbn i Minder",
+    "chatBlockUnavailable": "Ikke længere tilgængelig",
+    "chatBlockRecommendedNextSteps": "Anbefalede næste trin",
     "couldNotLoadMemories": "Kunne ikke indlæse minder",
     "couldNotLoadKnowledgeGraph": "Kunne ikke indlæse vidensgrafen"
 }

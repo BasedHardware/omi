@@ -9990,6 +9990,36 @@ class AppLocalizationsTa extends AppLocalizations {
   String get tapPlusToStartRecording => 'Tap + to start recording';
 
   @override
+  String get chatBlockTask => 'பணி';
+
+  @override
+  String get chatBlockGoal => 'இலக்கு';
+
+  @override
+  String get chatBlockConversation => 'உரையாடல்';
+
+  @override
+  String get chatBlockMemory => 'நினைவு';
+
+  @override
+  String get chatBlockQuestion => 'கேள்வி';
+
+  @override
+  String get chatBlockOpenInGoals => 'இலக்குகளில் திறக்க';
+
+  @override
+  String get chatBlockOpenConversation => 'உரையாடலைத் திறக்க';
+
+  @override
+  String get chatBlockOpenInMemories => 'நினைவுகளில் திறக்க';
+
+  @override
+  String get chatBlockUnavailable => 'இனி கிடைக்கவில்லை';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'பரிந்துரைக்கப்பட்ட அடுத்த படிகள்';
+
+  @override
   String get couldNotLoadMemories => 'நினைவுகளை ஏற்ற முடியவில்லை';
 
   @override

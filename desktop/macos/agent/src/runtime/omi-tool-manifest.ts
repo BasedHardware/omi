@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { isChatFirstMainChat } from "./chat-first-capability.js";
-
 import {
   agentControlCapabilityManifest,
   agentControlInputSchema,
@@ -348,16 +347,16 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     surfaces: ["realtime_voice"],
     capabilityDoc: doc(
       "Get Tasks",
-      "Read the user's overdue and due-today tasks locally.",
+      "Read the user's open tasks locally: overdue, due today, and undated.",
       [
         "Use for plain voice questions like what are my tasks, what's due today, or what's on my list.",
-        "Prefer get_action_items for completed tasks, date ranges, or the full list.",
+        "Prefer get_action_items for completed tasks or an explicit date range.",
       ],
     ),
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     voice: {
       realtimeDescription:
-        "Read the user's tasks (overdue + due today) locally and get them back as text to speak. Fast synchronous read — use this for 'what are my tasks', 'what's due today', 'what's on my list'. Reading tasks is always a direct call, never background work.",
+        "Read the user's open tasks locally and get them back as text to speak: everything overdue, everything due today, and everything on the list with no due date. This is the same list the Tasks page shows, so an empty result means the user genuinely has no open tasks — never say they have none without calling this first. Fast synchronous read — use it for 'what are my tasks', 'what's due today', 'what's on my list', 'what should I work on'. Reading tasks is always a direct call, never background work.",
     },
   },
   complete_task: {
@@ -378,9 +377,11 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
   },
   load_skill: {
     surfaces: ["desktop_chat"],
-    capabilityDoc: doc("Load Skill", "Load the full instructions for a named skill listed in available_skills.", [
-      "Use the exact skill name from available_skills.",
-    ]),
+    capabilityDoc: doc(
+      "Load Skill",
+      "Load a skill progressively: the first call returns metadata, a section table of contents, and the first section; further sections load by part.",
+      ["Use the exact skill name from available_skills.", "Read additional sections with part only when the first section is relevant."],
+    ),
   },
   search_skills: {
     surfaces: ["desktop_chat"],
@@ -538,13 +539,13 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Get Action Items",
       "Retrieve the user's tasks with optional completion and due-date filters.",
       [
-        "Use for completed tasks, date ranges, or the full task list.",
-        "For voice, prefer get_tasks for plain overdue/due-today questions.",
+        "Use for completed tasks or an explicit date range.",
+        "For voice, prefer get_tasks for any plain question about the open list.",
       ],
     ),
     voice: {
       realtimeDescription:
-        "Read the user's tasks / to-dos from the backend, with optional filters. Use for COMPLETED tasks ('what did I finish'), a DATE RANGE ('what's due next week'), or the FULL list ('all my tasks') — for plain 'what's due today / overdue', prefer get_tasks. Fast synchronous read. Speak a short summary of what it returns.",
+        "Read the user's tasks / to-dos from the backend, with optional filters. Use for COMPLETED tasks ('what did I finish') or a DATE RANGE ('what's due next week') — for any plain question about the open list, prefer get_tasks. Fast synchronous read. Speak a short summary of what it returns.",
     },
   },
   create_action_item: {
@@ -555,11 +556,28 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       [
         "Use when the user explicitly asks to add something to their list.",
         "Pass a concise description and due_at only when the user gave a time.",
+        "For 'next time I'm here' or 'when I open this', use create_context_reminder.",
       ],
     ),
     voice: {
       realtimeDescription:
-        "Create a new task / to-do / reminder for the user ('remind me to…', 'add … to my list', 'I need to…'). Fast synchronous write. Confirm out loud after it returns.",
+        "Create a new task / to-do / timed reminder for the user ('remind me to…', 'add … to my list', 'I need to…'). Do NOT use for 'next time I'm here' / 'when I open this' — that is create_context_reminder. Fast synchronous write. Confirm out loud after it returns.",
+    },
+  },
+  create_context_reminder: {
+    surfaces: ["desktop_chat", "realtime_voice"],
+    capabilityDoc: doc(
+      "Create Context Reminder",
+      "Bind a reminder to the user's current app or document, not to a time.",
+      [
+        "Use when the user says 'remind me next time I'm here', 'next time I open this', or 'when I'm back in this'.",
+        "The place is captured from the frontmost window automatically; pass only the reminder text.",
+        "Do not use for timed reminders ('tomorrow', 'at 3pm') — those are create_action_item.",
+      ],
+    ),
+    voice: {
+      realtimeDescription:
+        "Bind a reminder to the place the user is in right now (the frontmost app or document). Use when they say 'remind me next time I'm here', 'next time I open this', or 'when I'm back in this'. Do NOT use for timed reminders ('tomorrow', 'at 3pm') — those are create_action_item. The place is captured automatically; pass only the reminder text. Fast synchronous write. Confirm out loud after it returns.",
     },
   },
   update_action_item: {
@@ -743,14 +761,21 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     voice: {
       realtimeDescription:
-        "Take more time and use Omi's full answer capabilities before replying. ALWAYS call this tool before answering when the user says 'think carefully', 'think about this', 'go deep', 'reason it out', 'take your time', 'don't just guess', or 'what should I do', or otherwise asks for advice, tradeoffs, a multi-step plan, or reconsideration of a weak answer. A short, vague, or first-turn request still counts: call the tool with the question as given instead of answering or asking a clarifying question first. For historical public research about how, when, or why a company, product, or person did something, or any public question requiring multiple sources, ALWAYS use two calls in this order: first web_search, then this tool with the original question and the complete web_search result in context. If no web_search result is present in this turn, call web_search instead of this tool first. Call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. If unsure whether deeper thought would improve the answer, call it. Skip only chit-chat, short confirmations, obvious stable facts, or one narrow current fact that a fast realtime tool fully answers, such as weather, a current price, or a score. Call immediately without speaking a wait-line or answer first: the app acknowledges the delay as soon as the tool is accepted. Never describe internal model, tool, delegation, or routing choices, and never say the request is being sent elsewhere. When the result arrives, speak only its conclusion faithfully; do not add a delayed status line.",
+        "Take more time and use Omi's full answer capabilities before replying. ALWAYS call this tool before answering when the user says 'think carefully', 'think about this', 'go deep', 'reason it out', 'take your time', 'don't just guess', or 'what should I do', or otherwise asks for advice, tradeoffs, a multi-step plan, or reconsideration of a weak answer. A short, vague, or first-turn request still counts: call the tool with the question as given instead of answering or asking a clarifying question first. For historical public research about how, when, or why a company, product, or person did something, or any public question requiring multiple sources, ALWAYS use two calls in this order: first web_search, then this tool with the original question and the complete web_search result in context. If no web_search result is present in this turn, call web_search instead of this tool first. Call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. If unsure whether deeper thought would improve the answer, call it. Skip only chit-chat, short confirmations, obvious stable facts, or one narrow current fact that a fast realtime tool fully answers, such as weather, a current price, or a score. Call immediately without speaking a wait-line or answer first: the app acknowledges the delay as soon as the tool is accepted. Never describe internal model, tool, delegation, or routing choices, and never say the request is being sent elsewhere. When the result arrives, speak only its conclusion faithfully; do not add a delayed status line. Set thinking='heavy' only when the user asks to think harder, think extra carefully, or take more time, or the question is genuinely hard; the default 'normal' already thinks at a high level. Screenshots you viewed this turn and other same-turn context are forwarded to the thinking agent automatically; still pass the useful facts as text in context.",
       schemaOverride: schema(
         {
           query: { type: "string", description: "The full question to escalate." },
           context: {
             type: "string",
             description:
-              "Relevant context you already have that helps answer well — facts you fetched, what the user is referring to, or the previous answer they pushed back on. Include only what's relevant; omit if there's nothing useful.",
+              "Relevant context you already have that helps answer well — facts you fetched, what the user is referring to, or the previous answer they pushed back on. Include only what's relevant; omit if there's nothing useful. Screenshots you viewed this turn and other same-turn context are forwarded automatically; still write the useful facts here so the thinking agent knows what mattered.",
+          },
+          thinking: {
+            type: "string",
+            enum: ["normal", "heavy"],
+            default: "normal",
+            description:
+              "normal (default) runs the thinking agent at high reasoning. Use heavy — extra-high reasoning that takes longer — when the user asks to think harder, think extra carefully, or take more time, or when the question is genuinely hard (intricate multi-step reasoning, dense tradeoffs, a hard puzzle or math).",
           },
         },
         ["query"],
@@ -758,7 +783,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     },
   },
   web_search: {
-    surfaces: ["realtime_voice"],
+    surfaces: ["desktop_chat", "realtime_voice"],
     capabilityDoc: doc(
       "Web Search",
       "Search the live public web through Omi's typed-chat retrieval lane, then speak a grounded answer.",
@@ -816,6 +841,34 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     voice: {
       realtimeDescription:
         "After screenshot succeeds for a current-screen question, report exactly one concise grounding observation. This report is internal verification, not the user-facing answer: when it succeeds, answer the user's original request naturally from the attached image.",
+    },
+  },
+  record_interject_feedback: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc(
+      "Record Interject Feedback",
+      "Silently record how the user's utterance relates to the proactive card.",
+      [
+        "Call silently when the latest utterance is a reply to the quoted card, then speak only the user-facing answer.",
+        "For a question or continuation, use riff or omit this tool; the first audio must be the answer.",
+        "Never speak the verb, a heads-up, or the tool result.",
+      ],
+    ),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "Record how the user's latest utterance relates to the proactive card, then speak only the user-facing reply. Call silently and immediately: do not speak a heads-up, do not speak the verb, and do not read the tool result. The app does not play a canned acknowledgement. For a question or continuation, use riff or omit this tool and let the first audio be the answer. For a correction, speak one English consequence sentence that names the fact that changed. Never speak taxonomy names as labels.",
+      schemaOverride: schema(
+        {
+          verb: {
+            type: "string",
+            enum: ["useful", "false_positive", "snooze", "disable", "missed", "correction", "riff"],
+            description:
+              "How the utterance relates to the card. riff is continuation or a question about the card.",
+          },
+        },
+        ["verb"],
+      ),
     },
   },
   point_click: {
@@ -1063,15 +1116,21 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
     name: "load_skill",
     label: "Load Skill",
-    description: "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    description: "Load a relevant skill progressively: the first call returns metadata, the body's section table of contents, and only the first section's content; additional sections load one at a time with a part number.",
     promptSnippet: "load_skill - Load a relevant skill returned by the catalog or search_skills",
     latency: "fast local",
-    inputSchema: schema({ name: { type: "string", description: "Skill name returned by the compact catalog or search_skills" } }, ["name"]),
+    inputSchema: schema(
+      {
+        name: { type: "string", description: "Skill name returned by the compact catalog or search_skills" },
+        part: { type: "number", description: "1-based body section to read. Omit for the overview, section list, and first section." },
+      },
+      ["name"]
+    ),
     annotations: readOnlyLocal,
     timeoutClass: "normal",
     executor: { kind: "nodeTool" },
     intendedForAgents: true,
-    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots."],
+    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots.", "Skills the user disabled in the desktop app are refused."],
     adapters: piAndStdio(),
   },
   {
@@ -1089,7 +1148,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     timeoutClass: "normal",
     executor: { kind: "nodeTool" },
     intendedForAgents: true,
-    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots."],
+    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots.", "Skills the user disabled in the desktop app never match."],
     adapters: piAndStdio(),
   },
   {
@@ -1151,6 +1210,11 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Get Conversations",
     description: "Retrieve user conversations with summaries, action items, metadata. Use for time-based queries or recaps.",
     promptSnippet: "get_conversations - Retrieve conversations by date range",
+    promptGuidelines: [
+      "If the user asked to see, find, open, pick or choose a conversation — 'show me the call with Paul', 'which one was most interesting', 'find the meeting about pricing' — the conversation is the answer: render it as a captureLink block ({type:'captureLink', conversationId:'<canonical id from this result>', summary:'...'}) with render_chat_blocks, and keep the prose to one lead-in line. Do not answer with a bold title and a citation number in place of the component.",
+      "A follow-up that narrows an earlier result — 'pick one', 'the second one', 'tell me more about that one' — still renders the component for what it picks.",
+      "A recap of a day, a summary, a comparison, a count, or a list longer than three is prose that cites the conversations inline instead.",
+    ],
     latency: "fast network",
     inputSchema: schema({
       start_date: { type: "string", description: "ISO date with timezone" },
@@ -1172,6 +1236,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Search Conversations",
     description: "Search conversations by topic or exact canonical ID/share link.",
     promptSnippet: "search_conversations - Find conversations about a topic or exact ID/share link",
+    promptGuidelines: [
+      "If the user asked to find, see, open or pick a conversation, the match is the answer: render it as a captureLink block ({type:'captureLink', conversationId:'<canonical id from this result>', summary:'...'}) with render_chat_blocks and keep the prose to one lead-in line. Up to three matches render; say how many more there are.",
+      "When the conversation is only evidence for something you are answering in prose — what was decided, whether it happened, what someone said — cite it inline and render nothing.",
+    ],
     latency: "fast network",
     inputSchema: schema(
       {
@@ -1196,6 +1264,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Get Memories",
     description: "Retrieve user memories - facts, preferences, habits. Use for 'what do you know about me?' type questions.",
     promptSnippet: "get_memories - Retrieve stored facts and preferences",
+    promptGuidelines: [
+      "If the user asked to see, review, find or pick specific memories, the memories are the answer: render the ones that matter as memoryLink blocks ({type:'memoryLink', memoryId:'<id from this result>', summary:'...'}) with render_chat_blocks — a count in prose, never a bulleted copy of the cards.",
+      "'What do you know about me' and other summaries, comparisons or long lists answer in prose and cite the memories inline instead.",
+    ],
     latency: "fast network",
     inputSchema: schema({
       limit: { type: "number", description: "Default 50" },
@@ -1216,6 +1288,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Search Memories",
     description: "Semantic search across user memories. Find memories about a topic using AI embeddings.",
     promptSnippet: "search_memories - Find memories about a topic",
+    promptGuidelines: [
+      "If the user asked to find, see or pick a memory, the match is the answer: render up to three as memoryLink blocks ({type:'memoryLink', memoryId:'<id from this result>', summary:'...'}) with render_chat_blocks and keep the prose to one lead-in line.",
+      "When a memory is only evidence for an answer in prose, cite it inline and render nothing.",
+    ],
     latency: "fast network",
     inputSchema: schema(
       {
@@ -1470,6 +1546,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Get Action Items",
     description: "Retrieve user tasks from Omi backend. Filter by completion status or due date.",
     promptSnippet: "get_action_items - Retrieve tasks",
+    promptGuidelines: [
+      "If the user asked to see, review, pick from or work through their tasks, the tasks are the answer: render the few that matter as taskCard blocks with render_chat_blocks. Say how many there are in total — a count, never their names. Naming them in the message, as a list or as bullets, prints every card twice: once as words that cannot be ticked off and once as the card itself.",
+      "If a task is only evidence for something you are answering in prose — how many are open, whether one exists, what a day contained — cite it inline and render nothing.",
+    ],
     latency: "fast network",
     inputSchema: schema({
       limit: { type: "number" },
@@ -1510,6 +1590,34 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     adapters: piAndStdio(),
   },
   {
+    name: "create_context_reminder",
+    label: "Create Context Reminder",
+    description:
+      "Bind a reminder to the user's current app or document rather than a time. Use for 'remind me next time I'm here' or 'when I open this'.",
+    promptSnippet: "create_context_reminder - Remind the user next time they return to this place",
+    promptGuidelines: [
+      "Call when the user asks to be reminded the next time they are in the current app, document, or page.",
+      "Pass only the reminder text. The current frontmost window is captured automatically.",
+      "Do not use for timed reminders; those are create_action_item.",
+    ],
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        text: {
+          type: "string",
+          description: "What to remind the user of when they return to this place.",
+        },
+      },
+      ["text"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires a signed-in owner and a frontmost non-Omi app window."],
+    adapters: piAndStdio(),
+  },
+  {
     name: "update_action_item",
     label: "Update Action Item",
     description: "Update task status, description, or due date.",
@@ -1518,7 +1626,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     inputSchema: schema(
       {
         action_item_id: { type: "string", description: "Task ID (required)" },
-        completed: { type: "boolean" },
+        completed: { type: "boolean", description: "Set true to mark the task done." },
         description: { type: "string" },
         due_at: { type: "string" },
       },
@@ -1745,6 +1853,13 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       {
         query: { type: "string", description: "The full question to escalate." },
         context: { type: "string", description: "Optional relevant context for the escalation." },
+        thinking: {
+          type: "string",
+          enum: ["normal", "heavy"],
+          default: "normal",
+          description:
+            "How hard the thinking agent reasons. normal (default) thinks at a high level; heavy thinks extra hard for genuinely hard questions or when the user asks to think harder, extra carefully, or take more time.",
+        },
       },
       ["query"],
     ),
@@ -1758,8 +1873,8 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
     name: "web_search",
     label: "Web Search",
-    description: "Search the live public web through the full typed-chat retrieval lane, then speak its answer.",
-    promptSnippet: "web_search - Search the live public web for a spoken answer",
+    description: "Search the live public web through the typed-chat retrieval lane.",
+    promptSnippet: "web_search - Search the live public web",
     latency: "async background",
     inputSchema: schema(
       {
@@ -1777,8 +1892,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     timeoutClass: "long",
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     intendedForAgents: true,
-    runtimePreconditions: ["Realtime voice only; requires the typed-chat public-web retrieval lane."],
-    adapters: {},
+    runtimePreconditions: ["Requires the typed-chat public-web retrieval lane. Paid plans only on desktop chat."],
+    adapters: {
+      "pi-mono": { advertised: true },
+    },
   },
   {
     name: "screenshot",
@@ -1821,6 +1938,31 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     intendedForAgents: true,
     runtimePreconditions: ["Realtime voice only; screenshot evidence must belong to the active PTT turn."],
+    adapters: {},
+  },
+  {
+    name: "record_interject_feedback",
+    label: "Record Interject Feedback",
+    description:
+      "Silently record how the user's latest utterance relates to the proactive card. Not a user-facing reply.",
+    promptSnippet: "record_interject_feedback - Silently classify a card reply, then speak only the answer",
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        verb: {
+          type: "string",
+          enum: ["useful", "false_positive", "snooze", "disable", "missed", "correction", "riff"],
+          description:
+            "How the utterance relates to the card. riff is continuation or a question about the card.",
+        },
+      },
+      ["verb"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only; Interject classification for the current PTT turn."],
     adapters: {},
   },
   {
@@ -2091,7 +2233,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     promptSnippet: "get_canonical_goals - Retrieve canonical goals with IDs for native goal links",
     promptGuidelines: [
       "For goal questions, call this before answering and use only returned canonical goals.",
-      "Render every returned goal the user should act on as a goalLink in the same response.",
+      "Render a goalLink only for a goal this turn is actually about — the one the user asked for or just changed. Goals you merely read to answer a question are citations.",
       "If it returns no goals, state that plainly; do not infer goals from memories or local SQL.",
     ],
     latency: "fast network",
@@ -2110,13 +2252,17 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
   {
     name: "render_chat_blocks",
     label: "Render Chat Blocks",
-    description: "Render native, interactive Omi components on the producing main Chat turn. In Chat-first UI, call this in the same turn whenever you retrieve, create, or summarize tasks, goals, memories, or captured conversations; do not leave those entities as a Markdown table/list or ask whether the user wants cards. For taskCard, taskId MUST be the opaque canonical ID returned by get_action_items or create_action_item; never use a local SQLite/execute_sql numeric row ID. If another lookup found task text, call get_action_items before rendering. Supported shapes include {type:'taskCard', taskId:'...'}, {type:'goalLink', goalId:'...', summary:'...'}, {type:'memoryLink', memoryId:'...', summary:'...'}, and {type:'captureLink', conversationId:'...', summary:'...'}.",
-    promptSnippet: "render_chat_blocks - Render native interactive Omi components in this main Chat response; use by default for entity results",
+    description: "Render native, interactive Omi components on the producing main Chat turn. Use it when the entity IS the answer — the user asked to see or act on that task, goal, memory or conversation, or this turn created or changed one — so the next thing they do is click it. Do NOT use it for entities you merely read to answer in prose: those are sources, and sources belong in citations. Most turns need no components at all. Render at most three. The components ARE the list: when you render them, the message text must be at most one short lead-in sentence, and must never be a numbered or bulleted list repeating what the components already show. For taskCard, taskId MUST be the opaque canonical ID returned by get_action_items or create_action_item; never use a local SQLite/execute_sql numeric row ID. If another lookup found task text, call get_action_items before rendering. Supported shapes include {type:'taskCard', taskId:'...'}, {type:'goalLink', goalId:'...', summary:'...'}, {type:'memoryLink', memoryId:'...', summary:'...'}, and {type:'captureLink', conversationId:'...', summary:'...'}.",
+    promptSnippet: "render_chat_blocks - Render a native interactive Omi component when the entity is what the user asked for or acted on; cite sources in prose otherwise",
     promptGuidelines: [
-      "After reading or mutating tasks, goals, memories, or captured conversations, render the relevant native components before finishing the same response.",
-      "Do not ask whether the user wants cards and do not substitute Markdown tables or lists for entities that have canonical IDs.",
+      "Default to a component whenever the user asks for something Omi draws natively — a task, goal, memory, conversation or capture. Prose wins only when the request is to read rather than to open or act on the thing: a summary, a recap, an analysis, a comparison, a count, or a list too long to render. 'Pick one', 'show me', 'which one', 'find the one about X', 'my tasks for today' all want the component, and a bold title with a citation number is not a substitute for it.",
+      "Render a component when the entity is the point of the turn: the user asked to see or act on it, or this turn created, completed, or changed it.",
+      "Rendering replaces the writing. \"Here are your three tasks:\" followed by three task cards is right; the same sentence followed by a numbered list of those same three tasks, with or without cards, is the failure this rule exists to stop.",
+      "Answering a question from what you read is the common case and needs no components. Cite those entities inline instead — a summary of yesterday cites the conversations it drew on, it does not stack cards above itself.",
+      "Render at most three components in a turn, and prefer none to a wall of them.",
+      "The cap is not a reason to fall back to prose. When the user asked to see or work through their tasks, goals or memories, render the three that matter and say how many more there are — a numbered list of entities written out in the message is the exact thing components replace.",
+      "Do not ask whether the user wants cards, and do not substitute a Markdown table for entities the user asked to act on.",
       "For task cards, obtain opaque canonical task IDs from get_action_items or create_action_item; execute_sql numeric row IDs are invalid.",
-      "Use only for a compact actionable question, task, goal, memory, or Omi-device capture reference.",
       "Never invent entity identifiers or URLs; the server validates every requested reference.",
     ],
     latency: "fast network",
@@ -2292,9 +2438,8 @@ export function toolNamesForAdapter(
 
 /// Surface projection over the same manifest that generates the Swift surface
 /// allowlists. Realtime-voice runs authorize Swift-executed voice tools (e.g.
-/// think_deeper, web_search, point_click) that no chat adapter advertises, so the
-/// kernel capability allowlist must include the run surface's tools — an
-/// adapter-only projection structurally rejects every voice-only tool.
+/// think_deeper, web_search, point_click); desktop chat now also advertises
+/// web_search as a real tool rather than a phrase-gated retrieval prefix.
 export function toolsForSurface(surface: OmiToolSurface): OmiToolManifestEntry[] {
   return omiToolManifest.filter((tool) => tool.surfaces.includes(surface));
 }

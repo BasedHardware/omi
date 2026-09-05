@@ -541,7 +541,8 @@ struct FloatingControlBarView: View {
           barWindow: window,
           isVoiceListening: showingNotchWaveform,
           isThinking: showingNotchThinking,
-          isSpeaking: showingNotchSpeaking
+          isSpeaking: showingNotchSpeaking,
+          isDictating: state.isVoiceDictating
         )
         .scaleEffect(notchLogoHovering ? 1.06 : 1.0)
       }
@@ -588,6 +589,10 @@ struct FloatingControlBarView: View {
       case .askOmiPrefilled(let prompt)? = notification.action
     {
       FirstRealAppCard(notification: notification, prompt: prompt)
+    } else if notification.assistantId == ContextReminderCoordinator.assistantID,
+      case .contextReminder(let reminderID)? = notification.action
+    {
+      ContextReminderCard(notification: notification, reminderID: reminderID)
     } else {
       notificationView(notification)
     }
@@ -1649,11 +1654,16 @@ struct FloatingControlBarView: View {
 
   /// The chip's secondary hint names the shortcut actually bound, and is absent
   /// when push-to-talk is off — a hint for a disabled gesture is a wrong hint.
+  ///
+  /// Every token, not the first: a chord binding (`⌃⌥`, or a modifier plus a
+  /// key) renders as several tokens, and naming only the first one tells the
+  /// user to hold a key that does not start voice. Joined the way the sibling
+  /// hold hint joins them, so the two read the same on the same bar.
   @MainActor static func followUpVoiceHint(settings: ShortcutSettings = ShortcutSettings.shared) -> String? {
     guard settings.pttEnabled else { return nil }
-    let tokens = settings.pttShortcut.displayTokens
-    guard let token = tokens.first, !token.isEmpty else { return nil }
-    return "or hold \(token) to ask aloud"
+    let shortcut = settings.pttShortcut.displayTokens.joined()
+    guard !shortcut.isEmpty else { return nil }
+    return "or hold \(shortcut) to ask aloud"
   }
 
   private var aiResponseView: some View {
@@ -2194,11 +2204,23 @@ private struct AgentMainChatView: View {
           case .discoveryCard(_, let title, let summary, let fullText):
             DiscoveryCard(title: title, summary: summary, fullText: fullText)
               .frame(maxWidth: .infinity, alignment: .leading)
-          // Rich controls are main-chat-only; floating/notch stays passive. The
-          // follow-up chip belongs to the answer surface, not this agent-pill
-          // transcript, which has no lane to send the next turn on.
-          case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
-            .followUp, .memoryReviewCard:
+          // The notch projects the same journal as the main window, so it
+          // renders the same interactable cards. Taps route the one shell and
+          // summon the main window (`ChatFirstRichBlockContext.auxiliary`).
+          case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
+            if let context = ChatFirstRichBlockContext.floatingSurface {
+              ChatFirstRichBlockGroupView(
+                group: group,
+                messageID: message.id,
+                context: context
+              )
+              .environment(\.colorScheme, .light)
+              .frame(maxWidth: .infinity, alignment: .leading)
+            }
+          // The follow-up chip belongs to the answer surface, not this agent-pill
+          // transcript, which has no lane to send the next turn on, and the review
+          // card is a rich editor this passive surface does not own.
+          case .followUp, .memoryReviewCard:
             EmptyView()
           case .agentSpawn(
             _, let pillId, let sessionId, let runId, let title, let objective, let provider
@@ -2231,7 +2253,6 @@ private struct AgentMainChatView: View {
       let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
       if !trimmed.isEmpty {
         OmiMarkdown(text: trimmed, sender: .ai, citations: message.inlineCitationReferences)
-          .textSelection(.enabled)
           .environment(\.fontScale, 0.88)
           .fixedSize(horizontal: false, vertical: true)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -2348,6 +2369,7 @@ private struct NotchAgentPillsRowView: View {
   let isVoiceListening: Bool
   let isThinking: Bool
   let isSpeaking: Bool
+  let isDictating: Bool
   @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
   @State private var pillStatusChangeToken = 0
 
@@ -2363,7 +2385,8 @@ private struct NotchAgentPillsRowView: View {
       },
       isListening: isVoiceListening,
       isThinking: isThinking,
-      isSpeaking: isSpeaking
+      isSpeaking: isSpeaking,
+      isDictating: isDictating
     )
     // Keep every PTT dot inside the same 21pt identity slot as the resting
     // Omi mark. The slot is frontmost and trails the visible left lobe, so the

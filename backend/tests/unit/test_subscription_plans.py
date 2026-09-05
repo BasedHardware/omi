@@ -214,7 +214,7 @@ def test_reconcile_basic_subscription_without_stored_stripe_id(monkeypatch, subs
 
 
 def test_unlimited_transcription_plan_skips_monthly_usage_scan(monkeypatch, subscription_module):
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source: False)
+    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None, **kw: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setattr(
@@ -231,7 +231,7 @@ def test_unlimited_transcription_plan_skips_monthly_usage_scan(monkeypatch, subs
 
 
 def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeypatch, subscription_module):
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source: False)
+    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None, **kw: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setattr(
@@ -240,7 +240,9 @@ def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeyp
         lambda uid: SimpleNamespace(plan=PlanType.basic),
         raising=False,
     )
-    monkeypatch.setattr(subscription_module, 'get_plan_limits', lambda plan: SimpleNamespace(transcription_seconds=60))
+    # The allowance resolver reads the catalog through `transcription_allowance_seconds`
+    # (never the env overlay behind `get_plan_limits`), so that is the seam to stub.
+    monkeypatch.setattr(subscription_module, 'transcription_allowance_seconds', lambda plan: 60)
     monthly_usage = MagicMock(return_value={'transcription_seconds': 60})
     monkeypatch.setattr(subscription_module, 'get_monthly_usage_for_subscription', monthly_usage)
 
@@ -250,7 +252,7 @@ def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeyp
 
 def test_zero_transcription_allowance_is_exhausted_not_unlimited(monkeypatch, subscription_module):
     _stub_remaining_deps(monkeypatch, subscription_module, PlanType.basic, used_seconds=0)
-    monkeypatch.setattr(subscription_module, 'get_plan_limits', lambda plan: SimpleNamespace(transcription_seconds=0))
+    monkeypatch.setattr(subscription_module, 'transcription_allowance_seconds', lambda plan: 0)
 
     assert subscription_module.has_transcription_credits('uid') is False
     assert subscription_module.get_remaining_transcription_seconds('uid') == 0
@@ -271,7 +273,7 @@ def test_malformed_transcription_allowance_fails_loudly(monkeypatch, subscriptio
 
 
 def _stub_remaining_deps(monkeypatch, subscription_module, plan, used_seconds):
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None: False)
+    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None, **kw: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setattr(

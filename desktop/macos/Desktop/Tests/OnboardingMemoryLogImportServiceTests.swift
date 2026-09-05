@@ -29,7 +29,6 @@ final class OnboardingMemoryLogImportServiceTests: XCTestCase {
 
   func testTaggedParserHandlesExportWrappersBulletsUnknownAndDuplicates() throws {
     let input = """
-      Here is the export:
       ```text
       - [recent] Prefers direct answers.
       2. [2026-08-30] Started a maker project.
@@ -50,10 +49,19 @@ final class OnboardingMemoryLogImportServiceTests: XCTestCase {
       ])
   }
 
-  func testUnstructuredPasteFallsBackToManagedExtractor() {
+  func testUnstructuredPasteDoesNotQualifyForLocalTaggedImport() {
     XCTAssertNil(
       OnboardingMemoryLogImportService.extractTaggedMemories(
         from: "I prefer concise answers and I enjoy sailing."))
+  }
+
+  func testMixedTaggedAndUntaggedPasteDoesNotSilentlyDropContent() {
+    XCTAssertNil(
+      OnboardingMemoryLogImportService.extractTaggedMemories(
+        from: """
+          [long-term] Prefers direct answers.
+          Enjoys sailing.
+          """))
   }
 
   func testExtractionErrorsMapToBoundedFailureClasses() {

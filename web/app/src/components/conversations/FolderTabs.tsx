@@ -1,10 +1,10 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { motion } from 'framer-motion';
 import { Plus, Star, Pencil, Trash2, Inbox, Briefcase, Heart, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Folder } from '@/types/folder';
+import { OpenSurface } from '@/components/ui/OpenSurface';
 
 // Special folder IDs for built-in tabs
 export const FOLDER_ALL = 'all';
@@ -35,13 +35,15 @@ export function FolderTabs({
     x: number;
     y: number;
   } | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleContextMenu = (e: React.MouseEvent, folder: Folder) => {
     e.preventDefault();
     setContextMenu({ folder, x: e.clientX, y: e.clientY });
+    setMenuOpen(true);
   };
 
-  const closeContextMenu = () => setContextMenu(null);
+  const closeContextMenu = () => setMenuOpen(false);
 
   return (
     <div className="relative">
@@ -95,15 +97,16 @@ export function FolderTabs({
       </div>
 
       {/* Context menu for folder options */}
+      {contextMenu && menuOpen && (
+        <div className="fixed inset-0 z-50" onClick={closeContextMenu} />
+      )}
       {contextMenu && (
-        <>
-          {/* Backdrop */}
-          <div className="fixed inset-0 z-50" onClick={closeContextMenu} />
-          {/* Menu */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
+          <OpenSurface
+            open={menuOpen}
+            onExited={() => setContextMenu(null)}
+            data-origin="top-left"
             className={cn(
+              't-dropdown',
               'fixed z-50 py-1 rounded-lg',
               'bg-bg-secondary border border-bg-tertiary',
               'shadow-lg min-w-[140px]',
@@ -138,8 +141,7 @@ export function FolderTabs({
               <Trash2 className="w-4 h-4" />
               <span>Delete folder</span>
             </button>
-          </motion.div>
-        </>
+          </OpenSurface>
       )}
     </div>
   );

@@ -229,7 +229,6 @@ final class ShellGlassChromeTests: XCTestCase {
   private static let shellSources = [
     "MainWindow/GlassShellChrome.swift",
     "MainWindow/DesktopHomeView.swift",
-    "MainWindow/SidebarView.swift",
     "MainWindow/DesktopTopBar.swift",
     "MainWindow/ChatFirst/ChatFirstShell.swift",
     "MainWindow/ChatFirst/Blocks/ChatFirstContentBlockViews.swift",

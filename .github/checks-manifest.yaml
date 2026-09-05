@@ -264,6 +264,16 @@ checks:
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-grdb-insert-idiom.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#11204: a mutating didInsert never witnesses PersistableRecord's non-mutating insert, so a direct record.insert(db) drops the rowid silently onto an optional field; two shipped instances went undetected until unrelated work tripped over them"
+  - id: desktop-single-chat-shell-self-test
+    command: ["python3", "desktop/macos/scripts/check-single-chat-shell.py", "--self-test"]
+    triggers: ["desktop/macos/scripts/check-single-chat-shell.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the tripwire must keep failing on each shape it was written for, and keep passing on prose that merely names one"
+  - id: desktop-single-chat-shell
+    command: ["python3", "desktop/macos/scripts/check-single-chat-shell.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-single-chat-shell.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#12598: the app mounted one of two shells behind a preference, and six content-block kinds rendered as controls on one and as nothing on the other; both grow back one symbol at a time"
   - id: brand-ui-ratchet-tests
     command: ["python3", ".github/scripts/test_check_brand_ui.py"]
     triggers: [".github/scripts/check_brand_ui.py", ".github/scripts/test_check_brand_ui.py", ".github/checks-manifest.yaml"]
@@ -812,11 +822,41 @@ checks:
     triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_stable_pointer_precondition.py", ".github/scripts/verify_stable_appcast.py", ".github/scripts/test_stable_promotion_verifiers.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#10163 mutation-sensitive Stable retry and default-channel feed fixtures"
+  - id: desktop-backend-drift-cli
+    command: ["python3", ".github/scripts/check_desktop_backend_drift.py", "--self-test"]
+    triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_desktop_backend_drift.py", ".github/scripts/test_check_desktop_backend_drift.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "stable promotion must show serving-backend drift against main without inventing SHAs or failing the pointer transition"
+  - id: desktop-backend-drift-fixtures
+    command: ["python3", ".github/scripts/test_check_desktop_backend_drift.py"]
+    triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_desktop_backend_drift.py", ".github/scripts/test_check_desktop_backend_drift.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "drift script must treat missing health SHAs as unknown and keep --strict off the promotion path"
   - id: guardrail-pulse-tests
     command: ["python3", ".github/scripts/test_guardrail_pulse.py"]
     triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9454 weekly baseline health pulse parsing, JSONL record, and 30-day staleness detection"
+  - id: dead-code-ratchet
+    command: ["python3", ".github/scripts/check_dead_code.py"]
+    triggers: ["app/lib/**", "app/pubspec.yaml", "backend/**/*.py", "desktop/macos/agent/**", "desktop/windows/src/**", ".github/scripts/check_dead_code.py", ".github/scripts/dead_code/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "57 unreachable Flutter files accumulated until a June 2026 security fix landed on unreachable code; import-graph reachability (flutter from main.dart, agent, windows entries, incl. dynamic import(), string-spawned .js/.mjs siblings, and the @renderer alias) plus zero-importer backend buckets now fail NEW dead code with a delete-or-allowlist-with-reason fix, and the committed baseline only shrinks. Backend triggers are all of backend/**/*.py because scan_backend reads every non-test backend .py as an import source and mention text — the older five-lib-prefix list let routers/scripts/main.py edits create dead code without tripping the ratchet"
+  - id: dead-code-ratchet-tests
+    command: ["python3", ".github/scripts/test_check_dead_code.py"]
+    triggers: [".github/scripts/check_dead_code.py", ".github/scripts/test_check_dead_code.py", ".github/scripts/dead_code/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the four area scanners, their trap edges (package-submodule imports, __main__ guards, mention demotion, dynamic import, spawned siblings, alias resolution), baseline round-trip, and allowlist schema must stay behaviorally covered"
+  - id: duplicate-route-ratchet
+    command: ["python3", ".github/scripts/check_duplicate_routes.py"]
+    triggers: ["backend/routers/**", "backend/main.py", "backend/desktop_backend.py", "backend/pusher/**", ".github/scripts/check_duplicate_routes.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "FC-shadowed-route-handler: DELETE /v1/conversations/{id}/action-items was registered in two routers and FastAPI first-match silently shadowed the richer handler (and its vector cleanup) while that handler's tests stayed green; this check diffs every (app, method, path) mounted by the three service entrypoints and fails on any duplicate registration"
+  - id: duplicate-route-ratchet-tests
+    command: ["python3", ".github/scripts/test_check_duplicate_routes.py"]
+    triggers: [".github/scripts/check_duplicate_routes.py", ".github/scripts/test_check_duplicate_routes.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hermetic fixture coverage for the duplicate-route scanner: shadowed duplicate fails with the colliding path, unique routes pass, same path on different apps is not a duplicate, api_route methods expand"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
@@ -831,6 +871,8 @@ exempt:
     reason: "runtime classifier invoked by gcp_admin.yml; contract and fixtures are admin-deploy-scope*"
   - path: ".github/scripts/check_desktop_backend_traffic_regression.py"
     reason: "runtime promotion gate invoked by desktop_backend_auto_dev.yml; contract and fixtures are desktop-backend-traffic-lineage-fixtures"
+  - path: ".github/scripts/check_desktop_backend_drift.py"
+    reason: "runtime promotion reporter invoked by desktop_promote_prod.yml; contract and fixtures are desktop-backend-drift-*"
   - path: ".github/scripts/check_isinstance_return_ratchet.py"
     reason: "typed error flow-control ratchet uses a committed baseline, not diff-scoped triggers"
   - path: "backend/scripts/check_app_client_openapi_compatibility.py"

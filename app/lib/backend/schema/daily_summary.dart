@@ -105,8 +105,20 @@ class DayStats {
   final int totalConversations; // Excluding discarded
   final int totalDurationMinutes; // Excluding discarded
   final int actionItemsCount;
+  final int? memoriesCreated;
+  final int? actionItemsCreated;
+  final int? watchingMinutes;
+  final int? proactiveMoments;
 
-  DayStats({this.totalConversations = 0, this.totalDurationMinutes = 0, this.actionItemsCount = 0});
+  DayStats({
+    this.totalConversations = 0,
+    this.totalDurationMinutes = 0,
+    this.actionItemsCount = 0,
+    this.memoriesCreated,
+    this.actionItemsCreated,
+    this.watchingMinutes,
+    this.proactiveMoments,
+  });
 
   factory DayStats.fromJson(Map<String, dynamic> json) {
     return DayStats.fromGenerated(wire.GeneratedDailySummaryDayStats.fromJson(json));
@@ -117,15 +129,23 @@ class DayStats {
       totalConversations: generated.totalConversations ?? 0,
       totalDurationMinutes: generated.totalDurationMinutes ?? 0,
       actionItemsCount: generated.actionItemsCount ?? 0,
+      memoriesCreated: generated.memoriesCreated,
+      actionItemsCreated: generated.actionItemsCreated,
+      watchingMinutes: generated.watchingMinutes,
+      proactiveMoments: generated.proactiveMoments,
     );
   }
 
-  String get formattedDuration {
-    if (totalDurationMinutes < 60) {
-      return '${totalDurationMinutes}m';
+  String get formattedDuration => _formatMinutes(totalDurationMinutes);
+
+  String? get formattedWatchingDuration => watchingMinutes == null ? null : _formatMinutes(watchingMinutes!);
+
+  static String _formatMinutes(int minutes) {
+    if (minutes < 60) {
+      return '${minutes}m';
     }
-    final hours = totalDurationMinutes ~/ 60;
-    final mins = totalDurationMinutes % 60;
+    final hours = minutes ~/ 60;
+    final mins = minutes % 60;
     return mins > 0 ? '${hours}h ${mins}m' : '${hours}h';
   }
 }

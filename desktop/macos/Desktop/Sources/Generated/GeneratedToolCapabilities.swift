@@ -377,9 +377,10 @@ enum GeneratedToolCapabilities {
       title: "Load Skill",
       latency: .fastLocal,
       surfaces: Set([.desktopChat]),
-      summary: "Load the full instructions for a named skill listed in available_skills.",
+      summary: "Load a skill progressively: the first call returns metadata, a section table of contents, and the first section; further sections load by part.",
       bullets: [
-      "Use the exact skill name from available_skills."
+      "Use the exact skill name from available_skills.",
+      "Read additional sections with part only when the first section is relevant."
     ]
     ),
     Capability(
@@ -417,7 +418,10 @@ enum GeneratedToolCapabilities {
       summary: "Retrieve conversations by recency or date range.",
       bullets: [
       "Use for latest/recent conversations and time-based conversation retrieval.",
-      "For voice, this returns summaries only and should be spoken briefly."
+      "For voice, this returns summaries only and should be spoken briefly.",
+      "If the user asked to see, find, open, pick or choose a conversation — 'show me the call with Paul', 'which one was most interesting', 'find the meeting about pricing' — the conversation is the answer: render it as a captureLink block ({type:'captureLink', conversationId:'<canonical id from this result>', summary:'...'}) with render_chat_blocks, and keep the prose to one lead-in line. Do not answer with a bold title and a citation number in place of the component.",
+      "A follow-up that narrows an earlier result — 'pick one', 'the second one', 'tell me more about that one' — still renders the component for what it picks.",
+      "A recap of a day, a summary, a comparison, a count, or a list longer than three is prose that cites the conversations inline instead."
     ]
     ),
     Capability(
@@ -428,7 +432,9 @@ enum GeneratedToolCapabilities {
       summary: "Search the user's past conversations by topic or exact canonical ID/share link.",
       bullets: [
       "Use for specific topics, decisions, or events discussed in conversations.",
-      "For a canonical conversation UUID or https://h.omi.me/conversations/<uuid> link, pass it unchanged for an exact lookup."
+      "For a canonical conversation UUID or https://h.omi.me/conversations/<uuid> link, pass it unchanged for an exact lookup.",
+      "If the user asked to find, see, open or pick a conversation, the match is the answer: render it as a captureLink block ({type:'captureLink', conversationId:'<canonical id from this result>', summary:'...'}) with render_chat_blocks and keep the prose to one lead-in line. Up to three matches render; say how many more there are.",
+      "When the conversation is only evidence for something you are answering in prose — what was decided, whether it happened, what someone said — cite it inline and render nothing."
     ]
     ),
     Capability(
@@ -438,7 +444,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Retrieve stored facts, preferences, habits, people, and background about the user.",
       bullets: [
-      "Use for broad 'what do you know about me' questions or personal facts."
+      "Use for broad 'what do you know about me' questions or personal facts.",
+      "If the user asked to see, review, find or pick specific memories, the memories are the answer: render the ones that matter as memoryLink blocks ({type:'memoryLink', memoryId:'<id from this result>', summary:'...'}) with render_chat_blocks — a count in prose, never a bulleted copy of the cards.",
+      "'What do you know about me' and other summaries, comparisons or long lists answer in prose and cite the memories inline instead."
     ]
     ),
     Capability(
@@ -448,7 +456,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Semantic search across user memories.",
       bullets: [
-      "Use for a specific personal fact that is not already in the visible user context."
+      "Use for a specific personal fact that is not already in the visible user context.",
+      "If the user asked to find, see or pick a memory, the match is the answer: render up to three as memoryLink blocks ({type:'memoryLink', memoryId:'<id from this result>', summary:'...'}) with render_chat_blocks and keep the prose to one lead-in line.",
+      "When a memory is only evidence for an answer in prose, cite it inline and render nothing."
     ]
     ),
     Capability(
@@ -565,8 +575,10 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Retrieve the user's tasks with optional completion and due-date filters.",
       bullets: [
-      "Use for completed tasks, date ranges, or the full task list.",
-      "For voice, prefer get_tasks for plain overdue/due-today questions."
+      "Use for completed tasks or an explicit date range.",
+      "For voice, prefer get_tasks for any plain question about the open list.",
+      "If the user asked to see, review, pick from or work through their tasks, the tasks are the answer: render the few that matter as taskCard blocks with render_chat_blocks. Say how many there are in total — a count, never their names. Naming them in the message, as a list or as bullets, prints every card twice: once as words that cannot be ticked off and once as the card itself.",
+      "If a task is only evidence for something you are answering in prose — how many are open, whether one exists, what a day contained — cite it inline and render nothing."
     ]
     ),
     Capability(
@@ -577,7 +589,23 @@ enum GeneratedToolCapabilities {
       summary: "Create a new task, to-do, or reminder.",
       bullets: [
       "Use when the user explicitly asks to add something to their list.",
-      "Pass a concise description and due_at only when the user gave a time."
+      "Pass a concise description and due_at only when the user gave a time.",
+      "For 'next time I'm here' or 'when I open this', use create_context_reminder."
+    ]
+    ),
+    Capability(
+      toolName: "create_context_reminder",
+      title: "Create Context Reminder",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat, .realtimeHub]),
+      summary: "Bind a reminder to the user's current app or document, not to a time.",
+      bullets: [
+      "Use when the user says 'remind me next time I'm here', 'next time I open this', or 'when I'm back in this'.",
+      "The place is captured from the frontmost window automatically; pass only the reminder text.",
+      "Do not use for timed reminders ('tomorrow', 'at 3pm') — those are create_action_item.",
+      "Call when the user asks to be reminded the next time they are in the current app, document, or page.",
+      "Pass only the reminder text. The current frontmost window is captured automatically.",
+      "Do not use for timed reminders; those are create_action_item."
     ]
     ),
     Capability(
@@ -690,10 +718,10 @@ enum GeneratedToolCapabilities {
       title: "Get Tasks",
       latency: .fastLocal,
       surfaces: Set([.realtimeHub]),
-      summary: "Read the user's overdue and due-today tasks locally.",
+      summary: "Read the user's open tasks locally: overdue, due today, and undated.",
       bullets: [
       "Use for plain voice questions like what are my tasks, what's due today, or what's on my list.",
-      "Prefer get_action_items for completed tasks, date ranges, or the full list."
+      "Prefer get_action_items for completed tasks or an explicit date range."
     ]
     ),
     Capability(
@@ -727,7 +755,7 @@ enum GeneratedToolCapabilities {
       toolName: "web_search",
       title: "Web Search",
       latency: .asyncBackground,
-      surfaces: Set([.realtimeHub]),
+      surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Search the live public web through Omi's typed-chat retrieval lane, then speak a grounded answer.",
       bullets: [
       "You MUST use this for current public information such as weather, news, prices, scores, schedules, releases, and officeholders.",
@@ -755,6 +783,18 @@ enum GeneratedToolCapabilities {
       bullets: [
       "Only call after screenshot returns the current image.",
       "Submit a concise visual observation, then answer the user's original request naturally."
+    ]
+    ),
+    Capability(
+      toolName: "record_interject_feedback",
+      title: "Record Interject Feedback",
+      latency: .fastLocal,
+      surfaces: Set([.realtimeHub]),
+      summary: "Silently record how the user's utterance relates to the proactive card.",
+      bullets: [
+      "Call silently when the latest utterance is a reply to the quoted card, then speak only the user-facing answer.",
+      "For a question or continuation, use riff or omit this tool; the first audio must be the answer.",
+      "Never speak the verb, a heads-up, or the tool result."
     ]
     ),
     Capability(
@@ -809,6 +849,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","read_tool_output","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","search_tool_output","set_desktop_attention_override","spawn_agent","think_deeper","update_action_item","update_agent_artifact_lifecycle","web_search"]
+    ["cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","create_context_reminder","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","read_tool_output","record_interject_feedback","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","search_tool_output","set_desktop_attention_override","spawn_agent","think_deeper","update_action_item","update_agent_artifact_lifecycle","web_search"]
   }
 }

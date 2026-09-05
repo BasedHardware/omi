@@ -70,6 +70,9 @@ environments:
           CONVERSATION_NOTES_V2_ENABLED:
             value: 'true'
             category: rollout
+          LLM_GATEWAY_ACCOUNTING_ENABLED:
+            value: 'true'
+            category: rollout
           MEETING_RECEIPT_RECONCILER_ENABLED:
             value: 'false'
             category: rollout
@@ -163,6 +166,9 @@ environments:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -231,6 +237,9 @@ environments:
               key: OMI_LLM_GATEWAY_SERVICE_TOKEN
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
           GITHUB_TOKEN:
             secret:
               name: dev-omi-backend-secrets
@@ -385,6 +394,9 @@ environments:
         PROMETHEUS_SIDECAR_PORT:
           value: '9090'
           category: telemetry
+        LLM_GATEWAY_ACCOUNTING_ENABLED:
+          value: 'true'
+          category: rollout
       secrets:
         METRICS_SECRET:
           secret: METRICS_SECRET
@@ -436,6 +448,9 @@ environments:
               value: '9090'
               category: telemetry
             CONVERSATION_NOTES_V2_ENABLED:
+              value: 'true'
+              category: rollout
+            LLM_GATEWAY_ACCOUNTING_ENABLED:
               value: 'true'
               category: rollout
             MEETING_RECEIPT_RECONCILER_ENABLED:
@@ -515,6 +530,9 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
+            MEMORY_BELIEF_MODEL_ENABLED:
+              value: 'true'
+              category: rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -657,6 +675,9 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
+            MEMORY_BELIEF_MODEL_ENABLED:
+              value: 'true'
+              category: rollout
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -793,6 +814,9 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
+            MEMORY_BELIEF_MODEL_ENABLED:
+              value: 'true'
+              category: rollout
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -895,6 +919,9 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
+            MEMORY_BELIEF_MODEL_ENABLED:
+              value: 'true'
+              category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
@@ -1071,6 +1098,9 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
+            MEMORY_BELIEF_MODEL_ENABLED:
+              value: 'true'
+              category: rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -1137,6 +1167,9 @@ environments:
             MEMORY_ENABLED:
               value: 'on'
               category: memory_rollout
+            MEMORY_BELIEF_MODEL_ENABLED:
+              value: 'true'
+              category: rollout
             MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
               value: 'true'
               category: memory_rollout
@@ -1288,6 +1321,9 @@ environments:
           CONVERSATION_NOTES_V2_ENABLED:
             value: 'true'
             category: rollout
+          LLM_GATEWAY_ACCOUNTING_ENABLED:
+            value: 'true'
+            category: rollout
           MEETING_RECEIPT_RECONCILER_ENABLED:
             value: 'false'
             category: rollout
@@ -1381,6 +1417,9 @@ environments:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+            category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -1527,6 +1566,9 @@ environments:
         PROMETHEUS_SIDECAR_PORT:
           value: '9090'
           category: telemetry
+        LLM_GATEWAY_ACCOUNTING_ENABLED:
+          value: 'true'
+          category: rollout
       secrets:
         METRICS_SECRET:
           secret: METRICS_SECRET
@@ -1583,6 +1625,9 @@ environments:
               value: '9090'
               category: telemetry
             CONVERSATION_NOTES_V2_ENABLED:
+              value: 'true'
+              category: rollout
+            LLM_GATEWAY_ACCOUNTING_ENABLED:
               value: 'true'
               category: rollout
             MEETING_RECEIPT_RECONCILER_ENABLED:
@@ -1662,6 +1707,9 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
+            MEMORY_BELIEF_MODEL_ENABLED:
+              value: 'false'
+              category: rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -1821,6 +1869,9 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
+            MEMORY_BELIEF_MODEL_ENABLED:
+              value: 'false'
+              category: rollout
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -1958,6 +2009,9 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
+            MEMORY_BELIEF_MODEL_ENABLED:
+              value: 'false'
+              category: rollout
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -2061,6 +2115,9 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
+            MEMORY_BELIEF_MODEL_ENABLED:
+              value: 'false'
+              category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
@@ -2220,6 +2277,9 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
+            MEMORY_BELIEF_MODEL_ENABLED:
+              value: 'false'
+              category: rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -2285,6 +2345,9 @@ environments:
             MEMORY_ENABLED:
               value: 'on'
               category: memory_rollout
+            MEMORY_BELIEF_MODEL_ENABLED:
+              value: 'false'
+              category: rollout
             MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
               value: 'false'
               category: memory_rollout

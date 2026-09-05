@@ -14,7 +14,7 @@ router module (the sanctioned monkeypatch-on-module seam).
 import asyncio
 import os
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -122,6 +122,19 @@ class TestDailySummaryGates:
             gate.assert_called_once_with('u1', platform='macos')
             summaries_db.get_daily_summary.assert_not_called()
 
+    def test_create_user_daily_summary_blocked_past_cap(self):
+        import routers.users as users_router
+
+        request = users_router.CreateDailySummaryRequest(date='2026-08-20')
+        with patch.object(users_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate, patch.object(
+            users_router, 'notification_db'
+        ) as notif_db:
+            with pytest.raises(HTTPException) as exc_info:
+                users_router.create_user_daily_summary(request, uid='u1', x_app_platform='macos')
+            assert exc_info.value.status_code == 402
+            gate.assert_called_once_with('u1', platform='macos')
+            notif_db.get_user_time_zone.assert_not_called()
+
     def test_regenerate_daily_summary_allowed_proceeds(self):
         import routers.users as users_router
 
@@ -198,6 +211,57 @@ class TestAppGeneratorGates:
             assert exc_info.value.status_code == 402
             gate.assert_called_once_with('u1', platform='macos')
 
+    def test_generate_app_blocked_past_cap(self):
+        # Regression for #12715: generate_app_endpoint tracked spend via
+        # track_usage but never called enforce_chat_quota, unlike the sibling
+        # description generators above — a free user past cap could still
+        # trigger billable AI app-config generation.
+        import routers.apps as apps_router
+
+        with patch.object(apps_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate:
+            data = apps_router.GenerateAppRequest(prompt='an app that summarizes my meetings')
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.run(apps_router.generate_app_endpoint(data, uid='u1', x_app_platform='macos'))
+            assert exc_info.value.status_code == 402
+            gate.assert_called_once_with('u1', platform='macos')
+
+    def test_generate_app_icon_blocked_past_cap(self):
+        # Regression for #12715: same gap as generate_app_endpoint, for the
+        # DALL-E icon generator (also billed under Features.APP_GENERATOR).
+        import routers.apps as apps_router
+
+        with patch.object(apps_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate:
+            data = apps_router.GenerateAppIconRequest(name='My App', description='does things', category='other')
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.run(apps_router.generate_app_icon_endpoint(data, uid='u1', x_app_platform='macos'))
+            assert exc_info.value.status_code == 402
+            gate.assert_called_once_with('u1', platform='macos')
+
+    def test_generate_prompts_blocked_past_cap(self):
+        # The last ungated managed-spend route in this router. #12739 closed
+        # /v1/app/generate and /v1/app/generate-icon; generate_sample_prompts_endpoint
+        # still ran the same Features.APP_GENERATOR spend behind rate limiting alone,
+        # so a free user past cap could keep drawing billable suggestions from it.
+        import routers.apps as apps_router
+
+        with patch.object(apps_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate, patch(
+            'utils.llm.clients.get_llm'
+        ) as llm:
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.run(apps_router.generate_sample_prompts_endpoint(uid='u1', x_app_platform='macos'))
+            assert exc_info.value.status_code == 402
+            gate.assert_called_once_with('u1', platform='macos')
+            llm.assert_not_called()
+
+    def test_generate_prompts_proceeds_within_cap(self):
+        import routers.apps as apps_router
+
+        with patch.object(apps_router, 'enforce_chat_quota') as gate, patch('utils.llm.clients.get_llm') as llm:
+            llm.return_value.ainvoke = AsyncMock(return_value=SimpleNamespace(content='["a","b","c","d","e"]'))
+            asyncio.run(apps_router.generate_sample_prompts_endpoint(uid='u1', x_app_platform='macos'))
+            gate.assert_called_once_with('u1', platform='macos')
+            llm.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # routers/omni_relay.py — realtime relay WebSocket
@@ -229,6 +293,13 @@ class TestOmniRelayGate:
             relay, 'extract_byok_from_websocket', return_value={}
         ), patch.object(
             relay, 'is_trial_paywalled', return_value=False
+        ), patch.object(
+            # Explicit: the module-level AutoMock of database.users does not reach
+            # `relay.users_db` when routers.omni_relay was already imported by
+            # another test file in this process, and the real one reads Firestore.
+            relay.users_db,
+            'is_byok_active',
+            return_value=False,
         ), patch.object(
             relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': False}
         ) as snapshot:
@@ -302,6 +373,8 @@ class TestOmniRelayGate:
             relay, 'extract_byok_from_websocket', return_value={}
         ), patch.object(
             relay, 'is_trial_paywalled', return_value=False
+        ), patch.object(
+            relay.users_db, 'is_byok_active', return_value=False
         ), patch.object(
             relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': True}
         ):

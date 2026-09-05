@@ -313,6 +313,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     DesktopAutomationBridge.shared.startIfNeeded()
     DesktopAutomationWindowPresentation.installIfNeeded()
+    // Watching from launch, so the first push-to-talk turn already knows
+    // whether there is a network to route to instead of guessing.
+    NetworkReachability.shared.start()
     LocalAgentAPIServer.shared.startIfNeeded()
     publishNamedBundleRuntimeManifest()
 
@@ -554,6 +557,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // opens gets the tap-to-ask card. Started here for the same reason as the
     // line above — it installs its own observers and decides eligibility itself.
     FirstRealAppCardCoordinator.shared.start()
+    ContextReminderCoordinator.shared.start()
 
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {

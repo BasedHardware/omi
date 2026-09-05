@@ -4,12 +4,12 @@ import Foundation
 ///
 /// Phases only. The summary's headline, overview, highlights, and action items are the user's own
 /// day; none of it goes to PostHog (desktop `AGENTS.md` → product analytics integrity). What we
-/// need to know is whether the card is seen, opened, and acted on — five bounded values answer
-/// that.
+/// need to know is whether the card is seen, opened, acted on, and cleared — six bounded values
+/// answer that.
 enum DailySummaryTelemetryPhase: String {
-  /// The card rendered at the top of the thread.
+  /// The recap pill rendered at the top of the thread.
   case shown
-  /// The reader opened "More".
+  /// The reader opened the dedicated recap page (from the Chat pill or the Activity day).
   case expanded
   /// The reader tapped the follow-up chip (which prefills the composer and sends nothing).
   case followUpTapped = "follow_up_tapped"
@@ -17,6 +17,8 @@ enum DailySummaryTelemetryPhase: String {
   case cardShown = "card_shown"
   /// That notch card was opened.
   case cardTapped = "card_tapped"
+  /// The reader cleared Chat and the card went with the thread.
+  case cardDismissed = "card_dismissed"
 }
 
 extension AnalyticsManager {

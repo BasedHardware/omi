@@ -51,9 +51,14 @@ struct MemoryReviewSection: View {
         }
         .accessibilityIdentifier("memory-review-section")
         .task {
+          // Non-production only, and a no-op on a shipped bundle: this is how the automation
+          // bridge reaches the rows a real card bound, so `memory-review.yaml` can assert them
+          // and vote through the same `store.send` the ✓ / ✗ buttons below call.
+          MemoryReviewCardRegistry.register(store)
           reportImpression()
           await store.loadLiveStateIfNeeded()
         }
+        .onDisappear { MemoryReviewCardRegistry.unregister(store) }
       }
     }
   }

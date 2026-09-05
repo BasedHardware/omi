@@ -130,6 +130,10 @@ package enum VoiceTurnRoute: Equatable, Sendable {
   case omniSTT
   case deepgramBatch
   case deepgramLive
+  /// Transcribed entirely on-device. Chosen when there is no network path at
+  /// all, so a dictation still types instead of waiting out a hub warm deadline
+  /// it can never satisfy.
+  case onDeviceASR
 }
 
 package enum VoiceContextOutcome: Equatable, Sendable {
@@ -266,6 +270,10 @@ package enum VoiceTurnTerminalReason: String, Equatable, Sendable, CaseIterable 
   case captureNotReady = "capture_not_ready"
   case transcriptionFailed = "transcription_failed"
   case providerFailed = "provider_failed"
+  /// The turn was recorded with no network path and was not a dictation:
+  /// nothing offline can answer it. Distinct from `providerFailed`, which
+  /// blames a provider that was reached.
+  case noNetwork = "no_network"
   case providerNoResponse = "provider_no_response"
   case hubWarmTimeout = "hub_warm_timeout"
   case deferredCommitTimeout = "deferred_commit_timeout"
@@ -330,6 +338,9 @@ package struct VoiceTurnUIProjection: Equatable, Sendable {
   package var isThinking = false
   package var isResponseWaiting = false
   package var isResponseActive = false
+  /// The turn has been recognised as a dictation ("type …"): its speech is
+  /// going to be pasted, not answered. Presentation only.
+  package var isDictating = false
 
   package static let idle = VoiceTurnUIProjection()
 }
@@ -361,6 +372,8 @@ package enum VoiceTurnUICopy {
       return "Couldn't save that reply — try again"
     case .providerFailed, .providerNoResponse, .deferredCommitTimeout:
       return "Couldn't get a voice reply — try again"
+    case .noNetwork:
+      return "No network — say “type …” to dictate offline"
     case .bargeInReplacementTimeout:
       return "Previous reply was interrupted — try again"
     case .toolTimeout:
@@ -615,6 +628,9 @@ enum VoiceTurnEvent: Equatable, Sendable {
   case journalFailed(turnID: VoiceTurnID, identity: VoiceEffectIdentity, message: String)
   case transcriptChanged(turnID: VoiceTurnID, text: String)
   case hintChanged(turnID: VoiceTurnID, text: String)
+  /// Voice typing claimed the turn. Presentation only: the notch shows the
+  /// hold is a dictation; nothing about routing or I/O changes here.
+  case dictationRecognized(turnID: VoiceTurnID)
   case responseWaitingChanged(turnID: VoiceTurnID, active: Bool)
   case responseActiveChanged(turnID: VoiceTurnID, active: Bool)
   case debugPresentationChanged(
@@ -663,7 +679,8 @@ enum VoiceTurnEvent: Equatable, Sendable {
       .transcriptionFinalizationCompleted(let turnID),
       .journalAccepted(let turnID, _),
       .journalFailed(let turnID, _, _),
-      .hintChanged(let turnID, _), .responseWaitingChanged(let turnID, _),
+      .hintChanged(let turnID, _), .dictationRecognized(let turnID),
+      .responseWaitingChanged(let turnID, _),
       .responseActiveChanged(let turnID, _), .debugPresentationChanged(let turnID, _),
       .clearPresentation(let turnID),
       .deadlineFired(let turnID, _),
@@ -722,6 +739,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
     case .journalFailed: return "journal_failed"
     case .transcriptChanged: return "transcript_changed"
     case .hintChanged: return "hint_changed"
+    case .dictationRecognized: return "dictation_recognized"
     case .responseWaitingChanged: return "response_waiting_changed"
     case .responseActiveChanged: return "response_active_changed"
     case .debugPresentationChanged: return "debug_presentation_changed"
@@ -1055,6 +1073,10 @@ package struct VoiceTurnFact: Sendable {
 
   package static func hintChanged(turnID: VoiceTurnID, text: String) -> Self {
     Self(.hintChanged(turnID: turnID, text: text))
+  }
+
+  package static func dictationRecognized(turnID: VoiceTurnID) -> Self {
+    Self(.dictationRecognized(turnID: turnID))
   }
 
   package static func responseWaitingChanged(turnID: VoiceTurnID, active: Bool) -> Self {
@@ -1952,6 +1974,9 @@ struct VoiceTurnReducer {
         schedule(.hintVisibility, after: deadlines.hintVisibility, in: &model, effects: &effects)
       }
 
+    case .dictationRecognized:
+      model.turn?.projection.isDictating = true
+
     case .responseWaitingChanged(_, let active):
       model.turn?.projection.isResponseWaiting = active
       model.turn?.projection.isThinking = active
@@ -1983,6 +2008,7 @@ struct VoiceTurnReducer {
       model.turn?.projection.isThinking = false
       model.turn?.projection.isResponseWaiting = false
       model.turn?.projection.isResponseActive = false
+      model.turn?.projection.isDictating = false
       cancel(.hintVisibility, in: &model, effects: &effects)
 
     case .deadlineFired(_, let deadline):

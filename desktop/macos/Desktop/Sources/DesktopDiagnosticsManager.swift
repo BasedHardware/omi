@@ -1433,8 +1433,10 @@ final class DesktopDiagnosticsManager {
     "task_workflow",
     "auth_storage",
     "state_authority",
+    "local_llm",
     "ptt_input_routing",
     "account_cutover",
+    "voice_typing",
     "other",
   ]
 
@@ -1468,6 +1470,7 @@ final class DesktopDiagnosticsManager {
     "db_backoff",
     "state_divergence",
     "status_inferred",
+    "engine_failed",
   ]
 
   private func bucketFallbackArea(_ area: String) -> String {

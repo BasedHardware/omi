@@ -63,6 +63,7 @@ final class IntegrationNudgeCoordinator {
       message: match.entry.pitch,
       assistantId: IntegrationNudgeCoordinator.assistantID,
       sound: .none,
+      kind: .integration,
       action: .connectIntegration(
         telemetryID: match.entry.telemetryID,
         triggerID: match.trigger.id

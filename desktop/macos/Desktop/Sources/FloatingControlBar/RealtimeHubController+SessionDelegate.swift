@@ -563,12 +563,14 @@ extension RealtimeHubController {
     case .thinkDeeper:
       let query = (command.input["query"] as? String) ?? turnTranscript
       let toolContext = (command.input["context"] as? String) ?? ""
+      let thinkingLevel = RealtimeHubTools.EscalationThinkingLevel.fromToolInput(command.input["thinking"])
       return await escalateToHigherModel(
         query,
         toolContext: toolContext,
+        thinkingLevel: thinkingLevel,
+        invocationTurnID: invocation.turnID,
         invocationID: command.invocationID,
-        ownerID: command.ownerID,
-        turnID: invocation.turnID)
+        ownerID: command.ownerID)
 
     case .webSearch:
       let scope = RealtimePublicWebSearchScope(toolValue: command.input["scope"])
@@ -932,6 +934,14 @@ extension RealtimeHubController {
         expectedTurnEpoch: toolTurnEpoch)
       return
     }
+    if name == HubTool.recordInterjectFeedback.rawValue {
+      handleInterjectFeedbackReport(
+        source: source,
+        callId: callId,
+        arguments: arguments,
+        expectedTurnEpoch: toolTurnEpoch)
+      return
+    }
     invokeExternallyAuthorizedTool(
       source: source,
       turnID: turnID,
@@ -1112,6 +1122,17 @@ extension RealtimeHubController {
       let candidates = AssistantSettings.shared.voiceBaseLanguages
       let fullTask = fullLIDTask
       let provider = providerTag
+      // The optimistic `.success` seal is scheduled now, so its revision marker
+      // is registered synchronously now: the persist closure below first
+      // awaits transcript resolution (bounded by the 20s LID deadline), and a
+      // playback failure or barge-in terminalizing in that window must find
+      // the marker, or the `.completed` seal becomes permanent (#12743).
+      registerSealedCompletedVoiceJournalRow(
+        ownerID: completedTurnOwnerID,
+        assistantText: reply,
+        terminal: .success,
+        acceptedSpawnOwnerID: acceptedSpawnOwnerID,
+        idempotencyKey: completedTurnIdempotencyKey)
       enqueueTurnPersistence(
         idempotencyKey: completedTurnIdempotencyKey,
         retainingReceipt: true
@@ -1133,6 +1154,10 @@ extension RealtimeHubController {
             terminal: .success,
             idempotencyKey: completedTurnIdempotencyKey,
             acceptedSpawnOwnerID: acceptedSpawnOwnerID) ?? false
+        if accepted, !resolution.userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          let repliedToCard = FloatingControlBarManager.shared.recentNotchCardVoiceContext() != nil
+          DesktopUsageDailyReporter.shared.recordCompletedPTTTurn(repliedToCard: repliedToCard)
+        }
         self?.lastTurnDiagnostics = [
           "provider": provider,
           "provider_transcript": heard,

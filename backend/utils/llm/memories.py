@@ -1,4 +1,5 @@
 from collections.abc import Callable, Sequence
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
@@ -86,6 +87,10 @@ class CanonicalL1MemoryCandidate(BaseModel):
     speaker_label: Optional[str] = None
     speaker_scope: str = "session-local"
     about: str = ""
+    subject_scope: Optional[str] = None
+    belief_class: Optional[str] = None
+    half_life_days: Optional[float] = None
+    valid_to: Optional[datetime] = None
     confidence: str = "medium"
     risk_flags: List[str] = Field(default_factory=list)
 
@@ -174,6 +179,10 @@ def extract_canonical_l1_memory_candidates(
             speaker_label=item.speaker_label,
             speaker_scope=item.speaker_scope,
             about=item.about,
+            subject_scope=item.subject_scope,
+            belief_class=item.belief_class,
+            half_life_days=item.half_life_days,
+            valid_to=item.valid_to,
             confidence=item.confidence,
             risk_flags=item.risk_flags,
         )

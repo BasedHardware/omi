@@ -87,6 +87,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # cheaper than :create — no Deepgram, just LLM structuring). Used per finished
     # conversation by Parakeet/local-STT users, so a bit more headroom than :create.
     "conversations:from-segments": (30, 3600),
+    # Desktop sends running per-day totals periodically; allow several devices
+    # plus reconnect bursts while still capping accidental hot loops.
+    "users:desktop_usage_daily": (600, 3600),
     # Chat — 2-6 LLM calls per message
     "chat:send_message": (120, 3600),
     "chat:initial": (60, 3600),
@@ -214,6 +217,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "test:prompt": (30, 3600),
     # Apps
     "apps:generate_prompts": (30, 3600),
+    # Persona intro message is a billable LLM call (Features.PERSONA) with no
+    # quota gate, unlike its sibling generate_prompts. Same bound as that
+    # sibling until a quota-gate policy decision is made (see #12781).
+    "apps:twitter_initial_message": (30, 3600),
     # TTS — ElevenLabs proxy. Coarse outer ring; fine-grained burst + daily
     # char caps are enforced in database.redis_db.check_tts_rate_limit.
     "tts:synthesize": (300, 3600),

@@ -15,6 +15,7 @@ import { shouldSubmitComposerKey } from '@/lib/chatComposerKey';
 import { parseChatEvidenceFromRecord } from '@/lib/chatEvidence';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ChatEvidenceCard } from './ChatEvidenceCard';
+import { PanelReveal } from '@/components/ui/PanelReveal';
 
 interface FilePreviewItem {
   file: File;
@@ -252,7 +253,7 @@ export function ChatPanel() {
               'max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full',
             )}
           >
-            <div className={cn('w-[400px] h-full flex flex-col', 'max-sm:w-full')}>
+            <PanelReveal className={cn('w-[400px] h-full flex flex-col', 'max-sm:w-full')}>
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
                 <div className="flex items-center gap-3">
@@ -531,7 +532,7 @@ export function ChatPanel() {
                   </div>
                 </div>
               </div>
-            </div>
+            </PanelReveal>
           </motion.div>
 
           {/* Clear chat confirmation dialog */}

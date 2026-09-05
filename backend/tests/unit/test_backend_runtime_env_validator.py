@@ -78,7 +78,11 @@ def with_memory_env(payload: str) -> str:
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
         '        {"name": "GCP_LOCATION", "value": "us-central1"},\n'
-        '        {"name": "USE_VERTEX_AI", "value": "true"},\n' + memory_env,
+        '        {"name": "USE_VERTEX_AI", "value": "true"},\n'
+        # Direct-provider surfaces (desktop_proxy, omni_relay) write their attempts to the
+        # gateway ledger under this switch; the manifest declares it on the Cloud Run
+        # `backend` service, so the deployed state must carry it too.
+        '        {"name": "LLM_GATEWAY_ACCOUNTING_ENABLED", "value": "true"},\n' + memory_env,
     )
 
 
@@ -199,6 +203,20 @@ GOOGLE_OAUTH_SECRETS = '''\
         {"name": "GOOGLE_MAPS_API_KEY", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_MAPS_API_KEY", "key": "latest"}}},'''
 
 
+def with_belief_model_env(payload: str) -> str:
+    """MEMORY_BELIEF_MODEL_ENABLED is declared beside every dev MEMORY_ENABLED site.
+
+    The belief model gates writes in process_conversation (backend-listen, pusher, and
+    the Cloud Run backend for reprocess), API memory create (backend-integration), and
+    the maintenance/sweep jobs. The dev overlay carries it on each of those hosts, so
+    the deployed-state fixture must carry it wherever MEMORY_ENABLED appears.
+    """
+    return payload.replace(
+        '{"name": "MEMORY_ENABLED", "value": "on"},',
+        '{"name": "MEMORY_ENABLED", "value": "on"},\n        {"name": "MEMORY_BELIEF_MODEL_ENABLED", "value": "true"},',
+    )
+
+
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
         with_wake_word_adjudication_env(
@@ -207,7 +225,11 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
                     with_backend_pusher_env(
                         with_parity_pack_env(
                             with_listen_finalization_orphan_env(
-                                with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+                                with_belief_model_env(
+                                    with_memory_env(
+                                        with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload))
+                                    )
+                                )
                             )
                         )
                     )

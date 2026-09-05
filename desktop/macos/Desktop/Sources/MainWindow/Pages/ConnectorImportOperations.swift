@@ -91,7 +91,7 @@ enum ConnectorImportOperations {
     case .server:
       return .failure(
         message: "Omi's memory service is temporarily unavailable. Try again shortly.",
-        failureClass: .invalidResponse)
+        failureClass: .server)
     case .invalidResponse:
       return .failure(
         message: "Omi couldn't read the extracted memories. Try the import again.",

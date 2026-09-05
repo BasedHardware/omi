@@ -105,11 +105,13 @@ extension ChatProvider {
     _ messageId: String, rating: Int?, surface: String,
     reason: ChatFeedbackReason?, expectedOwner: String?
   ) async {
-    // Owner fence: if an auth change happened between the flush drain and this
-    // call, the rating belongs to the previous account and must not be written
-    // under the new session.
     if let expectedOwner, RuntimeOwnerIdentity.currentOwnerId() != expectedOwner { return }
+    let message = messages.first(where: { $0.id == messageId })
     do {
+      if let message, ChatContinuityInvariants.isProactiveNotification(message), rating == -1 {
+        await InterjectSuggestionFeedbackMutation.recordFromChatRating(
+          continuityKey: message.clientTurnId, reason: reason)
+      }
       if let persistMessageRatingHandler {
         try await persistMessageRatingHandler(messageId, rating)
       } else {

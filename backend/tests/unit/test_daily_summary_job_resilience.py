@@ -13,10 +13,17 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any, Dict, Iterator, List, Tuple
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+
+# Imported for its side effect on import cost, not for its API: the job imports
+# learned_today lazily, so without this the pydantic model build inside
+# models.daily_summary_payload lands in the call phase of the test below and
+# trips the fast-unit CPU duration guard. Paying it at collection keeps the
+# guard measuring the test rather than a one-time import.
+import utils.memory.learned_today  # noqa: F401
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -107,6 +114,8 @@ def _loaded_job() -> Iterator[Tuple[ModuleType, ModuleType, FakeRedis, RecordedF
         'database.redis_db': _module(
             'database.redis_db',
             try_acquire_daily_summary_lock=lambda *_args: True,
+            # Declines before the LLM call hand the day back instead of sitting on the 2h key.
+            release_daily_summary_lock=lambda *_args: None,
             r=fake_redis,
         ),
         'models.notification_message': _module(
@@ -116,7 +125,7 @@ def _loaded_job() -> Iterator[Tuple[ModuleType, ModuleType, FakeRedis, RecordedF
         'utils.conversations.factory': _module('utils.conversations.factory', deserialize_conversation=lambda v: v),
         'utils.llm.external_integrations': _module(
             'utils.llm.external_integrations',
-            generate_comprehensive_daily_summary=lambda *_args: {},
+            generate_comprehensive_daily_summary=lambda *_a, **_k: {},
         ),
         'utils.notifications': _module(
             'utils.notifications',
@@ -207,7 +216,9 @@ def test_failing_hour_group_does_not_abort_the_remaining_groups() -> None:
         notification_db.get_users_for_daily_summary = read_users
         notifications._send_summary_notification = lambda user: served.append(user[0])
 
-        assert asyncio.run(notifications.send_daily_summary_notification()) is None
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert outcome.ok is False
+        assert 'firestore unavailable' in (outcome.error_text or '')
         assert served == ['uid-00', 'uid-01', 'uid-02'], 'hour 22 must still be served after hour 21 failed'
 
 
@@ -251,7 +262,7 @@ def test_next_execution_resumes_at_the_checkpointed_tail() -> None:
         notifications._get_timezones_grouped_by_hour = lambda: {22: ['UTC']}
         notification_db.get_users_for_daily_summary = lambda _tz, _hour: _users(9)
         notifications.summary_budget.write_job_cursor(
-            notifications.summary_budget.job_cursor_key(datetime.now(timezone.utc)),
+            notifications.summary_budget.job_cursor_key(),
             {'hour': 22, 'uid': 'uid-08'},
         )
         served: List[str] = []
@@ -262,6 +273,36 @@ def test_next_execution_resumes_at_the_checkpointed_tail() -> None:
         assert served[0] == 'uid-08', 'the run must start at the tail the previous run could not reach'
         assert sorted(served) == [f'uid-{i:02d}' for i in range(9)], 'rotation still covers the head'
         assert redis.store == {}, 'a complete pass clears the checkpoint'
+
+
+def test_a_partially_read_hour_group_does_not_clear_the_checkpoint() -> None:
+    """A dropped timezone chunk is a partial enumeration. Finishing the run as if
+    it were complete retires users the job never even listed."""
+    with _loaded_job() as (notifications, notification_db, redis, fallbacks):
+        notifications._get_timezones_grouped_by_hour = lambda: {22: [f'tz-{i:02d}' for i in range(40)]}
+        served: List[str] = []
+
+        def read_users(timezones: List[str], _target_hour: int) -> List[Any]:
+            if 'tz-30' in timezones:
+                raise RuntimeError('firestore unavailable')
+            return _users(3)
+
+        notification_db.get_users_for_daily_summary = read_users
+        notifications._send_summary_notification = lambda user: served.append(user[0])
+
+        asyncio.run(notifications.send_daily_summary_notification())
+
+        assert served == ['uid-00', 'uid-01', 'uid-02'], 'the chunk that did read is still served'
+        assert redis.store, 'a partial read must leave the run resumable'
+
+
+def test_the_checkpoint_key_survives_the_hour_rollover() -> None:
+    """The key used to carry the UTC hour, so the execution that wrote the tail
+    and the execution that should resume it never shared a key."""
+    from utils.other import daily_summary_budget
+
+    assert daily_summary_budget.job_cursor_key() == daily_summary_budget.job_cursor_key()
+    assert 'T' not in daily_summary_budget.job_cursor_key()
 
 
 def test_job_end_summary_line_reports_the_counters() -> None:
@@ -321,6 +362,55 @@ def test_truncation_bound_always_keeps_one_conversation() -> None:
     assert bounded.dropped == 1
 
 
+def test_a_nonpositive_budget_falls_back_to_the_bound_not_past_it() -> None:
+    """Returning the whole day for max_chars <= 0 removed the only protection
+    against the context overflow this bound exists for."""
+    from utils.other import daily_summary_budget
+
+    conversations = [_Conversation(i, 100) for i in range(10)]
+    bounded = daily_summary_budget.select_conversations_within_budget(conversations, 0, render=_render)
+
+    assert bounded.rendered_chars <= daily_summary_budget.DEFAULT_MAX_HISTORY_CHARS
+    assert len(bounded.conversations) == 10, 'a small day still fits under the fallback bound'
+
+    bounded = daily_summary_budget.select_conversations_within_budget(
+        [_Conversation(i, 200_000) for i in range(5)], -1, render=_render
+    )
+    assert bounded.truncated is True, 'the fallback bound is applied, not skipped'
+
+
+def test_an_unrenderable_conversation_is_dropped_and_counted() -> None:
+    """Keeping it at zero cost only moved the failure into the summary render,
+    where it costs the whole recap instead of one conversation."""
+    from utils.other import daily_summary_budget
+
+    def render(conversation: _Conversation) -> str:
+        if conversation.index == 1:
+            raise ValueError('unrenderable segment')
+        return 'x' * conversation.size
+
+    conversations = [_Conversation(i, 10) for i in range(3)]
+    bounded = daily_summary_budget.select_conversations_within_budget(conversations, 10_000, render=render)
+
+    assert [c.index for c in bounded.conversations] == [0, 2]
+    assert bounded.dropped == 1
+
+
+def test_a_renderer_that_fails_for_everything_still_hands_the_day_over() -> None:
+    """If nothing renders the fault is the renderer, not the conversations, and
+    dropping the whole day would turn that into a silently missing recap."""
+    from utils.other import daily_summary_budget
+
+    def render(_conversation: _Conversation) -> str:
+        raise ImportError('renderer unavailable')
+
+    conversations = [_Conversation(i, 10) for i in range(3)]
+    bounded = daily_summary_budget.select_conversations_within_budget(conversations, 10_000, render=render)
+
+    assert bounded.conversations == conversations
+    assert bounded.truncated is False
+
+
 def test_truncation_bound_tolerates_naive_and_missing_timestamps() -> None:
     from utils.other import daily_summary_budget
 
@@ -362,7 +452,8 @@ def test_job_survives_a_redis_outage_end_to_end() -> None:
         served: List[str] = []
         notifications._send_summary_notification = lambda user: served.append(user[0])
 
-        assert asyncio.run(notifications.send_daily_summary_notification()) is None
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert outcome.ok is True
         assert len(served) == 3, 'losing the checkpoint costs a re-walk, never a summary'
 
 
@@ -371,25 +462,50 @@ def test_job_survives_a_redis_outage_end_to_end() -> None:
 
 class _FakeConversation:
     def __init__(self) -> None:
+        self.id = 'convo-1'
         self.discarded = False
         self.transcript_segments = ['segment']
         self.started_at = datetime(2026, 8, 23, 9, tzinfo=timezone.utc)
+        # The pre-LLM summary-content gate (flip-review F-12) declines a day
+        # whose conversations carry titles only; these tests pin the send path,
+        # so the fixture carries body content.
+        self.apps_results: list = []
+        self.structured = SimpleNamespace(overview='You shipped the thing.')
 
 
 @contextmanager
-def _loaded_send_path(memories_learned: List[Dict[str, Any]]) -> Iterator[Tuple[ModuleType, List[Any]]]:
-    """Load the job with the real NotificationMessage so FCM serialization is exercised."""
+def _loaded_send_path(
+    memories_learned: List[Dict[str, Any]],
+) -> Iterator[Tuple[ModuleType, List[Any], Dict[str, Any]]]:
+    """Load the job with the real NotificationMessage so FCM serialization is exercised.
+
+    The generator stub behaves like the real one: ``memories_learned`` is a
+    *parameter* it echoes into the summary, never something it reads for itself.
+    A stub that returned the refs regardless of what it was passed would pass
+    whether or not the scheduled path selects them — which is exactly how the
+    card shipped dead.
+    """
 
     async def no_async_work(*_args: Any, **_kwargs: Any) -> None:
         return None
 
     sends: List[Any] = []
+    seen: Dict[str, Any] = {}
     summary_data = {
         'day_emoji': '📅',
         'headline': 'A good day',
         'overview': 'You shipped the thing.',
-        'memories_learned': memories_learned,
     }
+
+    def generate(*args: Any, memories_learned: Any = None, **_kwargs: Any) -> Dict[str, Any]:
+        seen['generator_args'] = args
+        seen['generator_kwarg'] = memories_learned
+        return {**summary_data, 'memories_learned': list(memories_learned or [])}
+
+    def select_payload(uid: str, conversations: Any, window_start: Any, window_end: Any) -> List[Dict[str, Any]]:
+        seen['selection_args'] = (uid, [c.id for c in conversations], window_start, window_end)
+        return memories_learned
+
     stubs = {
         'database._client': AutoMockModule('database._client'),
         'database.conversations': _module(
@@ -402,7 +518,11 @@ def _loaded_send_path(memories_learned: List[Dict[str, Any]]) -> Iterator[Tuple[
             get_users_token_in_timezones=lambda *_a, **_k: [],
         ),
         'database.redis_db': _module(
-            'database.redis_db', try_acquire_daily_summary_lock=lambda *_args: True, r=FakeRedis()
+            'database.redis_db',
+            try_acquire_daily_summary_lock=lambda *_args: True,
+            # Declines before the LLM call hand the day back instead of sitting on the 2h key.
+            release_daily_summary_lock=lambda *_args: None,
+            r=FakeRedis(),
         ),
         'utils.conversations.factory': _module(
             'utils.conversations.factory', deserialize_conversation=lambda _v: _FakeConversation()
@@ -410,7 +530,7 @@ def _loaded_send_path(memories_learned: List[Dict[str, Any]]) -> Iterator[Tuple[
         'utils.conversations.render': _module('utils.conversations.render', conversations_to_string=lambda _c: 'text'),
         'utils.llm.external_integrations': _module(
             'utils.llm.external_integrations',
-            generate_comprehensive_daily_summary=lambda *_args: summary_data,
+            generate_comprehensive_daily_summary=generate,
         ),
         'utils.notifications': _module(
             'utils.notifications',
@@ -430,18 +550,28 @@ def _loaded_send_path(memories_learned: List[Dict[str, Any]]) -> Iterator[Tuple[
             'utils.other.notifications',
             str(BACKEND_DIR / 'utils' / 'other' / 'notifications.py'),
         )
-        yield notifications, sends
+        # The selection itself is a Firestore read; the job's obligation under
+        # test is that it makes the call and threads the result through.
+        notifications.memories_learned_payload = select_payload
+        yield notifications, sends, seen
 
 
 _MEMORY = {'memory_id': 'mem-1', 'content': 'Ships on Tuesdays', 'category': 'work'}
 
 
 def test_scheduled_send_carries_the_memory_review_card() -> None:
+    """Regression (#12635 review): the scheduled job called the generator without
+    ``memories_learned``, so the parameter kept its None default, the summary's
+    list was always empty, and the block was never attached on the only path real
+    users receive. The card was dead in production as shipped."""
     import json
 
-    with _loaded_send_path([_MEMORY]) as (notifications, sends):
+    with _loaded_send_path([_MEMORY]) as (notifications, sends, seen):
         notifications._send_summary_notification(('uid-00', ['token-00']))
 
+        assert seen['generator_kwarg'] == [_MEMORY], 'the scheduled path must select the day\'s memories'
+        assert seen['selection_args'][0] == 'uid-00'
+        assert seen['selection_args'][1] == ['convo-1'], 'selection is scoped to the bounded conversation set'
         assert len(sends) == 1
         args, _kwargs = sends[0]
         payload = args[3]
@@ -454,7 +584,7 @@ def test_scheduled_send_carries_the_memory_review_card() -> None:
 
 
 def test_scheduled_send_omits_the_card_when_no_memories_were_learned() -> None:
-    with _loaded_send_path([]) as (notifications, sends):
+    with _loaded_send_path([]) as (notifications, sends, _seen):
         notifications._send_summary_notification(('uid-00', ['token-00']))
 
         assert len(sends) == 1
@@ -463,3 +593,16 @@ def test_scheduled_send_omits_the_card_when_no_memories_were_learned() -> None:
         assert 'content_blocks' not in payload, 'no card is sent when the day produced nothing to review'
         assert payload['text'] == 'You shipped the thing.', 'the message text is identical either way'
         assert args[2] == 'You shipped the thing.'
+
+
+def test_an_oversized_card_costs_the_card_not_the_notification() -> None:
+    """FCM rejects the whole message past 4KB of data, so an unbounded card would
+    take the recap down with it rather than degrade."""
+    huge = [{'memory_id': f'mem-{i}', 'content': 'x' * 900, 'category': 'work'} for i in range(6)]
+    with _loaded_send_path(huge) as (notifications, sends, _seen):
+        notifications._send_summary_notification(('uid-00', ['token-00']))
+
+        assert len(sends) == 1, 'the summary must still be sent'
+        payload = sends[0][0][3]
+        assert 'content_blocks' not in payload
+        assert payload['text'] == 'You shipped the thing.'

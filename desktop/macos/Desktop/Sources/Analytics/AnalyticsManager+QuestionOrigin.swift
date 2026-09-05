@@ -39,6 +39,17 @@ extension AnalyticsManager {
   func consumeQuestionOrigin() -> QuestionOrigin {
     QuestionOriginContext.consume()
   }
+
+  /// Drop an armed origin whose dispatch never reached a question at all.
+  ///
+  /// The arm is one-shot but it does not expire: a dispatch that returns before
+  /// anything is sent — no floating window, no provider, a voice turn already
+  /// handed off — emits no `question_asked` to consume it, so the arm survives
+  /// and stamps `followup` on the next, unrelated question the user asks. The
+  /// surface that armed it is the one that knows the send never happened.
+  func questionOriginationAborted() {
+    QuestionOriginContext.clear()
+  }
 }
 
 /// One-shot main-actor store for the armed origin. Deliberately not a mutable
@@ -57,8 +68,13 @@ enum QuestionOriginContext {
     return armed ?? .unprompted
   }
 
-  /// Test seam: drop a previously armed origin without emitting.
-  static func resetForTests() {
+  /// Drop a previously armed origin without emitting.
+  static func clear() {
     armed = nil
+  }
+
+  /// Test seam.
+  static func resetForTests() {
+    clear()
   }
 }

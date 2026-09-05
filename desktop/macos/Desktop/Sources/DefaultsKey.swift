@@ -50,6 +50,11 @@ enum DefaultsKey: String {
   /// budgets in `IntegrationNudgePolicy` are what keep that from being noise.
   case integrationNudgesEnabled = "integrationNudgesEnabled"
   case aiChatWorkingDirectory = "aiChatWorkingDirectory"
+  /// JSON array of skill names the user disabled in Settings. Absent or empty
+  /// means every skill is enabled. Read by the skill-catalog projection and
+  /// exported to the agent runtime as `OMI_DISABLED_SKILLS`, so the toggle
+  /// hides a skill from the catalog and from load_skill/search_skills alike.
+  case disabledSkillsJSON = "disabledSkillsJSON"
   /// Presence-only marker: the user turned Launch at Login OFF in Settings on
   /// a build that has this key. Absent means "no recorded decline" — the
   /// default-on migration (`OmiApp.migrateLaunchAtLoginDefault`) enables once;
@@ -73,7 +78,26 @@ enum DefaultsKey: String {
   case onboardingHowDidYouHearSource = "onboardingHowDidYouHearSource"
   case onboardingRole = "onboardingRole"
   case onboardingJustCompleted = "onboardingJustCompleted"
+  /// Legacy onboarding ACP session id (pre-kernel `surface_conversations`).
+  case onboardingACPSessionId = "onboardingACPSessionId"
+  /// Legacy locally persisted onboarding chat messages; kernel journal owns this now.
+  case onboardingChatMessages = "onboardingChatMessages"
+  /// Mid-onboarding restart marker kept by `OnboardingChatPersistence`.
+  case onboardingMidOnboarding = "onboardingMidOnboarding"
+  /// Retired-wizard exploration text; only cleared from disk, never written now.
+  case onboardingExplorationText = "onboardingExplorationText"
+  /// Retired-wizard exploration completion; only cleared from disk, never written now.
+  case onboardingExplorationCompleted = "onboardingExplorationCompleted"
+  /// `complete_onboarding` tool-call marker kept by `OnboardingChatPersistence`.
+  case onboardingToolCompleted = "onboardingToolCompleted"
+  /// Monthly-goal answered marker kept by `OnboardingChatPersistence`.
+  case onboardingGoalCompleted = "onboardingGoalCompleted"
   case hasCompletedFileIndexing = "hasCompletedFileIndexing"
+  /// Durable record that the user skipped Accessibility during onboarding. Absent
+  /// means "no recorded skip" (pre-marker onboarding or an Allow); macOS exposes no
+  /// denied/notDetermined distinction for AX, so this is the only signal that keeps
+  /// the sidebar from pulsing a deliberate skip as "denied".
+  case onboardingAccessibilitySkipped = "onboardingAccessibilitySkipped"
   case screenAnalysisEnabled = "screenAnalysisEnabled"
   case ratingPromptQuestionCount = "ratingPromptQuestionCount"
   case ratingPromptSubmittedRating = "ratingPromptSubmittedRating"
@@ -142,6 +166,12 @@ struct ScopedDefaultsKey {
     Self(rawValue: "trial_nudge.v1.\(kind).\(ownerHash)")
   }
 
+  /// Dismissed chat-quota warnings. Entries carry their own billing cycle, so
+  /// the set expires on its own instead of needing a sweep.
+  static func chatQuotaBannerDismissals(ownerHash: String) -> Self {
+    Self(rawValue: "chat_quota_banner_dismissals.v1.\(ownerHash)")
+  }
+
   static func tasksFullSyncCompleted(ownerID: String) -> Self {
     Self(rawValue: "tasksFullSyncCompleted_v9_\(ownerID)")
   }
@@ -191,6 +221,13 @@ struct ScopedDefaultsKey {
     Self(rawValue: "dailySummary.lastSeenID.v1.\(ownerID)")
   }
 
+  /// Owner-scoped id of the daily summary that was on screen when the owner last cleared Chat.
+  /// The card is chrome rather than a turn (INV-CHAT-1), so clearing the transcript cannot
+  /// delete it — this is what makes Clear take it away anyway, until a newer summary arrives.
+  static func dailySummaryClearedID(ownerID: String) -> Self {
+    Self(rawValue: "dailySummary.clearedID.v1.\(ownerID)")
+  }
+
   static func importConnectorAvailabilityText(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
   }
@@ -217,12 +254,10 @@ struct ScopedDefaultsKey {
     Self(rawValue: "proactiveTaskInterruptionLedger.v1.\(ownerID)")
   }
 
-  /// Owner-scoped record of which Home knows-list rows have already been shown,
-  /// opened, or dismissed. Without it a thin candidate source repeats the same
-  /// four rows on every visit; owner-scoped for the same bleed class as above.
-  static func homeKnowsImpressions(ownerID: String) -> Self {
-    Self(rawValue: "homeKnows.impressions.v1.\(ownerID)")
+  static func suggestionTaskNudgeLedger(ownerID: String) -> Self {
+    Self(rawValue: "suggestionTaskNudgeLedger.v1.\(ownerID)")
   }
+
 }
 
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.

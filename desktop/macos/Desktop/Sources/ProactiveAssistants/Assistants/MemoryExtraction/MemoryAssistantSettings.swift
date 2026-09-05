@@ -13,6 +13,7 @@ class MemoryAssistantSettings {
   private let minConfidenceKey = "memoryMinConfidence"
   private let notificationsEnabledKey = "memoryNotificationsEnabled"
   private let excludedAppsKey = "memoryExcludedApps"
+  private let excludedHostsKey = "memoryExcludedHosts"
 
   // MARK: - Default Values
 
@@ -32,7 +33,7 @@ class MemoryAssistantSettings {
 
     CRITICAL CONTEXT:
     • You are extracting memories about the user viewing this screen
-    • Focus on information visible on screen that reveals facts about the user or wisdom they can learn from
+    • Focus on information visible on screen that reveals facts about the user
     • NEVER extract memories about what the user is actively doing right now (that's not a memory, it's current activity)
     • Only extract information that would be valuable to remember long-term
 
@@ -51,38 +52,20 @@ class MemoryAssistantSettings {
     THE CATEGORIZATION TEST (CRITICAL):
     For EVERY potential memory, ask these questions IN ORDER:
 
-    Q1: "Is this wisdom/advice FROM someone else that the user can learn from?"
-        → If YES: This is an INTERESTING memory. Include attribution (who said it).
-        → If NO: Go to Q2.
-
-    Q2: "Is this a fact ABOUT the user - their opinions, realizations, network, or preferences?"
+    Q1: "Is this a fact ABOUT the user - their opinions, realizations, network, or preferences?"
         → If YES: This is a SYSTEM memory.
-        → If NO: Probably should NOT be extracted at all.
+        → If NO: Do NOT extract it.
 
-    NEVER put the user's own realizations or opinions in INTERESTING.
-    INTERESTING is ONLY for external wisdom from others that the user can learn from.
+    Do not extract wisdom, advice, or facts about other people or sources. A separate insight
+    lane owns external wisdom. This lane only admits facts about the primary user.
 
-    INTERESTING MEMORIES (External Wisdom You Can Learn From):
-    These are actionable advice, frameworks, and strategies FROM OTHER PEOPLE/SOURCES visible on screen.
+    SUBJECT ADMISSION (CRITICAL):
+    Only extract a memory when it is established as about the primary user.
+    - subject_scope must be primary_user (not third_party, not artifact)
+    - subject_evidence must be user_authored or addressed_to_user (not rendered_content, not ui_chrome)
+    - contains_credential_or_identifier must be false (no passwords, API keys, account identifiers)
 
-    CRITICAL REQUIREMENTS FOR INTERESTING MEMORIES:
-    1. **Must come from an EXTERNAL source** - not the user's own realization
-    2. **Should include attribution** - who said it, what company/book/article it's from
-    3. **Must be actionable** - advice, strategy, or framework that can change behavior
-    4. **Format**: "Source: actionable insight"
-
-    EXAMPLES OF GOOD INTERESTING MEMORIES (from screenshots):
-    ✅ "Paul Graham (article): startups should do things that don't scale initially"
-    ✅ "Slack message from Sarah: always send meeting agendas 24 hours in advance"
-    ✅ "LinkedIn post by Naval: specific knowledge cannot be taught, must be learned"
-    ✅ "Email from manager: use STAR method for performance reviews"
-    ✅ "Tweet by @pmarca: the best time to raise money is when you don't need it"
-
-    EXAMPLES OF WHAT IS NOT INTERESTING (should be SYSTEM or excluded):
-    ❌ User's own tweet or post (user's OWN content → SYSTEM or exclude)
-    ❌ User's notes or documents they're writing (current activity → exclude)
-    ❌ Generic tips without attribution (no source → exclude)
-    ❌ News headlines (not actionable wisdom → exclude)
+    If you cannot establish those three, return an empty list.
 
     SYSTEM MEMORIES (Facts About the User):
     These are facts ABOUT the user visible from their screen content - their preferences, network, projects, etc.
@@ -150,9 +133,8 @@ class MemoryAssistantSettings {
     • Focus on "who" and "what", not "when"
 
     OUTPUT LIMITS (STRICT - only 1 memory max):
-    • Extract AT MOST 1 memory per screenshot (either system OR interesting, not both)
+    • Extract AT MOST 1 memory per screenshot
     • Pick the SINGLE most valuable memory if multiple candidates exist
-    • INTERESTING memories are RARE - they require EXTERNAL wisdom with ATTRIBUTION
     • Many screenshots will result in 0 memories - this is NORMAL and EXPECTED
     • Better to extract 0 memories than to include low-quality ones
     • DEFAULT TO EMPTY LIST - only extract if the memory is truly exceptional
@@ -292,6 +274,21 @@ class MemoryAssistantSettings {
     }
   }
 
+  /// Hosts excluded from memory extraction (youtube.com, etc.). App-name exclusion
+  /// cannot express this because the browser is "Google Chrome".
+  var excludedHosts: Set<String> {
+    get {
+      if let saved = UserDefaults.standard.array(forKey: excludedHostsKey) as? [String] {
+        return Set(saved)
+      }
+      return []
+    }
+    set {
+      UserDefaults.standard.set(Array(newValue), forKey: excludedHostsKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+    }
+  }
+
   /// Check if an app is excluded from memory extraction
   /// (built-in list + user's custom list + Rewind privacy exclusions)
   func isAppExcluded(_ appName: String) -> Bool {
@@ -330,6 +327,7 @@ class MemoryAssistantSettings {
     minConfidence = defaultMinConfidence
     notificationsEnabled = defaultNotificationsEnabled
     excludedApps = []
+    excludedHosts = []
     resetPromptToDefault()
   }
 }

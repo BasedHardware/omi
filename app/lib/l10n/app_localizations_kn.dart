@@ -9952,6 +9952,36 @@ class AppLocalizationsKn extends AppLocalizations {
   String get tapPlusToStartRecording => 'Tap + to start recording';
 
   @override
+  String get chatBlockTask => 'ಕಾರ್ಯ';
+
+  @override
+  String get chatBlockGoal => 'ಗುರಿ';
+
+  @override
+  String get chatBlockConversation => 'ಸಂಭಾಷಣೆ';
+
+  @override
+  String get chatBlockMemory => 'ನೆನಪು';
+
+  @override
+  String get chatBlockQuestion => 'ಪ್ರಶ್ನೆ';
+
+  @override
+  String get chatBlockOpenInGoals => 'ಗುರಿಗಳಲ್ಲಿ ತೆರೆಯಿರಿ';
+
+  @override
+  String get chatBlockOpenConversation => 'ಸಂಭಾಷಣೆ ತೆರೆಯಿರಿ';
+
+  @override
+  String get chatBlockOpenInMemories => 'ನೆನಪುಗಳಲ್ಲಿ ತೆರೆಯಿರಿ';
+
+  @override
+  String get chatBlockUnavailable => 'ಇನ್ನು ಲಭ್ಯವಿಲ್ಲ';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'ಶಿಫಾರಸು ಮಾಡಿದ ಮುಂದಿನ ಹಂತಗಳು';
+
+  @override
   String get couldNotLoadMemories => 'ನೆನಪುಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
 
   @override

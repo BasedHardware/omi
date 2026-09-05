@@ -27,16 +27,16 @@ struct QueryAnswerThread: View {
   /// Re-sends the question that failed, through the host's one send — never a second send path. The
   /// host holds that question, because the composer is emptied by the send that failed.
   let onRetry: () -> Void
-  /// Enables the sampled Chat-first inline entity controls without giving this thread a second
-  /// provider, transcript, or lifecycle owner.
-  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
+  /// The inline entity controls' owners. It gives this thread no second provider, transcript, or
+  /// lifecycle owner.
+  let chatFirstRichBlockContext: ChatFirstRichBlockContext
 
   @State private var didReportChatFirstTranscriptPage = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       ChatMessagesView(
-        messages: citationSafeMessages,
+        messages: chatProvider.messages,
         conversationIdentity: chatProvider.currentSessionId
           ?? ChatConversationIdentity.mainChatDefault,
         isSending: chatProvider.isSending,
@@ -55,6 +55,18 @@ struct QueryAnswerThread: View {
         onRetry: { Task { await chatProvider.retryLoad() } },
         localSendToken: chatProvider.localSendToken,
         onCancelTurn: { chatProvider.stopAgent(owner: .mainChat) },
+        // A spawned-agent card in the main transcript opens the agent through the
+        // one resolver the notch uses; this used to be wired only on the deleted
+        // Dashboard chat, so Home's agent cards had no way in.
+        onOpenAgent: { agentID, completion in
+          FloatingControlBarManager.shared.openAgentChatFromTimeline(
+            agentID: agentID, completion: completion)
+        },
+        onOpenAgentRef: { ref, completion in
+          FloatingControlBarManager.shared.openAgentChatFromTimeline(
+            ref: ref, completion: completion)
+        },
+
         // **Not zero.** The assistant's identity mark is drawn in an overlay offset
         // `ChatOmiMarkPlacement.markGutter` to the left of the message column, so a transcript with
         // no leading inset draws it outside the panel and clips it away — leaving omi's replies as
@@ -65,12 +77,12 @@ struct QueryAnswerThread: View {
         // `ChatMessagesView` keeps its rows eagerly mounted on purpose — a lazy
         // stack re-estimates off-screen rich-Markdown heights and hands AppKit
         // the wrong anchor mid-gesture — so how many rows are mounted is the
-        // whole cost. It picks the compact window automatically for a caller
-        // that passes a chat-first block context; the ordinary QueryShellHome
-        // path has none, so it used to mount the 500-row default into a panel
-        // 460 pt tall: 910 ms and 607 native views for 400 messages, against
-        // 114 ms and 84 for the same transcript compact. `Show older messages`
-        // is already the way back to the rest of it.
+        // whole cost. The 500-row default in a panel 460 pt tall cost 910 ms and
+        // 607 native views for 400 messages, against 114 ms and 84 for the same
+        // transcript compact. `Show older messages` is already the way back to
+        // the rest of it. Passed explicitly: every host now carries a block
+        // context, so deriving the window from "has a context" would have
+        // silently shrunk the task panel's too.
         chatFirstRichBlockContext: chatFirstRichBlockContext,
         transcriptWindowPolicy: .compactHome,
         verticalContentPadding: OmiSpacing.sm,
@@ -121,51 +133,26 @@ struct QueryAnswerThread: View {
 
     }
     .accessibilityIdentifier("query-shell-answer")
-    .onAppear { reportChatFirstTranscriptPageIfReady() }
+    .onAppear {
+      ChatSwitchPerfLog.mark("QueryAnswerThread.appear")
+      reportChatFirstTranscriptPageIfReady()
+    }
     .onChange(of: chatProvider.isMainChatJournalFirstPageReady) { _, _ in
       reportChatFirstTranscriptPageIfReady()
     }
     .onDisappear {
       didReportChatFirstTranscriptPage = false
-      chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptDidDisappear()
+      chatFirstRichBlockContext.promptMaterializationCoordinator.chatTranscriptDidDisappear()
     }
   }
 
   /// Prompt materialization is visible-chat gated: the coordinator may run only after the one
   /// mounted transcript has its first page, and leaving answer mode immediately makes it inert.
   private func reportChatFirstTranscriptPageIfReady() {
-    guard !didReportChatFirstTranscriptPage,
-      chatFirstRichBlockContext != nil,
-      chatProvider.isMainChatJournalFirstPageReady
+    guard !didReportChatFirstTranscriptPage, chatProvider.isMainChatJournalFirstPageReady
     else { return }
     didReportChatFirstTranscriptPage = true
-    chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptFirstPageDidLoad()
-  }
-
-  /// The legacy shell has no exact goal destination. Preserve the historical source preview but
-  /// make its marker unavailable before it reaches the renderer, instead of presenting a button
-  /// whose action cannot honor the cited identity. Chat-first keeps its typed goal route.
-  private var citationSafeMessages: [ChatMessage] {
-    guard chatFirstRichBlockContext == nil else { return chatProvider.messages }
-    return chatProvider.messages.map { message in
-      var message = message
-      message.contentBlocks = message.contentBlocks.map { block in
-        guard case .citation(let id, let reference) = block, reference.kind == .goal else {
-          return block
-        }
-        return .citation(
-          id: id,
-          reference: ChatCitationReference(
-            ordinal: reference.ordinal,
-            kind: .unavailable,
-            sourceID: "",
-            title: reference.displayTitle,
-            preview: reference.preview,
-            createdAt: reference.createdAt,
-            appName: reference.appName))
-      }
-      return message
-    }
+    chatFirstRichBlockContext.promptMaterializationCoordinator.chatTranscriptFirstPageDidLoad()
   }
 
 }

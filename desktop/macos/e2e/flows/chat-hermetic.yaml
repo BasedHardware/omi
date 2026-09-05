@@ -32,15 +32,34 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
-  # Follow-up chip: tail parser, chip view, and question-origin attribution ride the same hermetic chat turn.
+  # The grounded follow-up chip, S6-S10. The stub gained one delimiter-carrying
+  # reply so a tail is reachable hermetically at all; S8 asserts the split by
+  # exact equality (the question is absent from the prose and present on the
+  # block), and S10 taps the chip's own send and reads back the origin the
+  # `question_asked` emit carried.
   - desktop/macos/Desktop/Sources/Chat/ChatFollowUpTail.swift
-  - desktop/macos/Desktop/Sources/Chat/FollowUpChip.swift
   - desktop/macos/Desktop/Sources/Analytics/AnalyticsManager+QuestionOrigin.swift
+  # The chip view itself is asserted by S9's `ax.expect`, which runs on the ui
+  # lane only; on the bridge lane the tier ladder runs, S8 pins the block it
+  # renders from and S10 drives `FollowUpChipTap`, the send its button performs.
+  - desktop/macos/Desktop/Sources/Chat/FollowUpChip.swift
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift
+  # The streaming buffer, S6-S8. Its defect class is display-only — the
+  # authoritative terminal answer overwrites the streamed text — so no assertion
+  # made *after* `wait_main_chat_idle` can see whether the question leaked into
+  # the prose a token at a time on the way there, and that is what c164760b6b
+  # fixed. The property is nonetheless a fact about the run rather than about the
+  # last frame: no projection the reader ever saw contained the withheld tail.
+  # `ChatStreamingTailProbe` records it as the buffer emits each projection, and
+  # S8 asserts it — with `streaming_tail_delimiter_seen`, so a turn that produced
+  # no tail cannot report zero leaks and pass.
+  - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
   - desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalEventHub.swift
   - desktop/macos/Desktop/Sources/Chat/KernelTurnJournal.swift
   - desktop/macos/Desktop/Sources/Chat/ChatMessageRatingPersistence.swift
+  - desktop/macos/Desktop/Sources/Chat/NegativeFeedbackRemediationFeature.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+MessageRating.swift
   - desktop/macos/Desktop/Sources/Chat/WritingToolsFix.swift
   - desktop/macos/Desktop/Sources/BrowserExtensionSetup.swift
@@ -48,6 +67,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdownChatTypography.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+AutomationSnapshot.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge+ResponseContext.swift
   - desktop/macos/Desktop/Sources/Chat/AgentQueryResult.swift
@@ -120,6 +140,78 @@ steps:
       result.detail.last_assistant_text: "MARKER:chat-hermetic"
 
   - id: S6
+    name: Ask for an answer that ends with a grounded follow-up tail
+    # The stub's one delimiter-carrying reply (FOLLOWUP_PROBE_* in
+    # backend/utils/llm/desktop_llm_stub.py). Its other steerable path,
+    # `exact_reply_token`, strips trailing non-alphanumerics and so cannot
+    # produce the `?` a chip question requires — this trigger is the only way a
+    # tail exists on a hermetic bundle.
+    bridge.action:
+      name: ask_main_chat
+      params:
+        query: "Recap the storage migration and end with a grounded follow-up question."
+    expect:
+      result.detail.accepted: "true"
+
+  - id: S7
+    name: Wait for chat idle
+    bridge.action:
+      name: wait_main_chat_idle
+      params:
+        timeoutMs: "120000"
+    expect:
+      result.detail.idle: "true"
+
+  - id: S8
+    name: The question left the prose, on the chip and at every frame in between
+    # Exact equality on the visible answer, deliberately, not `contains`: what
+    # this step is for is the ABSENCE of the question from the prose. A split
+    # that failed leaves the tail in the answer and says the same thing twice —
+    # the defect two separate fixes on this branch were about — and only an
+    # exact match catches it.
+    #
+    # The last three are the same property while the answer was still arriving.
+    # The terminal answer overwrites the streamed text, so `last_assistant_text`
+    # is silent about the leak c164760b6b fixed, where the projection was fed its
+    # own output and streamed the withheld question out a token at a time.
+    # `streaming_tail_leaks` counts projections whose visible content did not
+    # match what the tail rule would have shown; `..._delimiter_seen` is asserted
+    # with it because a turn that never carried a tail would otherwise report
+    # zero leaks and read as a pass, and `..._projections` proves the probe was
+    # fed at all rather than silently disarmed.
+    bridge.action:
+      name: main_chat_snapshot
+      params:
+        limit: "12"
+    expect:
+      result.detail.last_assistant_text: "Priya flagged the storage migration in the Tuesday review."
+      result.detail.last_assistant_follow_up_question: "What did Priya say about the storage migration?"
+      result.detail.streaming_tail_projections: { min: 1 }
+      result.detail.streaming_tail_delimiter_seen: "true"
+      result.detail.streaming_tail_leaks: "0"
+
+  - id: S9
+    name: The chip is on screen under the answer
+    # UI lane only; skipped on the bridge lane, where S8 pins the block this
+    # view renders from and S10 drives the send its button performs.
+    ax.expect:
+      identifiers_visible:
+        - chat-follow-up-chip
+
+  - id: S10
+    name: Tapping the chip attributes the question to the chip
+    # `origin` cannot be read after the fact — it is consumed inside the
+    # `question_asked` emit — so the action reports what that emit carried.
+    # `unprompted` here is the arm failing to reach the send.
+    bridge.action:
+      name: tap_chat_follow_up_chip
+    expect:
+      result.detail.has_chip: "true"
+      result.detail.question: "What did Priya say about the storage migration?"
+      result.detail.accepted: "true"
+      result.detail.question_origin: "followup"
+
+  - id: S11
     name: Logs clean
     log.expect:
       absent:

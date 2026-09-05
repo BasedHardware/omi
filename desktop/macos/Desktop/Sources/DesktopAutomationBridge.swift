@@ -138,6 +138,10 @@ enum DesktopAutomationLaunchOptions {
 }
 
 struct DesktopAutomationSnapshot: Codable, Sendable {
+  /// The app has one shell. Flows and the navigation-visibility policy still read
+  /// `shellVariant`, so it is pinned here rather than removed from the contract.
+  static let singleShellVariant = "chat_first"
+
   var bridgeEnabled: Bool
   var bridgePort: UInt16
   var bundleIdentifier: String
@@ -146,14 +150,14 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var selectedTabIndex: Int?
   var selectedSettingsSection: String?
   var highlightedSettingId: String?
-  var usesLegacyHomeDesign: Bool
-  /// Home stage mode: `hub`, `chat`, or `connect`. Written only by `DashboardPage`, which is the only
-  /// view that renders the stage; nil whenever nothing on screen has one — which includes the whole
-  /// legacy shell, whose Home is the query surface. Never defaulted: see `HomeStageAutomationPolicy`.
+  /// Home stage mode: `hub`, `chat`, or `connect`. `DashboardPage` was the only view that ever
+  /// rendered that stage and it no longer exists, so this is now always nil. Kept in the snapshot
+  /// so an older flow reading it sees "no stage" rather than a missing key.
   var homeMode: String?
-  /// `loading`, `legacy`, or `chat_first`; never a local rollout preference.
+  /// Always `chat_first` on a mounted shell: the app has exactly one. Nil only before the shell has
+  /// reported state. Never a local preference.
   var shellVariant: String?
-  /// Stable typed route for the Chat-first shell. Nil for the legacy shell.
+  /// Stable typed route for the one shell.
   var chatFirstRoute: String?
   /// Set only by the mounted Chat-first destination after it has appeared. This
   /// keeps a successful navigation response equivalent to the target being
@@ -167,6 +171,7 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   /// never an analytics dimension or a persisted navigation value.
   var focusedEntityID: String?
   var isFocusedEntityAcknowledged: Bool
+  /// Retained for snapshot compatibility; the legacy sidebar shell is gone, so it is always false.
   var showsPrimarySidebar: Bool
   var isSidebarCollapsed: Bool
   var hasCompletedOnboarding: Bool
@@ -179,6 +184,8 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var askOmiFocused: Bool
   var floatingBarFrame: String?
   var floatingBarVoiceListening: Bool
+  /// The current hold has been recognised as a dictation (the notch's red tint).
+  var floatingBarVoiceDictating: Bool
   var floatingBarVoiceResponseActive: Bool
   var floatingBarUsesNotchIsland: Bool
   var updatedAt: String
@@ -464,7 +471,6 @@ final class DesktopAutomationStateStore {
     selectedTabIndex: nil,
     selectedSettingsSection: nil,
     highlightedSettingId: nil,
-    usesLegacyHomeDesign: false,
     homeMode: nil,
     shellVariant: nil,
     chatFirstRoute: nil,
@@ -485,6 +491,7 @@ final class DesktopAutomationStateStore {
     askOmiFocused: false,
     floatingBarFrame: nil,
     floatingBarVoiceListening: false,
+    floatingBarVoiceDictating: false,
     floatingBarVoiceResponseActive: false,
     floatingBarUsesNotchIsland: false,
     updatedAt: ISO8601DateFormatter().string(from: Date())
@@ -583,6 +590,7 @@ private func liveAutomationSnapshotFromMainActor() async -> DesktopAutomationSna
       isAskOmiFocused: floating.isAskOmiFocused,
       frame: floating.frame,
       isVoiceListening: floating.isVoiceListening,
+      isVoiceDictating: floating.isVoiceDictating,
       isVoiceResponseActive: floating.isVoiceResponseActive,
       usesNotchIsland: floating.usesNotchIsland,
       isAppActive: NSApp.isActive
@@ -594,6 +602,7 @@ private func liveAutomationSnapshotFromMainActor() async -> DesktopAutomationSna
     snapshot.askOmiFocused = floating.isAskOmiFocused
     snapshot.floatingBarFrame = floating.frame
     snapshot.floatingBarVoiceListening = floating.isVoiceListening
+    snapshot.floatingBarVoiceDictating = floating.isVoiceDictating
     snapshot.floatingBarVoiceResponseActive = floating.isVoiceResponseActive
     snapshot.floatingBarUsesNotchIsland = floating.usesNotchIsland
     snapshot.isAppActive = floating.isAppActive
@@ -877,10 +886,20 @@ final class DesktopAutomationActionRegistry {
     ) { _ in
       await MainActor.run {
         let limiter = FloatingBarUsageLimiter.shared
+        let banner = ChatQuotaBanner.current(
+          quota: limiter.serverQuota,
+          optimisticDelta: limiter.optimisticDelta,
+          dismissed: ChatQuotaBannerDismissals.shared.dismissed)
         return [
           "is_limit_reached": limiter.isLimitReached ? "true" : "false",
           "remaining_queries": "\(limiter.remainingQueries)",
           "limit_description": limiter.limitDescription,
+          "banner_threshold": banner.map { "\($0.threshold)" } ?? "none",
+          "rendered_banner_threshold": ChatQuotaBannerPresentation.shared.rendered
+            .map { "\($0.threshold)" } ?? "none",
+          "rendered_banner_title": ChatQuotaBannerPresentation.shared.rendered?.title ?? "",
+          "banner_title": banner?.title ?? "",
+          "banner_message": banner?.message ?? "",
         ]
       }
     }
@@ -901,6 +920,49 @@ final class DesktopAutomationActionRegistry {
           "reset": "true",
           "is_limit_reached": limiter.isLimitReached ? "true" : "false",
           "remaining_queries": "\(limiter.remainingQueries)",
+        ]
+      }
+    }
+    // Seeds the quota snapshot the chat-quota warnings key off, so a harness can
+    // walk 90/100 without spending a month of real questions. Non-prod only.
+    register(
+      name: "apply_usage_quota",
+      summary: "Seed the chat usage-quota snapshot (threshold-warning harness). Non-prod only.",
+      params: ["used", "limit", "plan", "unit", "is_overage_plan", "reset_at"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "apply_usage_quota is disabled on production bundles"]
+      }
+      guard let used = params["used"].flatMap(Double.init) else {
+        throw DesktopAutomationActionError.invalidParams("used must be a number")
+      }
+      var json: [String: Any] = [
+        "plan": params["plan"] ?? "Operator",
+        "plan_type": "operator",
+        "unit": params["unit"] ?? "questions",
+        "used": used,
+        "percent": 0,
+        "allowed": true,
+      ]
+      if let limit = params["limit"].flatMap(Double.init) {
+        json["limit"] = limit
+        json["allowed"] = used < limit
+      }
+      if let resetAt = params["reset_at"].flatMap(Int.init) { json["reset_at"] = resetAt }
+      if let overage = params["is_overage_plan"] { json["is_overage_plan"] = overage == "true" }
+      let data = try JSONSerialization.data(withJSONObject: json)
+      let quota = try JSONDecoder().decode(APIClient.ChatUsageQuota.self, from: data)
+      return await MainActor.run {
+        let limiter = FloatingBarUsageLimiter.shared
+        limiter.applyQuota(quota)
+        // Seeding a cycle must produce the banner it asks for; a dismissal left
+        // over from an earlier run would silently suppress it.
+        ChatQuotaBannerDismissals.shared.reset()
+        return [
+          "applied": "true",
+          "used": "\(quota.used)",
+          "limit": "\(quota.limit ?? -1)",
+          "is_limit_reached": limiter.isLimitReached ? "true" : "false",
         ]
       }
     }
@@ -1464,20 +1526,33 @@ final class DesktopAutomationActionRegistry {
     // routing decision, realtime admission, warm buffering, and replay seam.
     // Unlike `ptt_test_turn`, it does not bypass PushToTalkManager; unlike a
     // physical test, it needs neither microphone permission nor a device.
+    // `pace_ms` spaces the 100 ms chunks in wall time (pass 100 for a real-time
+    // hold), which is what lets the wake-word probes and the hub's warm
+    // deadline run on the timeline a physical hold has. `settle_ms` waits after
+    // release for the closing transcription, polish, and paste to land.
     register(
       name: "ptt_manager_turn",
       summary:
         "Inject a PCM16/16k mono hold through PushToTalkManager and realtime admission; returns lifecycle diagnostics",
-      params: ["pcm"]
+      params: ["pcm", "pace_ms", "settle_ms", "chunk_bytes"]
     ) { params in
       guard let path = params["pcm"],
         let pcm16k = try? Data(contentsOf: URL(fileURLWithPath: path)),
         !pcm16k.isEmpty
       else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
+      // Bounded so the nanosecond conversion below cannot trap on a typo.
+      let maxWaitMs: UInt64 = 10 * 60 * 1_000
+      let paceMs = min(UInt64(params["pace_ms"] ?? "") ?? 0, maxWaitMs)
+      let settleMs = min(UInt64(params["settle_ms"] ?? "") ?? 0, maxWaitMs)
+      // Default 100 ms. Pass 342 to mimic what the CoreAudio IOProc hands a
+      // 48 kHz device's capture after resampling — chunk size has already
+      // hidden one bug that only a real microphone showed. Always a whole
+      // number of 16-bit samples, so an odd size cannot shear the PCM framing.
+      let requestedChunk = Int(params["chunk_bytes"] ?? "") ?? 3_200
+      let chunkSize = max(2, requestedChunk - requestedChunk % 2)
 
       var result = PushToTalkManager.shared.beginRealtimePushToTalkForAutomation()
       guard result["listening"] == "true" else { return result }
-      let chunkSize = 3_200
       var offset = 0
       var injected = 0
       while offset < pcm16k.count {
@@ -1486,14 +1561,37 @@ final class DesktopAutomationActionRegistry {
           injected += end - offset
         }
         offset = end
+        if paceMs > 0 { try? await Task.sleep(nanoseconds: paceMs * 1_000_000) }
       }
       let stopped = PushToTalkManager.shared.endPushToTalkForAutomation()
+      if settleMs > 0 { try? await Task.sleep(nanoseconds: settleMs * 1_000_000) }
       result["injected_bytes"] = "\(injected)"
       result["finalized"] = stopped["finalized"] ?? "false"
       for (key, value) in RealtimeHubController.shared.automationPTTDiagnostics() {
         result[key] = value
       }
+      for (key, value) in PushToTalkManager.shared.voiceTypingAutomationDiagnostics() {
+        result[key] = value
+      }
       return result
+    }
+
+    // The dictation pipeline without a voice turn: transcribe a recording the
+    // way a key-up does (backend, then on-device; on-device only with
+    // network=false), clean it up, and paste it into the frontmost app. Lets a
+    // harness verify the paste and the fallback order with no microphone and,
+    // with network=false, no sign-in.
+    register(
+      name: "voice_typing_dictate",
+      summary: "Run a PCM16/16k recording through the dictation pipeline and paste the result into the frontmost app",
+      params: ["pcm", "network"]
+    ) { params in
+      guard let path = params["pcm"],
+        let pcm16k = try? Data(contentsOf: URL(fileURLWithPath: path)),
+        !pcm16k.isEmpty
+      else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
+      let allowNetwork = (params["network"] ?? "true").lowercased() != "false"
+      return await PushToTalkManager.shared.dictateForAutomation(pcm16k: pcm16k, allowNetwork: allowNetwork)
     }
 
     register(

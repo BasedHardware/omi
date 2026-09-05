@@ -3235,6 +3235,16 @@
     "pendantFullSyncBlocked": "Pendant atmiņa ir pilna, un tas joprojām ir ierakstīšanas režīmā, tāpēc saglabāto audio nevar pārsūtīt. Nospiediet Pendant pogu, lai apturētu ierakstīšanu, un pēc tam sinhronizējiet vēlreiz.",
     "conversationsNotCapturedCount": "Nav ierakstīts ({count})",
     "transcriptionNoAudio": "Transkripcija nesaņem audio",
+    "chatBlockTask": "Uzdevums",
+    "chatBlockGoal": "Mērķis",
+    "chatBlockConversation": "Saruna",
+    "chatBlockMemory": "Atmiņa",
+    "chatBlockQuestion": "Jautājums",
+    "chatBlockOpenInGoals": "Atvērt sadaļā “Mērķi”",
+    "chatBlockOpenConversation": "Atvērt sarunu",
+    "chatBlockOpenInMemories": "Atvērt sadaļā “Atmiņas”",
+    "chatBlockUnavailable": "Vairs nav pieejams",
+    "chatBlockRecommendedNextSteps": "Ieteicamie nākamie soļi",
     "couldNotLoadMemories": "Neizdevās ielādēt atmiņas",
     "couldNotLoadKnowledgeGraph": "Neizdevās ielādēt zināšanu grafu"
 }
