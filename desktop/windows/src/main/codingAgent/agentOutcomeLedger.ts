@@ -13,7 +13,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
-import type { CodingAgentAdapterId } from './interface'
+import { PRODUCTION_ADAPTER_IDS, type CodingAgentAdapterId } from './interface'
 
 /** Coarse shape of the delegated task, guessed from the prompt text. Coarser
  *  than it sounds — this only has to separate "this benefits from resuming
@@ -53,8 +53,12 @@ function isTaskTag(value: unknown): value is TaskTag {
   return typeof value === 'string' && (TASK_TAGS as readonly string[]).includes(value)
 }
 
+// Reuses interface.ts's own list rather than repeating adapter ids here, so a
+// new coding agent added to PRODUCTION_ADAPTER_IDS is recognized by the
+// sanitizer automatically instead of silently having every entry dropped
+// until someone remembers to update this file too.
 function isAdapterId(value: unknown): value is CodingAgentAdapterId {
-  return value === 'acp' || value === 'openclaw' || value === 'hermes' || value === 'codex'
+  return typeof value === 'string' && (PRODUCTION_ADAPTER_IDS as readonly string[]).includes(value)
 }
 
 // Same defensive posture as appSettings.sanitizeAppSettings: a corrupt or

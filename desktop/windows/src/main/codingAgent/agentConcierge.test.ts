@@ -105,6 +105,59 @@ describe('rankAgentsForTask', () => {
     expect(rankAgentsForTask(['openclaw', 'acp'], 'general', allWins)).toEqual(['acp', 'openclaw'])
   })
 
+  it('never lets a history swing outrank tool support, even at the score floor/ceiling', () => {
+    // The case flagged in review: on a tag with no capability bonus for
+    // either side, OpenClaw at the history ceiling scores -3 + 2 = -1, and
+    // Codex at the history floor scores 0 + -2 = -2. -1 beats -2, so a
+    // score-only sort would have put a tool-less agent ahead of one that can
+    // actually edit files. Tool support has to be a hard partition, not a
+    // score nudge sized to usually win, or a long enough streak on either
+    // side reopens exactly this gap.
+    const openclawWinStreak: AgentOutcomeEntry[] = Array.from({ length: 20 }, (_, i) => ({
+      adapterId: 'openclaw',
+      tag: 'general',
+      outcome: 'success',
+      ts: i
+    }))
+    const codexLossStreak: AgentOutcomeEntry[] = Array.from({ length: 20 }, (_, i) => ({
+      adapterId: 'codex',
+      tag: 'general',
+      outcome: 'failure',
+      ts: 100 + i
+    }))
+    expect(
+      rankAgentsForTask(['openclaw', 'codex'], 'general', [
+        ...openclawWinStreak,
+        ...codexLossStreak
+      ])
+    ).toEqual(['codex', 'openclaw'])
+  })
+
+  it('keeps the tool-support gate even on the tag where OpenClaw scores highest', () => {
+    // long_running is OpenClaw's best case (it does support native resume),
+    // so it's the tightest margin: capability score -3 + 1 = -2, plus a
+    // maxed-out win streak, versus Hermes/Codex with no long_running bonus at
+    // the history floor. Still must not cross the tool-support partition.
+    const openclawWinStreak: AgentOutcomeEntry[] = Array.from({ length: 20 }, (_, i) => ({
+      adapterId: 'openclaw',
+      tag: 'long_running',
+      outcome: 'success',
+      ts: i
+    }))
+    const hermesLossStreak: AgentOutcomeEntry[] = Array.from({ length: 20 }, (_, i) => ({
+      adapterId: 'hermes',
+      tag: 'long_running',
+      outcome: 'failure',
+      ts: 100 + i
+    }))
+    expect(
+      rankAgentsForTask(['openclaw', 'hermes'], 'long_running', [
+        ...openclawWinStreak,
+        ...hermesLossStreak
+      ])
+    ).toEqual(['hermes', 'openclaw'])
+  })
+
   it('ignores history for a different agent or a different kind of task', () => {
     const ledger: AgentOutcomeEntry[] = [
       { adapterId: 'codex', tag: 'bulk_refactor', outcome: 'success', ts: 1 },
