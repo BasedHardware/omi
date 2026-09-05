@@ -46,6 +46,26 @@ final class MemoriesViewModelObserverTests: XCTestCase {
     )
   }
 
+  /// A chat-tool save and a proactive extraction both write straight to the
+  /// backend; without this subscriber an open page keeps rendering its cached
+  /// list and the user concludes the save failed.
+  func testMemoriesDidChangeNotificationTriggersRefresh() async {
+    let viewModel = MemoriesViewModel()
+    XCTAssertEqual(viewModel.refreshInvocations, 0, "Fresh instance must start at zero")
+
+    NotificationCenter.default.post(name: .memoriesDidChange, object: nil)
+    // The subscriber refreshes from an unstructured Task; yield until it has
+    // run rather than sleeping for a duration the machine may not honour.
+    for _ in 0..<1000 {
+      if viewModel.refreshInvocations > 0 { break }
+      await Task.yield()
+    }
+
+    XCTAssertEqual(
+      viewModel.refreshInvocations, 1,
+      "a memory written outside the page must route to refreshMemoriesIfNeeded()")
+  }
+
   func testRefreshAllDataNotificationTriggersRefresh() async {
     let viewModel = MemoriesViewModel()
 

@@ -1,0 +1,7 @@
+{
+  "changes": [
+    "Chat can now save a memory from anything in the conversation — an attachment, an earlier turn — instead of refusing unless you typed a magic phrase, and can save a whole set of facts at once",
+    "Fixed memory saves being rejected when the fact contained a slash, such as a path, a URL, or \"AI/ML\"",
+    "Memories saved from chat or picked up in the background now appear on the Memories page right away, and a memory whose upload failed is retried instead of being stranded on that Mac"
+  ]
+}

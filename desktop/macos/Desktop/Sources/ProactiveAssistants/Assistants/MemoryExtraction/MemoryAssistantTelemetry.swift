@@ -127,13 +127,18 @@ struct MemoryAssistantDurabilityRequest: Sendable {
   let contextSummary: String
   let windowTitle: String?
   let ownerID: String
+  /// Set when the local row already exists — a retry of a memory whose backend
+  /// create failed. The sequence then resumes at the backend half and emits no
+  /// terminal, because the extraction that created the row already emitted one.
+  let existingLocalID: Int64?
 
   init(
     memory: ExtractedMemory,
     screenshotId: Int64?,
     contextSummary: String,
     windowTitle: String?,
-    ownerID: String
+    ownerID: String,
+    existingLocalID: Int64? = nil
   ) {
     content = memory.content
     category = memory.category.rawValue
@@ -143,6 +148,7 @@ struct MemoryAssistantDurabilityRequest: Sendable {
     self.contextSummary = contextSummary
     self.windowTitle = windowTitle
     self.ownerID = ownerID
+    self.existingLocalID = existingLocalID
   }
 }
 
@@ -240,8 +246,14 @@ actor MemoryAssistantProductionDurability: MemoryAssistantDurabilityRunning {
   }
 
   func persistAndSync(_ request: MemoryAssistantDurabilityRequest) async -> MemoryAssistantDurability.Outcome {
-    guard let localID = await operations.insertLocalMemory(request) else {
-      return .localPersistenceFailed
+    let localID: Int64
+    if let existing = request.existingLocalID {
+      localID = existing
+    } else {
+      guard let inserted = await operations.insertLocalMemory(request) else {
+        return .localPersistenceFailed
+      }
+      localID = inserted
     }
     guard let receipt = await operations.createRemoteMemory(request) else {
       return .syncFailed
@@ -352,6 +364,8 @@ actor MemoryAssistantDurabilityPipeline {
     confidence: Double
   ) async -> MemoryAssistantDurability.Outcome {
     let outcome = await runner.persistAndSync(request)
+    // A retry re-sends an already-counted memory; re-emitting would count it twice.
+    guard request.existingLocalID == nil else { return outcome }
     await MainActor.run {
       MemoryAssistantDurability.emitPersistenceTerminal(outcome, confidence: confidence)
     }
