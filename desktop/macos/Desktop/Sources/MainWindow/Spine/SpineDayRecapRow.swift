@@ -132,6 +132,7 @@ struct SpineDayRecapRow: View {
       .padding(.bottom, OmiSpacing.sm)
       .frame(maxWidth: .infinity, alignment: .leading)
       .contentShape(Rectangle())
+      .accessibilityIdentifier("spine-day-recap-header")
     }
     .buttonStyle(.plain)
     // **The day card's body, not a second surface.** Same material as the
