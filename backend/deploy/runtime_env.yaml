@@ -988,6 +988,28 @@ environments:
           flags:
             --task-timeout: 3600s
           secrets:
+            OPENAI_API_KEY:
+              secret: OPENAI_API_KEY
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+          env:
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+          forbidden_env:
+          - HOSTED_PUSHER_API_URL
+        x-connector-sync-job:
+          flags:
+            --task-timeout: 3600s
+            --remove-env-vars: HOSTED_PUSHER_API_URL
+          secrets:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
@@ -1003,6 +1025,12 @@ environments:
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
               version: latest
+            X_OAUTH_CLIENT_SECRET:
+              secret: X_OAUTH_CLIENT_SECRET
+              version: latest
+            RAPID_API_KEY:
+              secret: RAPID_API_KEY
+              version: latest
           env:
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
@@ -1014,6 +1042,15 @@ environments:
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend-dev
+            X_OAUTH_CLIENT_ID:
+              env_var: X_OAUTH_CLIENT_ID
+              category: oauth_metadata
+            X_OAUTH_REDIRECT_URI:
+              env_var: X_OAUTH_REDIRECT_URI
+              category: oauth_metadata
+            RAPID_API_HOST:
+              env_var: RAPID_API_HOST
+              category: integrations
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -1271,6 +1308,7 @@ environments:
       - .github/workflows/gcp_backend_auto_dev.yml
       - .github/workflows/gcp_backend.yml
       - .github/workflows/gcp_notifications_job.yml
+      - .github/workflows/gcp_x_connector_sync_job.yml
       - .github/workflows/gcp_memory_maintenance_job.yml
       - .github/workflows/gcp_memory_maintenance_job_auto_dev.yml
       - .github/workflows/gcp_frame_request_retention_job.yml
@@ -2202,6 +2240,23 @@ environments:
           flags:
             --task-timeout: 3600s
           secrets:
+            OPENAI_API_KEY:
+              secret: OPENAI_API_KEY
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+          env:
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+        x-connector-sync-job:
+          flags:
+            --task-timeout: 3600s
+          secrets:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
@@ -2217,6 +2272,12 @@ environments:
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
               version: latest
+            X_OAUTH_CLIENT_SECRET:
+              secret: X_OAUTH_CLIENT_SECRET
+              version: latest
+            RAPID_API_KEY:
+              secret: RAPID_API_KEY
+              version: latest
           env:
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
@@ -2228,6 +2289,15 @@ environments:
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend
+            X_OAUTH_CLIENT_ID:
+              env_var: X_OAUTH_CLIENT_ID
+              category: oauth_metadata
+            X_OAUTH_REDIRECT_URI:
+              env_var: X_OAUTH_REDIRECT_URI
+              category: oauth_metadata
+            RAPID_API_HOST:
+              env_var: RAPID_API_HOST
+              category: integrations
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
@@ -2477,6 +2547,7 @@ environments:
       workflow_files:
       - .github/workflows/gcp_backend.yml
       - .github/workflows/gcp_notifications_job.yml
+      - .github/workflows/gcp_x_connector_sync_job.yml
       - .github/workflows/gcp_memory_maintenance_job.yml
       - .github/workflows/gcp_frame_request_retention_job.yml
       - .github/workflows/gcp_daily_memory_sweep_job.yml

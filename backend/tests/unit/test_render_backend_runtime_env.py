@@ -15,6 +15,12 @@ _MANIFEST = _MODULE['_load_yaml'](_MODULE['DEFAULT_MANIFEST'])
 @pytest.fixture(autouse=True)
 def _reuse_parsed_repo_manifest(monkeypatch):
     monkeypatch.setitem(_MODULE, '_load_yaml', lambda _path: _MANIFEST)
+    # Full-state renderer tests need deploy-time values for every declared job.
+    for env_config in _MANIFEST['environments'].values():
+        for job in (env_config.get('cloud_run', {}).get('jobs') or {}).values():
+            for raw_entry in (job.get('env') or {}).values():
+                if isinstance(raw_entry, dict) and isinstance(raw_entry.get('env_var'), str):
+                    monkeypatch.setenv(raw_entry['env_var'], str(raw_entry.get('default', 'rendered-value')))
 
 
 def _job_env_block(out: str, job_prefix: str) -> str:
@@ -178,6 +184,52 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest' in memory_secrets
 
 
+def test_render_dev_emits_x_connector_sync_job_outputs(capsys, monkeypatch):
+    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
+    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-dev-subnet-1')
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
+    monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'x-connector-sync-job'])
+
+    assert _MODULE['main']() == 0
+    output = capsys.readouterr().out
+    assert 'X_OAUTH_CLIENT_ID=x-client-id' in output
+    assert 'X_OAUTH_REDIRECT_URI=https://api.example/v1/x/callback' in output
+    assert 'RAPID_API_HOST=twitter-api.example' in output
+    assert 'X_OAUTH_CLIENT_SECRET=X_OAUTH_CLIENT_SECRET:latest' in output
+    assert 'RAPID_API_KEY=RAPID_API_KEY:latest' in output
+    assert 'notifications_job_env_vars<<' not in output
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_x_connector_sync_job_pins_its_task_timeout(env):
+    """The job must pin a task timeout rather than inherit Cloud Run's 600s default.
+
+    Every other Cloud Run job in this manifest pins one. An unpinned job deploys at the
+    platform default, and #12530 is what that costs: the notifications job was SIGKILLed
+    mid-batch at 600s, users past the kill point were never reached on any run, and the
+    pipeline looked healthy throughout. X sync walks a registry at ~1.5s per user plus
+    fetch and extraction, so it has the same shape of exposure.
+
+    Pinned equal to memory-maintenance-job, the job this one was cloned from.
+    """
+    jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
+    assert jobs['x-connector-sync-job']['flags']['--task-timeout'] == '3600s'
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_every_cloud_run_job_pins_a_task_timeout(env):
+    """No job may rely on the platform default.
+
+    Asserting only the new job would let the next one repeat the omission — this PR's own
+    job was added without a timeout precisely because nothing required one.
+    """
+    jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
+    unpinned = sorted(name for name, spec in jobs.items() if not (spec.get('flags') or {}).get('--task-timeout'))
+    assert unpinned == [], f'Cloud Run jobs without an explicit --task-timeout: {unpinned}'
+
+
 @pytest.mark.parametrize('env', ['dev', 'prod'])
 def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
     jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
@@ -247,22 +299,38 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
         'TYPESENSE_HOST',
         'TYPESENSE_HOST_PORT',
         'TYPESENSE_API_KEY',
+        'PINECONE_INDEX_NAME',
+        'OMI_BACKGROUND_FLEX_CAPABLE',
+        'OMI_LLM_GATEWAY_URL',
+        'X_OAUTH_CLIENT_ID',
+        'X_OAUTH_REDIRECT_URI',
+        'RAPID_API_HOST',
     }
     assert forbidden_notifications_vars.isdisjoint(notifications_env)
-    assert notifications_env['PINECONE_INDEX_NAME']['value'] == 'memories-backend-dev'
-    assert notifications_env['OMI_BACKGROUND_FLEX_CAPABLE']['value'] == 'true'
-    assert notifications_env['OMI_LLM_GATEWAY_URL']['env_var'] == 'OMI_LLM_GATEWAY_URL'
     assert set(notifications_job['secrets']) == {
+        'SERVICE_ACCOUNT_JSON',
+        'ENCRYPTION_SECRET',
+        'OPENAI_API_KEY',
+    }
+
+    x_sync_job = cloud_run['jobs']['x-connector-sync-job']
+    x_sync_env = x_sync_job['env']
+    assert x_sync_env['PINECONE_INDEX_NAME']['value'] == 'memories-backend-dev'
+    assert x_sync_env['OMI_BACKGROUND_FLEX_CAPABLE']['value'] == 'true'
+    assert x_sync_env['OMI_LLM_GATEWAY_URL']['env_var'] == 'OMI_LLM_GATEWAY_URL'
+    assert set(x_sync_job['secrets']) >= {
         'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
         'OMI_LLM_GATEWAY_SERVICE_TOKEN',
+        'X_OAUTH_CLIENT_SECRET',
+        'RAPID_API_KEY',
     }
 
 
-def test_notifications_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
-    workflow = (_SCRIPT.parents[2] / '.github/workflows/gcp_notifications_job.yml').read_text(encoding='utf-8')
+def test_x_connector_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
+    workflow = (_SCRIPT.parents[2] / '.github/workflows/gcp_x_connector_sync_job.yml').read_text(encoding='utf-8')
 
     assert 'Verify LLM Gateway serving data plane' in workflow
     assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in workflow
@@ -288,6 +356,9 @@ def test_render_prod_emits_memory_maintenance_job_cron_on(capsys, monkeypatch):
     monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'invoker@project.iam.gserviceaccount.com')
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://backend-sync.example.com/v2/sync-jobs/run')
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@project.iam.gserviceaccount.com')
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'fake-x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
     rc = _MODULE['main']()
     assert rc == 0
@@ -330,6 +401,9 @@ def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatc
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://backend-sync.example.com/v2/sync-jobs/run')
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@project.iam.gserviceaccount.com')
     monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://172.16.160.108')
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'fake-x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
 
     assert _MODULE['main']() == 0
