@@ -14,8 +14,12 @@ creates or updates only these named resources:
 
 The API services use bare development ADC and the dedicated
 `jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com` runtime identity.
-They use the `(default)` Firestore database in `based-hardware-dev`, while
+They use the named `jit-qa` Firestore database in `based-hardware-dev`, while
 Firebase token verification is explicitly addressed to `based-hardware`.
+The workflow creates that native Firestore database in `us-central1` if it is
+missing. `FIRESTORE_DATABASE_ID=jit-qa` is mechanically accepted only with
+the dev project, dev stage, and QA auth fence, so an accidental production
+process cannot fall back into this database.
 `OMI_JIT_QA_AUTH_ONLY=true` enables the narrow application fence: after token
 verification, every HTTP/WebSocket route rejects a UID other than
 `vi7SA9ckQCe4ccobWNxlbdcNdC23`, before account, Redis, or model work. The
@@ -30,7 +34,11 @@ deployment. Gateway-only routing is required (`gateway` route and feature mode,
 direct-model exception `false`); a missing or unhealthy gateway cannot be
 reported as QA ready. The gateway's public Cloud Run transport is still
 application-authenticated with the scoped token and caller allowlist
-`backend,desktop`; `/health` is the only unauthenticated probe. No shared
+`backend,desktop`; `/health` is the only unauthenticated probe. Readiness
+requires pre-existing development-project `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+and `PERPLEXITY_API_KEY` secrets because the checked-in gateway route catalog
+contains those managed lanes; the workflow only grants the QA runtime access
+and never creates, exports, or prints their values. No shared
 Redis/cache, Typesense, Pinecone, queue, connector, notification, or customer
 credential binding is copied into the plane.
 
@@ -39,16 +47,20 @@ about `$35.77` for 730 hours for the 1 GiB instance, before other dev costs.
 See [Memorystore Redis pricing](https://cloud.google.com/memorystore/docs/redis/pricing).
 The workflow does not create a Scheduler trigger. To clean up the owned QA
 resources, first disable or cancel any run, then delete the three services, two
-jobs, the Redis/token resources, and the dedicated runtime identity in
-`based-hardware-dev`; redeployment is idempotent and recreates the same fixed
-names and minimum bindings. Never run cleanup against `based-hardware`.
+jobs, the named `jit-qa` database, Redis/token resources, and the dedicated
+runtime identity in `based-hardware-dev`; redeployment is idempotent and
+recreates the same fixed names and minimum bindings. Never run cleanup against
+`based-hardware`.
 
 The drain and sweep jobs deploy with gates closed and the explicit QA UID in
 their environment. QA sweep executions use a direct allowlist inventory and
 never read or advance the global daily-sweep cursors. `run_once=true` requires
 `RUN_ONCE`, checks `run.jobs.runWithOverrides`, executes the drain first, and
-polls the exact returned execution through `status.conditions[type=Completed]`.
-Only a successful drain makes a sweep eligible. A sweep additionally requires
+polls the exact returned execution through `status.conditions[type=Completed]`,
+then reads the QA database's apply-control, migration-completion, and bounded
+projection documents and requires matching writer/head/epoch fences, stable
+ledger mode, zero live legacy rows, and a nonempty completed scan. Only that
+durable proof makes a sweep eligible. A sweep additionally requires
 the separate literal `RUN_MODEL_EXPERIMENT`; that path is the paid-model
 approval boundary and is capped at eight candidates and `$0.05` per run. A
 deployment-only dispatch performs no model work. Execution artifacts contain

@@ -6,7 +6,8 @@
   },
   "spec": {
     "template": {
-      "template": {
+      "spec": {
+        "template": {
         "spec": {
           "serviceAccountName": "jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com",
           "containers": [
@@ -16,6 +17,7 @@
                 {"name": "OMI_ENV_STAGE", "value": "dev"},
                 {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware-dev"},
                 {"name": "OMI_FIRESTORE_DATA_PLANE_PROJECT", "value": "based-hardware-dev"},
+                {"name": "FIRESTORE_DATABASE_ID", "value": "jit-qa"},
                 {"name": "FIREBASE_AUTH_PROJECT_ID", "value": "based-hardware"},
                 {"name": "KNOWLEDGE_LEDGER_DRAIN_ENABLED", "value": "false"},
                 {"name": "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
@@ -27,6 +29,7 @@
             }
           ]
         }
+      }
       }
     }
   }

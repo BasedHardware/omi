@@ -21,6 +21,7 @@ from typing import Any, Mapping
 PROJECT_ID = "based-hardware-dev"
 REGION = "us-central1"
 AUTH_PROJECT_ID = "based-hardware"
+FIRESTORE_DATABASE_ID = "jit-qa"
 
 BACKEND_SERVICE = "backend-jit-qa"
 DESKTOP_BACKEND_SERVICE = "desktop-backend-jit-qa"
@@ -60,6 +61,12 @@ _ALLOWED_SECRET_BINDINGS = {
     "ENCRYPTION_SECRET": "ENCRYPTION_SECRET:latest",
     "OPENAI_API_KEY": "OPENAI_API_KEY:latest",
     "REDIS_DB_PASSWORD": "jit-qa-redis-password:latest",
+    "OMI_LLM_GATEWAY_SERVICE_TOKEN": "jit-qa-gateway-token:latest",
+}
+_GATEWAY_SECRET_BINDINGS = {
+    "OPENAI_API_KEY": "OPENAI_API_KEY:latest",
+    "ANTHROPIC_API_KEY": "ANTHROPIC_API_KEY:latest",
+    "PERPLEXITY_API_KEY": "PERPLEXITY_API_KEY:latest",
     "OMI_LLM_GATEWAY_SERVICE_TOKEN": "jit-qa-gateway-token:latest",
 }
 RUNTIME_SERVICE_ACCOUNT = "jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com"
@@ -134,6 +141,7 @@ def validate_environment(environment: Mapping[str, str]) -> None:
     expected = {
         "GOOGLE_CLOUD_PROJECT": PROJECT_ID,
         "OMI_FIRESTORE_DATA_PLANE_PROJECT": PROJECT_ID,
+        "FIRESTORE_DATABASE_ID": FIRESTORE_DATABASE_ID,
         "FIREBASE_AUTH_PROJECT_ID": AUTH_PROJECT_ID,
         "OMI_ENV_STAGE": "dev",
     }
@@ -178,6 +186,8 @@ def _containers(resource: Mapping[str, Any], *, kind: str) -> list[Mapping[str, 
         paths = (("spec", "template", "spec", "containers"), ("spec", "template", "containers"))
     elif kind == "job":
         paths = (
+            ("spec", "template", "spec", "template", "spec", "containers"),
+            ("spec", "template", "spec", "template", "containers"),
             ("spec", "template", "template", "spec", "containers"),
             ("spec", "template", "template", "containers"),
         )
@@ -280,15 +290,26 @@ def validate_cloud_run_resource(
     if not isinstance(spec, Mapping):
         raise JITQAContractError("Cloud Run resource has no v2 spec")
     if kind == "service":
-        template = spec.get("template")
+        templates = [spec.get("template")]
     else:
-        template = spec.get("template", {}).get("template") if isinstance(spec.get("template"), Mapping) else None
-    if not isinstance(template, Mapping):
+        outer = spec.get("template")
+        templates = []
+        if isinstance(outer, Mapping):
+            templates.extend(
+                [outer.get("spec", {}).get("template") if isinstance(outer.get("spec"), Mapping) else None]
+            )
+            templates.extend([outer.get("template")])
+    templates = [template for template in templates if isinstance(template, Mapping)]
+    if not templates:
         raise JITQAContractError("Cloud Run resource has no v2 service template")
-    service_account = template.get("serviceAccountName", template.get("serviceAccount"))
-    if service_account is None and isinstance(template.get("spec"), Mapping):
-        service_spec = template["spec"]
-        service_account = service_spec.get("serviceAccountName", service_spec.get("serviceAccount"))
+    service_account = None
+    for template in templates:
+        service_account = template.get("serviceAccountName", template.get("serviceAccount"))
+        if service_account is None and isinstance(template.get("spec"), Mapping):
+            service_spec = template["spec"]
+            service_account = service_spec.get("serviceAccountName", service_spec.get("serviceAccount"))
+        if service_account is not None:
+            break
     if service_account != expected_service_account:
         raise JITQAContractError("Cloud Run resource uses an unexpected runtime service account")
 
@@ -305,6 +326,7 @@ def resource_environment(
         "OMI_ENV_STAGE": "dev",
         "GOOGLE_CLOUD_PROJECT": PROJECT_ID,
         "OMI_FIRESTORE_DATA_PLANE_PROJECT": PROJECT_ID,
+        "FIRESTORE_DATABASE_ID": FIRESTORE_DATABASE_ID,
         "FIREBASE_AUTH_PROJECT_ID": AUTH_PROJECT_ID,
     }
     if profile in {"backend", "desktop"}:
@@ -333,8 +355,7 @@ def resource_environment(
                 "OMI_LLM_GATEWAY_BUILD_IDENTITY": "jit-qa",
             },
             {
-                "OPENAI_API_KEY": _ALLOWED_SECRET_BINDINGS["OPENAI_API_KEY"],
-                "OMI_LLM_GATEWAY_SERVICE_TOKEN": _ALLOWED_SECRET_BINDINGS["OMI_LLM_GATEWAY_SERVICE_TOKEN"],
+                **_GATEWAY_SECRET_BINDINGS,
             },
         )
     if profile == "drain":
@@ -362,8 +383,18 @@ def resource_environment(
                 "MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG": "",
                 "OMI_JIT_QA_AUTH_ONLY": "true",
                 "OMI_JIT_QA_UID_ALLOWLIST": QA_UID,
+                "OMI_LLM_GATEWAY_FEATURE_MODE": "gateway",
+                "OMI_LLM_CHAT_AGENT_ROUTE": "gateway",
+                "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION": "false",
+                "OMI_LLM_GATEWAY_URL": gateway_url,
+                "REDIS_DB_HOST": redis_host,
+                "REDIS_DB_PORT": "6379",
             },
-            dict(_ALLOWED_SECRET_BINDINGS),
+            {
+                "ENCRYPTION_SECRET": _ALLOWED_SECRET_BINDINGS["ENCRYPTION_SECRET"],
+                "REDIS_DB_PASSWORD": _ALLOWED_SECRET_BINDINGS["REDIS_DB_PASSWORD"],
+                "OMI_LLM_GATEWAY_SERVICE_TOKEN": _ALLOWED_SECRET_BINDINGS["OMI_LLM_GATEWAY_SERVICE_TOKEN"],
+            },
         )
     raise JITQAContractError(f"unknown QA resource profile {profile!r}")
 

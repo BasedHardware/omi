@@ -13,6 +13,7 @@ SCHEMA_VERSION = "omi.jit.qa.cloud.v1"
 PROJECT = "based-hardware-dev"
 REGION = "us-central1"
 AUTH_PROJECT = "based-hardware"
+FIRESTORE_DATABASE = "jit-qa"
 _REVISION_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _DIGEST_IMAGE_RE = re.compile(r"^gcr\.io/based-hardware-dev/[a-z0-9-]+@sha256:[0-9a-f]{64}$")
@@ -32,7 +33,12 @@ def _containers(resource: Mapping[str, Any], *, kind: str) -> list[Mapping[str, 
     paths = (
         (("spec", "template", "spec", "containers"), ("spec", "template", "containers"))
         if kind == "service"
-        else (("spec", "template", "template", "spec", "containers"), ("spec", "template", "template", "containers"))
+        else (
+            ("spec", "template", "spec", "template", "spec", "containers"),
+            ("spec", "template", "spec", "template", "containers"),
+            ("spec", "template", "template", "spec", "containers"),
+            ("spec", "template", "template", "containers"),
+        )
     )
     value: object = None
     for path in paths:
@@ -59,6 +65,18 @@ def _revision(resource: Mapping[str, Any], *, label: str) -> str:
     revision = status.get("latestReadyRevisionName") if isinstance(status, Mapping) else None
     if not isinstance(revision, str) or not _REVISION_RE.fullmatch(revision):
         raise ValueError(f"{label} has no exact ready revision")
+    traffic = status.get("traffic") if isinstance(status, Mapping) else None
+    serving = (
+        [
+            item.get("revisionName")
+            for item in traffic
+            if isinstance(item, Mapping) and item.get("percent") == 100 and item.get("revisionName")
+        ]
+        if isinstance(traffic, list)
+        else []
+    )
+    if serving != [revision]:
+        raise ValueError(f"{label} does not have exactly one 100 percent serving revision")
     return revision
 
 
@@ -68,7 +86,7 @@ def _image(resource: Mapping[str, Any], *, kind: str, label: str) -> str:
     if not isinstance(image, str):
         raise ValueError(f"{label} has no immutable image")
     require_digest_image(image, label=label)
-    return image
+    return image.rsplit("@", 1)[1]
 
 
 def build_receipt(
@@ -101,16 +119,17 @@ def build_receipt(
         "python_service": "backend-jit-qa",
         "desktop_service": "desktop-backend-jit-qa",
         "gateway_service": "llm-gateway-jit-qa",
-        "exact_python_url": python_url,
-        "exact_desktop_url": desktop_url,
-        "exact_gateway_url": gateway_url,
-        "full_source_sha": source_sha,
+        "python_url": python_url,
+        "desktop_url": desktop_url,
+        "gateway_url": gateway_url,
+        "source_sha": source_sha,
+        "firestore_database": FIRESTORE_DATABASE,
         "python_revision": _revision(python_resource, label="python service"),
         "python_image_digest": _image(python_resource, kind="service", label="python image"),
         "desktop_revision": _revision(desktop_resource, label="desktop service"),
         "desktop_image_digest": _image(desktop_resource, kind="service", label="desktop image"),
         "dependency_vector": {
-            "firestore": "based-hardware-dev",
+            "firestore": "based-hardware-dev/jit-qa",
             "redis": "jit-qa-redis:basic-1GiB",
             "gateway": "llm-gateway-jit-qa:service-token",
             "firebase_auth": "based-hardware:verify-only",

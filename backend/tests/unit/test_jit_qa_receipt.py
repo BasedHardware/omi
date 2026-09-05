@@ -54,7 +54,11 @@ def _resource(profile: str, name: str, image_name: str, revision: str, kind: str
     return {
         "metadata": {"name": name},
         "spec": spec,
-        "status": {"latestReadyRevisionName": revision, "url": f"https://{name}.run.app"},
+        "status": {
+            "latestReadyRevisionName": revision,
+            "url": f"https://{name}.run.app",
+            "traffic": [{"revisionName": revision, "percent": 100}],
+        },
     }
 
 
@@ -75,6 +79,10 @@ def test_receipt_has_activation_shape_and_dependency_vector():
     assert receipt["status"] == "ready"
     assert receipt["reviewed"] is False
     assert receipt["dependency_vector"]["redis"] == "jit-qa-redis:basic-1GiB"
+    assert receipt["source_sha"] == "a" * 40
+    assert receipt["python_url"] == "https://backend-jit-qa.run.app"
+    assert receipt["python_image_digest"] == "sha256:" + "a" * 64
+    assert receipt["firestore_database"] == "jit-qa"
 
 
 def test_receipt_does_not_call_a_resource_ready_without_probes():
@@ -89,5 +97,23 @@ def test_receipt_does_not_call_a_resource_ready_without_probes():
             desktop_url="https://desktop-backend-jit-qa.run.app",
             gateway_url="https://llm-gateway-jit-qa.run.app",
             app_probe=False,
+            gateway_probe=True,
+        )
+
+
+def test_receipt_rejects_latest_ready_revision_without_full_traffic():
+    python = _resource("backend", "backend-jit-qa", "backend-jit-qa", "backend-jit-qa-00001")
+    python["status"]["traffic"] = [{"revisionName": "backend-jit-qa-00000", "percent": 100}]
+    with pytest.raises(ValueError, match="100 percent serving revision"):
+        RECEIPT.build_receipt(
+            source_sha="a" * 40,
+            python_resource=python,
+            desktop_resource=_resource(
+                "desktop", "desktop-backend-jit-qa", "desktop-backend-jit-qa", "desktop-backend-jit-qa-00001"
+            ),
+            python_url="https://backend-jit-qa.run.app",
+            desktop_url="https://desktop-backend-jit-qa.run.app",
+            gateway_url="https://llm-gateway-jit-qa.run.app",
+            app_probe=True,
             gateway_probe=True,
         )

@@ -15,6 +15,7 @@
               {"name": "OMI_ENV_STAGE", "value": "dev"},
               {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware-dev"},
               {"name": "OMI_FIRESTORE_DATA_PLANE_PROJECT", "value": "based-hardware-dev"},
+              {"name": "FIRESTORE_DATABASE_ID", "value": "jit-qa"},
               {"name": "FIREBASE_AUTH_PROJECT_ID", "value": "based-hardware"},
               {"name": "MEMORY_ENABLED", "value": "on"},
               {"name": "MEMORY_BELIEF_MODEL_ENABLED", "value": "true"},
