@@ -50,6 +50,14 @@ export const EXTERNAL_AGENT_GUIDES: Record<ExternalAgentId, AgentGuide> = {
   }
 }
 
-export function isExternalAgentId(id: CodingAgentId): id is ExternalAgentId {
-  return id !== 'acp'
+/**
+ * Takes `string` rather than `CodingAgentId` so callers holding the wider
+ * `ProductionAdapterId` (main's coding-agent registry, which also includes
+ * the non-external `pi-mono`) can narrow directly instead of hitting a type
+ * error on the extra member. Checks real key membership rather than
+ * excluding `'acp'`, so it stays correct if the guide map ever gains or
+ * loses an entry independently of `CodingAgentId`.
+ */
+export function isExternalAgentId(id: string): id is ExternalAgentId {
+  return id in EXTERNAL_AGENT_GUIDES
 }

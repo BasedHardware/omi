@@ -23,7 +23,7 @@ import {
   type ProductionAdapterId,
   type RuntimeAdapter
 } from './interface'
-import { EXTERNAL_AGENT_GUIDES } from '../../shared/agentGuides'
+import { EXTERNAL_AGENT_GUIDES, isExternalAgentId } from '../../shared/agentGuides'
 
 export const ADAPTER_ACTIVATION_ENV = {
   acp: undefined, // Claude Code — bundled bridge, no install or env var needed
@@ -164,10 +164,7 @@ export function adapterActivationError(adapterId: ProductionAdapterId): string |
 }
 
 function installInstruction(adapterId: ProductionAdapterId, displayName: string): string {
-  const guide =
-    adapterId === 'openclaw' || adapterId === 'hermes' || adapterId === 'codex'
-      ? EXTERNAL_AGENT_GUIDES[adapterId]
-      : undefined
+  const guide = isExternalAgentId(adapterId) ? EXTERNAL_AGENT_GUIDES[adapterId] : undefined
   const command = guide?.installCommands[0]
   if (command) return `Install ${displayName} first: run \`${command}\` in a terminal`
   if (guide?.installNote) return `Install ${displayName} first — ${guide.installNote}`
