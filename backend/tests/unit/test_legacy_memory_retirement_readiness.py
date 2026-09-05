@@ -93,7 +93,11 @@ def test_daily_replacement_has_a_distinct_retained_resource_contract() -> None:
     assert len(daily_images) == 1
     assert daily_images[0]["dockerfile"] == "backend/modal/Dockerfile.daily_memory_sweep_job"
     assert daily_images[0]["entrypoints"] == ["daily_memory_sweep_job"]
-    assert all("gcp_daily_memory_sweep_job" in workflow for workflow in daily_images[0]["deployment_workflows"])
+    assert set(daily_images[0]["deployment_workflows"]) == {
+        ".github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml",
+        ".github/workflows/gcp_daily_memory_sweep_job.yml",
+        ".github/workflows/jit_qa_cloud_run.yml",
+    }
 
 
 def test_daily_manual_deploy_is_main_only_admitted_and_provisions_scheduler() -> None:
