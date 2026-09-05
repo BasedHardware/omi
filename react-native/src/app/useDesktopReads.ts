@@ -93,49 +93,48 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
           return;
         }
         const previous = readOutcomesRef.current;
-        const hadSavedRows =
-          previous !== null &&
-          [previous.conversations, previous.memories, previous.tasks].some(
-            outcome =>
-              outcome.status === 'success' && outcome.value.items.length > 0,
-          );
         const homeOutcomes = [
           outcomes.conversations,
           outcomes.memories,
           outcomes.tasks,
         ];
         const failed = homeOutcomes.some(outcome => outcome.status === 'error');
-        setReadOutcomes(current => {
-          let next: DesktopReadOutcomes;
-          if (current === null) {
-            next = outcomes;
-          } else {
-            next = {
-              conversations: mergeOutcome(
-                current.conversations,
-                outcomes.conversations,
-              ),
-              memories: mergeOutcome(current.memories, outcomes.memories),
-              tasks: mergeOutcome(current.tasks, outcomes.tasks),
-            };
-          }
-          readOutcomesRef.current = next;
-          if (
-            next.conversations.status === 'success' ||
-            next.memories.status === 'success' ||
-            next.tasks.status === 'success'
-          ) {
-            homeReadsLoadedRef.current = true;
-          }
-          return next;
-        });
-        const hasSavedRows = homeOutcomes.some(
+        // Merge first, then judge the phase from what the shell will actually
+        // show. A non-transient failure replaces prior success rows; claiming
+        // "showing saved data" after those rows are gone is a lie. Transient
+        // service failures keep prior rows via mergeOutcome, so the merged
+        // snapshot is the single source of truth for both paths.
+        const next: DesktopReadOutcomes =
+          previous === null
+            ? outcomes
+            : {
+                conversations: mergeOutcome(
+                  previous.conversations,
+                  outcomes.conversations,
+                ),
+                memories: mergeOutcome(previous.memories, outcomes.memories),
+                tasks: mergeOutcome(previous.tasks, outcomes.tasks),
+              };
+        readOutcomesRef.current = next;
+        if (
+          next.conversations.status === 'success' ||
+          next.memories.status === 'success' ||
+          next.tasks.status === 'success'
+        ) {
+          homeReadsLoadedRef.current = true;
+        }
+        setReadOutcomes(next);
+        const showingSavedRows = [
+          next.conversations,
+          next.memories,
+          next.tasks,
+        ].some(
           outcome =>
             outcome.status === 'success' && outcome.value.items.length > 0,
         );
         setReadsPhase(
           failed
-            ? hasSavedRows || hadSavedRows
+            ? showingSavedRows
               ? 'saved-but-refresh-failed'
               : 'unavailable'
             : 'ready',
@@ -144,10 +143,15 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
         if (seq !== refreshSeqRef.current) {
           return;
         }
+        const retained = readOutcomesRef.current;
+        const showingSavedRows =
+          retained !== null &&
+          [retained.conversations, retained.memories, retained.tasks].some(
+            outcome =>
+              outcome.status === 'success' && outcome.value.items.length > 0,
+          );
         setReadsPhase(
-          readOutcomesRef.current === null
-            ? 'unavailable'
-            : 'saved-but-refresh-failed',
+          showingSavedRows ? 'saved-but-refresh-failed' : 'unavailable',
         );
       }
     },

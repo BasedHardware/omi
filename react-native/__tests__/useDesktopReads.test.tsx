@@ -328,6 +328,21 @@ test('reset retires rows before a software-plane refresh', async () => {
   reads.unmount();
 });
 
+
+test('a thrown refresh after empty success is unavailable, not saved', async () => {
+  readsMock.mockResolvedValueOnce(successOutcomes([]));
+  const reads = await renderReads({enabled: true});
+  expect(reads.latest().readsPhase).toBe('ready');
+  expect(reads.latest().reads).toEqual([]);
+
+  readsMock.mockRejectedValueOnce(new Error('transport failed'));
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().refreshReads(false);
+  });
+  expect(reads.latest().readsPhase).toBe('unavailable');
+  reads.unmount();
+});
+
 test('an older superseded refresh cannot overwrite a newer refresh', async () => {
   let resolveOlder!: (value: DesktopReadOutcomes) => void;
   readsMock.mockImplementationOnce(
