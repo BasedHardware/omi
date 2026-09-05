@@ -18,8 +18,6 @@ struct ComputerUsePermissionsBlock: View {
 
   @State private var showTools = false
 
-  private let permissionPoll = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
-
   /// Every grant is listed at all times, so the row says which of three things
   /// is true rather than appearing only to complain. `needsRelaunch` is the
   /// state a checkbox cannot express: macOS has given the grant and this
@@ -80,10 +78,8 @@ struct ComputerUsePermissionsBlock: View {
 
       toolsSection
     }
-    .onReceive(permissionPoll) { _ in
-      Task { await store.poll() }
-    }
-    .onAppear { store.refreshPermissions() }
+    .onAppear { store.beginPolling() }
+    .onDisappear { store.endPolling() }
   }
 
   // MARK: - Permissions

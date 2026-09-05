@@ -108,23 +108,4 @@ final class CuaControlStatusStoreTests: XCTestCase {
     XCTAssertNil(LocalMcpStore.readAllServers()[CuaMcpRegistration.serverName])
   }
 
-  /// The status line stays honest at both ends: sub-perceptual latency is
-  /// "now", and anything older is spoken in human units rather than seconds.
-  @MainActor
-  func testStatusTextHumanizesTheLastAction() throws {
-    let store = makeStore(granted: [])
-    let gate = try XCTUnwrap(self.gate)
-
-    store.stopNow()
-    XCTAssertEqual(store.statusText(), "Stopped — stopped from Settings")
-    store.rearm()
-    XCTAssertEqual(store.statusText(), "Ready. Nothing has used it yet.")
-
-    let result = gate.perform(needs: []) { 1 }
-    guard case .success = result else { return XCTFail("expected the effect to run") }
-    let last = try XCTUnwrap(gate.lastActivity)
-
-    XCTAssertEqual(store.statusText(at: last.addingTimeInterval(2)), "Active now")
-    XCTAssertTrue(store.statusText(at: last.addingTimeInterval(70)).hasPrefix("Ready. Last action"))
-  }
 }

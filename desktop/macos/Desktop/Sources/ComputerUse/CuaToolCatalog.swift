@@ -464,7 +464,6 @@ enum CuaToolCatalog {
       return .error("Unknown action \(action).")
     }
 
-    await CuaControlGate.shared.noteActivity()
     switch outcome {
     case .performed:
       return .text("\(action) on \(ref) succeeded.")
@@ -638,7 +637,6 @@ enum CuaToolCatalog {
         continuation.resume(returning: CuaAppleScript.run(script, timeout: timeout))
       }
     }
-    await CuaControlGate.shared.noteActivity()
 
     if let failure = result.failure {
       // A refused Apple Event names the app it was refused for, which is the one

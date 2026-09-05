@@ -62,8 +62,6 @@ final class CuaControlGate: ObservableObject {
   private let ownerID: @MainActor () -> String?
 
   @Published private(set) var suspension: String?
-  /// When a synthetic event was last posted, for the "active" indicator.
-  @Published private(set) var lastActivity: Date?
 
   init(
     defaults: UserDefaults = .standard,
@@ -162,7 +160,6 @@ final class CuaControlGate: ObservableObject {
       return .failure(refusal)
     }
     let value = effect()
-    lastActivity = Date()
     return .success(value)
   }
 
@@ -182,10 +179,8 @@ final class CuaControlGate: ObservableObject {
     }
     let cancel = CuaGestureCancel()
     activeGestures.insert(cancel)
-    lastActivity = Date()
     let value = await Task.detached(priority: .userInitiated) { effect(cancel) }.value
     activeGestures.remove(cancel)
-    lastActivity = Date()
     return .success(value)
   }
 
@@ -198,12 +193,6 @@ final class CuaControlGate: ObservableObject {
     activeGestures.removeAll()
   }
 
-  /// Marks the surface active for an effect that ran somewhere else — an
-  /// accessibility press, which is a real action on the user's Mac even though
-  /// it posts no event.
-  func noteActivity() {
-    lastActivity = Date()
-  }
 }
 
 /// A running gesture's stop flag, checked between events.

@@ -58,6 +58,9 @@ final class CuaControlStatusStore: ObservableObject {
     Listed(permission: .screenRecording, title: "Screen", detail: "take screenshots"),
   ]
 
+  private var watchers = 0
+  private var pollTask: Task<Void, Never>?
+
   private let gate: CuaControlGate
   private let isGranted: @MainActor (CuaPermission) -> Bool
   private let needsRelaunch: @MainActor () -> Bool
@@ -103,14 +106,6 @@ final class CuaControlStatusStore: ObservableObject {
     isEnabled && !isSuspended && missingGrantCount == 0 && !screenNeedsRelaunch
   }
 
-  /// The sheet's status line: live state and the stop control sit together
-  /// because a kill switch you have to go looking for is not one.
-  func statusText(at now: Date = Date()) -> String {
-    if let suspension = gate.suspension { return "Stopped — \(suspension)" }
-    guard let last = gate.lastActivity else { return "Ready. Nothing has used it yet." }
-    if now.timeIntervalSince(last) < 5 { return "Active now" }
-    return "Ready. Last action \(Self.relativeTime(from: last, to: now))."
-  }
 
   func stopNow() { gate.suspend(reason: "stopped from Settings") }
   func rearm() { gate.rearm() }
@@ -160,7 +155,28 @@ final class CuaControlStatusStore: ObservableObject {
     refreshPermissions()
   }
 
-  private static func relativeTime(from date: Date, to now: Date) -> String {
-    RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
+  /// One timer for however many surfaces are on screen.
+  ///
+  /// The card grid and the sheet both watch this state, and each owning a timer
+  /// meant two accessibility probes every two seconds whenever the sheet was
+  /// open over the grid. Callers say when they are watching instead; the poll
+  /// runs while at least one is.
+  func beginPolling() {
+    watchers += 1
+    guard pollTask == nil else { return }
+    pollTask = Task { [weak self] in
+      while !Task.isCancelled {
+        await self?.poll()
+        try? await Task.sleep(for: .seconds(2))
+      }
+    }
   }
+
+  func endPolling() {
+    watchers = max(0, watchers - 1)
+    guard watchers == 0 else { return }
+    pollTask?.cancel()
+    pollTask = nil
+  }
+
 }

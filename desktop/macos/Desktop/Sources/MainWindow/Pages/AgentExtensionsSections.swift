@@ -18,8 +18,6 @@ struct McpServersSection: View {
   /// card as every other server, with the gate's state standing in for a probe.
   @ObservedObject private var cuaStatus = CuaControlStatusStore.shared
 
-  private let cuaPermissionPoll = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
-
   private var servers: [LocalMcpStore.Entry] {
     var listed = appProvider.localMcpServers.filter { matchesSearch($0.name, $0.summary, query: searchText) }
     // The built-in entry is in mcp.json only while the gate is on, but its card
@@ -92,11 +90,10 @@ struct McpServersSection: View {
       await appProvider.refreshMcpStatuses()
     }
     // The built-in card's status follows the gate and its TCC grants, so it
-    // polls the same live state the sheet's permissions block does.
-    .onReceive(cuaPermissionPoll) { _ in
-      Task { await cuaStatus.poll() }
-    }
-    .onAppear { cuaStatus.refreshPermissions() }
+    // watches the same live state the sheet's permissions block does — through
+    // the store's one timer, not a second copy of it.
+    .onAppear { cuaStatus.beginPolling() }
+    .onDisappear { cuaStatus.endPolling() }
     // The detail sheet's switch writes or removes the mcp.json entry through
     // the gate, so the list and its probes follow the gate rather than waiting
     // for the next page visit.
