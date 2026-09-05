@@ -1446,6 +1446,9 @@ def _query_spec_index_requirements() -> tuple[FirestoreIndexRequirement, ...]:
             document_id_range
             and bool(spec.filters)
             and all(query_filter.field_path == '__name__' for query_filter in spec.filters)
+            and len(spec.index_fields) == 1
+            and spec.index_fields[0].field_path == '__name__'
+            and spec.index_fields[0].order in {'ASCENDING', 'DESCENDING'}
         )
         if document_id_only_range:
             # Firestore serves collection-group ranges on the document key from

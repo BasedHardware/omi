@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 from google.cloud.firestore_v1 import FieldFilter
 
+import database.firestore_index_registry as firestore_index_registry
 import database.action_items as action_items_db
 import database.chat as chat_db
 import database.conversations as conversations_db
@@ -44,6 +45,8 @@ from database.firestore_index_registry import (
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
     QUERY_SPECS,
     FirestoreIndexField,
+    FirestoreQueryFilter,
+    FirestoreQuerySpec,
     _index_fields_need_composite_manifest,
     firebase_index_manifest,
 )
@@ -844,3 +847,21 @@ def test_document_id_only_collection_group_range_has_no_impossible_composite_req
         and index['fields'] == [{'fieldPath': '__name__', 'order': 'ASCENDING'}]
         for index in manifest['indexes']
     )
+
+
+def test_document_id_range_with_additional_ordering_field_still_requires_composite(monkeypatch):
+    spec = FirestoreQuerySpec(
+        identifier='synthetic_document_id_range_with_order',
+        collection_group='photos',
+        query_scope='COLLECTION_GROUP',
+        filters=(
+            FirestoreQueryFilter('__name__', '>=', 'start_key'),
+            FirestoreQueryFilter('__name__', '<=', 'end_key'),
+        ),
+        index_fields=(_asc('created_at'), _asc('__name__')),
+    )
+    monkeypatch.setattr(firestore_index_registry, 'QUERY_SPECS', (spec,))
+
+    requirements = firestore_index_registry._query_spec_index_requirements()
+
+    assert [requirement.identifier for requirement in requirements] == [spec.identifier]
