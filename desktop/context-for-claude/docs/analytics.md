@@ -182,6 +182,22 @@ somebody's microphone was on.
 Changing `AnalyticsIdentity.salt` re-anonymises every install and restarts every retention curve.
 Don't.
 
+### Carrying the device hash as a super-property would be the same mistake in a different spelling
+
+The recurring proposal is to leave `distinct_id` alone and add `ClientDevice.deviceIdHash` as a
+super-property instead, so the PostHog series can be joined to the Firestore install roster. Adding
+it beside `distinct_id` is not weaker than making the two ids equal — it *is* the join, made
+explicit. `macos_<hash>` is the key of `users/{uid}/screen_activity/{clientDeviceId}-{rowId}`, so it
+resolves to a uid and a uid resolves to a person; every property on this page would then be a named
+person's record of when their microphone was on. And the usual argument for it — "the backend
+already receives that hash, so PostHog learns nothing new" — is about the wrong party: the backend
+receiving it is precisely what makes it a join key, and PostHog does **not** receive it today.
+
+The question it is reached for does not need it. `cfc_daily_active` is already one event per install
+per day carrying `tool_calls_total`, so a day-by-day activity grid is answerable from this project
+alone — including for the install that never signs in, which the Firestore roster cannot see at all.
+The MCP key's single `last_used_at` is the thing that undercounts; fix that where it is stored.
+
 ## The three refusals
 
 1. **Airgap Mode drops events, it does not defer them.** Every other `NetworkEgress.Client` queues
@@ -253,6 +269,41 @@ FROM events
 WHERE timestamp > now() - INTERVAL 1 DAY AND properties.app = 'context-for-claude'
 GROUP BY event ORDER BY n DESC
 ```
+
+## Bucketing days: two clocks, and neither of them is ambiguous
+
+An install shows up in two datasets stamped on two different clocks. Reading them as one clock is
+the error this note exists to prevent, and the naive-looking timestamps invite it.
+
+**`cfc_daily_active` is one event per install per *local* calendar day.**
+`ContextAnalytics.dayStamp` takes `.year/.month/.day` from `Calendar.current`, so the boundary is
+the machine's own midnight. That is the right boundary for the question the event answers — "was
+this person at their desk today" — and it means two installs in different zones roll over at
+different instants. Cohort on the day the install already declared, not on a UTC re-derivation of
+the event timestamp.
+
+**Screen-activity rows are UTC.** They land in Firestore looking timezone-less —
+`'2026-08-17 20:55:09.022'` — but that is an instant in UTC with the offset dropped, never a
+device-local wall clock. `ScreenActivityUploader.storageTimestamp` pins it:
+
+```swift
+formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+formatter.locale = Locale(identifier: "en_US_POSIX")
+formatter.timeZone = TimeZone(secondsFromGMT: 0)
+```
+
+The backend agrees by construction rather than by convention: `normalize_screen_activity_timestamp`
+in `backend/database/screen_activity.py` runs `parsed.astimezone(timezone.utc).replace(tzinfo=None)`
+on anything tz-aware before storing, and the Omi desktop app's `makeCanonicalTimestampFormatter`
+fixes the same zone. The offset is absent because the field is a **lexicographic sort key, not a
+date type** — the backend range-filters it by string comparison — and an offset would break the
+sort, which is the same defect in a different disguise as the RFC-3339 stamp that used to ship here.
+
+So the string is safe to bucket by UTC day directly, and comparable across users. What is *not*
+safe is assuming it agrees with the `cfc_daily_active` day for the same install: for anybody not on
+UTC, an evening capture belongs to one calendar day in Firestore and the other in PostHog.
+`ScreenActivityWireFormatTests` pins the exact emitted string, so a formatter that silently fell
+back to device-local fails there rather than in a query months later.
 
 ## Asking it questions
 
