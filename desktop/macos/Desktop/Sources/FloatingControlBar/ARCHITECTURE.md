@@ -30,12 +30,14 @@ owns the dictate-or-ask decision and the delivery, and nothing else does.
   receives audio until the turn is known to be a dictation.
 - **Wake-word probe (advisory).** `VoiceTypeWakeWordProbeSchedule` runs the
   on-device Parakeet model (`PTTLanguageIdentifier.transcribe`) over the first
-  few seconds of the hold at most twice per turn, scheduled by *voiced* bytes
-  so a locked turn's silent lead-in does not trigger it. A probe that hears
-  the wake word claims the turn, releases the hub turn (`cancelTurn`) so
-  minutes of dictation are not streamed to a model whose answer will be
-  cancelled, and publishes `dictationRecognized` so the notch's eight dots
-  ease to red (`NotchVoiceMorphGeometry.dictationTint`, 0.45 s ease-in) while
+  few seconds of the hold, at the five voiced-byte thresholds in
+  `VoiceTypeWakeWordProbeSchedule.voicedByteThresholds` (from ~0.45 s through
+  ~2.3 s of voice). A locked turn's silent lead-in does not trigger them. A
+  probe that hears the wake word claims the turn, releases the hub turn
+  (`cancelTurn`) so minutes of dictation are not streamed to a model whose
+  answer will be cancelled, and publishes `dictationRecognized` so the notch's
+  eight dots ease to red (`NotchVoiceMorphGeometry.dictationTintDuration`,
+  0.28 s ease-in) while
   keeping whatever motion they have — the waveform while listening, the ring
   while the paste is prepared. A probe that misses is harmless: the closing
   transcript decides on its own.
@@ -80,10 +82,12 @@ owns the dictate-or-ask decision and the delivery, and nothing else does.
      the text goes onto the pasteboard, marked transient for clipboard
      managers, one ⌘V is posted from a private-state event source (a locked
      turn is finished by a chord press, so Option may still be physically
-     held), and the previous clipboard is put back 0.4 s later unless the user
+     held), and the previous clipboard is put back 0.6 s later unless the user
      has copied something since. If focus has moved since key-up — live, a
      dock click brought Omi's own window forward mid-hold — the text is
-     copied instead and the bar says "Copied — press ⌘V to paste". A caret
+     copied instead and the bar says "Copied — press ⌘V to paste". An
+     unreadable current focus after a known release target is treated the same
+     way. A caret
      sitting right after a word gets a separating space first
      (`caretFollowsWordCharacter`, one character read through
      `AXStringForRange`).

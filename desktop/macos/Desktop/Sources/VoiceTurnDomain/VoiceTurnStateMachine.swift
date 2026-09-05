@@ -2002,6 +2002,7 @@ struct VoiceTurnReducer {
       model.turn?.projection.isThinking = false
       model.turn?.projection.isResponseWaiting = false
       model.turn?.projection.isResponseActive = false
+      model.turn?.projection.isDictating = false
       cancel(.hintVisibility, in: &model, effects: &effects)
 
     case .deadlineFired(_, let deadline):

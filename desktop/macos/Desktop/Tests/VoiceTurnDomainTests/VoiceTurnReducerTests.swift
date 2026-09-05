@@ -2085,6 +2085,18 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertFalse(ended.turn?.projection.isDictating == true)
   }
 
+  func testClearPresentationResetsDictationTint() {
+    let turnID = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .dictationRecognized(turnID: turnID)).model
+    XCTAssertTrue(model.turn?.projection.isDictating == true)
+
+    let cleared = reduce(model, .clearPresentation(turnID: turnID))
+
+    XCTAssertEqual(cleared.model.turn?.projection, .idle)
+    XCTAssertEqual(cleared.model.turn?.phase, .recording)
+  }
+
   func testTerminalHintDeadlineClearsHintWithoutResurrectingTurn() {
     let turnID = VoiceTurnID()
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model

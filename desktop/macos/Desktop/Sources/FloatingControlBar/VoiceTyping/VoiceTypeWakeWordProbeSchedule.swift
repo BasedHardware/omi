@@ -7,9 +7,10 @@ import Foundation
 /// about spend and about feedback: a dictation on the realtime-hub route would
 /// otherwise stream every minute of the hold to a model whose answer is going
 /// to be cancelled, and the user would get no sign that "type" was heard until
-/// the paste. Two probes at most, scheduled by *voiced* audio rather than by
-/// time — a locked turn can open with seconds of room tone — and each decodes
-/// only the first few seconds, so the cost is bounded however long the hold.
+/// the paste. Probes fire at the voiced-byte thresholds below (five attempts
+/// through ~2.3 s of voice), scheduled by *voiced* audio rather than by time —
+/// a locked turn can open with seconds of room tone — and each decodes only
+/// the first few seconds, so the cost is bounded however long the hold.
 ///
 /// The probe is advisory. The closing transcript decides the turn on its own,
 /// so a missed or misheard probe costs nothing but the early hub release.

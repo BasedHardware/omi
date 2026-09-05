@@ -69,9 +69,11 @@ enum VoiceTypeCommandParser {
 
   /// The subset of mishearings safe to claim a dictation from *mid-hold*, before
   /// the whole utterance is known. Excludes the ones that are also ordinary
-  /// words ("typing", "types", "typo") — "typing is broken" is a real question,
-  /// not a dictation — so an early claim on them cannot hijack a spoken query.
-  private static let probeClaimMishearings = ["typed", "tie", "tied", "tight", "tape", "tap", "two"]
+  /// words ("typing", "types", "typo", "two") — "typing is broken" and "two plus
+  /// two" are real questions, not dictations — so an early claim on them cannot
+  /// hijack a spoken query. Closing `payloadAssumingDictation` can still drop
+  /// a leading "two" once the turn is already claimed.
+  private static let probeClaimMishearings = ["typed", "tie", "tied", "tight", "tape", "tap"]
 
   /// Whether the opening of a still-growing transcript plausibly begins a
   /// dictation — the documented wake word, or a close mishearing of it.

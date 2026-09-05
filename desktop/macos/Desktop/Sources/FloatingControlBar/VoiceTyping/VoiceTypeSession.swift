@@ -124,10 +124,13 @@ final class VoiceTypeSession {
     guard latch == .typing else { return .none }
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return .none }
-    if let aimed = releaseFocusTarget, let current = sink.focusTarget(), current != aimed {
-      log("VoiceTypeSession: focus left the dictation target — copied \(trimmed.count) chars instead")
-      sink.copy(trimmed)
-      return .copied(trimmed)
+    if let aimed = releaseFocusTarget {
+      let current = sink.focusTarget()
+      if current == nil || current != aimed {
+        log("VoiceTypeSession: focus left the dictation target — copied \(trimmed.count) chars instead")
+        sink.copy(trimmed)
+        return .copied(trimmed)
+      }
     }
     // Decided from where the caret is right now: the first word must not land
     // flush against the word before it ("voiceI think").

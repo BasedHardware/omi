@@ -6,6 +6,7 @@ import Foundation
 /// Where dictated text lands. The protocol exists so the session's delivery
 /// rules are testable without touching the clipboard or whatever app the
 /// developer happens to have focused.
+@MainActor
 protocol TextInsertionSink: AnyObject {
   /// Puts `text` at the caret of the focused app in one step. Returns false
   /// when nothing could be posted, so the caller can fall back to `copy`.
@@ -36,6 +37,7 @@ extension TextInsertionSink {
 /// one insertion every text field already handles. The floating bar is a
 /// non-activating panel, so during push-to-talk focus is still the user's own
 /// app — the caret they were last in.
+@MainActor
 final class PasteboardTextInsertionSink: TextInsertionSink {
 
   /// How long the focused app gets to read the pasteboard before the previous
@@ -53,11 +55,11 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
   /// that ⌘V would arrive as ⌥⌘V.
   private let source = CGEventSource(stateID: .privateState)
 
-  /// The real user clipboard to put back, and the scheduled work that does it,
-  /// while a dictation sits on the pasteboard. Held so a second dictation
+  /// The real user clipboard to put back, and the scheduled restore that does
+  /// it, while a dictation sits on the pasteboard. Held so a second dictation
   /// within the restore window carries the *original* clipboard forward instead
   /// of saving the first dictation as if it were the user's.
-  private var pendingRestore: (items: [[NSPasteboard.PasteboardType: Data]], work: DispatchWorkItem)?
+  private var pendingRestore: (items: [[NSPasteboard.PasteboardType: Data]], task: Task<Void, Never>)?
   /// The pasteboard `changeCount` right after this sink wrote a dictation. If it
   /// still holds at restore time, nothing else wrote since (a ⌘V only reads), so
   /// the restore is safe; a higher count means the user copied something and
@@ -71,10 +73,10 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
     // carry the original behind it forward rather than saving the dictation.
     let previous: [[NSPasteboard.PasteboardType: Data]]
     if let pending = pendingRestore, pasteboard.changeCount == writtenChangeCount {
-      pending.work.cancel()
+      pending.task.cancel()
       previous = pending.items
     } else {
-      pendingRestore?.work.cancel()
+      pendingRestore?.task.cancel()
       previous = Self.snapshot(pasteboard)
     }
     pendingRestore = nil
@@ -92,16 +94,18 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
       return false
     }
     writtenChangeCount = pasteboard.changeCount
-    let work = DispatchWorkItem { [weak self] in
-      guard let self else { return }
+    let expectedCount = writtenChangeCount
+    let task = Task { @MainActor [weak self] in
+      let delay = UInt64(Self.restoreDelay * 1_000_000_000)
+      try? await Task.sleep(nanoseconds: delay)
+      guard !Task.isCancelled, let self else { return }
       self.pendingRestore = nil
       // A ⌘V reads without bumping changeCount; a higher count means the user
       // copied their own content, which must win.
-      guard pasteboard.changeCount == self.writtenChangeCount else { return }
+      guard pasteboard.changeCount == expectedCount else { return }
       Self.restore(previous, to: pasteboard)
     }
-    pendingRestore = (previous, work)
-    DispatchQueue.main.asyncAfter(deadline: .now() + Self.restoreDelay, execute: work)
+    pendingRestore = (previous, task)
     return true
   }
 
@@ -128,16 +132,15 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
         AXUIElementCreateSystemWide(), kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
       let focusedRef, CFGetTypeID(focusedRef) == AXUIElementGetTypeID()
     else { return false }
-    // swiftlint:disable:next force_cast
-    let element = focusedRef as! AXUIElement
+    let element = unsafeDowncast(focusedRef, to: AXUIElement.self)
     var rangeRef: CFTypeRef?
     guard
       AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
       let rangeRef, CFGetTypeID(rangeRef) == AXValueGetTypeID()
     else { return false }
+    let rangeValue = unsafeDowncast(rangeRef, to: AXValue.self)
     var selection = CFRange()
-    // swiftlint:disable:next force_cast
-    guard AXValueGetValue(rangeRef as! AXValue, .cfRange, &selection), selection.location > 0 else { return false }
+    guard AXValueGetValue(rangeValue, .cfRange, &selection), selection.location > 0 else { return false }
     var previous = CFRange(location: selection.location - 1, length: 1)
     guard let parameter = AXValueCreate(.cfRange, &previous) else { return false }
     var textRef: CFTypeRef?
@@ -150,15 +153,14 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
   }
 
   private func postCommandV() -> Bool {
-    var posted = false
-    for isDown in [true, false] {
-      guard let event = CGEvent(keyboardEventSource: source, virtualKey: Self.vKeyCode, keyDown: isDown)
-      else { continue }
-      event.flags = .maskCommand
-      event.post(tap: .cghidEventTap)
-      posted = true
-    }
-    return posted
+    guard let down = CGEvent(keyboardEventSource: source, virtualKey: Self.vKeyCode, keyDown: true),
+      let up = CGEvent(keyboardEventSource: source, virtualKey: Self.vKeyCode, keyDown: false)
+    else { return false }
+    down.flags = .maskCommand
+    up.flags = .maskCommand
+    down.post(tap: .cghidEventTap)
+    up.post(tap: .cghidEventTap)
+    return true
   }
 
   /// Every item's every representation, so a copied image or rich text is put

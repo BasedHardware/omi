@@ -67,7 +67,7 @@ final class VoiceTypeCommandParserTests: XCTestCase {
     // The on-device probe mishears "type" from a short opening clip. These are
     // the misses observed live; each must claim the turn mid-hold so the notch
     // turns red while talking, not only at key-up.
-    for opening in ["Two. Okay. So hello.", "Tie, hello world", "Typed the report", "tape - send it"] {
+    for opening in ["Tie, hello world", "Typed the report", "tape - send it"] {
       XCTAssertTrue(VoiceTypeCommandParser.opensLikeDictation(opening), "\(opening) should open like a dictation")
     }
   }
@@ -82,7 +82,8 @@ final class VoiceTypeCommandParserTests: XCTestCase {
     }
     // A mishearing still needs the next word (it is weaker evidence).
     XCTAssertFalse(VoiceTypeCommandParser.opensLikeDictation("Two."))
-    XCTAssertTrue(VoiceTypeCommandParser.opensLikeDictation("Two. Okay"))
+    XCTAssertFalse(VoiceTypeCommandParser.opensLikeDictation("Two. Okay"))
+    XCTAssertFalse(VoiceTypeCommandParser.opensLikeDictation("Two plus two"))
   }
 
   func testOpensLikeDictationDoesNotClaimAnOrdinaryQuestionOrPrefixWord() {
@@ -169,12 +170,12 @@ final class VoiceTypeSessionTests: XCTestCase {
 
   func testALenientClaimLatchesOnAMisheardWakeWordButStrictDoesNot() {
     let (strict, _) = makeSession()
-    XCTAssertFalse(strict.claim(transcript: "Two. Okay. So hello."), "strict claim rejects a mishearing")
+    XCTAssertFalse(strict.claim(transcript: "Tie, hello world"), "strict claim rejects a mishearing")
     let (lenient, _) = makeSession()
-    XCTAssertTrue(lenient.claim(transcript: "Two. Okay. So hello.", lenient: true))
+    XCTAssertTrue(lenient.claim(transcript: "Tie, hello world", lenient: true))
     XCTAssertTrue(lenient.claimsTurn)
     // The closing transcript then strips the misheard token from the paste.
-    XCTAssertEqual(lenient.payload(from: "Two. Okay. So hello."), "Okay. So hello.")
+    XCTAssertEqual(lenient.payload(from: "Tie, hello world"), "Hello world")
   }
 
   func testAProbeThatHearsAQuestionDoesNotLatch() {
@@ -222,7 +223,7 @@ final class VoiceTypeSessionTests: XCTestCase {
     XCTAssertEqual(sink.copied, ["Hello world"])
   }
 
-  func testAnUnreadableFocusStillPastes() {
+  func testAnUnreadableFocusAtReleaseStillPastes() {
     let sink = RecordingSink()
     sink.focus = nil
     let session = VoiceTypeSession(sink: sink, isAccessibilityTrusted: { true })
@@ -231,6 +232,15 @@ final class VoiceTypeSessionTests: XCTestCase {
     XCTAssertNotNil(session.payload(from: "Type hello"))
     XCTAssertEqual(session.deliver("Hello"), .pasted("Hello"))
     XCTAssertEqual(sink.pasted, ["Hello"])
+  }
+
+  func testFocusThatBecameUnreadableAfterReleaseCopies() {
+    let (session, sink) = makeSession()
+    XCTAssertNotNil(session.payload(from: "Type hello"))
+    sink.focus = nil
+    XCTAssertEqual(session.deliver("Hello"), .copied("Hello"))
+    XCTAssertTrue(sink.pasted.isEmpty)
+    XCTAssertEqual(sink.copied, ["Hello"])
   }
 
   func testAFailedPasteFallsBackToTheClipboard() {

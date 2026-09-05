@@ -17,7 +17,18 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/LegacyVoiceJournalImporter.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTAttemptLifecycleRecorder.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTCaptureReadinessPolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NetworkReachability.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PTTLanguageIdentifier.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationFormatter.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationPolisher.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationTranscriber.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/PTTRoutePolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/TextInsertionSink.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeAudioTrim.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeCommandParser.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeSession.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeWakeWordProbeSchedule.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager+OwnerBoundaryTestSupport.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager+InputDeviceRouting.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/ShortcutSettings.swift
