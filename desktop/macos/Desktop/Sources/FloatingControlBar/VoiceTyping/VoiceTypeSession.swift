@@ -134,14 +134,14 @@ final class VoiceTypeSession {
     }
     // Decided from where the caret is right now: the first word must not land
     // flush against the word before it ("voiceI think").
-    let separator = sink.caretFollowsWordCharacter() ? " " : ""
+    let separator = sink.caretNeedsSeparatingSpace() ? " " : ""
     guard sink.paste(separator + trimmed) else {
       log("VoiceTypeSession: paste could not be posted — copied \(trimmed.count) chars instead")
       sink.copy(trimmed)
       return .copied(trimmed)
     }
-    // The target's bundle id only — never the text.
-    let target = (releaseFocusTarget ?? "?").split(separator: ":").last.map(String.init) ?? "?"
+    // The target's bundle id only (pid:bundle:window) — never the text.
+    let target = (releaseFocusTarget ?? "?").split(separator: ":").dropFirst().first.map(String.init) ?? "?"
     log(
       "VoiceTypeSession: pasted \(trimmed.count) chars into \(target)"
         + (separator.isEmpty ? "" : " (continuing a line)"))
