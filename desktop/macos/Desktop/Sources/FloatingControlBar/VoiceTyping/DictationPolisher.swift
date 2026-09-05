@@ -158,19 +158,17 @@ enum DictationPolisher {
     timeout: TimeInterval = DictationPolisher.timeout
   ) async throws -> String? {
     let system = systemPrompt(context: context)
-    let candidate: String = try await withThrowingTaskGroup(of: String.self) { group in
-      group.addTask {
+    // The deadline is enforced at the boundary (`DeadlinedOperation`): a
+    // request stuck before its first cancellation check — in the auth header
+    // refresh, say — is abandoned at the cap, not waited for.
+    let candidate: String
+    do {
+      candidate = try await DeadlinedOperation.run(seconds: timeout) {
         try await client.sendTextRequest(
           prompt: text, systemPrompt: system, maxRetries: 0, timeout: timeout, thinkingBudget: 0)
       }
-      group.addTask {
-        try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-        throw PolishError.timedOut
-      }
-      let first = try await group.next()
-      group.cancelAll()
-      guard let first else { throw PolishError.timedOut }
-      return first
+    } catch DeadlinedOperation.Failure.timedOut {
+      throw PolishError.timedOut
     }
     return accept(candidate, for: text)
   }
