@@ -685,3 +685,118 @@ test('an admitted stream failure keeps its uncertain interruption visible', asyn
     'Response interrupted. It may still complete.',
   );
 });
+
+test('a send during the initial history load still receives the transcript', async () => {
+  // send() bumps chatMutationSeqRef so an in-flight setMessages(page) cannot
+  // wipe the optimistic row. The same bump used to discard the history page
+  // entirely, leaving olderCursor null with no recovery. History must merge.
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+
+  const historyResolvers: Array<
+    (value: {id: string; status: number; body: string | null}) => void
+  > = [];
+  mockBackend.request.mockImplementation(
+    async (value: {id: string; body?: string}) => {
+      if (value.id === 'chat-history') {
+        return new Promise(resolve => {
+          historyResolvers.push(resolve);
+        });
+      }
+      if (value.id.startsWith('admit-')) {
+        const body = JSON.parse(value.body ?? '{}') as {
+          id: string;
+          text: string;
+          at: number;
+        };
+        return {
+          id: value.id,
+          status: 201,
+          body: admissionBody(
+            {
+              id: body.id,
+              text: body.text,
+              sender: 'human',
+              createdAt: body.at,
+              generationOutcome: null,
+            },
+            'gen-during-history',
+          ),
+        };
+      }
+      return {id: value.id, status: 501, body: null};
+    },
+  );
+  mockBackend.generationEvents.mockResolvedValue({
+    id: 'gen-during-history',
+    status: 200,
+    body: `event: done\nid: terminal\ndata: ${JSON.stringify({
+      kind: 'done',
+      message: wireMessage({
+        id: 'gen-during-history',
+        text: 'reply while history pending',
+        sender: 'ai',
+        createdAt: 20,
+        generationOutcome: 'completed',
+      }),
+    })}\n\n`,
+  });
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  expect(historyResolvers.length).toBeGreaterThan(0);
+
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('sent before history landed');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain('sent before history landed');
+  expect(textOf(renderer)).toContain('reply while history pending');
+
+  const historyPage = historyBody(
+    [
+      {
+        id: 'prior-1',
+        text: 'PRIOR HISTORY MESSAGE',
+        sender: 'human',
+        createdAt: 1,
+        generationOutcome: null,
+      },
+      {
+        id: 'prior-2',
+        text: 'PRIOR HISTORY REPLY',
+        sender: 'ai',
+        createdAt: 2,
+        generationOutcome: 'completed',
+      },
+    ],
+    {olderCursor: 'older-from-initial', hasOlder: true},
+  );
+  await act(async () => {
+    // Strict Mode may have started more than one load; settle every waiter.
+    historyResolvers.splice(0).forEach(resolve => {
+      resolve({
+        id: 'chat-history',
+        status: 200,
+        body: historyPage,
+      });
+    });
+    await flushAsyncQueue();
+  });
+
+  expect(textOf(renderer)).toContain('PRIOR HISTORY MESSAGE');
+  expect(textOf(renderer)).toContain('PRIOR HISTORY REPLY');
+  expect(textOf(renderer)).toContain('sent before history landed');
+  expect(textOf(renderer)).toContain('reply while history pending');
+  expect(labelsOf(renderer)).toContain('Load earlier messages');
+});
