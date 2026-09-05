@@ -75,6 +75,7 @@ from utils.mcp_memories import (
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
+    resolve_mcp_pending_visibility,
 )
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 from utils.mcp_analytics import (
@@ -336,8 +337,10 @@ MCP_TOOLS: List[Dict[str, Any]] = [
     {
         "name": "get_memories",
         "description": (
-            "Retrieve durable facts known about the user across domains. This is not recent conversation history; "
-            "for today, yesterday, last week, or another time window use date-bounded get_conversations instead."
+            "Retrieve memory records known about the user across domains. Explicit create_memory submissions that "
+            "are still being processed are included by default so callers can verify a write immediately. This is "
+            "not recent conversation history; for today, yesterday, last week, or another time window use "
+            "date-bounded get_conversations instead."
         ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": MEMORIES_READ_SECURITY,
@@ -352,7 +355,7 @@ MCP_TOOLS: List[Dict[str, Any]] = [
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Number of durable memories to retrieve",
+                    "description": "Number of memory records to retrieve",
                     "default": MCP_MEMORY_LIST_DEFAULT_LIMIT,
                     "minimum": 1,
                     "maximum": MCP_MEMORY_LIST_MAX_LIMIT,
@@ -380,12 +383,25 @@ MCP_TOOLS: List[Dict[str, Any]] = [
                     "description": "Include memories marked above standard data protection. Defaults to true for backward compatibility.",
                     "default": True,
                 },
+                "include_pending_processing": {
+                    "type": "boolean",
+                    "description": (
+                        "Include explicit user submissions that are still being processed. Defaults to true for "
+                        "read-after-write visibility; set false to return only processed memories. Pending "
+                        "submissions are also excluded when include_sensitive is false because their sensitivity "
+                        "classification is not complete."
+                    ),
+                    "default": True,
+                },
             },
         },
     },
     {
         "name": "create_memory",
-        "description": "Create a new memory. A memory is a known fact about the user across multiple domains.",
+        "description": (
+            "Create a new memory submission. The returned record can remain short-term while required processing "
+            "runs; get_memories includes pending submissions by default for immediate readback."
+        ),
         "annotations": WRITE_ANNOTATIONS,
         "securitySchemes": MEMORIES_WRITE_SECURITY,
         "inputSchema": {
@@ -968,6 +984,11 @@ def execute_tool(
             manually_added = parse_optional_mcp_bool(arguments.get("manually_added"), "manually_added")
             include_activity = parse_mcp_bool(arguments.get("include_activity"), "include_activity", default=False)
             include_sensitive = parse_mcp_bool(arguments.get("include_sensitive"), "include_sensitive", default=True)
+            include_pending_processing = parse_mcp_bool(
+                arguments.get("include_pending_processing"),
+                "include_pending_processing",
+                default=True,
+            )
             updated_after = parse_mcp_datetime(arguments.get("updated_after"), "updated_after")
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
@@ -992,10 +1013,19 @@ def execute_tool(
         if not app_key_grant.allowed:
             raise _authorization_denied_error(str(app_key_grant.observability))
 
+        read_pending_processing = resolve_mcp_pending_visibility(
+            include_pending_processing=include_pending_processing,
+            include_sensitive=include_sensitive,
+        )
         result = collect_filtered_memories(
             lambda batch_offset, batch_limit: [
                 memory.model_dump(mode='json')
-                for memory in MemoryService(db_client=db).read(user_id, limit=batch_limit, offset=batch_offset)
+                for memory in MemoryService(db_client=db).read(
+                    user_id,
+                    limit=batch_limit,
+                    offset=batch_offset,
+                    include_pending_processing=read_pending_processing,
+                )
             ],
             limit=limit,
             offset=offset,
