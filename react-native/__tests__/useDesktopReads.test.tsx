@@ -141,6 +141,24 @@ beforeEach(() => {
   readsMock.mockReset();
 });
 
+test('ignoreEnabled loads while the gate is still closed', async () => {
+  readsMock.mockResolvedValue(successOutcomes(['After sign-in']));
+  const reads = await renderReads({enabled: false});
+  expect(reads.latest().reads).toEqual([]);
+
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().refreshReads(false);
+  });
+  expect(reads.latest().reads).toEqual([]);
+
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().refreshReads(false, {ignoreEnabled: true});
+  });
+  expect(reads.latest().reads.map(item => item.id)).toEqual(['After sign-in']);
+  expect(reads.latest().readsPhase).toBe('ready');
+  reads.unmount();
+});
+
 test('orders Home timeline by normalized conversation and memory time', async () => {
   // Port of superseded #12141 — memories are epoch seconds; conversations are ms.
   const olderConversation = conversationItem('older-conversation', 'Older');
