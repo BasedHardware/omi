@@ -1014,6 +1014,7 @@ export interface ChatTool {
 
 export interface ChatUsageQuota {
   allowed?: boolean;
+  is_overage_plan?: boolean;
   limit?: number | null;
   percent?: number;
   plan: string;

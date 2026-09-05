@@ -1,0 +1,17 @@
+{
+    "schema_version": 1,
+    "id": "FC-external-protocol-subset-read-as-absent",
+    "violated_contract": "A hand-written client of an external protocol or file format must distinguish what the peer did not send from what the client never implemented. When it implements a subset and drops the rest, every omission is silent: there is no decode error, no unhandled case, and no failing test, because the client stays internally consistent and the peer is behaving correctly. The missing capability is then read as a property of the peer rather than of the client — a server past its page size reads as a server with fewer tools, a server on the other transport reads as an unreachable server, a tool that answers with an image reads as a tool that answers with base64 — so the bug is attributed to the integration and survives review. Unlike a mirror of an in-tree source (FC-mirrored-model-omits-new-member), membership cannot be derived: there is nothing in the repository to enumerate the specification from.",
+    "canonical_prevention": "Keep the implemented subset in exactly one place, so a gap is fixed once for every transport and caller rather than per copy. Make the parse exhaustive over what the specification defines and have the default arm name what it did not understand instead of discarding it, so an unimplemented case appears in the output as an unimplemented case. Never let 'nothing recognised' fall through to stringifying the raw envelope — that is how a base64 payload became a tool's answer. Record what the peer declared at handshake and ask only for what it offers. Prove conformance by driving the reference implementation of the protocol, not fixtures written from the same reading of the spec that produced the bug.",
+    "canonical_prevention_artifact": [
+        "desktop/macos/agent/src/runtime/mcp-client.ts",
+        "desktop/macos/agent/tests/mcp-content-blocks.test.ts",
+        "desktop/macos/agent/tests/mcp-sse-client.test.ts"
+    ],
+    "evidence_prs": [],
+    "scope_hints": [
+        "desktop/macos/agent/src/runtime/**",
+        "desktop/macos/pi-mono-extension/**"
+    ],
+    "status": "open"
+}

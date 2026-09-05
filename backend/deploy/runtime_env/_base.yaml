@@ -171,6 +171,9 @@ environment_shared:
         MEMORY_ENABLED:
           category: memory_rollout
           value: 'off'
+        MEMORY_BELIEF_MODEL_ENABLED:
+          value: 'false'
+          category: rollout
         MEMORY_TYPESENSE_COLLECTION:
           value: canonical_memory_atoms
           category: memory_rollout
@@ -267,6 +270,9 @@ environment_shared:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'off'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
             category: rollout
@@ -410,6 +416,9 @@ environment_shared:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'off'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+            category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -498,6 +507,9 @@ environment_shared:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'off'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+            category: rollout
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
             value: '555'
@@ -597,6 +609,9 @@ environment_shared:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'off'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+            category: rollout
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
             value: '555'
@@ -707,6 +722,9 @@ environment_shared:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'off'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+            category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -764,6 +782,9 @@ environment_shared:
           MEMORY_ENABLED:
             value: 'off'
             category: memory_rollout
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+            category: rollout
           MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
             value: 'false'
             category: memory_rollout

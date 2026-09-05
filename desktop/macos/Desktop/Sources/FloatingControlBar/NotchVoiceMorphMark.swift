@@ -130,6 +130,36 @@ enum NotchVoiceMorphGeometry {
     return CGFloat((a + b + c) / 2.6) * amplitude * waveEnvelope(index: index)
   }
 
+  // MARK: - Dictation tint
+
+  /// How long the dots take to ease from white to red once a hold is
+  /// recognised as a dictation. Long enough to read as a deliberate change,
+  /// short enough to land before the next word.
+  static let dictationTintDuration: TimeInterval = 0.28
+
+  /// Red the dots settle on. Warm and bright so it holds up against the
+  /// notch's black glass at a 3.8pt dot.
+  static let dictationTint: (red: CGFloat, green: CGFloat, blue: CGFloat) = (1.0, 0.30, 0.26)
+
+  /// Ease-in blend (0 = white, 1 = red) `elapsed` seconds after the
+  /// dictation was recognised. Nil elapsed means not dictating.
+  static func dictationBlend(elapsed: TimeInterval?, reduceMotion: Bool) -> CGFloat {
+    guard let elapsed else { return 0 }
+    if reduceMotion { return 1 }
+    let t = clamp(CGFloat(elapsed / dictationTintDuration))
+    return t * t
+  }
+
+  /// The dot colour for a blend: the listening white with the tint mixed in.
+  static func dictationDotColor(blend rawBlend: CGFloat) -> Color {
+    let blend = clamp(rawBlend)
+    return Color(
+      red: 1 + (dictationTint.red - 1) * blend,
+      green: 1 + (dictationTint.green - 1) * blend,
+      blue: 1 + (dictationTint.blue - 1) * blend
+    ).opacity(0.98)
+  }
+
   private static func smoothStep(_ value: CGFloat) -> CGFloat {
     value * value * (3 - 2 * value)
   }
@@ -232,9 +262,14 @@ struct NotchVoiceMorphMark: View {
   let isListening: Bool
   let isThinking: Bool
   var isSpeaking: Bool = false
+  /// The hold has been recognised as a dictation: the dots ease to red and
+  /// keep whatever motion the presentation already has.
+  var isDictating: Bool = false
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var morphProgress: CGFloat = 0
+  /// When the dictation tint began easing in; nil while not dictating.
+  @State private var dictationTintStart: Date?
   /// Reference peaks measured on real hardware: close-mic speech ~0.03–0.2
   /// RMS after the capture noise floor; post-mixer reply speech ~0.1–0.25.
   /// The mic side attacks tight so the wave snaps to syllables, but its peak
@@ -248,7 +283,7 @@ struct NotchVoiceMorphMark: View {
     minPeak: 0.1, attackTau: 0.012, releaseTau: 0.09)
 
   var body: some View {
-    TimelineView(.animation(paused: !isListening && !isThinking && !isSpeaking)) { timeline in
+    TimelineView(.animation(paused: !isListening && !isThinking && !isSpeaking && !isDictating)) { timeline in
       Canvas { context, size in
         draw(into: &context, size: size, date: timeline.date)
       }
@@ -258,6 +293,9 @@ struct NotchVoiceMorphMark: View {
     }
     .onChange(of: isListening) { _, listening in
       setMorphProgress(NotchVoiceMorphGeometry.targetProgress(isListening: listening))
+    }
+    .onChange(of: isDictating, initial: true) { _, dictating in
+      dictationTintStart = dictating ? (dictationTintStart ?? Date()) : nil
     }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(
@@ -334,12 +372,21 @@ struct NotchVoiceMorphMark: View {
       // keeps every waveform dot legible against the notch's black chrome.
       // Color follows the presentation, not the pulse magnitude, so a pause
       // in the reply can't flicker the ring between white and status colors.
+      // A dictation tints every dot red, eased in from the moment the wake
+      // word was heard, on top of whatever motion the presentation has:
+      // the waveform keeps spiking while listening, the ring keeps turning
+      // while the paste is prepared. Only the colour changes.
+      let dictationBlend = NotchVoiceMorphGeometry.dictationBlend(
+        elapsed: dictationTintStart.map { date.timeIntervalSince($0) },
+        reduceMotion: reduceMotion)
       let color =
-        isListening || speakingPresentation
-        ? NotchGlass.primary.opacity(0.98)
-        : dotColors.indices.contains(index)
-          ? dotColors[index]
-          : NotchGlass.primary.opacity(0.96)
+        dictationBlend > 0
+        ? NotchVoiceMorphGeometry.dictationDotColor(blend: dictationBlend)
+        : isListening || speakingPresentation
+          ? NotchGlass.primary.opacity(0.98)
+          : dotColors.indices.contains(index)
+            ? dotColors[index]
+            : NotchGlass.primary.opacity(0.96)
       let rect = CGRect(
         x: position.x - dotDiameter / 2,
         y: position.y - dotDiameter / 2,
