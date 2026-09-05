@@ -199,6 +199,42 @@ enum RuntimeOwnerIdentity {
     EffectiveOwnerAuthorizationRevocation.shared.isActive
   }
 
+  /// Test-only seam over the process-global revocation behind
+  /// `effectiveOwnerTransitionInProgress`.
+  ///
+  /// Deliberately scoped rather than exposing `begin()`/`end()`: an active revocation makes
+  /// `currentOwnerId` return nil for *every* caller in the process, and the revocation lives
+  /// on a `private` singleton no suite can clear. A test that leaked it would strand every
+  /// later suite in the same binary with no way to recover — the #12039 failure shape. The
+  /// `defer` makes that leak unrepresentable.
+  /// `@MainActor` rather than isolation-generic: every caller is a `@MainActor` XCTestCase,
+  /// and `#isolation` appears nowhere else in this codebase — not a construct to introduce
+  /// for a test seam.
+  @MainActor
+  static func withEffectiveOwnerTransitionForTests<T>(
+    _ body: @MainActor () async throws -> T
+  ) async rethrows -> T {
+    // Restore the entry state rather than ending unconditionally. The revocation is a
+    // shared boolean, not a counter, so a bare `end()` in `defer` would clear a
+    // revocation this scope never started: an outer scope's, or — worse — a leak
+    // inherited from an earlier suite, which is the exact condition `setUp` exists to
+    // report. Swallowing that leak here would hide the bug this seam was built to find.
+    let wasRevokedOnEntry = EffectiveOwnerAuthorizationRevocation.shared.isActive
+    EffectiveOwnerAuthorizationRevocation.shared.begin()
+    defer {
+      if !wasRevokedOnEntry {
+        EffectiveOwnerAuthorizationRevocation.shared.end()
+      }
+    }
+    return try await body()
+  }
+
+  /// Clears a revocation that leaked from elsewhere in the test process, so one suite's
+  /// abandoned owner transition cannot silently fail every suite that runs after it.
+  static func resetEffectiveOwnerTransitionForTests() {
+    EffectiveOwnerAuthorizationRevocation.shared.end()
+  }
+
   /// Returns the cleanup-only capability for an already-running physical or
   /// kernel effect owned by `ownerID`. New work must never consult this seam.
   static func transitionCleanupCapability(
