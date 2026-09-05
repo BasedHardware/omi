@@ -43,9 +43,19 @@ describe('nav model (macOS parity)', () => {
     expect(pathForShortcut(key)).toBe(path)
   })
 
+  // Ctrl+7 is a DELIBERATE divergence from the table above. macOS has no Search
+  // destination to bind: its search is the QueryShell that Home itself becomes
+  // when you type (MainWindow/QueryShell/QueryShellHome.swift), so there is
+  // nothing there for a seventh key to open. Windows has no QueryShell, so
+  // search is its own destination and needs its own key. Everything else stays
+  // pinned to macOS.
+  it('binds Ctrl+7 to Search, which macOS has no equivalent destination for', () => {
+    expect(pathForShortcut('7')).toBe('/search')
+  })
+
   it('binds no other keys', () => {
-    expect(pathForShortcut('7')).toBeUndefined()
-    expect(pathForShortcut('k')).toBeUndefined() // macOS has no command palette
+    expect(pathForShortcut('8')).toBeUndefined()
+    expect(pathForShortcut('k')).toBeUndefined() // still no command palette
   })
 
   // DesktopHomeView.swift:1037-1044 — Esc goes Home from these four ONLY.
@@ -117,14 +127,17 @@ describe('route manifest', () => {
     expect(resolveRoute('/nope')).toBeUndefined()
   })
 
-  it('navRoutes are Home, Conversations, Tasks, Rewind, Apps, Insights in nav order', () => {
+  it('navRoutes are Home, Conversations, Tasks, Rewind, Apps, Insights, Search in nav order', () => {
+    // Search is appended rather than placed near Home so the existing rail order
+    // is unchanged for anyone already used to it.
     expect(navRoutes().map((e) => e.id)).toEqual([
       'home',
       'conversations',
       'tasks',
       'rewind',
       'apps',
-      'insights'
+      'insights',
+      'search'
     ])
   })
 
@@ -138,7 +151,8 @@ describe('route manifest', () => {
       'goals',
       'apps',
       'rewind',
-      'insights'
+      'insights',
+      'search'
     ])
   })
 
