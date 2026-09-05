@@ -172,6 +172,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// forced from outside. Everything downstream (mismatch check, local-transcript
   /// fallback, persistence) runs the real path. Cleared after one use.
   var testProviderTranscriptOverride: String?
+  /// The user text for a wake-word turn, which is known exactly rather than heard.
+  ///
+  /// The wake word hands the session already-transcribed words and only enough silence to
+  /// open the input window, so the provider has no user speech to transcribe. Left to its
+  /// own input transcription it journals whatever it made of the room — live, a Spanish
+  /// sentence nobody said appeared as the user's message on two turns. What was actually
+  /// asked is not in doubt, so it is supplied rather than recognised.
+  var wakeWordInputTranscript: String?
   /// Harness-visible outcome of the most recent externally authorized tool.
   /// An empty error means the kernel accepted and executed the proposal.
   var lastExternalToolName = ""
@@ -456,6 +464,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     turnEarlyVerdictCode = nil
     lastTurnDiagnostics.removeAll()
     testProviderTranscriptOverride = nil
+    wakeWordInputTranscript = nil
     acceptedSpawnJournalReceiptByContinuityKey.removeAll()
     turnPublicWebEvidence = nil
     prefetchedVoiceContext = ""
@@ -970,6 +979,79 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       }
       return result
     }
+  }
+
+  /// Run one hands-free wake-word command as a realtime turn.
+  ///
+  /// The wake word detects on the ambient transcript, so the words already exist by the
+  /// time it fires and the spoken audio is long gone. What the realtime session is for is
+  /// the *exchange*: the model speaks its own answer, barge-in is native rather than
+  /// text-matched, and a follow-up continues inside the same session instead of opening a
+  /// fresh query. Detection stays where it is; only the reply path moves.
+  ///
+  /// Push-to-talk owns a physical hold, so it streams audio and commits on release. This
+  /// owns no hold — the same shape the automation harness uses — so it mints an
+  /// `.automation` turn, opens the input window, and hands over text.
+  @discardableResult
+  func runWakeWordTurn(_ command: String) async -> Bool {
+    let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+
+    // The warm session tears itself down after an idle period, so a wake word arriving in a
+    // quiet stretch finds nothing to talk to. Giving up there sent the command to the chat
+    // path instead — observed live as the third of three commands answering in a text box
+    // while the first two spoke. Warm it and wait briefly before minting a turn, so a turn
+    // is never created that cannot be used.
+    if session == nil { ensureWarm() }
+    let warmDeadline = Date().addingTimeInterval(5)
+    while session == nil, Date() < warmDeadline {
+      try? await Task.sleep(nanoseconds: 100_000_000)
+    }
+    guard session != nil else {
+      log("RealtimeHub: no realtime session available for the wake word")
+      return false
+    }
+
+    let turnID = RealtimeAutomationTurnHarness.begin(on: VoiceTurnCoordinator.shared)
+    // Without a route the reducer has nothing to commit against: `commitTurn` is refused as
+    // a stale physical commit and the buffered text never reaches the provider. Observed
+    // exactly that — "rejected duplicate/stale physical commit before provider side
+    // effects" — before this line existed.
+    VoiceTurnCoordinator.shared.publish(.selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
+    guard beginTurn(turnID: turnID) == .accepted else {
+      log("RealtimeHub: wake word turn refused at input preparation")
+      VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerFailed))
+      return false
+    }
+
+    // Order matters, and it is the reverse of what it looks like. The Gemini activity
+    // window is opened by `beginInputTurn`, which runs inside `commitTurn()` — not at
+    // `beginTurn`. So the text cannot be "sent" first: `sendSpokenCommand` deliberately
+    // buffers while the window is shut, and `beginInputTurn` flushes the buffer the moment
+    // it opens it. Waiting for the window before sending simply times out.
+    //
+    // The silence frames are the other half of the same constraint: Gemini rejects a
+    // pure-text activity window with a 1007 precondition failure, so the window has to
+    // carry real audio. Two 100 ms frames, matching the headless harness.
+    let silenceChunk = Data(count: 3_200)  // 100 ms @ 16 kHz s16le
+    for _ in 0..<2 {
+      feedAudio(silenceChunk, turnID: turnID)
+      try? await Task.sleep(nanoseconds: 100_000_000)
+    }
+
+    // Supply the user side before committing: the journal and the chat bubble read the
+    // provider's input transcription, and this turn gives it nothing real to transcribe.
+    wakeWordInputTranscript = trimmed
+    guard await session?.sendSpokenCommand(trimmed) == true else {
+      log("RealtimeHub: wake word command could not be queued for the session")
+      _ = cancelTurn(turnID: turnID)
+      return false
+    }
+
+    log("RealtimeHub: wake word turn '\(trimmed)' committed to the realtime session")
+    VoiceTurnCoordinator.shared.publish(.finalize(turnID: turnID))
+    _ = commitTurn()
+    return true
   }
 
   func runHeadlessPTTTurn(
