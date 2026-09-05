@@ -129,27 +129,7 @@ if grep -q 'api\.omi\.me' "$dev_env"; then
 fi
 
 cloud_receipt="$(mktemp)"
-cat > "$cloud_receipt" <<'EOF'
-{
-  "schema_version": "omi.jit.qa.cloud.v1",
-  "status": "ready",
-  "reviewed": true,
-  "project": "based-hardware-dev",
-  "region": "us-central1",
-  "auth_project": "based-hardware",
-  "data_plane_project": "based-hardware-dev",
-  "python_service": "backend-jit-qa",
-  "desktop_service": "desktop-backend-jit-qa",
-  "python_url": "https://backend-jit-qa-rev123-uc.a.run.app",
-  "desktop_url": "https://desktop-backend-jit-qa-rev123-uc.a.run.app",
-  "source_sha": "60635449cf595ea6078cd0f716989a0d15d45c13",
-  "python_revision": "backend-jit-qa-rev123",
-  "python_image_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "desktop_revision": "desktop-backend-jit-qa-rev123",
-  "desktop_image_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-  "dependency_vector": {"firestore": "based-hardware-dev", "cache": "qa-isolated", "gateway": "qa-verified"}
-}
-EOF
+cp "$ROOT/tests/fixtures/jit-qa/cloud-receipt-v1.json" "$cloud_receipt"
 clear_target_env
 export OMI_JIT_QA_TARGET=cloud-qa
 export OMI_JIT_QA_CLOUD_RECEIPT_PATH="$cloud_receipt"
@@ -164,6 +144,32 @@ test "$OMI_ENV_STAGE" = dev
 test "$OMI_SKIP_BACKEND" = 1
 test "$OMI_SKIP_TUNNEL" = 1
 test "$OMI_SKIP_REWIND_SEED" = 1
+
+# The same producer receipt also round-trips through Cloud Run's newer
+# deterministic regional URL form.
+sed -i '' \
+    -e 's|https://backend-jit-qa-rev123-uc.a.run.app|https://backend-jit-qa-123456789012.us-central1.run.app|g' \
+    -e 's|https://desktop-backend-jit-qa-rev123-uc.a.run.app|https://desktop-backend-jit-qa-123456789012.us-central1.run.app|g' \
+    -e 's|https://llm-gateway-jit-qa-rev123-uc.a.run.app|https://llm-gateway-jit-qa-123456789012.us-central1.run.app|g' \
+    "$cloud_receipt"
+clear_target_env
+export OMI_JIT_QA_TARGET=cloud-qa
+export OMI_JIT_QA_CLOUD_RECEIPT_PATH="$cloud_receipt"
+export OMI_JIT_QA_CLOUD_PYTHON_URL="https://backend-jit-qa-123456789012.us-central1.run.app"
+export OMI_JIT_QA_CLOUD_DESKTOP_URL="https://desktop-backend-jit-qa-123456789012.us-central1.run.app"
+omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
+omi_prepare_jit_qa_target omi-jit-qa com.omi.omi-jit-qa 0 initial
+test "$OMI_PYTHON_API_URL" = "$OMI_JIT_QA_CLOUD_PYTHON_URL"
+test "$OMI_DESKTOP_API_URL" = "$OMI_JIT_QA_CLOUD_DESKTOP_URL"
+
+# Restore the legacy deterministic fixture values for the negative cases below.
+sed -i '' \
+    -e 's|https://backend-jit-qa-123456789012.us-central1.run.app|https://backend-jit-qa-rev123-uc.a.run.app|g' \
+    -e 's|https://desktop-backend-jit-qa-123456789012.us-central1.run.app|https://desktop-backend-jit-qa-rev123-uc.a.run.app|g' \
+    -e 's|https://llm-gateway-jit-qa-123456789012.us-central1.run.app|https://llm-gateway-jit-qa-rev123-uc.a.run.app|g' \
+    "$cloud_receipt"
+export OMI_JIT_QA_CLOUD_PYTHON_URL="https://backend-jit-qa-rev123-uc.a.run.app"
+export OMI_JIT_QA_CLOUD_DESKTOP_URL="https://desktop-backend-jit-qa-rev123-uc.a.run.app"
 
 cloud_env="$(mktemp)"
 printf '%s\n' \
@@ -201,8 +207,15 @@ sed -i '' 's/"project": "based-hardware"/"project": "based-hardware-dev"/' "$clo
 sed -i '' 's/"reviewed": true/"reviewed": false/' "$cloud_receipt"
 expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
 sed -i '' 's/"reviewed": false/"reviewed": true/' "$cloud_receipt"
-sed -i '' 's/"source_sha": "[^"]*"/"source_sha": "not-a-commit"/' "$cloud_receipt"
+sed -i '' 's/"full_source_sha": "[^"]*"/"full_source_sha": "not-a-commit"/' "$cloud_receipt"
 expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
+sed -i '' 's/"full_source_sha": "not-a-commit"/"full_source_sha": "60635449cf595ea6078cd0f716989a0d15d45c13"/' "$cloud_receipt"
+sed -i '' 's/"firestore_database_id": "jit-qa"/"firestore_database_id": "wrong"/' "$cloud_receipt"
+expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
+sed -i '' 's/"firestore_database_id": "wrong"/"firestore_database_id": "jit-qa"/' "$cloud_receipt"
+sed -i '' 's/"exact_gateway_url": "[^"]*"/"exact_gateway_url": "https:\/\/gateway.example"/' "$cloud_receipt"
+expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
+sed -i '' 's|"exact_gateway_url": "https://gateway.example"|"exact_gateway_url": "https://llm-gateway-jit-qa-rev123-uc.a.run.app"|' "$cloud_receipt"
 printf '%s\n' '[]' > "$cloud_receipt"
 expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
 

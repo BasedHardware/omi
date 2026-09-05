@@ -18,8 +18,10 @@ OMI_JIT_QA_CLOUD_PROJECT="based-hardware-dev"
 OMI_JIT_QA_CLOUD_REGION="us-central1"
 OMI_JIT_QA_CLOUD_AUTH_PROJECT="based-hardware"
 OMI_JIT_QA_CLOUD_DATA_PLANE_PROJECT="based-hardware-dev"
+OMI_JIT_QA_CLOUD_FIRESTORE_DATABASE="jit-qa"
 OMI_JIT_QA_CLOUD_PYTHON_SERVICE="backend-jit-qa"
 OMI_JIT_QA_CLOUD_DESKTOP_SERVICE="desktop-backend-jit-qa"
+OMI_JIT_QA_CLOUD_GATEWAY_SERVICE="llm-gateway-jit-qa"
 OMI_JIT_QA_CLOUD_RECEIPT_ENV="OMI_JIT_QA_CLOUD_RECEIPT_PATH"
 # Firebase web API keys identify a client/project; they are not credentials.
 # The dev services intentionally validate the same production Firebase identity
@@ -39,10 +41,17 @@ omi_jit_qa_validate_cloud_url() {
 
     case "$service" in
         "$OMI_JIT_QA_CLOUD_PYTHON_SERVICE")
-            pattern='^https://backend-jit-qa-[a-z0-9-]+-uc\.a\.run\.app$'
+            # Cloud Run currently exposes both the legacy hashed endpoint
+            # (…-uc.a.run.app) and the deterministic regional endpoint
+            # (…-PROJECT_NUMBER.us-central1.run.app). Accept only these
+            # forms for this fixed service and region.
+            pattern='^https://backend-jit-qa-([a-z0-9-]+-uc\.a\.run\.app|[0-9]+\.us-central1\.run\.app)$'
             ;;
         "$OMI_JIT_QA_CLOUD_DESKTOP_SERVICE")
-            pattern='^https://desktop-backend-jit-qa-[a-z0-9-]+-uc\.a\.run\.app$'
+            pattern='^https://desktop-backend-jit-qa-([a-z0-9-]+-uc\.a\.run\.app|[0-9]+\.us-central1\.run\.app)$'
+            ;;
+        "$OMI_JIT_QA_CLOUD_GATEWAY_SERVICE")
+            pattern='^https://llm-gateway-jit-qa-([a-z0-9-]+-uc\.a\.run\.app|[0-9]+\.us-central1\.run\.app)$'
             ;;
         *)
             omi_jit_qa_fail "unknown cloud QA service $service"
@@ -80,7 +89,8 @@ omi_jit_qa_validate_cloud_receipt() {
     python3 - "$receipt_path" "$python_url" "$desktop_url" \
         "$OMI_JIT_QA_CLOUD_PROJECT" "$OMI_JIT_QA_CLOUD_REGION" \
         "$OMI_JIT_QA_CLOUD_AUTH_PROJECT" "$OMI_JIT_QA_CLOUD_DATA_PLANE_PROJECT" \
-        "$OMI_JIT_QA_CLOUD_PYTHON_SERVICE" "$OMI_JIT_QA_CLOUD_DESKTOP_SERVICE" <<'PY'
+        "$OMI_JIT_QA_CLOUD_FIRESTORE_DATABASE" "$OMI_JIT_QA_CLOUD_PYTHON_SERVICE" \
+        "$OMI_JIT_QA_CLOUD_DESKTOP_SERVICE" "$OMI_JIT_QA_CLOUD_GATEWAY_SERVICE" <<'PY'
 import json
 import pathlib
 import re
@@ -94,8 +104,10 @@ import sys
     region,
     auth_project,
     data_plane_project,
+    firestore_database,
     python_service,
     desktop_service,
+    gateway_service,
 ) = sys.argv[1:]
 
 try:
@@ -116,8 +128,10 @@ required = {
     "data_plane_project": data_plane_project,
     "python_service": python_service,
     "desktop_service": desktop_service,
-    "python_url": python_url,
-    "desktop_url": desktop_url,
+    "exact_python_url": python_url,
+    "exact_desktop_url": desktop_url,
+    "firestore_database_id": firestore_database,
+    "gateway_service": gateway_service,
 }
 for key, expected in required.items():
     if receipt.get(key) != expected:
@@ -126,7 +140,17 @@ for key, expected in required.items():
 if receipt.get("reviewed") is not True:
     print("ERROR: JIT QA target: cloud deployment receipt is not marked reviewed", file=sys.stderr)
     raise SystemExit(2)
-source_sha = receipt.get("source_sha")
+gateway_url = receipt.get("exact_gateway_url")
+if not isinstance(gateway_url, str):
+    print("ERROR: JIT QA target: cloud receipt exact_gateway_url is required", file=sys.stderr)
+    raise SystemExit(2)
+gateway_pattern = re.compile(
+    r"^https://" + re.escape(gateway_service) + r"-([a-z0-9-]+-uc\.a\.run\.app|[0-9]+\.us-central1\.run\.app)$"
+)
+if not gateway_pattern.fullmatch(gateway_url):
+    print("ERROR: JIT QA target: cloud receipt exact_gateway_url is not the isolated QA gateway URL", file=sys.stderr)
+    raise SystemExit(2)
+source_sha = receipt.get("full_source_sha")
 if not isinstance(source_sha, str) or not re.fullmatch(r"[0-9a-f]{40}", source_sha):
     print("ERROR: JIT QA target: cloud receipt must pin a full lowercase source SHA", file=sys.stderr)
     raise SystemExit(2)
