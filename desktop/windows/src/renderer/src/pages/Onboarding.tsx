@@ -24,6 +24,7 @@ import { VoiceIntroStep } from '../components/onboarding/VoiceIntroStep'
 import { AskDemoStep } from '../components/onboarding/AskDemoStep'
 import { DataSourcesStep } from '../components/onboarding/DataSourcesStep'
 import { GoalStep } from '../components/onboarding/GoalStep'
+import { AutoCreatedTasksStep } from '../components/onboarding/AutoCreatedTasksStep'
 import { createGoal } from '../lib/goals'
 // Import BrainGraph DIRECTLY (not via LazyBrainGraph) for onboarding — matches
 // the f42497b version that rendered reliably. The lazy wrapper's Suspense +
@@ -38,7 +39,7 @@ import {
   useOnboardingGraph
 } from '../lib/onboardingGraph'
 
-const TOTAL_STEPS = 14
+const TOTAL_STEPS = 15
 
 export function Onboarding(): React.JSX.Element {
   // Resume where the user left off if they quit mid-onboarding. Clamped in case
@@ -100,8 +101,8 @@ export function Onboarding(): React.JSX.Element {
     next()
   }
 
-  const finishToChat = (): void => {
-    setPendingRoute('/chat')
+  const finishToTasks = (): void => {
+    setPendingRoute('/tasks')
     completeOnboarding()
   }
 
@@ -112,7 +113,7 @@ export function Onboarding(): React.JSX.Element {
     void createGoal(goal).catch(() => {
       toast('Saved locally — goal sync will retry later', { tone: 'warn' })
     })
-    finishToChat()
+    next()
   }
 
   // App names already revealed in the brain map (id prefix `app_`), used to
@@ -251,15 +252,18 @@ export function Onboarding(): React.JSX.Element {
         />
       )
     }
-    return (
-      <GoalStep
-        stepIndex={step}
-        totalSteps={TOTAL_STEPS}
-        apps={appNames}
-        onContinue={handleGoal}
-        onSkip={finishToChat}
-      />
-    )
+    if (step === 13) {
+      return (
+        <GoalStep
+          stepIndex={step}
+          totalSteps={TOTAL_STEPS}
+          apps={appNames}
+          onContinue={handleGoal}
+          onSkip={next}
+        />
+      )
+    }
+    return <AutoCreatedTasksStep onFinish={finishToTasks} />
   }
 
   // Persistent two-pane shell: omi logo + the swapping step card on the left, the
