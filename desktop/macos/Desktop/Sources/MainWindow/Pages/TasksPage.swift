@@ -4828,8 +4828,21 @@ struct TaskCategorySection: View {
       // Tasks in category with drag-and-drop reordering.
       // Rendered in multi-select too, so selection keeps the category grouping;
       // TaskDragDropModifier below is disabled while selecting.
+      //
+      // The row stack MUST stay eager. This section is itself an item of the
+      // outer list's lazy stack (tasksListView), and a lazy container nested
+      // inside a lazy item makes the section's measured height non-convergent:
+      // the inner stack reports estimates while the outer one measures it, then
+      // real heights once placed, so every layout pass mutates lazy-item phases
+      // and re-signals prefetch, each scheduling another transaction. The
+      // transaction flush then never drains — a permanent beachball on scroll
+      // (QA freeze: 2627/2627 main-thread samples inside the transaction flush,
+      // dominated by lazy estimate measurement and item-phase mutations).
+      // The outer stack stays the virtualizer; rows inside a visible section are
+      // bounded by displayLimit, so eagerness here costs nothing meaningful.
+      // TasksListRowStackLazyNestingTests holds this contract.
       if !isCollapsed {
-        LazyVStack(spacing: OmiSpacing.sm) {
+        VStack(spacing: OmiSpacing.sm) {
           ForEach(visibleTasks) { task in
             VStack(spacing: 0) {
               HStack(spacing: OmiSpacing.sm) {
