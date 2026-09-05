@@ -164,6 +164,8 @@
     "modelNumber": "Номер моделі",
     "manufacturer": "Виробник",
     "doubleTap": "Подвійне натискання",
+    "deviceButtonActions": "Дії кнопки пристрою",
+    "deviceButtonActionsDescription": "Дозволити керувати записом і голосовими командами натисканням кнопки",
     "ledBrightness": "Яскравість світлодіода",
     "micGain": "Підсилення мікрофона",
     "disconnect": "Відключити",

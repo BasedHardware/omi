@@ -521,6 +521,13 @@ class AppLocalizationsMk extends AppLocalizations {
   String get doubleTap => 'Двојно допирање';
 
   @override
+  String get deviceButtonActions => 'Дејства на копчето на уредот';
+
+  @override
+  String get deviceButtonActionsDescription =>
+      'Дозволи притискањата на копчето да управуваат со снимањето и гласовните команди';
+
+  @override
   String get ledBrightness => 'Осветленост на LED';
 
   @override

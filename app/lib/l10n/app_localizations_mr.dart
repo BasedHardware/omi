@@ -519,6 +519,12 @@ class AppLocalizationsMr extends AppLocalizations {
   String get doubleTap => 'दुहेरी टॅप';
 
   @override
+  String get deviceButtonActions => 'डिव्हाइस बटण क्रिया';
+
+  @override
+  String get deviceButtonActionsDescription => 'बटण दाबून रेकॉर्डिंग आणि व्हॉइस कमांड नियंत्रित करण्यास अनुमती द्या';
+
+  @override
   String get ledBrightness => 'LED चमक';
 
   @override

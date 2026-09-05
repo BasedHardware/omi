@@ -164,6 +164,8 @@
     "modelNumber": "Número de modelo",
     "manufacturer": "Fabricante",
     "doubleTap": "Doble toque",
+    "deviceButtonActions": "Acciones del botón del dispositivo",
+    "deviceButtonActionsDescription": "Permitir que las pulsaciones controlen la grabación y los comandos de voz",
     "ledBrightness": "Brillo LED",
     "micGain": "Ganancia de micrófono",
     "disconnect": "Desconectar",

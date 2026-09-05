@@ -509,6 +509,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get doubleTap => '双击';
 
   @override
+  String get deviceButtonActions => '设备按钮操作';
+
+  @override
+  String get deviceButtonActionsDescription => '允许通过按键控制录音和语音命令';
+
+  @override
   String get ledBrightness => 'LED 亮度';
 
   @override

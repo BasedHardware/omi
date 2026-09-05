@@ -164,6 +164,8 @@
     "modelNumber": "Modelnummer",
     "manufacturer": "Fabrikant",
     "doubleTap": "Dubbel tikken",
+    "deviceButtonActions": "Acties voor apparaatknop",
+    "deviceButtonActionsDescription": "Sta toe dat knopdrukken opnames en spraakopdrachten bedienen",
     "ledBrightness": "LED-helderheid",
     "micGain": "Microfoonversterking",
     "disconnect": "Loskoppelen",

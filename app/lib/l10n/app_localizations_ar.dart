@@ -514,6 +514,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get doubleTap => 'نقرة مزدوجة';
 
   @override
+  String get deviceButtonActions => 'إجراءات زر الجهاز';
+
+  @override
+  String get deviceButtonActionsDescription => 'السماح لضغطات الزر بالتحكم في التسجيل والأوامر الصوتية';
+
+  @override
   String get ledBrightness => 'سطوع LED';
 
   @override

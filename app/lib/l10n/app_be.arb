@@ -661,6 +661,8 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "Двайны дотык",
+    "deviceButtonActions": "Дзеянні кнопкі прылады",
+    "deviceButtonActionsDescription": "Дазволіць націсканням кнопкі кіраваць запісам і галасавымі камандамі",
     "@doubleTap": {
         "description": "Double tap action label"
     },

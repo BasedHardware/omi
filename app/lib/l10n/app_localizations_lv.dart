@@ -520,6 +520,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get doubleTap => 'Dubultklikšķis';
 
   @override
+  String get deviceButtonActions => 'Ierīces pogas darbības';
+
+  @override
+  String get deviceButtonActionsDescription => 'Atļaut ar pogas nospiešanu vadīt ierakstīšanu un balss komandas';
+
+  @override
   String get ledBrightness => 'LED spilgtums';
 
   @override

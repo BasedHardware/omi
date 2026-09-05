@@ -520,6 +520,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get doubleTap => 'Nhấn đúp';
 
   @override
+  String get deviceButtonActions => 'Thao tác nút thiết bị';
+
+  @override
+  String get deviceButtonActionsDescription => 'Cho phép thao tác nút điều khiển ghi âm và lệnh thoại';
+
+  @override
   String get ledBrightness => 'Độ sáng đèn LED';
 
   @override

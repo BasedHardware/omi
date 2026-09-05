@@ -520,6 +520,13 @@ class AppLocalizationsTe extends AppLocalizations {
   String get doubleTap => 'డబల్ నొక్కండి';
 
   @override
+  String get deviceButtonActions => 'పరికర బటన్ చర్యలు';
+
+  @override
+  String get deviceButtonActionsDescription =>
+      'బటన్ నొక్కడం ద్వారా రికార్డింగ్ మరియు వాయిస్ ఆదేశాలను నియంత్రించడానికి అనుమతించండి';
+
+  @override
   String get ledBrightness => 'LED ప్రకాశం';
 
   @override

@@ -661,6 +661,8 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "دوگنا تھپتھپائیں",
+    "deviceButtonActions": "ڈیوائس بٹن کی کارروائیاں",
+    "deviceButtonActionsDescription": "بٹن دبانے سے ریکارڈنگ اور صوتی احکامات کنٹرول کرنے کی اجازت دیں",
     "@doubleTap": {
         "description": "Double tap action label"
     },

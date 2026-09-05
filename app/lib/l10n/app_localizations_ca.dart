@@ -521,6 +521,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get doubleTap => 'Doble toc';
 
   @override
+  String get deviceButtonActions => 'Accions del botó del dispositiu';
+
+  @override
+  String get deviceButtonActionsDescription =>
+      'Permet que les pulsacions del botó controlin l\'enregistrament i les ordres de veu';
+
+  @override
   String get ledBrightness => 'Brillantor LED';
 
   @override

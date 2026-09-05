@@ -164,6 +164,8 @@
     "modelNumber": "หมายเลขรุ่น",
     "manufacturer": "ผู้ผลิต",
     "doubleTap": "แตะสองครั้ง",
+    "deviceButtonActions": "การทำงานของปุ่มอุปกรณ์",
+    "deviceButtonActionsDescription": "อนุญาตให้การกดปุ่มควบคุมการบันทึกและคำสั่งเสียง",
     "ledBrightness": "ความสว่าง LED",
     "micGain": "ระดับไมโครโฟน",
     "disconnect": "ตัดการเชื่อมต่อ",

@@ -515,6 +515,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get doubleTap => 'לחץ כפול';
 
   @override
+  String get deviceButtonActions => 'פעולות לחצן המכשיר';
+
+  @override
+  String get deviceButtonActionsDescription => 'לאפשר ללחיצות על הלחצן לשלוט בהקלטה ובפקודות קוליות';
+
+  @override
   String get ledBrightness => 'בהיקות LED';
 
   @override

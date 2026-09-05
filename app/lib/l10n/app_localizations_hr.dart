@@ -519,6 +519,12 @@ class AppLocalizationsHr extends AppLocalizations {
   String get doubleTap => 'Dvostruki dodir';
 
   @override
+  String get deviceButtonActions => 'Radnje gumba uređaja';
+
+  @override
+  String get deviceButtonActionsDescription => 'Dopusti da pritisci gumba upravljaju snimanjem i glasovnim naredbama';
+
+  @override
   String get ledBrightness => 'Svjetlina LED-a';
 
   @override

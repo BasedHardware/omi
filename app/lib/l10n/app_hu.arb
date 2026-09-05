@@ -164,6 +164,8 @@
     "modelNumber": "Modellszám",
     "manufacturer": "Gyártó",
     "doubleTap": "Dupla érintés",
+    "deviceButtonActions": "Eszközgomb műveletei",
+    "deviceButtonActionsDescription": "A gombnyomások vezérelhetik a felvételt és a hangparancsokat",
     "ledBrightness": "LED fényerő",
     "micGain": "Mikrofon erősítés",
     "disconnect": "Leválasztás",

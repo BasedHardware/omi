@@ -1173,6 +1173,18 @@ abstract class AppLocalizations {
   /// **'Double Tap'**
   String get doubleTap;
 
+  /// Title of the master toggle for hardware button actions in device settings
+  ///
+  /// In en, this message translates to:
+  /// **'Device Button Actions'**
+  String get deviceButtonActions;
+
+  /// Explains that the master device-button toggle controls recording and voice command actions
+  ///
+  /// In en, this message translates to:
+  /// **'Allow button presses to control recording and voice commands'**
+  String get deviceButtonActionsDescription;
+
   /// LED brightness setting
   ///
   /// In en, this message translates to:

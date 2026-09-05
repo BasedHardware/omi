@@ -519,6 +519,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get doubleTap => 'Doble toque';
 
   @override
+  String get deviceButtonActions => 'Acciones del botón del dispositivo';
+
+  @override
+  String get deviceButtonActionsDescription =>
+      'Permitir que las pulsaciones controlen la grabación y los comandos de voz';
+
+  @override
   String get ledBrightness => 'Brillo LED';
 
   @override

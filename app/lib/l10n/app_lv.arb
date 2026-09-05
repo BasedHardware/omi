@@ -164,6 +164,8 @@
     "modelNumber": "Modeļa numurs",
     "manufacturer": "Ražotājs",
     "doubleTap": "Dubultklikšķis",
+    "deviceButtonActions": "Ierīces pogas darbības",
+    "deviceButtonActionsDescription": "Atļaut ar pogas nospiešanu vadīt ierakstīšanu un balss komandas",
     "ledBrightness": "LED spilgtums",
     "micGain": "Mikrofona pastiprinājums",
     "disconnect": "Atvienot",
