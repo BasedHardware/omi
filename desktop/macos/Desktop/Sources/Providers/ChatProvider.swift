@@ -4176,7 +4176,7 @@ class ChatProvider: ObservableObject {
     let plural = attachments.count == 1 ? "file" : "files"
     var lines: [String] = [
       "[Attached Files]",
-      "The user attached \(attachments.count) \(plural) to this exact message. Treat references like \"this\", \"the file\", \"the attachment\", or \"what do you think of this\" as referring to these attachment(s). If the answer depends on file contents, inspect the local_path with file-reading tools before asking for clarification.",
+      "The user attached \(attachments.count) \(plural) to this exact message. They are the primary subject of the message: treat references like \"this\", \"look\", \"the file\", \"the attachment\", or \"what do you think of this\" as referring to these attachment(s), and inspect them before consulting screen, work, or memory context. If the answer depends on file contents, inspect the local_path with file-reading tools before asking for clarification. Do not describe the screen unless the user asks about the screen explicitly.",
     ]
     for (index, attachment) in attachments.enumerated() {
       lines.append("")
@@ -5031,12 +5031,17 @@ class ChatProvider: ObservableObject {
         }
       }
       var screenPayload: [String: Any]?
+      // Files and referenced conversations the user attached are the turn's subject; they
+      // must not be crowded out by an ambient desktop snapshot or a capture that a bare
+      // "look at this" would otherwise trigger.
+      let hasAttachments = !attachmentsForMessage.isEmpty || !composerReferencesForMessage.isEmpty
       if effectiveImageData == nil,
         let screenContextReason = ScreenContextAutoIncludePolicy.reason(
           userText: effectivePrompt,
           systemPromptStyle: systemPromptStyle,
           turnOwner: turnOwner,
-          onboardingActive: !UserDefaults.standard.bool(forKey: DefaultsKey.hasCompletedOnboarding)
+          onboardingActive: !UserDefaults.standard.bool(forKey: DefaultsKey.hasCompletedOnboarding),
+          hasAttachments: hasAttachments
         )
       {
         let screenRecordingGranted = CGPreflightScreenCaptureAccess()

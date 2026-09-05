@@ -29,6 +29,7 @@ import {
   type ContextDeliveryCursor,
 } from "./context-snapshot.js";
 import { repairPersistedAgentSpawnJournals } from "./agent-spawn-journal.js";
+import { renderAttachmentsSection } from "./attachment-prompt.js";
 import {
   bindProducingJournalTurn,
   searchJournalConversation,
@@ -73,7 +74,6 @@ import {
   requiresVerifiedContextDispatch,
   bindingMetadata,
   stableHash,
-  stableJsonStringify,
   stableMcpServerConfig,
   stableJsonHash,
   parseJsonObject,
@@ -1155,9 +1155,7 @@ export class KernelCore {
       if (surfaceRef) {
         const snapshot = attemptInput.admittedContextSnapshot;
         if (!snapshot) throw new Error("Run is missing its admitted context snapshot");
-        const attachments = input.attachments?.length
-          ? `\n\n# Attachments\n${stableJsonStringify(input.attachments)}`
-          : "";
+        const attachments = renderAttachmentsSection(input.attachments);
         const renderedContext = adapterId === "pi-mono" && handle.bindingId
           ? renderContextSnapshotForBinding(
               snapshot,
