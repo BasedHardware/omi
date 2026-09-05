@@ -34,7 +34,10 @@ function Harness({
   onState,
 }: {
   macDesktop: boolean;
-  refreshReads: (initial: boolean) => Promise<void>;
+  refreshReads: (
+    initial: boolean,
+    options?: {ignoreEnabled?: boolean},
+  ) => Promise<void>;
   onState: (state: ReturnType<typeof useOnboarding>) => void;
 }) {
   const state = useOnboarding(macDesktop, refreshReads);
@@ -44,7 +47,10 @@ function Harness({
 
 async function renderOnboarding(
   macDesktop: boolean,
-  refreshReads: (initial: boolean) => Promise<void> = async () => undefined,
+  refreshReads: (
+    initial: boolean,
+    options?: {ignoreEnabled?: boolean},
+  ) => Promise<void> = async () => undefined,
 ) {
   let latest: ReturnType<typeof useOnboarding> | null = null;
   await ReactTestRenderer.act(async () => {
@@ -134,7 +140,7 @@ test('a real sign-in records onboarding completion and leaves Welcome', async ()
   expect(mockAuth.signIn).toHaveBeenCalledTimes(1);
   expect(mockAuth.markOnboardingComplete).toHaveBeenCalledTimes(1);
   expect(hook.latest().onboardingRequired).toBe(false);
-  expect(refreshReads).toHaveBeenCalledWith(false);
+  expect(refreshReads).toHaveBeenCalledWith(false, {ignoreEnabled: true});
 });
 
 test('a cancelled sign-in stays on Welcome without faking a session', async () => {

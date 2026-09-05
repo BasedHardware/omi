@@ -61,8 +61,16 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
   // never hit /v1/conversations|memories|tasks, so their 401/unconfigured
   // failures cannot poison readsPhase for the session that signs in next.
   const refreshReads = useCallback(
-    async (initial: boolean) => {
-      if (!enabled) {
+    async (
+      initial: boolean,
+      options?: {
+        // Post-sign-in: parent just flipped onboardingRequired, but this hook
+        // still sees enabled===false until the next render. Allow one explicit
+        // load so await refreshReads() is truthful instead of a no-op.
+        ignoreEnabled?: boolean;
+      },
+    ) => {
+      if (!enabled && options?.ignoreEnabled !== true) {
         return;
       }
       const backend = omiBackend;
