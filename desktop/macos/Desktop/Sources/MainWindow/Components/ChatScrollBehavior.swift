@@ -190,6 +190,63 @@ final class ChatFollowGlide {
   }
 }
 
+/// **Streaming tracks the live edge every tick, not every throttle window.**
+///
+/// A periodic follow glides toward the bottom measured when the follow fired —
+/// but a paced stream grows the document every `ChatStreamingBuffer` flush
+/// (35 ms), so by the time an 80 ms follow runs its target is stale: the
+/// viewport decelerates into where the bottom *was*, waits while text lands
+/// below it, then accelerates again. That velocity sawtooth is the jitter a
+/// reader feels as up-and-down stutter. While a stream is live and the reader
+/// owns the viewport, the pinner instead moves the clip view to the current
+/// maximum scroll **every tick** whenever the document has grown — no target
+/// math, nothing to go stale — so tracking is continuous and the only vertical
+/// steps left are the text's own line wraps.
+///
+/// Positional tracking, not animation: it applies under Reduce Motion too.
+/// Armed from the streaming follow path; disarmed by reader input, stream
+/// end, scroll-mode change, conversation switch, and teardown through
+/// `cancelAllPendingScrolls`. Each move is classified by the owner as the
+/// app's own (the programmatic-scroll signal), so `UserScrollDetector` never
+/// mistakes tracking for the reader taking the viewport.
+@MainActor
+final class ChatLiveEdgePinner {
+  /// 60 Hz, matching the display cadence the glide's clock was built for.
+  private static let tickInterval: TimeInterval = 1.0 / 60.0
+
+  private var timer: Timer?
+  private(set) var isPinning = false
+  private var track: (() -> Void)?
+
+  var isActive: Bool { isPinning }
+
+  /// Begin (or keep) pinning. An already-armed pinner keeps its cadence and
+  /// only refreshes the tracking closure — restarting the timer on every flush
+  /// would reset the tick phase 28 times a second.
+  func start(track: @escaping () -> Void) {
+    self.track = track
+    guard !isPinning else { return }
+    isPinning = true
+    let tick = Timer(timeInterval: Self.tickInterval, repeats: true) { [weak self] _ in
+      MainActor.assumeIsolated {
+        guard let self, self.isPinning else { return }
+        self.track?()
+      }
+    }
+    timer = tick
+    RunLoop.main.add(tick, forMode: .common)
+  }
+
+  /// Reader input, stream end, and teardown call this; a pinner must never
+  /// fight the viewport's owner.
+  func cancel() {
+    timer?.invalidate()
+    timer = nil
+    isPinning = false
+    track = nil
+  }
+}
+
 /// The moments the transcript moved its own viewport.
 ///
 /// `UserScrollDetector` promotes an open mouse press to reader ownership as

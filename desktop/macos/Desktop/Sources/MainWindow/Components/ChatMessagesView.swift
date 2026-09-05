@@ -474,6 +474,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// The follow glide's clock. Lives across body evaluations so a newer
   /// follow retargets the glide in flight instead of starting a second one.
   @State private var followGlide = ChatFollowGlide()
+  /// The streaming follow's clock: while a stream is live and the reader is
+  /// following, the viewport pins to the live edge every tick instead of
+  /// gliding toward targets that the next flush has already made stale.
+  @State private var liveEdgePinner = ChatLiveEdgePinner()
   /// When this transcript last moved its own viewport. The scroll detector
   /// reads it so a follow-scroll landing under an open mouse press is not
   /// mistaken for the reader taking the viewport.
@@ -697,6 +701,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // sources for every token would re-walk the entire transcript.
     .onChange(of: messages.last?.isStreaming) { wasStreaming, isStreaming in
       guard wasStreaming == true, isStreaming != true else { return }
+      // The stream settled: per-tick tracking has nothing left to track.
+      liveEdgePinner.cancel()
       transcriptGeometry.setMessages(visibleTranscriptMessages)
     }
     // A journal restore may be populated by background events while the
@@ -852,10 +858,38 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
     switch scrollMode {
     case .followingBottom:
+      // A live stream pins the viewport to the live edge every tick — a
+      // periodic follow would keep gliding toward a bottom the next flush has
+      // already moved (the jitter the throttle's own cadence used to trade
+      // against). Everything else — a settled turn, a non-streaming arrival —
+      // keeps the throttle.
+      if messages.last?.isStreaming == true {
+        liveEdgePinner.start(track: { pinToLiveEdge() })
+        pinToLiveEdge()
+        return
+      }
+      liveEdgePinner.cancel()
       throttledScrollToBottom(proxy: proxy)
     case .freeScrolling:
       hasActivityBelow = true
     }
+  }
+
+  /// The live edge, right now, as a direct clip-view move. No target to go
+  /// stale: the bottom is read and taken in the same tick. Returns without
+  /// moving when the scroll view has not resolved yet.
+  private func pinToLiveEdge() {
+    guard let scrollView = transcriptGeometry.scrollView, let document = scrollView.documentView
+    else { return }
+    let clipView = scrollView.contentView
+    let viewportHeight = clipView.bounds.height
+    let top = max(document.frame.height - viewportHeight, 0)
+    let originY = document.isFlipped ? top : document.frame.height - top - viewportHeight
+    guard abs(clipView.bounds.origin.y - originY) > 0.25 else { return }
+    transcriptGeometry.setFollowingLiveEdge(true)
+    programmaticScroll.markProgrammaticScroll()
+    clipView.setBoundsOrigin(NSPoint(x: clipView.bounds.origin.x, y: originY))
+    scrollView.reflectScrolledClipView(clipView)
   }
 
   // MARK: - Initial Restore
@@ -987,10 +1021,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     }
   }
 
-  /// Cancels all pending scheduled scrolls (throttle, initial placement, and
-  /// any follow glide in flight).
+  /// Cancels all pending scheduled scrolls (throttle, initial placement, any
+  /// follow glide in flight, and the streaming live-edge pinner).
   private func cancelAllPendingScrolls() {
     followGlide.cancel()
+    liveEdgePinner.cancel()
     scrollThrottleWorkItem?.cancel()
     scrollThrottleWorkItem = nil
     // The queued run is gone, so the throttle must stop reporting one as

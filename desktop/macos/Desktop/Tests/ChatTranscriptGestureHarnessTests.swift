@@ -130,6 +130,30 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         + "(drifted \(worstDrift) pt of a \(harness.viewportHeight) pt viewport)")
   }
 
+  /// The jitter complaint, as a gate: while a stream is live and the reader is
+  /// following, the pinner tracks the live edge every tick, so between-flush
+  /// drift stays within one flush's own growth (a line or two). The periodic
+  /// glide this replaced drifted tens of points between follows — its worst
+  /// was 48 pt here — which read as up-and-down stutter.
+  func testStreamingPinsTheViewportToTheLiveEdgeEveryTick() throws {
+    let harness = try makeHarness()
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+    XCTAssertTrue(harness.isAtBottom, "precondition: the transcript opens at the live edge")
+
+    var worstDrift: CGFloat = 0
+    for chunk in 0..<40 {
+      harness.appendStreamingText(" Streamed chunk \(chunk) with enough prose to grow the row. ")
+      harness.pump(0.035)
+      worstDrift = max(worstDrift, harness.maximumScrollTop - harness.scrollTop)
+    }
+
+    XCTAssertLessThan(
+      worstDrift, 20,
+      "a streaming transcript must pin the following viewport to the live edge per tick "
+        + "(drifted \(worstDrift) pt of a \(harness.viewportHeight) pt viewport)")
+  }
+
   func testAnArrivingTurnDoesNotPullTheReaderBack() throws {
     let harness = try makeHarness()
     defer { harness.tearDown() }
