@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.292",
+      "date": "2026-09-05",
+      "changes": [
+        "Fixed screenshots sitting at a slightly different left edge than the rest of the activity timeline when they follow a conversation"
+      ]
+    },
+    {
       "version": "0.12.291",
       "date": "2026-09-05",
       "changes": [
