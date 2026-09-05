@@ -1,3 +1,3 @@
 {
-  "change": "Only Meetings now shows as on in the top-bar listening control (green dot, no mute slash), its badge no longer overlaps the microphone, and the click hint is simply Only Meetings."
+  "change": "The top-bar listening control now shows the Only Meetings icon in place of the microphone while that mode is selected, reads as on while armed for a call, and explains the mode in its tooltip"
 }
