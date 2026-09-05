@@ -115,6 +115,11 @@ final class HomeDailySummaryStore: ObservableObject {
         self.summaryHour = resolvedHour
         self.lastError = nil
         self.lastRefresh = self.now()
+        // Counts, not content. A refresh that succeeds with nothing is the one outcome this store
+        // otherwise leaves invisible, and it is indistinguishable in the UI from "never fetched".
+        log(
+          "HomeDailySummaryStore: loaded \(summaries.count) summaries"
+            + " (\(self.byDate.count) dated, latest=\(self.latest?.date ?? "none"), summaryHour=\(resolvedHour))")
       } catch {
         // Bounded: the message is for the local log and an inline hint, never for analytics.
         self.lastError = "Couldn't load your daily summary."

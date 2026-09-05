@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 
 import database.daily_summaries as daily_summaries_db
 import database.memories as memories_db
+import database.notifications as notifications_db
+import routers.users as users_router
 
 
 def _usage_db(existing=None):
@@ -117,3 +119,66 @@ def test_memories_created_counts_canonical_and_legacy_shapes_without_duplicates(
         result = memories_db.count_memories_created('uid1', start, end, firestore_client=fake_db)
 
     assert result == 3
+
+
+# ---------------------------------------------------------------------------
+# The heartbeat is the desktop's only route to the user document's time_zone
+# ---------------------------------------------------------------------------
+
+
+def _user_doc_db(existing_user: dict | None):
+    fake_db = MagicMock()
+    user_ref = fake_db.collection.return_value.document.return_value
+    snapshot = MagicMock()
+    snapshot.exists = existing_user is not None
+    snapshot.to_dict.return_value = existing_user
+    user_ref.get.return_value = snapshot
+    return fake_db, user_ref
+
+
+def test_set_user_time_zone_if_missing_writes_for_a_document_without_one():
+    fake_db, user_ref = _user_doc_db({'email': 'desktop-only@example.com'})
+    with patch.object(notifications_db, 'db', fake_db):
+        assert notifications_db.set_user_time_zone_if_missing('uid1', 'America/New_York') is True
+    user_ref.set.assert_called_once_with({'time_zone': 'America/New_York'}, merge=True)
+
+
+def test_set_user_time_zone_if_missing_leaves_a_mobile_written_zone_alone():
+    fake_db, user_ref = _user_doc_db({'time_zone': 'Asia/Tokyo'})
+    with patch.object(notifications_db, 'db', fake_db):
+        assert notifications_db.set_user_time_zone_if_missing('uid1', 'America/New_York') is False
+    user_ref.set.assert_not_called()
+
+
+def _heartbeat_request(users_router):
+    return users_router.DesktopDailyUsageRequest(
+        date=datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+        timezone='UTC',
+        client_device_id='macos_abc123',
+        watching_seconds=10,
+        listening_seconds=0,
+        proactive_cards_shown=0,
+        proactive_cards_acted=0,
+        ptt_turns=0,
+    )
+
+
+def test_heartbeat_fills_a_missing_time_zone_once_and_then_trusts_the_flag():
+    patches = {
+        'daily_summaries_db': MagicMock(),
+        'notification_db': MagicMock(),
+        'get_generic_cache': MagicMock(side_effect=[None, {'time_zone': 'UTC'}]),
+        'set_generic_cache': MagicMock(),
+    }
+    with patch.multiple(users_router, **patches):
+        users_router.record_desktop_daily_usage(_heartbeat_request(users_router), uid='u1')
+        users_router.record_desktop_daily_usage(_heartbeat_request(users_router), uid='u1')
+
+    patches['daily_summaries_db'].upsert_desktop_daily_usage.assert_called()
+    assert patches['daily_summaries_db'].upsert_desktop_daily_usage.call_count == 2
+    # One document read across two heartbeats: the flag carries the answer for the second.
+    patches['notification_db'].set_user_time_zone_if_missing.assert_called_once_with('u1', 'UTC')
+    patches['set_generic_cache'].assert_called_once()
+    key, value = patches['set_generic_cache'].call_args.args[:2]
+    assert key == 'desktop_usage_time_zone_known:u1'
+    assert value == {'time_zone': 'UTC'}
