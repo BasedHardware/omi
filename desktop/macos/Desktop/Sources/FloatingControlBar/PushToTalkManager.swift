@@ -3497,7 +3497,11 @@ class PushToTalkManager: ObservableObject {
   /// Runs the dictation pipeline on a recording without a voice turn, for the
   /// automation bridge: the same transcription, cleanup, and paste a key-up
   /// performs, into whatever application is frontmost. Refused while a real
-  /// turn is active, so it can never paste into the middle of one.
+  /// turn is active, and abandoned — before anything reaches the focused app —
+  /// if one starts while the recording is being transcribed or polished, so
+  /// it can never paste into the middle of a real turn. The real turn's
+  /// `begin()` owns the session from that moment; the automation neither
+  /// claims nor resets it afterwards.
   func dictateForAutomation(pcm16k: Data, allowNetwork: Bool) async -> [String: String] {
     guard currentVoiceTurnID == nil else { return ["error": "a voice turn is active"] }
     voiceTypeSession.begin()
@@ -3510,7 +3514,10 @@ class PushToTalkManager: ObservableObject {
       language: AssistantSettings.shared.effectiveTranscriptionLanguage,
       appName: NSWorkspace.shared.frontmostApplication?.localizedName,
       allowNetwork: allowNetwork,
-      isCurrent: { true })
+      isCurrent: { [weak self] in self?.currentVoiceTurnID == nil })
+    guard !run.abandoned, currentVoiceTurnID == nil else {
+      return ["error": "a voice turn started while the recording was being transcribed — nothing was pasted"]
+    }
     voiceTypeSession.abandon()
     let delivery: String
     switch run.completion {

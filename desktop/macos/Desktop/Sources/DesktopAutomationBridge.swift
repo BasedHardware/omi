@@ -1531,12 +1531,16 @@ final class DesktopAutomationActionRegistry {
         let pcm16k = try? Data(contentsOf: URL(fileURLWithPath: path)),
         !pcm16k.isEmpty
       else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
-      let paceMs = UInt64(params["pace_ms"] ?? "") ?? 0
-      let settleMs = UInt64(params["settle_ms"] ?? "") ?? 0
+      // Bounded so the nanosecond conversion below cannot trap on a typo.
+      let maxWaitMs: UInt64 = 10 * 60 * 1_000
+      let paceMs = min(UInt64(params["pace_ms"] ?? "") ?? 0, maxWaitMs)
+      let settleMs = min(UInt64(params["settle_ms"] ?? "") ?? 0, maxWaitMs)
       // Default 100 ms. Pass 342 to mimic what the CoreAudio IOProc hands a
       // 48 kHz device's capture after resampling — chunk size has already
-      // hidden one bug that only a real microphone showed.
-      let chunkSize = max(2, Int(params["chunk_bytes"] ?? "") ?? 3_200)
+      // hidden one bug that only a real microphone showed. Always a whole
+      // number of 16-bit samples, so an odd size cannot shear the PCM framing.
+      let requestedChunk = Int(params["chunk_bytes"] ?? "") ?? 3_200
+      let chunkSize = max(2, requestedChunk - requestedChunk % 2)
 
       var result = PushToTalkManager.shared.beginRealtimePushToTalkForAutomation()
       guard result["listening"] == "true" else { return result }
