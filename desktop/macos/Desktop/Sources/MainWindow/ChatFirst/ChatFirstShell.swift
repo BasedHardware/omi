@@ -62,6 +62,10 @@ struct ChatFirstShell: View {
       // Home and More pages), leaving the automation contract stale even though
       // the requested route is selected.
       destination
+        // Attached *inside* the identified subtree: a modifier above `.id` keeps
+        // its identity across the replacement and never observes the outgoing
+        // destination's disappearance.
+        .onDisappear { ChatSwitchPerfLog.mark("oldDestinationGone") }
         .id(navigation.route.stableName)
     }
     // The top bar occupies the hidden title-bar band; the window's top edge is the glass.
@@ -144,6 +148,7 @@ struct ChatFirstShell: View {
       chatDestination
         .accessibilityIdentifier("chat-first-route-chat")
         .onAppear {
+          ChatSwitchPerfLog.mark("chatRouteAppear")
           navigation.markRouteVisible(navigation.route)
           automationRuntime.registerChatPage(
             requestPromptMaterialization: {

@@ -497,6 +497,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// before it settles. A pending placement is retried after a transient view
   /// disappearance; completed/user-interrupted state preserves scroll position.
   @State private var initialRestoreState: ChatInitialRestoreState = .waiting
+  /// The document height the previous settling pass measured, for
+  /// `ChatInitialRestoreSettle`'s stability check. Reset by every restore start,
+  /// so a local send's own scheduled pass cannot feed a later restore a stale
+  /// reading.
+  @State private var lastRestorePassDocumentHeight: CGFloat?
 
   // MARK: - Prepend Preservation (Load Earlier Messages)
 
@@ -793,6 +798,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       }
     }
     .onAppear {
+      ChatSwitchPerfLog.mark("ChatMessagesView.appear")
       // Product invariant: a presented chat starts at its newest message.
       // Never reuse a completed placement from a prior scroll-view instance;
       // that instance may have been dismissed while the reader was at top.
@@ -903,13 +909,14 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     scrollMode = .followingBottom
     hasActivityBelow = false
     initialRestoreState = .pending
+    lastRestorePassDocumentHeight = nil
 
     // The anchor already exists by the time this handler runs in the common
     // case. Try immediately, then retain the settling passes below for rich
     // Markdown that expands across later layout turns.
     scrollToBottom(proxy: proxy)
 
-    let delays = ChatScrollLiveEdge.initialRestoreSettlingDelays
+    let delays = ChatInitialRestoreSettle.delays
     guard !delays.isEmpty else {
       initialRestoreState = .completed
       return
@@ -1007,8 +1014,28 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // Only fire if still following — user may have scrolled during settling
       if scrollMode == .followingBottom {
         scrollToBottom(proxy: proxy)
-        if completesInitialRestore, initialRestoreState == .pending {
+        // The passes exist to re-pin the live edge while rich rows expand
+        // across later layout turns. A pass that measures the same document
+        // height as the pass before it has nothing left to re-pin, so the
+        // restore completes there instead of burning the remaining ladder on a
+        // document that has stopped reflowing. The ladder's last pass
+        // (`completesInitialRestore`) completes unconditionally.
+        let documentHeight = transcriptGeometry.scrollView?.documentView?.frame.height ?? 0
+        let isSettled =
+          completesInitialRestore
+          || ChatInitialRestoreSettle.hasSettled(
+            previousPassDocumentHeight: lastRestorePassDocumentHeight,
+            currentDocumentHeight: documentHeight)
+        lastRestorePassDocumentHeight = documentHeight
+        if isSettled, initialRestoreState == .pending {
+          // The last settling pass ran: the live edge holds and the reader
+          // stops seeing motion. This closes the switch measurement.
+          ChatSwitchPerfLog.mark("restoreSettled")
+          ChatSwitchPerfLog.endSwitch("restore-settled")
           initialRestoreState = .completed
+          for item in initialScrollWorkItems where item !== workItem {
+            item.cancel()
+          }
         }
       }
       if let workItem {
@@ -1154,7 +1181,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           transcriptGeometry.setRowOffset(minY, for: message.id)
         }
       }
-      .task { await dailySummaryCoordinator.activate() }
+      .task {
+        let startedAt = DispatchTime.now()
+        await dailySummaryCoordinator.activate()
+        ChatSwitchPerfLog.span("dailySummaryActivate", startedAt: startedAt)
+      }
     }
   }
 
@@ -1216,6 +1247,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   private var scrollDetectors: some View {
     ZStack {
       ScrollPositionDetector { position in
+        ChatSwitchPerfLog.markOnce(
+          "transcriptLaidOut", detail: "docH=\(Int(position.documentHeight))")
         transcriptGeometry.setContent(
           height: position.documentHeight,
           scrollTop: position.scrollTop

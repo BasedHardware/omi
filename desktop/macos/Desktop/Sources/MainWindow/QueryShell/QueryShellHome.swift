@@ -77,10 +77,16 @@ struct QueryShellHome: View {
   /// Measured rather than assumed: the composer is at its resting height most of the time but grows
   /// with a staged-file row, with a second line of draft and with the reader's font scale, and a
   /// reserve that ignores that is a reserve that puts the panel back off the bottom edge the first
-  /// time somebody drops a file on it. The reporter is a `background` `GeometryReader`, which cannot
-  /// affect layout, and the value it feeds only ever flows *downwards* — the composer's height never
-  /// depends on the panel's — so there is no measurement loop. One state for both placements, because
-  /// there is only ever one composer on screen (`QueryComposerPlacement`).
+  /// time somebody drops a file on it. The reporter is `onGeometryChange`, which cannot affect
+  /// layout, and the value it feeds only ever flows *downwards* — the composer's height never
+  /// depends on the panel's — so there is no measurement loop. One state for both placements,
+  /// because there is only ever one composer on screen (`QueryComposerPlacement`).
+  ///
+  /// The height travels through a callback rather than a `PreferenceKey`: a preference written at
+  /// the composer and read at this surface's root makes SwiftUI run a reduce over one combiner pair
+  /// per node of everything mounted between them — the whole transcript on the chat surface — and
+  /// that collection dominated the measured cost of every switch into Chat. The callback feeds the
+  /// identical value into the identical state.
   @State private var composerHeight: CGFloat = QueryShellLayout.barMinHeight
   /// **The caret, as a claim rather than a flag.** Monotonic, and every increment lands the caret in
   /// the bar. `@FocusState` cannot do that job any more: the field is an `NSTextView` that SwiftUI's
@@ -89,6 +95,13 @@ struct QueryShellHome: View {
   @State private var caretClaims = 0
 
   var body: some View {
+    // `markOnce`: body re-evaluates on every local state change (search text,
+    // composer height); only the first evaluation after the route change is
+    // the switch's mount work. The detail classifies cold vs warm switches.
+    // `let _ =` keeps the Void result out of the ViewBuilder's expression list.
+    let _ = ChatSwitchPerfLog.markOnce(
+      "QueryShellHome.body",
+      detail: "messages=\(chatProvider.messages.count) isLoading=\(chatProvider.isLoading)")
     querySurface
   }
 
@@ -133,10 +146,6 @@ struct QueryShellHome: View {
           }
           Spacer(minLength: 0)
         }
-        .onPreferenceChange(QueryComposerHeightKey.self) { measured in
-          guard measured > 0, measured != composerHeight else { return }
-          composerHeight = measured
-        }
         .frame(width: lane)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.top, OmiSpacing.sm)
@@ -145,6 +154,7 @@ struct QueryShellHome: View {
     // A typed character belongs in the field even when the field is not focused: this is a search
     // surface, and a search surface that swallows the first letter you type is broken.
     .onAppear {
+      ChatSwitchPerfLog.mark("QueryShellHome.appear")
       takePendingDraftIfAny()
       claimCaret()
     }
@@ -258,11 +268,21 @@ struct QueryShellHome: View {
       references: chatProvider.pendingComposerReferences,
       onReferenceRemoved: { chatProvider.removeComposerReference(id: $0) }
     )
-    .background {
-      GeometryReader { composer in
-        Color.clear.preference(key: QueryComposerHeightKey.self, value: composer.size.height)
-      }
+    .onGeometryChange(for: CGFloat.self) {
+      $0.size.height
+    } action: { measured in
+      reportComposerHeight(measured)
     }
+  }
+
+  /// Receives the composer's measured height — the same guarded write the
+  /// preference reader used to perform, minus the preference traversal.
+  private func reportComposerHeight(_ measured: CGFloat) {
+    // The composer's real height has been measured and fed back — the bar is
+    // laid out and usable at its resting geometry.
+    ChatSwitchPerfLog.markOnce("composerMeasured")
+    guard measured > 0, measured != composerHeight else { return }
+    composerHeight = measured
   }
 
   /// The seam value the panel and its body are handed, **assembled rather than stored**: the text
@@ -574,27 +594,17 @@ struct QueryShellHome: View {
   }
 
   private func loadScreenCount() async {
+    let startedAt = DispatchTime.now()
     // Rewind's pool opens asynchronously after launch, and this is a `.task` that runs once — so an
     // ask that lands before it is open under-reports the archive by its entire size for the rest of
     // the session. That is what made the corner read "390 results · of 147 captured": 147 was the
     // conversations and memories alone, with the whole screen archive counted as nothing.
     guard await SpineScreenIndex.poolWhenReady() != nil else {
       screenCount = 0
+      ChatSwitchPerfLog.span("screenCountTask", startedAt: startedAt)
       return
     }
     screenCount = (try? await RewindDatabase.shared.getScreenshotCount()) ?? 0
-  }
-}
-
-/// The composer's height, reported up to the surface that has to fit a panel around it.
-///
-/// `max` rather than last-writer-wins: only one composer is mounted at a time, but a preference that
-/// reduced to the newest value would let a transient zero from a view being torn down — which is
-/// exactly what a mode change does to the placement it is leaving — shrink the reserve and let the
-/// panel run off the window for a frame.
-private struct QueryComposerHeightKey: PreferenceKey {
-  static let defaultValue: CGFloat = 0
-  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-    value = max(value, nextValue())
+    ChatSwitchPerfLog.span("screenCountTask", startedAt: startedAt)
   }
 }

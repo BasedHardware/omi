@@ -315,6 +315,7 @@ final class ChatFirstShellNavigation: ObservableObject {
       return
     }
     invalidateLinkResolutions()
+    ChatSwitchPerfLog.beginSwitch(destination: "selectPrimary:\(destination.stableName)")
     route = destination
     visibleRoute = nil
     clearFocus()
@@ -342,6 +343,7 @@ final class ChatFirstShellNavigation: ObservableObject {
       return
     }
     invalidateLinkResolutions()
+    ChatSwitchPerfLog.beginSwitch(destination: "selectMore:\(page.stableName)")
     route = .more(page)
     visibleRoute = nil
     clearFocus()

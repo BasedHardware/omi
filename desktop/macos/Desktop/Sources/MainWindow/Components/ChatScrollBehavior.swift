@@ -62,6 +62,42 @@ enum ChatScrollLiveEdge {
   }
 }
 
+/// **The initial restore's settling passes, as a stability-seeking policy.**
+///
+/// A saved conversation must open at its live edge, and rich rows (Markdown
+/// blocks, code, remote images) can expand across several SwiftUI layout turns
+/// after the first placement, so the restore re-pins the live edge a few more
+/// times before it declares itself settled. A fixed ladder long enough to cover
+/// the slowest reflow made every switch pay the whole ladder even when the
+/// document had already stopped changing after the first pass — the reader
+/// watched a settled transcript keep "settling" for a full second.
+///
+/// A tighter ladder plus a stability check: a pass that measures the same
+/// document height as the pass before it has nothing left to re-pin, so the
+/// restore completes there and the remaining passes are cancelled. The ladder's
+/// last pass still completes unconditionally, so a document that never holds
+/// still for two consecutive passes reaches `.completed` exactly as before.
+enum ChatInitialRestoreSettle {
+  /// Tight enough that a transcript which lays out on an early pass settles in
+  /// a fraction of a second; the stability check, not the ladder, owns the tail.
+  static let delays: [TimeInterval] = [0.05, 0.1, 0.18, 0.3, 0.5]
+  /// Sub-point drift between passes is not reflow.
+  static let stabilityEpsilon: CGFloat = 0.5
+
+  /// Whether a settling pass may complete the restore: the previous pass must
+  /// have seen a laid-out document (a real height, not the pre-layout zero) and
+  /// this pass must measure the same height within `stabilityEpsilon`.
+  static func hasSettled(
+    previousPassDocumentHeight: CGFloat?,
+    currentDocumentHeight: CGFloat
+  ) -> Bool {
+    guard let previous = previousPassDocumentHeight, previous > 0,
+      currentDocumentHeight > 0
+    else { return false }
+    return abs(currentDocumentHeight - previous) <= stabilityEpsilon
+  }
+}
+
 /// **How often a following transcript re-reaches the live edge while an answer
 /// streams.** A rate limiter, not a quiet period.
 ///

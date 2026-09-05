@@ -133,7 +133,10 @@ struct QueryAnswerThread: View {
 
     }
     .accessibilityIdentifier("query-shell-answer")
-    .onAppear { reportChatFirstTranscriptPageIfReady() }
+    .onAppear {
+      ChatSwitchPerfLog.mark("QueryAnswerThread.appear")
+      reportChatFirstTranscriptPageIfReady()
+    }
     .onChange(of: chatProvider.isMainChatJournalFirstPageReady) { _, _ in
       reportChatFirstTranscriptPageIfReady()
     }
