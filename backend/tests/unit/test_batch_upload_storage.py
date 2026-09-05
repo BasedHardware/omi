@@ -81,6 +81,7 @@ def merge():
         "models.conversation": ["Conversation"],
         "models.conversation_enums": ["ConversationStatus"],
         "models.structured": ["Structured"],
+        "models.client_processing": ["PROJECTION_FAMILY_FIELDS"],
     }
     model_stubs: dict[str, ModuleType] = {}
     for _modname, _attrs in model_submods.items():
@@ -88,6 +89,7 @@ def merge():
         for _attr in _attrs:
             setattr(_mod, _attr, MagicMock())
         model_stubs[_modname] = _mod
+    model_stubs["models.client_processing"].PROJECTION_FAMILY_FIELDS = frozenset({"client_processing"})
 
     memory_service_stub = ModuleType("utils.memory.memory_service")
     setattr(memory_service_stub, "MemoryService", MagicMock())
