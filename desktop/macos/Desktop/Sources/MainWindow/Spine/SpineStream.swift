@@ -572,6 +572,7 @@ struct SpineDayHeader: View {
     }
     .accessibilityElement(children: .combine)
     .accessibilityAddTraits(.isButton)
+    .accessibilityIdentifier("spine-day-header")
     .accessibilityLabel(Text(isCollapsed ? "Expand \(day.title)" : "Collapse \(day.title)"))
     .accessibilityValue(Text(day.subtitle))
     .help(isCollapsed ? "Show this day" : "Hide this day")

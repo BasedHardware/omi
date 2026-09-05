@@ -104,21 +104,14 @@ struct SpineDayRecapRow: View {
       onOpenRecap(record)
     } label: {
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        HStack(spacing: OmiSpacing.sm) {
-          if let emoji = nonEmpty(record.dayEmoji) {
-            Text(emoji)
-              .scaledFont(size: OmiType.caption)
-          }
-          Text(nonEmpty(record.headline) ?? "Your day in review")
-            .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundStyle(Ink.primary)
-            .lineLimit(1)
-            .truncationMode(.tail)
-          Spacer(minLength: OmiSpacing.sm)
-          Image(systemName: "chevron.right")
-            .scaledFont(size: OmiType.micro, weight: .semibold)
-            .foregroundStyle(Ink.secondary)
-        }
+        // The day header directly above already shows the recap's emoji and is
+        // the fold control: no second emoji, no second arrow. The body's whole
+        // surface opens the page (pointer + tooltip say so).
+        Text(nonEmpty(record.headline) ?? "Your day in review")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundStyle(Ink.primary)
+          .lineLimit(1)
+          .truncationMode(.tail)
         if let overview = nonEmpty(record.overview) {
           Text(overview)
             .scaledFont(size: OmiType.caption, weight: .regular)
@@ -132,7 +125,6 @@ struct SpineDayRecapRow: View {
       .padding(.bottom, OmiSpacing.sm)
       .frame(maxWidth: .infinity, alignment: .leading)
       .contentShape(Rectangle())
-      .accessibilityIdentifier("spine-day-recap-header")
     }
     .buttonStyle(.plain)
     // **The day card's body, not a second surface.** Same material as the
