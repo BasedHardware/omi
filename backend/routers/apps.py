@@ -1738,7 +1738,10 @@ async def verify_twitter_ownership_tweet(
 
 
 @router.get('/v1/personas/twitter/initial-message', tags=['v1'], response_model=TwitterInitialMessageResponse)
-def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_twitter_initial_message(
+    username: str,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "apps:twitter_initial_message")),
+):
     persona = get_persona_by_username_db(username)
     if persona:
         with track_usage(uid, Features.PERSONA):
