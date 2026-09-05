@@ -92,34 +92,28 @@ final class ShellListeningCycleTests: XCTestCase {
     }
   }
 
-  // MARK: The mark
+  // MARK: The silhouette
 
-  /// Only Meetings is the mode whose behaviour the glyph cannot state — the control is switched on
-  /// while the microphone is held shut — so it is the one mode that carries a mark. The others must
-  /// not, or the mark stops meaning anything.
-  func testOnlyMeetingsCarriesTheModeBadgeAndNothingElseDoes() {
+  /// Only Meetings is a different capability from room listening — record calls, not the room — so
+  /// it owns the control's silhouette outright rather than riding on the mic as a corner mark, which
+  /// read as two glyphs fused into one. The other two modes keep the mic, or the swap would say
+  /// nothing.
+  func testOnlyMeetingsWearsThePeopleGlyphAndTheOtherModesKeepTheMic() {
     XCTAssertEqual(
-      ShellStatusGlyph.modeBadge(for: .onlyMeetings), ShellStatusGlyph.meetingsOnly,
+      ShellStatusGlyph.listeningGlyph(for: .onlyMeetings), ShellStatusGlyph.meetingsOnly,
       "Only Meetings must be distinguishable from Always On at a glance")
-    XCTAssertNil(
-      ShellStatusGlyph.modeBadge(for: .always),
-      "Always On must not wear the meetings mark — the two modes would be indistinguishable")
-    XCTAssertNil(ShellStatusGlyph.modeBadge(for: .off), "the off mode is said by the slash")
-  }
-
-  /// The mark rides in the corner; the silhouette underneath stays the one `mic` the cluster's
-  /// header pins. `ShellStatusIconLegibilityTests` measures that in pixels — this is the
-  /// type-level half: adding a mode must never add a listening glyph.
-  func testTheModeBadgeIsNeverTheListeningGlyphItself() {
+    XCTAssertEqual(
+      ShellStatusGlyph.listeningGlyph(for: .always), ShellStatusGlyph.listening,
+      "Always On is the microphone itself")
+    XCTAssertEqual(
+      ShellStatusGlyph.listeningGlyph(for: .off), ShellStatusGlyph.listening,
+      "the off mode is said by the slash over the mic, not by a different glyph")
     XCTAssertNotEqual(
-      ShellStatusGlyph.modeBadge(for: .onlyMeetings), ShellStatusGlyph.listening,
-      """
-      the meetings mark replaced the listening glyph instead of riding on top of it — that is the \
-      `waveform`/`mic` silhouette swap the cluster's header rejects, returning as a mode badge.
-      """)
+      ShellStatusGlyph.meetingsOnly, ShellStatusGlyph.listening,
+      "the meetings glyph must be a different silhouette or the mode is invisible")
     XCTAssertEqual(
       ShellStatusGlyph.listening, "mic",
-      "the listening control has exactly one silhouette, in every state and every mode")
+      "the room-listening silhouette is the one the cluster's header pins")
   }
 
   // MARK: The promise the tooltip makes
