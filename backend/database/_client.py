@@ -157,10 +157,10 @@ def _build_firestore_client() -> Any:
         database = _firestore_database_id()
         if database and project_id != "based-hardware-dev":
             raise RuntimeError("jit-qa cannot use a mounted customer-data service account")
-        kwargs: dict[str, Any] = {"credentials": credentials, "project": project_id}
+        customer_kwargs: dict[str, Any] = {"credentials": credentials, "project": project_id}
         if database:
-            kwargs["database"] = database
-        return firestore.Client(**kwargs)
+            customer_kwargs["database"] = database
+        return firestore.Client(**customer_kwargs)
 
     prepare_google_credentials()
     database = _firestore_database_id()

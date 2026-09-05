@@ -64,7 +64,7 @@ class DailySweepUIDInventoryPage:
 
 
 def explicit_jit_qa_daily_sweep_uid_inventory(
-    uids: Iterable[str],
+    uids: Iterable[object],
 ) -> DailySweepUIDInventoryPage:
     """Build a bounded QA page without touching the global inventory/cursors.
 
