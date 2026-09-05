@@ -64,7 +64,6 @@ QA_ENTITLEMENT_PERIOD_END = 4102444800  # 2100-01-01T00:00:00Z
 ROW_COUNT = 101
 MUTATION_PAGE_SIZE = 100
 EXCLUSIVITY_SCAN_LIMIT = ROW_COUNT + 1
-BOOTSTRAP_COLLECTIONS = frozenset({"jit_qa_bootstrap", "users", "testers", "canonical_memory_maintenance_registry"})
 LEDGER_DRAIN_CURSOR_PATH = "knowledge_ledger_migration_control/inventory_cursor"
 RUN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,47}$")
 SUMMARY_KEYS = (
@@ -204,9 +203,10 @@ def _qa_tester_payload() -> dict[str, Any]:
 def _assert_named_database_empty(db_client: Any) -> None:
     """Prove the named database is empty before creating the QA account.
 
-    ``collections()`` is a metadata-only inventory.  Each present top-level
-    collection is then queried with a two-document bound so a non-empty or
-    unsupported collection fails closed without reading customer content.
+    ``collections()`` is a metadata-only inventory.  Firestore does not retain
+    empty collections, so any collection returned by this inventory means the
+    first-bootstrap precondition is false.  We stop before reading or writing a
+    document; the named database must be genuinely empty.
     """
 
     collections_factory = getattr(db_client, "collections", None)
@@ -216,24 +216,11 @@ def _assert_named_database_empty(db_client: Any) -> None:
         collections = list(collections_factory())
     except Exception as exc:
         raise JITQAVerificationError("bootstrap could not inventory the named Firestore database") from exc
-    for collection in collections:
-        collection_id = str(getattr(collection, "id", ""))
-        if collection_id not in BOOTSTRAP_COLLECTIONS:
-            raise JITQAVerificationError(f"bootstrap found an unsupported top-level collection: {collection_id!r}")
-        limited = getattr(collection, "limit", None)
-        if not callable(limited):
-            raise JITQAVerificationError("bootstrap cannot bound the named Firestore database inventory")
-        stream = getattr(limited(2), "stream", None)
-        if not callable(stream):
-            raise JITQAVerificationError("bootstrap cannot prove the named Firestore database is empty")
-        try:
-            first_two = list(stream())
-        except Exception as exc:
-            raise JITQAVerificationError("bootstrap could not inspect the named Firestore database") from exc
-        if first_two:
-            raise JITQAVerificationError(
-                f"bootstrap requires a truly empty named database; collection {collection_id!r} already has documents"
-            )
+    if collections:
+        collection_id = str(getattr(collections[0], "id", ""))
+        raise JITQAVerificationError(
+            "bootstrap requires a truly empty named database; " f"found collection {collection_id!r}"
+        )
 
 
 def _assert_owned_fields(
@@ -424,6 +411,27 @@ def _fixture_evidence(run_id: str, index: int) -> MemoryEvidence:
     )
 
 
+EVIDENCE_OWNERSHIP_FIELDS = (
+    "evidence_id",
+    "source_id",
+    "source_version",
+    "artifact_preservation",
+    "source_state",
+    "source_type",
+)
+
+
+def _expected_evidence_fields(run_id: str, index: int) -> dict[str, Any]:
+    expected = _stored_model(_fixture_evidence(run_id, index))
+    return {key: expected.get(key) for key in EVIDENCE_OWNERSHIP_FIELDS}
+
+
+def _projected_evidence_fields(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize fake and Firestore projection responses to owned fields."""
+
+    return {key: payload[key] for key in EVIDENCE_OWNERSHIP_FIELDS if key in payload}
+
+
 def _fixture_item(
     run_id: str,
     index: int,
@@ -570,11 +578,10 @@ def seed_fixture(db_client: Any, *, run_id: str) -> dict[str, int | str]:
             continue
 
         evidence_ref = db_client.document(_evidence_path(run_id, index))
-        evidence = _get_selected(evidence_ref, ("evidence_id", "source_id", "source_state", "source_type"))
+        evidence = _get_selected(evidence_ref, EVIDENCE_OWNERSHIP_FIELDS)
         expected_evidence = _stored_model(_fixture_evidence(run_id, index))
-        if evidence and evidence != {
-            key: expected_evidence.get(key) for key in ("evidence_id", "source_id", "source_state", "source_type")
-        }:
+        expected_evidence_ownership = _expected_evidence_fields(run_id, index)
+        if evidence and _projected_evidence_fields(evidence) != expected_evidence_ownership:
             raise JITQAVerificationError(f"refusing to overwrite non-owned QA evidence {index:03d}")
         if not evidence:
             create_evidence = getattr(evidence_ref, "create", None)
@@ -583,13 +590,8 @@ def seed_fixture(db_client: Any, *, run_id: str) -> dict[str, int | str]:
             try:
                 create_evidence(expected_evidence)
             except Exception as exc:
-                raced_evidence = _get_selected(
-                    evidence_ref, ("evidence_id", "source_id", "source_state", "source_type")
-                )
-                if raced_evidence != {
-                    key: expected_evidence.get(key)
-                    for key in ("evidence_id", "source_id", "source_state", "source_type")
-                }:
+                raced_evidence = _get_selected(evidence_ref, EVIDENCE_OWNERSHIP_FIELDS)
+                if _projected_evidence_fields(raced_evidence) != expected_evidence_ownership:
                     raise JITQAVerificationError(
                         f"QA fixture evidence creation raced with an unowned document {index:03d}"
                     ) from exc
@@ -717,10 +719,13 @@ def inspect_fixture(db_client: Any, *, run_id: str, allow_ledger: bool = True) -
         )
         evidence_payload = _get_selected(
             db_client.document(_evidence_path(run_id, index)),
-            ("evidence_id", "source_id", "source_state", "source_type"),
+            EVIDENCE_OWNERSHIP_FIELDS,
         )
-        if evidence_payload:
-            retained_evidence += 1
+        if not evidence_payload:
+            raise JITQAVerificationError(f"fixture evidence {index:03d} is missing")
+        if _projected_evidence_fields(evidence_payload) != _expected_evidence_fields(run_id, index):
+            raise JITQAVerificationError(f"fixture evidence {index:03d} is foreign or malformed")
+        retained_evidence += 1
 
     completion = _get_selected(
         db_client.document(_completion_path()),

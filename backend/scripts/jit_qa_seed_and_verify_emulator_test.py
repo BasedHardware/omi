@@ -33,12 +33,23 @@ from models.memory_apply import WriterMode  # noqa: E402
 from scripts import jit_qa_seed_and_verify as operator  # noqa: E402
 from utils.memory import knowledge_ledger_drain as drain  # noqa: E402
 
-PROJECT_ID = "demo-omi-jit-qa-seed-verify"
+PROJECT_ID = "demo-omi-jit-qa"
+DATABASE_ID = "jit-qa"
 NOW = datetime(2026, 9, 5, 12, tzinfo=timezone.utc)
 
 
 async def _permit_injected_rollout(*_args: Any, **_kwargs: Any) -> Any:
     return SimpleNamespace(permits_work=True)
+
+
+def _validate_emulator_host(value: str) -> None:
+    host, separator, port = value.rpartition(":")
+    if not separator or host not in {"127.0.0.1", "localhost", "::1"} or not port.isdigit():
+        raise RuntimeError("FIRESTORE_EMULATOR_HOST must be a loopback host with a numeric port")
+
+
+def _build_emulator_client() -> Any:
+    return firestore.Client(project=PROJECT_ID, database=DATABASE_ID)
 
 
 def _summary_payload(summary: Any) -> dict[str, Any]:
@@ -57,9 +68,11 @@ def _summary_payload(summary: Any) -> dict[str, Any]:
 
 
 def main() -> int:
-    if not os.environ.get("FIRESTORE_EMULATOR_HOST"):
+    emulator_host = os.environ.get("FIRESTORE_EMULATOR_HOST", "").strip()
+    if not emulator_host:
         raise RuntimeError("FIRESTORE_EMULATOR_HOST is required; run through firebase emulators:exec")
-    client: Any = firestore.Client(project=PROJECT_ID)
+    _validate_emulator_host(emulator_host)
+    client: Any = _build_emulator_client()
     # The operator's production entrypoint rejects emulators.  This test calls
     # the explicit bootstrap function under a labelled local override so cloud
     # mode remains fail-closed and real-admission-only.

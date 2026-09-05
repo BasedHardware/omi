@@ -134,6 +134,21 @@ def test_target_and_environment_are_fail_closed(monkeypatch):
         operator.validate_environment()
 
 
+def test_firestore_client_selects_named_qa_database(monkeypatch):
+    calls = {}
+
+    class FakeFirestoreClient:
+        def __init__(self, **kwargs):
+            calls.update(kwargs)
+
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("GCLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("FIRESTORE_DATABASE_ID", raising=False)
+    monkeypatch.setattr(operator.firestore, "Client", FakeFirestoreClient)
+    operator.build_firestore_client()
+    assert calls == {"project": "based-hardware-dev", "database": "jit-qa"}
+
+
 def test_seed_is_idempotent_and_writes_only_owned_rows():
     db = _DB()
     first = operator.seed_fixture(db, run_id="proof-20260905")
@@ -195,7 +210,7 @@ def test_fixture_exclusivity_fails_closed_without_metadata_projection():
         operator._assert_fixture_exclusive(NoProjectionDB(), run_id="proof-20260905")
 
 
-def test_bootstrap_empty_inventory_fails_closed_without_bound():
+def test_bootstrap_empty_inventory_rejects_any_present_collection():
     class UnboundedCollection:
         id = "users"
 
@@ -203,8 +218,25 @@ def test_bootstrap_empty_inventory_fails_closed_without_bound():
         def collections(self):
             return [UnboundedCollection()]
 
-    with pytest.raises(operator.JITQAVerificationError, match="bound the named Firestore database"):
+    with pytest.raises(operator.JITQAVerificationError, match="truly empty"):
         operator._assert_named_database_empty(UnboundedDB())
+
+
+def test_bootstrap_empty_inventory_accepts_no_collections():
+    class EmptyDB:
+        def collections(self):
+            return []
+
+    operator._assert_named_database_empty(EmptyDB())
+
+
+def test_evidence_ownership_requires_full_source_metadata():
+    db = _DB()
+    operator.seed_fixture(db, run_id="proof-20260905")
+    evidence = db.docs[operator._evidence_path("proof-20260905", 0)]
+    evidence.pop("source_version")
+    with pytest.raises(operator.JITQAVerificationError, match="foreign or malformed"):
+        operator.inspect_fixture(db, run_id="proof-20260905")
 
 
 def test_bootstrap_is_create_only_and_idempotent(monkeypatch):
