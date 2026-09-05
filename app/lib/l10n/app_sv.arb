@@ -3235,6 +3235,16 @@
     "pendantFullSyncBlocked": "Lagringen på din Pendant är full och den är fortfarande i inspelningsläge, så det lagrade ljudet kan inte överföras. Tryck på Pendantens knapp för att stoppa inspelningen och synkronisera sedan igen.",
     "conversationsNotCapturedCount": "Inte fångat ({count})",
     "transcriptionNoAudio": "Transkrieringen tar inte emot ljud",
+    "chatBlockTask": "Uppgift",
+    "chatBlockGoal": "Mål",
+    "chatBlockConversation": "Konversation",
+    "chatBlockMemory": "Minne",
+    "chatBlockQuestion": "Fråga",
+    "chatBlockOpenInGoals": "Öppna i Mål",
+    "chatBlockOpenConversation": "Öppna konversation",
+    "chatBlockOpenInMemories": "Öppna i Minnen",
+    "chatBlockUnavailable": "Inte längre tillgänglig",
+    "chatBlockRecommendedNextSteps": "Rekommenderade nästa steg",
     "couldNotLoadMemories": "Kunde inte läsa in minnen",
     "couldNotLoadKnowledgeGraph": "Kunde inte läsa in kunskapsgrafen"
 }

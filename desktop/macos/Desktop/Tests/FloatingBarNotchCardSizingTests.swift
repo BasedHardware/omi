@@ -60,7 +60,8 @@ final class FloatingBarNotchCardSizingTests: XCTestCase {
       ownerID: "test-owner",
       title: title,
       message: "User is asked to find learned lessons in Claude Code sessions",
-      assistantId: "proactive_assistant"
+      assistantId: "proactive_assistant",
+      kind: .memory
     )
   }
 

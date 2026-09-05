@@ -53,7 +53,11 @@ private enum CaptureArchiveRepositoryError: Error {
 }
 
 extension ServerConversation {
-  fileprivate var isOmiCaptureArchiveRecord: Bool {
+  /// The archive's provenance contract. Beyond the repository itself, the only
+  /// legitimate reader is citation routing: a chat citation names whatever the
+  /// agent retrieved, and this predicate decides whether the capture focus may
+  /// carry it or it must open as the exact fetched record.
+  var isOmiCaptureArchiveRecord: Bool {
     source == .omi && !discarded && (status == .completed || status == .processing)
   }
 }

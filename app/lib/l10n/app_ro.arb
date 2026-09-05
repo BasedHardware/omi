@@ -3235,6 +3235,16 @@
     "pendantFullSyncBlocked": "Spațiul de stocare al Pendantului este plin și acesta este încă în modul de înregistrare, așa că audio-ul stocat nu poate fi transferat. Apăsați butonul Pendantului pentru a opri înregistrarea, apoi sincronizați din nou.",
     "conversationsNotCapturedCount": "Neînregistrat ({count})",
     "transcriptionNoAudio": "Transcrierea nu primește audio",
+    "chatBlockTask": "Sarcină",
+    "chatBlockGoal": "Obiectiv",
+    "chatBlockConversation": "Conversație",
+    "chatBlockMemory": "Amintire",
+    "chatBlockQuestion": "Întrebare",
+    "chatBlockOpenInGoals": "Deschide în Obiective",
+    "chatBlockOpenConversation": "Deschide conversația",
+    "chatBlockOpenInMemories": "Deschide în Amintiri",
+    "chatBlockUnavailable": "Nu mai este disponibil",
+    "chatBlockRecommendedNextSteps": "Pașii următori recomandați",
     "couldNotLoadMemories": "Nu s-au putut încărca amintirile",
     "couldNotLoadKnowledgeGraph": "Nu s-a putut încărca graful de cunoștințe"
 }

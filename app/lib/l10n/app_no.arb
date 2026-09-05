@@ -3235,6 +3235,16 @@
     "pendantFullSyncBlocked": "Lagringen på Pendant er full, og den er fortsatt i opptaksmodus, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.",
     "conversationsNotCapturedCount": "Ikke fanget opp ({count})",
     "transcriptionNoAudio": "Transkripsjon mottar ikke lyd",
+    "chatBlockTask": "Oppgave",
+    "chatBlockGoal": "Mål",
+    "chatBlockConversation": "Samtale",
+    "chatBlockMemory": "Minne",
+    "chatBlockQuestion": "Spørsmål",
+    "chatBlockOpenInGoals": "Åpne i Mål",
+    "chatBlockOpenConversation": "Åpne samtale",
+    "chatBlockOpenInMemories": "Åpne i Minner",
+    "chatBlockUnavailable": "Ikke lenger tilgjengelig",
+    "chatBlockRecommendedNextSteps": "Anbefalte neste trinn",
     "couldNotLoadMemories": "Kunne ikke laste minner",
     "couldNotLoadKnowledgeGraph": "Kunne ikke laste kunnskapsgrafen"
 }

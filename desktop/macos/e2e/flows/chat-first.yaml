@@ -17,8 +17,30 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstAutomationRuntime.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstRoute.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstShell.swift
+  # The opt-in switch-latency logger stamps exactly the spans this flow drives:
+  # route select, destination teardown, transcript mount, and the settled restore.
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatSwitchPerfLog.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
+  # The first-48h activation surfaces (#12608). `home-stage.yaml` drove these
+  # through `DashboardPage`; that page is gone, and the Chat route is where they
+  # live now — the summary card is transcript chrome and the prefilled draft
+  # lands in the one composer.
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift
+  # The recap is a thin pill above the transcript that opens the dedicated recap page
+  # in a sheet; the full-card view it replaced is retired.
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailyRecapRow.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DailyRecapPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailySummaryCoordinator.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailySummaryPresentation.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/AnalyticsManager+DailySummary.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeDailySummaryStatsRow.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeDailySummaryStore.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+DailySummaries.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DayZeroChips.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeSuggestionsStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/MainChatNavigationRequest.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
 preconditions:
   - automation_bridge_ready
   - auth_ready
@@ -128,6 +150,37 @@ steps:
     wait:
       state.shellVariant: chat_first
       state.chatFirstRoute: chat
+
+  # The first-48h activation surfaces, on the route that now owns them. These
+  # were `home-stage.yaml` S9-S12; that flow asserted `state.homeMode` first,
+  # which only `DashboardPage` ever published, so it went with the page.
+  - id: S11a
+    name: A prefilled chat request lands in the composer unsent
+    # The first-real-app card and the daily-summary follow-up both enter through
+    # this one seam (`openMainAppChat(prefilledDraft:)`), which `QueryShellHome`
+    # consumes on the Chat route. Nothing may be sent.
+    bridge.action:
+      name: open_chat_prefilled
+      params:
+        query: "Summarize what's on my screen"
+    expect:
+      ok: true
+
+  - id: S11b
+    name: The draft is the composer text
+    bridge.action:
+      name: chat_drafts_snapshot
+    expect:
+      result.detail.main: "Summarize what's on my screen"
+
+  - id: S11c
+    name: Daily summary store answers shape-only
+    # Day 0 and quiet days legitimately have no summary; the action must answer either way.
+    bridge.action:
+      name: daily_summary_snapshot
+    expect:
+      ok: true
+      result.detail.hasSummary: { exists: true }
 
   - id: S12
     name: Assert the bridge did not report a route failure

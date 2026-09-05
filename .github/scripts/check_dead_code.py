@@ -39,7 +39,9 @@ Ratchet contract (monorepo rules: deterministic, hermetic, actionable):
   file, or add it to the area allowlist with a reason.
 - `--update-baseline` rewrites the baseline from the current state (deletions
   shrink it; the allowlist is never touched or auto-pruned).
-- No network, no git history: pure filesystem analysis of the checkout.
+- No network, no git history: pure filesystem analysis of the checkout. Files
+  git ignores are not part of that checkout — CI never sees them — so they are
+  excluded before reachability runs (see `_git_ignored_paths`).
 """
 
 from __future__ import annotations
@@ -48,6 +50,7 @@ import argparse
 import json
 import posixpath
 import re
+import subprocess
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
@@ -73,6 +76,75 @@ class AreaScan:
 
 
 # ---------------------------------------------------------------------------
+# gitignore
+# ---------------------------------------------------------------------------
+
+def _git_ignored_paths(root: Path) -> set[Path]:
+    """Absolute paths git ignores under `root`.
+
+    The scan walks the working tree, but the contract is about the tree CI
+    checks out. A developer machine also carries gitignored siblings — generated
+    config like `app/lib/firebase_options_dev.dart`, build output, `.claude/`
+    worktrees — none of which exist in CI. Reporting them as newly dead fails
+    the gate only locally, which reads as the checker being broken.
+
+    Mirrors `_git_ignored_paths` in backend/scripts/generate_plan_catalog.py,
+    added for the same reason in #12476.
+
+    Returns an empty set when git cannot answer, leaving the pure-filesystem
+    behaviour unchanged.
+    """
+    try:
+        completed = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "ls-files",
+                "--others",
+                "--ignored",
+                "--exclude-standard",
+                "--directory",
+                "-z",
+            ],
+            capture_output=True,
+            text=True,
+            # A filename whose bytes are invalid for the locale must degrade to the
+            # filesystem fallback, not raise out of a checker that has to keep running.
+            errors="surrogateescape",
+            timeout=60,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        return set()
+    return {(root / entry).resolve() for entry in completed.stdout.split("\0") if entry}
+
+
+def _ignore_predicate(root: Path):
+    """Return `is_ignored(path)`; git is consulted once per scan."""
+    ignored = _git_ignored_paths(root)
+    if not ignored:
+        return lambda path: False
+    resolved_root = root.resolve()
+
+    def is_ignored(path: Path) -> bool:
+        # `--directory` collapses an ignored directory to one entry, so a file
+        # inside it matches through an ancestor rather than directly.
+        current = path.resolve()
+        while True:
+            if current in ignored:
+                return True
+            if current == resolved_root:
+                return False
+            parent = current.parent
+            if parent == current:
+                return False
+            current = parent
+
+    return is_ignored
+
+
+# ---------------------------------------------------------------------------
 # flutter
 # ---------------------------------------------------------------------------
 
@@ -89,10 +161,16 @@ def scan_flutter(root: Path) -> AreaScan:
     entry = lib / FLUTTER_ENTRY
     if not entry.is_file():
         return AreaScan("flutter", error=f"flutter entry {FLUTTER_LIB_REL}/{FLUTTER_ENTRY} is missing; nothing to anchor reachability")
+    is_ignored = _ignore_predicate(root)
+    if is_ignored(entry):
+        # Reachability is seeded from this entry below. Excluding it from `files`
+        # while still walking from it would strand every other file and report
+        # the whole area dead, so fail closed the way a missing entry does.
+        return AreaScan("flutter", error=f"flutter entry {FLUTTER_LIB_REL}/{FLUTTER_ENTRY} is gitignored; nothing to anchor reachability")
     files: dict[str, Path] = {}
     for path in lib.rglob("*.dart"):
         rel = path.relative_to(lib).as_posix()
-        if not FLUTTER_SKIP.search(rel):
+        if not FLUTTER_SKIP.search(rel) and not is_ignored(path):
             files[rel] = path
     edges: dict[str, set[str]] = {}
     for rel, path in files.items():
@@ -136,10 +214,13 @@ def scan_backend(root: Path) -> AreaScan:
     backend = root / BACKEND_REL
     if not backend.is_dir():
         return AreaScan("backend", error="backend/ is missing; nothing to scan")
+    is_ignored = _ignore_predicate(root)
     files: dict[str, Path] = {}
     for path in backend.rglob("*.py"):
         rel = path.relative_to(backend).as_posix()
         if "__pycache__" in rel or rel.startswith(BACKEND_TEST_PREFIXES):
+            continue
+        if is_ignored(path):
             continue
         files[rel] = path
     modmap: dict[str, str] = {}
@@ -267,11 +348,12 @@ def scan_ts(root: Path, area: str, area_root_rel: str, entry_specs: list[str],
     base = root / area_root_rel / "src"
     if not base.is_dir():
         return AreaScan(area, error=f"{area_root_rel}/src is missing; nothing to scan")
+    is_ignored = _ignore_predicate(root)
     files: dict[str, Path] = {}
     for path in base.rglob("*"):
         if path.suffix in TS_SUFFIXES and path.is_file():
             rel = path.relative_to(base).as_posix()
-            if not TS_SKIP.search(rel):
+            if not TS_SKIP.search(rel) and not is_ignored(path):
                 files[rel] = path
     static_imp, dynamic_imp = _import_patterns(aliases)
     # Deterministic winner: rglob order is filesystem-dependent, so with bare-stem

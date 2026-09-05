@@ -9936,6 +9936,36 @@ class AppLocalizationsSr extends AppLocalizations {
   String get tapPlusToStartRecording => 'Tap + to start recording';
 
   @override
+  String get chatBlockTask => 'Задатак';
+
+  @override
+  String get chatBlockGoal => 'Циљ';
+
+  @override
+  String get chatBlockConversation => 'Разговор';
+
+  @override
+  String get chatBlockMemory => 'Сећање';
+
+  @override
+  String get chatBlockQuestion => 'Питање';
+
+  @override
+  String get chatBlockOpenInGoals => 'Отвори у Циљевима';
+
+  @override
+  String get chatBlockOpenConversation => 'Отвори разговор';
+
+  @override
+  String get chatBlockOpenInMemories => 'Отвори у Сећањима';
+
+  @override
+  String get chatBlockUnavailable => 'Више није доступно';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Препоручени следећи кораци';
+
+  @override
   String get couldNotLoadMemories => 'Није могуће учитати успомене';
 
   @override

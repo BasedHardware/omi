@@ -88,6 +88,7 @@ extension ChatProvider {
     if updatedMessages.map(\.id) != orderBeforeCanonicalSort {
       divergences.insert(.ordering)
     }
+    Self.inheritCitationsAcrossTurns(&updatedMessages)
     messages = updatedMessages
     flushPendingMessageRatings()
     Task { await bindKindOnlyCitationsIfNeeded() }
@@ -103,6 +104,23 @@ extension ChatProvider {
 
   func projectJournalTurn(_ turn: KernelJournalTurn) {
     projectJournalTurns([turn])
+  }
+
+  /// A settled follow-up that cites a number it never retrieved itself is
+  /// pointing at an earlier turn's list (`ChatCitationMarkup.inheritedReferences`).
+  /// The binding is a projection over the journal, not a row written to it: the
+  /// references it borrows were already persisted on the turn that earned them,
+  /// and re-deriving them here is what lets restored history open the same
+  /// source the reader could open live.
+  static func inheritCitationsAcrossTurns(_ messages: inout [ChatMessage]) {
+    for index in messages.indices where messages[index].sender == .ai && !messages[index].isStreaming {
+      let inherited = ChatCitationMarkup.inheritedReferences(
+        citedIn: messages[index],
+        resolved: messages[index].inlineCitationReferences,
+        earlierTurns: Array(messages[..<index]))
+      guard !inherited.isEmpty else { continue }
+      messages[index].persistCitedReferences(from: inherited)
+    }
   }
 
   /// Local memories/conversations/tasks used to bind kind-only labels such as `[memory]` when the
@@ -171,13 +189,19 @@ extension ChatProvider {
       retrievedReferences: turnReferences,
       fallbackText: queryText)
     messages[index].isStreaming = false
+    // A number this turn never assigned is one the reader was shown a turn ago.
+    let inheritedReferences = ChatCitationMarkup.inheritedReferences(
+      citedIn: messages[index],
+      resolved: turnReferences,
+      earlierTurns: Array(messages[..<index]))
+    let bindableReferences = turnReferences + inheritedReferences
     let bindBase: [ChatCitationReference]
     if messages[index].hasKindOnlyCitationMarkers {
       bindBase = ChatCitationReference.appendingLookup(
         await kindCitationLookupReferences(),
-        to: turnReferences)
+        to: bindableReferences)
     } else {
-      bindBase = turnReferences
+      bindBase = bindableReferences
     }
     await applyKindOnlyCitationBinding(to: messageId, base: bindBase)
     guard let current = messages.first(where: { $0.id == messageId }) else { return queryText }

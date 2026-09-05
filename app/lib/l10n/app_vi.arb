@@ -3240,6 +3240,16 @@
     "pendantFullSyncBlocked": "Bộ nhớ của Pendant đã đầy và nó vẫn đang ở chế độ ghi âm, nên không thể chuyển âm thanh đã lưu. Nhấn nút của Pendant để dừng ghi âm, sau đó đồng bộ lại.",
     "conversationsNotCapturedCount": "Không được ghi âm ({count})",
     "transcriptionNoAudio": "Bản ghi âm không nhận được âm thanh",
+    "chatBlockTask": "Nhiệm vụ",
+    "chatBlockGoal": "Mục tiêu",
+    "chatBlockConversation": "Cuộc trò chuyện",
+    "chatBlockMemory": "Ký ức",
+    "chatBlockQuestion": "Câu hỏi",
+    "chatBlockOpenInGoals": "Mở trong Mục tiêu",
+    "chatBlockOpenConversation": "Mở cuộc trò chuyện",
+    "chatBlockOpenInMemories": "Mở trong Ký ức",
+    "chatBlockUnavailable": "Không còn khả dụng",
+    "chatBlockRecommendedNextSteps": "Các bước tiếp theo được đề xuất",
     "couldNotLoadMemories": "Không thể tải ký ức",
     "couldNotLoadKnowledgeGraph": "Không thể tải đồ thị tri thức"
 }

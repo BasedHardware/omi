@@ -1532,6 +1532,7 @@ def generate_description_and_emoji_endpoint(
 @router.get('/v1/app/generate-prompts', tags=['v1'], response_model=AppPromptsGenerationResponse)
 async def generate_sample_prompts_endpoint(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "apps:generate_prompts")),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     """
     Generate sample app prompts for the AI app generator.
@@ -1539,6 +1540,9 @@ async def generate_sample_prompts_endpoint(
     """
     from utils.llm.clients import get_llm
     import json
+
+    # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    enforce_chat_quota(uid, platform=x_app_platform)
 
     system_prompt = """Generate 5 creative and diverse ideas for apps that are either:
 1. Conversation summary based apps - analyze user's recorded conversations and extract/organize information
@@ -1738,7 +1742,10 @@ async def verify_twitter_ownership_tweet(
 
 
 @router.get('/v1/personas/twitter/initial-message', tags=['v1'], response_model=TwitterInitialMessageResponse)
-def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_twitter_initial_message(
+    username: str,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "apps:twitter_initial_message")),
+):
     persona = get_persona_by_username_db(username)
     if persona:
         with track_usage(uid, Features.PERSONA):

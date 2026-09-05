@@ -49,21 +49,6 @@ enum ViewExporter {
       ),
 
       (
-        "02-dashboard",
-        {
-          AnyView(
-            DashboardPage(
-              viewModel: DashboardViewModel(),
-              appState: AppState(),
-              appProvider: AppProvider(),
-              chatProvider: previewChatProvider(),
-              memoriesViewModel: MemoriesViewModel(),
-              selectedIndex: .constant(0)))
-        },
-        CGSize(width: 900, height: 700)
-      ),
-
-      (
         "04-conversations",
         { AnyView(ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))) },
         CGSize(width: 900, height: 700)
@@ -91,12 +76,6 @@ enum ViewExporter {
         "11-desktop-home",
         { AnyView(DesktopHomeView().environmentObject(AppState())) },
         CGSize(width: 1200, height: 800)
-      ),
-
-      (
-        "13-daily-score",
-        { AnyView(DailyScoreWidget(dailyScore: nil)) },
-        CGSize(width: 400, height: 350)
       ),
 
       (
@@ -234,19 +213,6 @@ enum ViewExporter {
   static func fullPageViewAt(_ index: Int) -> (String, AnyView, CGSize)? {
     // Pages that can be shown with the sidebar
     let pages: [(String, Int, () -> AnyView)] = [
-      (
-        "full-dashboard", 0,
-        {
-          AnyView(
-            DashboardPage(
-              viewModel: DashboardViewModel(),
-              appState: AppState(),
-              appProvider: AppProvider(),
-              chatProvider: ChatProvider(),
-              memoriesViewModel: previewMemoriesViewModel(),
-              selectedIndex: .constant(0)))
-        }
-      ),
       (
         "full-conversations", 1,
         {

@@ -220,16 +220,17 @@ final class GlassLegibilityTests: XCTestCase {
   /// test could resolve ever changed. A component-scoped tripwire on the literal is the only thing
   /// that would have failed on that commit.
   ///
-  /// Scoped to Home's own file and to `Color(red:` specifically: a page hosted on the panel has no
+  /// Scoped to Home's own file — `QueryShellHome`, since `DashboardPage` was deleted — and to
+  /// `Color(red:` specifically: a page hosted on the panel has no
   /// business mixing its own opaque colour at all, and every legitimate surface on it is a token.
   func testStaticCheck_HomeMixesNoColourLiteralOfItsOwn() {
     let home = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()  // Tests
       .deletingLastPathComponent()  // Desktop
-      .appendingPathComponent("Sources/MainWindow/Pages/DashboardPage.swift")
+      .appendingPathComponent("Sources/MainWindow/QueryShell/QueryShellHome.swift")
     // omi-test-quality: source-inspection -- static contract: which token a call site names is a source fact; a rendered view cannot report it.
     guard let source = try? String(contentsOf: home, encoding: .utf8) else {
-      return XCTFail("Could not read DashboardPage.swift at \(home.path)")
+      return XCTFail("Could not read QueryShellHome.swift at \(home.path)")
     }
     XCTAssertFalse(
       source.contains("Color(red:"),

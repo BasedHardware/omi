@@ -28,6 +28,8 @@ covers:
   # save_knowledge_graph discovery_text resolves through backend KG extract SSOT.
   - desktop/macos/Desktop/Sources/Services/KnowledgeGraphToolSupport.swift
   - desktop/macos/Desktop/Sources/Providers/ChatFirstBlockToolExecutor.swift
+  # The one renderer every Chat surface hands a grouped rich block to.
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/Blocks/ChatFirstRichBlockGroupView.swift
   - desktop/macos/Desktop/Sources/Chat/ChatFirstBlockValidation.swift
   # S14-S22 prove a capture is staged as a typed, removable composer reference,
   # persists on the accepted user turn after the composer clears, and reopens
@@ -38,6 +40,14 @@ covers:
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+AutomationSnapshot.swift
   - desktop/macos/Desktop/Sources/Chat/AgentQueryResult.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  # Every rendered assistant row mounts this file's popover anchor. The flow
+  # covers that mount and teardown; the selectable text view's own behaviour
+  # (selectable, not editable, one view across rebuilds) is asserted
+  # hermetically in ChatSelectableTextSurfaceTests, not here.
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatSelectableProse.swift
+  # The prose parse and measured height this file caches are exercised by the
+  # same mounts the flow drives; the cache changes no visible behaviour.
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatProseRenderCache.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/StableChatCardHeader.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatConversationReferencePill.swift
   # S8 drives the Tasks-page closure, including its bounded attempt/terminal telemetry.
@@ -62,6 +72,11 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CapturePlaybackAPI.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstShell.swift
   - desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
+  # S22a-S22c seed a recap, open it through the slim Chat pill, and prove the dedicated recap
+  # page mounts in its sheet — the one surface that carries recap badges and actions.
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailyRecapRow.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DailyRecapPage.swift
+  - desktop/macos/Desktop/Sources/Automation/MemoryReviewFixture.swift
 preconditions:
   - automation_bridge_ready
   - named_non_production_bundle_ui_lane
@@ -273,6 +288,34 @@ steps:
       result.detail.route: memories
       result.detail.route_visible: "true"
       result.detail.capture_detail_visible: "true"
+
+  - id: S22a
+    name: Seed a recap so the Chat pill has a record to open
+    # `seed_memory_review_fixture` writes the day's summary the way the nightly job would, through
+    # the store's own refresh. Shape-only check first: a day with no recap has no pill, and S22b
+    # would click nothing.
+    bridge.action:
+      name: seed_memory_review_fixture
+      params:
+        count: "2"
+        timeoutMs: "15000"
+    expect:
+      result.detail.createdCount: "2"
+      result.detail.memoriesLearned: "2"
+
+  - id: S22b
+    name: Open the dedicated recap page through the slim recap pill
+    ax.activate:
+      identifier: chat-daily-recap-row
+    timeout_seconds: 10
+    wait:
+      state.visibleChatFirstRoute: daily-recap
+
+  - id: S22c
+    name: The recap page is mounted in its sheet
+    ax.expect:
+      identifiers_visible:
+        - daily-recap-page
 
   - id: S23
     name: Confirm the bridge recorded no route failure

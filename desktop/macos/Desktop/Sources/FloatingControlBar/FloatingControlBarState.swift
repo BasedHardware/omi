@@ -276,7 +276,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     title: String,
     message: String,
     assistantId: String,
-    kind: ProactiveNotificationKind? = nil,
+    kind: ProactiveNotificationKind,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     jitFeedbackContext: JITTriggerFeedbackContext? = nil,
@@ -289,7 +289,10 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.title = title
     self.message = message
     self.assistantId = assistantId
-    self.kind = kind ?? ProactiveNotificationKind.from(assistantId: assistantId)
+    // Required, never derived here. Deriving it from `assistantId` meant every
+    // producer that forgot to say what its card was silently became `.general`
+    // and journaled a bare `notification:<uuid>` row badged "Notification".
+    self.kind = kind
     self.context = context
     self.action = action
     self.jitFeedbackContext = jitFeedbackContext

@@ -9931,6 +9931,36 @@ class AppLocalizationsId extends AppLocalizations {
   String get tapPlusToStartRecording => 'Tap + to start recording';
 
   @override
+  String get chatBlockTask => 'Tugas';
+
+  @override
+  String get chatBlockGoal => 'Tujuan';
+
+  @override
+  String get chatBlockConversation => 'Percakapan';
+
+  @override
+  String get chatBlockMemory => 'Memori';
+
+  @override
+  String get chatBlockQuestion => 'Pertanyaan';
+
+  @override
+  String get chatBlockOpenInGoals => 'Buka di Tujuan';
+
+  @override
+  String get chatBlockOpenConversation => 'Buka percakapan';
+
+  @override
+  String get chatBlockOpenInMemories => 'Buka di Memori';
+
+  @override
+  String get chatBlockUnavailable => 'Tidak lagi tersedia';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Langkah berikutnya yang disarankan';
+
+  @override
   String get couldNotLoadMemories => 'Tidak dapat memuat kenangan';
 
   @override

@@ -9925,6 +9925,36 @@ class AppLocalizationsBn extends AppLocalizations {
   String get tapPlusToStartRecording => 'Tap + to start recording';
 
   @override
+  String get chatBlockTask => 'কাজ';
+
+  @override
+  String get chatBlockGoal => 'লক্ষ্য';
+
+  @override
+  String get chatBlockConversation => 'কথোপকথন';
+
+  @override
+  String get chatBlockMemory => 'স্মৃতি';
+
+  @override
+  String get chatBlockQuestion => 'প্রশ্ন';
+
+  @override
+  String get chatBlockOpenInGoals => 'লক্ষ্যে খুলুন';
+
+  @override
+  String get chatBlockOpenConversation => 'কথোপকথন খুলুন';
+
+  @override
+  String get chatBlockOpenInMemories => 'স্মৃতিতে খুলুন';
+
+  @override
+  String get chatBlockUnavailable => 'আর উপলব্ধ নেই';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'প্রস্তাবিত পরবর্তী পদক্ষেপ';
+
+  @override
   String get couldNotLoadMemories => 'স্মৃতি লোড করা যায়নি';
 
   @override

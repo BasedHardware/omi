@@ -6,9 +6,9 @@ import Foundation
 /// the conversation the user asked to continue would be nowhere in sight.
 ///
 /// Flow: the raiser calls `request()` (which also posts
-/// `.openMainChatRequested`); `DesktopHomeView` switches to the Home tab on
-/// the notification, and `DashboardPage` consumes the pending request when it
-/// is (or becomes) visible and opens the chat panel.
+/// `.openMainChatRequested`); `DesktopHomeView` selects the Chat route on the
+/// notification, and `QueryShellHome` — the one chat destination — takes any
+/// pending draft when its composer mounts or is already mounted.
 @MainActor
 final class MainChatNavigationRequestStore {
   static let shared = MainChatNavigationRequestStore()

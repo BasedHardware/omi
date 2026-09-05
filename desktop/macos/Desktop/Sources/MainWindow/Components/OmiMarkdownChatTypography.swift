@@ -6,7 +6,7 @@ extension OmiMarkdownContent {
   /// Tracks the chat font-size setting (`fontSize` already includes `fontScale`).
   /// It does not grow with window size — line leading that followed the panel
   /// would loosen on a large display and tighten on a small one.
-  static func chatLineSpacing(fontSize: CGFloat) -> CGFloat {
+  nonisolated static func chatLineSpacing(fontSize: CGFloat) -> CGFloat {
     round(5 * fontSize / 14)
   }
 }

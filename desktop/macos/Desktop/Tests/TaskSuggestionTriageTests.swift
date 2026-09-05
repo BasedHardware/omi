@@ -4,7 +4,8 @@ import XCTest
 
 /// `TaskActionItem.isPendingSuggestion` still names AI-captured action items so
 /// proactive nudges can skip leftover extractor rows. Those rows are ordinary
-/// due-date tasks on the Tasks page; Candidate review is a separate surface.
+/// due-date tasks everywhere the user or the assistant reads the list; Candidate
+/// review is a separate surface.
 final class TaskSuggestionTriageTests: XCTestCase {
 
   private func task(
@@ -43,11 +44,15 @@ final class TaskSuggestionTriageTests: XCTestCase {
     XCTAssertFalse(task(source: "screenshot", deleted: true).isPendingSuggestion)
   }
 
-  func testDashboardLanesExcludeUnreviewedAICaptures() {
-    XCTAssertFalse(DashboardTaskLanePolicy.admits(task(source: "screenshot")))
-    XCTAssertFalse(DashboardTaskLanePolicy.admits(task(source: "transcription:omi")))
-    XCTAssertTrue(DashboardTaskLanePolicy.admits(task(source: "manual")))
-    XCTAssertTrue(DashboardTaskLanePolicy.admits(task(source: "recurring")))
+  /// The dashboard/realtime lanes used to drop these rows as "unreviewed". They
+  /// no longer do — capture is suggestion-only under INV-TASK-2, so a row that
+  /// reached `action_items` is already the user's, and hiding it only made the
+  /// assistant contradict the Tasks page. `DashboardTaskLaneReachTests` pins
+  /// that reach. The classification survives for proactive nudges, which is the
+  /// one consumer still asking "did a capture pipeline write this?".
+  func testTheClassificationSurvivesForProactiveNudgesOnly() {
+    XCTAssertTrue(task(source: "screenshot").isPendingSuggestion)
+    XCTAssertFalse(task(source: "manual").isPendingSuggestion)
   }
 }
 

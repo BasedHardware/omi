@@ -10801,6 +10801,16 @@
     "pendantFullSyncBlocked": "حافظه Pendant پر است و همچنان در حالت ضبط قرار دارد، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.",
     "conversationsNotCapturedCount": "ثبت نشده ({count})",
     "transcriptionNoAudio": "رونویسی صدا دریافت نمی‌کند",
+    "chatBlockTask": "وظیفه",
+    "chatBlockGoal": "هدف",
+    "chatBlockConversation": "گفتگو",
+    "chatBlockMemory": "خاطره",
+    "chatBlockQuestion": "پرسش",
+    "chatBlockOpenInGoals": "باز کردن در اهداف",
+    "chatBlockOpenConversation": "باز کردن گفتگو",
+    "chatBlockOpenInMemories": "باز کردن در خاطرات",
+    "chatBlockUnavailable": "دیگر در دسترس نیست",
+    "chatBlockRecommendedNextSteps": "گام‌های بعدی پیشنهادی",
     "couldNotLoadMemories": "بارگذاری خاطرات ممکن نشد",
     "couldNotLoadKnowledgeGraph": "بارگذاری گراف دانش ممکن نشد"
 }

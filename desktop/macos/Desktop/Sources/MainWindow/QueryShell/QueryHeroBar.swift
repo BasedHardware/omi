@@ -384,6 +384,7 @@ struct QueryHeroBar: View {
           .allowsHitTesting(false)
       }
     }
+    .onAppear { ChatSwitchPerfLog.markOnce("composerAppeared") }
     .accessibilityIdentifier("query-shell-field")
     .accessibilityLabel(Text(placeholder))
   }

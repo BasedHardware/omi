@@ -103,8 +103,7 @@ final class SpineDayRecapTests: XCTestCase {
     let recap = record(date: "2026-08-23")
     let host = NSHostingView(
       rootView: SpineDayRecapRow(
-        content: .recap(recap), dateKey: "2026-08-23", now: Date(),
-        calendar: Calendar(identifier: .gregorian)
+        content: .recap(recap), dateKey: "2026-08-23"
       )
       .frame(width: 420)
       .accessibilityIdentifier("spine-day-recap-host"))
@@ -127,8 +126,7 @@ final class SpineDayRecapTests: XCTestCase {
     func height(_ content: SpineDayRecapContent) -> CGFloat {
       let host = NSHostingView(
         rootView: SpineDayRecapRow(
-          content: content, dateKey: "2026-08-22", now: Date(),
-          calendar: Calendar(identifier: .gregorian)
+          content: content, dateKey: "2026-08-22"
         )
         .frame(width: 420))
       host.frame = NSRect(x: 0, y: 0, width: 420, height: 80)

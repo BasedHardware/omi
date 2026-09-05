@@ -24,6 +24,8 @@ jobs:
     # and the merge gate correctly failed closed on "scope cancelled" with no
     # code failure. Bound generously like the apt steps below: the cap is a
     # hang backstop, not a budget the legitimate path must fit under.
+    # filter: blob:none keeps the history cheap while still enabling name-only
+    # diffs against the live base SHA.
     timeout-minutes: 10
     outputs:
       applies: ${{ steps.scope.outputs.applies }}
@@ -32,6 +34,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - name: Decide whether hermetic backend coverage applies
         id: scope
@@ -44,6 +47,8 @@ jobs:
           PR_BASE_REF: origin/${{ github.base_ref }}
           MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: |
+          set -euo pipefail
+
           case "$EVENT_NAME" in
             pull_request) base_sha="$PR_BASE_REF" ;;
             merge_group) base_sha="$MERGE_GROUP_BASE_SHA" ;;
@@ -57,11 +62,17 @@ jobs:
               ;;
           esac
 
+          # Fail closed: if the scope base cannot be resolved (missing event sha,
+          # shallow/failed no-blob history fetch, or on-demand missing object),
+          # fail the job rather than silently treating the repo as out of scope.
+          # A silent `applies=false` would skip the hermetic backend gate.
           if [[ -z "$base_sha" ]] || ! git cat-file -e "${base_sha}^{commit}"; then
             echo "Cannot resolve hermetic backend scope base: ${base_sha:-<empty>}" >&2
             exit 1
           fi
 
+          # set -euo pipefail aborts here if the (partial-clone) history fetch
+          # fails mid-diff; a failed diff must never yield empty -> applies=false.
           changed_files="$(git diff --name-only "$base_sha"...HEAD)"
           printf '%s\n' "$changed_files"
           if grep -Eq '^(backend/|package\.json$|package-lock\.json$|\.github/workflows/backend-hermetic-e2e\.yml$)' <<<"$changed_files"; then

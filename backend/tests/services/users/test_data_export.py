@@ -21,7 +21,7 @@ def _isolate_firestore_collection_iterators(monkeypatch):
     """
     monkeypatch.setattr(data_export, "_iter_user_subcollection", MagicMock(return_value=iter([])))
     monkeypatch.setattr(data_export, "_iter_user_nested_subcollection", MagicMock(return_value=iter([])))
-    monkeypatch.setattr(data_export.conversations_db, "get_conversation_photos", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export.conversations_db, "iter_all_conversation_photos", MagicMock(return_value=[]))
 
 
 def test_iter_user_data_export_streams_all_top_level_sections(monkeypatch):
@@ -261,6 +261,27 @@ def test_malformed_retained_inline_image_aborts_portability_export(inline):
         )
 
 
+@pytest.mark.parametrize("inline", ["===", "b", "not valid base64!!!"])
+def test_invalid_base64_retained_inline_image_aborts_portability_export(inline):
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="inline image bytes are malformed"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "base64": inline, "content_type": "image/jpeg"},
+        )
+
+
+def test_empty_decoded_base64_retained_inline_image_aborts_portability_export(monkeypatch):
+    monkeypatch.setattr(data_export.base64, "b64decode", lambda *args, **kwargs: b"")
+
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="inline image bytes are empty"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "base64": "validbase64", "content_type": "image/jpeg"},
+        )
+
+
 def test_empty_inline_marker_falls_back_to_permanent_storage(monkeypatch):
     download = MagicMock(return_value=b"stored-image")
     monkeypatch.setattr(data_export, "download_frame_request_pixels", download)
@@ -436,8 +457,10 @@ def test_iter_user_data_export_includes_legacy_photo_subcollection_without_marke
     )
     monkeypatch.setattr(
         data_export.conversations_db,
-        "get_conversation_photos",
-        MagicMock(return_value=[{"id": "photo-1", "base64": "aW1hZ2U=", "content_type": "image/jpeg"}]),
+        "iter_all_conversation_photos",
+        MagicMock(
+            return_value=[("conv-legacy", {"id": "photo-1", "base64": "aW1hZ2U=", "content_type": "image/jpeg"})]
+        ),
     )
     monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
 
@@ -657,8 +680,18 @@ def test_conversation_photo_manifest_spills_to_disk_instead_of_accumulating(monk
     )
     monkeypatch.setattr(
         data_export.conversations_db,
-        "get_conversation_photos",
-        MagicMock(return_value=[{"id": "photo-1", "base64": "x" * 1024}]),
+        "iter_all_conversation_photos",
+        MagicMock(
+            return_value=[
+                (
+                    "conv-1",
+                    {
+                        "id": "photo-1",
+                        "base64": "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eA==",
+                    },
+                )
+            ]
+        ),
     )
     monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
     real_spooled_file = data_export.tempfile.SpooledTemporaryFile
@@ -674,7 +707,10 @@ def test_conversation_photo_manifest_spills_to_disk_instead_of_accumulating(monk
 
     payload = json.loads("".join(data_export._iter_user_data_export_from_spool("uid1", StringIO("[]"))))
 
-    assert payload["conversation_photo_manifest"][0]["bytes_base64"] == "x" * 1024
+    assert (
+        payload["conversation_photo_manifest"][0]["bytes_base64"]
+        == "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eA=="
+    )
     assert created[0]._rolled is True
     assert created[0].closed is True
 
@@ -726,3 +762,78 @@ def test_legacy_conversation_photo_without_any_bytes_reference_exports_metadata(
 
     assert manifest["bytes_available"] is False
     assert manifest["bytes_unavailable_reason"] == "no_retained_bytes_reference"
+
+
+def test_export_photo_manifest_require_bytes_missing_reference():
+    with pytest.raises(
+        data_export.PortabilityExportIncomplete, match="retained image bytes reference is missing or malformed"
+    ):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "base64": "", "storage_id": ""},
+            require_bytes=True,
+        )
+
+
+def test_export_photo_manifest_malformed_inline_bytes_type():
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="retained inline image bytes are malformed"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "base64": 123},
+            require_bytes=True,
+        )
+
+
+def test_export_photo_manifest_malformed_inline_bytes_encoding():
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="retained inline image bytes are malformed"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "base64": "invalid base64!"},
+            require_bytes=True,
+        )
+
+
+def test_export_photo_manifest_valid_inline_bytes():
+    import base64
+
+    valid_base64 = base64.b64encode(b"test pixels").decode("ascii")
+    manifest = data_export._export_photo_manifest(
+        "uid1",
+        "conv-1",
+        {"id": "photo-1", "base64": valid_base64},
+        require_bytes=True,
+    )
+    assert manifest["bytes_available"] is True
+    assert manifest["bytes_base64"] == valid_base64
+
+
+def test_export_photo_manifest_empty_storage_object(monkeypatch):
+    monkeypatch.setattr(data_export, "download_frame_request_pixels", MagicMock(return_value=b""))
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="retained image object is empty"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "storage_id": "storage-1"},
+            require_bytes=True,
+        )
+    data_export.download_frame_request_pixels.assert_called_once_with("uid1", "storage-1")
+
+
+def test_export_photo_manifest_valid_storage_object(monkeypatch):
+    monkeypatch.setattr(
+        data_export, "download_frame_request_pixels", MagicMock(return_value=b"test pixels from storage")
+    )
+    manifest = data_export._export_photo_manifest(
+        "uid1",
+        "conv-1",
+        {"id": "photo-1", "storage_id": "storage-1"},
+        require_bytes=True,
+    )
+    assert manifest["bytes_available"] is True
+    import base64
+
+    assert manifest["bytes_base64"] == base64.b64encode(b"test pixels from storage").decode("ascii")
+    data_export.download_frame_request_pixels.assert_called_once_with("uid1", "storage-1")

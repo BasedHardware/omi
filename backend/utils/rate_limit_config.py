@@ -100,6 +100,12 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "file:upload": (40, 3600),
     # STT proxy — parakeet GPU batch transcription behind the Omi auth guard
     "stt:transcribe": (60, 3600),
+    # Context bucket sync — one 30-minute pass per device, so a handful an hour
+    # covers several machines with room for retries. Each request can carry 50
+    # buckets and their facts, one transaction per bucket, so the cost per call
+    # is far above a plain write.
+    "context_buckets:sync": (30, 3600),
+    "context_buckets:purge": (60, 3600),
     # Agent/MCP — bursty tool calls
     "agent:execute_tool": (120, 3600),
     # JIT frame metadata is cheap, but uploads carry bounded pixel bytes.
@@ -217,6 +223,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "test:prompt": (30, 3600),
     # Apps
     "apps:generate_prompts": (30, 3600),
+    # Persona intro message is a billable LLM call (Features.PERSONA) with no
+    # quota gate, unlike its sibling generate_prompts. Same bound as that
+    # sibling until a quota-gate policy decision is made (see #12781).
+    "apps:twitter_initial_message": (30, 3600),
     # TTS — ElevenLabs proxy. Coarse outer ring; fine-grained burst + daily
     # char caps are enforced in database.redis_db.check_tts_rate_limit.
     "tts:synthesize": (300, 3600),

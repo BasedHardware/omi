@@ -3211,6 +3211,16 @@
     "pendantFullSyncBlocked": "ذاكرة Pendant ممتلئة وما زال في وضع التسجيل، لذا لا يمكن نقل الصوت المخزّن. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة.",
     "conversationsNotCapturedCount": "لم يتم التسجيل ({count})",
     "transcriptionNoAudio": "النسخ لا يستلم الصوت",
+    "chatBlockTask": "مهمة",
+    "chatBlockGoal": "هدف",
+    "chatBlockConversation": "محادثة",
+    "chatBlockMemory": "ذكرى",
+    "chatBlockQuestion": "سؤال",
+    "chatBlockOpenInGoals": "فتح في الأهداف",
+    "chatBlockOpenConversation": "فتح المحادثة",
+    "chatBlockOpenInMemories": "فتح في الذكريات",
+    "chatBlockUnavailable": "لم يعد متاحًا",
+    "chatBlockRecommendedNextSteps": "الخطوات التالية الموصى بها",
     "couldNotLoadMemories": "تعذر تحميل الذكريات",
     "couldNotLoadKnowledgeGraph": "تعذر تحميل الرسم البياني للمعرفة"
 }

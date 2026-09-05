@@ -737,7 +737,13 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
 
     const contentBlocks = input.replaceContentBlocks === undefined
       ? mergeById(current.contentBlocks, validateContentBlocks(input.appendContentBlocks ?? []))
-      : mergeById([], validateContentBlocks(input.replaceContentBlocks));
+      : mergeById(
+        [],
+        projectContentBlocksOverKernelAuthored(
+          current.contentBlocks,
+          validateContentBlocks(input.replaceContentBlocks),
+        ),
+      );
     const resources = input.replaceResources === undefined
       ? mergeById(current.resources, validateResources(input.appendResources ?? []))
       : mergeById([], validateResources(input.replaceResources));
@@ -1738,7 +1744,7 @@ export function terminalizeJournalTurn(
     }
     const content = input.content ?? current.content;
     const finalContentBlocks = input.disposition === "accept" && contentBlocks !== undefined
-      ? monotonicAcceptContentBlocks(current.contentBlocks, contentBlocks)
+      ? projectContentBlocksOverKernelAuthored(current.contentBlocks, contentBlocks)
       : contentBlocks ?? current.contentBlocks;
     const finalResources = input.disposition === "accept" && resources !== undefined
       ? monotonicAcceptResources(current.resources, resources)
@@ -2001,19 +2007,62 @@ function markDiscardedBackendProjection(store: AgentStore, turnId: string, nowMs
   );
 }
 
-function monotonicAcceptContentBlocks(
+/**
+ * The block kinds the kernel writes and the visible projection never authors.
+ *
+ * Both the streaming update and the terminal commit hand us the projection
+ * Swift assembled from the adapter stream — text, tool calls, thinking, and the
+ * cards Swift itself appends. A block the *agent* rendered mid-turn through
+ * `render_chat_blocks` cannot be in it: that append is a journal mutation, not
+ * a stream event, so the surface has never seen it. Replacing the turn's blocks
+ * with that projection deleted every task card, goal link and memory link the
+ * turn had rendered, seconds after the tool reported success — which is why
+ * chat-first components looked like they never rendered while the tool returned
+ * `ok`.
+ */
+const KERNEL_AUTHORED_CONTENT_BLOCK_TYPES: ReadonlySet<ConversationContentBlock["type"]> = new Set([
+  "agentSpawn",
+  "agentCompletion",
+  "taskCard",
+  "goalLink",
+  "captureLink",
+  "conversationLink",
+  "memoryLink",
+  "questionCard",
+]);
+
+/**
+ * Blocks the surface may re-send but never re-derive, so the journal's copy
+ * stays canonical even when a projection carries one of its own.
+ */
+const PINNED_CONTENT_BLOCK_TYPES: ReadonlySet<ConversationContentBlock["type"]> = new Set([
+  "agentSpawn",
+  "agentCompletion",
+]);
+
+/**
+ * Apply a surface projection over the journal's blocks without losing the ones
+ * the surface could not have known about.
+ *
+ * An id the projection carries is the projection's to define — that is how a
+ * question card's options get retired — except for the pinned kinds above.
+ * An id it omits survives only when the kernel wrote it.
+ */
+function projectContentBlocksOverKernelAuthored(
   current: readonly ConversationContentBlock[],
   incoming: readonly ConversationContentBlock[],
 ): ConversationContentBlock[] {
-  const protectedCurrent = new Map(
+  const pinned = new Map(
     current
-      .filter((block) => block.type === "agentSpawn" || block.type === "agentCompletion")
+      .filter((block) => PINNED_CONTENT_BLOCK_TYPES.has(block.type))
       .map((block) => [block.id, block] as const),
   );
-  const result = incoming.map((block) => structuredClone(protectedCurrent.get(block.id) ?? block));
+  const result = incoming.map((block) => structuredClone(pinned.get(block.id) ?? block));
   const resultIds = new Set(result.map((block) => block.id));
-  for (const block of protectedCurrent.values()) {
-    if (!resultIds.has(block.id)) result.push(structuredClone(block));
+  for (const block of current) {
+    if (resultIds.has(block.id)) continue;
+    if (!KERNEL_AUTHORED_CONTENT_BLOCK_TYPES.has(block.type)) continue;
+    result.push(structuredClone(block));
   }
   return result;
 }

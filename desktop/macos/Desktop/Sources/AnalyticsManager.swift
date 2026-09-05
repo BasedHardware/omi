@@ -566,6 +566,30 @@ class AnalyticsManager {
     PostHogManager.shared.setUserProperties(userProperties)
   }
 
+  private var deviceConnectionTelemetryCaptureForTests: (@MainActor (String) -> Void)?
+
+  func setDeviceConnectionTelemetryCaptureForTests(
+    _ capture: (@MainActor (String) -> Void)?
+  ) {
+    deviceConnectionTelemetryCaptureForTests = capture
+  }
+
+  func deviceConnected(device: BtDevice) {
+    let vendor = device.type.analyticsVendorSlug
+    let eventProperties: [String: Any] = [
+      "device_vendor": vendor,
+      "device_type": device.type.rawValue,
+    ]
+    deviceConnectionTelemetryCaptureForTests?("Device Connected")
+    PostHogManager.shared.track("Device Connected", properties: eventProperties)
+    PostHogManager.shared.setUserProperties(["device_vendor": vendor])
+  }
+
+  func deviceDisconnected() {
+    deviceConnectionTelemetryCaptureForTests?("Device Disconnected")
+    PostHogManager.shared.track("Device Disconnected")
+  }
+
   /// Report when ScreenCaptureKit broken state is detected (TCC granted but capture failing).
   func screenCaptureBrokenDetected() {
     guard !Self.isDevBuild else { return }

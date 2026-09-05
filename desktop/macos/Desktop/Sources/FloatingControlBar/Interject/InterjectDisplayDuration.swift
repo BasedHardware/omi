@@ -19,7 +19,7 @@ enum InterjectDisplayDuration {
       return 4
     case .insight, .suggestion:
       return 5
-    case .general, .memory, .goal, .meetingNotes, .integration:
+    case .general, .functional, .trial, .onboarding, .memory, .goal, .meetingNotes, .integration:
       return 5
     }
   }

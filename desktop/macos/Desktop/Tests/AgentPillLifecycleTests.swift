@@ -541,7 +541,10 @@ import XCTest
     XCTAssertFalse(responseSource.contains("proxy.scrollTo(\"bottom\", anchor: .bottom)"))
     XCTAssertFalse(viewSource.contains("proxy.scrollTo(\"agentBottom\", anchor: .bottom)"))
     XCTAssertTrue(scrollSource.contains("struct ChatScrollContainer<Content: View>: View"))
-    XCTAssertTrue(scrollSource.contains("UserScrollDetector {"))
+    // The detector is mounted, and mounted with the transcript's own
+    // programmatic-scroll signal — without it a follow-scroll landing under an
+    // open press reads as the reader taking the viewport.
+    XCTAssertTrue(scrollSource.contains("UserScrollDetector(programmaticScroll: programmaticScroll) {"))
     XCTAssertTrue(scrollSource.contains("onScrollSettledAtBottom"))
     XCTAssertTrue(scrollSource.contains("scheduleSettledBottomFollow"))
     XCTAssertTrue(scrollSource.contains("Self.isAtBottom(scrollView)"))
@@ -843,7 +846,8 @@ import XCTest
         ownerID: "owner",
         title: "Replacement notification",
         message: "Must remain visible",
-        assistantId: "test"),
+        assistantId: "test",
+        kind: .functional),
       animated: false)
     scheduler.fire()
 

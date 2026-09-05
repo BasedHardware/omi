@@ -40,7 +40,11 @@ struct VoiceTypeWakeWordProbeSchedule: Equatable {
   private var pending = Data()
   private static let windowBytes = 640
 
-  /// Feeds one mic chunk. Returns true when a probe is due now.
+  /// Feeds one mic chunk. Returns true while a probe is due — it stays due,
+  /// chunk after chunk, until `beginProbe` takes it. The caller can only run
+  /// one decode at a time, and a slow model load must not silently spend the
+  /// slots that fall while it is busy: the probe that was due simply runs on
+  /// the first chunk after the decoder is free.
   mutating func observe(chunk: Data) -> Bool {
     guard !isDecided, probesTaken < Self.voicedByteThresholds.count else { return false }
     pending.append(chunk)
@@ -49,9 +53,18 @@ struct VoiceTypeWakeWordProbeSchedule: Equatable {
       voicedBytes += VoiceTypeAudioTrim.speechBytes(in: Data(pending.prefix(whole)))
       pending = Data(pending.dropFirst(whole))
     }
-    guard voicedBytes >= Self.voicedByteThresholds[probesTaken] else { return false }
+    return isProbeDue
+  }
+
+  var isProbeDue: Bool {
+    !isDecided && probesTaken < Self.voicedByteThresholds.count
+      && voicedBytes >= Self.voicedByteThresholds[probesTaken]
+  }
+
+  /// The caller is starting the probe that is due. Consumes the slot.
+  mutating func beginProbe() {
+    guard isProbeDue else { return }
     probesTaken += 1
-    return true
   }
 
   /// The question is settled either way (claimed, rejected, or blocked); no
