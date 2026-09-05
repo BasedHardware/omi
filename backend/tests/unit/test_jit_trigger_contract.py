@@ -1,4 +1,6 @@
+import json
 from datetime import datetime, time, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -26,8 +28,12 @@ from utils.memory.jit_trigger_contract import (
     evaluate_memory_item_trigger,
     evaluate_trigger,
 )
+from utils.retrieval.tools.knowledge_ledger_write_tools import build_paid_trigger_condition
 
 NOW = datetime(2026, 8, 23, 14, 30, tzinfo=timezone.utc)
+SHARED_TRIGGER_MATRIX = (
+    Path(__file__).resolve().parents[2].parent / "contracts" / "parity" / "jit_trigger_condition_matrix.json"
+)
 EMBEDDING = {
     "prototype_id": "release-review",
     "prototype_revision": "prototype-v1",
@@ -153,6 +159,15 @@ def test_trigger_action_is_bounded_typed_and_round_trips_with_selectors():
 def test_compiler_rejects_unbounded_or_ambiguous_schema(condition):
     with pytest.raises((TypeError, ValueError)):
         compile_trigger_condition(condition)
+
+
+def test_shared_model_facing_trigger_payloads_compile_in_backend():
+    matrix = json.loads(SHARED_TRIGGER_MATRIX.read_text(encoding="utf-8"))
+
+    for payload in matrix["valid_payloads"]:
+        compiled = build_paid_trigger_condition(payload["description"], payload["condition"])
+        assert compiled["action"] == {"type": "agent_prompt", "prompt": payload["description"]}
+        assert compiled["schema_version"] == "jit_trigger.v1"
 
 
 def test_all_conditions_match_and_double_run_is_byte_stable():

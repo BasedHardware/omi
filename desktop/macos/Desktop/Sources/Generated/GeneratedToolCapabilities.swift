@@ -555,7 +555,7 @@ enum GeneratedToolCapabilities {
       "Never call it from a pattern you merely noticed in passive behavior; an inferred habit is not standing intent.",
       "Embedding/semantic selectors are not supported; use keywords, regex, apps, windows, time, or calendar selectors instead.",
       "Use match_mode 'all' or 'any' (never 'exact'); regex must be an array of safe patterns; entity_aliases must be an object; time requires start and end; calendar requires event_keywords or event_types.",
-      "For an exact marker, use a keyword selector such as condition={keywords:[\"JIT-QA-20260905-1853\"]} and describe the notification in description."
+      "For an exact phrase, use a keyword selector such as condition={keywords:[\"incident marker\"]} and describe the notification in description."
     ]
     ),
     Capability(

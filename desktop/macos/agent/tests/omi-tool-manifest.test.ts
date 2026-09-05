@@ -482,12 +482,18 @@ describe("omi tool manifest", () => {
       expect(properties.match_mode.enum).toEqual(["all", "any"]);
       expect(properties.entity_aliases.additionalProperties.items.type).toBe("string");
       expect(properties.keywords.items.type).toBe("string");
+      expect(properties.keywords.minItems).toBe(1);
       expect(properties.regex.items.type).toBe("string");
+      expect(properties.regex.minItems).toBe(1);
+      expect(properties.apps.minItems).toBe(1);
+      expect(properties.windows.minItems).toBe(1);
       expect(properties.time.required).toEqual(["start", "end"]);
       expect(properties.calendar.anyOf).toEqual([
         { required: ["event_keywords"] },
         { required: ["event_types"] },
       ]);
+      expect(properties.calendar.properties.event_keywords.minItems).toBe(1);
+      expect(properties.calendar.properties.event_types.minItems).toBe(1);
       expect(condition.examples).toEqual([
         { keywords: ["incident"] },
         { apps: ["Slack"], keywords: ["budget"] },
