@@ -1,0 +1,15 @@
+{
+  "prompt": "Please remember that I am running the synthetic JIT acceptance test marker JIT-QA-20260905-1808. Also create a standing trigger to notify me whenever that exact marker appears in a new conversation.",
+  "attemptedTool": {
+    "name": "create_memory",
+    "input": {
+      "content": "The user is running the synthetic JIT acceptance test marker JIT-QA-20260905-1808."
+    },
+    "resultCode": "memory_save_not_authorized"
+  },
+  "expected": {
+    "surfaceKind": "main_chat",
+    "jitKnowledgeToolsEnabled": true,
+    "toolName": "create_standing_trigger"
+  }
+}
