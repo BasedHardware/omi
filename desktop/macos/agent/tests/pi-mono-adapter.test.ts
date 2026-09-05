@@ -8,6 +8,7 @@ import {
   PiMonoAdapter,
   PiMonoRuntimeAdapter,
   routePromptForPublicWeb,
+  toolProjectionFromMetadata,
 } from "../src/adapters/pi-mono.js";
 import { HarnessFeature, type AdapterAttemptContext, type HarnessConfig } from "../src/adapters/interface.js";
 import type { OutboundMessage } from "../src/protocol.js";
@@ -911,6 +912,40 @@ describe("PiMonoAdapter source-level invariants", () => {
   it("always scrubs ANTHROPIC_API_KEY from the child env", () => {
     expect(piMonoSrc).toMatch(/delete\s+env\.ANTHROPIC_API_KEY\s*;?/);
   });
+
+  it("preserves the explicit per-turn JIT gate in the adapter projection", () => {
+    expect(toolProjectionFromMetadata({
+      surfaceKind: "main_chat",
+      jitKnowledgeToolsEnabled: true,
+    }).jitKnowledgeToolsEnabled).toBe(true);
+    expect(toolProjectionFromMetadata({
+      surfaceKind: "main_chat",
+      jitKnowledgeToolsEnabled: "true",
+    }).jitKnowledgeToolsEnabled).toBe(false);
+    expect(toolProjectionFromMetadata({
+      surfaceKind: "main_chat",
+    }).jitKnowledgeToolsEnabled).toBe(false);
+  });
+
+  it("keeps the real failed JIT save attempt as an exact regression fixture", () => {
+    const fixture = JSON.parse(readFileSync(
+      fileURLToPath(new URL("./fixtures/jit-knowledge-tool-gate-regression.json", import.meta.url)),
+      "utf8",
+    )) as {
+      prompt: string;
+      attemptedTool: { name: string; input: { content: string }; resultCode: string };
+      expected: { surfaceKind: string; jitKnowledgeToolsEnabled: boolean; toolName: string };
+    };
+    expect(fixture.prompt).toBe(
+      "Please remember that I am running the synthetic JIT acceptance test marker JIT-QA-20260905-1808. Also create a standing trigger to notify me whenever that exact marker appears in a new conversation.",
+    );
+    expect(fixture.attemptedTool).toEqual({
+      name: "create_memory",
+      input: { content: "The user is running the synthetic JIT acceptance test marker JIT-QA-20260905-1808." },
+      resultCode: "memory_save_not_authorized",
+    });
+    expect(toolProjectionFromMetadata(fixture.expected).jitKnowledgeToolsEnabled).toBe(true);
+  });
 });
 
 describe("PiMonoAdapter spawn args (behavioral)", () => {
@@ -979,6 +1014,7 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
       surfaceKind: "main_chat",
       chatFirstUi: true,
       controlGeneration: 7,
+      jitKnowledgeToolsEnabled: true,
     });
     await adapter.start();
 
@@ -986,14 +1022,17 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     expect(options.env.OMI_SURFACE_KIND).toBe("main_chat");
     expect(options.env.OMI_CHAT_FIRST_UI).toBe("true");
     expect(options.env.OMI_CHAT_FIRST_CONTROL_GENERATION).toBe("7");
-    await adapter.stop();
-
+    expect(options.env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED).toBe("true");
     vi.mocked(spawn).mockClear();
     await adapter.setToolProjection({
       surfaceKind: "main_chat",
       chatFirstUi: false,
       controlGeneration: null,
+      jitKnowledgeToolsEnabled: false,
     });
+    expect(spawn).not.toHaveBeenCalled();
+    const previousJitGate = process.env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED;
+    process.env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED = "true";
     await adapter.start();
     const [, , legacyMainChatOptions] = vi.mocked(spawn).mock.calls[0] as [
       string,
@@ -1003,6 +1042,9 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     expect(legacyMainChatOptions.env.OMI_SURFACE_KIND).toBe("main_chat");
     expect(legacyMainChatOptions.env.OMI_CHAT_FIRST_UI).toBeUndefined();
     expect(legacyMainChatOptions.env.OMI_CHAT_FIRST_CONTROL_GENERATION).toBeUndefined();
+    expect(legacyMainChatOptions.env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED).toBeUndefined();
+    if (previousJitGate === undefined) delete process.env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED;
+    else process.env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED = previousJitGate;
     await adapter.stop();
 
     vi.mocked(spawn).mockClear();

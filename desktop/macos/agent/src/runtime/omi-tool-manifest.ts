@@ -181,6 +181,110 @@ function schema(properties: Record<string, unknown>, required: string[] = []): O
   };
 }
 
+/**
+ * The backend's TriggerCondition is a typed Pydantic contract even though the
+ * LangChain Dict annotation currently exposes it as an open object. Keep the
+ * desktop model-facing schema typed here so it can produce a payload the
+ * server compiler accepts on the first call. The backend remains the
+ * authority for selector bounds and safe-regex validation.
+ */
+const standingTriggerStringArray = (description: string, maxItems: number, maxLength = 80) => ({
+  type: "array",
+  items: { type: "string", minLength: 1, maxLength },
+  minItems: 1,
+  maxItems,
+  description,
+});
+
+const standingTriggerConditionSchema = {
+  type: "object",
+  properties: {
+    match_mode: {
+      type: "string",
+      enum: ["all", "any"],
+      default: "all",
+      description: "Whether every selector must match (all) or any one selector may match (any).",
+    },
+    entity_aliases: {
+      type: "object",
+      minProperties: 1,
+      maxProperties: 12,
+      additionalProperties: {
+        type: "array",
+        items: { type: "string", minLength: 1, maxLength: 80 },
+        minItems: 1,
+        maxItems: 16,
+      },
+      description: "Map an entity name to one or more aliases, e.g. {\"release_owner\":[\"David\",\"Dave\"]}.",
+    },
+    keywords: standingTriggerStringArray("Whole-word terms to match in captured context, e.g. [\"incident\", \"outage\"].", 32),
+    regex: standingTriggerStringArray(
+      "Safe regular expressions to match in captured context (no lookarounds, backreferences, or nested quantifiers).",
+      8,
+      160,
+    ),
+    apps: standingTriggerStringArray("Application names to match, e.g. [\"Slack\"].", 16),
+    windows: standingTriggerStringArray("Window titles to match, e.g. [\"#release\"].", 16, 120),
+    time: {
+      type: "object",
+      properties: {
+        weekdays: {
+          type: "array",
+          items: { type: "integer", minimum: 0, maximum: 6 },
+          maxItems: 7,
+          description: "Optional ISO weekday indexes 0 (Monday) through 6 (Sunday).",
+        },
+        start: {
+          type: "string",
+          pattern: "^(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?$",
+          description: "Inclusive local start time, e.g. 09:00.",
+        },
+        end: {
+          type: "string",
+          pattern: "^(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?$",
+          description: "Inclusive local end time, e.g. 17:00.",
+        },
+        timezone: {
+          type: "string",
+          minLength: 1,
+          description: "Optional installed IANA timezone; defaults to UTC, e.g. America/New_York.",
+        },
+      },
+      required: ["start", "end"],
+      additionalProperties: false,
+      description: "Time selector; start and end are both required when time is present.",
+    },
+    calendar: {
+      type: "object",
+      properties: {
+        event_keywords: standingTriggerStringArray("Calendar event title terms, e.g. [\"release review\"].", 32),
+        event_types: standingTriggerStringArray("Calendar event types, e.g. [\"meeting\"].", 32),
+      },
+      anyOf: [{ required: ["event_keywords"] }, { required: ["event_types"] }],
+      additionalProperties: false,
+      description: "Calendar selector; provide event_keywords or event_types (at least one).",
+    },
+  },
+  anyOf: [
+    { required: ["entity_aliases"] },
+    { required: ["keywords"] },
+    { required: ["regex"] },
+    { required: ["apps"] },
+    { required: ["windows"] },
+    { required: ["time"] },
+    { required: ["calendar"] },
+  ],
+  maxProperties: 8,
+  additionalProperties: false,
+  description:
+    "Typed deterministic selector payload. Examples: {\"keywords\":[\"incident\"]}; {\"apps\":[\"Slack\"],\"keywords\":[\"budget\"]}; {\"time\":{\"start\":\"09:00\",\"end\":\"17:00\",\"timezone\":\"UTC\"}}.",
+  examples: [
+    { keywords: ["incident"] },
+    { apps: ["Slack"], keywords: ["budget"] },
+    { time: { start: "09:00", end: "17:00", timezone: "UTC" } },
+  ],
+};
+
 function piAndStdio(condition: OmiToolCondition = "always"): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
   return {
     "pi-mono": { advertised: condition !== "onboardingOnly", condition: condition === "always" ? undefined : condition },
@@ -1492,20 +1596,20 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       "Call this for an explicit standing-intent request such as 'watch for X and tell me' or 'let me know whenever Y happens'.",
       "Never call it from a pattern you merely noticed in passive behavior; an inferred habit is not standing intent.",
       "Embedding/semantic selectors are not supported; use keywords, regex, apps, windows, time, or calendar selectors instead.",
+      "Use match_mode 'all' or 'any' (never 'exact'); regex must be an array of safe patterns; entity_aliases must be an object; time requires start and end; calendar requires event_keywords or event_types.",
+      "For an exact phrase, use a keyword selector such as condition={keywords:[\"incident marker\"]} and describe the notification in description.",
     ],
     latency: "fast network",
     inputSchema: schema(
       {
         description: {
           type: "string",
+          minLength: 1,
+          maxLength: 2000,
           description: "What to tell the user when this trigger fires, in your own words (at most 2000 characters).",
         },
         condition: {
-          type: "object",
-          properties: {},
-          additionalProperties: true,
-          description:
-            "Deterministic selector payload: match_mode, entity_aliases, keywords, regex, apps, windows, time, calendar.",
+          ...standingTriggerConditionSchema,
         },
       },
       ["description", "condition"],
