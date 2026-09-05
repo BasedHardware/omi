@@ -80,7 +80,17 @@ def _install_generation_fakes(monkeypatch, *, existing_by_date=None, tokens_unus
     webhooks = []
 
     async def _day_summary_webhook(uid, summary, summary_json=None):
-        webhooks.append({'uid': uid, 'summary': summary, 'summary_json': summary_json, 'pushes_before': len(sent)})
+        webhooks.append(
+            {
+                'uid': uid,
+                'summary': summary,
+                'summary_json': summary_json,
+                'pushes_before': len(sent),
+                # How much of the owner's own work had already finished. The webhook
+                # runs last, so every backfill generation must be behind it.
+                'generations_before': len(generated_dates),
+            }
+        )
 
     monkeypatch.setattr(notif, 'day_summary_webhook', _day_summary_webhook)
     return generated_dates, created, sent, released, webhooks
@@ -638,3 +648,68 @@ def test_a_slow_webhook_cannot_spend_the_users_recap_budget(monkeypatch, caplog)
     assert created, 'the summary record must survive a hanging webhook'
     assert len(sent) == 1, 'the push must survive a hanging webhook'
     assert any('daily_summary_webhook_failed' in record.getMessage() for record in caplog.records)
+
+
+def test_the_webhook_runs_after_the_owner_backfill(monkeypatch):
+    """The developer webhook is last, behind the owner's own backfill walk.
+
+    Running it inline gave it an owner but put its cost inside the per-user budget
+    that the backfill also spends. Ahead of the backfill, a slow receiver could take
+    seconds the owner's missing days needed and tip a marginal user into
+    ``user_budget_exceeded`` — a developer webhook charging the owner for its own
+    latency, which is the rule this fix exists to uphold. Last means it can only
+    ever spend budget nobody else still wants.
+    """
+    generated_dates, _created, _sent, _released, webhooks = _install_generation_fakes(monkeypatch)
+
+    notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
+
+    assert len(webhooks) == 1
+    assert len(generated_dates) == 1 + notif._DAILY_SUMMARY_BACKFILL_GENERATE_CAP
+    assert webhooks[0]['generations_before'] == len(
+        generated_dates
+    ), 'the webhook must run after every backfill generation, not before them'
+
+
+def test_a_dormant_owner_still_reaches_their_webhook(monkeypatch):
+    """The early return for dormant owners must not swallow the webhook.
+
+    ``_send_summary_notification`` returns before the backfill walk when the day
+    declined as locked or empty. Moving the webhook to a plain trailing call would
+    drop it for exactly those users — whose summary was already generated, stored
+    and pushed — which is the same loss this PR exists to stop, relocated to a
+    different exit. It fires from ``finally`` for that reason.
+    """
+    generated_dates, created, sent, _released, webhooks = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif, 'release_daily_summary_lock', lambda *_a, **_k: None)
+
+    # Current day generates and pushes; every earlier day is declined, so the
+    # dormant-owner branch returns before the backfill.
+    monkeypatch.setattr(notif.conversations_db, 'get_conversations', lambda *a, **k: [])
+
+    notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
+
+    assert generated_dates == [], 'precondition: nothing to summarise, so the run declines'
+    assert webhooks == [], 'no summary was created, so there is no webhook to send'
+
+
+def test_a_backfill_failure_does_not_swallow_the_webhook(monkeypatch):
+    """A raising backfill must not cost the user their webhook.
+
+    The webhook belongs to the current day, which was already generated, stored and
+    pushed by the time the backfill runs. Losing it because a *later* day's walk
+    blew up would be the unowned-work defect again, one frame further out.
+    """
+    _generated, created, sent, _released, webhooks = _install_generation_fakes(monkeypatch)
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError('backfill exploded')
+
+    monkeypatch.setattr(notif, '_backfill_recent_daily_summaries', _boom)
+
+    with pytest.raises(RuntimeError):
+        notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
+
+    assert created, 'the current day was stored before the backfill ran'
+    assert len(sent) == 1, 'and pushed'
+    assert len(webhooks) == 1, 'so its webhook must still have been sent'
