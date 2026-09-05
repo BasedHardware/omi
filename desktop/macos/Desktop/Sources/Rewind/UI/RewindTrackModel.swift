@@ -58,9 +58,13 @@ enum RewindTimelineNavigation {
 /// a pure function of timestamps that a hermetic test can drive without a window server.
 enum RewindTrackWindow {
 
-  /// The narrowest window a zoom may reach — a minute across the bar is already finer than the
-  /// capture interval, so anything below it zooms into empty space.
-  static let minimumSpan: Double = 60
+  /// The narrowest window a zoom may reach.
+  ///
+  /// Ten seconds across the bar: at the default three-second capture interval that is three or
+  /// four frames, each a wide, individually scrubbable segment. The floor used to be a minute,
+  /// which left the last zoom steps feeling stuck when what the user wanted was to land on one
+  /// exact frame among a dense burst of app switches.
+  static let minimumSpan: Double = 10
 
   /// Exact retained-history bounds, padded enough that the end captures are not flush against the
   /// track. This range stays global while viewport samples come and go beneath it.
@@ -71,20 +75,38 @@ enum RewindTrackWindow {
     return lower...upper
   }
 
+  /// A gap between consecutive captures longer than this is a break in capture — the machine was
+  /// asleep, capture was off, the app was quit — rather than the space between two samples.
+  ///
+  /// Measured against the larger of this and three sampling intervals, so the rule holds at every
+  /// zoom: a viewport is a bounded sample (`RewindViewModel.timelineSampleTarget`), and at all-time
+  /// zoom the samples themselves sit further apart than fifteen minutes.
+  static let maximumTiledGap: Double = 15 * 60
+
   /// Contiguous same-app stretches, in capture order.
   ///
-  /// Blocks tile: each one ends where the next begins, so the bar has no seams the data did not put
-  /// there. The last block is given the run's median sampling interval so a day still in progress
-  /// does not end in a zero-width segment.
+  /// Blocks tile across the gaps sampling puts between captures: each one ends where the next
+  /// begins, so the bar has no seams the data did not put there. A block does **not** reach across
+  /// a break in capture (`maximumTiledGap`); it ends one sampling interval after its last capture
+  /// and the gap stays the empty channel.
+  ///
+  /// That distinction is what keeps the bar honest across zoom levels. A viewport loads only the
+  /// captures inside it, so a block stretched to the next capture painted a lunch break as the app
+  /// used before it at day zoom, and painted the same hours grey once the viewport no longer
+  /// contained that earlier capture — colour that disappeared as the user panned. The last block
+  /// gets the same one-interval tail so a day still in progress does not end in a zero-width
+  /// segment.
   static func blocks(from instants: [Double], apps: [String]) -> [RewindActivityBlock] {
     guard instants.count == apps.count, !instants.isEmpty else { return [] }
-    let tail = medianInterval(of: instants)
+    let tail = samplingInterval(of: instants)
+    let breakAfter = max(maximumTiledGap, 3 * tail)
     var result: [RewindActivityBlock] = []
     var startIndex = 0
     for index in 1...instants.count {
       let ended = index == instants.count
-      if ended || apps[index] != apps[startIndex] {
-        let endedAt = ended ? instants[instants.count - 1] + tail : instants[index]
+      let breaks = !ended && instants[index] - instants[index - 1] > breakAfter
+      if ended || breaks || apps[index] != apps[startIndex] {
+        let endedAt = ended || breaks ? instants[index - 1] + tail : instants[index]
         result.append(
           RewindActivityBlock(
             app: apps[startIndex], startedAt: instants[startIndex], endedAt: endedAt))
@@ -121,6 +143,29 @@ enum RewindTrackWindow {
 
   /// The median gap between consecutive captures — the run's own sampling interval, measured rather
   /// than assumed, because Rewind's capture rate is a user setting.
+  /// The spacing between samples, for `blocks` — the quantity a break has to be measured against.
+  ///
+  /// Not the median. In a short history — a day just after midnight, a window over one working
+  /// session — a single outage can be half the gaps or more, and a median that has absorbed it
+  /// makes the break threshold three outages long, so the outage tiles as the app before it. The
+  /// lower quartile is the gap that is typical of the *samples*, which the odd outage cannot move;
+  /// a sparse all-time sample, where every gap is wide, still measures its own spacing. With fewer
+  /// than four gaps there is no quartile to speak of, so the smallest gap stands in and the fixed
+  /// cutoff caps it: two frames an hour apart are a break, not a sampling rate.
+  static func samplingInterval(of instants: [Double]) -> Double {
+    guard instants.count > 1 else { return 60 }
+    var gaps: [Double] = []
+    gaps.reserveCapacity(instants.count - 1)
+    for index in 1..<instants.count {
+      let gap = instants[index] - instants[index - 1]
+      if gap > 0 { gaps.append(gap) }
+    }
+    guard !gaps.isEmpty else { return 60 }
+    gaps.sort()
+    guard gaps.count >= 4 else { return min(gaps[0], maximumTiledGap) }
+    return gaps[gaps.count / 4]
+  }
+
   static func medianInterval(of instants: [Double]) -> Double {
     guard instants.count > 1 else { return 60 }
     var gaps: [Double] = []
