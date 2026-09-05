@@ -1,0 +1,3 @@
+{
+  "change": "Reduced background polling while setting up export connectors."
+}
