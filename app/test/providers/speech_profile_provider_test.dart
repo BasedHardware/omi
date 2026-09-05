@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
@@ -15,6 +16,7 @@ import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/utils/constants.dart';
 
 /// Minimal EnvFields stub so Env-backed code paths don't hit a
 /// LateInitializationError (mirrors capture_provider_test.dart's fixture).
@@ -109,6 +111,27 @@ class _CountingSpeechProfileProvider extends SpeechProfileProvider {
     );
   }
 }
+
+/// Counts finalize() calls instead of uploading anything.
+class _FinalizeCountingProvider extends SpeechProfileProvider {
+  int finalizeCalls = 0;
+
+  @override
+  Future finalize() async {
+    finalizeCalls++;
+  }
+}
+
+TranscriptSegment _userSegment(String id, String text, {int speakerId = 0}) => TranscriptSegment(
+      id: id,
+      text: text,
+      speaker: 'SPEAKER_$speakerId',
+      isUser: true,
+      personId: null,
+      start: 0,
+      end: 1,
+      translations: [],
+    );
 
 void main() {
   setUpAll(() async {
@@ -453,6 +476,49 @@ void main() {
 
       expect(provider.profileCompleted, isTrue, reason: 'the user must be able to leave onboarding');
       expect(provider.error, 'TOO_SHORT');
+
+      provider.dispose();
+    });
+  });
+
+  // The recording completes once the user has spoken enough words (the UI
+  // shows a bar filling toward the target), not when the backend decides the
+  // "Talk About" topics were covered.
+  group('completes on the spoken word target', () {
+    String words(int n) => List.generate(n, (i) => 'w$i').join(' ');
+
+    test('fills the bar as words arrive and finalizes once at the target', () {
+      final provider = _FinalizeCountingProvider();
+      provider.updateStartedRecording(true);
+
+      provider.segments.add(_userSegment('1', words(SpeechProfileProvider.targetWordCount ~/ 2)));
+      provider.updateSpokenText();
+      expect(provider.wordProgress, closeTo(0.5, 0.01));
+      expect(provider.finalizeCalls, 0);
+
+      provider.segments.add(_userSegment('2', words(SpeechProfileProvider.targetWordCount)));
+      provider.updateSpokenText();
+      expect(provider.wordProgress, 1.0, reason: 'progress is clamped at the target');
+      expect(provider.finalizeCalls, 1);
+
+      provider.segments.add(_userSegment('3', 'more words'));
+      provider.updateSpokenText();
+      expect(provider.finalizeCalls, 1, reason: 'later segments must not finalize again');
+
+      provider.dispose();
+    });
+
+    test("ignores Omi's own question segments and the backend's completion event", () {
+      final provider = _FinalizeCountingProvider();
+      provider.updateStartedRecording(true);
+
+      provider.segments.add(_userSegment('q', words(SpeechProfileProvider.targetWordCount), speakerId: omiSpeakerId));
+      provider.updateSpokenText();
+      expect(provider.spokenWordCount, 0);
+      expect(provider.finalizeCalls, 0);
+
+      provider.onMessageEventReceived(OnboardingCompleteEvent(conversationId: 'c1'));
+      expect(provider.finalizeCalls, 0, reason: 'only the word target completes the recording');
 
       provider.dispose();
     });

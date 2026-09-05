@@ -11750,6 +11750,22 @@
     "@redo": {
         "description": "Label for the redo/re-record button on the speech profile page"
     },
+    "answerWithYourVoice": "Answer with your voice:",
+    "@answerWithYourVoice": {
+        "description": "Heading of the compact card listing the topics to speak about while recording the speech profile"
+    },
+    "speechProfileTopicLocation": "Where do you live?",
+    "@speechProfileTopicLocation": {
+        "description": "First speech profile topic prompt; must match the backend onboarding question"
+    },
+    "speechProfileTopicWork": "What do you do for work?",
+    "@speechProfileTopicWork": {
+        "description": "Second speech profile topic prompt; must match the backend onboarding question"
+    },
+    "speechProfileTopicGoal": "What is your long-term goal?",
+    "@speechProfileTopicGoal": {
+        "description": "Third speech profile topic prompt; must match the backend onboarding question"
+    },
     "transcriptionNoAudio": "Transcription not receiving audio",
     "@transcriptionNoAudio": {
         "description": "Status when an active call transcription socket receives no audio frames"

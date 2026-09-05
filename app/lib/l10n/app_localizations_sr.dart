@@ -9938,6 +9938,18 @@ class AppLocalizationsSr extends AppLocalizations {
   String get redo => 'Redo';
 
   @override
+  String get answerWithYourVoice => 'Answer with your voice:';
+
+  @override
+  String get speechProfileTopicLocation => 'Where do you live?';
+
+  @override
+  String get speechProfileTopicWork => 'What do you do for work?';
+
+  @override
+  String get speechProfileTopicGoal => 'What is your long-term goal?';
+
+  @override
   String get transcriptionNoAudio => 'Транскрипција не прима аудио';
 
   @override

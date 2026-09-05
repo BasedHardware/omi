@@ -7,7 +7,8 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
-import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
+import 'package:omi/pages/speech_profile/speech_topics_card.dart';
+import 'package:omi/pages/speech_profile/word_progress_bar.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
@@ -28,9 +29,7 @@ class SpeechProfileWidget extends StatefulWidget {
   State<SpeechProfileWidget> createState() => _SpeechProfileWidgetState();
 }
 
-class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerProviderStateMixin {
-  late AnimationController _questionAnimationController;
-  late Animation<double> _questionFadeAnimation;
+class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
   SpeechProfileProvider? _speechProvider;
   // Guards the pre-flight availability check itself, which runs before
   // provider.isInitialising ever becomes true — without this, a rapid double
@@ -40,12 +39,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
   @override
   void initState() {
     super.initState();
-    _questionAnimationController = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
-    _questionFadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut));
-
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       // Check if user has set primary language
@@ -76,7 +69,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
     _speechProvider?.forceCompletionTimer = null;
 
     _scrollController.dispose();
-    _questionAnimationController.dispose();
 
     super.dispose();
   }
@@ -144,12 +136,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
             showInfo: (info) {
               if (info == 'SCROLL_DOWN') {
                 scrollDown();
-              } else if (info == 'NEXT_QUESTION') {
-                if (!mounted) return;
-
-                _questionAnimationController
-                  ..reset()
-                  ..forward();
               } else if (info == 'SKIP_UNAVAILABLE') {
                 AppSnackbar.showSnackbarError(context.l10n.reconnecting);
               }
@@ -451,9 +437,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                           provider.finalize();
                                         },
                                       );
-
-                                      if (!mounted) return;
-                                      _questionAnimationController.forward();
                                     },
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.white,
@@ -535,23 +518,13 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                           // exactly (fontSize 20, full-white, taller viewport), hidden
                           // entirely until the first words arrive.
                           if (provider.text.isNotEmpty) ...[
-                            ShaderMask(
-                              shaderCallback: (bounds) {
-                                if (provider.text.split(' ').length < 10) {
-                                  return const LinearGradient(
-                                    colors: [Colors.white, Colors.white],
-                                  ).createShader(bounds);
-                                }
-                                return const LinearGradient(
-                                  colors: [Colors.transparent, Colors.white],
-                                  stops: [0.0, 0.5],
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                ).createShader(bounds);
-                              },
-                              blendMode: BlendMode.dstIn,
-                              child: SizedBox(
-                                height: 130,
+                            // Exactly three lines of 20px text at 1.5 line height,
+                            // bottom-anchored: whole lines scroll off the top rather
+                            // than being cut through or faded.
+                            SizedBox(
+                              height: 3 * 20 * 1.5,
+                              child: Align(
+                                alignment: Alignment.bottomCenter,
                                 child: ListView(
                                   controller: _scrollController,
                                   shrinkWrap: true,
@@ -571,37 +544,16 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 20),
                           ],
 
-                          // Current question
-                          FadeTransition(
-                            opacity: _questionFadeAnimation,
-                            child: Text(
-                              provider.currentQuestion,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                height: 1.3,
-                                fontFamily: 'Manrope',
-                                fontWeight: FontWeight.w600,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
+                          const SpeechTopicsCard(),
 
                           const SizedBox(height: 12),
 
-                          // Progress bar
-                          SizedBox(
-                            width: double.infinity,
-                            child: ProgressBarWithPercentage(
-                              progressValue: provider.questionProgress,
-                              showPercentageAsPlainText: true,
-                            ),
-                          ),
+                          WordProgressBar(progress: provider.wordProgress),
 
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 12),
 
                           OutlinedButton(
                             onPressed: () {

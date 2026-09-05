@@ -54,6 +54,14 @@ class SpeechProfileProvider extends ChangeNotifier
 
   bool startedRecording = false;
   double percentageCompleted = 0;
+
+  /// Words the user must speak before the profile is finalized. The UI shows
+  /// a bar filling toward it; reaching it is what completes the recording.
+  static const int targetWordCount = 60;
+  bool _wordTargetReached = false;
+
+  int get spokenWordCount => text.trim().isEmpty ? 0 : text.trim().split(RegExp(r'\s+')).length;
+  double get wordProgress => (spokenWordCount / targetWordCount).clamp(0.0, 1.0);
   bool uploadingProfile = false;
   bool profileCompleted = false;
   Timer? forceCompletionTimer;
@@ -587,6 +595,7 @@ class SpeechProfileProvider extends ChangeNotifier
     audioStorage.clearAudioBytes();
     text = '';
     percentageCompleted = 0;
+    _wordTargetReached = false;
     notifyListeners();
   }
 
@@ -630,6 +639,7 @@ class SpeechProfileProvider extends ChangeNotifier
     totalQuestions = 0;
     startedRecording = false;
     percentageCompleted = 0;
+    _wordTargetReached = false;
     uploadingProfile = false;
     profileCompleted = false;
     usePhoneMic = false;
@@ -781,8 +791,9 @@ class SpeechProfileProvider extends ChangeNotifier
       Logger.debug('Question ${event.questionIndex} answered');
       notifyInfo('NEXT_QUESTION');
     } else if (event is OnboardingCompleteEvent) {
-      Logger.debug('Onboarding complete from backend: conversationId=${event.conversationId}');
-      finalize();
+      // Completion is driven by the spoken word target (onSegmentReceived);
+      // the backend finishing its topic checks only means it stops asking.
+      Logger.debug('Onboarding topics complete from backend: conversationId=${event.conversationId}');
     }
   }
 
@@ -808,12 +819,24 @@ class SpeechProfileProvider extends ChangeNotifier
     // Validate single speaker (exclude Omi segments)
     _validateSingleSpeaker();
 
-    // Display only user's speech, not Omi's questions
-    text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
-    percentageCompleted = questionProgress;
-
+    updateSpokenText();
     notifyInfo('SCROLL_DOWN');
     notifyListeners();
+  }
+
+  /// Recomputes what the user has said (Omi's own question segments are
+  /// excluded), the word-target progress, and finalizes the recording once
+  /// the target is reached. Split from onSegmentReceived so it can be
+  /// exercised without the audio storage that method also touches.
+  @visibleForTesting
+  void updateSpokenText() {
+    text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
+    percentageCompleted = wordProgress;
+    if (!_wordTargetReached && spokenWordCount >= targetWordCount) {
+      _wordTargetReached = true;
+      Logger.debug('Spoken word target reached ($spokenWordCount/$targetWordCount); finalizing');
+      finalize();
+    }
   }
 
   @override

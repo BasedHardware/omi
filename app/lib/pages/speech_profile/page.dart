@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/speech_profile.dart';
@@ -11,7 +12,8 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
-import 'package:omi/pages/speech_profile/user_speech_samples.dart';
+import 'package:omi/pages/speech_profile/speech_topics_card.dart';
+import 'package:omi/pages/speech_profile/word_progress_bar.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
@@ -23,7 +25,6 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/fade_in_words_text.dart';
-import 'percentage_bar_progress.dart';
 
 class SpeechProfilePage extends StatefulWidget {
   final bool onbording;
@@ -34,9 +35,12 @@ class SpeechProfilePage extends StatefulWidget {
   State<SpeechProfilePage> createState() => _SpeechProfilePageState();
 }
 
-class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProviderStateMixin {
-  late AnimationController _questionAnimationController;
-  late Animation<double> _questionFadeAnimation;
+class _SpeechProfilePageState extends State<SpeechProfilePage> {
+  // Plays the saved profile audio in place; the Play button becomes Stop.
+  final AudioPlayer _profilePlayer = AudioPlayer();
+  StreamSubscription<PlayerState>? _profilePlayerSub;
+  bool _profilePlaying = false;
+  bool _profileLoading = false;
   // Guards the pre-flight availability check itself, which runs before
   // provider.isInitialising ever becomes true — without this, a rapid double
   // tap on Redo/Get Started during that network round-trip could start two
@@ -46,11 +50,11 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
   @override
   void initState() {
     super.initState();
-    _questionAnimationController = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
-    _questionFadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut));
+    _profilePlayerSub = _profilePlayer.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed && mounted) {
+        setState(() => _profilePlaying = false);
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
@@ -109,10 +113,38 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
     return icon != null ? button : SizedBox(width: double.infinity, child: button);
   }
 
+  Future<void> _toggleProfilePlayback() async {
+    if (_profilePlaying) {
+      await _stopProfilePlayback();
+      return;
+    }
+    if (_profileLoading) return;
+    setState(() => _profileLoading = true);
+    try {
+      final url = await getUserSpeechProfile();
+      if (url == null || url.isEmpty) throw StateError('no speech profile url');
+      await _profilePlayer.setUrl(url);
+      if (!mounted) return;
+      setState(() => _profilePlaying = true);
+      unawaited(_profilePlayer.play());
+    } catch (e) {
+      Logger.debug('Speech profile playback failed: $e');
+      if (mounted) AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
+    } finally {
+      if (mounted) setState(() => _profileLoading = false);
+    }
+  }
+
+  Future<void> _stopProfilePlayback() async {
+    await _profilePlayer.stop();
+    if (mounted) setState(() => _profilePlaying = false);
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
-    _questionAnimationController.dispose();
+    _profilePlayerSub?.cancel();
+    _profilePlayer.dispose();
     super.dispose();
   }
 
@@ -228,7 +260,6 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
         },
       );
       provider.updateStartedRecording(true);
-      _questionAnimationController.forward();
     }
 
     return PopScope(
@@ -255,9 +286,6 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
             showInfo: (info) {
               if (info == 'SCROLL_DOWN') {
                 scrollDown();
-              } else if (info == 'NEXT_QUESTION') {
-                _questionAnimationController.reset();
-                _questionAnimationController.forward();
               } else if (info == 'SKIP_UNAVAILABLE') {
                 AppSnackbar.showSnackbarError(context.l10n.reconnecting);
               }
@@ -448,9 +476,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                             children: [
                                               Expanded(
                                                 child: _capsuleButton(
-                                                  icon: Icons.play_arrow_rounded,
-                                                  text: context.l10n.play,
-                                                  onPressed: () => routeToPage(context, const UserSpeechSamples()),
+                                                  icon: _profilePlaying ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                                                  text: _profilePlaying ? context.l10n.stop : context.l10n.play,
+                                                  onPressed: _toggleProfilePlayback,
                                                 ),
                                               ),
                                               const SizedBox(width: 16),
@@ -458,7 +486,10 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                                 child: _capsuleButton(
                                                   icon: Icons.replay_rounded,
                                                   text: context.l10n.redo,
-                                                  onPressed: () => startRecording(provider),
+                                                  onPressed: () {
+                                                    _stopProfilePlayback();
+                                                    startRecording(provider);
+                                                  },
                                                 ),
                                               ),
                                             ],
@@ -466,50 +497,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                         ),
                               ],
                             )
-                          : provider.text.isEmpty
-                              ? const SizedBox.shrink()
-                              : Padding(
-                                  padding: const EdgeInsets.only(top: 80.0),
-                                  child: LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      return ShaderMask(
-                                        shaderCallback: (bounds) {
-                                          if (provider.text.split(' ').length < 10) {
-                                            return const LinearGradient(
-                                              colors: [Colors.white, Colors.white],
-                                            ).createShader(bounds);
-                                          }
-                                          return const LinearGradient(
-                                            colors: [Colors.transparent, Colors.white],
-                                            stops: [0.0, 0.5],
-                                            begin: Alignment.topCenter,
-                                            end: Alignment.bottomCenter,
-                                          ).createShader(bounds);
-                                        },
-                                        blendMode: BlendMode.dstIn,
-                                        child: SizedBox(
-                                          height: 130,
-                                          child: ListView(
-                                            controller: _scrollController,
-                                            shrinkWrap: true,
-                                            physics: const NeverScrollableScrollPhysics(),
-                                            children: [
-                                              FadeInWordsText(
-                                                text: provider.text,
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 20,
-                                                  fontWeight: FontWeight.w400,
-                                                  height: 1.5,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
+                          // While recording, the transcript is laid out above the
+                          // topics card in the bottom section so they cannot overlap.
+                          : const SizedBox.shrink(),
                     ),
                   ),
                   Align(
@@ -581,34 +571,43 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                       : Column(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            const SizedBox(height: 8),
-                                            FadeTransition(
-                                              opacity: _questionFadeAnimation,
-                                              child: Text(
-                                                provider.currentQuestion,
-                                                style: const TextStyle(color: Colors.white, fontSize: 22, height: 1.3),
-                                                textAlign: TextAlign.center,
+                                            if (provider.text.isNotEmpty)
+                                              Padding(
+                                                padding: const EdgeInsets.fromLTRB(32, 0, 32, 28),
+                                                // Exactly three lines of 18px text at 1.4 line height,
+                                                // bottom-anchored: whole lines scroll off the top rather
+                                                // than being cut through or faded.
+                                                child: SizedBox(
+                                                  height: 3 * 18 * 1.4,
+                                                  child: Align(
+                                                    alignment: Alignment.bottomCenter,
+                                                    child: ListView(
+                                                      controller: _scrollController,
+                                                      shrinkWrap: true,
+                                                      physics: const NeverScrollableScrollPhysics(),
+                                                      children: [
+                                                        FadeInWordsText(
+                                                          text: provider.text,
+                                                          style: const TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 18,
+                                                            fontWeight: FontWeight.w400,
+                                                            height: 1.4,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
                                               ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            SizedBox(
-                                              width: MediaQuery.sizeOf(context).width * 0.9,
-                                              child: ProgressBarWithPercentage(
-                                                progressValue: provider.questionProgress,
-                                                showPercentageAsPlainText: true,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            OutlinedButton(
-                                              onPressed: () => provider.skipCurrentQuestion(),
-                                              style: OutlinedButton.styleFrom(
-                                                side: const BorderSide(color: Colors.white),
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                                              ),
-                                              child: Text(
-                                                context.l10n.skipThisQuestion,
-                                                style: const TextStyle(color: Colors.white, fontSize: 14),
+                                            Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                                              child: Column(
+                                                children: [
+                                                  const SpeechTopicsCard(),
+                                                  const SizedBox(height: 12),
+                                                  WordProgressBar(progress: provider.wordProgress),
+                                                ],
                                               ),
                                             ),
                                             if (provider.device == null)

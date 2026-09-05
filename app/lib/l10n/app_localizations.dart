@@ -18465,6 +18465,30 @@ abstract class AppLocalizations {
   /// **'Redo'**
   String get redo;
 
+  /// Heading of the compact card listing the topics to speak about while recording the speech profile
+  ///
+  /// In en, this message translates to:
+  /// **'Answer with your voice:'**
+  String get answerWithYourVoice;
+
+  /// First speech profile topic prompt; must match the backend onboarding question
+  ///
+  /// In en, this message translates to:
+  /// **'Where do you live?'**
+  String get speechProfileTopicLocation;
+
+  /// Second speech profile topic prompt; must match the backend onboarding question
+  ///
+  /// In en, this message translates to:
+  /// **'What do you do for work?'**
+  String get speechProfileTopicWork;
+
+  /// Third speech profile topic prompt; must match the backend onboarding question
+  ///
+  /// In en, this message translates to:
+  /// **'What is your long-term goal?'**
+  String get speechProfileTopicGoal;
+
   /// Status when an active call transcription socket receives no audio frames
   ///
   /// In en, this message translates to:
