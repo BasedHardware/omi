@@ -106,7 +106,6 @@ final class CuaControlStatusStore: ObservableObject {
     isEnabled && !isSuspended && missingGrantCount == 0 && !screenNeedsRelaunch
   }
 
-
   func stopNow() { gate.suspend(reason: "stopped from Settings") }
   func rearm() { gate.rearm() }
 

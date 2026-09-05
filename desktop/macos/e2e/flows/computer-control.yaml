@@ -6,6 +6,7 @@ app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ComputerUsePermissionsBlock.swift
   - desktop/macos/Desktop/Sources/ComputerUse/CuaControlStatusStore.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaControlCopy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AgentExtensionsSections.swift
   - desktop/macos/Desktop/Sources/ComputerUse/CuaControlGate.swift
   - desktop/macos/Desktop/Sources/ComputerUse/CuaPermissions.swift

@@ -1340,7 +1340,8 @@ final class DesktopAutomationActionRegistry {
         "screen_needs_relaunch": store.screenNeedsRelaunch ? "true" : "false",
       ]
       for entry in CuaControlStatusStore.listed {
-        out["grant_\(entry.permission.rawValue)"] = (store.granted[entry.permission] ?? false)
+        out["grant_\(entry.permission.rawValue)"] =
+          (store.granted[entry.permission] ?? false)
           ? "true" : "false"
       }
       return out
