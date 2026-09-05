@@ -75,12 +75,41 @@ def _display_date_for_now(tz_name: Optional[str]):
 # queries on holes it cannot fill.
 _DECLINE_LOCKED = 'locked'
 _DECLINE_NO_CONVERSATIONS = 'no_conversations'
-# The window held conversations, but none this job may summarize (all ``is_locked``, or none
-# carried transcript content). Distinct from ``no_conversations`` because the owner *was*
+# The window held conversations, but none this job may summarize (all ``is_locked``, none
+# carried transcript content, or nothing carried summary body content — titles alone).
+# Distinct from ``no_conversations`` because the owner *was*
 # active: their earlier days are worth walking back for, and the caller may say so.
 _DECLINE_NOTHING_TO_SUMMARIZE = 'nothing_to_summarize'
 # Public name for the one decline a caller outside this module has to act on differently.
 DAILY_SUMMARY_DECLINE_LOCKED = _DECLINE_LOCKED
+
+
+def _conversation_has_summary_content(conversation: Any) -> bool:
+    """True when the recap renderer would show more than this conversation's title.
+
+    Reads the content fields ``conversations_to_string(use_transcript=False)``
+    renders as the body — the first app result's content when one exists, else
+    the structured overview, plus ``structured.action_items`` and
+    ``structured.events`` — so the pre-LLM decline guard cannot drift from
+    what the model would actually see.
+
+    Attendee names are rendered too, but deliberately do not count: they are
+    presence labels attached to the conversation, not summary content, and a
+    day that renders as titles plus a list of names is still the degenerate
+    F-12 shape this gate exists to decline.
+    """
+    apps_results = getattr(conversation, 'apps_results', None) or []
+    if apps_results:
+        content = getattr(apps_results[0], 'content', None)
+        if content and content.strip():
+            return True
+    structured = getattr(conversation, 'structured', None)
+    overview = getattr(structured, 'overview', None)
+    if overview and overview.strip():
+        return True
+    if getattr(structured, 'action_items', None):
+        return True
+    return bool(getattr(structured, 'events', None))
 
 
 def generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc) -> Optional[dict]:
@@ -92,7 +121,11 @@ def generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc
     2. durable by-date idempotency (existing record → return it, no LLM)
     3. conversations exist in the window and are not ``is_locked``
     4. at least one non-discarded conversation has ``transcript_segments``
-    5. LLM generate → persist
+    5. the bounded day carries more than titles for the prompt: some
+       conversation has a non-empty ``structured.overview``, a first app
+       result, action items, or events — the body fields the recap renderer
+       shows
+    6. LLM generate → persist
 
     Returns the stored record (or the pre-existing one), or ``None`` when a guard declined.
     """
@@ -181,6 +214,20 @@ def _generate_and_store_daily_summary(
             from_mode='full_day', to_mode='truncated_day', reason='quota', outcome='degraded'
         )
     conversations = bounded.conversations
+
+    # The prompt is built by ``conversations_to_string(use_transcript=False)``,
+    # which renders the title plus the first app result or the structured
+    # overview, plus action items and events. A bounded day where no
+    # conversation carries any of these leaves the model titles alone: the
+    # output is thin or hallucinated
+    # and then pushed (flip-review F-12 / decision 4). Decline before the LLM
+    # call — no call, no record, no push. Paid, pre-flip and mobile days are
+    # unchanged by construction: their overviews are non-empty, so this guard
+    # never fires for them.
+    if not any(_conversation_has_summary_content(c) for c in conversations if not c.discarded):
+        logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with summary content')
+        release_daily_summary_lock(uid, date_str)
+        return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
 
     summary_data = generate_comprehensive_daily_summary(
         uid,

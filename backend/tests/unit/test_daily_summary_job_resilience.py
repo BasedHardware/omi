@@ -13,7 +13,7 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any, Dict, Iterator, List, Tuple
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
@@ -466,6 +466,11 @@ class _FakeConversation:
         self.discarded = False
         self.transcript_segments = ['segment']
         self.started_at = datetime(2026, 8, 23, 9, tzinfo=timezone.utc)
+        # The pre-LLM summary-content gate (flip-review F-12) declines a day
+        # whose conversations carry titles only; these tests pin the send path,
+        # so the fixture carries body content.
+        self.apps_results: list = []
+        self.structured = SimpleNamespace(overview='You shipped the thing.')
 
 
 @contextmanager
