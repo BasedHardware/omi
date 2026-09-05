@@ -142,6 +142,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Omi talks to the development server on your Mac so you can sign in and use the local API.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Omi uses Bluetooth to connect to your Omi wearable and stream its microphone audio to your phone — for example, to transcribe your meetings into notes and check the device's battery.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
