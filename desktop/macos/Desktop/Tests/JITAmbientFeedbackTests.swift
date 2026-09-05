@@ -40,13 +40,17 @@ final class JITAmbientFeedbackTests: XCTestCase {
 
   private final class LockedCounter: @unchecked Sendable {
     private let lock = NSLock()
-    private var value = 0
+    private var count = 0
 
     func increment() -> Int {
       lock.withLock {
-        value += 1
-        return value
+        count += 1
+        return count
       }
+    }
+
+    var value: Int {
+      lock.withLock { count }
     }
   }
 
@@ -58,7 +62,8 @@ final class JITAmbientFeedbackTests: XCTestCase {
 
   private func context(
     ownerID: String = "owner",
-    accountGeneration: Int = 4
+    accountGeneration: Int = 4,
+    authorizationGeneration: UInt64 = 0
   ) -> JITAmbientFeedbackContext {
     let candidateID = JITProactivityReservation.opaqueIdentifier(
       ["candidate", "ambient-feedback"], installationIdentity: "fixture")
@@ -69,6 +74,7 @@ final class JITAmbientFeedbackTests: XCTestCase {
       eventID: eventID,
       candidateID: candidateID,
       accountGeneration: accountGeneration,
+      authorizationGeneration: authorizationGeneration,
       suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity(
         evaluationID: UUID(uuidString: "00000000-0000-0000-0000-000000000101") ?? UUID(),
         suggestionID: UUID(uuidString: "00000000-0000-0000-0000-000000000102") ?? UUID()
@@ -96,12 +102,14 @@ final class JITAmbientFeedbackTests: XCTestCase {
       ownerID: "owner",
       eventID: eventID,
       candidateID: candidateID,
-      accountGeneration: 4)
+      accountGeneration: 4,
+      authorizationGeneration: 0)
     let retry = JITAmbientFeedbackContext(
       ownerID: "owner",
       eventID: eventID,
       candidateID: candidateID,
-      accountGeneration: 4)
+      accountGeneration: 4,
+      authorizationGeneration: 0)
     XCTAssertEqual(
       first.suggestionIdentity,
       retry.suggestionIdentity,
@@ -113,7 +121,8 @@ final class JITAmbientFeedbackTests: XCTestCase {
       ownerID: "owner",
       eventID: eventID,
       candidateID: changedCandidateID,
-      accountGeneration: 4)
+      accountGeneration: 4,
+      authorizationGeneration: 0)
     XCTAssertNotEqual(first.suggestionIdentity, changed.suggestionIdentity)
   }
 
@@ -183,6 +192,54 @@ final class JITAmbientFeedbackTests: XCTestCase {
     )
 
     XCTAssertEqual(recorder.calls.count, 1)
+  }
+
+  func testAmbientRouterRejectsFreshSnapshotAfterSameOwnerReauthentication() async throws {
+    let authority = RuntimeOwnerAuthorizationAuthority()
+    authority.endTransition(ownerID: "owner")
+    let oldSnapshot = try XCTUnwrap(
+      authority.capture(ownerID: "owner", expectedOwnerID: "owner"))
+    let context = context(authorizationGeneration: oldSnapshot.authorizationGeneration)
+
+    authority.beginTransition()
+    authority.endTransition(ownerID: "owner")
+    let freshSnapshot = try XCTUnwrap(
+      authority.capture(ownerID: "owner", expectedOwnerID: "owner"))
+    XCTAssertNotEqual(oldSnapshot.authorizationGeneration, freshSnapshot.authorizationGeneration)
+
+    let recorder = Recorder()
+    await JITAmbientFeedbackActionRouter.record(
+      .useful,
+      context: context,
+      authorizationSnapshot: freshSnapshot,
+      currentAccountGeneration: context.accountGeneration,
+      authorizationCurrent: { snapshot in authority.isCurrent(snapshot, ownerID: "owner") },
+      recorder: { context, action, _ in recorder.append(context, action) }
+    )
+
+    XCTAssertTrue(
+      recorder.calls.isEmpty,
+      "old-session feedback must not use a fresh same-owner snapshot")
+  }
+
+  func testAmbientRouterDropsFeedbackWhenCardWasReplacedBeforeMutation() async throws {
+    let authorization = try authorization()
+    let context = context(authorizationGeneration: authorization.authorizationGeneration)
+    let recorder = Recorder()
+    let checks = LockedCounter()
+
+    await JITAmbientFeedbackActionRouter.record(
+      .useful,
+      context: context,
+      authorizationSnapshot: authorization,
+      currentAccountGeneration: context.accountGeneration,
+      authorizationCurrent: { _ in true },
+      presentationCurrent: { checks.increment() == 1 },
+      recorder: { context, action, _ in recorder.append(context, action) }
+    )
+
+    XCTAssertEqual(checks.value, 2, "the live-card identity must be rechecked at the write seam")
+    XCTAssertTrue(recorder.calls.isEmpty, "a replaced card must not write feedback")
   }
 
   func testAmbientMutationRechecksOwnerAfterSuspendedRecorderHop() async throws {

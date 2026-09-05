@@ -10,6 +10,11 @@ private struct RuntimeOwnerDefaultsReference: @unchecked Sendable {
 struct RuntimeOwnerAuthorizationSnapshot: Equatable, Sendable {
   let ownerID: String
   fileprivate let generation: UInt64
+
+  /// Session generation captured with the owner. A fresh snapshot after a
+  /// same-owner sign-out/sign-in must not authorize work carrying the prior
+  /// session's provenance.
+  var authorizationGeneration: UInt64 { generation }
 }
 
 final class RuntimeOwnerAuthorizationAuthority: @unchecked Sendable {

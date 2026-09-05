@@ -401,6 +401,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     guard let ownerID = metadata.jitFeedbackContext?.ownerID ?? metadata.jitAmbientFeedbackContext?.ownerID,
       ownerID == metadata.authorizationSnapshot.ownerID,
       RuntimeOwnerIdentity.isAuthorizationCurrent(metadata.authorizationSnapshot),
+      Self.jitFeedbackAuthorizationGenerationMatches(
+        jitFeedbackContext: metadata.jitFeedbackContext,
+        jitAmbientFeedbackContext: metadata.jitAmbientFeedbackContext,
+        authorizationSnapshot: metadata.authorizationSnapshot),
       Self.isCurrentJITAccountGeneration(metadata)
     else { return false }
 
@@ -441,6 +445,17 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       jitFeedbackContext: metadata.jitFeedbackContext,
       jitAmbientFeedbackContext: metadata.jitAmbientFeedbackContext,
       currentGeneration: AccountCutoverControlManager.shared.control.accountGeneration)
+  }
+
+  private static func jitFeedbackAuthorizationGenerationMatches(
+    jitFeedbackContext: JITTriggerFeedbackContext?,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) -> Bool {
+    guard let jitAmbientFeedbackContext else { return true }
+    return jitFeedbackContext == nil
+      && jitAmbientFeedbackContext.authorizationGeneration
+        == authorizationSnapshot.authorizationGeneration
   }
 
   /// Testable generation fence shared by relaunch routing and the in-process
@@ -541,6 +556,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         "event_id": context.eventID,
         "candidate_id": context.candidateID,
         "account_generation": context.accountGeneration,
+        "authorization_generation": context.authorizationGeneration,
         "evaluation_id": context.suggestionIdentity.evaluationID.uuidString,
         "suggestion_id": context.suggestionIdentity.suggestionID.uuidString,
       ]
@@ -584,16 +600,20 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       let eventID = payload["event_id"] as? String,
       let candidateID = payload["candidate_id"] as? String,
       let accountGeneration = payload["account_generation"] as? Int,
+      let authorizationGenerationNumber = payload["authorization_generation"] as? NSNumber,
       let evaluationRaw = payload["evaluation_id"] as? String,
       let suggestionRaw = payload["suggestion_id"] as? String,
       let evaluationID = UUID(uuidString: evaluationRaw),
-      let suggestionID = UUID(uuidString: suggestionRaw)
+      let suggestionID = UUID(uuidString: suggestionRaw),
+      authorizationGenerationNumber.int64Value >= 0,
+      let authorizationGeneration = UInt64(exactly: authorizationGenerationNumber.int64Value)
     else { return nil }
     let context = JITAmbientFeedbackContext(
       ownerID: ownerID,
       eventID: eventID,
       candidateID: candidateID,
       accountGeneration: accountGeneration,
+      authorizationGeneration: authorizationGeneration,
       suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity(
         evaluationID: evaluationID, suggestionID: suggestionID))
     return context.isValid ? context : nil
@@ -1312,6 +1332,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     onDropped: (() -> Void)? = nil
   ) {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      Self.jitFeedbackAuthorizationGenerationMatches(
+        jitFeedbackContext: jitFeedbackContext,
+        jitAmbientFeedbackContext: jitAmbientFeedbackContext,
+        authorizationSnapshot: authorizationSnapshot),
       Self.jitFeedbackGenerationsMatchCurrent(
         jitFeedbackContext: jitFeedbackContext,
         jitAmbientFeedbackContext: jitAmbientFeedbackContext)

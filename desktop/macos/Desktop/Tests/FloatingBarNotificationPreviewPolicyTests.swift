@@ -311,7 +311,8 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       ownerID: owner,
       eventID: eventID,
       candidateID: candidateID,
-      accountGeneration: currentGeneration + 1)
+      accountGeneration: currentGeneration + 1,
+      authorizationGeneration: 0)
     var droppedCount = 0
     let service = NotificationService(registerWithSystemNotificationCenter: false)
 

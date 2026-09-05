@@ -9,6 +9,7 @@ struct JITAmbientFeedbackContext: Equatable, Sendable {
   let eventID: String
   let candidateID: String
   let accountGeneration: Int
+  let authorizationGeneration: UInt64
   let suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity
 
   init(
@@ -16,19 +17,22 @@ struct JITAmbientFeedbackContext: Equatable, Sendable {
     eventID: String,
     candidateID: String,
     accountGeneration: Int,
+    authorizationGeneration: UInt64,
     suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     self.ownerID = ownerID
     self.eventID = eventID
     self.candidateID = candidateID
     self.accountGeneration = accountGeneration
+    self.authorizationGeneration = authorizationGeneration
     self.suggestionIdentity =
       suggestionIdentity
       ?? Self.stableSuggestionIdentity(
         ownerID: ownerID,
         eventID: eventID,
         candidateID: candidateID,
-        accountGeneration: accountGeneration)
+        accountGeneration: accountGeneration,
+        authorizationGeneration: authorizationGeneration)
   }
 
   /// Ambient candidates do not have the suggestion assistant's evaluation
@@ -39,9 +43,11 @@ struct JITAmbientFeedbackContext: Equatable, Sendable {
     ownerID: String,
     eventID: String,
     candidateID: String,
-    accountGeneration: Int
+    accountGeneration: Int,
+    authorizationGeneration: UInt64
   ) -> SuggestionAssistantTelemetry.NotificationIdentity {
-    let seed = "\(ownerID)\u{1f}\(eventID)\u{1f}\(candidateID)\u{1f}\(accountGeneration)"
+    let seed =
+      "\(ownerID)\u{1f}\(eventID)\u{1f}\(candidateID)\u{1f}\(accountGeneration)\u{1f}\(authorizationGeneration)"
     return SuggestionAssistantTelemetry.NotificationIdentity(
       evaluationID: deterministicUUID("evaluation\u{1f}\(seed)"),
       suggestionID: deterministicUUID("suggestion\u{1f}\(seed)"))
@@ -58,7 +64,12 @@ struct JITAmbientFeedbackContext: Equatable, Sendable {
       String(characters[16..<20]),
       String(characters[20..<32]),
     ].joined(separator: "-")
-    return UUID(uuidString: uuidString)!
+    guard let uuid = UUID(uuidString: uuidString) else {
+      // The string is assembled from a 32-character SHA-256 digest, so this
+      // can only indicate a broken UUID materialization implementation.
+      preconditionFailure("Failed to materialize deterministic UUID")
+    }
+    return uuid
   }
 
   var isValid: Bool {
@@ -92,6 +103,8 @@ enum JITAmbientFeedbackActionRouter {
       RuntimeOwnerAuthorizationSnapshot
     ) async -> Void
 
+  typealias PresentationCurrent = @MainActor @Sendable () -> Bool
+
   static func record(
     _ action: JITTriggerFeedbackAction,
     context: JITAmbientFeedbackContext,
@@ -99,15 +112,19 @@ enum JITAmbientFeedbackActionRouter {
     currentAccountGeneration: Int,
     authorizationCurrent: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool =
       RuntimeOwnerIdentity.isAuthorizationCurrent,
+    presentationCurrent: @escaping PresentationCurrent = { true },
     recorder: Record? = nil
   ) async {
     guard context.isValid,
       context.ownerID == authorizationSnapshot.ownerID,
+      context.authorizationGeneration == authorizationSnapshot.authorizationGeneration,
       context.accountGeneration == currentAccountGeneration,
       authorizationCurrent(authorizationSnapshot),
       visibleActions.contains(action)
     else { return }
+    guard await presentationCurrent() else { return }
     if let recorder {
+      guard await presentationCurrent() else { return }
       await recorder(context, action, authorizationSnapshot)
       return
     }
@@ -120,6 +137,7 @@ enum JITAmbientFeedbackActionRouter {
       return generationAuthority.isCurrent(context.accountGeneration)
     }
     guard generationMatches else { return }
+    guard await presentationCurrent() else { return }
     _ = await InterjectSuggestionFeedbackMutation.record(
       evaluationID: context.suggestionIdentity.evaluationID,
       suggestionID: context.suggestionIdentity.suggestionID,

@@ -3520,6 +3520,13 @@ class FloatingControlBarManager {
     window?.makeKeyAndOrderFront(nil)
   }
 
+  /// A feedback task may outlive the card that launched it. Callers use this
+  /// main-actor check immediately before mutation so a replacement cannot be
+  /// credited to the dismissed card (or dismiss the replacement afterward).
+  func isCurrentNotification(_ notificationID: UUID) -> Bool {
+    window?.state.currentNotification?.id == notificationID
+  }
+
   @discardableResult
   func showNotification(
     ownerID: String,

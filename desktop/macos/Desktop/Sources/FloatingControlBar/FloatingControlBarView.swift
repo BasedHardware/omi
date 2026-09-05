@@ -723,6 +723,7 @@ struct FloatingControlBarView: View {
       )
     else { return }
     let accountGeneration = AccountCutoverControlManager.shared.control.accountGeneration
+    let notificationID = notification.id
     Task {
       switch presentation {
       case .planned(let context):
@@ -739,9 +740,13 @@ struct FloatingControlBarView: View {
           action,
           context: context,
           authorizationSnapshot: authorizationSnapshot,
-          currentAccountGeneration: accountGeneration)
+          currentAccountGeneration: accountGeneration,
+          presentationCurrent: {
+            FloatingControlBarManager.shared.isCurrentNotification(notificationID)
+          })
       }
       await MainActor.run {
+        guard FloatingControlBarManager.shared.isCurrentNotification(notificationID) else { return }
         FloatingControlBarManager.shared.dismissCurrentNotification()
       }
     }

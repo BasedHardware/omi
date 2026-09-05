@@ -156,6 +156,10 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       defaultChatFontSize * 1.25
       + OmiMarkdownContent.chatLineSpacing(fontSize: defaultChatFontSize)
     XCTAssertLessThan(
+      oneLineHeight + 1.5,
+      48,
+      "the one-line bound must still reject the measured pre-fix 48 pt multi-line glide")
+    XCTAssertLessThan(
       worstDrift, oneLineHeight + 1.5,
       "a streaming transcript must pin the following viewport to the live edge per tick "
         + "(drifted \(worstDrift) pt of a \(harness.viewportHeight) pt viewport)")
