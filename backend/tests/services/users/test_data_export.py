@@ -261,6 +261,27 @@ def test_malformed_retained_inline_image_aborts_portability_export(inline):
         )
 
 
+@pytest.mark.parametrize("inline", ["===", "b", "not valid base64!!!"])
+def test_invalid_base64_retained_inline_image_aborts_portability_export(inline):
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="inline image bytes are malformed"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "base64": inline, "content_type": "image/jpeg"},
+        )
+
+
+def test_empty_decoded_base64_retained_inline_image_aborts_portability_export(monkeypatch):
+    monkeypatch.setattr(data_export.base64, "b64decode", lambda *args, **kwargs: b"")
+
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="inline image bytes are empty"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "base64": "validbase64", "content_type": "image/jpeg"},
+        )
+
+
 def test_empty_inline_marker_falls_back_to_permanent_storage(monkeypatch):
     download = MagicMock(return_value=b"stored-image")
     monkeypatch.setattr(data_export, "download_frame_request_pixels", download)
