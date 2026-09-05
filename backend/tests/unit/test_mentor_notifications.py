@@ -81,6 +81,7 @@ mock_is_trial_paywalled = MagicMock(return_value=False)
 mock_get_freq = MagicMock(return_value=3)
 mock_get_dev_keys = MagicMock(return_value=[])
 mock_send_notification = MagicMock()
+mock_dispatch_notification = MagicMock()
 
 # redis_mod / mem_mod aggregate the redis/mem-backed mocks. Each attribute is the
 # very mock object patched at the consumption site, so legacy test lines such as
@@ -140,10 +141,10 @@ def _apply_fakes(monkeypatch):
     monkeypatch.setattr(app_int, 'get_available_apps', mock_get_available_apps)
     monkeypatch.setattr(app_int, 'is_trial_paywalled', mock_is_trial_paywalled)
     monkeypatch.setattr(app_int, 'send_notification', mock_send_notification)
+    monkeypatch.setattr(app_int, 'dispatch_notification', mock_dispatch_notification)
     monkeypatch.setattr(app_int, 'incr_daily_notification_count', redis_mod.incr_daily_notification_count)
     monkeypatch.setattr(app_int, 'get_daily_notification_count', redis_mod.get_daily_notification_count)
     monkeypatch.setattr(app_int, 'delete_app_cache_by_id', redis_mod.delete_app_cache_by_id)
-    monkeypatch.setattr(app_int, 'NotificationMessage', MagicMock())
     monkeypatch.setattr(app_int, 'Conversation', MagicMock())
     monkeypatch.setattr(app_int, 'ConversationSource', MagicMock())
     monkeypatch.setattr(app_int, 'Message', MagicMock())
@@ -177,6 +178,7 @@ def _apply_fakes(monkeypatch):
 def _setup_app_integrations_stubs():
     """Reset the app_integrations-runtime shared mocks to a clean default state."""
     mock_send_notification.reset_mock()
+    mock_dispatch_notification.reset_mock()
     mock_get_dev_keys.reset_mock()
     mock_get_dev_keys.return_value = []
     mock_get_freq.return_value = 3
@@ -186,7 +188,7 @@ def _setup_app_integrations_stubs():
     redis_mod.incr_daily_notification_count.reset_mock()
     mem_mod.get_proactive_noti_sent_at.return_value = None
     mem_mod.set_proactive_noti_sent_at.reset_mock()
-    return mock_send_notification
+    return mock_dispatch_notification
 
 
 def _make_segments(count: int) -> list:
