@@ -42,6 +42,7 @@ from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
 from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import AutoMockModule, load_module_fresh, package_submodule_stubs, stub_modules
+import utils.managed_compute as managed_compute
 from utils.managed_compute import Decision
 
 _BACKEND = Path(__file__).resolve().parents[2]
@@ -810,8 +811,10 @@ def test_entrypoint_matrix(
     def fake_authorize(uid: str, feature: str, funding_owner: str, **_kwargs: Any) -> Decision:
         return _decision_for_cell(cell, funding_owner)
 
-    monkeypatch.setattr(pc, 'authorize_managed_compute', fake_authorize)
-    monkeypatch.setattr(pc, 'request_carries_validated_byok_key', lambda _feature: cell == 'byok')
+    # The decision_for closure lives in utils.managed_compute (hoisted when the
+    # connector memory producers started sharing it), so its seams patch there.
+    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', fake_authorize)
+    monkeypatch.setattr(managed_compute, 'request_carries_validated_byok_key', lambda _feature: cell == 'byok')
 
     if flag_on and cell == 'basic_with_projection':
         real_resolve = pc.resolve_free_tier_processing_plan
@@ -875,7 +878,7 @@ def test_red_proof_flag_on_ignoring_plan_makes_basic_desktop_call_structured(mon
     monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
     spies = _spy_managed_effects(monkeypatch, pc)
     monkeypatch.setattr(
-        pc,
+        managed_compute,
         'authorize_managed_compute',
         lambda *args, **kwargs: _decision_for_cell('basic_no_projection', 'omi'),
     )
@@ -906,7 +909,7 @@ def test_red_proof_minimum_must_report_actual_persistence(monkeypatch: Any, pc: 
     monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
     _spy_managed_effects(monkeypatch, pc)
     monkeypatch.setattr(
-        pc,
+        managed_compute,
         'authorize_managed_compute',
         lambda *args, **kwargs: _decision_for_cell('basic_no_projection', 'omi'),
     )
@@ -932,7 +935,7 @@ def test_red_proof_desktop_merge_flag_on_basic_is_minimum_not_legacy(monkeypatch
     monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
     spies = _spy_managed_effects(monkeypatch, pc)
     monkeypatch.setattr(
-        pc,
+        managed_compute,
         'authorize_managed_compute',
         lambda *args, **kwargs: _decision_for_cell('basic_no_projection', 'omi'),
     )
