@@ -51,5 +51,6 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/desktop_promote_beta.yml
+    secrets: inherit
     with:
       release_tag: ${{ inputs.release_tag }}
