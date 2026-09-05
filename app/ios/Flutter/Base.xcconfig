@@ -1,5 +1,15 @@
 APP_BUNDLE_IDENTIFIER=com.friend-app-with-wearable.ios12
+APP_GROUP_IDENTIFIER=group.com.friend-app-with-wearable.ios12
 AUTH_CALLBACK_SCHEME=omi
+
+// Default reversed Google client ID. setup.sh regenerates Custom.xcconfig from
+// the flavour's GoogleService-Info.plist and, when that plist carries a
+// REVERSED_CLIENT_ID, overrides this value — Custom.xcconfig is included after
+// this file. The default exists because the prebuilt community Firebase config
+// carries no REVERSED_CLIENT_ID, and Runner/Info.plist emits this value as a
+// CFBundleURLSchemes entry: with nothing here, a community build ships an empty
+// URL scheme and the Google Sign-In redirect has nowhere to land.
+GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde
 
 // Ray-Ban Meta (Meta Wearables DAT) credentials — optional, git-ignored.
 // Copy RayBanMetaCredentials.xcconfig.template to RayBanMetaCredentials.xcconfig

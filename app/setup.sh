@@ -66,6 +66,152 @@ function generate_device_suffix() {
 }
 
 ######################################
+# Detect Apple Development Team ID
+######################################
+function detect_apple_team_id() {
+  # 1. Honour explicit override
+  if [ -n "${APPLE_DEVELOPMENT_TEAM:-}" ]; then
+    echo "$APPLE_DEVELOPMENT_TEAM"
+    return
+  fi
+
+  local profiles_dir="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+  local suffix
+  suffix=$(generate_device_suffix)
+  local bundle_pattern="com.friend-app-with-wearable.ios12-${suffix}"
+
+  # 2. Look for a profile whose AppID matches this machine's bundle ID
+  local team_id=""
+  if [ -d "$profiles_dir" ]; then
+    while IFS= read -r -d '' profile; do
+      local plist
+      plist=$(security cms -D -i "$profile" 2>/dev/null) || continue
+      local app_id
+      app_id=$(echo "$plist" | xmllint --xpath \
+        "string(//key[text()='application-identifier']/following-sibling::string[1])" \
+        - 2>/dev/null)
+      local bare_id="${app_id#*.}"
+      if [ "$bare_id" = "$bundle_pattern" ]; then
+        team_id=$(echo "$plist" | xmllint --xpath \
+          "string(//key[text()='TeamIdentifier']/following-sibling::array[1]/string[1])" \
+          - 2>/dev/null)
+        break
+      fi
+    done < <(find "$profiles_dir" -name '*.mobileprovision' -print0 2>/dev/null)
+  fi
+
+  # 3. Fallback: offer the teams named by installed profiles, but only if this
+  #    machine holds an iOS development identity at all.
+  #
+  #    Deliberately does NOT try to decide which team a certificate belongs to.
+  #    The team in a certificate's common name is not authoritative: Apple keeps
+  #    the original personal-team ID there when a developer joins a paid team, so
+  #    a certificate reading "Apple Development: NAME (PERSONALTEAM)" can be
+  #    issued under a different team entirely — the real one is the OU, readable
+  #    only by decoding the certificate. Matching the common name therefore
+  #    rejects teams the developer can sign for and accepts ones they cannot.
+  #
+  #    The profile's own TeamIdentifier is authoritative, so that is what gets
+  #    offered. The identity check is a presence test only: with no iOS
+  #    development identity, nothing here is signable and prompting for a team
+  #    would be pointless. "iPhone Developer" is the legacy name for the same
+  #    identity and still exists on older machines. "Developer ID Application"
+  #    is deliberately excluded — it signs Mac distribution builds and cannot
+  #    sign an iOS development build.
+  #
+  #    When several teams qualify this cannot tell them apart, so it asks rather
+  #    than guessing — see the prompt below.
+  # SHA-1 fingerprints of the iOS development identities whose private keys this
+  # machine holds. "Developer ID Application" is excluded: it signs Mac
+  # distribution builds and cannot sign an iOS development build.
+  local held_fingerprints
+  held_fingerprints=$(security find-identity -v -p codesigning 2>/dev/null \
+    | grep -E "Apple Development|iPhone Developer" \
+    | awk '{print toupper($2)}' | grep -E '^[0-9A-F]{40}$')
+
+  if [ -z "$team_id" ] && [ -d "$profiles_dir" ] && [ -n "$held_fingerprints" ]; then
+    local seen_teams=()
+    while IFS= read -r -d '' profile; do
+      local plist candidate
+      plist=$(security cms -D -i "$profile" 2>/dev/null) || continue
+      candidate=$(echo "$plist" | xmllint --xpath \
+        "string(//key[text()='TeamIdentifier']/following-sibling::array[1]/string[1])" \
+        - 2>/dev/null)
+      [ -n "$candidate" ] || continue
+
+      local already_seen=false
+      for t in "${seen_teams[@]:-}"; do [ "$t" = "$candidate" ] && already_seen=true && break; done
+      $already_seen && continue
+
+      # Offer the team only if the profile embeds a certificate whose private key
+      # is on this machine — the same question Xcode asks when it picks a profile.
+      # Deliberately not decided from the certificate's common name: Apple keeps
+      # the original personal-team ID there when a developer joins a paid team, so
+      # a certificate reading "Apple Development: NAME (PERSONALTEAM)" can be
+      # issued under a different team (the real one is the OU). Matching the name
+      # both rejects teams the developer can sign for and accepts ones they cannot.
+      local usable=false idx=0 der fingerprint
+      while [ "$idx" -lt 50 ]; do
+        der=$(printf '%s' "$plist" \
+          | plutil -extract "DeveloperCertificates.$idx" raw -o - - 2>/dev/null) || break
+        [ -n "$der" ] || break
+        fingerprint=$(printf '%s' "$der" | base64 -d 2>/dev/null \
+          | openssl x509 -inform DER -noout -fingerprint -sha1 2>/dev/null \
+          | sed 's/.*=//; s/://g' | tr '[:lower:]' '[:upper:]')
+        if [ -n "$fingerprint" ] && printf '%s\n' "$held_fingerprints" | grep -qx "$fingerprint"; then
+          usable=true
+          break
+        fi
+        idx=$((idx + 1))
+      done
+      $usable && seen_teams+=("$candidate")
+    done < <(find "$profiles_dir" -name '*.mobileprovision' -print0 2>/dev/null)
+
+    if [ "${#seen_teams[@]}" -eq 1 ]; then
+      team_id="${seen_teams[0]}"
+    elif [ "${#seen_teams[@]}" -gt 1 ]; then
+      echo "⚠️  Multiple Apple Developer accounts found. Choose one:" >&2
+      for i in "${!seen_teams[@]}"; do
+        echo "   $((i+1))) ${seen_teams[$i]}" >&2
+      done
+      # Same reasoning as the prompt below: never block on read without a TTY.
+      if [ -t 0 ]; then
+        local choice
+        read -rp "   Enter number [1-${#seen_teams[@]}]: " choice
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#seen_teams[@]}" ]; then
+          team_id="${seen_teams[$((choice-1))]}"
+        fi
+      fi
+    fi
+  fi
+
+  # 4. Last resort: prompt the user (with format validation)
+  if [ -z "$team_id" ]; then
+    echo "⚠️  Could not auto-detect your Apple Development Team ID." >&2
+    echo "   Find it at: https://developer.apple.com/account -> Membership" >&2
+    echo "   or run: APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX bash setup.sh ios" >&2
+    # Only prompt when a human is actually attached. Without this, a
+    # non-interactive run (CI, nested automation) blocks forever on read
+    # instead of failing with a usable message.
+    if [ ! -t 0 ]; then
+      echo "   ❌ No terminal available to prompt for a Team ID." >&2
+      echo "      Set APPLE_DEVELOPMENT_TEAM and re-run." >&2
+      return 1
+    fi
+    while true; do
+      read -rp "   Enter your Team ID (10 uppercase alphanumeric characters): " team_id
+      team_id=$(echo "${team_id}" | tr '[:lower:]' '[:upper:]' | tr -d ' ')
+      if [[ "$team_id" =~ ^[A-Z0-9]{10}$ ]]; then
+        break
+      fi
+      echo "   ❌ Invalid Team ID '${team_id}' — must be exactly 10 uppercase letters/digits." >&2
+    done
+  fi
+
+  echo "$team_id"
+}
+
+######################################
 # Generate custom configs for iOS
 ######################################
 function generate_ios_custom_config() {
@@ -87,12 +233,23 @@ function generate_ios_custom_config() {
     local suffixed_bundle_id="com.friend-app-with-wearable.ios12-${suffix}"
     /usr/libexec/PlistBuddy -c "Set :BUNDLE_ID ${suffixed_bundle_id}" "ios/Config/${config_name}/GoogleService-Info.plist"
     /usr/libexec/PlistBuddy -c "Set :BUNDLE_ID ${suffixed_bundle_id}" ios/Runner/GoogleService-Info.plist
+    # The widget shares defaults through this group, so it must track the suffixed
+    # bundle. Prod/beta inherit the unsuffixed default from Base.xcconfig.
+    echo "APP_GROUP_IDENTIFIER=group.com.friend-app-with-wearable.ios12-${suffix}" >> ios/Flutter/Custom.xcconfig
   else
     # Beta uses a distinct bundle/callback identity and must be provisioned
     # explicitly by the developer's Apple team.
     echo "APP_BUNDLE_IDENTIFIER=${OMI_MOBILE_BETA_BUNDLE_ID:-com.friend-app-with-wearable.ios12.beta}" >> ios/Flutter/Custom.xcconfig
     echo "AUTH_CALLBACK_SCHEME=${callback_scheme}" >> ios/Flutter/Custom.xcconfig
   fi
+
+  # Detect and write the Development Team ID so automatic signing resolves to the
+  # developer's own Apple team rather than a hardcoded one.
+  echo "🔍 Detecting Apple Development Team ID..."
+  local development_team
+  development_team=$(detect_apple_team_id)
+  echo "✅ Team ID: ${development_team}"
+  echo "DEVELOPMENT_TEAM=${development_team}" >> ios/Flutter/Custom.xcconfig
 }
 
 ######################################
