@@ -138,7 +138,18 @@ struct QueryShellHome: View {
             headerAccessory: { headerAccessory },
             footer: {
               if mode == .answer {
-                composerBar(draft: draft)
+                // Measured as one unit: `composerHeight` is what the panel
+                // reserves for its footer, so a banner outside that
+                // measurement would push the composer down by its own height.
+                VStack(spacing: OmiSpacing.sm) {
+                  ChatQuotaBannerView.Slot()
+                  composerBar(draft: draft)
+                }
+                .onGeometryChange(for: CGFloat.self) {
+                  $0.size.height
+                } action: { measured in
+                  reportComposerHeight(measured)
+                }
               }
             }
           ) {
@@ -268,11 +279,8 @@ struct QueryShellHome: View {
       references: chatProvider.pendingComposerReferences,
       onReferenceRemoved: { chatProvider.removeComposerReference(id: $0) }
     )
-    .onGeometryChange(for: CGFloat.self) {
-      $0.size.height
-    } action: { measured in
-      reportComposerHeight(measured)
-    }
+    // The footer unit (quota banner + composer) is measured where it is
+    // composed, so the bar itself carries no height reporting of its own.
   }
 
   /// Receives the composer's measured height — the same guarded write the

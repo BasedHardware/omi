@@ -4311,6 +4311,144 @@ describe("kernel conversation journal", () => {
     });
     fixture.store.close();
   });
+
+  it("revises an optimistically sealed completion to failed without touching payload or canonical metadata", () => {
+    // #12743: the desktop voice funnel seals a `.success` row `completed` at
+    // provider-response-finish while playback is still draining. When the
+    // reducer later proves the answer never reached the user, the revision
+    // must downgrade the row to `failed` while preserving exactly what the
+    // funnel sealed — content, blocks, resources, and canonical metadata such
+    // as model attribution and the continuity key.
+    const fixture = newSurface("main_chat", "chat", "sealed-terminal-revision");
+    const continuityKey = "voice:sealed-revision";
+    const turnId = `turn_${createHash("sha256")
+      .update(`${continuityKey}\0assistant`)
+      .digest("hex")
+      .slice(0, 32)}`;
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "realtime_voice",
+      status: "completed",
+      content: "Take the blue potion at 12:45.",
+      contentBlocks: [{ type: "text", id: `${turnId}:text`, text: "Take the blue potion at 12:45." }],
+      resources: [],
+      metadataJson: JSON.stringify({
+        continuityKey,
+        modelsUsed: ["gemini-3.1-flash-live-preview"],
+      }),
+      createdAtMs: 10,
+    });
+
+    const revised = updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      status: "failed",
+      metadataJson: JSON.stringify({ terminalReason: "answer_not_delivered" }),
+      terminalRevision: true,
+      nowMs: 11,
+    });
+
+    expect(revised.status).toBe("failed");
+    expect(revised.content).toBe("Take the blue potion at 12:45.");
+    expect(revised.contentBlocks).toEqual([
+      { type: "text", id: `${turnId}:text`, text: "Take the blue potion at 12:45." },
+    ]);
+    expect(revised.resources).toEqual([]);
+    expect(JSON.parse(revised.metadataJson)).toMatchObject({
+      continuityKey,
+      modelsUsed: ["gemini-3.1-flash-live-preview"],
+      terminalReason: "answer_not_delivered",
+    });
+    fixture.store.close();
+  });
+
+  it("rejects a completed-to-failed downgrade without the terminal revision authority", () => {
+    const fixture = newSurface("main_chat", "chat", "sealed-downgrade-authority");
+    const turnId = "turn-downgrade-plain";
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "realtime_voice",
+      status: "completed",
+      content: "sealed",
+      contentBlocks: [],
+      resources: [],
+      metadataJson: "{}",
+      createdAtMs: 10,
+    });
+
+    expect(() => updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      status: "failed",
+      metadataJson: JSON.stringify({ terminalReason: "answer_not_delivered" }),
+      nowMs: 11,
+    })).toThrow(/Invalid journal turn status transition completed -> failed/);
+    fixture.store.close();
+  });
+
+  it("rejects a terminal revision that mutates payload or targets a non-failed status", () => {
+    const fixture = newSurface("main_chat", "chat", "sealed-revision-shape");
+    const turnId = "turn-revision-shape";
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "realtime_voice",
+      status: "completed",
+      content: "sealed",
+      contentBlocks: [],
+      resources: [],
+      metadataJson: JSON.stringify({ continuityKey: "voice:shape" }),
+      createdAtMs: 10,
+    });
+
+    expect(() => updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      status: "failed",
+      content: "rewritten answer",
+      terminalRevision: true,
+      nowMs: 11,
+    })).toThrow(/payload-free downgrade/);
+    expect(() => updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      status: "completed",
+      metadataJson: JSON.stringify({ terminalReason: "x" }),
+      terminalRevision: true,
+      nowMs: 11,
+    })).toThrow(/payload-free downgrade/);
+    // The well-formed revision of the same sealed row still lands.
+    const revised = updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      status: "failed",
+      metadataJson: JSON.stringify({ terminalReason: "playback_failed" }),
+      terminalRevision: true,
+      nowMs: 12,
+    });
+    expect(revised.status).toBe("failed");
+    expect(JSON.parse(revised.metadataJson)).toMatchObject({
+      continuityKey: "voice:shape",
+      terminalReason: "playback_failed",
+    });
+    fixture.store.close();
+  });
 });
 
 interface SurfaceFixture {

@@ -55,6 +55,64 @@ package enum OmiComposerReturnKey: Equatable, Sendable {
 /// NSTextView subclass that reports IME marked-text composition state.
 private class OmiNSTextView: NSTextView {
   var onMarkedTextStatusChange: ((Bool) -> Void)?
+  /// See `OmiTextEditor.onFileDrop`.
+  var onFileDrop: ((URL) -> Void)?
+  /// See `OmiTextEditor.onFileDragTargeted`.
+  var onFileDragTargeted: ((Bool) -> Void)?
+
+  private var handlesFileDrops: Bool { onFileDrop != nil }
+
+  /// Handling the drag here, rather than leaving it to a SwiftUI `.onDrop` layered behind, is what
+  /// makes the *whole* editor a drop target: the text view covers that layer, so without this only
+  /// the few points of padding around it ever saw a file — and dropping on the text itself made
+  /// AppKit insert the file's path.
+  override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+    guard handlesFileDrops, OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
+      return super.draggingEntered(sender)
+    }
+    onFileDragTargeted?(true)
+    return .copy
+  }
+
+  // The host draws the drop highlight, and it has no other way to know a drag is over the text: the
+  // SwiftUI `.onDrop` behind this view only ever sees the padding around it.
+  override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+    onFileDragTargeted?(false)
+    super.draggingExited(sender)
+  }
+
+  override func draggingEnded(_ sender: any NSDraggingInfo) {
+    onFileDragTargeted?(false)
+    super.draggingEnded(sender)
+  }
+
+  override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+    guard handlesFileDrops, OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
+      return super.draggingUpdated(sender)
+    }
+    return .copy
+  }
+
+  override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+    guard let onFileDrop, OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
+      return super.performDragOperation(sender)
+    }
+    onFileDragTargeted?(false)
+    guard
+      let url = sender.draggingPasteboard.readObjects(
+        forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])?.first as? URL
+    else { return false }
+    onFileDrop(url)
+    return true
+  }
+
+  /// AppKit re-registers a text view's default dragged types when it joins a window, so the
+  /// registration must be re-asserted there rather than once at construction.
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    guard handlesFileDrops else { return }
+    registerForDraggedTypes([.fileURL])
+  }
 
   override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
     super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
@@ -94,6 +152,13 @@ package struct OmiTextEditor: NSViewRepresentable {
   /// equivalent for an `NSViewRepresentable`, and deliberately a counter rather than a `Bool` — a flag
   /// that is already `true` cannot ask for the caret back after AppKit gave it to something else.
   var focusRequest: Int = 0
+  /// Receive files dropped anywhere on the editor. Set this and AppKit's own handling — which
+  /// inserts the dropped file's *path* — is replaced by this callback for file drags; text drags
+  /// are untouched. Leave it nil and the editor behaves exactly as AppKit intends.
+  var onFileDrop: ((URL) -> Void)? = nil
+  /// Whether a file drag is currently over the editor, so the host can draw the same highlight it
+  /// draws for the padding around it.
+  var onFileDragTargeted: ((Bool) -> Void)? = nil
 
   // Optional height tracking (for floating bar's window resize flow)
   var minHeight: CGFloat? = nil
@@ -110,6 +175,8 @@ package struct OmiTextEditor: NSViewRepresentable {
     focusOnAppear: Bool = true,
     onMarkedTextChange: ((Bool) -> Void)? = nil,
     focusRequest: Int = 0,
+    onFileDrop: ((URL) -> Void)? = nil,
+    onFileDragTargeted: ((Bool) -> Void)? = nil,
     minHeight: CGFloat? = nil,
     maxHeight: CGFloat? = nil,
     onHeightChange: ((CGFloat) -> Void)? = nil
@@ -123,9 +190,19 @@ package struct OmiTextEditor: NSViewRepresentable {
     self.focusOnAppear = focusOnAppear
     self.onMarkedTextChange = onMarkedTextChange
     self.focusRequest = focusRequest
+    self.onFileDrop = onFileDrop
+    self.onFileDragTargeted = onFileDragTargeted
     self.minHeight = minHeight
     self.maxHeight = maxHeight
     self.onHeightChange = onHeightChange
+  }
+
+  /// Whether a drag is carrying files rather than text. An editor that refuses file drops declines
+  /// exactly these, so the `.onDrop` layered above it receives them and can read their contents;
+  /// left to AppKit, NSTextView accepts the drag itself and inserts the file's *path*.
+  package static func dragCarriesFile(_ pasteboard: NSPasteboard) -> Bool {
+    pasteboard.canReadObject(
+      forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
   }
 
   package func makeNSView(context: Context) -> NSScrollView {
@@ -140,6 +217,8 @@ package struct OmiTextEditor: NSViewRepresentable {
     textView.isAutomaticDashSubstitutionEnabled = false
     textView.isAutomaticTextReplacementEnabled = false
     textView.delegate = context.coordinator
+    textView.onFileDrop = onFileDrop
+    textView.onFileDragTargeted = onFileDragTargeted
     textView.onMarkedTextStatusChange = { [weak coordinator = context.coordinator] hasMarkedText in
       coordinator?.updateMarkedTextState(hasMarkedText)
     }
@@ -176,6 +255,8 @@ package struct OmiTextEditor: NSViewRepresentable {
     // Keep the coordinator's binding fresh so textDidChange writes to the
     // correct task's draftText when SwiftUI reuses this NSView across tasks.
     context.coordinator.updateTextBinding($text)
+    (textView as? OmiNSTextView)?.onFileDrop = onFileDrop
+    (textView as? OmiNSTextView)?.onFileDragTargeted = onFileDragTargeted
 
     if textView.string != text, !textView.hasMarkedText() {
       context.coordinator.isUpdating = true

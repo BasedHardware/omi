@@ -1,6 +1,7 @@
 """Daily summary generation is independent of push delivery, backfills missed days, and has a no-push create route."""
 
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,8 +11,30 @@ import utils.other.notifications as notif
 
 
 class _FakeConvo:
+    """A conversation whose day has something to summarize (non-empty overview).
+
+    The pre-LLM gate declines a day whose conversations carry titles only, so
+    the default fixture must carry summary body content; the thin-day decline
+    has its own tests below.
+    """
+
     transcript_segments = [object()]
     discarded = False
+    apps_results: list = []
+
+    def __init__(self, overview: str = 'You had a productive day.') -> None:
+        self.structured = SimpleNamespace(overview=overview)
+
+
+class _MinimumConvo:
+    """The §1.7 deterministic minimum shape: a title, an empty overview, no app results."""
+
+    transcript_segments = [object()]
+    discarded = False
+    apps_results: list = []
+
+    def __init__(self) -> None:
+        self.structured = SimpleNamespace(overview='')
 
 
 def _install_generation_fakes(monkeypatch, *, existing_by_date=None, tokens_unused=True):
@@ -44,6 +67,10 @@ def _install_generation_fakes(monkeypatch, *, existing_by_date=None, tokens_unus
     )
     monkeypatch.setattr(notif.postprocess_executor, 'submit', lambda *a, **k: None)
     monkeypatch.setattr(notif, 'day_summary_webhook', lambda *a, **k: None)
+    # Without this stub the scheduled path reaches the real MemoryService and issues a
+    # live Firestore query from a unit test, which hangs under api_core's retry (the
+    # empty-overview suite documents the same trap).
+    monkeypatch.setattr(notif, 'memories_learned_payload', lambda *a, **k: [])
     monkeypatch.setattr(notif, 'send_notification', lambda *a, **k: sent.append({'args': a, 'kwargs': k}))
     return generated_dates, created, sent, released
 
@@ -233,6 +260,163 @@ def test_backfill_is_skipped_for_a_user_with_no_conversations(monkeypatch):
     assert len(lock_dates) == 1, f'backfill must not walk back for a dormant user: {lock_dates}'
     # The current day is looked at twice at most (generation guard + the has-conversations probe).
     assert len(conversation_queries) <= 2, conversation_queries
+
+
+def test_a_day_of_minimum_conversations_costs_zero_llm_calls_and_no_push(monkeypatch):
+    """A §1.7-minimum day (titles + empty overviews, no app results) renders as
+    titles only for the recap prompt; generating from that input is thin or
+    hallucinated and then pushed (flip-review F-12). Decline before the LLM:
+    no call, no record, no push — but the owner *was* recording, so backfill
+    still walks their earlier days."""
+    generated_dates, created, sent, released = _install_generation_fakes(monkeypatch)
+    display = notif._display_date_for_now('UTC')
+    today_str = display.strftime('%Y-%m-%d')
+    start_utc, end_utc = notif.local_day_bounds_utc(display, 'UTC')
+
+    def _conversations(uid, start_date=None, end_date=None, **_k):
+        if start_date and start_date.date() >= display:
+            return [{'is_locked': False, 'id': 'thin'}]
+        return [{'is_locked': False, 'id': 'full'}]
+
+    monkeypatch.setattr(notif.conversations_db, 'get_conversations', _conversations)
+    monkeypatch.setattr(
+        notif, 'deserialize_conversation', lambda d: _MinimumConvo() if d['id'] == 'thin' else _FakeConvo()
+    )
+
+    record, created_flag, declined = notif._generate_and_store_daily_summary('u1', today_str, start_utc, end_utc)
+
+    assert record is None and created_flag is False
+    assert declined == notif._DECLINE_NOTHING_TO_SUMMARIZE
+    assert generated_dates == [], 'the LLM must not be called for a titles-only day'
+    assert created == [], 'no DailySummary document may be written'
+    assert released == [today_str], 'a declined day must not stay locked'
+
+    notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
+
+    assert sent == [], 'nothing may be pushed for a titles-only day'
+    assert today_str not in generated_dates
+    assert (
+        len(generated_dates) == notif._DAILY_SUMMARY_BACKFILL_GENERATE_CAP
+    ), 'the owner was recording, so the backfill walk still runs on content-bearing days'
+
+
+def test_a_day_with_one_nonempty_overview_generates_exactly_once(monkeypatch):
+    """The gate is an any(): a single conversation carrying summary body content
+    is a day worth summarizing. Paid / pre-flip / mobile days look like this —
+    they generate exactly as before."""
+    generated_dates, created, sent, _released = _install_generation_fakes(monkeypatch)
+    display = notif._display_date_for_now('UTC')
+
+    def _conversations(uid, start_date=None, end_date=None, **_k):
+        if start_date and start_date.date() >= display:
+            # The current day: one §1.7-minimum conversation and one enriched one.
+            return [{'is_locked': False, 'id': 'thin'}, {'is_locked': False, 'id': 'full'}]
+        return [{'is_locked': False, 'id': 'full'}]
+
+    monkeypatch.setattr(notif.conversations_db, 'get_conversations', _conversations)
+    monkeypatch.setattr(
+        notif, 'deserialize_conversation', lambda d: _MinimumConvo() if d['id'] == 'thin' else _FakeConvo()
+    )
+
+    notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
+
+    assert len(generated_dates) == 1 + notif._DAILY_SUMMARY_BACKFILL_GENERATE_CAP
+    assert len(sent) == 1
+    assert created
+
+
+def test_an_app_result_content_alone_counts_as_summary_content(monkeypatch):
+    """The renderer prefers the first app result over the overview; a day whose
+    only content lives in ``apps_results[0].content`` is summarizable."""
+    generated_dates, _created, _sent, _released = _install_generation_fakes(monkeypatch)
+
+    class _AppResultConvo:
+        transcript_segments = [object()]
+        discarded = False
+        structured = SimpleNamespace(overview='')
+
+        def __init__(self) -> None:
+            self.apps_results = [SimpleNamespace(content='A busy day of meetings.')]
+
+    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _AppResultConvo())
+    record, created, _declined = notif._generate_and_store_daily_summary(
+        'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
+    )
+
+    assert record is not None and created is True
+    assert generated_dates == ['2026-08-20']
+
+
+def test_action_items_alone_count_as_summary_content(monkeypatch):
+    """The renderer also emits ``structured.action_items`` into the prompt body
+    (render.py). A day whose conversations have empty overviews, no app
+    results, but real action items is summarizable — declining it would drop
+    recaps that previously generated."""
+    generated_dates, created, _sent, _released = _install_generation_fakes(monkeypatch)
+
+    class _ActionItemsConvo:
+        transcript_segments = [object()]
+        discarded = False
+        apps_results: list = []
+        structured = SimpleNamespace(overview='', action_items=[object()], events=[])
+
+    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _ActionItemsConvo())
+    record, created_flag, declined = notif._generate_and_store_daily_summary(
+        'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
+    )
+
+    assert record is not None and created_flag is True
+    assert declined is None
+    assert generated_dates == ['2026-08-20']
+    assert created, 'an action-items day must still persist a DailySummary'
+
+
+def test_events_alone_count_as_summary_content(monkeypatch):
+    """Same as above for ``structured.events``: the renderer emits them into
+    the prompt body, so they are summary content."""
+    generated_dates, _created, _sent, _released = _install_generation_fakes(monkeypatch)
+
+    class _EventsConvo:
+        transcript_segments = [object()]
+        discarded = False
+        apps_results: list = []
+        structured = SimpleNamespace(overview='', action_items=[], events=[object()])
+
+    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _EventsConvo())
+    record, created, _declined = notif._generate_and_store_daily_summary(
+        'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
+    )
+
+    assert record is not None and created is True
+    assert generated_dates == ['2026-08-20']
+
+
+def test_empty_action_items_and_events_do_not_rescue_a_titles_only_day(monkeypatch):
+    """``action_items=[]``/``events=[]`` are the §1.7 deterministic minimum's
+    neutral empties — they must not flip the gate, and neither do attendee
+    names (presence labels, not summary content): a titles-only day still
+    declines before the LLM."""
+    generated_dates, created, sent, released = _install_generation_fakes(monkeypatch)
+
+    class _EmptyListsConvo:
+        transcript_segments = [object()]
+        discarded = False
+        apps_results: list = []
+
+        def __init__(self) -> None:
+            self.structured = SimpleNamespace(overview='', action_items=[], events=[])
+
+    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _EmptyListsConvo())
+    record, created_flag, declined = notif._generate_and_store_daily_summary(
+        'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
+    )
+
+    assert record is None and created_flag is False
+    assert declined == notif._DECLINE_NOTHING_TO_SUMMARIZE
+    assert generated_dates == []
+    assert created == []
+    assert sent == []
+    assert released == ['2026-08-20']
 
 
 def test_a_day_declined_before_the_llm_releases_its_lock(monkeypatch):

@@ -52,7 +52,7 @@ extension RealtimeHubController {
     audioReceivedThisTurn = false
     lastExternalToolName = ""
     lastExternalToolErrorCode = ""
-    turnIdempotencyKey = "voice:\(turnID.rawValue.uuidString.lowercased())"
+    turnIdempotencyKey = Self.voiceContinuityKey(for: turnID)
     turnPublicWebEvidence = nil
     resetScreenGrounding(for: turnID)
     if let interruptedTurnTask, !supersedesPendingReplacement {
@@ -66,7 +66,7 @@ extension RealtimeHubController {
             terminal: .interruptedByBargeIn,
             idempotencyKey: interruptedTurn.idempotencyKey,
             acceptedSpawnOwnerID: interruptedTurn.acceptedSpawnOwnerID,
-            answerDelivered: interruptedTurn.answerDelivered) ?? false
+            delivery: interruptedTurn.answerDelivered ? .delivered : .notDelivered) ?? false
         }
       }
     }

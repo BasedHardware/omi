@@ -1148,6 +1148,11 @@ struct DesktopHomeView: View {
         selectedSettingsSection = .advanced
         navigateToLegacyDestination(.settings)
       }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToPlanSettings)) { _ in
+        selectedSettingsSection = .planUsage
+        highlightedSettingId = "planusage.current"
+        navigateToLegacyDestination(.settings)
+      }
       .onReceive(NotificationCenter.default.publisher(for: .navigateToRewind)) { _ in
         log("DesktopHomeView: Received navigateToRewind notification")
         navigateToLegacyDestination(.rewind)

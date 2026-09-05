@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-modeled-null-default-persisted-as-explicit-key",
+  "violated_contract": "A modeled optional field whose serializer always emits its None default must never reach a merge-based persist unchecked: an explicit null is a real stored key, so every document the persist path touches gains the field even when no branch of the program ever decided to write it. Conversation.processing_state shipped this way — Conversation.dict() emitted processing_state: null on every normal persist, transaction.set(merge=True) stored it, and with both rollout flags off the dark-rollout promise (a field appears only when a branch owns writing it) was already broken in production. Missing versus explicit-null is a real Firestore distinction and it is invisible to type-checked code: only the stored documents show the drift, which is also why the terminal_no_derived_effects marker follows a write-only-in-the-owning-branch discipline that this modeled field did not receive. The same mechanism silently breaks rollout monitors keyed on field presence and makes every document carry a field whose only legitimate value is written by one flag-on branch.",
+  "canonical_prevention": "Every payload builder that serializes a model for a merge-based persist passes its dict through one shared helper that drops the field when its value is None. The helper never writes null: the explicit-null merge-clear (which an omission cannot perform because merge keeps an omitted key) is written only by the owning enrichment path, directly and outside the helper. The entrypoint matrix asserts the persist contract per cell: key absent where nothing was decided, the real value at the one branch that writes it, explicit null only where a stale value is being cleared.",
+  "canonical_prevention_artifact": [
+    "backend/utils/conversations/projection_payload.py",
+    "backend/tests/unit/test_free_tier_entrypoint_matrix.py",
+    "backend/tests/unit/test_process_conversation_free_tier_branch.py",
+    "backend/tests/unit/test_client_processing_acceptance.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/**",
+    "backend/database/conversations.py",
+    "backend/models/conversation.py"
+  ],
+  "status": "open"
+}

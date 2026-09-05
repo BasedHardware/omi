@@ -42,6 +42,7 @@ from models.transcript_segment import TranscriptSegment
 from utils.conversations.projection_payload import PROVENANCE_LOG_MAX_CHARS
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 from utils.conversations.transcript_hash import transcript_sha256
+import utils.managed_compute as managed_compute
 from utils.managed_compute import Decision
 
 _BACKEND = Path(__file__).resolve().parents[2]
@@ -332,8 +333,8 @@ def _enable_flag(monkeypatch, pc) -> None:
 
 
 def _authorize(monkeypatch, pc, decision: Decision) -> None:
-    monkeypatch.setattr(pc, 'authorize_managed_compute', lambda *_args, **_kwargs: decision)
-    monkeypatch.setattr(pc, 'request_carries_validated_byok_key', lambda _feature: False)
+    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', lambda *_args, **_kwargs: decision)
+    monkeypatch.setattr(managed_compute, 'request_carries_validated_byok_key', lambda _feature: False)
 
 
 def _spy_managed_effects(monkeypatch, pc) -> dict[str, MagicMock]:
@@ -911,7 +912,12 @@ def test_non_desktop_minimum_is_none_because_no_projection_is_coming(stack) -> N
 
 # red-proof: set a processing_state when a projection is already in hand
 def test_projected_conversation_carries_no_processing_state(stack) -> None:
-    """Nothing is pending: the projection IS the summary."""
+    """Nothing is pending: the projection IS the summary.
+
+    The field is absent from the persist payload, not an explicit null —
+    persist is merge=True, and a dumped null is a real Firestore key that
+    stamps every projected conversation (flip-review F-1).
+    """
     pc, _dev = stack
     created = pc.lifecycle_service.create_completed_conversation
     created.reset_mock()
@@ -920,7 +926,7 @@ def test_projected_conversation_carries_no_processing_state(stack) -> None:
     )
     assert persisted is True
     assert stored.processing_state is None
-    assert _persisted_payload(created)['processing_state'] is None
+    assert 'processing_state' not in _persisted_payload(created)
 
 
 # red-proof: revert `_store_deterministic_minimum` to `_build_deferred_structured`

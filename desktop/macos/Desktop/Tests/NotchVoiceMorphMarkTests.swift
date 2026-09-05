@@ -231,3 +231,38 @@ final class NotchVoiceMorphMarkTests: XCTestCase {
     XCTAssertLessThan(quiet, 0.95, "Quieter speech must read as quieter than the loud peak")
   }
 }
+
+final class NotchVoiceMorphDictationTintTests: XCTestCase {
+
+  func testTheTintEasesInAndSettlesOnRed() {
+    // Not dictating: no tint at all, so the listening white is untouched.
+    XCTAssertEqual(NotchVoiceMorphGeometry.dictationBlend(elapsed: nil, reduceMotion: false), 0)
+    // Ease-in: slow to start, full by the duration, and never past it.
+    let start = NotchVoiceMorphGeometry.dictationBlend(elapsed: 0, reduceMotion: false)
+    let early = NotchVoiceMorphGeometry.dictationBlend(
+      elapsed: NotchVoiceMorphGeometry.dictationTintDuration * 0.25, reduceMotion: false)
+    let mid = NotchVoiceMorphGeometry.dictationBlend(
+      elapsed: NotchVoiceMorphGeometry.dictationTintDuration * 0.5, reduceMotion: false)
+    let done = NotchVoiceMorphGeometry.dictationBlend(
+      elapsed: NotchVoiceMorphGeometry.dictationTintDuration, reduceMotion: false)
+    let late = NotchVoiceMorphGeometry.dictationBlend(elapsed: 10, reduceMotion: false)
+    XCTAssertEqual(start, 0)
+    XCTAssertLessThan(early, 0.25, "an ease-in lags a linear ramp at the start")
+    XCTAssertLessThan(early, mid)
+    XCTAssertEqual(done, 1)
+    XCTAssertEqual(late, 1)
+  }
+
+  func testReduceMotionSnapsToRedInsteadOfAnimating() {
+    XCTAssertEqual(NotchVoiceMorphGeometry.dictationBlend(elapsed: 0, reduceMotion: true), 1)
+    XCTAssertEqual(NotchVoiceMorphGeometry.dictationBlend(elapsed: nil, reduceMotion: true), 0)
+  }
+
+  func testTheTintIsRedNotPurple() {
+    // Brand rule: never purple. Red means red and blue stay well apart.
+    let tint = NotchVoiceMorphGeometry.dictationTint
+    XCTAssertEqual(tint.red, 1)
+    XCTAssertLessThan(tint.blue, 0.4)
+    XCTAssertLessThan(tint.green, 0.4)
+  }
+}

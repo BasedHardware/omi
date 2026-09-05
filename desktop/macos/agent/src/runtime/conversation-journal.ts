@@ -98,6 +98,14 @@ export interface UpdateJournalTurnInput {
   producingRunId?: string | null;
   producingAttemptId?: string | null;
   metadataJson?: string;
+  /**
+   * Narrow revision authority: the desktop client that optimistically sealed a
+   * row `completed` (before answer delivery resolved) downgrades it to
+   * `failed` once the reducer proves the answer never reached the user
+   * (#12743). Only a payload-free downgrade is accepted, and `metadataJson`
+   * merges into the row's existing metadata instead of replacing it.
+   */
+  terminalRevision?: boolean;
   nowMs?: number;
 }
 
@@ -678,7 +686,24 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
   return store.withTransaction(() => {
     assertConversationOwner(store, input.conversationId, input.ownerId);
     const current = requireJournalTurn(store, input.conversationId, input.turnId);
-    if (input.status !== undefined) assertTurnStatusTransition(current.status, input.status);
+    if (input.terminalRevision === true) {
+      assertTerminalRevisionShape(input);
+    }
+    if (input.status !== undefined) {
+      // The one sanctioned exception to the terminal transition table: the
+      // desktop client that sealed a row `completed` optimistically (before
+      // answer delivery resolved) downgrades it to `failed` when the reducer
+      // proves the answer never reached the user (#12743). Everything else —
+      // including run-linked turns, which the caller rejects earlier — still
+      // goes through the strict table.
+      const sealedCompletionDowngrade =
+        input.terminalRevision === true
+        && current.status === "completed"
+        && input.status === "failed";
+      if (!sealedCompletionDowngrade) {
+        assertTurnStatusTransition(current.status, input.status);
+      }
+    }
     if (input.producingRunId !== undefined) {
       assertProducingRunOwner(store, input.producingRunId, input.ownerId);
       if (current.producingRunId !== null && current.producingRunId !== input.producingRunId) {
@@ -725,7 +750,9 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
     const status = input.status ?? current.status;
     const metadataJson = input.metadataJson === undefined
       ? current.metadataJson
-      : validObjectJson(input.metadataJson, "metadataJson");
+      : input.terminalRevision === true
+        ? mergedObjectJson(current.metadataJson, input.metadataJson)
+        : validObjectJson(input.metadataJson, "metadataJson");
     const content = input.content ?? current.content;
     const producingRunId = input.producingRunId === undefined ? current.producingRunId : input.producingRunId;
     const producingAttemptId = input.producingAttemptId === undefined
@@ -4284,6 +4311,44 @@ function validObjectJson(raw: string, field: string): string {
     throw new Error(`${field} must contain a JSON object`);
   }
   return JSON.stringify(parsed);
+}
+
+/**
+ * Shallow key-merge used only by terminal revisions: the truncation cause
+ * joins the row's existing metadata (model attribution, continuity) instead
+ * of replacing it. The patch's keys win on conflict.
+ */
+function mergedObjectJson(base: string, patch: string): string {
+  const baseObject = parseObjectJson(base);
+  const patchObject = parseObjectJson(patch);
+  if (
+    baseObject === null || Array.isArray(baseObject) || typeof baseObject !== "object"
+    || patchObject === null || Array.isArray(patchObject) || typeof patchObject !== "object"
+  ) {
+    throw new Error("metadataJson must contain a JSON object");
+  }
+  return JSON.stringify({ ...(baseObject as Record<string, unknown>), ...(patchObject as Record<string, unknown>) });
+}
+
+/**
+ * A terminal revision is a payload-free downgrade of an optimistically sealed
+ * completion: status must be `failed`, and no payload or run-identity field
+ * may ride along — the sealed row's content, blocks, resources, and metadata
+ * (beyond the merged terminal reason) stay exactly as written.
+ */
+function assertTerminalRevisionShape(input: UpdateJournalTurnInput): void {
+  if (
+    input.status !== "failed"
+    || input.content !== undefined
+    || input.replaceContentBlocks !== undefined
+    || input.appendContentBlocks !== undefined
+    || input.replaceResources !== undefined
+    || input.appendResources !== undefined
+    || input.producingRunId !== undefined
+    || input.producingAttemptId !== undefined
+  ) {
+    throw new Error("Terminal journal revision must be a payload-free downgrade to failed");
+  }
 }
 
 function parseObjectJson(raw: string): unknown {
