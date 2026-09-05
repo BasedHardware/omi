@@ -13,8 +13,9 @@ import SwiftUI
 /// bubble's, a soft fill with no border, and a trailing chevron — a marker in the thread, not
 /// another card. Centered bordered prose reads as an answer; the day boundary is the quieter
 /// thing. A doorway, not the experience: day label, one-line headline, at most two lines of
-/// overview — the full record, its badges, and its actions live on `DailyRecapPage`, which
-/// clicking opens through the typed recap route.
+/// overview, and the day's stats as a strip of micro chips (the same numbers the Activity day
+/// card shows, at bubble-row weight) — the full record and its actions live on `DailyRecapPage`,
+/// which clicking opens through the typed recap route.
 struct ChatDailyRecapRow: View {
   let record: DailySummaryRecord
 
@@ -57,6 +58,9 @@ struct ChatDailyRecapRow: View {
             .fixedSize(horizontal: false, vertical: true)
             .multilineTextAlignment(.leading)
         }
+        if let stats = record.stats {
+          statsStrip(stats)
+        }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, OmiSpacing.md)
@@ -68,6 +72,39 @@ struct ChatDailyRecapRow: View {
     .accessibilityIdentifier("chat-daily-recap-row")
     .accessibilityLabel(Text("Open the daily recap"))
     .help("Open the full recap for \(dayLabel)")
+  }
+
+  /// The day's numbers at bubble-row weight: one micro chip per stat, hugging
+  /// its content, no scroll — six fit the narrowest chat column. Same data the
+  /// Activity day card shows; the page is where they get room to breathe.
+  private func statsStrip(_ stats: DailySummaryRecord.Stats) -> some View {
+    let chips = HomeDailySummaryStatsRow.chips(for: stats)
+    return Group {
+      if !chips.isEmpty {
+        HStack(spacing: OmiSpacing.xxs) {
+          ForEach(chips) { chip in
+            HStack(spacing: 3) {
+              Image(systemName: chip.symbol)
+                .scaledFont(size: OmiType.micro, weight: .semibold)
+                .foregroundStyle(Ink.secondary)
+              Text(chip.value)
+                .scaledFont(size: OmiType.micro, weight: .bold)
+                .monospacedDigit()
+                .foregroundStyle(Ink.primary)
+              Text(chip.label)
+                .scaledFont(size: OmiType.micro)
+                .foregroundStyle(Ink.secondary)
+            }
+            .lineLimit(1)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(Ink.rowFill.opacity(0.6)))
+          }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Day stats")
+      }
+    }
   }
 
   /// "Yesterday · 🚀" — the day the recap is about, not the day it was written.
