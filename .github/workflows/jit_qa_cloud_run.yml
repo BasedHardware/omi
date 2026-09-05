@@ -165,7 +165,7 @@ jobs:
       - name: Preflight required development secret metadata before resource mutation
         run: |
           set -euo pipefail
-          for secret in ENCRYPTION_SECRET OPENAI_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET"; do
+          for secret in ENCRYPTION_SECRET OPENAI_API_KEY POSTHOG_PROJECT_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET"; do
             gcloud secrets describe "$secret" --project "$QA_PROJECT" >/dev/null
             gcloud secrets versions describe latest --secret "$secret" --project "$QA_PROJECT" >/dev/null
           done
@@ -236,7 +236,7 @@ jobs:
           if [[ "$token_state" != "ENABLED" ]]; then
             openssl rand -hex 32 | gcloud secrets versions add "$QA_GATEWAY_TOKEN_SECRET" --project "$QA_PROJECT" --data-file=- >/dev/null
           fi
-          for secret in ENCRYPTION_SECRET OPENAI_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET" "$QA_REDIS_SECRET" "$QA_GATEWAY_TOKEN_SECRET"; do
+          for secret in ENCRYPTION_SECRET OPENAI_API_KEY POSTHOG_PROJECT_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET" "$QA_REDIS_SECRET" "$QA_GATEWAY_TOKEN_SECRET"; do
             gcloud secrets describe "$secret" --project "$QA_PROJECT" >/dev/null
             gcloud secrets add-iam-policy-binding "$secret" --project "$QA_PROJECT" --member="serviceAccount:${QA_RUNTIME_SERVICE_ACCOUNT}" --role=roles/secretmanager.secretAccessor --condition=None --quiet >/dev/null
           done
@@ -300,7 +300,7 @@ jobs:
           common="^@^OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@MEMORY_ENABLED=on@MEMORY_BELIEF_MODEL_ENABLED=true@OMI_LLM_GATEWAY_FEATURE_MODE=gateway@OMI_LLM_CHAT_AGENT_ROUTE=gateway@OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false@OMI_LLM_GATEWAY_URL=${GATEWAY_URL}@REDIS_DB_HOST=${REDIS_HOST}@REDIS_DB_PORT=6379"
           for pair in "$QA_SERVICE:$BACKEND_IMAGE" "$QA_DESKTOP_SERVICE:$DESKTOP_IMAGE"; do
             service="${pair%%:*}"; image="${pair#*:}"
-            gcloud run deploy "$service" --project "$QA_PROJECT" --region "$QA_REGION" --image "$image" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --network "$QA_NETWORK" --vpc-egress private-ranges-only --set-env-vars "$common" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,REDIS_DB_PASSWORD=${QA_REDIS_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
+            gcloud run deploy "$service" --project "$QA_PROJECT" --region "$QA_REGION" --image "$image" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --network "$QA_NETWORK" --vpc-egress private-ranges-only --set-env-vars "$common" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest,REDIS_DB_PASSWORD=${QA_REDIS_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
           done
       - name: Deploy gates-closed maintenance jobs
         env:
@@ -312,8 +312,8 @@ jobs:
           set -euo pipefail
           drain_env="^@^OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@MEMORY_ENABLED=on@KNOWLEDGE_LEDGER_DRAIN_ENABLED=false@KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST=${QA_UID}"
           sweep_env="^@^OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@MEMORY_ENABLED=on@MEMORY_DAILY_MEMORY_SWEEP_ENABLED=false@MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false@MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=false@MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=disabled@MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=8@MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0@MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=false@MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=@OMI_LLM_GATEWAY_FEATURE_MODE=gateway@OMI_LLM_CHAT_AGENT_ROUTE=gateway@OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false@OMI_LLM_GATEWAY_URL=${GATEWAY_URL}@REDIS_DB_HOST=${REDIS_HOST}@REDIS_DB_PORT=6379"
-          gcloud run jobs deploy "$QA_DRAIN_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --image "$DRAIN_IMAGE" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --network "$QA_NETWORK" --vpc-egress private-ranges-only --tasks 1 --max-retries 0 --task-timeout 1200s --set-env-vars "$drain_env" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
-          gcloud run jobs deploy "$QA_SWEEP_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --image "$SWEEP_IMAGE" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --network "$QA_NETWORK" --vpc-egress private-ranges-only --tasks 1 --max-retries 0 --task-timeout 1200s --set-env-vars "$sweep_env" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,REDIS_DB_PASSWORD=${QA_REDIS_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
+          gcloud run jobs deploy "$QA_DRAIN_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --image "$DRAIN_IMAGE" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --network "$QA_NETWORK" --vpc-egress private-ranges-only --tasks 1 --max-retries 0 --task-timeout 1200s --set-env-vars "$drain_env" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
+          gcloud run jobs deploy "$QA_SWEEP_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --image "$SWEEP_IMAGE" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --network "$QA_NETWORK" --vpc-egress private-ranges-only --tasks 1 --max-retries 0 --task-timeout 1200s --set-env-vars "$sweep_env" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest,REDIS_DB_PASSWORD=${QA_REDIS_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
       - name: Resolve exact service URLs
         id: urls
         run: |

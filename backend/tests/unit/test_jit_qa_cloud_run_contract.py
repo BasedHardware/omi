@@ -233,6 +233,12 @@ def test_gateway_resource_is_fenced_to_the_fixed_qa_uid():
     assert literals["OMI_JIT_QA_UID_ALLOWLIST"] == CONTRACT.QA_UID
 
 
+@pytest.mark.parametrize("profile", ("backend", "desktop", "drain", "sweep"))
+def test_rollout_profiles_require_the_real_posthog_control_plane_secret(profile):
+    _, secrets = CONTRACT.resource_environment(profile)
+    assert secrets["POSTHOG_PROJECT_API_KEY"] == "POSTHOG_PROJECT_API_KEY:latest"
+
+
 def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "workflow_dispatch:" in text
@@ -257,6 +263,7 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert 'LLM_GATEWAY_ALLOWED_CALLERS=backend,desktop' in text
     assert 'gcloud firestore databases describe --database "$QA_FIRESTORE_DATABASE"' in text
     assert 'gcloud redis instances describe "$QA_REDIS_INSTANCE"' in text
+    assert "POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest" in text
     assert "RUN_MODEL_EXPERIMENT" not in text
     assert "MODEL_CONFIRMATION_INPUT" not in text
     assert "gcr.io/${QA_PROJECT}" in text

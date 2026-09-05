@@ -24,7 +24,8 @@
                 {"name": "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
                 {"name": "OMI_JIT_QA_AUTH_ONLY", "value": "true"},
                 {"name": "OMI_JIT_QA_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
-                {"name": "ENCRYPTION_SECRET", "valueSource": {"secretKeyRef": {"secret": "ENCRYPTION_SECRET", "version": "latest"}}}
+                {"name": "ENCRYPTION_SECRET", "valueSource": {"secretKeyRef": {"secret": "ENCRYPTION_SECRET", "version": "latest"}}},
+                {"name": "POSTHOG_PROJECT_API_KEY", "valueSource": {"secretKeyRef": {"secret": "POSTHOG_PROJECT_API_KEY", "version": "latest"}}}
               ],
               "envFrom": []
             }

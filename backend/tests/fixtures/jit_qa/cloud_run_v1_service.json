@@ -29,6 +29,7 @@
               {"name": "REDIS_DB_PORT", "value": "6379"},
               {"name": "ENCRYPTION_SECRET", "valueSource": {"secretKeyRef": {"secret": "ENCRYPTION_SECRET", "version": "latest"}}},
               {"name": "OPENAI_API_KEY", "valueSource": {"secretKeyRef": {"secret": "OPENAI_API_KEY", "version": "latest"}}},
+              {"name": "POSTHOG_PROJECT_API_KEY", "valueSource": {"secretKeyRef": {"secret": "POSTHOG_PROJECT_API_KEY", "version": "latest"}}},
               {"name": "REDIS_DB_PASSWORD", "valueSource": {"secretKeyRef": {"secret": "jit-qa-redis-password", "version": "latest"}}},
               {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueSource": {"secretKeyRef": {"secret": "jit-qa-gateway-token", "version": "latest"}}}
             ]

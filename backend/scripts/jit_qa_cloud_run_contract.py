@@ -60,6 +60,10 @@ _ALLOWED_SECRET_BINDINGS = {
     # this plane.
     "ENCRYPTION_SECRET": "ENCRYPTION_SECRET:latest",
     "OPENAI_API_KEY": "OPENAI_API_KEY:latest",
+    # Rollout admission is a real PostHog control-plane read.  Keep the
+    # project key as an individually approved dev secret; never copy the
+    # normal customer-data secret bundle into this plane.
+    "POSTHOG_PROJECT_API_KEY": "POSTHOG_PROJECT_API_KEY:latest",
     "REDIS_DB_PASSWORD": "jit-qa-redis-password:latest",
     "OMI_LLM_GATEWAY_SERVICE_TOKEN": "jit-qa-gateway-token:latest",
 }
@@ -380,7 +384,10 @@ def resource_environment(
                 "OMI_JIT_QA_AUTH_ONLY": "true",
                 "OMI_JIT_QA_UID_ALLOWLIST": QA_UID,
             },
-            {"ENCRYPTION_SECRET": _ALLOWED_SECRET_BINDINGS["ENCRYPTION_SECRET"]},
+            {
+                "ENCRYPTION_SECRET": _ALLOWED_SECRET_BINDINGS["ENCRYPTION_SECRET"],
+                "POSTHOG_PROJECT_API_KEY": _ALLOWED_SECRET_BINDINGS["POSTHOG_PROJECT_API_KEY"],
+            },
         )
     if profile == "sweep":
         return (
@@ -406,6 +413,7 @@ def resource_environment(
             },
             {
                 "ENCRYPTION_SECRET": _ALLOWED_SECRET_BINDINGS["ENCRYPTION_SECRET"],
+                "POSTHOG_PROJECT_API_KEY": _ALLOWED_SECRET_BINDINGS["POSTHOG_PROJECT_API_KEY"],
                 "REDIS_DB_PASSWORD": _ALLOWED_SECRET_BINDINGS["REDIS_DB_PASSWORD"],
                 "OMI_LLM_GATEWAY_SERVICE_TOKEN": _ALLOWED_SECRET_BINDINGS["OMI_LLM_GATEWAY_SERVICE_TOKEN"],
             },

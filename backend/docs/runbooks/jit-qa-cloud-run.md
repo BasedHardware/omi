@@ -25,6 +25,10 @@ verification, every HTTP/WebSocket route rejects a UID other than
 `vi7SA9ckQCe4ccobWNxlbdcNdC23`, before account, Redis, or model work. The
 Firebase Admin client uses verify-only credentials and its mutation methods are
 blocked; Firestore ADC remains available for the isolated data plane.
+The backend, desktop, drain, and sweep profiles bind the development
+`POSTHOG_PROJECT_API_KEY` individually. This is required for the JIT rollout
+authority to observe the `jit-processing-v1` control-plane decision; an
+unconfigured PostHog client is not a rollout proof.
 
 The API and gateway use a dedicated Basic-tier 1 GiB Memorystore instance named
 `jit-qa-redis`; its AUTH value and gateway service token live in the dedicated
