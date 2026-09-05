@@ -859,3 +859,64 @@ def test_pkce_rejects_malformed_values():
         pass
     else:
         raise AssertionError('non-ASCII verifier should fail closed')
+
+
+def test_authorization_code_exchange_with_omitted_resource_keeps_stored_audience():
+    """RFC 8707 (https://datatracker.ietf.org/doc/html/rfc8707#section-2): the
+    resource indicator is optional; when the token request omits it, the code's
+    stored audience stays bound — while a wrong explicit value still fails."""
+    client = mcp_oauth.get_client('omi-chatgpt-prod')
+    scopes = mcp_oauth.normalize_scopes('memories.read', client)
+    verifier = 'b' * 64
+    grant = mcp_oauth.create_or_update_grant('user-omit', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+
+    def issue_code():
+        return mcp_oauth.issue_authorization_code(
+            'user-omit',
+            grant['id'],
+            'omi-chatgpt-prod',
+            'https://chatgpt.com/connector_platform_oauth_redirect',
+            mcp_oauth.MCP_RESOURCE_URL,
+            scopes,
+            mcp_oauth.pkce_s256(verifier),
+        )
+
+    assert (
+        mcp_oauth.exchange_authorization_code_for_tokens(
+            issue_code(),
+            'omi-chatgpt-prod',
+            'https://chatgpt.com/connector_platform_oauth_redirect',
+            'https://wrong.example/v1/mcp/sse',
+            verifier,
+        )
+        is None
+    )
+
+    token_pair = mcp_oauth.exchange_authorization_code_for_tokens(
+        issue_code(),
+        'omi-chatgpt-prod',
+        'https://chatgpt.com/connector_platform_oauth_redirect',
+        None,
+        verifier,
+    )
+    auth_context = mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)
+    assert auth_context['uid'] == 'user-omit'
+
+
+def test_refresh_rotation_with_omitted_resource_keeps_stored_audience():
+    scopes = ['memories.read']
+    grant = mcp_oauth.create_or_update_grant(
+        'user-omit-refresh', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes
+    )
+    token_pair = mcp_oauth.issue_token_pair(grant, scopes=scopes)
+
+    assert (
+        mcp_oauth.rotate_refresh_token(
+            token_pair['refresh_token'], 'omi-chatgpt-prod', 'https://wrong.example/v1/mcp/sse'
+        )
+        is None
+    )
+
+    rotated = mcp_oauth.rotate_refresh_token(token_pair['refresh_token'], 'omi-chatgpt-prod', None)
+    auth_context = mcp_oauth.validate_access_token(rotated['access_token'], mcp_oauth.MCP_RESOURCE_URL)
+    assert auth_context['uid'] == 'user-omit-refresh'
