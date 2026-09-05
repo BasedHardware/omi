@@ -51,9 +51,10 @@ def _resource(profile: str, kind: str, image: str) -> dict:
     return {"metadata": {"name": "qa-resource"}, "spec": spec}
 
 
-def test_static_configuration_is_dev_only_and_requires_four_immutable_images():
+def test_static_configuration_is_dev_only_and_requires_five_immutable_images():
     images = {
-        name: f"gcr.io/based-hardware-dev/{name}@sha256:{'a' * 64}" for name in ("backend", "desktop", "drain", "sweep")
+        name: f"gcr.io/based-hardware-dev/{name}@sha256:{'a' * 64}"
+        for name in ("backend", "desktop", "gateway", "drain", "sweep")
     }
     CONTRACT.validate_static_configuration(
         project="based-hardware-dev",
@@ -157,6 +158,49 @@ def test_cloud_run_resource_rejects_inherited_cache_or_customer_binding():
         )
 
 
+def test_cloud_run_v1_nested_job_fixture_is_supported():
+    image = "gcr.io/based-hardware-dev/knowledge-ledger-drain-qa-job@sha256:" + "d" * 64
+    fixture_path = BACKEND_ROOT / "tests" / "fixtures" / "jit_qa" / "cloud_run_v1_job.json"
+    resource = json.loads(fixture_path.read_text(encoding="utf-8"))
+    CONTRACT.validate_cloud_run_resource(
+        resource,
+        kind="job",
+        expected_image=image,
+        expected_environment=CONTRACT.resource_environment("drain")[0],
+        expected_secret_bindings=CONTRACT.resource_environment("drain")[1],
+        expected_name=CONTRACT.LEDGER_DRAIN_JOB,
+    )
+
+
+def test_cloud_run_v1_nested_service_fixture_is_supported():
+    image = "gcr.io/based-hardware-dev/backend-jit-qa@sha256:" + "b" * 64
+    fixture_path = BACKEND_ROOT / "tests" / "fixtures" / "jit_qa" / "cloud_run_v1_service.json"
+    resource = json.loads(fixture_path.read_text(encoding="utf-8"))
+    literals, secrets = CONTRACT.resource_environment("backend")
+    CONTRACT.validate_cloud_run_resource(
+        resource,
+        kind="service",
+        expected_image=image,
+        expected_environment=literals,
+        expected_secret_bindings=secrets,
+        expected_name=CONTRACT.BACKEND_SERVICE,
+        gateway_url=CONTRACT.DEFAULT_GATEWAY_URL,
+        redis_host=CONTRACT.DEFAULT_REDIS_HOST,
+    )
+
+
+def test_gateway_route_and_qa_http_contract_reject_direct_fallback():
+    literals, _ = CONTRACT.resource_environment("backend", gateway_url="https://gateway.example", redis_host="10.0.0.2")
+    assert literals["OMI_LLM_GATEWAY_FEATURE_MODE"] == "gateway"
+    assert literals["OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION"] == "false"
+    with pytest.raises(CONTRACT.JITQAContractError):
+        CONTRACT.validate_qa_http_environment(
+            {**literals, "OMI_LLM_GATEWAY_FEATURE_MODE": "direct"},
+            gateway_url="https://gateway.example",
+            redis_host="10.0.0.2",
+        )
+
+
 def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "workflow_dispatch:" in text
@@ -165,6 +209,7 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "based-hardware-dev" in text
     assert "backend-jit-qa" in text
     assert "desktop-backend-jit-qa" in text
+    assert "llm-gateway-jit-qa" in text
     assert "knowledge-ledger-drain-qa-job" in text
     assert "daily-memory-sweep-qa-job" in text
     assert "runWithOverrides" in text

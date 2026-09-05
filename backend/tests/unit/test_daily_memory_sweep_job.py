@@ -210,3 +210,32 @@ def test_open_authority_preserves_inventory_scheduler_and_commit_flow(monkeypatc
             "advance_page": True,
         }
     ]
+
+
+def test_qa_auth_only_uses_explicit_inventory_without_global_scan(monkeypatch, daily_memory_sweep_job):
+    job = daily_memory_sweep_job
+    monkeypatch.setenv("OMI_JIT_QA_AUTH_ONLY", "true")
+    monkeypatch.setenv("OMI_JIT_QA_UID_ALLOWLIST", "qa-user")
+    page = DailySweepUIDInventoryPage(uids=("qa-user",))
+    global_inventory_calls: list[bool] = []
+    explicit_inventory_calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(job, "default_db_client", object())
+    monkeypatch.setattr(
+        job, "daily_memory_sweep_authority_from_environment", lambda: sweep.SweepAuthorityState(enabled=True)
+    )
+    monkeypatch.setattr(
+        job, "bounded_daily_memory_sweep_uid_inventory", lambda *_args, **_kwargs: global_inventory_calls.append(True)
+    )
+    monkeypatch.setattr(
+        job,
+        "explicit_jit_qa_daily_sweep_uid_inventory",
+        lambda uids: explicit_inventory_calls.append(tuple(uids)) or page,
+    )
+    summary = sweep.DailySweepSchedulerSummary(attempted_users=0, committed_users=0)
+    monkeypatch.setattr(job, "run_daily_memory_sweep_scheduler", lambda **_kwargs: summary)
+    monkeypatch.setattr(job, "commit_daily_memory_sweep_uid_inventory", lambda *_args, **_kwargs: None)
+
+    job.run_daily_memory_sweep_job()
+
+    assert global_inventory_calls == []
+    assert explicit_inventory_calls[-1] == ("qa-user",)

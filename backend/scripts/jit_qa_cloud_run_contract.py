@@ -26,6 +26,7 @@ BACKEND_SERVICE = "backend-jit-qa"
 DESKTOP_BACKEND_SERVICE = "desktop-backend-jit-qa"
 LEDGER_DRAIN_JOB = "knowledge-ledger-drain-qa-job"
 DAILY_SWEEP_JOB = "daily-memory-sweep-qa-job"
+LLM_GATEWAY_SERVICE = "llm-gateway-jit-qa"
 
 # This is the existing named-app identity that can authenticate through the
 # normal Firebase Auth project.  The cloud plane owns only this UID and uses
@@ -39,6 +40,8 @@ BACKEND_DOCKERFILE = "backend/Dockerfile"
 DESKTOP_BACKEND_DOCKERFILE = "backend/Dockerfile.desktop_backend"
 LEDGER_DRAIN_DOCKERFILE = "backend/modal/Dockerfile.knowledge_ledger_drain_job"
 DAILY_SWEEP_DOCKERFILE = "backend/modal/Dockerfile.daily_memory_sweep_job"
+DEFAULT_GATEWAY_URL = "https://llm-gateway-jit-qa.invalid"
+DEFAULT_REDIS_HOST = "10.0.0.10"
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _DIGEST_IMAGE_RE = re.compile(r"^gcr\.io/based-hardware-dev/[a-z0-9-]+@sha256:[0-9a-f]{64}$")
@@ -56,6 +59,8 @@ _ALLOWED_SECRET_BINDINGS = {
     # this plane.
     "ENCRYPTION_SECRET": "ENCRYPTION_SECRET:latest",
     "OPENAI_API_KEY": "OPENAI_API_KEY:latest",
+    "REDIS_DB_PASSWORD": "jit-qa-redis-password:latest",
+    "OMI_LLM_GATEWAY_SERVICE_TOKEN": "jit-qa-gateway-token:latest",
 }
 RUNTIME_SERVICE_ACCOUNT = "jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com"
 
@@ -113,7 +118,7 @@ def validate_static_configuration(
     if run_once == "false" and confirmation:
         raise JITQAContractError("execution confirmation is only valid with run_once=true")
     if images is not None:
-        expected = {"backend", "desktop", "drain", "sweep"}
+        expected = {"backend", "desktop", "gateway", "drain", "sweep"}
         if set(images) != expected:
             raise JITQAContractError(f"exactly these QA images are required: {sorted(expected)}")
         for name, image in images.items():
@@ -139,6 +144,24 @@ def validate_environment(environment: Mapping[str, str]) -> None:
         raise JITQAContractError("ledger drain allowlist must contain only the QA UID")
 
 
+def validate_qa_http_environment(environment: Mapping[str, str], *, gateway_url: str, redis_host: str) -> None:
+    """Require the isolated HTTP service to use the QA auth, gateway and cache."""
+
+    expected = {
+        "OMI_JIT_QA_AUTH_ONLY": "true",
+        "OMI_JIT_QA_UID_ALLOWLIST": QA_UID,
+        "OMI_LLM_GATEWAY_FEATURE_MODE": "gateway",
+        "OMI_LLM_CHAT_AGENT_ROUTE": "gateway",
+        "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION": "false",
+        "OMI_LLM_GATEWAY_URL": gateway_url,
+        "REDIS_DB_HOST": redis_host,
+        "REDIS_DB_PORT": "6379",
+    }
+    for name, value in expected.items():
+        if environment.get(name) != value:
+            raise JITQAContractError(f"{name} must be the isolated QA value")
+
+
 def validate_execution(*, run_once: str, confirmation: str, kill_switch: str = "false") -> None:
     """Admit one explicit bounded execution without opening a persistent gate."""
 
@@ -151,23 +174,28 @@ def validate_execution(*, run_once: str, confirmation: str, kill_switch: str = "
 
 
 def _containers(resource: Mapping[str, Any], *, kind: str) -> list[Mapping[str, Any]]:
-    try:
-        if kind == "service":
-            template = resource["spec"]["template"]
-            if not isinstance(template, Mapping):
-                raise TypeError
-            service_template = template.get("spec", template)
-            value = service_template["containers"]
-        elif kind == "job":
-            template = resource["spec"]["template"]
-            if not isinstance(template, Mapping):
-                raise TypeError
-            job_template = template.get("template", template)
-            value = job_template["containers"]
-        else:
-            raise JITQAContractError(f"unknown Cloud Run resource kind {kind!r}")
-    except (KeyError, TypeError) as exc:
-        raise JITQAContractError(f"Cloud Run {kind} has no v2 container contract") from exc
+    if kind == "service":
+        paths = (("spec", "template", "spec", "containers"), ("spec", "template", "containers"))
+    elif kind == "job":
+        paths = (
+            ("spec", "template", "template", "spec", "containers"),
+            ("spec", "template", "template", "containers"),
+        )
+    else:
+        raise JITQAContractError(f"unknown Cloud Run resource kind {kind!r}")
+    value: object = None
+    for path in paths:
+        candidate: object = resource
+        for key in path:
+            if not isinstance(candidate, Mapping):
+                candidate = None
+                break
+            candidate = candidate.get(key)
+        if candidate is not None:
+            value = candidate
+            break
+    if value is None:
+        raise JITQAContractError(f"Cloud Run {kind} has no supported v1/v2 container contract")
     if not isinstance(value, list) or len(value) != 1 or not isinstance(value[0], dict):
         raise JITQAContractError(f"Cloud Run {kind} must have exactly one application container")
     return value
@@ -182,6 +210,8 @@ def validate_cloud_run_resource(
     expected_secret_bindings: Mapping[str, str] | None = None,
     expected_name: str | None = None,
     expected_service_account: str = RUNTIME_SERVICE_ACCOUNT,
+    gateway_url: str | None = None,
+    redis_host: str | None = None,
 ) -> None:
     """Validate a post-deploy Cloud Run describe result without printing secrets."""
 
@@ -238,6 +268,13 @@ def validate_cloud_run_resource(
     missing = expected_names - seen_names
     if missing:
         raise JITQAContractError(f"Cloud Run resource is missing required environment entries: {sorted(missing)}")
+    if kind == "service" and gateway_url is not None and redis_host is not None:
+        actual_environment = {
+            str(entry["name"]): str(entry.get("value", ""))
+            for entry in container.get("env", [])
+            if isinstance(entry, dict) and "name" in entry and "value" in entry
+        }
+        validate_qa_http_environment(actual_environment, gateway_url=gateway_url, redis_host=redis_host)
 
     spec = resource.get("spec")
     if not isinstance(spec, Mapping):
@@ -256,7 +293,12 @@ def validate_cloud_run_resource(
         raise JITQAContractError("Cloud Run resource uses an unexpected runtime service account")
 
 
-def resource_environment(profile: str) -> tuple[dict[str, str], dict[str, str]]:
+def resource_environment(
+    profile: str,
+    *,
+    gateway_url: str = DEFAULT_GATEWAY_URL,
+    redis_host: str = DEFAULT_REDIS_HOST,
+) -> tuple[dict[str, str], dict[str, str]]:
     """Return the exact literal and Secret Manager bindings for a QA profile."""
 
     identity = {
@@ -271,12 +313,29 @@ def resource_environment(profile: str) -> tuple[dict[str, str], dict[str, str]]:
                 **identity,
                 "MEMORY_ENABLED": "on",
                 "MEMORY_BELIEF_MODEL_ENABLED": "true",
-                # The gateway/companion plane is admitted separately.  Direct
-                # mode keeps this service isolated if that plane is absent.
-                "OMI_LLM_GATEWAY_FEATURE_MODE": "direct",
-                "OMI_LLM_CHAT_AGENT_ROUTE": "direct",
+                "OMI_JIT_QA_AUTH_ONLY": "true",
+                "OMI_JIT_QA_UID_ALLOWLIST": QA_UID,
+                "OMI_LLM_GATEWAY_FEATURE_MODE": "gateway",
+                "OMI_LLM_CHAT_AGENT_ROUTE": "gateway",
+                "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION": "false",
+                "OMI_LLM_GATEWAY_URL": gateway_url,
+                "REDIS_DB_HOST": redis_host,
+                "REDIS_DB_PORT": "6379",
             },
             dict(_ALLOWED_SECRET_BINDINGS),
+        )
+    if profile == "gateway":
+        return (
+            {
+                **identity,
+                "OMI_LLM_GATEWAY_PROD": "false",
+                "LLM_GATEWAY_ALLOWED_CALLERS": "backend,desktop",
+                "OMI_LLM_GATEWAY_BUILD_IDENTITY": "jit-qa",
+            },
+            {
+                "OPENAI_API_KEY": _ALLOWED_SECRET_BINDINGS["OPENAI_API_KEY"],
+                "OMI_LLM_GATEWAY_SERVICE_TOKEN": _ALLOWED_SECRET_BINDINGS["OMI_LLM_GATEWAY_SERVICE_TOKEN"],
+            },
         )
     if profile == "drain":
         return (
@@ -284,6 +343,8 @@ def resource_environment(profile: str) -> tuple[dict[str, str], dict[str, str]]:
                 **identity,
                 "KNOWLEDGE_LEDGER_DRAIN_ENABLED": "false",
                 "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST": QA_UID,
+                "OMI_JIT_QA_AUTH_ONLY": "true",
+                "OMI_JIT_QA_UID_ALLOWLIST": QA_UID,
             },
             {"ENCRYPTION_SECRET": _ALLOWED_SECRET_BINDINGS["ENCRYPTION_SECRET"]},
         )
@@ -299,6 +360,8 @@ def resource_environment(profile: str) -> tuple[dict[str, str], dict[str, str]]:
                 "MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD": "0",
                 "MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED": "false",
                 "MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG": "",
+                "OMI_JIT_QA_AUTH_ONLY": "true",
+                "OMI_JIT_QA_UID_ALLOWLIST": QA_UID,
             },
             dict(_ALLOWED_SECRET_BINDINGS),
         )
@@ -321,9 +384,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--environment-json", type=Path)
     parser.add_argument("--resource-json", type=Path)
     parser.add_argument("--kind", choices=("service", "job"))
-    parser.add_argument("--profile", choices=("backend", "desktop", "drain", "sweep"))
+    parser.add_argument("--profile", choices=("backend", "desktop", "gateway", "drain", "sweep"))
     parser.add_argument("--expected-image")
     parser.add_argument("--expected-name")
+    parser.add_argument("--gateway-url", default=DEFAULT_GATEWAY_URL)
+    parser.add_argument("--redis-host", default=DEFAULT_REDIS_HOST)
     return parser.parse_args()
 
 
@@ -370,7 +435,9 @@ def main() -> int:
                 raise JITQAContractError("Cloud Run resource JSON must be an object")
             if args.profile is None:
                 raise JITQAContractError("resource validation requires --profile")
-            expected_environment, expected_secret_bindings = resource_environment(args.profile)
+            expected_environment, expected_secret_bindings = resource_environment(
+                args.profile, gateway_url=args.gateway_url, redis_host=args.redis_host
+            )
             validate_cloud_run_resource(
                 resource,
                 kind=args.kind,
@@ -378,6 +445,8 @@ def main() -> int:
                 expected_environment=expected_environment,
                 expected_secret_bindings=expected_secret_bindings,
                 expected_name=args.expected_name,
+                gateway_url=args.gateway_url if args.profile in {"backend", "desktop"} else None,
+                redis_host=args.redis_host if args.profile in {"backend", "desktop"} else None,
             )
     except (JITQAContractError, OSError, json.JSONDecodeError) as exc:
         print(f"JIT QA contract failed: {exc}", file=sys.stderr)
