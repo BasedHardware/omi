@@ -1,0 +1,11 @@
+{
+  "id": "conv_demo",
+  "structured": {
+    "title": "USB-C hardware chat",
+    "overview": "The team discussed the pendant redesign. USB-C PD negotiation is handled by a CC resistor that signals device role. The current wireless charging coil costs 3.20 dollars per unit. Waterproofing means the port needs an IP67 rated rubber gasket."
+  },
+  "transcript_segments": [
+    {"text": "Remember, the nRF52840 chip we use was released by Nordic Semiconductor.", "is_user": false, "start": 0, "end": 4},
+    {"text": "And our battery is 250mAh which means roughly two days of runtime.", "is_user": true, "start": 4, "end": 8}
+  ]
+}
