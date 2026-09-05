@@ -193,6 +193,46 @@ test('orders Home timeline by normalized conversation and memory time', async ()
   reads.unmount();
 });
 
+test('missing timestamps sort after dated Home rows', async () => {
+  const dated = conversationItem('dated', 'Dated');
+  dated.startedAt = '2026-09-02T10:00:00.000Z';
+  dated.createdAt = '2026-09-02T10:00:00.000Z';
+  const undatedMemory = {
+    kind: 'memory' as const,
+    id: 'undated-memory',
+    title: 'Undated',
+    summary: 'Undated',
+    searchableText: 'Undated',
+    citations: [] as never[],
+    timestamp: null,
+    provenance: {
+      label: null,
+      synthesisVersion: 'v1',
+      inputDigest: 'a',
+      outputDigest: 'b',
+    },
+  };
+  const page = {
+    windowStatus: 'complete' as const,
+    complete: true,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'complete' as const,
+    reasons: [] as string[],
+  };
+  readsMock.mockResolvedValue({
+    conversations: {status: 'success', value: {items: [dated], page}},
+    memories: {status: 'success', value: {items: [undatedMemory], page}},
+    tasks: {status: 'success', value: {items: [], page}},
+  });
+  const reads = await renderReads({enabled: true});
+  expect(reads.latest().reads.map(item => item.id)).toEqual([
+    'dated',
+    'undated-memory',
+  ]);
+  reads.unmount();
+});
+
 test('a successful refresh inside the live session lands as saved rows', async () => {
   readsMock.mockResolvedValue(successOutcomes(['Account A conversation']));
   const reads = await renderReads({enabled: true});
@@ -327,7 +367,6 @@ test('reset retires rows before a software-plane refresh', async () => {
   expect(reads.latest().readsPhase).toBe('initial-loading');
   reads.unmount();
 });
-
 
 test('a thrown refresh after empty success is unavailable, not saved', async () => {
   readsMock.mockResolvedValueOnce(successOutcomes([]));
