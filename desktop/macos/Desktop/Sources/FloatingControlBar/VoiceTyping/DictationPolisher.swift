@@ -72,6 +72,14 @@ enum DictationPolisher {
   /// it by half.
   static let acceptableWordRatio: ClosedRange<Double> = 0.5...1.5
 
+  /// The least share of the rewrite's ordinary words that must already occur
+  /// in the original. A cleanup keeps the speaker's words; a rewrite that is
+  /// mostly new words is an answer, a summary, or a hallucination, whatever
+  /// its length. Words containing a digit or "@" are left out of the count:
+  /// numbers, times, and addresses are the words the model is *meant* to
+  /// rewrite ("four pm" → "4pm", "john at example dot com" → an address).
+  static let minimumSharedWordFraction = 0.6
+
   /// The model answering, apologising, or narrating instead of cleaning. Only
   /// refused when the original did not open the same way, since "I'm sorry I
   /// missed your call" is a perfectly good dictation.
@@ -146,7 +154,31 @@ enum DictationPolisher {
     } else if candidateWords > sourceWords + 3 {
       return nil
     }
+    guard sharesEnoughWords(candidate: text, source: source) else { return nil }
     return text
+  }
+
+  /// Whether `candidate` is lexically a version of `source` rather than a
+  /// different text of a similar length. Judged on the candidate's side: the
+  /// original may lose fillers, false starts, and self-corrections, but the
+  /// rewrite may not gain words the speaker never said. Too few comparable
+  /// words (a one- or two-word dictation) is not evidence either way.
+  static func sharesEnoughWords(candidate: String, source: String) -> Bool {
+    let comparable = contentWords(candidate).filter { word in
+      !word.contains(where: { $0.isNumber }) && !word.contains("@")
+    }
+    guard comparable.count >= 3 else { return true }
+    let sourceWords = Set(contentWords(source))
+    let shared = comparable.filter { sourceWords.contains($0) }.count
+    return Double(shared) / Double(comparable.count) >= minimumSharedWordFraction
+  }
+
+  private static func contentWords(_ text: String) -> [String] {
+    let edges = CharacterSet.punctuationCharacters.union(.symbols)
+    return text.lowercased()
+      .split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+      .map { $0.trimmingCharacters(in: edges) }
+      .filter { !$0.isEmpty }
   }
 
   /// Runs the model with a hard deadline. Any failure is the caller's cue to
