@@ -756,6 +756,7 @@ struct DesktopHomeView: View {
       askOmiFocused: FloatingControlBarManager.shared.automationState.isAskOmiFocused,
       floatingBarFrame: FloatingControlBarManager.shared.automationState.frame,
       floatingBarVoiceListening: FloatingControlBarManager.shared.automationState.isVoiceListening,
+      floatingBarVoiceDictating: FloatingControlBarManager.shared.automationState.isVoiceDictating,
       floatingBarVoiceResponseActive: FloatingControlBarManager.shared.automationState.isVoiceResponseActive,
       floatingBarUsesNotchIsland: FloatingControlBarManager.shared.automationState.usesNotchIsland,
       updatedAt: ISO8601DateFormatter().string(from: Date())

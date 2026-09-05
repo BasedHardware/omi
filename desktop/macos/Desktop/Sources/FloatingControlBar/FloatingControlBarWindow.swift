@@ -3205,6 +3205,8 @@ class FloatingControlBarManager {
     let isAskOmiFocused: Bool
     let frame: String?
     let isVoiceListening: Bool
+    /// The current hold has been recognised as a dictation (the notch's red tint).
+    let isVoiceDictating: Bool
     let isVoiceResponseActive: Bool
     let usesNotchIsland: Bool
   }
@@ -3217,6 +3219,7 @@ class FloatingControlBarManager {
         isAskOmiFocused: false,
         frame: nil,
         isVoiceListening: false,
+        isVoiceDictating: false,
         isVoiceResponseActive: false,
         usesNotchIsland: false
       )
@@ -3228,6 +3231,7 @@ class FloatingControlBarManager {
       isAskOmiFocused: focused,
       frame: NSStringFromRect(window.frame),
       isVoiceListening: window.state.isVoiceListening,
+      isVoiceDictating: window.state.isVoiceDictating,
       isVoiceResponseActive: window.state.isVoiceResponseGlowActive,
       usesNotchIsland: window.state.usesNotchIsland
     )

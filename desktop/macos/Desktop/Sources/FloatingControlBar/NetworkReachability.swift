@@ -9,10 +9,11 @@ import Network
 /// fast — the alternative is holding the key while the realtime hub waits out
 /// its warm deadline, only to discover there was never a network to reach.
 ///
-/// Deliberately optimistic before the first path update: a turn taken in the
-/// first moments after launch must not be forced on-device on no evidence. Being
-/// wrong that way is safe, because the existing warm-deadline fallback still
-/// catches it.
+/// Started at launch (`applicationDidFinishLaunching`), so the first turn
+/// already has a real answer. Deliberately optimistic before the first path
+/// update: a turn taken in the first moments after launch must not be forced
+/// on-device on no evidence. Being wrong that way is safe, because the
+/// existing warm-deadline fallback still catches it.
 @MainActor
 final class NetworkReachability {
 
@@ -25,8 +26,8 @@ final class NetworkReachability {
 
   private init() {}
 
-  /// True while a network path is satisfied. Starts the monitor on first use so
-  /// no caller has to remember to.
+  /// True while a network path is satisfied. Also starts the monitor, for the
+  /// callers (tests, early paths) that run before launch has.
   var isOnline: Bool {
     start()
     return online
