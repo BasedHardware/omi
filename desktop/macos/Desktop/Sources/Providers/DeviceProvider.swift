@@ -336,7 +336,7 @@ final class DeviceProvider: ObservableObject {
 
       logger.info("Connected to \(device.displayName)")
 
-      AnalyticsManager.shared.deviceConnected(deviceType: device.type.rawValue, deviceName: device.name)
+      AnalyticsManager.shared.deviceConnected(device: device)
 
     } catch DeviceSessionCoordinatorError.connectionAlreadyActive {
       logger.debug("Ignored duplicate connection request for \(device.displayName)")

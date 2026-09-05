@@ -574,15 +574,15 @@ class AnalyticsManager {
     deviceConnectionTelemetryCaptureForTests = capture
   }
 
-  func deviceConnected(deviceType: String, deviceName: String) {
+  func deviceConnected(device: BtDevice) {
+    let vendor = device.type.analyticsVendorSlug
+    let eventProperties: [String: Any] = [
+      "device_vendor": vendor,
+      "device_type": device.type.rawValue,
+    ]
     deviceConnectionTelemetryCaptureForTests?("Device Connected")
-    PostHogManager.shared.track(
-      "Device Connected",
-      properties: [
-        "device_type": deviceType,
-        "device_name": deviceName,
-      ]
-    )
+    PostHogManager.shared.track("Device Connected", properties: eventProperties)
+    PostHogManager.shared.setUserProperties(["device_vendor": vendor])
   }
 
   func deviceDisconnected() {
