@@ -17,6 +17,7 @@ from database.firestore_index_registry import (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
+    CONVERSATION_PHOTOS_NAME_RANGE_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
@@ -24,6 +25,7 @@ from database.firestore_index_registry import (
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
     INDEX_ONLY_REQUIREMENTS,
+    INDEX_REQUIREMENTS,
     MESSAGES_BY_APP_ORDERED_QUERY,
     MESSAGES_BY_SESSION_ORDERED_QUERY,
     POLICY_EXPIRED_SHORT_TERM_QUERY,
@@ -827,3 +829,18 @@ def test_every_composite_requiring_query_spec_is_declared_in_the_checked_in_mani
         if _platform_requires_composite(spec.index_fields) and spec.index_requirement.signature not in declared
     ]
     assert missing == []
+
+
+def test_document_id_only_collection_group_range_has_no_impossible_composite_requirement():
+    assert CONVERSATION_PHOTOS_NAME_RANGE_QUERY in QUERY_SPECS
+    assert all(
+        requirement.identifier != CONVERSATION_PHOTOS_NAME_RANGE_QUERY.identifier for requirement in INDEX_REQUIREMENTS
+    )
+
+    manifest = firebase_index_manifest()
+    assert not any(
+        index['collectionGroup'] == 'photos'
+        and index['queryScope'] == 'COLLECTION_GROUP'
+        and index['fields'] == [{'fieldPath': '__name__', 'order': 'ASCENDING'}]
+        for index in manifest['indexes']
+    )

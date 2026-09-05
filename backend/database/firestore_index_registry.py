@@ -1442,6 +1442,18 @@ def _query_spec_index_requirements() -> tuple[FirestoreIndexRequirement, ...]:
             query_filter.field_path == '__name__' and query_filter.operator not in ('==', 'in')
             for query_filter in spec.filters
         )
+        document_id_only_range = (
+            document_id_range
+            and bool(spec.filters)
+            and all(query_filter.field_path == '__name__' for query_filter in spec.filters)
+        )
+        if document_id_only_range:
+            # Firestore serves collection-group ranges on the document key from
+            # its built-in key index. A one-field __name__ composite is not a
+            # valid Firestore composite definition (composites require at least
+            # two fields); keep the query registered for coverage without
+            # turning it into an impossible provisioning requirement.
+            continue
         if not _index_fields_need_composite_manifest(spec.index_fields) and not document_id_range:
             continue
         signature = spec.index_requirement.signature
