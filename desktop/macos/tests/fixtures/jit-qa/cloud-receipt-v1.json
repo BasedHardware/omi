@@ -1,0 +1,30 @@
+{
+  "schema_version": "omi.jit.qa.cloud.v1",
+  "status": "ready",
+  "reviewed": true,
+  "project": "based-hardware-dev",
+  "data_plane_project": "based-hardware-dev",
+  "region": "us-central1",
+  "auth_project": "based-hardware",
+  "firestore_database_id": "jit-qa",
+  "python_service": "backend-jit-qa",
+  "desktop_service": "desktop-backend-jit-qa",
+  "gateway_service": "llm-gateway-jit-qa",
+  "exact_python_url": "https://backend-jit-qa-rev123-uc.a.run.app",
+  "exact_desktop_url": "https://desktop-backend-jit-qa-rev123-uc.a.run.app",
+  "exact_gateway_url": "https://llm-gateway-jit-qa-rev123-uc.a.run.app",
+  "full_source_sha": "60635449cf595ea6078cd0f716989a0d15d45c13",
+  "python_revision": "backend-jit-qa-rev123",
+  "python_image_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "desktop_revision": "desktop-backend-jit-qa-rev123",
+  "desktop_image_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "dependency_vector": {
+    "firestore": "based-hardware-dev",
+    "redis": "jit-qa-redis:basic-1GiB",
+    "gateway": "llm-gateway-jit-qa:service-token",
+    "firebase_auth": "based-hardware:verify-only",
+    "storage": "none",
+    "pubsub": "none",
+    "scheduler": "none"
+  }
+}

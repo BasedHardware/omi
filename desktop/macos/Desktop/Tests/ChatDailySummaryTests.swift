@@ -397,9 +397,9 @@ final class ChatDailySummaryTests: XCTestCase {
 
   /// The recap lives in history now: a day-boundary row anchored above the
   /// first message on or after the recap's day. `ChatDailyRecapRowPlacement`
-  /// decides, without a view, where that boundary is and when a thread
-  /// deliberately shows none — a marker the transcript cannot back up would be
-  /// a lie about where the day began.
+  /// decides, without a view, where that boundary is, when it waits for older
+  /// history to load, and when it takes the live edge — a marker the transcript
+  /// cannot back up would be a lie about where the day began.
   func testRecapRowPlacement() throws {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
@@ -431,10 +431,21 @@ final class ChatDailySummaryTests: XCTestCase {
     XCTAssertNil(
       ChatDailyRecapRowPlacement.anchorMessageID(
         in: thread, recapDate: "2026-08-31", hasOlderMessagesAbove: true, calendar: calendar))
-    // A recap newer than everything loaded has no boundary in the window.
+    // A recap newer than everything loaded is the newest thing in the thread:
+    // it takes the live edge, below the last row.
+    XCTAssertEqual(
+      ChatDailyRecapRowPlacement.anchorMessageID(
+        in: thread, recapDate: "2026-09-03", hasOlderMessagesAbove: false, calendar: calendar),
+      thread[2].id)
+    XCTAssertEqual(
+      ChatDailyRecapRowPlacement.anchorMessageID(
+        in: thread, recapDate: "2026-09-03", hasOlderMessagesAbove: true, calendar: calendar),
+      thread[2].id,
+      "the live edge does not depend on how much older history is still hidden")
+    // An empty thread renders nothing rather than inventing a row.
     XCTAssertNil(
       ChatDailyRecapRowPlacement.anchorMessageID(
-        in: thread, recapDate: "2026-09-03", hasOlderMessagesAbove: false, calendar: calendar))
+        in: [], recapDate: "2026-09-03", hasOlderMessagesAbove: false, calendar: calendar))
     // A missing or malformed date renders nothing rather than anchoring somewhere.
     XCTAssertNil(
       ChatDailyRecapRowPlacement.anchorMessageID(

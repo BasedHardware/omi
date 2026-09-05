@@ -1056,9 +1056,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     case .insight, .resurface, .goal: return insightEnabled
     case .memory: return memoryEnabled
     case .integration: return integrationEnabled
-    // Functional system notices and the two never-journaled product cards sit
-    // outside the five-category taxonomy and are ungated by it.
-    case .general, .functional, .trial, .onboarding: return true
+    // Functional system notices, the never-journaled product cards, and the
+    // recap announcement sit outside the five-category taxonomy and are
+    // ungated by it.
+    case .general, .functional, .trial, .onboarding, .dailyRecap: return true
     }
   }
 

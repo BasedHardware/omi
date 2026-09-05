@@ -131,6 +131,13 @@ final class ChatDailySummaryCoordinator: ObservableObject {
     AnalyticsManager.shared.trackDailySummary(.cardShown)
   }
 
+  /// The assistant identity the recap announcement presents under, so the floating bar's kind
+  /// derivation (`ProactiveNotificationKind.from(assistantId:)`) lands on `.dailyRecap` —
+  /// presentation-only. The announcement must not journal a transcript turn: the recap is already
+  /// in the thread as the dedicated `ChatDailyRecapRow` day boundary, and a journaled bell card
+  /// rendered a truncated, stat-less copy of it (INV-CHAT-1 — the recap is chrome, not a turn).
+  static let assistantID = "daily_recap"
+
   private static let defaultCardSink: CardSink = { ownerID, title, body in
     // Fenced to the owner the summary was fetched for, not whoever is current now.
     guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID) else {
@@ -140,6 +147,7 @@ final class ChatDailySummaryCoordinator: ObservableObject {
       ownerID: snapshot.ownerID,
       title: title,
       message: body,
+      assistantId: ChatDailySummaryCoordinator.assistantID,
       // The summary is a statement about a day that already happened; the frequency budget exists
       // to throttle interruptions the user did not ask for, and this one is at most one per day.
       respectFrequency: false,
