@@ -301,8 +301,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                   return ShaderMask(
                                     shaderCallback: (bounds) {
                                       if (provider.text.split(' ').length < 10) {
-                                        return const LinearGradient(colors: [Colors.white, Colors.white])
-                                            .createShader(bounds);
+                                        return const LinearGradient(
+                                          colors: [Colors.white, Colors.white],
+                                        ).createShader(bounds);
                                       }
                                       return const LinearGradient(
                                         colors: [Colors.transparent, Colors.white],
