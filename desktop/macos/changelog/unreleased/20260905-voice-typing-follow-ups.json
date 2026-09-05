@@ -1,8 +1,0 @@
-{
-  "changes": [
-    "Voice typing: the notch's red dots now ease back out when the dictation ends instead of snapping to white",
-    "Voice typing: a hold that heard nothing to type pastes nothing and leaves your clipboard alone, and the cleanup no longer strips letters out of addresses, hyphenated words, or units",
-    "Voice typing: if you switch documents in the same app while a dictation is being transcribed, the text is copied for you to paste instead of landing in the new document",
-    "Voice typing with no network: a spoken question now says \"No network — say “type …” to dictate offline\" instead of reporting a failed reply"
-  ]
-}
