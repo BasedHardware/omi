@@ -36,6 +36,7 @@ class MemoriesProvider extends ChangeNotifier {
   bool _ledgerHistorySupported = false;
   bool _ledgerHistoryTruncated = false;
   bool _loadFailed = false;
+  bool _hasLoaded = false;
   Future<void>? _clientDeviceInitialization;
   List<Tuple2<MemoryCategory, int>> categories = [];
   MemoryCategory? selectedCategory;
@@ -81,6 +82,12 @@ class MemoriesProvider extends ChangeNotifier {
   bool get ledgerHistorySupported => _ledgerHistorySupported;
   bool get ledgerHistoryTruncated => _ledgerHistoryTruncated;
   bool get loadFailed => _loadFailed;
+
+  /// Whether a load attempt has already completed in this session (success or
+  /// failure). `_loading` starts `true` before anything was ever fetched, so
+  /// callers that need "a fetch is actually in flight" must check
+  /// `loading && hasLoaded`.
+  bool get hasLoaded => _hasLoaded;
   bool get showLoadError => _loadFailed && _memories.isEmpty;
 
   bool isRevertingMemory(String memoryId) => _revertingMemoryIds.contains(memoryId);
@@ -239,6 +246,8 @@ class MemoriesProvider extends ChangeNotifier {
     categories = [];
     selectedCategory = null;
     _loading = false;
+    _hasLoaded = false;
+    _loadFailed = false;
     _isSyncing = false;
     _revertingMemoryIds.clear();
     _revertOperationIds.clear();
@@ -350,6 +359,7 @@ class MemoriesProvider extends ChangeNotifier {
       if (!result.ok) {
         _loadFailed = true;
         _loading = false;
+        _hasLoaded = true;
         notifyListeners();
         return;
       }
@@ -398,6 +408,7 @@ class MemoriesProvider extends ChangeNotifier {
         ledgerProjectionRevision != _ledgerProjectionRevision) {
       if (generation == _sessionGeneration && loadSequence == _loadSequence) {
         _loading = false;
+        _hasLoaded = true;
         notifyListeners();
       }
       return;
@@ -428,6 +439,7 @@ class MemoriesProvider extends ChangeNotifier {
     );
 
     _loading = false;
+    _hasLoaded = true;
     _setCategories();
   }
 
@@ -474,9 +486,24 @@ class MemoriesProvider extends ChangeNotifier {
   ///
   /// The local change is optimistic so the control responds immediately, but
   /// it is rolled back if the server rejects or cannot persist the decision.
+  ///
+  /// A memory that is not in the loaded list (cold provider, truncated bulk
+  /// list, or a recap referencing an id this client never paged in) is still
+  /// reviewed by id: the request is id-addressed and the server stays the
+  /// authority, so refusing to send it would strand the recap controls.
   Future<bool> reviewMemory(Memory memory, bool value) async {
     final index = _memories.indexWhere((candidate) => candidate.id == memory.id);
-    if (index == -1 || memory.isLocked) return false;
+    if (index == -1) {
+      final generation = _sessionGeneration;
+      try {
+        final persisted = await _reviewMemoryRequest(memory.id, value);
+        return generation == _sessionGeneration && persisted;
+      } catch (error) {
+        Logger.warning('MemoriesProvider: review persistence failed for ${memory.id}: $error');
+        return false;
+      }
+    }
+    if (memory.isLocked) return false;
     final generation = _sessionGeneration;
     final previousReview = memory.userReview;
     final previousReviewed = memory.reviewed;

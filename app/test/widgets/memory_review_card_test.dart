@@ -337,8 +337,15 @@ void main() {
     expect(find.text('Updated.'), findsNothing);
   });
 
-  testWidgets('an unresolved memory still shows its content with the controls disabled', (tester) async {
-    final provider = _provider(rows: const []);
+  testWidgets('a known memory outside the provider list is still fully tappable', (tester) async {
+    final reviews = <String, bool>{};
+    final provider = _provider(
+      rows: const [],
+      reviewMemoryRequest: (id, value) async {
+        reviews[id] = value;
+        return true;
+      },
+    );
     addTearDown(provider.dispose);
     await provider.loadMemories();
 
@@ -346,8 +353,96 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Prefers async standups'), findsOneWidget);
-    final accept = tester.widget<InkWell>(find.byKey(const Key('memory_review_accept_mem-missing')));
-    expect(accept.onTap, isNull);
-    expect(find.byKey(const Key('memory_review_status_mem-missing')), findsNothing);
+    // Identity is enough: a row the bulk list never contained must not render
+    // dead control chrome.
+    for (final key in [
+      const Key('memory_review_accept_mem-missing'),
+      const Key('memory_review_reject_mem-missing'),
+      const Key('memory_review_fix_mem-missing'),
+    ]) {
+      expect(tester.widget<InkWell>(find.byKey(key)).onTap, isNotNull);
+    }
+
+    await tester.tap(find.byKey(const Key('memory_review_accept_mem-missing')));
+    await tester.pumpAndSettle();
+    // The verdict reached the server by id even though the row never loaded,
+    // and the row says so instead of falling back to tappable controls.
+    expect(reviews, {'mem-missing': true});
+    expect(find.text("Confirmed. I'll act on this."), findsOneWidget);
+  });
+
+  testWidgets('a fix on an unresolved row edits by id and records the correction', (tester) async {
+    final edits = <String, String>{};
+    final provider = _provider(
+      rows: const [],
+      editMemoryRequest: (id, value) async {
+        edits[id] = value;
+        return const EditMemoryResult(persisted: true);
+      },
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-missing')]));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('memory_review_fix_mem-missing')));
+    await tester.pumpAndSettle();
+
+    // The editor is seeded from the recap text when no live row exists.
+    final editor = tester.widget<TextField>(find.byKey(const Key('memory_review_editor_mem-missing')));
+    expect(editor.controller?.text, 'Prefers async standups');
+
+    await tester.enterText(find.byKey(const Key('memory_review_editor_mem-missing')), 'Prefers written standups');
+    await tester.tap(find.byKey(const Key('memory_review_save_mem-missing')));
+    await tester.pumpAndSettle();
+
+    expect(edits, {'mem-missing': 'Prefers written standups'});
+    expect(find.text('Updated.'), findsOneWidget);
+    expect(find.text('Prefers written standups'), findsOneWidget);
+    expect(find.byKey(const Key('memory_review_editor_mem-missing')), findsNothing);
+  });
+
+  testWidgets('a failed review on an unresolved row reverts and shows the error line', (tester) async {
+    final provider = _provider(
+      rows: const [],
+      reviewMemoryRequest: (id, value) async => false,
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-missing')]));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('memory_review_reject_mem-missing')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('memory_review_error_mem-missing')), findsOneWidget);
+    expect(find.text("Dropped. I'll avoid facts like this."), findsNothing);
+    // The controls come back so the user can try again.
+    final reject = tester.widget<InkWell>(find.byKey(const Key('memory_review_reject_mem-missing')));
+    expect(reject.onTap, isNotNull);
+  });
+
+  testWidgets('a truncated bulk list does not disable the recap rows', (tester) async {
+    // GET /v3/memories can return X-Omi-List-Truncated; the provider stops
+    // paging there, so the recap ids can be permanently absent from the list.
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true, truncated: true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
+      reviewMemoryRequest: (id, value) async => true,
+      editMemoryRequest: (id, value) async => const EditMemoryResult(persisted: true),
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-beyond')]));
+    await tester.pumpAndSettle();
+
+    expect(provider.memories, isEmpty);
+    final accept = tester.widget<InkWell>(find.byKey(const Key('memory_review_accept_mem-beyond')));
+    expect(accept.onTap, isNotNull);
   });
 }
