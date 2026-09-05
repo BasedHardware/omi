@@ -9,9 +9,12 @@ import SwiftUI
 /// inset for it, nothing floats, and it cannot move the live edge, which is why the pinned bar's
 /// admission and inset machinery (INV-CHAT-2's banner constraints) no longer exists in Chat.
 ///
-/// A doorway, not the experience: day label, one-line headline, at most two lines of overview —
-/// the full record, its badges, and its actions live on `DailyRecapPage`, which clicking opens
-/// through the typed recap route.
+/// **Below the messages in hierarchy, on purpose.** Left-aligned text one step smaller than the
+/// bubble's, a soft fill with no border, and a trailing chevron — a marker in the thread, not
+/// another card. Centered bordered prose reads as an answer; the day boundary is the quieter
+/// thing. A doorway, not the experience: day label, one-line headline, at most two lines of
+/// overview — the full record, its badges, and its actions live on `DailyRecapPage`, which
+/// clicking opens through the typed recap route.
 struct ChatDailyRecapRow: View {
   let record: DailySummaryRecord
 
@@ -30,12 +33,13 @@ struct ChatDailyRecapRow: View {
         DailyRecapRouteRef(recordID: record.id, date: record.date ?? ""))
       AnalyticsManager.shared.trackDailySummary(.expanded)
     } label: {
-      VStack(spacing: OmiSpacing.xxs) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         HStack(spacing: OmiSpacing.xs) {
           Text(dayLabel)
             .scaledFont(size: OmiType.micro, weight: .semibold)
             .foregroundStyle(Ink.secondary)
             .tracking(0.6)
+          Spacer(minLength: OmiSpacing.sm)
           Image(systemName: "chevron.right")
             .scaledFont(size: OmiType.micro, weight: .semibold)
             .foregroundStyle(Ink.secondary)
@@ -51,18 +55,14 @@ struct ChatDailyRecapRow: View {
             .foregroundStyle(Ink.secondary)
             .lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)
-            .multilineTextAlignment(.center)
+            .multilineTextAlignment(.leading)
         }
       }
-      .frame(maxWidth: .infinity)
+      .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Ink.rowFill))
-      .overlay(
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-          .stroke(Ink.hairline, lineWidth: 1)
-      )
-      .contentShape(.rect(cornerRadius: 10))
+      .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Ink.rowFill))
+      .contentShape(.rect(cornerRadius: 8))
     }
     .buttonStyle(.plain)
     .accessibilityIdentifier("chat-daily-recap-row")
