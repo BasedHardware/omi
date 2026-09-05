@@ -1,0 +1,504 @@
+name: JIT isolated QA Cloud Run plane
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact current main SHA with a successful first-attempt Release Eligibility proof
+        required: true
+        type: string
+      run_once:
+        description: Run the bounded ledger drain after deployment
+        required: true
+        default: false
+        type: boolean
+      confirmation:
+        description: Type RUN_ONCE to admit the drain execution
+        required: false
+        default: ''
+        type: string
+
+env:
+  QA_PROJECT: based-hardware-dev
+  QA_REGION: us-central1
+  QA_FIRESTORE_DATABASE: jit-qa
+  QA_AUTH_PROJECT: based-hardware
+  QA_NETWORK: default
+  QA_SERVICE: backend-jit-qa
+  QA_DESKTOP_SERVICE: desktop-backend-jit-qa
+  QA_GATEWAY_SERVICE: llm-gateway-jit-qa
+  QA_DRAIN_JOB: knowledge-ledger-drain-qa-job
+  QA_SWEEP_JOB: daily-memory-sweep-qa-job
+  QA_REDIS_INSTANCE: jit-qa-redis
+  QA_REDIS_SECRET: jit-qa-redis-password
+  QA_GATEWAY_TOKEN_SECRET: jit-qa-gateway-token
+  QA_ANTHROPIC_SECRET: ANTHROPIC_API_KEY
+  QA_PERPLEXITY_SECRET: PERPLEXITY_API_KEY
+  QA_RUNTIME_SERVICE_ACCOUNT: jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com
+  QA_UID: vi7SA9ckQCe4ccobWNxlbdcNdC23
+
+concurrency:
+  group: jit-isolated-qa-cloud-run-development
+  cancel-in-progress: false
+
+jobs:
+  admit:
+    name: Admit exact proven main source
+    permissions:
+      actions: read
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Require current main and Release Eligibility proof
+        id: source
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REF}" == "refs/heads/main" ]]
+          printf '%s\n' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          [[ "$RELEASE_SHA" == "$(git rev-parse --verify refs/remotes/origin/main)" ]]
+          proof_path="${RUNNER_TEMP}/release-eligibility-${RELEASE_SHA}.json"
+          gh api -H 'Accept: application/vnd.github+json' "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${RELEASE_SHA}&per_page=100" > "$proof_path"
+          python3 .github/scripts/verify_backend_release_admission.py --sha "$RELEASE_SHA" --repository "$GITHUB_REPOSITORY" --workflow-runs "$proof_path" --require-first-attempt
+          git checkout --detach "$RELEASE_SHA"
+          [[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]]
+          echo "source_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build immutable isolated QA images
+    needs: admit
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    outputs:
+      backend_image: ${{ steps.images.outputs.backend_image }}
+      desktop_image: ${{ steps.images.outputs.desktop_image }}
+      gateway_image: ${{ steps.images.outputs.gateway_image }}
+      drain_image: ${{ steps.images.outputs.drain_image }}
+      sweep_image: ${{ steps.images.outputs.sweep_image }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.admit.outputs.source_sha }}
+          fetch-depth: 0
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Configure and build images
+        env:
+          SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r candidate; do
+            case "$candidate" in
+              *.template) ;;
+              *) echo "refusing to build from credential or dotenv file: $candidate" >&2; exit 1 ;;
+            esac
+          done < <(find backend -type f \( -name '.env' -o -name '.env.*' -o -name 'google-credentials.json' -o -iname 'service-account*.json' \) -print)
+          gcloud auth configure-docker gcr.io --quiet
+          docker build --file backend/Dockerfile --tag "gcr.io/${QA_PROJECT}/${QA_SERVICE}:${SOURCE_SHA}" .
+          docker build --file backend/Dockerfile.desktop_backend --tag "gcr.io/${QA_PROJECT}/${QA_DESKTOP_SERVICE}:${SOURCE_SHA}" .
+          docker build --file backend/Dockerfile --tag "gcr.io/${QA_PROJECT}/${QA_GATEWAY_SERVICE}:${SOURCE_SHA}" .
+          docker build --file backend/modal/Dockerfile.knowledge_ledger_drain_job --tag "gcr.io/${QA_PROJECT}/${QA_DRAIN_JOB}:${SOURCE_SHA}" .
+          docker build --file backend/modal/Dockerfile.daily_memory_sweep_job --tag "gcr.io/${QA_PROJECT}/${QA_SWEEP_JOB}:${SOURCE_SHA}" .
+      - name: Smoke each registered runtime image
+        env:
+          SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/runtime_image_contracts.py smoke --dockerfile backend/Dockerfile --image "gcr.io/${QA_PROJECT}/${QA_SERVICE}:${SOURCE_SHA}"
+          python3 backend/scripts/runtime_image_contracts.py smoke --dockerfile backend/Dockerfile.desktop_backend --image "gcr.io/${QA_PROJECT}/${QA_DESKTOP_SERVICE}:${SOURCE_SHA}"
+          python3 backend/scripts/runtime_image_contracts.py smoke --dockerfile backend/modal/Dockerfile.knowledge_ledger_drain_job --image "gcr.io/${QA_PROJECT}/${QA_DRAIN_JOB}:${SOURCE_SHA}"
+          python3 backend/scripts/runtime_image_contracts.py smoke --dockerfile backend/modal/Dockerfile.daily_memory_sweep_job --image "gcr.io/${QA_PROJECT}/${QA_SWEEP_JOB}:${SOURCE_SHA}"
+      - name: Publish immutable digests
+        id: images
+        env:
+          SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          publish_image() {
+            local name="$1" output_name="$2"
+            local tag="gcr.io/${QA_PROJECT}/${name}:${SOURCE_SHA}"
+            docker push "$tag" >/dev/null
+            local digest
+            digest="$(gcloud container images describe "$tag" --format='value(image_summary.digest)')"
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            echo "${output_name}=gcr.io/${QA_PROJECT}/${name}@${digest}" >> "$GITHUB_OUTPUT"
+          }
+          publish_image "$QA_SERVICE" backend_image
+          publish_image "$QA_DESKTOP_SERVICE" desktop_image
+          publish_image "$QA_GATEWAY_SERVICE" gateway_image
+          publish_image "$QA_DRAIN_JOB" drain_image
+          publish_image "$QA_SWEEP_JOB" sweep_image
+
+  provision:
+    name: Provision only named development QA dependencies
+    needs: admit
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    outputs:
+      redis_host: ${{ steps.redis.outputs.redis_host }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.admit.outputs.source_sha }}
+          fetch-depth: 1
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Preflight required development secret metadata before resource mutation
+        run: |
+          set -euo pipefail
+          for secret in ENCRYPTION_SECRET OPENAI_API_KEY POSTHOG_PROJECT_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET"; do
+            gcloud secrets describe "$secret" --project "$QA_PROJECT" >/dev/null
+            gcloud secrets versions describe latest --secret "$secret" --project "$QA_PROJECT" >/dev/null
+          done
+      - name: Create or verify the dev-only runtime identity and minimum access
+        run: |
+          set -euo pipefail
+          if ! gcloud iam service-accounts describe "$QA_RUNTIME_SERVICE_ACCOUNT" --project "$QA_PROJECT" >/dev/null 2>&1; then
+            gcloud iam service-accounts create jit-qa-runtime --project "$QA_PROJECT" --display-name='JIT isolated QA runtime'
+          fi
+          gcloud projects add-iam-policy-binding "$QA_PROJECT" --member="serviceAccount:${QA_RUNTIME_SERVICE_ACCOUNT}" --role=roles/datastore.user --condition=None --quiet >/dev/null
+      - name: Create or verify the isolated named Firestore database
+        run: |
+          set -euo pipefail
+          if ! gcloud firestore databases describe --database "$QA_FIRESTORE_DATABASE" --project "$QA_PROJECT" >/dev/null 2>&1; then
+            gcloud firestore databases create --database "$QA_FIRESTORE_DATABASE" --location "$QA_REGION" --type firestore-native --project "$QA_PROJECT" --quiet
+          fi
+          db_json="$RUNNER_TEMP/jit-qa-firestore.json"
+          gcloud firestore databases describe --database "$QA_FIRESTORE_DATABASE" --project "$QA_PROJECT" --format=json > "$db_json"
+          python3 - "$db_json" <<'PY'
+          import json, sys
+          database = json.load(open(sys.argv[1], encoding="utf-8"))
+          if not str(database.get("name", "")).endswith("/databases/jit-qa"):
+              raise SystemExit("Firestore database name is not jit-qa")
+          if database.get("locationId") != "us-central1":
+              raise SystemExit("Firestore QA database is outside us-central1")
+          if database.get("type") != "FIRESTORE_NATIVE":
+              raise SystemExit("Firestore QA database is not native mode")
+          PY
+      - name: Create or verify the 1 GiB Basic Redis dependency
+        id: redis
+        run: |
+          set -euo pipefail
+          if ! gcloud redis instances describe "$QA_REDIS_INSTANCE" --project "$QA_PROJECT" --region "$QA_REGION" >/dev/null 2>&1; then
+            gcloud redis instances create "$QA_REDIS_INSTANCE" --project "$QA_PROJECT" --region "$QA_REGION" --network "$QA_NETWORK" --tier basic --size 1 --enable-auth --labels managed-by=github-actions,jit-qa=true --quiet
+          fi
+          redis_json="$RUNNER_TEMP/jit-qa-redis.json"
+          gcloud redis instances describe "$QA_REDIS_INSTANCE" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$redis_json"
+          python3 - "$redis_json" <<'PY'
+          import json, sys
+          instance = json.load(open(sys.argv[1], encoding="utf-8"))
+          expected_network = "projects/based-hardware-dev/global/networks/default"
+          if instance.get("tier") != "BASIC":
+              raise SystemExit("Redis QA instance must use BASIC tier")
+          if float(instance.get("memorySizeGb", 0)) != 1:
+              raise SystemExit("Redis QA instance must be exactly 1 GiB")
+          if instance.get("authorizedNetwork") != expected_network:
+              raise SystemExit("Redis QA instance uses an unexpected VPC network")
+          if instance.get("authEnabled") is not True:
+              raise SystemExit("Redis QA instance must have AUTH enabled")
+          PY
+          redis_host="$(gcloud redis instances describe "$QA_REDIS_INSTANCE" --project "$QA_PROJECT" --region "$QA_REGION" --format='value(host)')"
+          [[ "$redis_host" =~ ^[0-9.]+$ ]]
+          auth_string="$(gcloud redis instances get-auth-string "$QA_REDIS_INSTANCE" --project "$QA_PROJECT" --region "$QA_REGION" --format='value(authString)')"
+          [[ -n "$auth_string" ]]
+          if ! gcloud secrets describe "$QA_REDIS_SECRET" --project "$QA_PROJECT" >/dev/null 2>&1; then
+            gcloud secrets create "$QA_REDIS_SECRET" --project "$QA_PROJECT" --replication-policy=user-managed --locations="$QA_REGION"
+          fi
+          printf '%s' "$auth_string" | gcloud secrets versions add "$QA_REDIS_SECRET" --project "$QA_PROJECT" --data-file=- >/dev/null
+          echo "redis_host=$redis_host" >> "$GITHUB_OUTPUT"
+      - name: Create isolated gateway token and grant resource-level secret access
+        run: |
+          set -euo pipefail
+          if ! gcloud secrets describe "$QA_GATEWAY_TOKEN_SECRET" --project "$QA_PROJECT" >/dev/null 2>&1; then
+            gcloud secrets create "$QA_GATEWAY_TOKEN_SECRET" --project "$QA_PROJECT" --replication-policy=user-managed --locations="$QA_REGION"
+            openssl rand -hex 32 | gcloud secrets versions add "$QA_GATEWAY_TOKEN_SECRET" --project "$QA_PROJECT" --data-file=- >/dev/null
+          fi
+          token_state="$(gcloud secrets versions describe latest --secret "$QA_GATEWAY_TOKEN_SECRET" --project "$QA_PROJECT" --format='value(state)' 2>/dev/null || true)"
+          if [[ "$token_state" != "ENABLED" ]]; then
+            openssl rand -hex 32 | gcloud secrets versions add "$QA_GATEWAY_TOKEN_SECRET" --project "$QA_PROJECT" --data-file=- >/dev/null
+          fi
+          for secret in ENCRYPTION_SECRET OPENAI_API_KEY POSTHOG_PROJECT_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET" "$QA_REDIS_SECRET" "$QA_GATEWAY_TOKEN_SECRET"; do
+            gcloud secrets describe "$secret" --project "$QA_PROJECT" >/dev/null
+            gcloud secrets add-iam-policy-binding "$secret" --project "$QA_PROJECT" --member="serviceAccount:${QA_RUNTIME_SERVICE_ACCOUNT}" --role=roles/secretmanager.secretAccessor --condition=None --quiet >/dev/null
+          done
+
+  deploy:
+    name: Deploy gates-closed isolated QA resources
+    needs: [admit, build, provision]
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    outputs:
+      python_url: ${{ steps.urls.outputs.python_url }}
+      desktop_url: ${{ steps.urls.outputs.desktop_url }}
+      gateway_url: ${{ steps.urls.outputs.gateway_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.admit.outputs.source_sha }}
+          fetch-depth: 1
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Validate safe deployment inputs
+        env:
+          RUN_ONCE_INPUT: ${{ inputs.run_once }}
+          CONFIRMATION_INPUT: ${{ inputs.confirmation }}
+          SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
+          BACKEND_IMAGE: ${{ needs.build.outputs.backend_image }}
+          DESKTOP_IMAGE: ${{ needs.build.outputs.desktop_image }}
+          GATEWAY_IMAGE: ${{ needs.build.outputs.gateway_image }}
+          DRAIN_IMAGE: ${{ needs.build.outputs.drain_image }}
+          SWEEP_IMAGE: ${{ needs.build.outputs.sweep_image }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/jit_qa_cloud_run_contract.py validate --project "$QA_PROJECT" --region "$QA_REGION" --auth-project "$QA_AUTH_PROJECT" --uid "$QA_UID" --drain-enabled false --sweep-enabled false --sweep-kill-switch false --run-once "$RUN_ONCE_INPUT" --confirmation "$CONFIRMATION_INPUT" --image "backend=$BACKEND_IMAGE" --image "desktop=$DESKTOP_IMAGE" --image "gateway=$GATEWAY_IMAGE" --image "drain=$DRAIN_IMAGE" --image "sweep=$SWEEP_IMAGE"
+      - name: Deploy dedicated authenticated gateway
+        env:
+          IMAGE: ${{ needs.build.outputs.gateway_image }}
+        run: |
+          set -euo pipefail
+          gateway_env="^@^OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@OMI_LLM_GATEWAY_PROD=false@LLM_GATEWAY_ALLOWED_CALLERS=backend,desktop@OMI_LLM_GATEWAY_BUILD_IDENTITY=jit-qa"
+          gcloud run deploy "$QA_GATEWAY_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --image "$IMAGE" --command uvicorn --args 'llm_gateway.main:app,--host=0.0.0.0,--port=8080' --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --set-env-vars "$gateway_env" --set-secrets "OPENAI_API_KEY=OPENAI_API_KEY:latest,ANTHROPIC_API_KEY=${QA_ANTHROPIC_SECRET}:latest,PERPLEXITY_API_KEY=${QA_PERPLEXITY_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
+      - name: Resolve exact gateway URL
+        id: gateway
+        run: |
+          set -euo pipefail
+          gateway_url="$(gcloud run services describe "$QA_GATEWAY_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format='value(status.url)')"
+          [[ "$gateway_url" == https://* ]]
+          echo "gateway_url=$gateway_url" >> "$GITHUB_OUTPUT"
+      - name: Deploy QA HTTP services with gateway-only routing
+        env:
+          BACKEND_IMAGE: ${{ needs.build.outputs.backend_image }}
+          DESKTOP_IMAGE: ${{ needs.build.outputs.desktop_image }}
+          REDIS_HOST: ${{ needs.provision.outputs.redis_host }}
+          GATEWAY_URL: ${{ steps.gateway.outputs.gateway_url }}
+        run: |
+          set -euo pipefail
+          common="^@^OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@MEMORY_ENABLED=on@MEMORY_BELIEF_MODEL_ENABLED=true@OMI_LLM_GATEWAY_FEATURE_MODE=gateway@OMI_LLM_CHAT_AGENT_ROUTE=gateway@OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false@OMI_LLM_GATEWAY_URL=${GATEWAY_URL}@REDIS_DB_HOST=${REDIS_HOST}@REDIS_DB_PORT=6379"
+          for pair in "$QA_SERVICE:$BACKEND_IMAGE" "$QA_DESKTOP_SERVICE:$DESKTOP_IMAGE"; do
+            service="${pair%%:*}"; image="${pair#*:}"
+            gcloud run deploy "$service" --project "$QA_PROJECT" --region "$QA_REGION" --image "$image" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --network "$QA_NETWORK" --vpc-egress private-ranges-only --set-env-vars "$common" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest,REDIS_DB_PASSWORD=${QA_REDIS_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
+          done
+      - name: Deploy gates-closed maintenance jobs
+        env:
+          DRAIN_IMAGE: ${{ needs.build.outputs.drain_image }}
+          SWEEP_IMAGE: ${{ needs.build.outputs.sweep_image }}
+          REDIS_HOST: ${{ needs.provision.outputs.redis_host }}
+          GATEWAY_URL: ${{ steps.gateway.outputs.gateway_url }}
+        run: |
+          set -euo pipefail
+          drain_env="^@^OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@MEMORY_ENABLED=on@KNOWLEDGE_LEDGER_DRAIN_ENABLED=false@KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST=${QA_UID}"
+          sweep_env="^@^OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@MEMORY_ENABLED=on@MEMORY_DAILY_MEMORY_SWEEP_ENABLED=false@MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false@MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=false@MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=disabled@MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=8@MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0@MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=false@MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=@OMI_LLM_GATEWAY_FEATURE_MODE=gateway@OMI_LLM_CHAT_AGENT_ROUTE=gateway@OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false@OMI_LLM_GATEWAY_URL=${GATEWAY_URL}@REDIS_DB_HOST=${REDIS_HOST}@REDIS_DB_PORT=6379"
+          gcloud run jobs deploy "$QA_DRAIN_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --image "$DRAIN_IMAGE" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --network "$QA_NETWORK" --vpc-egress private-ranges-only --tasks 1 --max-retries 0 --task-timeout 1200s --set-env-vars "$drain_env" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
+          gcloud run jobs deploy "$QA_SWEEP_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --image "$SWEEP_IMAGE" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --network "$QA_NETWORK" --vpc-egress private-ranges-only --tasks 1 --max-retries 0 --task-timeout 1200s --set-env-vars "$sweep_env" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest,REDIS_DB_PASSWORD=${QA_REDIS_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
+      - name: Resolve exact service URLs
+        id: urls
+        run: |
+          set -euo pipefail
+          {
+            echo "python_url=$(gcloud run services describe "$QA_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format='value(status.url)')"
+            echo "desktop_url=$(gcloud run services describe "$QA_DESKTOP_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format='value(status.url)')"
+            echo "gateway_url=${{ steps.gateway.outputs.gateway_url }}"
+          } >> "$GITHUB_OUTPUT"
+
+  verify:
+    name: Verify exact QA resources and readiness candidate
+    needs: [admit, build, provision, deploy]
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.admit.outputs.source_sha }}
+          fetch-depth: 1
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Verify read-only execution permissions on QA jobs
+        run: |
+          set -euo pipefail
+          token="$(gcloud auth print-access-token)"
+          for job in "$QA_DRAIN_JOB" "$QA_SWEEP_JOB"; do
+            response="$RUNNER_TEMP/${job}-permissions.json"
+            curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' --data '{"permissions":["run.jobs.get","run.jobs.run","run.jobs.runWithOverrides"]}' "https://run.googleapis.com/v2/projects/${QA_PROJECT}/locations/${QA_REGION}/jobs/${job}:testIamPermissions" > "$response"
+            python3 - "$response" <<'PY'
+          import json, sys
+          granted = set(json.load(open(sys.argv[1], encoding="utf-8")).get("permissions", []))
+          missing = {"run.jobs.get", "run.jobs.run", "run.jobs.runWithOverrides"} - granted
+          if missing:
+              raise SystemExit(f"missing QA execution permissions: {sorted(missing)}")
+          PY
+          done
+      - name: Read resources and enforce immutable contracts
+        env:
+          BACKEND_IMAGE: ${{ needs.build.outputs.backend_image }}
+          DESKTOP_IMAGE: ${{ needs.build.outputs.desktop_image }}
+          GATEWAY_IMAGE: ${{ needs.build.outputs.gateway_image }}
+          DRAIN_IMAGE: ${{ needs.build.outputs.drain_image }}
+          SWEEP_IMAGE: ${{ needs.build.outputs.sweep_image }}
+          GATEWAY_URL: ${{ needs.deploy.outputs.gateway_url }}
+          REDIS_HOST: ${{ needs.provision.outputs.redis_host }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/jit-qa-contract"; install -d -m 700 "$out"
+          gcloud run services describe "$QA_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$out/backend.json"
+          gcloud run services describe "$QA_DESKTOP_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$out/desktop.json"
+          gcloud run services describe "$QA_GATEWAY_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$out/gateway.json"
+          gcloud run jobs describe "$QA_DRAIN_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$out/drain.json"
+          gcloud run jobs describe "$QA_SWEEP_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$out/sweep.json"
+          python3 backend/scripts/jit_qa_cloud_run_contract.py resource --kind service --profile backend --expected-image "$BACKEND_IMAGE" --resource-json "$out/backend.json" --expected-name "$QA_SERVICE" --gateway-url "$GATEWAY_URL" --redis-host "$REDIS_HOST"
+          python3 backend/scripts/jit_qa_cloud_run_contract.py resource --kind service --profile desktop --expected-image "$DESKTOP_IMAGE" --resource-json "$out/desktop.json" --expected-name "$QA_DESKTOP_SERVICE" --gateway-url "$GATEWAY_URL" --redis-host "$REDIS_HOST"
+          python3 backend/scripts/jit_qa_cloud_run_contract.py resource --kind service --profile gateway --expected-image "$GATEWAY_IMAGE" --resource-json "$out/gateway.json" --expected-name "$QA_GATEWAY_SERVICE"
+          python3 backend/scripts/jit_qa_cloud_run_contract.py resource --kind job --profile drain --expected-image "$DRAIN_IMAGE" --resource-json "$out/drain.json" --expected-name "$QA_DRAIN_JOB"
+          python3 backend/scripts/jit_qa_cloud_run_contract.py resource --kind job --profile sweep --expected-image "$SWEEP_IMAGE" --resource-json "$out/sweep.json" --expected-name "$QA_SWEEP_JOB" --gateway-url "$GATEWAY_URL" --redis-host "$REDIS_HOST"
+      - name: Probe gateway and app routes without customer data
+        env:
+          GATEWAY_URL: ${{ needs.deploy.outputs.gateway_url }}
+          PYTHON_URL: ${{ needs.deploy.outputs.python_url }}
+          DESKTOP_URL: ${{ needs.deploy.outputs.desktop_url }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error "$GATEWAY_URL/health" >/dev/null
+          curl --silent --show-error -o /dev/null -w '%{http_code}' "$GATEWAY_URL/ready" | grep -Eq '^(401|403)$'
+          gateway_token="$(gcloud secrets versions access latest --secret "$QA_GATEWAY_TOKEN_SECRET" --project "$QA_PROJECT")"
+          curl --fail --silent --show-error -H "Authorization: Bearer ${gateway_token}" -H 'X-Omi-Service-Caller: backend' -H "X-Omi-User-Uid: ${QA_UID}" "$GATEWAY_URL/ready" >/dev/null
+          curl --fail --silent --show-error "$PYTHON_URL/openapi.json" >/dev/null
+          curl --fail --silent --show-error "$DESKTOP_URL/openapi.json" >/dev/null
+          curl --silent --show-error -o /dev/null -w '%{http_code}' -X POST -H 'Authorization: Bearer invalid-qa-token' "$PYTHON_URL/v2/messages" | grep -Eq '^(401|403)$'
+      - name: Write content-free activation-shaped readiness candidate
+        env:
+          SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
+          PYTHON_URL: ${{ needs.deploy.outputs.python_url }}
+          DESKTOP_URL: ${{ needs.deploy.outputs.desktop_url }}
+          GATEWAY_URL: ${{ needs.deploy.outputs.gateway_url }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/jit_qa_receipt.py --source-sha "$SOURCE_SHA" --python-json "$RUNNER_TEMP/jit-qa-contract/backend.json" --desktop-json "$RUNNER_TEMP/jit-qa-contract/desktop.json" --gateway-json "$RUNNER_TEMP/jit-qa-contract/gateway.json" --python-url "$PYTHON_URL" --desktop-url "$DESKTOP_URL" --gateway-url "$GATEWAY_URL" --app-probe --gateway-probe --output "$RUNNER_TEMP/jit-qa-receipt.json"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jit-qa-readiness-candidate-${{ github.run_id }}
+          path: ${{ runner.temp }}/jit-qa-receipt.json
+          if-no-files-found: error
+
+  execute:
+    name: Execute explicit drain after durable-proof admission
+    if: inputs.run_once == true
+    needs: [admit, provision, deploy, verify]
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Admit safe execution inputs
+        env:
+          RUN_ONCE_INPUT: ${{ inputs.run_once }}
+          CONFIRMATION_INPUT: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          if os.environ["RUN_ONCE_INPUT"] != "true" or os.environ["CONFIRMATION_INPUT"] != "RUN_ONCE":
+              raise SystemExit("explicit RUN_ONCE confirmation is required")
+          PY
+      - name: Execute and wait for the exact ledger drain
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/jit-qa-execution"
+          gcloud run jobs execute "$QA_DRAIN_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --update-env-vars "KNOWLEDGE_LEDGER_DRAIN_ENABLED=true,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST=${QA_UID}" --format=json > "$RUNNER_TEMP/jit-qa-execution/drain.json"
+          python3 - "$RUNNER_TEMP/jit-qa-execution/drain.json" <<'PY' > "$RUNNER_TEMP/jit-qa-execution/drain.name"
+          import json, sys
+          payload = json.load(open(sys.argv[1], encoding="utf-8"))
+          name = payload.get("metadata", {}).get("name")
+          if not isinstance(name, str) or not name.startswith("knowledge-ledger-drain-qa-job-"):
+              raise SystemExit("missing exact returned drain execution")
+          print(name)
+          PY
+          execution="$(cat "$RUNNER_TEMP/jit-qa-execution/drain.name")"
+          for _ in $(seq 1 80); do
+            gcloud run jobs executions describe "$execution" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$RUNNER_TEMP/jit-qa-execution/drain.state.json"
+            state="$(python3 - "$RUNNER_TEMP/jit-qa-execution/drain.state.json" <<'PY'
+          import json, sys
+          payload = json.load(open(sys.argv[1], encoding="utf-8"))
+          condition = next((item for item in payload.get("status", {}).get("conditions", []) if item.get("type") == "Completed"), None)
+          print("running" if condition is None or condition.get("status") not in {"True", "False"} else "succeeded" if condition.get("status") == "True" else "failed")
+          PY
+          )"
+            [[ "$state" == succeeded ]] && break
+            [[ "$state" != failed ]] || { echo 'QA drain failed; sweep is not eligible' >&2; exit 1; }
+            sleep 15
+          done
+          [[ "$state" == succeeded ]]
+      - name: Prove durable ledger completion before sweep admission
+        run: |
+          set -euo pipefail
+          token="$(gcloud auth print-access-token)"
+          base="https://firestore.googleapis.com/v1/projects/${QA_PROJECT}/databases/${QA_FIRESTORE_DATABASE}/documents/users/${QA_UID}"
+          for path in memory_state/apply_control memory_control/knowledge_ledger_migration memory_control/knowledge_ledger_prompt_projection; do
+            curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${token}" "${base}/${path}" > "$RUNNER_TEMP/jit-qa-execution/${path##*/}.json"
+          done
+          python3 - "$RUNNER_TEMP/jit-qa-execution/apply_control.json" "$RUNNER_TEMP/jit-qa-execution/knowledge_ledger_migration.json" "$RUNNER_TEMP/jit-qa-execution/knowledge_ledger_prompt_projection.json" <<'PY'
+          import json
+          import sys
+
+          control, migration, projection = [json.load(open(path, encoding="utf-8")) for path in sys.argv[1:]]
+
+          def value(document, field):
+              fields = document.get("fields", {})
+              entry = fields.get(field, {})
+              if "stringValue" in entry:
+                  return entry["stringValue"]
+              if "integerValue" in entry:
+                  return int(entry["integerValue"])
+              return None
+
+          if value(control, "writer_mode") != "ledger":
+              raise SystemExit("durable ledger proof has no stable ledger writer")
+          if value(migration, "status") != "complete" or value(migration, "blocking_row_count") != 0:
+              raise SystemExit("durable ledger proof is incomplete")
+          if value(control, "head_commit_id") != value(migration, "source_head_commit_id"):
+              raise SystemExit("durable ledger proof head fence mismatches control")
+          if value(control, "writer_epoch") != value(migration, "writer_epoch"):
+              raise SystemExit("durable ledger proof epoch fence mismatches control")
+          if value(projection, "status") != "complete" or value(projection, "legacy_row_count") != 0:
+              raise SystemExit("durable ledger projection is incomplete")
+          if value(projection, "blocking_row_count") != 0 or (value(projection, "scanned_row_count") or 0) <= 0:
+              raise SystemExit("durable ledger projection has no nonempty completed scan")
+          print("durable ledger completion proof passed")
+          PY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jit-qa-execution-receipt-${{ github.run_id }}
+          path: ${{ runner.temp }}/jit-qa-execution
+          if-no-files-found: error

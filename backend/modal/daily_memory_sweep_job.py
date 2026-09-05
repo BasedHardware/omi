@@ -16,6 +16,7 @@ import firebase_admin
 
 from database._client import db as default_db_client
 from database.notifications import get_user_time_zone
+from utils.env_loader import firebase_admin_options
 from utils.jit_rollout import JITDecisionStage, TriState, resolve_jit_rollout_sync
 from utils.memory.daily_memory_sweep import (
     DailySweepCohortDecision,
@@ -28,6 +29,7 @@ from utils.memory.daily_memory_sweep_inventory import (
     DailySweepUIDInventoryPage,
     bounded_daily_memory_sweep_uid_inventory,
     commit_daily_memory_sweep_uid_inventory,
+    explicit_jit_qa_daily_sweep_uid_inventory,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -50,7 +52,7 @@ def _init_firebase() -> None:
     if service_account_json:
         firebase_admin.initialize_app(firebase_admin.credentials.Certificate(json.loads(service_account_json)))
     else:
-        firebase_admin.initialize_app()
+        firebase_admin.initialize_app(options=firebase_admin_options())
 
 
 def run_daily_memory_sweep_job() -> None:
@@ -60,6 +62,7 @@ def run_daily_memory_sweep_job() -> None:
     # killed, malformed, or otherwise unavailable.  ``getattr`` is deliberate:
     # an unavailable authority provider must fail closed rather than allowing
     # a newly deployed job to perform any user/data work.
+    truthy = {"1", "true", "yes", "on"}
     try:
         authority = daily_memory_sweep_authority_from_environment()
         authority_open = getattr(authority, "may_write", False) is True
@@ -69,17 +72,20 @@ def run_daily_memory_sweep_job() -> None:
     if not authority_open:
         logger.info("daily-memory-sweep job closed by backend authority; exiting before inventory")
         return
-    page = bounded_daily_memory_sweep_uid_inventory(
-        default_db_client,
-        limit=400,
-        persist_cursor=False,
-        return_page=True,
-    )
+    qa_allowlist = os.getenv("OMI_JIT_QA_UID_ALLOWLIST", "").strip()
+    if os.getenv("OMI_JIT_QA_AUTH_ONLY", "false").strip().casefold() in truthy:
+        page = explicit_jit_qa_daily_sweep_uid_inventory(qa_allowlist.split(","))
+    else:
+        page = bounded_daily_memory_sweep_uid_inventory(
+            default_db_client,
+            limit=400,
+            persist_cursor=False,
+            return_page=True,
+        )
     if not isinstance(page, DailySweepUIDInventoryPage):
         raise RuntimeError("daily-memory-sweep inventory page is malformed")
     inventory = page.uids
     now = datetime.now(timezone.utc)
-    truthy = {"1", "true", "yes", "on"}
     timezone_reconciler = None
     if os.getenv("MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED", "false").casefold() in truthy:
         timezone_reconciler = lambda uid, timezone_name: reconcile_daily_memory_sweep_timezone(
