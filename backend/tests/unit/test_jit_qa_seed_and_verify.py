@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -15,9 +16,10 @@ from scripts import jit_qa_seed_and_verify as operator
 
 
 class _Snapshot:
-    def __init__(self, payload: dict | None):
+    def __init__(self, payload: dict | None, *, document_id: str = ""):
         self.exists = payload is not None
         self._payload = dict(payload or {})
+        self.id = document_id
 
     def to_dict(self):
         return dict(self._payload)
@@ -32,7 +34,7 @@ class _Ref:
         return self
 
     def get(self):
-        return _Snapshot(self.db.docs.get(self.path))
+        return _Snapshot(self.db.docs.get(self.path), document_id=self.path.rsplit("/", 1)[-1])
 
     def set(self, payload, merge=False):
         if merge and self.path in self.db.docs:
@@ -40,23 +42,66 @@ class _Ref:
         else:
             self.db.docs[self.path] = dict(payload)
 
+    def create(self, payload):
+        if self.path in self.db.docs:
+            raise RuntimeError("already exists")
+        self.db.docs[self.path] = dict(payload)
+
+
+class _Collection:
+    def __init__(self, db: "_DB", path: str):
+        self.db = db
+        self.path = path.strip("/")
+        self._limit = None
+
+    @property
+    def id(self):
+        return self.path.rsplit("/", 1)[-1]
+
+    def select(self, _fields):
+        return self
+
+    def limit(self, value):
+        self._limit = value
+        return self
+
+    def stream(self):
+        prefix_parts = self.path.split("/")
+        rows = []
+        for path, payload in self.db.docs.items():
+            parts = path.split("/")
+            if len(parts) == len(prefix_parts) + 1 and parts[: len(prefix_parts)] == prefix_parts:
+                rows.append(_Snapshot(payload, document_id=parts[-1]))
+        return rows[: self._limit]
+
 
 class _DB:
-    def __init__(self):
-        self.docs = {
-            f"users/{operator.QA_UID}/memory_state/apply_control": {
-                "uid": operator.QA_UID,
-                "writer_mode": "compatibility",
-                "writer_epoch": 1,
-                "head_commit_id": "qa-head",
-                "account_generation": 1,
-                "source_generation": 1,
-                "commit_sequence": 0,
+    def __init__(self, *, include_control=True):
+        self.docs = (
+            {
+                f"users/{operator.QA_UID}/memory_state/apply_control": {
+                    "uid": operator.QA_UID,
+                    "writer_mode": "compatibility",
+                    "writer_epoch": 1,
+                    "head_commit_id": "qa-head",
+                    "account_generation": 1,
+                    "source_generation": 1,
+                    "commit_sequence": 0,
+                }
             }
-        }
+            if include_control
+            else {}
+        )
 
     def document(self, path):
         return _Ref(self, path)
+
+    def collection(self, path):
+        return _Collection(self, path)
+
+    def collections(self):
+        ids = {path.split("/", 1)[0] for path in self.docs}
+        return [_Collection(self, collection_id) for collection_id in sorted(ids)]
 
 
 def _summary(**overrides):
@@ -123,6 +168,65 @@ def test_seed_refuses_foreign_document_without_overwriting_it():
         operator.seed_fixture(db, run_id="proof-20260905")
     assert db.docs[path]["uid"] == "customer-uid"
     assert operator._evidence_path("proof-20260905", 0) not in db.docs
+
+
+def test_fixture_exclusivity_fails_closed_without_a_queryable_collection():
+    class PointOnlyDB:
+        def document(self, path):
+            return _Ref(_DB(), path)
+
+    with pytest.raises(operator.JITQAVerificationError, match="cannot prove fixture exclusivity"):
+        operator._assert_fixture_exclusive(PointOnlyDB(), run_id="proof-20260905")
+
+
+def test_bootstrap_is_create_only_and_idempotent(monkeypatch):
+    db = _DB(include_control=False)
+
+    def ensure_control(uid, *, db_client):
+        assert uid == operator.QA_UID
+        control_ref = db_client.document(operator._control_path())
+        if not control_ref.get().exists:
+            control_ref.create(
+                {
+                    "uid": uid,
+                    "writer_mode": "compatibility",
+                    "writer_epoch": 0,
+                    "head_commit_id": "head0",
+                    "account_generation": 1,
+                    "source_generation": 1,
+                    "commit_sequence": 0,
+                }
+            )
+        registry_ref = db_client.document(f"canonical_memory_maintenance_registry/{uid}")
+        if not registry_ref.get().exists:
+            registry_ref.create({"uid": uid, "schema_version": 1})
+        return SimpleNamespace(uid=uid, writer_mode=SimpleNamespace(value="compatibility"))
+
+    monkeypatch.setattr(operator, "ensure_canonical_apply_control_state", ensure_control)
+    monkeypatch.setattr(operator, "validate_environment", lambda: None)
+
+    first = operator.bootstrap_qa_account(db)
+    assert first["profile"] == "created"
+    assert first["tester"] == "created"
+    assert db.docs[f"users/{operator.QA_UID}"]["time_zone"] == operator.QA_TIME_ZONE
+    assert db.docs[f"users/{operator.QA_UID}"]["subscription"]["plan"] == operator.QA_ENTITLEMENT_PLAN
+    assert db.docs[operator.TESTER_PATH]["test_account"] is True
+    assert db.docs[operator.BOOTSTRAP_PATH]["status"] == "complete"
+
+    before = {path: dict(payload) for path, payload in db.docs.items()}
+    second = operator.bootstrap_qa_account(db)
+    assert second["profile"] == "existing"
+    assert second["tester"] == "existing"
+    assert db.docs == before
+
+
+def test_bootstrap_refuses_unowned_document_before_any_write(monkeypatch):
+    db = _DB(include_control=False)
+    db.docs["users/another-uid"] = {"uid": "another-uid"}
+    monkeypatch.setattr(operator, "validate_environment", lambda: None)
+    with pytest.raises(operator.JITQAVerificationError, match="truly empty"):
+        operator.bootstrap_qa_account(db)
+    assert operator.BOOTSTRAP_PATH not in db.docs
 
 
 def test_summary_parser_accepts_workflow_envelope_and_rejects_missing_fields(tmp_path: Path):

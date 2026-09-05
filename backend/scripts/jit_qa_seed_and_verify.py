@@ -3,9 +3,11 @@
 
 This operator is deliberately narrower than the deployment workflow.  It owns
 only a deterministic, synthetic fixture in the named ``jit-qa`` Firestore
-database.  It never discovers or edits another account, never creates the
-apply-control document, and never calls a model.  The Cloud Run workflow owns
-job execution; this command consumes its content-free execution summaries.
+database.  The explicit ``bootstrap`` command is create-only and may only
+initialize a truly empty named database for the fixed QA identity.  It never
+discovers or edits another account, never creates a production control plane,
+and never calls a model.  The Cloud Run workflow owns job execution; this
+command consumes its content-free execution summaries.
 
 The fixture contains 101 canonical rows that are intentionally missing the
 ledger schema marker.  The production drain's mutation budget is 100 rows per
@@ -37,10 +39,12 @@ if str(BACKEND_DIR) not in sys.path:
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState  # noqa: E402
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState  # noqa: E402
+from models.users import PlanType, Subscription, SubscriptionStatus  # noqa: E402
 from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION  # noqa: E402
 from utils.memory.knowledge_ledger_migration import (  # noqa: E402
     rollback_ledger_writer_to_compatibility,
 )
+from utils.memory.memory_system import ensure_canonical_apply_control_state  # noqa: E402
 
 PROJECT_ID = "based-hardware-dev"
 DATABASE_ID = "jit-qa"
@@ -48,8 +52,19 @@ REGION = "us-central1"
 QA_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 LEDGER_DRAIN_JOB = "knowledge-ledger-drain-qa-job"
 FIXTURE_MARKER = "omi.jit.qa.seed-and-verify.v1"
+BOOTSTRAP_MARKER = "omi.jit.qa.bootstrap.v1"
+BOOTSTRAP_PATH = f"jit_qa_bootstrap/{QA_UID}"
+TESTER_PATH = f"testers/{QA_UID}"
+QA_TIME_ZONE = "America/New_York"
+# The isolated QA database has no Stripe authority.  This is a named, synthetic
+# entitlement used only by the QA service's fixed UID allowlist; it is never
+# copied to customer data or used as production billing evidence.
+QA_ENTITLEMENT_PLAN = PlanType.operator.value
+QA_ENTITLEMENT_PERIOD_END = 4102444800  # 2100-01-01T00:00:00Z
 ROW_COUNT = 101
 MUTATION_PAGE_SIZE = 100
+EXCLUSIVITY_SCAN_LIMIT = ROW_COUNT + 1
+BOOTSTRAP_COLLECTIONS = frozenset({"jit_qa_bootstrap", "users", "testers", "canonical_memory_maintenance_registry"})
 LEDGER_DRAIN_CURSOR_PATH = "knowledge_ledger_migration_control/inventory_cursor"
 RUN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,47}$")
 SUMMARY_KEYS = (
@@ -132,6 +147,206 @@ def _projection_path() -> str:
     return f"users/{QA_UID}/memory_control/knowledge_ledger_prompt_projection"
 
 
+def _bootstrap_marker_payload(*, status: str) -> dict[str, Any]:
+    return {
+        "schema_version": BOOTSTRAP_MARKER,
+        "status": status,
+        "project": PROJECT_ID,
+        "database": DATABASE_ID,
+        "uid": QA_UID,
+        "time_zone": QA_TIME_ZONE,
+        "entitlement_plan": QA_ENTITLEMENT_PLAN,
+        "test_account": True,
+    }
+
+
+def _qa_subscription_payload() -> dict[str, Any]:
+    """Return the typed subscription projection required by desktop admission.
+
+    This is intentionally built through the shipped ``Subscription`` model.  A
+    QA database has no Stripe webhook, so the period is a fixed synthetic
+    horizon and is scoped by the explicit QA marker below.
+    """
+
+    return Subscription(
+        plan=PlanType.operator,
+        status=SubscriptionStatus.active,
+        current_period_end=QA_ENTITLEMENT_PERIOD_END,
+    ).model_dump(mode="json")
+
+
+def _qa_profile_payload() -> dict[str, Any]:
+    return {
+        "uid": QA_UID,
+        "time_zone": QA_TIME_ZONE,
+        "subscription": _qa_subscription_payload(),
+        "test_account": True,
+        "jit_qa_bootstrap_marker": BOOTSTRAP_MARKER,
+        "jit_qa_project": PROJECT_ID,
+        "jit_qa_database": DATABASE_ID,
+    }
+
+
+def _qa_tester_payload() -> dict[str, Any]:
+    # ``database.apps.is_tester_db`` treats existence of this canonical tester
+    # document as the test-account entitlement.  Keep the apps array explicit
+    # for readers that use the tester document's normal shape.
+    return {
+        "uid": QA_UID,
+        "apps": [],
+        "test_account": True,
+        "jit_qa_bootstrap_marker": BOOTSTRAP_MARKER,
+        "jit_qa_project": PROJECT_ID,
+        "jit_qa_database": DATABASE_ID,
+    }
+
+
+def _assert_named_database_empty(db_client: Any) -> None:
+    """Prove the named database is empty before creating the QA account.
+
+    ``collections()`` is a metadata-only inventory.  Each present top-level
+    collection is then queried with a two-document bound so a non-empty or
+    unsupported collection fails closed without reading customer content.
+    """
+
+    collections_factory = getattr(db_client, "collections", None)
+    if not callable(collections_factory):
+        raise JITQAVerificationError("bootstrap requires a Firestore client that can inventory collections")
+    try:
+        collections = list(collections_factory())
+    except Exception as exc:
+        raise JITQAVerificationError("bootstrap could not inventory the named Firestore database") from exc
+    for collection in collections:
+        collection_id = str(getattr(collection, "id", ""))
+        if collection_id not in BOOTSTRAP_COLLECTIONS:
+            raise JITQAVerificationError(f"bootstrap found an unsupported top-level collection: {collection_id!r}")
+        limited = getattr(collection, "limit", None)
+        stream = getattr(limited(2) if callable(limited) else collection, "stream", None)
+        if not callable(stream):
+            raise JITQAVerificationError("bootstrap cannot prove the named Firestore database is empty")
+        try:
+            first_two = list(stream())
+        except Exception as exc:
+            raise JITQAVerificationError("bootstrap could not inspect the named Firestore database") from exc
+        if first_two:
+            raise JITQAVerificationError(
+                f"bootstrap requires a truly empty named database; collection {collection_id!r} already has documents"
+            )
+
+
+def _assert_owned_fields(
+    db_client: Any,
+    path: str,
+    expected: Mapping[str, Any],
+    *,
+    label: str,
+) -> bool:
+    """Return whether a document exists with all owned fields unchanged."""
+
+    payload = _as_dict(db_client.document(path).get())
+    if not payload:
+        return False
+    for key, value in expected.items():
+        if payload.get(key) != value:
+            raise JITQAVerificationError(f"refusing to overwrite unowned or malformed QA {label}")
+    return True
+
+
+def _create_or_verify_owned_document(
+    db_client: Any,
+    path: str,
+    payload: Mapping[str, Any],
+    *,
+    label: str,
+) -> str:
+    """Create a profile/tester document, never overwrite an existing document."""
+
+    ref = db_client.document(path)
+    snapshot = ref.get()
+    if getattr(snapshot, "exists", False):
+        existing = _as_dict(snapshot)
+        for key, value in payload.items():
+            if existing.get(key) != value:
+                raise JITQAVerificationError(f"refusing to overwrite unowned or malformed QA {label}")
+        return "existing"
+    create = getattr(ref, "create", None)
+    if not callable(create):
+        raise JITQAVerificationError(f"bootstrap requires create-only Firestore writes for QA {label}")
+    try:
+        create(dict(payload))
+    except Exception as exc:
+        # A race is safe only if the winner wrote the exact owned projection.
+        if _assert_owned_fields(db_client, path, payload, label=label):
+            return "existing"
+        raise JITQAVerificationError(f"QA {label} creation did not produce the owned document") from exc
+    return "created"
+
+
+def bootstrap_qa_account(db_client: Any) -> dict[str, Any]:
+    """Create the fixed QA identity and canonical apply state in an empty DB.
+
+    This is the only command allowed to prepare an empty ``jit-qa`` database.
+    It writes a durable ownership marker first, then creates only missing
+    profile/tester documents and invokes the shipped canonical apply-state
+    helper.  It never fabricates a ledger completion or cutover receipt; the
+    drain job remains the sole cutover authority.
+    """
+
+    validate_environment()
+    validate_target()
+    marker_ref = db_client.document(BOOTSTRAP_PATH)
+    marker_snapshot = marker_ref.get()
+    marker = _as_dict(marker_snapshot)
+    if not marker:
+        _assert_named_database_empty(db_client)
+        create = getattr(marker_ref, "create", None)
+        if not callable(create):
+            raise JITQAVerificationError("bootstrap requires create-only Firestore writes for its ownership marker")
+        try:
+            create(_bootstrap_marker_payload(status="in_progress"))
+        except Exception as exc:
+            marker = _as_dict(marker_ref.get())
+            if marker != _bootstrap_marker_payload(status="in_progress"):
+                raise JITQAVerificationError("bootstrap ownership marker raced with an unowned document") from exc
+    else:
+        expected_marker = _bootstrap_marker_payload(status=str(marker.get("status", "")))
+        if marker != expected_marker or marker.get("status") not in {"in_progress", "complete"}:
+            raise JITQAVerificationError("QA bootstrap marker is missing, malformed, or owned by another run")
+
+    profile_result = _create_or_verify_owned_document(
+        db_client,
+        f"users/{QA_UID}",
+        _qa_profile_payload(),
+        label="user profile",
+    )
+    tester_result = _create_or_verify_owned_document(db_client, TESTER_PATH, _qa_tester_payload(), label="tester")
+
+    # This helper atomically creates the real canonical apply-control state and
+    # its maintenance registry entry.  No raw MemoryControlState admission is
+    # fabricated here.
+    control = ensure_canonical_apply_control_state(QA_UID, db_client=db_client)
+    if control.uid != QA_UID or control.writer_mode.value != "compatibility":
+        raise JITQAVerificationError("canonical QA apply-control helper returned an unexpected writer state")
+
+    complete_marker = _bootstrap_marker_payload(status="complete")
+    marker_ref.set(complete_marker)
+    return {
+        "result": "PASS",
+        "status": "complete",
+        "project": PROJECT_ID,
+        "database": DATABASE_ID,
+        "uid": QA_UID,
+        "time_zone": QA_TIME_ZONE,
+        "entitlement_plan": QA_ENTITLEMENT_PLAN,
+        "profile": profile_result,
+        "tester": tester_result,
+        "apply_control_path": _control_path(),
+        "apply_control_writer_mode": control.writer_mode.value,
+        "maintenance_registry": f"canonical_memory_maintenance_registry/{QA_UID}",
+        "cutover_authority": "knowledge-ledger-drain-qa-job via publish_ledger_migration_cutover",
+    }
+
+
 def _as_dict(snapshot: Any) -> dict[str, Any]:
     if not getattr(snapshot, "exists", False):
         return {}
@@ -155,19 +370,24 @@ def _assert_fixture_exclusive(db_client: Any, *, run_id: str) -> None:
 
     collection_factory = getattr(db_client, "collection", None)
     if not callable(collection_factory):
-        # Lightweight unit fakes use point reads only.  The real Firestore
-        # client always exposes collection().
-        return
+        raise JITQAVerificationError("QA Firestore client cannot prove fixture exclusivity")
     collection = collection_factory(f"users/{QA_UID}/memory_items")
     selector = getattr(collection, "select", None)
     if callable(selector):
         collection = selector(["memory_id", "uid", "jit_qa_fixture", "jit_qa_run_id", "jit_qa_row"])
+    limiter = getattr(collection, "limit", None)
+    if not callable(limiter):
+        raise JITQAVerificationError("QA Firestore client cannot bound fixture exclusivity inventory")
+    collection = limiter(EXCLUSIVITY_SCAN_LIMIT)
     stream = getattr(collection, "stream", None)
     if not callable(stream):
         raise JITQAVerificationError("QA Firestore client cannot prove fixture exclusivity")
     expected_ids = {f"jitqa-{run_id}-legacy-{index:03d}" for index in range(ROW_COUNT)}
-    foreign_ids: list[str] = []
+    scanned = 0
     for snapshot in stream():
+        scanned += 1
+        if scanned > EXCLUSIVITY_SCAN_LIMIT:
+            raise JITQAVerificationError("QA fixture exclusivity inventory exceeded its hard bound")
         snapshot_id = str(getattr(snapshot, "id", ""))
         payload = _as_dict(snapshot)
         if snapshot_id not in expected_ids or not _owned_fields_match(
@@ -175,11 +395,12 @@ def _assert_fixture_exclusive(db_client: Any, *, run_id: str) -> None:
             run_id=run_id,
             index=int(payload.get("jit_qa_row", -1)) if str(payload.get("jit_qa_row", "")).isdigit() else -1,
         ):
-            foreign_ids.append(snapshot_id or "<missing-id>")
-    if foreign_ids:
-        raise JITQAVerificationError(
-            "QA account contains pre-existing or foreign memory rows; refusing to migrate shared state"
-        )
+            # Stop at the first foreign row.  The query is deliberately capped
+            # at 101 + 1 so a malicious/accidental large collection cannot turn
+            # this proof into an unbounded inventory.
+            raise JITQAVerificationError(
+                "QA account contains a non-owned QA row or foreign memory row; refusing to migrate shared state"
+            )
 
 
 def _stored_model(model: Any) -> dict[str, Any]:
@@ -639,8 +860,9 @@ def _load_args_summary(path: Path) -> Mapping[str, Any]:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--run-id", required=True, help="lowercase synthetic fixture namespace")
+    parser.add_argument("--run-id", help="lowercase synthetic fixture namespace")
     sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("bootstrap", help="create the fixed QA profile in a truly empty named database")
     sub.add_parser("prepare", help="preflight and create missing owned synthetic rows")
     sub.add_parser("inspect", help="read content-free fixture metadata")
     verify = sub.add_parser("verify", help="verify first, second, and stable retry drain summaries")
@@ -654,10 +876,15 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    validate_run_id(args.run_id)
+    if args.command != "bootstrap" and not args.run_id:
+        raise JITQAVerificationError("--run-id is required for prepare, inspect, verify, and rollback")
+    if args.run_id:
+        validate_run_id(args.run_id)
     validate_environment()
     db_client = build_firestore_client()
-    if args.command == "prepare":
+    if args.command == "bootstrap":
+        print(json.dumps(bootstrap_qa_account(db_client), sort_keys=True))
+    elif args.command == "prepare":
         print(json.dumps(seed_fixture(db_client, run_id=args.run_id), sort_keys=True))
     elif args.command == "inspect":
         print(json.dumps(inspect_fixture(db_client, run_id=args.run_id).as_dict(), sort_keys=True))

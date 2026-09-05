@@ -7,12 +7,27 @@ execution. The only account it may touch is
 database `jit-qa`. It refuses a different project, database, UID, emulator, or
 customer Firebase credential selector.
 
-The deployment/database factory must create the QA database and the account's
-`users/{uid}/memory_state/apply_control` document first. The operator does not
-create or repair apply-control state. The initial writer mode must be
-`compatibility`; all rows and evidence are namespaced by the supplied run ID.
-Existing documents with a foreign marker are a hard failure, and rerunning the
-same seed is a read-only no-op for rows already owned by that run.
+The deployment/database factory creates the named Firestore database. Before
+seeding, run the explicit create-only bootstrap against that named database:
+
+```bash
+python3 backend/scripts/jit_qa_seed_and_verify.py bootstrap
+```
+
+Bootstrap fails unless the named database is truly empty, creates only the
+fixed QA UID's minimal `users/{uid}` profile and `testers/{uid}` entitlement
+marker, and calls `ensure_canonical_apply_control_state` to create the real
+compatibility apply-control fence. It never creates a migration completion or
+ledger cutover receipt; those remain owned by the drain job's canonical
+`publish_ledger_migration_cutover` path. A durable
+`jit_qa_bootstrap/{uid}` marker makes a retry idempotent while refusing any
+unowned or malformed document. The default database and every other UID remain
+out of scope.
+
+The initial writer mode must be `compatibility`; all rows and evidence are
+namespaced by the supplied run ID. Existing documents with a foreign marker
+are a hard failure, and rerunning the same seed is a read-only no-op for rows
+already owned by that run.
 
 ## Prepare and inspect
 
@@ -22,6 +37,8 @@ running the script. No model call or Cloud Run execution is made by these
 commands.
 
 ```bash
+python3 backend/scripts/jit_qa_seed_and_verify.py bootstrap
+
 python3 backend/scripts/jit_qa_seed_and_verify.py \
   --run-id qa-proof-20260905 prepare
 
@@ -100,3 +117,20 @@ The operator's drain proof is a separate data-plane receipt. A reviewed cloud
 resource receipt proves the endpoint/dependency tuple; it does not prove the
 101-row drain. Both must be retained together, with the exact Cloud Run
 execution names joined to the three summary files.
+
+## Emulator proof boundary
+
+For local correctness, run the real Firestore emulator proof under
+`firebase emulators:exec`:
+
+```bash
+firebase emulators:exec --only firestore --project demo-omi-jit-qa \
+  'PYTHONPATH=backend python3 backend/scripts/jit_qa_seed_and_verify_emulator_test.py'
+```
+
+That test exercises bootstrap, 101-row seed, the actual migration helper's
+100+1 progress, canonical publication, rollback, and roll-forward against a
+real emulator. It injects only the rollout decision and labels that boundary
+in its output. The named-cloud command still rejects emulators and requires
+the deployed job's real rollout/admission path; an emulator pass is not a
+cloud readiness result.
