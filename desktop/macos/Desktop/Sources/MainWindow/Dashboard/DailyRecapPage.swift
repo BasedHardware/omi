@@ -163,15 +163,17 @@ struct DailyRecapPage: View {
       .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  /// One row of equal-width chips, each a single line: icon, bold value, label
-  /// ("4h watching"). The fixed width is what keeps the line from ever wrapping
-  /// mid-word — a chip that outgrows its slot scrolls, it does not fold.
+  /// One row of chips, each hugging its content on a single line: icon, bold
+  /// value, label ("4h 33m watching"). A fixed slot was tried and was the bug:
+  /// short labels left dead space inside their capsule while the row's tail
+  /// clipped past the column edge. Content-sized chips keep every label whole
+  /// and the row scrolls only when the window is genuinely too narrow.
   private func statsRow(_ stats: DailySummaryRecord.Stats) -> some View {
     let chips = HomeDailySummaryStatsRow.chips(for: stats)
     return Group {
       if !chips.isEmpty {
         ScrollView(.horizontal, showsIndicators: false) {
-          HStack(spacing: OmiSpacing.xs) {
+          HStack(spacing: OmiSpacing.sm) {
             ForEach(chips) { chip in
               statChip(chip)
             }
@@ -197,11 +199,10 @@ struct DailyRecapPage: View {
         .foregroundStyle(HomePalette.secondary)
     }
     .lineLimit(1)
-    .truncationMode(.tail)
-    .padding(.horizontal, OmiSpacing.sm + 1)
+    .fixedSize()
+    .padding(.horizontal, OmiSpacing.sm)
     .padding(.vertical, OmiSpacing.xxs + 2)
     .background(Capsule().fill(Ink.rowFill))
-    .frame(width: Self.statChipWidth, alignment: .leading)
     .accessibilityElement(children: .combine)
     .accessibilityLabel("\(chip.value) \(chip.label)")
   }
@@ -433,7 +434,6 @@ struct DailyRecapPage: View {
   /// Six chips at a width that holds the longest label ("8h 5m listening",
   /// "13 conversations") on one line; the row scrolls in a narrower lane
   /// rather than folding a label mid-word.
-  nonisolated static let statChipWidth: CGFloat = 152
 }
 
 // MARK: - Rows
