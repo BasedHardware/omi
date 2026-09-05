@@ -1311,14 +1311,6 @@ CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('__name__'),),
 )
 
-CONTEXT_BUCKET_FACTS_BY_GENERATION_QUERY = FirestoreQuerySpec(
-    identifier='context_bucket_facts_generation_updated',
-    collection_group='context_bucket_facts',
-    query_scope='COLLECTION',
-    filters=(FirestoreQueryFilter('account_generation', '==', 'account_generation'),),
-    index_fields=(_asc('account_generation'), _desc('updated_at'), _desc('__name__')),
-)
-
 QUERY_SPECS = (
     ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
     CONVERSATION_PHOTOS_NAME_RANGE_QUERY,
@@ -1387,7 +1379,6 @@ QUERY_SPECS = (
     DAY3_REENGAGEMENT_SIGNUP_COHORT_QUERY,
     DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY,
     DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY,
-    CONTEXT_BUCKET_FACTS_BY_GENERATION_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
