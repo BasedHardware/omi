@@ -46,7 +46,6 @@ DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
 DELETION_WIPE_RETRY_BASE_DELAY = timedelta(minutes=5)
 DELETION_WIPE_RETRY_MAX_DELAY = timedelta(hours=1)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
-_DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES = frozenset({'pending', 'retrying', 'running', 'failed'})
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
 ONBOARDING_ADMISSION_PATH = "onboarding_admission/current"
 ONBOARDING_ADMISSION_TTL = timedelta(minutes=20)
@@ -577,25 +576,6 @@ def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution
     if status == 'completed':
         return {'outcome': 'completed', 'uid': None}
     if status in _DELETION_WIPE_TERMINAL_STATUSES:
-        return {'outcome': 'not_actionable', 'uid': None}
-    return {'outcome': 'resolved', 'uid': doc.id}
-
-
-def resolve_legacy_deletion_wipe_uid(legacy_uid: str) -> DeletionWipeTaskResolution:
-    """Resolve a bounded legacy payload through the persisted deletion record.
-
-    This compatibility path is deliberately narrower than the historical
-    handler: a UID from a queued legacy task is never executable on its own.
-    It must name a still-actionable canonical deletion record, and the handler
-    uses the document id returned here rather than the payload value.
-    """
-    doc = account_deletion_document(legacy_uid).get()
-    if not doc.exists:
-        return {'outcome': 'missing', 'uid': None}
-    status = (doc.to_dict() or {}).get('wipe_status')
-    if status == 'completed':
-        return {'outcome': 'completed', 'uid': None}
-    if status not in _DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES:
         return {'outcome': 'not_actionable', 'uid': None}
     return {'outcome': 'resolved', 'uid': doc.id}
 
