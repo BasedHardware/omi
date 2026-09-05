@@ -2944,6 +2944,11 @@ class FloatingControlBarManager {
 
   /// Whether the user has enabled the Ask Omi bar (persisted across launches).
   /// Defaults to true for new users.
+  ///
+  /// Several surfaces write this — the Settings switch, the notch's Hide control, the bar's own
+  /// hide path, a Push-to-Talk reveal — so a change is announced through
+  /// `.floatingBarEnabledDidChange` and any switch that mirrors it re-reads rather than
+  /// remembering its last write.
   var isEnabled: Bool {
     get {
       // Default to true if never set
@@ -2953,7 +2958,12 @@ class FloatingControlBarManager {
       return UserDefaults.standard.bool(forKey: Self.kAskOmiEnabled)
     }
     set {
+      let changed = newValue != isEnabled
       UserDefaults.standard.set(newValue, forKey: Self.kAskOmiEnabled)
+      if changed {
+        log("FloatingControlBarManager: isEnabled -> \(newValue)")
+        NotificationCenter.default.post(name: .floatingBarEnabledDidChange, object: nil)
+      }
     }
   }
 
