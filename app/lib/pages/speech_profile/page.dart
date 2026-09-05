@@ -21,7 +21,6 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
-
 import 'percentage_bar_progress.dart';
 
 class SpeechProfilePage extends StatefulWidget {
