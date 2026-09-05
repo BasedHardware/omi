@@ -80,4 +80,29 @@ final class InterjectSuggestionFeedbackStoreTests: XCTestCase {
     let current = await store.current(evaluationID: evaluation, suggestionID: suggestion)
     XCTAssertNil(current, "riff must not inflate teach-rate")
   }
+
+  func testAmbientFeedbackKeepsDeliveryProvenanceInTheCanonicalLedger() async throws {
+    let store = InterjectSuggestionFeedbackStore()
+    let evaluation = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000ca"))
+    let suggestion = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000cb"))
+    let provenance = InterjectFeedbackProvenance(
+      lane: "ambient",
+      ownerID: "owner",
+      deliveryID: String(repeating: "a", count: 64),
+      candidateID: String(repeating: "b", count: 64),
+      accountGeneration: 3
+    )
+
+    await InterjectSuggestionFeedbackMutation.record(
+      evaluationID: evaluation,
+      suggestionID: suggestion,
+      verb: .useful,
+      provenance: provenance,
+      store: store,
+      emitAnalytics: false
+    )
+
+    let current = await store.current(evaluationID: evaluation, suggestionID: suggestion)
+    XCTAssertEqual(current?.provenance, provenance)
+  }
 }

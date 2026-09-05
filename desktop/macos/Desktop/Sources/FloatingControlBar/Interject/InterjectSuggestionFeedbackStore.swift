@@ -14,6 +14,17 @@ enum InterjectFeedbackVerb: String, Codable, CaseIterable, Sendable {
   var recordsAsTeachSignal: Bool { self != .riff }
 }
 
+/// Delivery provenance for a JIT ambient teach signal. These are opaque join
+/// keys and a bounded account generation; notification content never enters
+/// the local feedback ledger.
+struct InterjectFeedbackProvenance: Codable, Equatable, Sendable {
+  let lane: String
+  let ownerID: String
+  let deliveryID: String
+  let candidateID: String
+  let accountGeneration: Int
+}
+
 /// One canonical suggestion-feedback row. Identity is the existing
 /// `evaluation_id` / `suggestion_id` pair — other surfaces read this, they
 /// never keep a parallel tally (FC-split-mutation-authority).
@@ -22,6 +33,7 @@ struct InterjectFeedbackRecord: Codable, Equatable, Sendable {
   let suggestionID: UUID
   let verb: InterjectFeedbackVerb
   let recordedAt: Date
+  let provenance: InterjectFeedbackProvenance?
 }
 
 /// Single mutation owner for suggestion feedback. Last write wins per identity.
@@ -58,6 +70,7 @@ enum InterjectSuggestionFeedbackMutation {
     suggestionID: UUID,
     verb: InterjectFeedbackVerb,
     recordedAt: Date = Date(),
+    provenance: InterjectFeedbackProvenance? = nil,
     store: InterjectSuggestionFeedbackStore = .shared,
     emitAnalytics: Bool = true
   ) async {
@@ -75,7 +88,8 @@ enum InterjectSuggestionFeedbackMutation {
         evaluationID: evaluationID,
         suggestionID: suggestionID,
         verb: verb,
-        recordedAt: recordedAt
+        recordedAt: recordedAt,
+        provenance: provenance
       )
     )
   }

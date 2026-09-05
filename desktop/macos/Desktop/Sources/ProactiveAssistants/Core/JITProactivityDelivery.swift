@@ -382,8 +382,19 @@ actor JITProactivityDelivery {
           "output_tokens": result.outputTokens,
         ], options: [.sortedKeys])
       let provenanceJSON = String(data: provenanceData, encoding: .utf8) ?? "{}"
-      let feedbackContext = JITTriggerFeedbackContext.planned(
-        ownerID: ownerID, execution: execution, paidPlan: paidPlan)
+      let feedbackContext: JITTriggerFeedbackContext? =
+        execution.lane == .planned
+        ? JITTriggerFeedbackContext.planned(
+          ownerID: ownerID, execution: execution, paidPlan: paidPlan)
+        : nil
+      let ambientFeedbackContext: JITAmbientFeedbackContext? =
+        execution.lane == .ambient
+        ? JITAmbientFeedbackContext(
+          ownerID: ownerID,
+          eventID: paidPlan.notificationAdmission.eventID,
+          candidateID: paidPlan.notificationAdmission.candidateID,
+          accountGeneration: execution.accountGeneration)
+        : nil
       try await store.completeDelivery(
         id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
         message: decision.message, state: "policy_approved")
@@ -400,6 +411,7 @@ actor JITProactivityDelivery {
             contextSummary: decision.reasoning, detail: execution.triggerID,
             provenanceRef: deliveryID),
           jitFeedbackContext: feedbackContext,
+          jitAmbientFeedbackContext: ambientFeedbackContext,
           onPresented: { [weak self] in
             Task {
               _ = try? await self?.store.completeDelivery(
