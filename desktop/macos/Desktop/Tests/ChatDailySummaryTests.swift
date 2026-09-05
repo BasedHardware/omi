@@ -137,6 +137,41 @@ final class ChatDailySummaryTests: XCTestCase {
       "Your day in review")
   }
 
+  // MARK: - Generation failures say what the server said
+
+  /// The three statuses the backend uses as *answers* each get their own line; the reader on
+  /// a quiet day was told "couldn't generate" and read it as a broken button.
+  func testServerDeclinesAreNotReportedAsFailures() {
+    let fallback = "Couldn't generate this recap."
+    func message(_ status: Int) -> String {
+      ChatDailySummaryPresentation.generationFailureMessage(
+        for: APIError.httpError(statusCode: status, detail: "Nothing to summarize for 2026-09-04"),
+        fallback: fallback)
+    }
+    XCTAssertTrue(message(400).contains("Nothing to summarize"))
+    XCTAssertTrue(message(409).contains("Already being generated"))
+    XCTAssertTrue(message(429).contains("wait a moment"))
+    for status in [400, 409, 429] {
+      XCTAssertNotEqual(message(status), fallback, "status \(status) is an answer, not a failure")
+    }
+  }
+
+  func testGenuineFailuresKeepTheCallersFallback() {
+    let fallback = "Couldn't regenerate this recap."
+    XCTAssertEqual(
+      ChatDailySummaryPresentation.generationFailureMessage(
+        for: APIError.httpError(statusCode: 500, detail: nil), fallback: fallback),
+      fallback)
+    XCTAssertEqual(
+      ChatDailySummaryPresentation.generationFailureMessage(
+        for: APIError.httpError(statusCode: 404, detail: "Daily summary not found"), fallback: fallback),
+      fallback)
+    XCTAssertEqual(
+      ChatDailySummaryPresentation.generationFailureMessage(
+        for: URLError(.notConnectedToInternet), fallback: fallback),
+      fallback)
+  }
+
   // MARK: - Sections render only what is there
 
   func testEmptySectionsAreDroppedRatherThanDrawnEmpty() {

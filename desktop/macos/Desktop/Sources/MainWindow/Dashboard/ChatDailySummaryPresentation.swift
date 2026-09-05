@@ -194,4 +194,28 @@ enum ChatDailySummaryPresentation {
     MainChatNavigationRequestStore.shared.request(draft: question)
     AnalyticsManager.shared.trackDailySummary(.followUpTapped)
   }
+
+  // MARK: - Generation failures
+
+  /// The one line a recap writer shows when the server did not produce a record.
+  ///
+  /// The backend's status codes are the contract, and three of them are answers rather than
+  /// failures: 400 is a decline — the day carries no conversation the recap can be written from;
+  /// 409 is another writer (almost always the nightly run) mid-generation; 429 is the spend
+  /// cooldown. Folding those into "Couldn't generate" read as a broken button on exactly the
+  /// days where the button had worked and the honest answer was "nothing recorded yet".
+  /// Anything else — a 5xx, a dropped connection, a decode failure — is `fallback`.
+  static func generationFailureMessage(for error: Error, fallback: String) -> String {
+    guard case APIError.httpError(let statusCode, _) = error else { return fallback }
+    switch statusCode {
+    case 400:
+      return "Nothing to summarize yet — a recap needs a recorded conversation from this day."
+    case 409:
+      return "Already being generated — check back in a moment."
+    case 429:
+      return "Just generated — wait a moment before trying again."
+    default:
+      return fallback
+    }
+  }
 }
