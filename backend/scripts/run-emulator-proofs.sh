@@ -100,6 +100,8 @@ run_proof "daily-sweep (crash / deletion / generation / paid-wipe)" \
   "$PYTHON" scripts/daily_memory_sweep_emulator_test.py
 run_proof "ledger correction, revert, standalone reopen, privacy fence" \
   "$PYTHON" scripts/knowledge_ledger_correction_emulator_test.py
+run_proof "direct-user ledger API writes / lifecycle / batch fence" \
+  "$PYTHON" scripts/jit_ledger_user_write_emulator_test.py
 run_proof_for_signal_only "planned + ambient proactivity arbitration" \
   "$PYTHON" scripts/jit_proactivity_reservation_emulator_test.py
 # Module execution, not a file path: this older proof has no sys.path bootstrap

@@ -22,6 +22,7 @@ from utils.memory.memory_service import (
     MemoryService,
     fetch_memory_dict,
 )
+from utils.memory.canonical_memory_adapter import mint_direct_user_write_authority
 from utils.observability.fallback import record_fallback
 from utils.feedback import record_memory_feedback
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
@@ -376,6 +377,7 @@ async def create_memory(
             operation="create_memory",
             upsert_vector=False,
             require_canonical_promotion=True,
+            direct_user_authority=mint_direct_user_write_authority(),
         )
     except Exception:
         logger.exception("MemoryService create_memory failed uid=%s", uid)
@@ -472,6 +474,7 @@ async def create_memories_batch(
             operation="batch_create_memory",
             upsert_vectors=False,
             require_canonical_promotion=True,
+            direct_user_authority=mint_direct_user_write_authority(),
         )
     except Exception:
         logger.exception("MemoryService create_memories_batch failed uid=%s count=%s", uid, len(memory_dbs))
