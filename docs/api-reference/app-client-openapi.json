@@ -15568,6 +15568,17 @@
       "JITRolloutDecisionEnvelope": {
         "additionalProperties": false,
         "properties": {
+          "budget_contract_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Contract Version"
+          },
           "cache_hit": {
             "title": "Cache Hit",
             "type": "boolean"
