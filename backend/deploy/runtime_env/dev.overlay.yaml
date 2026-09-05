@@ -35,6 +35,9 @@ overlay:
           category: rollout
         MEMORY_ENABLED:
           value: 'on'
+        MEMORY_BELIEF_MODEL_ENABLED:
+          value: 'true'
+          category: rollout
         CONVERSATION_NOTES_V2_ENABLED:
           value: 'true'
           category: rollout
@@ -74,6 +77,9 @@ overlay:
             key: OMI_LLM_GATEWAY_SERVICE_TOKEN
         MEMORY_ENABLED:
           value: 'on'
+        MEMORY_BELIEF_MODEL_ENABLED:
+          value: 'true'
+          category: rollout
         GITHUB_TOKEN:
           secret:
             name: dev-omi-backend-secrets
@@ -284,6 +290,9 @@ overlay:
             category: rollout
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
           # `/v3/memories` and the canonical graph use signed cursors even for
           # the initial page, so cursor reads fail closed until this versioned
           # binding is present.
@@ -341,6 +350,9 @@ overlay:
             category: rollout
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -391,6 +403,9 @@ overlay:
             category: rollout
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -441,6 +456,9 @@ overlay:
             category: rollout
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -473,6 +491,9 @@ overlay:
             value: based-hardware
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
             value: 'true'
           MEMORY_CANONICAL_MAINTENANCE_FLEX:
@@ -500,6 +521,9 @@ overlay:
             value: based-hardware
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
           MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
             value: 'true'
           MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH:

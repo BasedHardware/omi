@@ -14,7 +14,6 @@ covers:
   - app/lib/pages/chat/widgets/user_message.dart
   - app/lib/pages/chat/widgets/voice_recorder_widget.dart
   - app/lib/pages/chat/widgets/files_handler_widget.dart
-  - app/lib/pages/chat/widgets/message_action_menu.dart
   - app/lib/providers/message_provider.dart
   - app/lib/backend/http/api/messages.dart
   - app/lib/pages/home/page.dart

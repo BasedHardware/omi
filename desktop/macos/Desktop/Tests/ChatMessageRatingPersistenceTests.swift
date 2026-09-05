@@ -61,6 +61,65 @@ final class ChatMessageRatingPersistenceTests: XCTestCase {
     XCTAssertTrue(queue.isEmpty)
   }
 
+  func testQueuedRatingCarriesReasonThroughSync() {
+    var queue = ChatMessageRatingQueue()
+    queue.enqueue(messageId: "m1", rating: -1, reason: .alreadyDone)
+    let synced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: true)
+    let ready = queue.drain(using: [synced])
+    XCTAssertEqual(ready.first?.reason, .alreadyDone)
+  }
+
+  func testQueuedVoiceRatingKeepsItsSurfaceThroughSync() {
+    // A floating-bar thumb on an unsynced reply waits in the queue; when it
+    // drains after sync it must still identify as a voice rating — silently
+    // defaulting to text at flush time corrupts the text/voice ratio split.
+    var queue = ChatMessageRatingQueue()
+    queue.enqueue(messageId: "m1", rating: 1, surface: "voice")
+
+    let unsynced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: false)
+    XCTAssertTrue(queue.drain(using: [unsynced]).isEmpty)
+
+    let synced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: true)
+    let ready = queue.drain(using: [synced])
+    XCTAssertEqual(ready.count, 1)
+    XCTAssertEqual(ready.first?.surface, "voice")
+    XCTAssertEqual(ready.first?.rating, 1)
+  }
+
+  func testQueuedRatingKeepsItsReasonThroughSync() {
+    // Same failure mode as the surface test above, one field over: a
+    // thumbs-down given on a reply that has not synced yet waits in the queue,
+    // and the reason must survive the drain. Dropping it at flush would send a
+    // reasonless rating, and the daily report would file the user's answer
+    // under "not_captured" — indistinguishable from never having asked.
+    var queue = ChatMessageRatingQueue()
+    queue.enqueue(
+      messageId: "m1", rating: -1, surface: "text", reason: .incorrectOrHallucination)
+
+    let unsynced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: false)
+    XCTAssertTrue(queue.drain(using: [unsynced]).isEmpty)
+
+    let synced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: true)
+    let ready = queue.drain(using: [synced])
+    XCTAssertEqual(ready.count, 1)
+    XCTAssertEqual(ready.first?.reason, .incorrectOrHallucination)
+    XCTAssertEqual(ready.first?.rating, -1)
+  }
+
+  func testQueueDefaultsToNoReason() {
+    var queue = ChatMessageRatingQueue()
+    queue.enqueue(messageId: "m1", rating: -1)
+    let synced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: true)
+    XCTAssertNil(queue.drain(using: [synced]).first?.reason)
+  }
+
+  func testQueueDefaultsToTextSurface() {
+    var queue = ChatMessageRatingQueue()
+    queue.enqueue(messageId: "m1", rating: -1)
+    let synced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: true)
+    XCTAssertEqual(queue.drain(using: [synced]).first?.surface, "text")
+  }
+
   func testQueueDrainsClearedRatingAfterSync() {
     var queue = ChatMessageRatingQueue()
     queue.enqueue(messageId: "m1", rating: 1)
@@ -76,6 +135,55 @@ final class ChatMessageRatingPersistenceTests: XCTestCase {
     XCTAssertEqual(ready.first?.messageId, "m1")
     XCTAssertNil(ready.first?.rating)
     XCTAssertTrue(queue.isEmpty)
+  }
+
+  func testProactiveNotificationRatingResolvesToNotificationSurface() {
+    // A thumb on a proactive-notification message (focus/insight/task/memory
+    // card in the transcript) rates the notification, not a general Omi
+    // answer — it must report source="notification" so the admin response
+    // quality % can exclude it, no matter which surface the caller passed.
+    let notification = ChatMessage(
+      id: "n1",
+      clientTurnId: ChatContinuityInvariants.proactiveNotificationContinuityKey(
+        id: UUID(), kind: .insight),
+      text: "You seem distracted.",
+      sender: .ai,
+      isSynced: true)
+    XCTAssertEqual(
+      ChatProvider.ratingSurface(for: notification, requested: "text"), "notification")
+    XCTAssertEqual(
+      ChatProvider.ratingSurface(for: notification, requested: "voice"), "notification")
+
+    let answer = ChatMessage(id: "a1", text: "Done.", sender: .ai, isSynced: true)
+    XCTAssertEqual(ChatProvider.ratingSurface(for: answer, requested: "text"), "text")
+    XCTAssertEqual(ChatProvider.ratingSurface(for: nil, requested: "voice"), "voice")
+  }
+
+  func testUnsyncedProactiveRatingKeepsNotificationSurfaceThroughFlush() async {
+    // Real deferred path: a thumb on an UNSYNCED proactive-notification
+    // message goes rateMessage → queue → post-sync drain. The resolved
+    // "notification" surface must be what drains — not the caller's "text".
+    let provider = ChatProvider()
+    let messageId = "proactive-live"
+    let unsynced = ChatMessage(
+      id: messageId,
+      clientTurnId: ChatContinuityInvariants.proactiveNotificationContinuityKey(
+        id: UUID(), kind: .task),
+      text: "You said you'd email Alex today.",
+      sender: .ai,
+      isStreaming: false,
+      isSynced: false,
+      journalStatus: .completed)
+    provider.messages = [unsynced]
+
+    await provider.rateMessage(messageId, rating: -1, surface: "text")
+    XCTAssertTrue(provider.pendingMessageRatings.contains(messageId))
+
+    provider.messages[0].isSynced = true
+    let ready = provider.pendingMessageRatings.drain(using: provider.messages)
+    XCTAssertEqual(ready.count, 1)
+    XCTAssertEqual(ready.first?.surface, "notification")
+    XCTAssertEqual(ready.first?.rating, -1)
   }
 
   func testQueueDropsFailedJournalWithoutPersist() {

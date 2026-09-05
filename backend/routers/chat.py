@@ -67,6 +67,8 @@ from utils.observability.transcription import TranscriptionAttempt
 from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
+from utils.chat_rating_triage import extract_rating_triage_fields
+from utils.feedback import record_chat_message_feedback
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.llm.gateway_client import CHAT_AGENT_ROUTE_DIRECT, get_chat_agent_route
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
@@ -84,15 +86,18 @@ from utils.retrieval.graph import execute_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.users import get_user_display_name
 from utils.log_sanitizer import sanitize_pii
+from utils.chat_followup import followup_content_blocks
 from utils.observability import submit_langsmith_feedback
 from utils.observability.fallback import record_fallback
 from utils.journey_metrics_contract import resolve_client_kind, resolve_client_kind_from_headers
 from utils.observability.journeys import ClientJourneyAttempt, JourneyAttempt
 from utils.voice_duration_limiter import (
+    MAX_SESSION_DURATION_S,
     compute_pcm_duration_ms,
     read_wav_duration_ms,
     try_consume_budget,
-    check_budget,
+    try_reserve_session_budget,
+    settle_reserved_duration,
     record_actual_duration,
 )
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
@@ -527,8 +532,9 @@ def send_message(
 
         memories_id = extract_memory_ids(memories) if memories else []
 
+        ai_message_id = str(uuid.uuid4())
         ai_message = Message(
-            id=str(uuid.uuid4()),
+            id=ai_message_id,
             text=response,
             created_at=datetime.now(timezone.utc),
             sender='ai',
@@ -540,6 +546,14 @@ def send_message(
             prompt_name=prompt_name,  # LangSmith prompt name for versioning
             prompt_commit=prompt_commit,  # LangSmith prompt commit for traceability
             evidence=evidence,
+            # One grounded next question, as a chip the client can tap. Empty for
+            # any turn that failed or has nothing to go one hop further into.
+            content_blocks=followup_content_blocks(
+                ai_message_id,
+                callback_data.get('followup'),
+                visible_text=response,
+                failed=bool(callback_data.get('error')),
+            ),
         )
         if chat_session:
             ai_message.chat_session_id = chat_session.id
@@ -863,12 +877,14 @@ def create_voice_message_stream(
         # Daily budget check (first file only — matches actual DG usage).
         # A quota rejection is not an STT attempt and therefore is not an
         # invalid-input or provider-outcome metric.
+        # An unreadable duration must not skip the budget check (STT still
+        # runs on it) — charge the worst case instead of charging nothing.
         first_wav = wav_paths[0]
         duration_ms = read_wav_duration_ms(first_wav)
-        if duration_ms is not None:
-            allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
-            if not allowed:
-                raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
+        budget_duration_ms = duration_ms if duration_ms is not None else MAX_SESSION_DURATION_S * 1000
+        allowed, used_ms, remaining_ms = try_consume_budget(uid, budget_duration_ms)
+        if not allowed:
+            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
     except TranscriptionFailure as failure:
         _record_preparation_failure(failure)
         _cleanup_temp_voice_wavs(paths + wav_paths, uid)
@@ -1166,15 +1182,15 @@ async def transcribe_voice_message(
 
         # Daily budget check (sum all files). This is not a provider outcome,
         # so do it before recording an accepted transcription attempt.
+        # An unreadable duration must not skip the budget check (STT still
+        # runs on it) — charge the worst case instead of charging nothing.
         total_duration_ms = 0
         for wav_path in wav_paths:
             duration_ms = await run_blocking(storage_executor, read_wav_duration_ms, wav_path)
-            if duration_ms is not None:
-                total_duration_ms += duration_ms
-        if total_duration_ms > 0:
-            allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
-            if not allowed:
-                raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
+            total_duration_ms += duration_ms if duration_ms is not None else MAX_SESSION_DURATION_S * 1000
+        allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
+        if not allowed:
+            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
         is_multi = resolved_language == 'multi'
         attempt = TranscriptionAttempt(
@@ -1360,16 +1376,10 @@ async def transcribe_voice_message_stream(
     except Exception:
         pass  # Fail-open, consistent with Redis rate limiting elsewhere
 
-    # Daily budget check — reject if already exhausted before opening a provider connection.
-    budget_remaining_ms = None  # None = fail-open (no enforcement)
-    try:
-        has_budget, used_ms, remaining_ms = check_budget(uid)
-        if not has_budget:
-            await websocket.close(code=1008, reason='Daily transcription budget exhausted')
-            return
-        budget_remaining_ms = remaining_ms
-    except Exception:
-        pass  # Fail-open
+    # Daily budget reservation is taken inside the session try/finally so every
+    # exit path (including STT connect failure) can settle/refund.
+    budget_remaining_ms = None  # None = fail-open (no mid-session enforcement)
+    budget_reserved_ms = 0
 
     websocket_active = True
     dg_socket = None
@@ -1605,12 +1615,26 @@ async def transcribe_voice_message_stream(
         return False
 
     def record_stt_usage_once() -> None:
-        """Record accepted provider audio only after a terminal provider drain."""
+        """Settle the connect-time reservation after a successful provider drain."""
         nonlocal usage_recorded
-        if usage_recorded or accepted_audio_bytes <= 0 or bytes_per_second <= 0:
+        if usage_recorded or bytes_per_second <= 0:
             return
-        actual_duration_ms = compute_pcm_duration_ms(accepted_audio_bytes, sample_rate, channels)
-        record_actual_duration(uid, actual_duration_ms)
+        actual_duration_ms = (
+            compute_pcm_duration_ms(accepted_audio_bytes, sample_rate, channels) if accepted_audio_bytes > 0 else 0
+        )
+        if budget_reserved_ms > 0:
+            settle_reserved_duration(uid, budget_reserved_ms, actual_duration_ms)
+        elif actual_duration_ms > 0:
+            # Fail-open path never reserved; keep force-record tracking.
+            record_actual_duration(uid, actual_duration_ms)
+        usage_recorded = True
+
+    def refund_reservation_once() -> None:
+        """Release an unused reservation when the session never drained successfully."""
+        nonlocal usage_recorded
+        if usage_recorded or budget_reserved_ms <= 0:
+            return
+        settle_reserved_duration(uid, budget_reserved_ms, 0)
         usage_recorded = True
 
     async def drain_stt_or_close() -> bool:
@@ -1632,6 +1656,22 @@ async def transcribe_voice_message_stream(
         return True
 
     try:
+        # Atomically reserve up to one session before opening a provider.
+        # Probe-only check_budget + force-record at end lets concurrent WS
+        # sessions each freeze the same remaining slice and overspend.
+        try:
+            allowed, reserved_ms, _used_ms, _remaining_ms = try_reserve_session_budget(
+                uid, MAX_SESSION_DURATION_S * 1000
+            )
+            if not allowed:
+                await websocket.close(code=1008, reason='Daily transcription budget exhausted')
+                return
+            if reserved_ms > 0:
+                budget_reserved_ms = reserved_ms
+                budget_remaining_ms = reserved_ms
+        except Exception:
+            pass  # Fail-open
+
         if stt_service == STTService.parakeet:
             dg_socket, stt_service = await connect_stt_socket_with_fallback(
                 primary_service=STTService.parakeet,
@@ -1763,6 +1803,9 @@ async def transcribe_voice_message_stream(
         # A rejected send still gets a best-effort close but no final transcript or usage charge.
         if dg_socket and not stt_send_failed and await drain_stt_or_close():
             record_stt_usage_once()
+        else:
+            # Provider never drained successfully — refund the connect-time reservation.
+            refund_reservation_once()
 
         if dg_socket and not stt_drained:
             try:
@@ -2004,17 +2047,38 @@ def create_initial_message_v1(
 def rate_message(
     message_id: str,
     data: RateMessageRequest,
+    x_app_platform: str | None = Header(None, alias='X-App-Platform'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Rate a chat message (thumbs up/down). Used by desktop client."""
     rating = data.rating
 
-    # Update rating on the message document
-    chat_db.update_message_rating(uid, message_id, rating)
-
-    # Also store in analytics collection
+    snapshot = chat_db.update_message_rating(uid, message_id, rating) or {}
     value = rating if rating is not None else 0
-    set_chat_message_rating_score(uid, message_id, value, platform='mobile')
+    platform = (x_app_platform or '').strip().lower()
+    if platform not in ('desktop', 'mobile'):
+        platform = 'desktop'
+    triage = extract_rating_triage_fields(snapshot)
+    reason = data.reason.value if data.reason else None
+    set_chat_message_rating_score(
+        uid,
+        message_id,
+        value,
+        reason=reason,
+        platform=platform,
+        notification_kind=triage.get('notification_kind'),
+        app_id=triage.get('app_id'),
+    )
+
+    # Unified feedback ledger — the daily thumbs-down report reads from here.
+    record_chat_message_feedback(
+        uid,
+        message_id,
+        value,
+        reason=reason,
+        comment=data.comment,
+        platform=platform,
+    )
 
     # Try to submit feedback to LangSmith
     try:

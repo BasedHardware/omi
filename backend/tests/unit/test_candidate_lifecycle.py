@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+import database.candidate_integration_outbox as integration_outbox_db
 import database.candidates as candidates_db
 from models.candidate import CandidateCreate, CandidateStatus
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -43,6 +44,8 @@ def fake_db(monkeypatch):
 
     monkeypatch.setattr(candidates_db, 'db', database)
     monkeypatch.setattr(candidates_db.firestore, 'transactional', transactional)
+    monkeypatch.setattr(integration_outbox_db, 'db', database)
+    monkeypatch.setattr(integration_outbox_db.firestore, 'transactional', transactional)
     candidate_service.clear_workstream_candidate_resolver()
     candidate_service.task_links.clear_workstream_goal_resolver()
     candidate_service.task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')
@@ -1148,14 +1151,15 @@ def test_failed_integration_outbox_is_retryable_without_reaccepting_task(fake_db
     record = create_record(fake_db)
     candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
 
-    first_lease = candidates_db.claim_candidate_integration_dispatch(
+    first_lease = integration_outbox_db.claim_candidate_integration_dispatch(
         'user-1', record.candidate_id, account_generation=3
     )
     assert first_lease is not None
     assert (
-        candidates_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3) is None
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        is None
     )
-    assert candidates_db.complete_candidate_integration_dispatch(
+    assert integration_outbox_db.complete_candidate_integration_dispatch(
         'user-1',
         record.candidate_id,
         account_generation=3,
@@ -1163,7 +1167,7 @@ def test_failed_integration_outbox_is_retryable_without_reaccepting_task(fake_db
         succeeded=False,
     )
     assert (
-        candidates_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
         is not None
     )
     outbox = next(data for path, data in fake_db.rows.items() if 'candidate_integration_outbox' in path)
@@ -1199,7 +1203,7 @@ def test_drain_recovers_crash_after_accept_commit(fake_db, monkeypatch):
     monkeypatch.setattr(candidate_service, 'auto_sync_action_item', sync)
     monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: function())
     monkeypatch.setattr(
-        candidates_db,
+        integration_outbox_db,
         'list_candidate_integration_dispatches',
         lambda uid, account_generation, limit=100: [
             {
@@ -1223,7 +1227,8 @@ def test_integration_outbox_is_generation_fenced_at_claim_and_completion(fake_db
     fake_db.rows[control_path]['account_generation'] = 4
 
     assert (
-        candidates_db.claim_candidate_integration_dispatch('user-1', first.candidate_id, account_generation=3) is None
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', first.candidate_id, account_generation=3)
+        is None
     )
     first_outbox = fake_db.rows[('users', 'user-1', 'candidate_integration_outbox', first.candidate_id)]
     assert first_outbox['status'] == 'suppressed'
@@ -1237,12 +1242,12 @@ def test_integration_outbox_is_generation_fenced_at_claim_and_completion(fake_db
         account_generation=3,
     )
     candidates_db.resolve_task_candidate('user-1', second.candidate_id, account_generation=3)
-    second_lease = candidates_db.claim_candidate_integration_dispatch(
+    second_lease = integration_outbox_db.claim_candidate_integration_dispatch(
         'user-1', second.candidate_id, account_generation=3
     )
     assert second_lease is not None
     fake_db.rows[control_path]['account_generation'] = 4
-    candidates_db.complete_candidate_integration_dispatch(
+    integration_outbox_db.complete_candidate_integration_dispatch(
         'user-1',
         second.candidate_id,
         account_generation=3,
@@ -1257,10 +1262,10 @@ def test_integration_outbox_rejects_completion_from_an_expired_lease(fake_db):
     record = create_record(fake_db)
     candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
     start = datetime(2026, 7, 9, 12, tzinfo=timezone.utc)
-    lease_a = candidates_db.claim_candidate_integration_dispatch(
+    lease_a = integration_outbox_db.claim_candidate_integration_dispatch(
         'user-1', record.candidate_id, account_generation=3, now=start, lease_seconds=300
     )
-    lease_b = candidates_db.claim_candidate_integration_dispatch(
+    lease_b = integration_outbox_db.claim_candidate_integration_dispatch(
         'user-1',
         record.candidate_id,
         account_generation=3,
@@ -1271,7 +1276,7 @@ def test_integration_outbox_rejects_completion_from_an_expired_lease(fake_db):
     assert lease_a is not None
     assert lease_b is not None and lease_b != lease_a
     assert (
-        candidates_db.complete_candidate_integration_dispatch(
+        integration_outbox_db.complete_candidate_integration_dispatch(
             'user-1',
             record.candidate_id,
             account_generation=3,
@@ -1283,7 +1288,7 @@ def test_integration_outbox_rejects_completion_from_an_expired_lease(fake_db):
     outbox_path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
     assert fake_db.rows[outbox_path]['status'] == 'processing'
     assert fake_db.rows[outbox_path]['lease_token'] == lease_b
-    assert candidates_db.complete_candidate_integration_dispatch(
+    assert integration_outbox_db.complete_candidate_integration_dispatch(
         'user-1',
         record.candidate_id,
         account_generation=3,
@@ -1291,6 +1296,193 @@ def test_integration_outbox_rejects_completion_from_an_expired_lease(fake_db):
         succeeded=True,
     )
     assert fake_db.rows[outbox_path]['status'] == 'completed'
+
+
+def test_poison_integration_item_does_not_block_the_item_behind_it(fake_db, monkeypatch):
+    processed: list[str] = []
+
+    def dispatch(uid, candidate_id, task_id, *, account_generation):
+        processed.append(candidate_id)
+        if candidate_id == 'cand-poison':
+            raise RuntimeError('malformed payload')
+        return True
+
+    monkeypatch.setattr(candidate_service, '_dispatch_task_integration', dispatch)
+    monkeypatch.setattr(
+        integration_outbox_db,
+        'list_candidate_integration_dispatches',
+        lambda uid, account_generation, limit=100: [
+            {
+                'candidate_id': 'cand-poison',
+                'task_id': 'task-poison',
+                'status': 'pending',
+                'account_generation': account_generation,
+                'created_at': datetime(2026, 7, 1, tzinfo=timezone.utc),
+            },
+            {
+                'candidate_id': 'cand-healthy',
+                'task_id': 'task-healthy',
+                'status': 'pending',
+                'account_generation': account_generation,
+                'created_at': datetime(2026, 7, 2, tzinfo=timezone.utc),
+            },
+        ],
+    )
+
+    scheduled = candidate_service.drain_candidate_integrations('user-1', account_generation=3)
+    assert processed == ['cand-poison', 'cand-healthy']
+    assert scheduled == 1
+
+
+def test_integration_poison_reaches_dead_letter_with_error_text(fake_db):
+    record = create_record(fake_db)
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    for _ in range(5):
+        lease = integration_outbox_db.claim_candidate_integration_dispatch(
+            'user-1', record.candidate_id, account_generation=3
+        )
+        assert lease is not None
+        assert integration_outbox_db.complete_candidate_integration_dispatch(
+            'user-1',
+            record.candidate_id,
+            account_generation=3,
+            lease_token=lease,
+            succeeded=False,
+            error_text='canonical hash mismatch',
+        )
+    outbox = next(data for path, data in fake_db.rows.items() if 'candidate_integration_outbox' in path)
+    assert outbox['status'] == 'dead_letter'
+    assert outbox['last_error_text'] == 'canonical hash mismatch'
+    assert outbox['dead_letter_reason'] == 'integration_failed'
+    assert integration_outbox_db.redrive_candidate_integration_dead_letter(
+        'user-1', record.candidate_id, account_generation=3
+    )
+    assert fake_db.rows[('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)]['status'] == 'pending'
+
+
+def test_claim_refuses_dead_letter(fake_db):
+    record = create_record(fake_db)
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'dead_letter'
+    assert (
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        is None
+    )
+
+
+def test_malformed_integration_row_becomes_dead_letter_with_error_text(fake_db, monkeypatch):
+    record = create_record(fake_db)
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    monkeypatch.setattr(
+        integration_outbox_db,
+        'list_candidate_integration_dispatches',
+        lambda uid, account_generation, limit=100: [
+            {
+                'candidate_id': record.candidate_id,
+                'status': 'pending',
+                'account_generation': account_generation,
+            }
+        ],
+    )
+    assert candidate_service.drain_candidate_integrations('user-1', account_generation=3) == 0
+    outbox = fake_db.rows[('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)]
+    assert outbox['status'] == 'dead_letter'
+    assert 'malformed' in (outbox.get('last_error_text') or '')
+    assert outbox.get('dead_letter_reason') == 'malformed'
+
+
+def test_future_available_at_is_not_dispatched(monkeypatch):
+    now = datetime.now(timezone.utc)
+    future = now + timedelta(hours=1)
+    ready_at = now - timedelta(minutes=1)
+
+    class _Snap:
+        def __init__(self, payload: dict):
+            self._payload = payload
+
+        def to_dict(self):
+            return self._payload
+
+    class _Query:
+        def where(self, *args, **kwargs):
+            return self
+
+        def limit(self, _limit):
+            return self
+
+        def stream(self):
+            return [
+                _Snap(
+                    {
+                        'candidate_id': 'future',
+                        'task_id': 'task-future',
+                        'status': 'failed',
+                        'account_generation': 3,
+                        'available_at': future,
+                    }
+                ),
+                _Snap(
+                    {
+                        'candidate_id': 'ready',
+                        'task_id': 'task-ready',
+                        'status': 'pending',
+                        'account_generation': 3,
+                        'available_at': ready_at,
+                    }
+                ),
+            ]
+
+    class _UserDoc:
+        def collection(self, _name):
+            return _Query()
+
+    class _Users:
+        def document(self, _uid):
+            return _UserDoc()
+
+    class _Database:
+        def collection(self, _name):
+            return _Users()
+
+    # Patch the module binding rather than reaching through the lazy Firestore
+    # proxy. Attribute lookup on that proxy constructs a real client before the
+    # test replacement can be installed, which is forbidden by the hermetic
+    # network guard.
+    monkeypatch.setattr(integration_outbox_db, 'db', _Database())
+    listed = integration_outbox_db.list_candidate_integration_dispatches('user-1', account_generation=3)
+    assert [row['candidate_id'] for row in listed] == ['ready']
+
+
+def test_drain_does_not_ack_a_failed_complete(fake_db, monkeypatch):
+    record = create_record(fake_db)
+    receipt = candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: None)
+    monkeypatch.setattr(
+        integration_outbox_db,
+        'list_candidate_integration_dispatches',
+        lambda uid, account_generation, limit=100: [
+            {
+                'candidate_id': record.candidate_id,
+                'task_id': receipt.task_id,
+                'status': 'pending',
+                'account_generation': account_generation,
+            }
+        ],
+    )
+    scheduled = candidate_service.drain_candidate_integrations('user-1', account_generation=3)
+    assert scheduled == 0
+    outbox = fake_db.rows[('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)]
+    assert outbox['status'] != 'completed'
+
+
+def test_integration_duplicate_identity_is_adopted_not_raised(fake_db):
+    record = create_record(fake_db)
+    first = candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    second = candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    assert first.task_id == second.task_id
+    outboxes = [data for path, data in fake_db.rows.items() if 'candidate_integration_outbox' in path]
+    assert len(outboxes) == 1
 
 
 @pytest.mark.parametrize('stored_expires_at', [True, False])

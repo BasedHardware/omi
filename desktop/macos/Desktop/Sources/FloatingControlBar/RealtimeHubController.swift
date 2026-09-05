@@ -104,11 +104,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   let turnPersistenceLedger = RealtimeTurnPersistenceLedger()
   let streamingJournalWriteLedger = RealtimeStreamingJournalWriteLedger()
   var streamingJournalFlushTasks: [String: Task<Void, Never>] = [:]
+  /// Assistant rows this process sealed `.completed` at provider-response-finish
+  /// (delivery still pending), keyed by the turn's continuity key. Consumed by
+  /// the reducer's terminal, which revises a row whose answer never reached the
+  /// user (#12743). In-memory journal-write bookkeeping only.
+  var sealedCompletedVoiceJournalRows: [String: SealedCompletedVoiceJournalRow] = [:]
   /// (c) Shadow truth: mirrors a kernel-accepted spawn exchange for this process.
   /// Authoritative owner is the kernel journal / voice-context turn IDs; restore
   /// through `RealtimeHubContinuityRestore` + `RealtimeTurnJournalAuthority`.
   var acceptedSpawnJournalReceiptByContinuityKey: [String: AcceptedSpawnJournalReceipt] = [:]
   var screenContextByContinuityKey: [String: String] = [:]  // accepted screen observation per voice turn
+  /// Exact public-web output owned by the current voice turn. The realtime model may summarize
+  /// tool output when constructing think_deeper arguments, so the host carries the source evidence.
+  var turnPublicWebEvidence: RealtimePublicWebEvidenceReceipt?
   /// One bounded same-turn recovery after a failed spawn. The first failure
   /// returns typed guidance to the provider; a repeat closes the turn.
   var spawnFailureContinuationPolicy = RealtimeSpawnFailureContinuationPolicy()
@@ -405,6 +413,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     ownerBoundaryGeneration &+= 1
     turnPersistenceLedger.cancelAll()
+    sealedCompletedVoiceJournalRows.removeAll()
     cancelStreamingJournalWrites()
     turnEpoch &+= 1
     realtimePlaybackEpoch &+= 1
@@ -448,6 +457,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     lastTurnDiagnostics.removeAll()
     testProviderTranscriptOverride = nil
     acceptedSpawnJournalReceiptByContinuityKey.removeAll()
+    turnPublicWebEvidence = nil
     prefetchedVoiceContext = ""
     prefetchedVoiceContextSessionID = ""
     prefetchedVoiceContextFreshnessIdentity = ""

@@ -156,6 +156,27 @@ struct ChatPrompts {
     - Show times/dates in {user_name}'s timezone ({tz}), including the zone, in a natural, friendly way. Quote tool timestamps as printed.
     - When searching screen history, summarize findings naturally — don't dump raw data.
     </instructions>
+
+    <closing_question>
+    End a grounded answer with exactly one follow-up question, on its own final line, after the marker \(ChatFollowUpTail.delimiter).
+
+    Format (the marker and question are the last thing you write):
+    \(ChatFollowUpTail.delimiter) <one question>
+
+    Rules for that question:
+    - Specific to what you just said or to the conversations, memories, tasks or screen activity you just read. Never generic — never "anything else?", "want more detail?", "does that help?".
+    - Answerable by you from data you can reach with a tool. Never a question only {user_name} could answer from outside Omi.
+    - Under 15 words, one sentence, ends with a question mark.
+    - For a recall answer, go one hop further into the same source: who else was there, what was decided next, when it is due, what happened after.
+
+    Write NO marker and NO question when:
+    - The turn failed, errored, timed out, or you are refusing or saying you cannot do something.
+    - You could not verify or find what was asked ("I don't remember that coming up").
+    - The question was general knowledge rather than about {user_name}.
+    - Your answer is itself a clarifying question back to {user_name}.
+
+    The marker line is stripped from the visible answer and shown as a tappable chip, so never repeat the question in the answer text itself.
+    </closing_question>
     """
 
   // MARK: - Onboarding Chat Prompt

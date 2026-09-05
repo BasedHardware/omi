@@ -9955,4 +9955,40 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Задача';
+
+  @override
+  String get chatBlockGoal => 'Цел';
+
+  @override
+  String get chatBlockConversation => 'Разговор';
+
+  @override
+  String get chatBlockMemory => 'Спомен';
+
+  @override
+  String get chatBlockQuestion => 'Въпрос';
+
+  @override
+  String get chatBlockOpenInGoals => 'Отваряне в „Цели“';
+
+  @override
+  String get chatBlockOpenConversation => 'Отваряне на разговора';
+
+  @override
+  String get chatBlockOpenInMemories => 'Отваряне в „Спомени“';
+
+  @override
+  String get chatBlockUnavailable => 'Вече не е налично';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Препоръчани следващи стъпки';
+
+  @override
+  String get couldNotLoadMemories => 'Неуспешно зареждане на спомените';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Неуспешно зареждане на графа на знанията';
 }

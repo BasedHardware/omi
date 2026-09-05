@@ -38,6 +38,14 @@ CHAT_HISTORY_APPEND_EPOCH_MESSAGES = 8
 # when a user has thousands of lifetime reported messages; the newest page
 # rarely contains more reported rows than this cap.
 CHAT_HISTORY_REPORTED_RAW_SCAN_CAP = 50
+# Extra documents a visible page may stream *beyond* the rows it would need if none
+# were reported. The floor is the page itself, never this: the previous raw
+# ``.offset(n).limit(m)`` query already streamed n + m documents, so budgeting
+# ``needed + slack`` can only read more than before by the slack, and can never fail
+# to service an offset the old query serviced. Capping the total instead made a deep
+# offset return an empty page, which the router reads as end-of-results -- the same
+# defect this scan exists to fix.
+CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK = 1000
 
 
 class ClientMessageIdPayloadConflict(ValueError):
@@ -95,6 +103,17 @@ def _prepare_message_for_read(message_data: Dict[str, Any], uid: str) -> Dict[st
         return _decrypt_chat_data(message_data, uid)
 
     return message_data
+
+
+def decrypt_message_payload(message_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
+    """Public read-path decryption for one raw message document.
+
+    Callers outside this module (the feedback-report context hydrator) need the
+    same enhanced-protection handling `get_message` applies, but starting from a
+    raw snapshot dict they already hold. Exposed rather than reaching into the
+    private helper so the encryption contract has one owner.
+    """
+    return _prepare_message_for_read(message_data, uid)
 
 
 # *****************************
@@ -227,6 +246,15 @@ def get_messages(
     app_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
+    """Return a visible chat page with offset counted in non-reported rows.
+
+    Firestore cannot apply ``reported != True`` cheaply for legacy docs that omit
+    the field, so reported rows are filtered in Python. Applying ``limit`` /
+    ``offset`` on the raw query first makes pages short and advances past
+    visible messages the client never saw. Scan with a bounded budget (same
+    spirit as ``get_messages_reconcile_page``) until ``offset`` visible rows are
+    skipped and ``limit`` visible rows are collected.
+    """
     logger.info(f'get_messages {uid} {limit} {offset} {app_id} {include_conversations}')
     user_ref = db.collection('users').document(uid)
     messages_ref = user_ref.collection('messages')
@@ -238,20 +266,54 @@ def get_messages(
         # App-scoped query: filter by plugin_id (None = main chat)
         messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
 
-    messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
+    query: Any = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
+    # A page with no reported rows needs exactly this many documents, which is what the
+    # old raw query streamed. Bound the *slack* on top of it, not the page itself.
+    needed = max(offset, 0) + max(limit, 0)
+    # Flat slack, not proportional. Scaling it with the page size gave a small page a
+    # tiny allowance (limit=2 -> 6 documents), so a dense run of reported rows still
+    # returned an empty page the router reads as end-of-results. The read cost is set
+    # by the batch sizing below, not by this ceiling, so a flat allowance costs a clean
+    # page nothing and only bounds how far a page that meets reported rows may scan.
+    scan_budget = needed + CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK
+    scanned = 0
+    visible_skipped = 0
     messages: List[Dict[str, Any]] = []
     conversations_id: set[str] = set()
     files_id: set[str] = set()
+    cursor_snapshot: Any = None
 
-    # Fetch messages and collect conversation IDs
-    for doc in messages_ref.stream():
-        message: Dict[str, Any] = _typed_doc(doc)
-        if message.get('reported') is True:
-            continue
-        messages.append(message)
-        conversations_id.update(message.get('memories_id', []))
-        files_id.update(message.get('files_id', []))
+    while scanned < scan_budget and len(messages) < limit:
+        # Read exactly what the page needs before reading any slack. Without this the
+        # first batch was a flat 100 documents, so the chat-send path's limit=5 and
+        # limit=15 reads streamed ~20x the documents they used to. Slack is only paid
+        # for by a page that actually met a reported row.
+        batch_limit = min(100, scan_budget - scanned)
+        if scanned == 0:
+            batch_limit = min(batch_limit, max(1, needed))
+        page_query = query.start_after(cursor_snapshot) if cursor_snapshot is not None else query
+        documents = list(page_query.limit(batch_limit).stream())
+        if not documents:
+            break
+
+        for document in documents:
+            scanned += 1
+            cursor_snapshot = document
+            message: Dict[str, Any] = _typed_doc(document)
+            if message.get('reported') is True:
+                continue
+            if visible_skipped < offset:
+                visible_skipped += 1
+                continue
+            messages.append(message)
+            conversations_id.update(message.get('memories_id', []))
+            files_id.update(message.get('files_id', []))
+            if len(messages) == limit:
+                break
+
+        if len(documents) < batch_limit:
+            break
 
     if not include_conversations:
         return messages
@@ -507,29 +569,30 @@ def report_message(uid: str, msg_doc_id: str) -> Dict[str, str]:
         return {"message": f"Update failed: {e}"}
 
 
-def update_message_rating(uid: str, message_id: str, rating: Optional[int]) -> bool:
+def update_message_rating(uid: str, message_id: str, rating: Optional[int]) -> Optional[Dict[str, Any]]:
     """
     Update the rating on a message document.
 
-    Args:
-        uid: User ID
-        message_id: Message ID (not doc ID)
-        rating: Rating value (1 = thumbs up, -1 = thumbs down, None = no rating)
+    Returns the already-streamed message snapshot on success so analytics can
+    copy identifiers (notification kind, app_id) without a second Firestore read.
+    Returns None if the message does not exist.
     """
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
     message_doc = next(message_ref, None)
     if not message_doc:
         logger.warning(f"⚠️ Message {message_id} not found for user {uid}")
-        return False
+        return None
 
+    snapshot = _typed_doc(message_doc)
     try:
         user_ref.collection('messages').document(message_doc.id).update({'rating': rating})
         logger.info(f"✅ Updated message {message_id} rating to {rating}")
-        return True
+        snapshot['rating'] = rating
+        return snapshot
     except Exception as e:
         logger.error(f"❌ Failed to update message rating: {e}")
-        return False
+        return None
 
 
 def batch_delete_messages(

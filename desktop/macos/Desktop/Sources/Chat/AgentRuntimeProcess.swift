@@ -2,8 +2,7 @@ import Foundation
 import OmiSupport
 
 extension Notification.Name {
-  /// Posted on MainActor after the runtime handshake makes direct control
-  /// tools admissible. Carries no owner id or request content.
+  /// Posted on MainActor after the runtime handshake makes direct control tools admissible.
   static let agentRuntimeDidBecomeReady = Notification.Name("com.omi.desktop.agentRuntimeDidBecomeReady")
 }
 
@@ -2670,6 +2669,27 @@ actor AgentRuntimeProcess {
       env.removeValue(forKey: "PLAYWRIGHT_MCP_EXTENSION_TOKEN")
     }
 
+    // User-managed local skills and MCP servers (~/.omi). Skills re-read per
+    // turn for the prompt catalog, but the pi-mono extension registers its MCP
+    // proxy tools once per spawn, so a file change reaches chat through the
+    // ChatProvider respawn on .omiUserMcpDidChange (debounced, never mid-turn).
+    // The OAuth refresh is unawaited: a stale token costs one server a 401
+    // (fail-open), and its write notifies, so the refreshed token applies
+    // without waiting for the next session.
+    env["OMI_USER_SKILLS_DIR"] = LocalSkillsStore.rootURL.path
+    // The disabled toggle must bind the tools too, not just the prompt catalog:
+    // load_skill/search_skills refuse names on this list.
+    if let disabledSkillsEnv = ChatProvider.disabledSkillsRuntimeEnvValue() {
+      env["OMI_DISABLED_SKILLS"] = disabledSkillsEnv
+    } else {
+      env.removeValue(forKey: "OMI_DISABLED_SKILLS")
+    }
+    // Skills dropped by hand never run the UI save path, so the ACP lane's
+    // plugin gate would silently miss them; write the manifest before spawn.
+    LocalSkillsStore.ensurePluginManifestIfSkillsExist()
+    env["OMI_LOCAL_MCP_FILE"] = LocalMcpStore.fileURL.path
+    Task { await LocalMcpStore.refreshExpiredTokens() }
+
     try assertStartupAuthority(
       authorizationSnapshot,
       expectedAuthorityEpoch: admissionAuthorityEpoch)
@@ -3696,8 +3716,9 @@ actor AgentRuntimeProcess {
         suppressedByStreamingTail: message.payload["suppressedByStreamingTail"] as? Bool ?? false,
         materializationStoppedByTail: message.payload["materializationStoppedByTail"] as? Bool ?? false,
         materializationReceipts: Self.chatFirstMaterializationReceipts(
-          from: message.payload["materializationReceipts"]
-        ),
+          from: message.payload["materializationReceipts"]),
+        materializationRejections: Self.chatFirstRejections(from: message.payload["materializationRejections"]),
+        materializationDeferrals: Self.chatFirstDeferrals(from: message.payload["materializationDeferrals"]),
         coldStartSequenceTerminalReceipts: Self.chatFirstColdStartSequenceTerminalReceipts(
           from: message.payload["coldStartSequenceTerminalReceipts"]
         ),
@@ -3987,7 +4008,7 @@ actor AgentRuntimeProcess {
         journalRequest.continuation.resume(throwing: BridgeError.authMissing)
         return
       }
-      log("AgentRuntimeProcess: journal operation failed (code-only)")
+      log(Self.chatFirstJournalFailureLog(failure: failure, payload: message.payload, raw: raw))
       journalRequest.continuation.resume(
         throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
       )

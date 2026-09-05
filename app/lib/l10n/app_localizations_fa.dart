@@ -9918,4 +9918,40 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'وظیفه';
+
+  @override
+  String get chatBlockGoal => 'هدف';
+
+  @override
+  String get chatBlockConversation => 'گفتگو';
+
+  @override
+  String get chatBlockMemory => 'خاطره';
+
+  @override
+  String get chatBlockQuestion => 'پرسش';
+
+  @override
+  String get chatBlockOpenInGoals => 'باز کردن در اهداف';
+
+  @override
+  String get chatBlockOpenConversation => 'باز کردن گفتگو';
+
+  @override
+  String get chatBlockOpenInMemories => 'باز کردن در خاطرات';
+
+  @override
+  String get chatBlockUnavailable => 'دیگر در دسترس نیست';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'گام‌های بعدی پیشنهادی';
+
+  @override
+  String get couldNotLoadMemories => 'بارگذاری خاطرات ممکن نشد';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'بارگذاری گراف دانش ممکن نشد';
 }

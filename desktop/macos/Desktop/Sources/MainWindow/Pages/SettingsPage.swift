@@ -361,8 +361,6 @@ struct SettingsContentView: View {
   // Multi-chat mode setting
   @AppStorage("multiChatEnabled") var multiChatEnabled = false
   @AppStorage("conversationsCompactView") var conversationsCompactView = true
-  @AppStorage("useLegacyHomeDesign") var useLegacyHomeDesign = false
-  @AppStorage("useOldestHomeDesign") var useOldestHomeDesign = false
   @AppStorage("speakNotificationsAloud") var speakNotificationsAloud = false
   @AppStorage(DefaultsKey.integrationNudgesEnabled.rawValue) var integrationNudgesEnabled = true
 

@@ -162,11 +162,22 @@ class AnalyticsManager {
   /// Scoped observation of floating-bar query telemetry. Nil in production;
   /// tests install a capture at the same boundary as PostHog.
   private var floatingBarQueryTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  /// Test seam for `question_asked` / `question_answered`; the emitters live in
+  /// `Analytics/AnalyticsManager+Questions.swift`, so this is internal, not private.
+  var questionTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  /// Test seam for search events; emitters live in `Analytics/AnalyticsManager+Search.swift`.
+  var searchTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
 
   func setFloatingBarQueryTelemetryCaptureForTests(
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
   ) {
     floatingBarQueryTelemetryCaptureForTests = capture
+  }
+
+  func setSearchTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    searchTelemetryCaptureForTests = capture
   }
 
   // MARK: - Initialization
@@ -555,6 +566,30 @@ class AnalyticsManager {
     PostHogManager.shared.setUserProperties(userProperties)
   }
 
+  private var deviceConnectionTelemetryCaptureForTests: (@MainActor (String) -> Void)?
+
+  func setDeviceConnectionTelemetryCaptureForTests(
+    _ capture: (@MainActor (String) -> Void)?
+  ) {
+    deviceConnectionTelemetryCaptureForTests = capture
+  }
+
+  func deviceConnected(device: BtDevice) {
+    let vendor = device.type.analyticsVendorSlug
+    let eventProperties: [String: Any] = [
+      "device_vendor": vendor,
+      "device_type": device.type.rawValue,
+    ]
+    deviceConnectionTelemetryCaptureForTests?("Device Connected")
+    PostHogManager.shared.track("Device Connected", properties: eventProperties)
+    PostHogManager.shared.setUserProperties(["device_vendor": vendor])
+  }
+
+  func deviceDisconnected() {
+    deviceConnectionTelemetryCaptureForTests?("Device Disconnected")
+    PostHogManager.shared.track("Device Disconnected")
+  }
+
   /// Report when ScreenCaptureKit broken state is detected (TCC granted but capture failing).
   func screenCaptureBrokenDetected() {
     guard !Self.isDevBuild else { return }
@@ -826,9 +861,7 @@ class AnalyticsManager {
     // question (retries of a failed turn, busy no-op paths) so the one-time
     // prompt trigger counts each logical question exactly once.
     guard countsAsQuestion else { return }
-    Task { @MainActor in
-      RatingPromptManager.shared.recordQuestionAsked()
-    }
+    questionAsked(surface: .chatWindow, source: source, messageLength: messageLength, attemptID: nil)
   }
 
   func desktopRatingSubmitted(rating: Int, revision: Int? = nil) {
@@ -849,16 +882,6 @@ class AnalyticsManager {
   func desktopPromptDismissed(promptId: String, promptType: String) {
     PostHogManager.shared.track(
       "Desktop Prompt Dismissed", properties: ["prompt_id": promptId, "prompt_type": promptType])
-  }
-
-  // MARK: - Search Events
-
-  func searchQueryEntered(query: String) {
-    PostHogManager.shared.searchQueryEntered(query: query)
-  }
-
-  func searchBarFocused() {
-    PostHogManager.shared.searchBarFocused()
   }
 
   // MARK: - Settings Events
@@ -915,9 +938,13 @@ class AnalyticsManager {
     PostHogManager.shared.track("chat_session_deleted", properties: [:])
   }
 
-  func messageRated(rating: Int) {
+  func messageRated(rating: Int, surface: String = "text") {
     let ratingString = rating == 1 ? "thumbs_up" : "thumbs_down"
-    PostHogManager.shared.track("message_rated", properties: ["rating": ratingString])
+    // `source` splits the admin thumbs-ratio chart: "text" = main-window
+    // chat, "voice" = floating-bar responses. Events before this dimension
+    // existed chart as the combined series only.
+    PostHogManager.shared.track(
+      "message_rated", properties: ["rating": ratingString, "source": surface])
   }
 
   func initialMessageGenerated(hasApp: Bool) {
@@ -952,6 +979,7 @@ class AnalyticsManager {
   func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
     let payload = event.analyticsPayload
     PostHogManager.shared.track(payload.eventName, properties: payload.properties)
+    questionAnswered(forChatEvent: event)
     if case .failed(_, _, let errorClass, _, _, _) = event {
       DesktopDiagnosticsManager.shared.recordChatFailure(errorClass: errorClass.rawValue)
     }
@@ -1579,7 +1607,14 @@ class AnalyticsManager {
   }
 
   /// Track when an AI query is sent from the floating bar
-  func floatingBarQuerySent(messageLength: Int, hasScreenshot: Bool, source: FloatingBarQuerySource) {
+  ///
+  /// `attemptID` is the voice turn id when the query came from push-to-talk,
+  /// so `question_asked` joins the coordinator's terminal record. Every call
+  /// here is one accepted question; the voice paths only reach it once the
+  /// transcript (or the realtime commit) exists.
+  func floatingBarQuerySent(
+    messageLength: Int, hasScreenshot: Bool, source: FloatingBarQuerySource, attemptID: String? = nil
+  ) {
     let props: [String: Any] = [
       "message_length": messageLength,
       "has_screenshot": hasScreenshot,
@@ -1587,6 +1622,9 @@ class AnalyticsManager {
     ]
     floatingBarQueryTelemetryCaptureForTests?("floating_bar_query_sent", props)
     PostHogManager.shared.track("floating_bar_query_sent", properties: props)
+    questionAsked(
+      surface: QuestionSurface(source), source: source.rawValue, messageLength: messageLength,
+      attemptID: attemptID)
   }
 
   /// Track when push-to-talk starts listening

@@ -188,7 +188,7 @@ for _journey in CLIENT_JOURNEYS:
     for _outcome in CLIENT_JOURNEY_OUTCOMES:
         OMI_CLIENT_JOURNEY_DURATION_SECONDS.labels(journey=_journey, outcome=_outcome)
 
-# The three gauges below report one GLOBAL Firestore-derived quantity, and every
+# The gauges below report one GLOBAL Firestore-derived quantity, and every
 # replica publishes the same value. Aggregate them with max(), never sum(): a
 # sum() multiplies the real number by the replica count and, while replicas run
 # different images, mixes two different answers to the same question.
@@ -196,6 +196,28 @@ LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_nonterminal_age_seconds',
     'Global age of the oldest queued, leased, or blocked listen finalization job; '
     'replicated per process, aggregate with max() not sum()',
+)
+
+# Durable-queue substrate age. Every replica publishes the same Firestore-derived
+# value for a given queue name; aggregate with max(), never sum(). Do not
+# zero-initialize: absent() means the periodic publisher has not run.
+OMI_QUEUE_OLDEST_READY_AGE_SECONDS = Gauge(
+    'omi_queue_oldest_ready_age_seconds',
+    'Age in seconds of the oldest ready durable-queue item; replicated per process, ' 'aggregate with max() not sum()',
+    ['queue'],
+)
+
+OMI_QUEUE_NAMES = (
+    'memory_outbox',
+    'candidate_integration_outbox',
+    'chat_first_proactive_intents',
+    'conversation_finalization_jobs',
+    'daily_summary_hour_groups',
+    'daily_memory_sweep',
+    'vector_repair_outbox',
+    'task_recurrence_inbox',
+    'frame_deletion_outbox',
+    'projection_repairs',
 )
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
@@ -453,7 +475,7 @@ TASK_INTELLIGENCE_ATTRIBUTION_TOTAL = Counter(
 CHAT_FIRST_PROACTIVE_TOTAL = Counter(
     'chat_first_proactive_total',
     'Chat-first proactive engine activity with no user content',
-    ['event', 'source'],
+    ['event', 'source', 'reason'],
 )
 
 MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL = Counter(
@@ -541,6 +563,34 @@ PUSHER_DRAIN_IN_PROGRESS = Gauge(
 )
 PUSHER_READY.set(1)
 PUSHER_DRAIN_IN_PROGRESS.set(0)
+
+
+# GET /v1/action-items read-cost controls (see database/action_items_cache.py).
+# `action_items_list` was 48.8% of every billable Firestore document read before
+# the 12/min per-uid cap shipped (#12258); the residual cost is a small number of
+# large-backlog accounts re-reading a full backlog on every allowed poll. These
+# two counters are how a deploy proves the remaining reads went away, rather than
+# inferring it from the billing export a week later.
+OMI_ACTION_ITEMS_LIST_THROTTLED_TOTAL = Counter(
+    'omi_action_items_list_throttled_total',
+    'GET /v1/action-items requests rejected with 429 by a list ceiling',
+    ['client', 'policy'],
+)
+
+OMI_ACTION_ITEMS_LIST_CACHE_TOTAL = Counter(
+    'omi_action_items_list_cache_total',
+    'GET /v1/action-items list responses by cache outcome (a hit or not_modified reads zero Firestore documents)',
+    ['outcome'],
+)
+
+
+def record_action_items_list_throttled(*, client: str, policy: str) -> None:
+    OMI_ACTION_ITEMS_LIST_THROTTLED_TOTAL.labels(client=client, policy=policy).inc()
+
+
+def record_action_items_list_cache(outcome: str) -> None:
+    """outcome: hit | not_modified | miss | bypass | unavailable."""
+    OMI_ACTION_ITEMS_LIST_CACHE_TOTAL.labels(outcome=outcome).inc()
 
 
 def metrics_response() -> Response:

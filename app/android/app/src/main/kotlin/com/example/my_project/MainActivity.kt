@@ -27,9 +27,6 @@ class MainActivity: FlutterActivity() {
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        // Register WiFi Network Plugin
-        WifiNetworkPlugin.registerWith(flutterEngine, this)
-
         // Register Phone Calls Plugin
         PhoneCallsPlugin.registerWith(flutterEngine, this)
 

@@ -53,7 +53,17 @@ def _request_json(base_url: str, path: str, token: str) -> Any:
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
             body = response.read(1_000_001)
-    except (OSError, urllib.error.HTTPError, urllib.error.URLError) as exc:
+    except urllib.error.HTTPError as exc:
+        # Name the status. Collapsing every failure into "HTTPError" cost ~37h of red
+        # deploys in #12668 because CI could not tell an unprovisioned rule (404) from a
+        # revoked token (401) — two failures with completely different owners and fixes.
+        # Status and reason phrase only: the response body can carry Grafana detail we do
+        # not want in a public log.
+        raise AlertRouteError(f"Grafana API request failed for {path}: HTTP {exc.code} {exc.reason}") from exc
+    except urllib.error.URLError as exc:
+        # Subclass of OSError, superclass of HTTPError, so it has to sit between the two.
+        raise AlertRouteError(f"Grafana API request failed for {path}: URLError {exc.reason}") from exc
+    except OSError as exc:
         raise AlertRouteError(f"Grafana API request failed for {path}: {type(exc).__name__}") from exc
     if len(body) > 1_000_000:
         raise AlertRouteError(f"Grafana API response exceeded the size limit for {path}")

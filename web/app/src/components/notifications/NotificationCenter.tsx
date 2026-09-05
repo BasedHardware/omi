@@ -8,6 +8,7 @@ import { NotificationItem } from './NotificationItem';
 import { NotificationPermissionBanner } from './NotificationPermissionBanner';
 import { cn } from '@/lib/utils';
 import type { OmiNotification } from '@/types/notification';
+import { PanelReveal } from '@/components/ui/PanelReveal';
 
 /**
  * Group notifications by date (Today, Yesterday, Earlier)
@@ -94,7 +95,7 @@ export function NotificationCenter() {
               'max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full',
             )}
           >
-            <div className={cn('w-[400px] h-full flex flex-col', 'max-sm:w-full')}>
+            <PanelReveal className={cn('w-[400px] h-full flex flex-col', 'max-sm:w-full')}>
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
                 <div className="flex items-center gap-3">
@@ -198,7 +199,7 @@ export function NotificationCenter() {
                   </div>
                 )}
               </div>
-            </div>
+            </PanelReveal>
           </motion.div>
         </>
       )}

@@ -128,7 +128,12 @@ def _existing_feature_refs(uid: str, *, firestore_client: Any) -> list[Any]:
 
     user_ref = _user_ref(uid, firestore_client=firestore_client)
     refs: list[Any] = []
-    for collection_name in (intents_db.INTENTS_COLLECTION, intents_db.DEFERRALS_COLLECTION):
+    for collection_name in (
+        intents_db.INTENTS_COLLECTION,
+        intents_db.DEAD_LETTERS_COLLECTION,
+        intents_db.DELIVERY_ATTEMPTS_COLLECTION,
+        intents_db.DEFERRALS_COLLECTION,
+    ):
         refs.extend(document.reference for document in user_ref.collection(collection_name).stream())
     return refs
 

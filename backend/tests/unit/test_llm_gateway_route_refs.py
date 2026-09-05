@@ -7,6 +7,7 @@ from utils.llm.gateway_client import is_auto_lane_id
 from utils.llm.model_config import (
     AutoLaneRouteRef,
     ExplicitRouteRef,
+    UnknownLLMFeature,
     get_model,
     get_provider,
     get_route_options,
@@ -32,18 +33,11 @@ def test_known_feature_returns_explicit_route_ref_without_changing_model_or_prov
 
 
 def test_unknown_feature_route_ref_uses_default_explicit_route():
+    """Fail closed: never a silent fall-through to luna."""
     feature = 'unknown_route_ref_feature'
 
-    route_ref = get_route_ref(feature)
-
-    assert route_ref == ExplicitRouteRef(
-        feature=feature,
-        model='gpt-5.6-luna',
-        provider='openai',
-        options={},
-    )
-    assert get_model(feature) == 'gpt-5.6-luna'
-    assert get_provider(feature) == 'openai'
+    with pytest.raises(UnknownLLMFeature):
+        get_route_ref(feature)
 
 
 def test_pinned_feature_route_ref_preserves_pinned_route_and_options():
@@ -108,3 +102,11 @@ def test_auto_lane_mapping_rejects_non_gateway_namespace(monkeypatch):
 
     with pytest.raises(ValueError, match='omi:auto'):
         get_route_ref('chat_extraction')
+
+
+def test_unmapped_auto_lane_feature_raises_unknown_llm_feature(monkeypatch):
+    """Fail closed: an auto-lane entry cannot mint a route for an unmapped feature."""
+    monkeypatch.setitem(model_config._AUTO_LANE_FEATURES, 'not_a_configured_feature', 'omi:auto:chat-structured')
+
+    with pytest.raises(UnknownLLMFeature):
+        get_route_ref('not_a_configured_feature')

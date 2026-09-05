@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-presentation-cohort-drops-journaled-content",
+  "violated_contract": "A client-side presentation cohort must never decide whether durable, journaled content is drawn. The macOS chat journaled taskCard, goalLink, captureLink, conversationLink, memoryLink and questionCard blocks for every account, but only the shell sampled into the chat-first cohort was handed a ChatFirstRichBlockContext; every other host (legacy shell, task chat panel, floating bar, notch) decoded the same blocks and rendered EmptyView. A task created during onboarding was therefore in the transcript and invisible, and the same transcript looked different per shell, per cohort, and per surface. The defect reads as 'the task was never created', not as a rendering gate, because the journal is correct.",
+  "canonical_prevention": "One renderer, no optional rendering context: every chat surface receives a non-optional rich-block context, and a behavioural test journals one message carrying every block type and asserts the shared renderer yields the interactable view for each. A static tripwire forbids the retired cohort/legacy symbols and any 'context == nil' branch from returning. Capability gates may disable an action on a card; they may not decide whether the card exists.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/MainWindow/ChatFirst/Blocks/ChatFirstRichBlockGroupView.swift",
+    "desktop/macos/Desktop/Tests/OneChatShellRichBlockTests.swift",
+    "desktop/macos/scripts/check-single-chat-shell.py",
+    "app/test/widgets/chat_content_blocks_test.dart"
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift",
+    "desktop/macos/Desktop/Sources/MainWindow/ChatFirst/**",
+    "app/lib/pages/chat/widgets/**"
+  ],
+  "status": "open",
+  "evidence_prs": []
+}

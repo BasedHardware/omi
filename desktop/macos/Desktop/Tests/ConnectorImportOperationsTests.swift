@@ -67,13 +67,23 @@ final class ConnectorImportOperationsTests: XCTestCase {
 
   func testMemoryLogImportedMapsToSuccessWithCounts() {
     let outcome = ConnectorImportOperations.memoryLogOutcome(
-      .imported(memories: 14, profileSummary: "profile"), source: .claude)
+      .imported(memories: 14, failed: 0, profileSummary: "profile"), source: .claude)
     guard case .success(let result, let message) = outcome else {
       return XCTFail("expected success, got \(outcome)")
     }
     XCTAssertEqual(result.memoryCount, 14)
     XCTAssertEqual(result.newItems, 14)
     XCTAssertEqual(message, "Imported 14 memories from Claude.")
+  }
+
+  func testMemoryLogPartialSaveReportsRetryableCount() {
+    let outcome = ConnectorImportOperations.memoryLogOutcome(
+      .imported(memories: 7, failed: 3, profileSummary: "profile"), source: .chatgpt)
+    guard case .success(let result, let message) = outcome else {
+      return XCTFail("expected success, got \(outcome)")
+    }
+    XCTAssertEqual(result.memoryCount, 7)
+    XCTAssertEqual(message, "Imported 7 memories from ChatGPT; 3 couldn't be saved. Import again to retry them.")
   }
 
   func testMemoryLogNoDurableMemoriesGuidesPasteFix() {
@@ -88,11 +98,20 @@ final class ConnectorImportOperationsTests: XCTestCase {
   }
 
   func testMemoryLogFailedGuidesRetry() {
-    let outcome = ConnectorImportOperations.memoryLogOutcome(.failed, source: .claude)
-    guard case .failure(let message, failureClass: _) = outcome else {
+    let outcome = ConnectorImportOperations.memoryLogOutcome(.failed(.network), source: .claude)
+    guard case .failure(let message, failureClass: let failureClass) = outcome else {
       return XCTFail("expected failure, got \(outcome)")
     }
-    XCTAssertEqual(message, "The import couldn't run. Try again.")
+    XCTAssertEqual(message, "Omi couldn't reach the memory service. Check your connection, then try again.")
+    XCTAssertEqual(failureClass, .network)
+  }
+
+  func testMemoryLogServerFailureKeepsDistinctTelemetryClass() {
+    let outcome = ConnectorImportOperations.memoryLogOutcome(.failed(.server), source: .chatgpt)
+    guard case .failure(_, failureClass: let failureClass) = outcome else {
+      return XCTFail("expected failure, got \(outcome)")
+    }
+    XCTAssertEqual(failureClass, .server)
   }
 
   func testCompletedXImportWithZeroPostsDoesNotSayStillRunning() {

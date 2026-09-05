@@ -17,6 +17,7 @@ from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
 from utils.transcribe_decisions import (
     ConversationLifecycleAction,
@@ -257,10 +258,9 @@ class LiveConversationController:
             if action == RecordingSessionReconnectAction.resume_current:
                 self.host.state.current_conversation_id = conversation_id
                 # Persist the custom-STT marker on resume so a conversation that
-                # started under normal STT but continues under custom STT (or vice
-                # versa) cannot bypass the Omi-paid LLM cost gate: once any session
-                # was custom-STT, the conversation must not run Omi-paid enrichment
-                # without an LLM BYOK key.
+                # started under normal STT but continues under custom STT keeps
+                # accurate provenance: once any session was custom-STT, the
+                # conversation is marked as such.
                 if self.host.use_custom_stt and not existing.get('uses_custom_stt', False):
                     await self.host.persistence.call(
                         conversations_db.update_conversation,
@@ -311,7 +311,10 @@ class LiveConversationController:
         await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,
             request.uid,
-            conversation.model_dump(),
+            # The modeled field's None default is omitted, never stamped:
+            # persist is merge=True, so a dumped None would become an
+            # explicit Firestore key on every fresh recording.
+            omit_null_processing_state(conversation.model_dump()),
             idempotent=bool(self.host.client_conversation_id and conversation_id == self.host.client_conversation_id),
         )
         await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)

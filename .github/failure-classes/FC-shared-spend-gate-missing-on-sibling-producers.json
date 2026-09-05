@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-shared-spend-gate-missing-on-sibling-producers",
+  "violated_contract": "When a managed-compute spend is gated at one producer of a shared feature, every other producer that invokes the same feature must consult the same gate through the same decision closure before its spend. The memory-formation gate (FREE_TIER_MEMORY_SUPPRESSION) was wired into the conversation coordinator's extraction boundary, while app-integration text extraction, the twitter persona producer and the X connector kept calling get_llm('memories') ungated — so the shard's own proof (zero managed extractor rows for basic) stayed green at the gated boundary while the ungated siblings spent, and the §1.8 proof read a dry pen for any user with such an app or connection.",
+  "canonical_prevention": "Enumerate the producers of a gated feature (callers of its spend seam, here extract_memories_from_text) when the gate lands, and give each one the plan check in the same shape: read the rollout flag first so flag-off performs no lookups, then one verdict through the single shared decision_for closure so funding-owner resolution and fail-closed behaviour cannot drift per producer. Pin each producer with a per-site test covering basic-suppressed, paid, BYOK, and flag-off-performs-no-lookup.",
+  "canonical_prevention_artifact": [
+    "backend/utils/managed_compute.py",
+    "backend/utils/conversations/memories.py",
+    "backend/utils/x_connector.py",
+    "backend/tests/unit/test_free_tier_connector_memory_gates.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/llm/memories.py",
+    "backend/utils/conversations/memories.py",
+    "backend/utils/x_connector.py",
+    "backend/utils/free_tier_memory_policy.py"
+  ],
+  "status": "open"
+}

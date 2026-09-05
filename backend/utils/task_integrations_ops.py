@@ -328,7 +328,7 @@ async def create_task_internal(
             if due_date:
                 task_data['due'] = due_date.strftime('%Y-%m-%dT00:00:00.000Z')
 
-            async def _google_tasks_post(c, token):
+            async def _google_tasks_post(c: httpx.AsyncClient, token: str) -> httpx.Response:
                 return await c.post(
                     f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
                     headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},

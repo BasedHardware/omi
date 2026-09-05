@@ -9730,4 +9730,40 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => '任务';
+
+  @override
+  String get chatBlockGoal => '目标';
+
+  @override
+  String get chatBlockConversation => '对话';
+
+  @override
+  String get chatBlockMemory => '记忆';
+
+  @override
+  String get chatBlockQuestion => '问题';
+
+  @override
+  String get chatBlockOpenInGoals => '在目标中打开';
+
+  @override
+  String get chatBlockOpenConversation => '打开对话';
+
+  @override
+  String get chatBlockOpenInMemories => '在记忆中打开';
+
+  @override
+  String get chatBlockUnavailable => '已不再可用';
+
+  @override
+  String get chatBlockRecommendedNextSteps => '建议的后续步骤';
+
+  @override
+  String get couldNotLoadMemories => '无法加载回忆';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => '无法加载知识图谱';
 }

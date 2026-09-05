@@ -9930,4 +9930,40 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'کام';
+
+  @override
+  String get chatBlockGoal => 'ہدف';
+
+  @override
+  String get chatBlockConversation => 'گفتگو';
+
+  @override
+  String get chatBlockMemory => 'یاد';
+
+  @override
+  String get chatBlockQuestion => 'سوال';
+
+  @override
+  String get chatBlockOpenInGoals => 'اہداف میں کھولیں';
+
+  @override
+  String get chatBlockOpenConversation => 'گفتگو کھولیں';
+
+  @override
+  String get chatBlockOpenInMemories => 'یادوں میں کھولیں';
+
+  @override
+  String get chatBlockUnavailable => 'اب دستیاب نہیں';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'تجویز کردہ اگلے اقدامات';
+
+  @override
+  String get couldNotLoadMemories => 'یادیں لوڈ نہیں ہو سکیں';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'نالج گراف لوڈ نہیں ہو سکا';
 }

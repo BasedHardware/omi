@@ -498,12 +498,9 @@ import XCTest
     XCTAssertTrue(source.contains("openAgentChatsFromNotchLogo()"))
   }
 
-  func testChatFirstCanRoutePrimaryFloatingTextEntryToTheMainApp() {
-    FloatingPrimaryTextInputRouting.configure(routesToMainApp: false)
-    defer { FloatingPrimaryTextInputRouting.configure(routesToMainApp: false) }
-
-    XCTAssertFalse(FloatingPrimaryTextInputRouting.shouldRouteAgentExitToMainApp(hasMainConversation: false))
-    FloatingPrimaryTextInputRouting.configure(routesToMainApp: true)
+  /// The notch never takes typed text on any shell: backing out of an agent chat with no main
+  /// conversation to show lands in the main chat, never in a composer.
+  func testAgentExitWithNothingToShowRoutesToTheMainAppOnEveryShell() {
     XCTAssertTrue(FloatingPrimaryTextInputRouting.shouldRouteAgentExitToMainApp(hasMainConversation: false))
     XCTAssertFalse(FloatingPrimaryTextInputRouting.shouldRouteAgentExitToMainApp(hasMainConversation: true))
   }
@@ -544,7 +541,10 @@ import XCTest
     XCTAssertFalse(responseSource.contains("proxy.scrollTo(\"bottom\", anchor: .bottom)"))
     XCTAssertFalse(viewSource.contains("proxy.scrollTo(\"agentBottom\", anchor: .bottom)"))
     XCTAssertTrue(scrollSource.contains("struct ChatScrollContainer<Content: View>: View"))
-    XCTAssertTrue(scrollSource.contains("UserScrollDetector {"))
+    // The detector is mounted, and mounted with the transcript's own
+    // programmatic-scroll signal — without it a follow-scroll landing under an
+    // open press reads as the reader taking the viewport.
+    XCTAssertTrue(scrollSource.contains("UserScrollDetector(programmaticScroll: programmaticScroll) {"))
     XCTAssertTrue(scrollSource.contains("onScrollSettledAtBottom"))
     XCTAssertTrue(scrollSource.contains("scheduleSettledBottomFollow"))
     XCTAssertTrue(scrollSource.contains("Self.isAtBottom(scrollView)"))
@@ -681,7 +681,7 @@ import XCTest
     XCTAssertTrue(windowSource.contains("static let notchActiveSideWidth: CGFloat = 42"))
     XCTAssertTrue(windowSource.contains("func resizeForAgentSwitcher(visible: Bool)"))
     XCTAssertTrue(windowSource.contains("max(collapsedBarSize.width, Self.notchExpandedWidth)"))
-    XCTAssertTrue(windowSource.contains("      if state.showingAIConversation {\n        return\n      }"))
+    XCTAssertTrue(windowSource.contains("if usesNotchIsland, state.showingAIConversation {\n      return\n    }"))
   }
 
   func testSpacesTransitionPreservesUserResizedNotchChatFrame() {
@@ -846,7 +846,8 @@ import XCTest
         ownerID: "owner",
         title: "Replacement notification",
         message: "Must remain visible",
-        assistantId: "test"),
+        assistantId: "test",
+        kind: .functional),
       animated: false)
     scheduler.fire()
 
@@ -1059,35 +1060,6 @@ import XCTest
     XCTAssertTrue(source.contains("persistCurrentResponseSurfaceSize()"))
     XCTAssertTrue(source.contains("Persisting ordinary resize notifications here records"))
     XCTAssertFalse(source.contains("let initialSize = NSSize(width: expandedContentWidth, height: startHeight)"))
-  }
-
-  func testTypedSendDelegatesResponseSizingToWindow() throws {
-    let viewSource = try floatingControlBarViewSource()
-    let windowSource = try floatingControlBarWindowSource()
-
-    guard let inputRange = viewSource.range(of: "private var aiInputView: some View"),
-      let inputEnd = viewSource.range(of: "private func recomputeUnifiedInputHeight")
-    else {
-      return XCTFail("Expected AI input view section")
-    }
-    let inputSource = String(viewSource[inputRange.lowerBound..<inputEnd.lowerBound])
-
-    XCTAssertTrue(inputSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
-    // Archiving moved with the retired typed follow-up: the window's query
-    // paths own it now; the view must not archive on its own.
-    XCTAssertTrue(windowSource.contains("state.archiveCurrentExchange(using:"))
-    XCTAssertFalse(viewSource.contains("archiveCurrentExchange"))
-    XCTAssertTrue(viewSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
-    XCTAssertFalse(inputSource.contains("state.showingAIResponse = true"))
-    XCTAssertFalse(viewSource.contains("state.conversationSurface == .mainResponse || state.showingAIResponse"))
-    XCTAssertTrue(
-      windowSource.contains("func beginVisibleMainQuery(_ message: String, fromVoice: Bool, animated: Bool = true)"))
-    XCTAssertTrue(windowSource.contains("state.resetMeasuredContentHeight(for: .mainResponse)"))
-    XCTAssertTrue(windowSource.contains("state.present(.mainResponse)"))
-    XCTAssertTrue(windowSource.contains("beginMainResponseHeight(animated: animated)"))
-    XCTAssertFalse(windowSource.contains("state.showingAIResponse = true"))
-    XCTAssertFalse(windowSource.contains("state.chatHistory"))
-    XCTAssertTrue(windowSource.contains("barWindow?.state.bindAnswerMessage(aiMessage)"))
   }
 
   func testActiveSubagentChatRefreshesWhenAgentOutputChanges() throws {
@@ -1615,7 +1587,7 @@ import XCTest
 
     // Legacy PTT collapse supplies the bare compact surface to the shared
     // transition path, which applies the active response/agent glow exactly once.
-    XCTAssertTrue(source.contains("toSurfaceSize: expanded ? Self.voiceBarSize : Self.minBarSize"))
+    XCTAssertTrue(source.contains("voiceSize = expanded ? Self.voiceBarSize : Self.minBarSize"))
     XCTAssertTrue(source.contains("let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: size)"))
     XCTAssertTrue(source.contains("guard state.isVoiceResponseGlowActive || collapsedPillAgentGlowActive else"))
   }

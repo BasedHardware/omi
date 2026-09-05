@@ -634,6 +634,7 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "integration:memories",
             "test:prompt",
             "apps:generate_prompts",
+            "apps:twitter_initial_message",
         ]
         for policy in used_policies:
             self.assertIn(policy, RATE_POLICIES, f"Policy '{policy}' used in router but missing from config")
@@ -826,7 +827,14 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_apps_router_has_rate_limit(self):
         matches = self._grep_file("routers/apps.py", r"with_rate_limit.*apps:")
-        self.assertGreaterEqual(len(matches), 1, "apps.py missing rate limit wiring")
+        self.assertGreaterEqual(len(matches), 2, "apps.py missing rate limit wiring")
+
+    def test_twitter_initial_message_endpoint_rate_limited(self):
+        """GET /v1/personas/twitter/initial-message runs a billable LLM call
+        (Features.PERSONA) and, unlike every other billable route in this
+        router, had neither a quota gate nor a rate limit (#12781)."""
+        matches = self._grep_file("routers/apps.py", r"with_rate_limit.*apps:twitter_initial_message")
+        self.assertEqual(len(matches), 1, "GET /v1/personas/twitter/initial-message must have a rate limit")
 
     def test_knowledge_graph_router_has_rate_limit(self):
         matches = self._grep_file("routers/knowledge_graph.py", r"with_rate_limit.*knowledge_graph:")

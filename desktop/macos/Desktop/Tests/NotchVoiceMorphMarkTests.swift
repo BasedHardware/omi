@@ -231,3 +231,124 @@ final class NotchVoiceMorphMarkTests: XCTestCase {
     XCTAssertLessThan(quiet, 0.95, "Quieter speech must read as quieter than the loud peak")
   }
 }
+
+final class NotchVoiceMorphDictationTintTests: XCTestCase {
+
+  func testTheTintEasesInAndSettlesOnRed() {
+    // Not dictating: no tint at all, so the listening white is untouched.
+    XCTAssertEqual(NotchVoiceMorphGeometry.dictationBlend(elapsed: nil, reduceMotion: false), 0)
+    // Ease-in: slow to start, full by the duration, and never past it.
+    let start = NotchVoiceMorphGeometry.dictationBlend(elapsed: 0, reduceMotion: false)
+    let early = NotchVoiceMorphGeometry.dictationBlend(
+      elapsed: NotchVoiceMorphGeometry.dictationTintDuration * 0.25, reduceMotion: false)
+    let mid = NotchVoiceMorphGeometry.dictationBlend(
+      elapsed: NotchVoiceMorphGeometry.dictationTintDuration * 0.5, reduceMotion: false)
+    let done = NotchVoiceMorphGeometry.dictationBlend(
+      elapsed: NotchVoiceMorphGeometry.dictationTintDuration, reduceMotion: false)
+    let late = NotchVoiceMorphGeometry.dictationBlend(elapsed: 10, reduceMotion: false)
+    XCTAssertEqual(start, 0)
+    XCTAssertLessThan(early, 0.25, "an ease-in lags a linear ramp at the start")
+    XCTAssertLessThan(early, mid)
+    XCTAssertEqual(done, 1)
+    XCTAssertEqual(late, 1)
+  }
+
+  func testTheTintEasesOutWhenTheDictationEndsInsteadOfSnapping() {
+    // Live: the dots went from full red to white in one frame at key-up.
+    let mid = NotchVoiceMorphGeometry.dictationFadeBlend(
+      elapsed: NotchVoiceMorphGeometry.dictationTintFadeDuration * 0.5, from: 1, reduceMotion: false)
+    XCTAssertEqual(NotchVoiceMorphGeometry.dictationFadeBlend(elapsed: 0, from: 1, reduceMotion: false), 1)
+    XCTAssertGreaterThan(mid, 0.2)
+    XCTAssertLessThan(mid, 0.8)
+    XCTAssertEqual(
+      NotchVoiceMorphGeometry.dictationFadeBlend(
+        elapsed: NotchVoiceMorphGeometry.dictationTintFadeDuration, from: 1, reduceMotion: false), 0)
+    XCTAssertEqual(NotchVoiceMorphGeometry.dictationFadeBlend(elapsed: 10, from: 1, reduceMotion: false), 0)
+    // A release during the ease-in fades from the partial red it had reached.
+    XCTAssertEqual(NotchVoiceMorphGeometry.dictationFadeBlend(elapsed: 0, from: 0.4, reduceMotion: false), 0.4)
+    // The departure is slower than the arrival: it is not a signal.
+    XCTAssertGreaterThan(
+      NotchVoiceMorphGeometry.dictationTintFadeDuration, NotchVoiceMorphGeometry.dictationTintDuration)
+  }
+
+  func testThePhaseFadesFromWhereTheEaseInWasAndKeepsAnimatingUntilDone() {
+    var tint = NotchDictationTint()
+    let t0 = Date(timeIntervalSinceReferenceDate: 1_000)
+    XCTAssertFalse(tint.isAnimating)
+    XCTAssertEqual(tint.blend(at: t0, reduceMotion: false), 0)
+
+    tint.update(isDictating: true, at: t0, reduceMotion: false)
+    XCTAssertTrue(tint.isAnimating)
+    let settled = t0.addingTimeInterval(NotchVoiceMorphGeometry.dictationTintDuration + 1)
+    XCTAssertEqual(tint.blend(at: settled, reduceMotion: false), 1)
+
+    // Key-up: the fade starts at full red and the timeline must keep running.
+    tint.update(isDictating: false, at: settled, reduceMotion: false)
+    XCTAssertTrue(tint.isAnimating, "a fade in progress still needs frames")
+    XCTAssertEqual(tint.blend(at: settled, reduceMotion: false), 1)
+    let halfway = settled.addingTimeInterval(NotchVoiceMorphGeometry.dictationTintFadeDuration / 2)
+    let midBlend = tint.blend(at: halfway, reduceMotion: false)
+    XCTAssertGreaterThan(midBlend, 0)
+    XCTAssertLessThan(midBlend, 1)
+    // Not yet over halfway through: still animating.
+    tint.settleIfFaded(at: halfway, reduceMotion: false)
+    XCTAssertTrue(tint.isAnimating)
+    // Over: back to the resting colour and the timeline may pause.
+    let done = settled.addingTimeInterval(NotchVoiceMorphGeometry.dictationTintFadeDuration)
+    XCTAssertEqual(tint.blend(at: done, reduceMotion: false), 0)
+    tint.settleIfFaded(at: done, reduceMotion: false)
+    XCTAssertFalse(tint.isAnimating)
+  }
+
+  func testAReleaseDuringTheEaseInFadesFromThePartialRed() {
+    var tint = NotchDictationTint()
+    let t0 = Date(timeIntervalSinceReferenceDate: 2_000)
+    tint.update(isDictating: true, at: t0, reduceMotion: false)
+    let early = t0.addingTimeInterval(NotchVoiceMorphGeometry.dictationTintDuration / 2)
+    let partial = tint.blend(at: early, reduceMotion: false)
+    XCTAssertGreaterThan(partial, 0)
+    XCTAssertLessThan(partial, 1)
+    tint.update(isDictating: false, at: early, reduceMotion: false)
+    XCTAssertEqual(tint.blend(at: early, reduceMotion: false), partial, accuracy: 0.0001)
+    // Claimed again mid-fade: the ease-in resumes from the current red.
+    let later = early.addingTimeInterval(0.1)
+    let midFade = tint.blend(at: later, reduceMotion: false)
+    tint.update(isDictating: true, at: later, reduceMotion: false)
+    XCTAssertEqual(tint.blend(at: later, reduceMotion: false), midFade, accuracy: 0.0001)
+  }
+
+  func testReduceMotionSnapsOutAsWellAsIn() {
+    var tint = NotchDictationTint()
+    let t0 = Date(timeIntervalSinceReferenceDate: 3_000)
+    tint.update(isDictating: true, at: t0, reduceMotion: true)
+    XCTAssertEqual(tint.blend(at: t0, reduceMotion: true), 1)
+    tint.update(isDictating: false, at: t0, reduceMotion: true)
+    XCTAssertEqual(tint.blend(at: t0, reduceMotion: true), 0)
+    tint.settleIfFaded(at: t0, reduceMotion: true)
+    XCTAssertFalse(tint.isAnimating)
+  }
+
+  func testTheFadeMixesTowardsTheDotsRestingColourNotWhite() {
+    // Halfway through a fade onto a status colour, the dot is between red
+    // and that colour; there is no detour through white.
+    let base: (red: CGFloat, green: CGFloat, blue: CGFloat) = (0.2, 0.8, 0.3)
+    let mixed = NotchVoiceMorphGeometry.components(
+      of: NotchVoiceMorphGeometry.dictationDotColor(blend: 0.5, base: base))
+    XCTAssertEqual(mixed.red, (base.red + NotchVoiceMorphGeometry.dictationTint.red) / 2, accuracy: 0.02)
+    XCTAssertEqual(mixed.green, (base.green + NotchVoiceMorphGeometry.dictationTint.green) / 2, accuracy: 0.02)
+    XCTAssertEqual(mixed.blue, (base.blue + NotchVoiceMorphGeometry.dictationTint.blue) / 2, accuracy: 0.02)
+  }
+
+  func testReduceMotionSnapsToRedInsteadOfAnimating() {
+    XCTAssertEqual(NotchVoiceMorphGeometry.dictationBlend(elapsed: 0, reduceMotion: true), 1)
+    XCTAssertEqual(NotchVoiceMorphGeometry.dictationBlend(elapsed: nil, reduceMotion: true), 0)
+  }
+
+  func testTheTintIsRedNotPurple() {
+    // Brand rule: never purple. Red means red and blue stay well apart.
+    let tint = NotchVoiceMorphGeometry.dictationTint
+    XCTAssertEqual(tint.red, 1)
+    XCTAssertLessThan(tint.blue, 0.4)
+    XCTAssertLessThan(tint.green, 0.4)
+  }
+}

@@ -244,6 +244,11 @@ extension APIClient {
     let percent: Double
     let allowed: Bool
     let resetAt: Int?  // unix seconds — start of next UTC month
+    /// Catalog exhaustion policy: true means passing `limit` bills overage
+    /// instead of blocking, so `allowed == false` is not a reason to refuse a
+    /// send. Absent on servers predating the field, where the old hard-cap
+    /// reading is the safe one.
+    let isOveragePlan: Bool?
 
     enum CodingKeys: String, CodingKey {
       case plan
@@ -254,6 +259,7 @@ extension APIClient {
       case percent
       case allowed
       case resetAt = "reset_at"
+      case isOveragePlan = "is_overage_plan"
     }
   }
 

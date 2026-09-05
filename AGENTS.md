@@ -15,13 +15,14 @@ These rules apply to every AI agent working in this repository. This file is **h
 | Backend Python (`backend/`) | `backend/AGENTS.md` — setup, async/executors, WebSocket rules, service map, logging security, testing |
 | Flutter app (`app/`) | `app/AGENTS.md` — build flavors, l10n, native bridge, tests, agent-flutter UI verification |
 | Desktop macOS (`desktop/macos/`) | `desktop/macos/AGENTS.md` — build/run, named bundles, self-testing, release pipeline, changelog |
-| Desktop Windows/Linux (`desktop/windows/`) | `desktop/windows/AGENTS.md` — pnpm pin, build/test, CI shape, Linux/Wayland dev env, release pipeline |
+| Desktop Windows/Linux (`desktop/windows/`) | `desktop/windows/AGENTS.md` — pnpm pin, build/test, CI, release pipeline |
 | Web app (`web/app/`) | `web/app/AGENTS.md` — setup, quality gates, tests, desktop-parity limits |
 | Firmware (`omi/firmware/`) | `omi/firmware/AGENTS.md` — release workflow |
 | Product behavior | `PRODUCT.md` + `product/invariants/` — locked invariants and guard tests |
-| A rule shared across app/macOS/Windows (buckets, day grouping, wire decode) | `contracts/parity/README.md` — shared fixtures, per-platform conformance suites, divergence register |
+| Cross-client parity rules | `contracts/parity/README.md` — fixtures, conformance suites, divergence register |
 | Fallback/fail-open branches | `.github/agent-docs/fallback-telemetry.md` — when to call `record_fallback` |
 | Mobile/desktop plan catalog | `.github/agent-docs/plan-catalog.md` — who sees Plus/Neo/Operator/Architect |
+| Context buckets | `.github/agent-docs/context-buckets.md` — device/backend sync boundary |
 | App flows / E2E | `app/e2e/SKILL.md`, `desktop/macos/e2e/SKILL.md` |
 | Cursor Cloud VM (Linux x86) | `.cursor/cloud-agent-environment.md` — hermetic E2E harness, known failures |
 
@@ -77,7 +78,7 @@ The unit of work is the violated contract, not only the line where the symptom a
 - Make individual commits per feature or testable surface, not per file or unrelated bulk changes.
 - If push fails (remote ahead): `git pull --rebase && git push`.
 - **PR size is reported, not bounded** (`pr-scope` manifest check — advisory annotations, never blocks): 1,500+ changed production-source lines warns; 3,000+ cites the audited history of missed regressions. Split only when the pieces are independently verifiable; otherwise give the one PR proportional review depth.
-- **RELEASE command:** branch from `main`, individual commits, push, open PR, merge without squash, switch back to `main` and pull. **RELEASEWITHBACKEND:** RELEASE + `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
+- **RELEASE command:** branch from `main`, individual commits, push, open PR, merge without squash, switch back to `main` and pull. **RELEASEWITHBACKEND:** `gh workflow run gcp_backend.yml -f environment=prod -f release_sha=<SHA>`.
 
 ## Issues
 
@@ -130,7 +131,7 @@ Click at coordinates: `cliclick c:X,Y`. Mac screenshots: `screencapture -x /tmp/
 ## Deploys & Release Pipelines
 
 - Desktop (hourly candidate → signed-smoke Beta → manual Stable): `desktop/macos/AGENTS.md` → Release Pipeline.
-- Backend: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`. Runtime env contract: `backend/AGENTS.md` → Service Map.
+- Backend: `gcp_backend.yml` is main stack (`environment`, `release_sha`, `release_version`, `mode`, `deploy_targets`; no `branch`). Prod `release_sha` needs first-attempt Release Eligibility. desktop-backend: `desktop_backend_prod.yml` (`release_sha`, confirm `deploy-desktop-backend-prod`, reason).
 - Firmware (Omi CV1): `omi/firmware/AGENTS.md`.
 
 **Every gated surface has a break-glass hatch. A broken gate is never a reason to be stuck.** Each records a tracking issue; repeated use means the gate is the defect.

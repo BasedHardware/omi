@@ -5,14 +5,19 @@ from typing import Any, Literal, Optional, TypedDict
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
-from database.account_deletion_policy import normalize_account_deletion_status
+from ._client import get_data_plane_firestore_client
+from database.account_deletion_marker import (
+    account_deletion_collection,
+    account_deletion_document,
+    account_deletion_firestore_client,
+    get_user_deletion_wipe_status,
+)
 from database.account_deletion_transitions import (
     adopt_legacy_late_agent_vm_cleanup as _adopt_legacy_late_agent_vm_cleanup_txn,
     mark_wipe_completed as _mark_user_deletion_wipe_completed_txn,
     record_late_agent_vm_cleanup as _record_late_agent_vm_cleanup_txn,
 )
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
-from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from database.person_aliases import rename_person_retaining_aliases
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.redis_db import (
@@ -41,7 +46,6 @@ DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
 DELETION_WIPE_RETRY_BASE_DELAY = timedelta(minutes=5)
 DELETION_WIPE_RETRY_MAX_DELAY = timedelta(hours=1)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
-_DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES = frozenset({'pending', 'retrying', 'running', 'failed'})
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
 ONBOARDING_ADMISSION_PATH = "onboarding_admission/current"
 ONBOARDING_ADMISSION_TTL = timedelta(minutes=20)
@@ -277,7 +281,7 @@ BYOK_HEARTBEAT_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
 
 def get_byok_state(uid: str, *, firestore_client: Any | None = None) -> dict:
-    user_ref = (firestore_client or db).collection('users').document(uid)
+    user_ref = (firestore_client or get_data_plane_firestore_client()).collection('users').document(uid)
     data = user_ref.get().to_dict() or {}
     return data.get('byok', {})
 
@@ -323,12 +327,13 @@ def _set_byok_active_transaction(transaction, user_ref, fingerprints: dict):
 
 
 def set_byok_active(uid: str, fingerprints: dict):
-    user_ref = db.collection('users').document(uid)
-    _set_byok_active_transaction(db.transaction(), user_ref, fingerprints)
+    client = get_data_plane_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    _set_byok_active_transaction(client.transaction(), user_ref, fingerprints)
 
 
 def clear_byok_active(uid: str):
-    user_ref = db.collection('users').document(uid)
+    user_ref = get_data_plane_firestore_client().collection('users').document(uid)
     user_ref.set(
         {
             'byok': {
@@ -345,7 +350,7 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
     # Stored in a top-level collection so it survives the user record being deleted.
     # Use merge=True so a retried delete request does not erase a durable wipe marker
     # (pending/failed/retrying/deleting_auth) already written to the same document.
-    db.collection('account_deletions').document(uid).set(
+    account_deletion_document(uid).set(
         {
             'uid': uid,
             'reason': reason or '',
@@ -354,25 +359,6 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
         },
         merge=True,
     )
-
-
-def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = None) -> str | None:
-    """Return the authoritative deletion lifecycle state for an authenticated UID.
-
-    This intentionally bypasses caches: an accepted deletion must become an
-    access barrier on the very next request, and a cached pre-delete miss would
-    reopen the exact half-deleted-account window this marker closes.
-    """
-    client = firestore_client or get_firestore_client()
-    snapshot = client.collection('account_deletions').document(uid).get()
-    record_document_read(
-        FirestoreReadSite.USER_DELETION_WIPE_STATUS,
-        FirestoreReadOutcome.HIT if snapshot.exists else FirestoreReadOutcome.MISS,
-    )
-    if not snapshot.exists:
-        return None
-    status = (snapshot.to_dict() or {}).get('wipe_status')
-    return normalize_account_deletion_status(marker_exists=True, raw_status=status)
 
 
 def mark_user_deletion_wipe_running(uid: str):
@@ -388,7 +374,7 @@ def mark_user_deletion_wipe_running(uid: str):
     ``stale_after`` (default 10 min) and re-enqueued concurrently, leading to
     duplicate work where a later failure overwrites a successful completion.
     """
-    db.collection('account_deletions').document(uid).set(
+    account_deletion_document(uid).set(
         {'wipe_status': 'running', 'wipe_running_at': datetime.now(timezone.utc)},
         merge=True,
     )
@@ -439,8 +425,9 @@ def mark_user_deletion_wipe_intent(uid: str) -> DeletionWipeIntent:
     remains a legacy recovery state and is promoted by a retry or reconciler.
     """
     wipe_job_id = uuid.uuid4().hex
-    doc_ref = db.collection('account_deletions').document(uid)
-    transaction = db.transaction()
+    client = account_deletion_firestore_client()
+    doc_ref = account_deletion_document(uid, firestore_client=client)
+    transaction = client.transaction()
     return _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id)
 
 
@@ -467,20 +454,23 @@ def _mark_user_deletion_wipe_started_txn(transaction, doc_ref, wipe_job_id: str)
 
 def mark_user_deletion_wipe_started(uid: str, wipe_job_id: str) -> bool:
     """Atomically promote one newly-created wipe intent to queue-pending."""
-    doc_ref = db.collection('account_deletions').document(uid)
-    transaction = db.transaction()
+    client = account_deletion_firestore_client()
+    doc_ref = account_deletion_document(uid, firestore_client=client)
+    transaction = client.transaction()
     return _mark_user_deletion_wipe_started_txn(transaction, doc_ref, wipe_job_id)
 
 
 def mark_user_deletion_wipe_completed(uid: str) -> bool:
     """Complete the wipe only if no provider cleanup remains outstanding."""
-    doc_ref = db.collection('account_deletions').document(uid)
-    return _mark_user_deletion_wipe_completed_txn(db.transaction(), doc_ref)
+    client = account_deletion_firestore_client()
+    return _mark_user_deletion_wipe_completed_txn(
+        client.transaction(), account_deletion_document(uid, firestore_client=client)
+    )
 
 
 def mark_user_deletion_wipe_failed(uid: str):
     """Mark the background data wipe as failed so a reconciliation worker can retry."""
-    db.collection('account_deletions').document(uid).set(
+    account_deletion_document(uid).set(
         {
             'wipe_status': 'failed',
             'wipe_failed_at': datetime.now(timezone.utc),
@@ -497,9 +487,10 @@ def record_late_agent_vm_cleanup(
     expected_instance_id: str | None = None,
 ) -> bool:
     """Persist a late VM only when an admitted deletion owns its cleanup."""
-    doc_ref = db.collection('account_deletions').document(uid)
+    client = account_deletion_firestore_client()
+    doc_ref = account_deletion_document(uid, firestore_client=client)
     return _record_late_agent_vm_cleanup_txn(
-        db.transaction(),
+        client.transaction(),
         doc_ref,
         vm_name,
         zone,
@@ -509,7 +500,7 @@ def record_late_agent_vm_cleanup(
 
 def get_late_agent_vm_cleanup(uid: str) -> dict[str, str] | None:
     """Return a late-created VM that must be retried independently of user data."""
-    snapshot = db.collection('account_deletions').document(uid).get()
+    snapshot = account_deletion_document(uid).get()
     data = snapshot.to_dict() or {}
     pending = data.get('late_agent_vm_cleanup') if snapshot.exists else None
     if not isinstance(pending, dict):
@@ -533,13 +524,14 @@ def get_late_agent_vm_cleanup(uid: str) -> dict[str, str] | None:
 
 def adopt_legacy_late_agent_vm_cleanup(uid: str, vm_name: str, zone: str, expected_instance_id: str) -> bool:
     """CAS-upgrade a pre-instance-ID cleanup record before provider deletion."""
-    doc_ref = db.collection('account_deletions').document(uid)
-    return _adopt_legacy_late_agent_vm_cleanup_txn(db.transaction(), doc_ref, vm_name, zone, expected_instance_id)
+    client = account_deletion_firestore_client()
+    doc_ref = account_deletion_document(uid, firestore_client=client)
+    return _adopt_legacy_late_agent_vm_cleanup_txn(client.transaction(), doc_ref, vm_name, zone, expected_instance_id)
 
 
 def clear_late_agent_vm_cleanup(uid: str, vm_name: str) -> None:
     """Clear a late-VM retry record only after its matching GCE instance is gone."""
-    doc_ref = db.collection('account_deletions').document(uid)
+    doc_ref = account_deletion_document(uid)
     snapshot = doc_ref.get()
     pending = (snapshot.to_dict() or {}).get('late_agent_vm_cleanup') if snapshot.exists else None
     if isinstance(pending, dict) and pending.get('vmName') == vm_name:
@@ -565,14 +557,15 @@ def ensure_deletion_wipe_job_id(uid: str) -> str | None:
     the reconciler claims the state first, then atomically assigns an opaque id
     before it re-enqueues the task.
     """
-    doc_ref = db.collection('account_deletions').document(uid)
-    transaction = db.transaction()
+    client = account_deletion_firestore_client()
+    doc_ref = account_deletion_document(uid, firestore_client=client)
+    transaction = client.transaction()
     return _ensure_deletion_wipe_job_id_txn(transaction, doc_ref, uuid.uuid4().hex)
 
 
 def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution:
     """Resolve an opaque task id to one canonical deletion job document."""
-    docs = list(db.collection('account_deletions').where('wipe_job_id', '==', wipe_job_id).limit(2).stream())
+    docs = list(account_deletion_collection().where('wipe_job_id', '==', wipe_job_id).limit(2).stream())
     if not docs:
         return {'outcome': 'missing', 'uid': None}
     if len(docs) != 1:
@@ -583,25 +576,6 @@ def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution
     if status == 'completed':
         return {'outcome': 'completed', 'uid': None}
     if status in _DELETION_WIPE_TERMINAL_STATUSES:
-        return {'outcome': 'not_actionable', 'uid': None}
-    return {'outcome': 'resolved', 'uid': doc.id}
-
-
-def resolve_legacy_deletion_wipe_uid(legacy_uid: str) -> DeletionWipeTaskResolution:
-    """Resolve a bounded legacy payload through the persisted deletion record.
-
-    This compatibility path is deliberately narrower than the historical
-    handler: a UID from a queued legacy task is never executable on its own.
-    It must name a still-actionable canonical deletion record, and the handler
-    uses the document id returned here rather than the payload value.
-    """
-    doc = db.collection('account_deletions').document(legacy_uid).get()
-    if not doc.exists:
-        return {'outcome': 'missing', 'uid': None}
-    status = (doc.to_dict() or {}).get('wipe_status')
-    if status == 'completed':
-        return {'outcome': 'completed', 'uid': None}
-    if status not in _DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES:
         return {'outcome': 'not_actionable', 'uid': None}
     return {'outcome': 'resolved', 'uid': doc.id}
 
@@ -633,8 +607,9 @@ def mark_user_deletion_billing_failed(uid: str, subscription_id: str | None, err
     Never clobbers an actionable or terminal wipe state. A billing failure can
     only block deletion before a destructive wipe has been queued or started.
     """
-    doc_ref = db.collection('account_deletions').document(uid)
-    transaction = db.transaction()
+    client = account_deletion_firestore_client()
+    doc_ref = account_deletion_document(uid, firestore_client=client)
+    transaction = client.transaction()
     return _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid, subscription_id, error)
 
 
@@ -645,7 +620,7 @@ def cancel_user_deletion_wipe(uid: str):
     persisted. Without this, the reconciliation worker would later wipe the
     user's data even though their Firebase account still exists.
     """
-    db.collection('account_deletions').document(uid).set(
+    account_deletion_document(uid).set(
         {'wipe_status': 'cancelled', 'wipe_cancelled_at': datetime.now(timezone.utc)},
         merge=True,
     )
@@ -698,7 +673,7 @@ def get_pending_deletion_wipes(
     # entirely of records still inside their backoff window and starve one that is ready.
     now = datetime.now(timezone.utc)
     result: list[dict] = []
-    failed_docs = db.collection('account_deletions').where('wipe_status', '==', 'failed').stream()
+    failed_docs = account_deletion_collection().where('wipe_status', '==', 'failed').stream()
     for doc in failed_docs:
         if len(result) >= limit:
             break
@@ -716,7 +691,7 @@ def get_pending_deletion_wipes(
         # first page of fresh pending docs, leaving them permanently unqueued.
         # The ``account_deletions`` collection only holds deletion events so
         # the full scan is bounded.
-        pending_docs = db.collection('account_deletions').where('wipe_status', '==', 'pending').stream()
+        pending_docs = account_deletion_collection().where('wipe_status', '==', 'pending').stream()
         for doc in pending_docs:
             if len(result) >= limit:
                 break
@@ -732,7 +707,7 @@ def get_pending_deletion_wipes(
         # behind other cleanup jobs) can take several minutes; we only want to
         # reclaim a ``running`` marker when the worker has almost certainly
         # crashed or the pod was killed mid-execution.
-        running_docs = db.collection('account_deletions').where('wipe_status', '==', 'running').stream()
+        running_docs = account_deletion_collection().where('wipe_status', '==', 'running').stream()
         for doc in running_docs:
             if len(result) >= limit:
                 break
@@ -747,7 +722,7 @@ def get_pending_deletion_wipes(
         # 'pending') usually means a crash/deploy after auth.delete_account()
         # succeeded. The reconciler verifies the Firebase user is gone before
         # recovering these — see reconcile_pending_deletion_wipes.
-        deleting_auth_docs = db.collection('account_deletions').where('wipe_status', '==', 'deleting_auth').stream()
+        deleting_auth_docs = account_deletion_collection().where('wipe_status', '==', 'deleting_auth').stream()
         for doc in deleting_auth_docs:
             if len(result) >= limit:
                 break
@@ -757,7 +732,7 @@ def get_pending_deletion_wipes(
                 result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
-        retrying_docs = db.collection('account_deletions').where('wipe_status', '==', 'retrying').stream()
+        retrying_docs = account_deletion_collection().where('wipe_status', '==', 'retrying').stream()
         for doc in retrying_docs:
             if len(result) >= limit:
                 break
@@ -851,8 +826,9 @@ def claim_deletion_wipe(
     another worker already owns a non-stale claim. This prevents the same wipe
     from being re-enqueued concurrently by multiple workers or scheduler runs.
     """
-    doc_ref = db.collection('account_deletions').document(uid)
-    transaction = db.transaction()
+    client = account_deletion_firestore_client()
+    doc_ref = account_deletion_document(uid, firestore_client=client)
+    transaction = client.transaction()
     return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after, running_stale_after)
 
 
@@ -895,8 +871,9 @@ def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELE
     Returns one of: ``claimed``, ``running``, ``completed``, ``missing``, or
     ``not_actionable``. Only ``claimed`` callers may run the destructive wipe.
     """
-    doc_ref = db.collection('account_deletions').document(uid)
-    transaction = db.transaction()
+    client = account_deletion_firestore_client()
+    doc_ref = account_deletion_document(uid, firestore_client=client)
+    transaction = client.transaction()
     return _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after)
 
 
@@ -1359,7 +1336,14 @@ def get_all_ratings(rating_type: str = 'memory_summary'):
 
 
 def set_chat_message_rating_score(
-    uid: str, message_id: str, value: int, reason: str = None, platform: str = None, app_version: str = None
+    uid: str,
+    message_id: str,
+    value: int,
+    reason: str = None,
+    platform: str = None,
+    app_version: str = None,
+    notification_kind: str = None,
+    app_id: str = None,
 ):
     """
     Store chat message rating/feedback.
@@ -1367,11 +1351,12 @@ def set_chat_message_rating_score(
     Args:
         uid: User ID
         message_id: Message ID being rated
-        value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = neutral/removed)
-        reason: Optional reason for thumbs down (e.g. 'too_verbose', 'incorrect_or_hallucination',
-                'not_helpful_or_irrelevant', 'didnt_follow_instructions', 'other')
-        platform: 'desktop' or 'mobile' — identifies where the rating came from
-        app_version: App version string (e.g. '0.11.276') — maps to a specific prompt version
+        value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = user cleared the rating)
+        reason: Optional enum reason for thumbs down
+        platform: 'desktop' or 'mobile' — always written; absence is not a value
+        app_version: App version string (e.g. '0.11.276')
+        notification_kind: Parsed `notification:<kind>:<uuid>` prefix, when present
+        app_id: Message app_id (Mentor vs default), copied so encryption cannot hide it
     """
     doc_id = document_id_from_seed('chat_message' + message_id)
     data = {
@@ -1388,6 +1373,10 @@ def set_chat_message_rating_score(
         data['platform'] = platform
     if app_version:
         data['app_version'] = app_version
+    if notification_kind:
+        data['notification_kind'] = notification_kind
+    if app_id:
+        data['app_id'] = app_id
     db.collection('analytics').document(doc_id).set(data)
 
 
@@ -2204,7 +2193,7 @@ def update_notification_settings(uid: str, enabled: bool = None, frequency: int 
 
 def _get_raw_assistant_settings(uid: str) -> dict:
     """Read only the assistant_settings sub-map (without update_channel injection)."""
-    user_ref = db.collection('users').document(uid)
+    user_ref = get_data_plane_firestore_client().collection('users').document(uid)
     doc = user_ref.get()
     if not doc.exists:
         return {}
@@ -2217,7 +2206,7 @@ def get_assistant_settings(uid: str) -> dict:
     Injects top-level ``update_channel`` into the response dict (it lives
     outside ``assistant_settings`` in Firestore but the API returns it together).
     """
-    user_ref = db.collection('users').document(uid)
+    user_ref = get_data_plane_firestore_client().collection('users').document(uid)
     doc = user_ref.get()
     if not doc.exists:
         return {}
@@ -2249,7 +2238,7 @@ def update_assistant_settings(uid: str, settings: dict) -> dict:
         else:
             existing[section] = values
 
-    user_ref = db.collection('users').document(uid)
+    user_ref = get_data_plane_firestore_client().collection('users').document(uid)
     updates = {'assistant_settings': existing}
     if update_channel is not None:
         updates['update_channel'] = update_channel

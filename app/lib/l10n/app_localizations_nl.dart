@@ -9945,4 +9945,40 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Taak';
+
+  @override
+  String get chatBlockGoal => 'Doel';
+
+  @override
+  String get chatBlockConversation => 'Gesprek';
+
+  @override
+  String get chatBlockMemory => 'Herinnering';
+
+  @override
+  String get chatBlockQuestion => 'Vraag';
+
+  @override
+  String get chatBlockOpenInGoals => 'Openen in Doelen';
+
+  @override
+  String get chatBlockOpenConversation => 'Gesprek openen';
+
+  @override
+  String get chatBlockOpenInMemories => 'Openen in Herinneringen';
+
+  @override
+  String get chatBlockUnavailable => 'Niet langer beschikbaar';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Aanbevolen volgende stappen';
+
+  @override
+  String get couldNotLoadMemories => 'Herinneringen konden niet worden geladen';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Kennisgrafiek kon niet worden geladen';
 }

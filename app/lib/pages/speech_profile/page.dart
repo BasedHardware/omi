@@ -61,9 +61,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
     });
   }
 
-  // TODO: use connection directly
-  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+  Future<BleAudioCodec> _getAudioCodec() async {
+    var connection = ServiceManager.instance().device.connection;
     if (connection == null) {
       return BleAudioCodec.pcm8;
     }
@@ -371,7 +370,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                           final currentDevice = provider.device;
                                           if (currentDevice != null) {
                                             try {
-                                              BleAudioCodec codec = await _getAudioCodec(currentDevice.id);
+                                              BleAudioCodec codec = await _getAudioCodec();
                                               if (!codec.isOpusSupported()) {
                                                 // Device doesn't support opus, use phone mic
                                                 usePhoneMic = true;

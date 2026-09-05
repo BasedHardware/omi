@@ -79,6 +79,7 @@ def merge():
     models_pkg.__path__ = []  # type: ignore[attr-defined]
     model_submods = {
         "models.audio_file": ["AudioFile"],
+        "models.client_processing": ["PROJECTION_FAMILY_FIELDS"],
         "models.conversation": ["Conversation"],
         "models.conversation_enums": ["ConversationStatus"],
         "models.structured": ["Structured"],

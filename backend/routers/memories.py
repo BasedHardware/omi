@@ -3,7 +3,9 @@ import uuid
 from typing import Any, Callable, Dict, List, Literal, Optional, cast
 
 import database._client as db_client_module
+from database.legal_holds import DestructiveOperationInProgress
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.other.account_gate_http import account_gate_busy_http_exception
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -21,6 +23,7 @@ from utils.memory.memory_service import (
     fetch_memory_dict,
 )
 from utils.observability.fallback import record_fallback
+from utils.feedback import record_memory_feedback
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.import_write_guard import (
     import_write_block_mode,
@@ -816,6 +819,8 @@ def delete_memories_batch(
     except HTTPException:
         # Preserve service-owned 402/404/413 mappings and observability details.
         raise
+    except DestructiveOperationInProgress as exc:
+        raise account_gate_busy_http_exception() from exc
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
     return {'status': 'ok'}
@@ -830,6 +835,8 @@ def delete_memory(
 ):
     try:
         MemoryService(db_client=getattr(db_client_module, 'db', None)).delete(uid, memory_id)
+    except DestructiveOperationInProgress as exc:
+        raise account_gate_busy_http_exception() from exc
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
     return {'status': 'ok'}
@@ -864,6 +871,10 @@ def review_memory(
     service = MemoryService(db_client=getattr(db_client_module, 'db', None))
     _validate_mutable_memory(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
     service.review(uid, memory_id, value)
+    # Discarding a memory is this surface's thumbs-down. `user_review` on the
+    # memory is a mutable flag with no timestamp, so the ledger row is what
+    # gives the verdict a time and lands it in the daily report.
+    record_memory_feedback(uid, memory_id, value)
     return {'status': 'ok'}
 
 

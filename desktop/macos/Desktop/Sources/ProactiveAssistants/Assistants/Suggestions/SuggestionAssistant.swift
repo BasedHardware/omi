@@ -70,7 +70,8 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   /// The commitments handed to the evaluation currently in flight, kept so delivery can
   /// hold a `commitment` nudge to what the model was actually shown.
-  private var commitmentsInFlight: [String] = []
+  private var commitmentsInFlight: [SuggestionCommitment] = []
+  private var nudgeLedgerPersistence: SuggestionTaskNudgeLedgerPersisting = SuggestionTaskNudgeLedgerDefaults()
 
   /// Goals, cached because grounding must stay off the network — a fetch on this path would
   /// blow through the window in which a suggestion is still about the current screen. A
@@ -202,7 +203,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     }
     lastEvaluationAt = now
     dailyBudget.recordEvaluation(now: now)
-    commitmentsInFlight = grounding.openCommitments
+    commitmentsInFlight = grounding.commitmentRecords
 
     do {
       return try await evaluate(frame: frame, grounding: grounding)
@@ -235,12 +236,23 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     // Overdue and due-today work is relevant regardless of what is on screen, and reading
     // it is free — it is already resident in the store.
-    let alwaysRelevant = await MainActor.run {
-      (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks)
+    let alwaysRelevant = await MainActor.run { () -> [SuggestionCommitment] in
+      let flagOn = NegativeFeedbackRemediationFeature.isEnabled
+      let ledger = flagOn ? SuggestionTaskNudgeLedgerDefaults().load() : SuggestionTaskNudgeLedger()
+      let now = Date()
+      return (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks)
         .prefix(15)
-        .map(Self.describeCommitment)
+        .compactMap { task in
+          if flagOn {
+            guard
+              SuggestionTaskNudgePolicy.isEligible(
+                taskId: task.id, dueAt: task.dueAt, ledger: ledger, now: now)
+            else { return nil }
+          }
+          return SuggestionCommitment(id: task.id, text: Self.describeCommitment(task))
+        }
     }
-    grounding.openCommitments = Array(alwaysRelevant)
+    grounding.commitmentRecords = Array(alwaysRelevant)
 
     grounding.goals = currentOwnerGoals()
     refreshGoalsIfStale()
@@ -255,13 +267,19 @@ actor SuggestionAssistant: ProactiveAssistant {
     let lookbackStart = Date().addingTimeInterval(-30 * 24 * 60 * 60)
 
     do {
-      let commitments = try await ActionItemStorage.shared.searchFTS(
-        query: searchTerm,
-        limit: 10,
-        includeCompleted: false
-      )
-      let scoped = commitments.map(\.description).filter { !grounding.openCommitments.contains($0) }
-      grounding.openCommitments.append(contentsOf: scoped)
+      let flagOn = await MainActor.run { NegativeFeedbackRemediationFeature.isEnabled }
+      if !flagOn {
+        let commitments = try await ActionItemStorage.shared.searchFTS(
+          query: searchTerm,
+          limit: 10,
+          includeCompleted: false
+        )
+        let existingTexts = Set(grounding.commitmentRecords.map(\.text))
+        for item in commitments where !existingTexts.contains(item.description) {
+          let id = item.backendId ?? item.description
+          grounding.commitmentRecords.append(SuggestionCommitment(id: id, text: item.description))
+        }
+      }
     } catch {
       logError("Suggestion: commitment grounding unavailable", error: error)
     }
@@ -559,7 +577,7 @@ actor SuggestionAssistant: ProactiveAssistant {
       isGroundedCommitment: SuggestionCommitmentGuard.isGrounded(
         suggestion: suggestion.suggestion,
         category: suggestion.category,
-        openCommitments: commitmentsInFlight
+        openCommitments: commitmentsInFlight.map(\.text)
       )
     )
 
@@ -625,6 +643,15 @@ actor SuggestionAssistant: ProactiveAssistant {
     ownerID: String,
     telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
   ) async {
+    let taskId = SuggestionCommitmentGuard.groundedTaskId(
+      suggestion: suggestion.suggestion,
+      category: suggestion.category,
+      commitments: commitmentsInFlight
+    )
+    var detail = suggestion.suggestion
+    if let taskId {
+      detail = "task_id=\(taskId)\n\(suggestion.suggestion)"
+    }
     let context = FloatingBarNotificationContext(
       sourceTitle: "Focus",
       assistantId: identifier,
@@ -633,7 +660,7 @@ actor SuggestionAssistant: ProactiveAssistant {
       contextSummary: result.contextSummary,
       currentActivity: result.currentActivity,
       reasoning: suggestion.reasoning,
-      detail: suggestion.suggestion
+      detail: detail
     )
 
     log("Suggestion: delivering [\(Int(suggestion.confidence * 100))%] \"\(suggestion.suggestion)\"")
@@ -647,6 +674,11 @@ actor SuggestionAssistant: ProactiveAssistant {
         context: context,
         suggestionTelemetryIdentity: telemetryIdentity
       )
+      if NegativeFeedbackRemediationFeature.isEnabled, let taskId {
+        var ledger = SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).load()
+        SuggestionTaskNudgePolicy.recordingDelivery(taskId: taskId, in: &ledger, now: Date())
+        SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).save(ledger)
+      }
     }
   }
 
@@ -693,7 +725,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     }
 
     let grounding = await assembleGrounding(for: frame)
-    commitmentsInFlight = grounding.openCommitments
+    commitmentsInFlight = grounding.commitmentRecords
 
     guard !grounding.isEmpty else {
       return ["outcome": "no_grounding", "commitments": "0"]

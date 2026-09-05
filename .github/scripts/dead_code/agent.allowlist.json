@@ -1,0 +1,24 @@
+{
+  "entries": [
+    {
+      "path": "desktop/macos/agent/src/runtime/contract-schema.ts",
+      "reason": "contract test fixtures module"
+    },
+    {
+      "path": "desktop/macos/agent/src/runtime/mcp-client.ts",
+      "reason": "imported only by the pi-mono-extension package via the built dist path (../agent/dist/runtime/mcp-client.js), which the agent reachability scan does not follow"
+    },
+    {
+      "path": "desktop/macos/agent/src/runtime/mcp-http-client.ts",
+      "reason": "imported only by the pi-mono-extension package via the built dist path (../agent/dist/runtime/mcp-client.js), which the agent reachability scan does not follow"
+    },
+    {
+      "path": "desktop/macos/agent/src/runtime/mcp-sse-client.ts",
+      "reason": "imported only by the pi-mono-extension package via the built dist path (../agent/dist/runtime/mcp-client.js), which the agent reachability scan does not follow"
+    },
+    {
+      "path": "desktop/macos/agent/src/runtime/mcp-stdio-client.ts",
+      "reason": "imported only by the pi-mono-extension package via the built dist path (../agent/dist/runtime/mcp-client.js), which the agent reachability scan does not follow"
+    }
+  ]
+}
