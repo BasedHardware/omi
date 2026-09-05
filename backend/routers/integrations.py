@@ -142,11 +142,15 @@ def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dic
 
 # Request/Response models
 class IntegrationData(BaseModel):
-    """Data for an integration connection"""
+    """Compatibility input for integrations without a server OAuth flow.
+
+    Deprecated credential fields remain in the released app-client schema, but
+    registered OAuth providers are rejected before any value is persisted.
+    """
 
     connected: bool = True
-    access_token: Optional[str] = None
-    refresh_token: Optional[str] = None
+    access_token: Optional[str] = Field(default=None, deprecated=True)
+    refresh_token: Optional[str] = Field(default=None, deprecated=True)
 
 
 class AppleHealthSyncData(BaseModel):
@@ -308,7 +312,15 @@ def get_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid))
 
 @router.put("/v1/integrations/{app_key}", tags=['integrations'], response_model=IntegrationMutationResponse)
 def save_integration(app_key: str, data: IntegrationData, uid: str = Depends(auth.get_current_user_uid)):
-    """Save or update an integration connection."""
+    """Save non-secret state for integrations without server-managed OAuth.
+
+    OAuth credentials are accepted only from a provider callback into the
+    encrypted control plane. This legacy compatibility route cannot inject or
+    replace a provider token.
+    """
+    resolved = resolve_integration_provider(app_key)
+    if resolved and resolved[1]['kind'] == 'oauth':
+        raise HTTPException(status_code=409, detail='oauth_integration_requires_authorization_flow')
     # Convert Pydantic model to dict, excluding None values
     integration_data = data.model_dump(exclude_none=True)
 
