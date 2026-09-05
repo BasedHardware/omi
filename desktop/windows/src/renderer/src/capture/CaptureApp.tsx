@@ -1,16 +1,19 @@
 import { useEffect, useRef } from 'react'
 import { RewindCaptureHost } from '../components/rewind/RewindCaptureHost'
+import { RewindChunkHost } from '../components/rewind/RewindChunkHost'
 import { ContinuousSessionHost } from './ContinuousSessionHost'
 import { AudioSessionHost } from './AudioSessionHost'
 import { PttCaptureHost } from './PttCaptureHost'
 import { ScreenSessionHost } from './ScreenSessionHost'
 import { MeetingSessionHost } from './MeetingSessionHost'
 import { installCaptureE2EHooks } from './e2eHooks'
+import { installRewindChunkE2EHooks } from '../rewind/chunkE2EHooks'
 import { auth } from '../lib/firebase'
 
 // Test hooks (no-op unless OMI_E2E=1) — module scope so they exist as soon as
 // the capture bundle evaluates, before React mounts.
 installCaptureE2EHooks()
+installRewindChunkE2EHooks()
 
 // Root of the hidden capture window (renderer #/capture). No visible UI — it only
 // mounts the capture hosts that own ALL capture: Rewind frames, the continuous
@@ -51,6 +54,7 @@ export function CaptureApp(): React.JSX.Element {
   return (
     <>
       <RewindCaptureHost />
+      <RewindChunkHost />
       <ContinuousSessionHost />
       <AudioSessionHost />
       <PttCaptureHost />
