@@ -782,6 +782,14 @@ void pusher(void)
     }
 }
 extern struct bt_gatt_service storage_service;
+
+static void register_storage_service_if_available(void)
+{
+    if (use_storage) {
+        bt_gatt_service_register(&storage_service);
+    }
+}
+
 //
 // Public functions
 //
@@ -823,7 +831,7 @@ int bt_on()
 {
     int err = bt_enable(NULL);
     bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
-    bt_gatt_service_register(&storage_service);
+    register_storage_service_if_available();
     if (use_storage) {
         k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
         sd_on();
@@ -862,7 +870,7 @@ int transport_start(bool offline_storage_available)
 
     // Start advertising
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
-    bt_gatt_service_register(&storage_service);
+    register_storage_service_if_available();
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
