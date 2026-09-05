@@ -67,7 +67,7 @@ struct JITProactivityAgentBudget: Equatable, Sendable {
     guard contractVersion == Self.cloudQAContractVersion,
       JITProactivityReservation.isIdentifier(executionID)
     else { return nil }
-    self.contractVersion = contractVersion!
+    self.contractVersion = Self.cloudQAContractVersion
     self.executionID = executionID
     self.maxProviderAttempts = Self.cloudQA.maxProviderAttempts
     self.maxOutputTokensPerAttempt = Self.cloudQA.maxOutputTokensPerAttempt
