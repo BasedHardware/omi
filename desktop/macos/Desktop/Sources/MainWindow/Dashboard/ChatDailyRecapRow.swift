@@ -12,10 +12,10 @@ import SwiftUI
 /// **Below the messages in hierarchy, on purpose.** Left-aligned text one step smaller than the
 /// bubble's, a soft fill with no border, and a trailing chevron — a marker in the thread, not
 /// another card. Centered bordered prose reads as an answer; the day boundary is the quieter
-/// thing. A doorway, not the experience: day label, one-line headline, at most two lines of
-/// overview, and the day's stats as a strip of micro chips (the same numbers the Activity day
-/// card shows, at bubble-row weight) — the full record and its actions live on `DailyRecapPage`,
-/// which clicking opens through the typed recap route.
+/// thing. A doorway, not the experience: day label, the day's emoji beside a one-line headline,
+/// at most three lines of overview, and the day's stats as a strip of micro chips (the same
+/// numbers the Activity day card shows, at bubble-row weight) — the full record and its actions
+/// live on `DailyRecapPage`, which clicking opens through the typed recap route.
 struct ChatDailyRecapRow: View {
   let record: DailySummaryRecord
 
@@ -45,16 +45,22 @@ struct ChatDailyRecapRow: View {
             .scaledFont(size: OmiType.micro, weight: .semibold)
             .foregroundStyle(Ink.secondary)
         }
-        Text(nonEmpty(record.headline) ?? "Your day in review")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundStyle(Ink.primary)
-          .lineLimit(1)
-          .truncationMode(.tail)
+        // The page's header shape, at row weight: the day's emoji beside the
+        // title, so the card reads as *the* recap rather than another notice.
+        HStack(spacing: OmiSpacing.xs) {
+          Text(nonEmpty(record.dayEmoji) ?? "📅")
+            .scaledFont(size: OmiType.subheading)
+          Text(nonEmpty(record.headline) ?? "Your day in review")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundStyle(Ink.primary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+        }
         if let overview = nonEmpty(record.overview) {
           Text(overview)
             .scaledFont(size: OmiType.caption)
             .foregroundStyle(Ink.secondary)
-            .lineLimit(2)
+            .lineLimit(3)
             .fixedSize(horizontal: false, vertical: true)
             .multilineTextAlignment(.leading)
         }
@@ -107,12 +113,10 @@ struct ChatDailyRecapRow: View {
     }
   }
 
-  /// "Yesterday · 🚀" — the day the recap is about, not the day it was written.
+  /// "Yesterday" — the day the recap is about, not the day it was written. The
+  /// day's emoji sits beside the title above, the way the page's header does.
   private var dayLabel: String {
-    let emoji = nonEmpty(record.dayEmoji) ?? "📅"
-    let day =
-      ChatDailySummaryPresentation.dateLabel(for: record.date, now: now()) ?? "Your day"
-    return "\(day) · \(emoji)"
+    ChatDailySummaryPresentation.dateLabel(for: record.date, now: now()) ?? "Your day"
   }
 
   private func nonEmpty(_ value: String?) -> String? {
@@ -124,15 +128,17 @@ struct ChatDailyRecapRow: View {
 /// Where the recap row goes, decided once and tested without a view.
 ///
 /// The row anchors **above the first message on or after the recap's day** — it is a day boundary
-/// in the thread, so it must sit where that day begins. Two shapes of thread render nothing at
-/// all, because either would draw the marker at a place the transcript cannot back up:
+/// in the thread, so it must sit where that day begins. Two shapes of thread place it
+/// differently, and one renders nothing at all:
 ///
-/// - **No message in the loaded window is on or after the recap's day.** The boundary is below
-///   what is loaded (or the thread is empty); a marker at the live edge would claim a day the
-///   visible history does not contain.
+/// - **No message in the loaded window is on or after the recap's day.** The recap is newer than
+///   everything loaded, so it is the newest thing in the thread: the marker takes the live edge,
+///   above the last row. (The row carries its own day label, so it claims nothing about the
+///   messages it sits below.)
 /// - **The boundary is at the very top of the loaded window while older messages exist above
 ///   it.** The day may begin further up; anchoring at the first loaded row would put the marker
-///   above messages from the same day whenever more history loads.
+///   above messages from the same day whenever more history loads, so it waits.
+/// - **An empty thread** renders nothing — the empty state owns that surface.
 enum ChatDailyRecapRowPlacement {
   static func anchorMessageID(
     in messages: [ChatMessage],
@@ -146,7 +152,7 @@ enum ChatDailyRecapRowPlacement {
     let dayStart = calendar.startOfDay(for: day)
     guard
       let index = messages.firstIndex(where: { calendar.startOfDay(for: $0.createdAt) >= dayStart })
-    else { return nil }
+    else { return messages.last?.id }
     if index == 0, hasOlderMessagesAbove { return nil }
     return messages[index].id
   }
