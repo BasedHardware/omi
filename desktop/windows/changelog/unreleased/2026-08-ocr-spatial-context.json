@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Screen memory extraction now preserves OCR reading order while removing repeated frames and desktop chrome."
+  ]
+}
