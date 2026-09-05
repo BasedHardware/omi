@@ -29,6 +29,7 @@ from utils.memory.retraction_scope import (
     retraction_can_be_skipped,
 )
 from utils.conversations.datetime_utils import coerce_utc_datetime
+from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations import lifecycle as lifecycle_service
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
@@ -275,9 +276,9 @@ def perform_merge_async(
         private_cloud_sync_enabled = any(c.get("private_cloud_sync_enabled", False) for c in sorted_convs)
 
         # Custom STT: True if any source was transcribed on a third-party
-        # provider, so the merged conversation stays behind the Omi-paid LLM
-        # post-processing gate (#7690). A custom-STT source must not be able to
-        # shed the marker by merging with a normal-STT one.
+        # provider, so the merged conversation keeps accurate provenance (#7690).
+        # A custom-STT source must not be able to shed the marker by merging with
+        # a normal-STT one.
         uses_custom_stt = any(c.get('uses_custom_stt', False) for c in sorted_convs)
 
         # Discarded: only if ALL are discarded
@@ -328,8 +329,10 @@ def perform_merge_async(
             external_data={"merge_metadata": merge_metadata},
         )
 
-        # 7. Save stub conversation to database
-        lifecycle_service.create_processing_conversation(uid, new_conversation.model_dump())
+        # 7. Save stub conversation to database. The modeled field's None
+        # default is omitted, never stamped: persist is merge=True, so a
+        # dumped None would become an explicit Firestore key.
+        lifecycle_service.create_processing_conversation(uid, omit_null_processing_state(new_conversation.model_dump()))
 
         # Build the conversation-level playback artifact for the merged conversation.
         # Fingerprint-named task: dedups with the enqueue process_conversation may

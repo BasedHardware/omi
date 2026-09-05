@@ -125,4 +125,49 @@ describe("McpStdioClient", () => {
     await expect(client.listTools()).rejects.toThrow();
     client.dispose();
   });
+
+  // The runtime env carries OMI_AUTH_TOKEN, OMI_BRIDGE_PIPE, BYOK provider
+  // keys, and Firebase credentials; a user server must never receive them.
+  // The fixture server reports what it can see via its tool description.
+  it("spawns user servers on a minimal environment, not the inherited runtime env", async () => {
+    const { McpStdioClient } = await import("../src/runtime/mcp-stdio-client.js");
+    const previous = {
+      OMI_AUTH_TOKEN: process.env.OMI_AUTH_TOKEN,
+      OMI_BRIDGE_PIPE: process.env.OMI_BRIDGE_PIPE,
+      OMI_BYOK_OPENAI: process.env.OMI_BYOK_OPENAI,
+      GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+      FIREBASE_TOKEN: process.env.FIREBASE_TOKEN,
+    };
+    process.env.OMI_AUTH_TOKEN = "secret-auth-token";
+    process.env.OMI_BRIDGE_PIPE = "/tmp/secret-pipe";
+    process.env.OMI_BYOK_OPENAI = "sk-secret";
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = "/secret/creds.json";
+    process.env.FIREBASE_TOKEN = "secret-firebase-token";
+    const client = new McpStdioClient(
+      process.execPath,
+      [join(import.meta.dirname, "fixtures", "echo-env-mcp-server.cjs")],
+      [{ name: "OMI_TEST_MARKER", value: "marker-present" }],
+    );
+    try {
+      const [tool] = await client.listTools();
+      const seen = JSON.parse(tool.description) as Record<string, unknown>;
+      expect(seen.omiAuthToken).toBeNull();
+      expect(seen.omiBridgePipe).toBeNull();
+      expect(seen.omiByokOpenai).toBeNull();
+      expect(seen.googleCredentials).toBeNull();
+      expect(seen.firebaseToken).toBeNull();
+      // The basics a server needs to run and find interpreters survive.
+      expect(seen.hasPath).toBe(true);
+      expect(seen.hasHome).toBe(true);
+      expect(seen.hasTmpdir).toBe(true);
+      // The server's own configured env entries still apply.
+      expect(seen.configuredMarker).toBe("marker-present");
+    } finally {
+      client.dispose();
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
 });

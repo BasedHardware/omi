@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 from typing import Literal
 
 from pydantic import AliasChoices, AwareDatetime, BaseModel, Field, field_validator, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from models.product_memory import (
     MAX_LEDGER_CONTENT_CHARACTERS,
@@ -130,6 +131,10 @@ class L1MemoryArchiveItem(BaseModel):
     # "unidentified non-primary speaker (speaker_1)", "Omi project", "Milo (cat)",
     # "Dr. Patel". Empty/unknown should be treated as uncertain, not as a named user.
     about: str = ""
+    subject_scope: SkipJsonSchema[Optional[str]] = None
+    belief_class: SkipJsonSchema[Optional[str]] = None
+    half_life_days: SkipJsonSchema[Optional[float]] = None
+    valid_to: SkipJsonSchema[Optional[AwareDatetime]] = None
     confidence: str = "medium"
     risk_flags: List[str] = Field(default_factory=list)
     allowed_use: Optional[str] = None
@@ -509,6 +514,8 @@ class DurableMemoryPatch(BaseModel):
     ledger_schema_version: Optional[str] = None
     kind: MemoryKind = MemoryKind.fact
     subject_scope: MemorySubjectScope = MemorySubjectScope.primary_user
+    half_life_days: Optional[float] = None
+    belief_class: Optional[str] = None
     slot: Optional[str] = None
     body: Optional[str] = None
     valid_from: Optional[AwareDatetime] = None
@@ -588,7 +595,6 @@ class DurableMemoryPatch(BaseModel):
 # Neutral symbol aliases (WS-G) — same types, canonical names for new code.
 WorkingObservation = WorkingMemoryObservation
 WorkingObservationArchiveItem = L1MemoryArchiveItem
-PromotionRoute = L2MemoryRoute
 
 __all__ = [
     "DURABLE_MEMORY_PATCH_FACT_SOURCE",
@@ -602,7 +608,6 @@ __all__ = [
     "L2SearchRequest",
     "L2SearchResult",
     "LifecycleState",
-    "PromotionRoute",
     "SourceBackedMemoryCandidate",
     "DURABLE_MEMORY_PATCH_FACT_SOURCE",
     "WorkingMemoryObservation",

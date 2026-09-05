@@ -425,3 +425,28 @@ def test_chat_get_memories_memory_list_decision_matches_search_denied_empty_and_
     assert denied.should_use_legacy_fallback is False
     assert denied.text == 'No memories available for this request.'
     assert denied_db.collection_paths == []
+
+
+def test_chat_default_memory_adapter_hedges_with_as_of_when_flag_on(monkeypatch):
+    monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    captured = now - timedelta(days=30)
+    memory = _memory_item(
+        'stale-state',
+        now=now,
+        captured_at=captured,
+        content='User was in Berlin',
+        half_life_days=30,
+    )
+    docs = {
+        'users/u1/memory_control/state': _enabled_rollout_doc(),
+        f'users/u1/memory_items/{memory.memory_id}': _stored_item(memory),
+    }
+    result = search_memory_default_chat_memories_text(
+        uid='u1', query='Berlin', limit=10, db_client=_FirestoreFake(docs), now=now
+    )
+    assert result is not None
+    assert 'as_of:' in result
+    assert 'band:' in result
+    assert f'date: {now.strftime("%Y-%m-%d")}' not in result or 'as_of:' in result
+    assert 'date:' not in result.split('content_quoted=', 1)[1]

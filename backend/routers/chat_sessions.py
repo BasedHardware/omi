@@ -16,6 +16,8 @@ import database.chat as chat_db
 import database.llm_usage as llm_usage_db
 from database.users import set_chat_message_rating_score
 from models.chat import Message
+from models.feedback import MAX_COMMENT_LENGTH, FeedbackReason, FeedbackSurface
+from utils.feedback import record_chat_message_feedback
 from models.chat_session import (
     ChatSessionResponse,
     DeleteMessagesResponse,
@@ -25,6 +27,7 @@ from models.chat_session import (
 )
 from models.shared import StatusResponse
 from utils.chat import initial_message_util
+from utils.chat_rating_triage import extract_rating_triage_fields
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
 from utils.other import endpoints as auth
@@ -69,9 +72,26 @@ class SaveMessageRequest(BaseModel):
     journal_revision: int | None = Field(None, ge=1, le=9_007_199_254_740_991)
 
 
+# Client `surface` values -> ledger surfaces. The client resolves 'notification'
+# for proactive cards (ChatProvider.ratingSurface); rejecting it here would 422
+# the PATCH and revert the user's thumbs-down instead of recording it.
+_LEDGER_SURFACES = {
+    'text': FeedbackSurface.chat_text,
+    'voice': FeedbackSurface.chat_voice,
+    'notification': FeedbackSurface.chat_notification,
+}
+
+
 class RateMessageRequest(BaseModel):
     rating: int | None = Field(None, ge=-1, le=1)
     app_version: str | None = None
+    # `reason`/`comment` are why a thumbs-down happened; `surface` separates
+    # main-window chat from floating-bar voice answers, which fail in different
+    # ways. All three are optional so an older desktop build keeps working —
+    # a rating with no reason records as "not captured", never as "no reason".
+    reason: FeedbackReason | None = None
+    comment: str | None = Field(None, max_length=MAX_COMMENT_LENGTH)
+    surface: str = Field('text', pattern=r'^(text|voice|notification)$')
 
 
 class InitialMessageRequest(BaseModel):
@@ -256,12 +276,34 @@ def rate_message(
 ):
     if request.rating is not None and request.rating not in (1, -1):
         raise HTTPException(status_code=400, detail='Rating must be 1, -1, or null')
-    if not chat_db.update_message_rating(uid, message_id, request.rating):
+    snapshot = chat_db.update_message_rating(uid, message_id, request.rating)
+    if snapshot is None:
         raise HTTPException(status_code=404, detail='Message not found')
     # Also write to analytics collection (same as mobile endpoint) so ratings
     # appear in the admin dashboard chat ratings chart.
     value = request.rating if request.rating is not None else 0
-    set_chat_message_rating_score(uid, message_id, value, platform='desktop', app_version=request.app_version)
+    triage = extract_rating_triage_fields(snapshot)
+    reason = request.reason.value if request.reason else None
+    set_chat_message_rating_score(
+        uid,
+        message_id,
+        value,
+        reason=reason,
+        platform='desktop',
+        app_version=request.app_version,
+        notification_kind=triage.get('notification_kind'),
+        app_id=triage.get('app_id'),
+    )
+    record_chat_message_feedback(
+        uid,
+        message_id,
+        value,
+        surface=_LEDGER_SURFACES.get(request.surface, FeedbackSurface.chat_text),
+        reason=reason,
+        comment=request.comment,
+        platform='desktop',
+        app_version=request.app_version,
+    )
     return {'status': 'ok'}
 
 

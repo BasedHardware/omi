@@ -1247,27 +1247,6 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // _handleCalendarCreation(ServerMemory memory) {
-  //   if (!SharedPreferencesUtil().calendarEnabled) return;
-  //   if (SharedPreferencesUtil().calendarType != 'auto') return;
-  //
-  //   List<Event> events = memory.structured.events;
-  //   if (events.isEmpty) return;
-  //
-  //   List<int> indexes = events.mapIndexed((index, e) => index).toList();
-  //   setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
-  //   for (var i = 0; i < events.length; i++) {
-  //     if (events[i].created) continue;
-  //     events[i].created = true;
-  //     CalendarUtil().createEvent(
-  //       events[i].title,
-  //       events[i].startsAt,
-  //       events[i].duration,
-  //       description: events[i].description,
-  //     );
-  //   }
-  // }
-
   /////////////////////////////////////////////////////////////////
   ////////// Delete Memory With Undo Functionality ///////////////
 

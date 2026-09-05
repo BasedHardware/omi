@@ -271,7 +271,6 @@ struct ConversationDetailView: View {
 
               ConversationDetailProcessingLayout(isProcessing: isEnrichingDeferred) {
                 deferredProcessingSection
-                  .allowsHitTesting(false)
               } content: {
                 summaryContent
               }
@@ -350,8 +349,11 @@ struct ConversationDetailView: View {
       // cached detail immediately, but always revalidates server-owned fields.
       if requestedConversation.deferred || requestedConversation.status == .processing {
         isEnrichingDeferred = true
+        // Keep following the row for as long as it is open. A bounded loop
+        // that silently stops leaves the banner promising a summary that no
+        // fetch will ever deliver; the backoff caps the cost instead.
         var attempts = 0
-        while attempts < 15 {
+        while true {
           guard isCurrentDetailRequest(requestGeneration), let appState = AppState.current else { break }
           let fetched = await appState.loadConversationDetail(requestedConversation) { cached in
             guard isCurrentDetailRequest(requestGeneration) else { return }
@@ -360,8 +362,9 @@ struct ConversationDetailView: View {
           guard isCurrentDetailRequest(requestGeneration) else { return }
           loadedConversation = fetched
           if fetched.status != .processing { break }
+          let delay = ProcessingConversationWatcher.pollDelay(attempt: attempts)
           attempts += 1
-          try? await Task.sleep(nanoseconds: 2_000_000_000)
+          try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
         }
         guard isCurrentDetailRequest(requestGeneration) else { return }
         isEnrichingDeferred = false
@@ -1169,23 +1172,10 @@ struct ConversationDetailView: View {
   /// Overlaid while a lazily-deferred conversation is enriched, preserving the
   /// position of details that may already be available from the local cache.
   private var deferredProcessingSection: some View {
-    HStack(spacing: OmiSpacing.md) {
-      ProgressView()
-        .controlSize(.small)
-      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-        Text("Processing conversation…")
-          .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(Ink.primary)
-        Text("Generating summary and action items")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-      }
-      Spacer()
+    ConversationProcessingBanner(conversation: displayConversation) { updated in
+      loadedConversation = updated
+      isEnrichingDeferred = false
     }
-    .padding(OmiSpacing.lg)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(Ink.rowFillHover.opacity(0.5))
-    .cornerRadius(OmiChrome.smallControlRadius)
   }
 
   // MARK: - Overview Section

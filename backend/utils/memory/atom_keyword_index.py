@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import timezone
 from typing import Any, Collection, Dict, List, Optional, cast
 
-from database._client import db as default_db_client
+from database._client import data_plane_db as default_db_client
 from database.memory_vector_metadata import canonical_memory_provider_id
 from database.legal_holds import external_write_fence
 from models.knowledge_ledger_search import (

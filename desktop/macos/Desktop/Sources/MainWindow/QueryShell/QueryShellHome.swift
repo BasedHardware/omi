@@ -141,7 +141,7 @@ struct QueryShellHome: View {
           // **The search bar is always on screen.** It is pure search — typing narrows the spine
           // below; clearing it returns the panel to the conversation. The chat composer is a
           // different control and stays pinned inside the panel (INV-6: one chat composer).
-          QuerySearchBar(text: $searchText)
+          QuerySearchBar(text: $searchText, searchSurface: .home)
           QueryResultsPanel(
             request: requestBinding(),
             mode: mode,
@@ -152,7 +152,19 @@ struct QueryShellHome: View {
             headerAccessory: { headerAccessory },
             footer: {
               if mode == .answer {
-                composerBar(draft: draft)
+                // Measured as one unit: `composerHeight` is what the panel
+                // reserves for its footer, so a banner outside that
+                // measurement would push the composer down by its own height.
+                VStack(spacing: OmiSpacing.sm) {
+                  ChatQuotaBannerView.Slot()
+                  composerBar(draft: draft)
+                }
+                .background {
+                  GeometryReader { footer in
+                    Color.clear.preference(
+                      key: QueryComposerHeightKey.self, value: footer.size.height)
+                  }
+                }
               }
             }
           ) {
@@ -288,11 +300,6 @@ struct QueryShellHome: View {
       references: chatProvider.pendingComposerReferences,
       onReferenceRemoved: { chatProvider.removeComposerReference(id: $0) }
     )
-    .background {
-      GeometryReader { composer in
-        Color.clear.preference(key: QueryComposerHeightKey.self, value: composer.size.height)
-      }
-    }
   }
 
   /// The seam value the panel and its body are handed, **assembled rather than stored**: the text
@@ -318,6 +325,7 @@ struct QueryShellHome: View {
         appState: appState,
         memoriesViewModel: memoriesViewModel,
         tasksStore: tasksStore,
+        searchSurface: .home,
         onOpenConversation: openConversationRecord,
         onOpenMemory: openMemory,
         onOpenBrainMap: openBrainMap,

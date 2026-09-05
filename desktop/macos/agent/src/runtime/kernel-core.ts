@@ -407,9 +407,14 @@ export class KernelCore {
       const latestAttempt = latestAttemptRow ? attemptFromRow(latestAttemptRow) : undefined;
       if (run.status === "orphaned" || !latestAttempt || TERMINAL_STATUSES.includes(latestAttempt.status)) {
         this.withTransaction(() => {
+          // A recycled run must not carry the previous attempt's answer while it
+          // is queued again: the context snapshot and control list both read
+          // final_text for active runs (#12731).
           this.updateRun(run.runId, {
             status: "queued",
             completedAtMs: null,
+            finalText: null,
+            resultJson: null,
             errorCode: null,
             errorMessage: null,
             updatedAtMs: Date.now(),
@@ -634,7 +639,10 @@ export class KernelCore {
     const persistedStatus = input.terminalStatus === "completed" ? "succeeded" : input.terminalStatus;
     if (TERMINAL_STATUSES.includes(run.status) || TERMINAL_STATUSES.includes(attempt.status)) {
       if (run.status === persistedStatus && attempt.status === persistedStatus) {
-        return { ...input, duplicate: true };
+        // First write wins, so a replayed frame's text is deliberately not
+        // stored. Say so rather than letting the surface read ok and assume it
+        // landed — that silence is the shape of #12731 itself.
+        return { ...input, duplicate: true, finalTextPersisted: false };
       }
       throw new ExternalSurfaceAuthorityError("run_terminal", "External surface run already has a different terminal state");
     }
@@ -653,18 +661,30 @@ export class KernelCore {
     if (errorCode && !/^[a-z0-9_]{1,64}$/.test(errorCode)) {
       throw new ExternalSurfaceAuthorityError("invalid_external_request", "External surface errorCode is invalid");
     }
+    if (input.finalText !== undefined && typeof input.finalText !== "string") {
+      throw new ExternalSurfaceAuthorityError("invalid_external_request", "External surface finalText must be a string");
+    }
+    // The kernel never observes an external surface's stream, so terminalization is
+    // the only point at which this run's answer can be captured. Persisted for every
+    // terminal status, following the internal adapter path, which likewise stores
+    // whatever text was produced and marks failure through errorCode instead. The
+    // internal path stores "" as-is; here an empty string collapses to null so
+    // "produced no text" reads identically whether the surface omitted the field
+    // or sent "" (#12731).
+    const trimmed = input.finalText?.trim();
+    const finalText = trimmed ? trimmed : null;
     this.withTransaction(() => {
       this.finishAttemptAndRun({
         sessionId: input.sessionId,
         runId: input.runId,
         attemptId: input.attemptId,
         status: persistedStatus,
-        finalText: null,
+        finalText,
         errorCode: persistedStatus === "failed" ? errorCode ?? "external_surface_failed" : null,
         errorMessage: persistedStatus === "failed" ? "External surface execution failed" : null,
       });
     });
-    return { ...input, duplicate: false };
+    return { ...input, duplicate: false, finalTextPersisted: finalText !== null };
   }
 
   private assertExternalRunIdentity(

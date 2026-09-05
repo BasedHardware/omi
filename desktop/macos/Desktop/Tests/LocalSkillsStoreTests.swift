@@ -36,6 +36,33 @@ final class LocalSkillsStoreTests: XCTestCase {
         atPath: tempRoot.appendingPathComponent(".claude-plugin/plugin.json").path))
   }
 
+  /// The ACP lane gates the user-skills plugin on `.claude-plugin/plugin.json`,
+  /// which the UI save path writes. A folder dropped in by hand never runs that
+  /// path, so the runtime-spawn safety net must cover it — and must not create
+  /// dotfiles for users with no skills at all.
+  func testSpawnSafetyNetWritesPluginManifestOnlyWhenSkillsExist() throws {
+    let skillsDir = tempRoot.appendingPathComponent("skills", isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: skillsDir.appendingPathComponent("hand-dropped"), withIntermediateDirectories: true)
+    try Data("---\nname: hand-dropped\ndescription: d\n---\nBody.".utf8)
+      .write(to: skillsDir.appendingPathComponent("hand-dropped/SKILL.md"))
+
+    LocalSkillsStore.ensurePluginManifestIfSkillsExist()
+    XCTAssertTrue(FileManager.default.fileExists(atPath: LocalSkillsStore.pluginManifestURL.path))
+
+    // A machine with a ~/.omi but no skills folder stays untouched.
+    let emptyRoot = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-skills-empty-\(UUID().uuidString)")
+    LocalSkillsStore.rootURLOverride = emptyRoot
+    defer {
+      LocalSkillsStore.rootURLOverride = tempRoot
+      try? FileManager.default.removeItem(at: emptyRoot)
+    }
+    LocalSkillsStore.ensurePluginManifestIfSkillsExist()
+    XCTAssertFalse(FileManager.default.fileExists(atPath: LocalSkillsStore.pluginManifestURL.path))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: emptyRoot.path))
+  }
+
   func testSavePreservesAuthorFrontmatterAndOwnsNameDescription() throws {
     let md = "---\nname: old-name\ndescription: Old desc\nlicense: MIT\n---\nBody text here."
     let slug = try LocalSkillsStore.saveSkill(title: "My Skill", markdown: md)
@@ -54,6 +81,64 @@ final class LocalSkillsStoreTests: XCTestCase {
 
     LocalSkillsStore.deleteSkill(slug: renamed)
     XCTAssertTrue(LocalSkillsStore.listSkills().isEmpty)
+  }
+
+  // MARK: - Disabled-slug upkeep
+
+  /// Saves and restores the real defaults key so the suite never leaks toggle
+  /// state into (or inherits it from) another test.
+  private func withDisabledSkillsDefaults<T>(_ body: () throws -> T) rethrows -> T {
+    let defaults = UserDefaults.standard
+    let original = defaults.string(forKey: DefaultsKey.disabledSkillsJSON.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.disabledSkillsJSON.rawValue)
+    defer {
+      if let original {
+        defaults.set(original, forKey: DefaultsKey.disabledSkillsJSON.rawValue)
+      } else {
+        defaults.removeObject(forKey: DefaultsKey.disabledSkillsJSON.rawValue)
+      }
+    }
+    return try body()
+  }
+
+  /// The disabled set holds slugs: a rename that left the old slug behind
+  /// would silently re-enable the renamed skill and let dead entries pile up.
+  func testRenameRekeysDisabledSlug() throws {
+    try withDisabledSkillsDefaults {
+      let original = try LocalSkillsStore.saveSkill(title: "First Name", markdown: "does things")
+      LocalSkillsStore.setDisabledSkillNames([original])
+
+      let renamed = try LocalSkillsStore.saveSkill(
+        title: "Second Name", markdown: "does things", replacingSlug: original)
+
+      XCTAssertEqual(
+        LocalSkillsStore.disabledSkillNames(),
+        [renamed],
+        "the renamed skill stays disabled under its new slug and the old entry is gone")
+    }
+  }
+
+  func testDeletePrunesDisabledSlug() throws {
+    try withDisabledSkillsDefaults {
+      let slug = try LocalSkillsStore.saveSkill(title: "Doomed", markdown: "x")
+      LocalSkillsStore.setDisabledSkillNames([slug, "still-here"])
+
+      LocalSkillsStore.deleteSkill(slug: slug)
+
+      XCTAssertEqual(
+        LocalSkillsStore.disabledSkillNames(), ["still-here"],
+        "deleting a disabled skill removes its entry and leaves others alone")
+    }
+  }
+
+  func testRenameOfEnabledSkillLeavesDisabledSetUntouched() throws {
+    try withDisabledSkillsDefaults {
+      let original = try LocalSkillsStore.saveSkill(title: "First Name", markdown: "does things")
+      _ = try LocalSkillsStore.saveSkill(
+        title: "Second Name", markdown: "does things", replacingSlug: original)
+
+      XCTAssertTrue(LocalSkillsStore.disabledSkillNames().isEmpty)
+    }
   }
 
   /// A catalog skill's SKILL.md references its siblings by relative path, so the folder is the

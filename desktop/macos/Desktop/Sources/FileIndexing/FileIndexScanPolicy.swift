@@ -53,6 +53,30 @@ struct FileIndexScanPolicy {
     ]
   }
 
+  /// Home subfolders macOS protects with per-folder TCC (Files and Folders):
+  /// enumerating them without Full Disk Access raises a system consent dialog.
+  static let tccProtectedFolderNames: Set<String> = ["Documents", "Desktop", "Downloads"]
+
+  /// Roots the **automatic** indexer (initial backfill, periodic rescan) may
+  /// enumerate. Without Full Disk Access the protected roots are dropped rather
+  /// than scanned — a background scan must never be the thing that throws a
+  /// "grant access to Documents?" sheet at the user. Explicit user-initiated scans
+  /// (Settings → Rescan files) keep the full root set.
+  func automaticScanRoots(
+    homeURL: URL,
+    applicationsURL: URL = URL(fileURLWithPath: "/Applications", isDirectory: true),
+    fullDiskAccessGranted: Bool
+  ) -> [URL] {
+    let roots = standardScanRoots(homeURL: homeURL, applicationsURL: applicationsURL)
+    guard !fullDiskAccessGranted else { return roots }
+    return roots.filter { root in
+      guard root.deletingLastPathComponent().standardizedFileURL == homeURL.standardizedFileURL else {
+        return true
+      }
+      return !Self.tccProtectedFolderNames.contains(root.lastPathComponent)
+    }
+  }
+
   func shouldScanDirectory(atDepth depth: Int) -> Bool {
     depth <= maxDepth
   }

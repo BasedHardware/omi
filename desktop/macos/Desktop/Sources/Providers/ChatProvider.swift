@@ -349,9 +349,16 @@ enum ChatContentBlock: Identifiable {
     recommendedActionItems: [ConversationLinkActionItem]
   )
   case memoryLink(id: String, memoryId: String, summary: String)
+  /// The memories one day actually produced, each row correctable in place.
+  /// Review state is deliberately absent: it is read live from the memory, so a vote on the phone
+  /// shows on the Mac and the block never becomes a second copy of the verdict.
+  case memoryReviewCard(id: String, summaryId: String, date: String, items: [MemoryReviewItem])
   /// Answer-level provenance. Unlike a rich link card, this is rendered at the matching inline
   /// numeric marker and is otherwise invisible in the transcript.
   case citation(id: String, reference: ChatCitationReference)
+  /// One grounded next question, rendered as a tappable chip under the answer.
+  /// Tapping it sends the question as a new user turn in the same lane.
+  case followUp(id: String, text: String)
   case agentSpawn(
     id: String,
     pillId: UUID?,
@@ -384,7 +391,9 @@ enum ChatContentBlock: Identifiable {
     case .captureLink(let id, _, _, _): return id
     case .conversationLink(let id, _, _, _): return id
     case .memoryLink(let id, _, _): return id
+    case .memoryReviewCard(let id, _, _, _): return id
     case .citation(let id, _): return id
+    case .followUp(let id, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
     }
@@ -839,6 +848,13 @@ extension ChatContentBlock {
       return trimmed.isEmpty ? nil : trimmed
     case .citation:
       return nil
+    // A copied answer is what Omi said, not the control offering the next turn.
+    case .followUp:
+      return nil
+    // Same rule for the review card: it is three controls over memories that already exist, not
+    // prose the reader would expect to find in a copied answer.
+    case .memoryReviewCard:
+      return nil
     case .agentSpawn(_, _, _, _, let title, let objective, _):
       let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
@@ -1274,6 +1290,16 @@ class ChatProvider: ObservableObject {
   private let journalWriteCoordinator = ChatJournalWriteCoordinator()
   private var journalOwnerByMessageID: [String: String] = [:]
   var pendingMessageRatings = ChatMessageRatingQueue()
+
+  /// The in-flight rating write for each message, so the next one can chain
+  /// behind it instead of racing it.
+  ///
+  /// A thumbs-down sends twice by design: the bare rating the instant the user
+  /// taps (so walking away still counts), then the same rating carrying the
+  /// reason once they pick a chip. Those are two independent PATCHes, and the
+  /// backend stores the rating with `.set()` — so if the bare one lands second
+  /// it overwrites the reason the user just gave with nothing.
+  var messageRatingWriteChain: [String: Task<Void, Never>] = [:]
   var persistMessageRatingHandler: ((String, Int?) async throws -> Void)?
   private var journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
   private var agentBridgeStarted = false
@@ -1375,11 +1401,14 @@ class ChatProvider: ObservableObject {
 
   private var refreshAllObserver: AnyCancellable?
   private var userSkillsObserver: AnyCancellable?
+  private var userMcpObserver: AnyCancellable?
 
   // MARK: - Streaming Buffer
   /// Accumulates text and thinking deltas during streaming and flushes them to
   /// the published messages array in batches, reducing SwiftUI re-render frequency.
-  private let streamingBuffer = ChatStreamingBuffer(flushInterval: 0.035)
+  // Not private: the journal projection extension releases the turn's raw
+  // accumulator when the authoritative answer lands.
+  let streamingBuffer = ChatStreamingBuffer(flushInterval: 0.035)
 
   // MARK: - Filtered Sessions
   var filteredSessions: [ChatSession] {
@@ -1568,6 +1597,30 @@ class ChatProvider: ObservableObject {
         }
       }
 
+    // Applies ~/.omi/mcp.json changes to the shared runtime — debounced and
+    // never mid-turn. The pi-mono extension registers its MCP proxy tools once
+    // per process spawn, so unlike skills a file change needs a respawn. The
+    // coordinator is process-wide (task chat consumes it at its own boundary)
+    // and is bound here to this provider's bridge state.
+    UserMcpRuntimeRefresh.shared.bindRuntime(
+      isTurnActive: { [weak self] in self?.isSending ?? false },
+      isRuntimeStarted: { [weak self] in self?.agentBridgeStarted ?? false },
+      respawn: { [weak self] in
+        guard let self else { throw BridgeError.stopped }
+        try await self.respawnBridgeForUserMcpChange()
+      })
+
+    // A server was added, removed, or re-authed in ~/.omi/mcp.json. The runtime
+    // reads the file once per process spawn, so the shared bridge respawns
+    // (debounced, never mid-turn — see UserMcpRuntimeRefresh).
+    userMcpObserver = NotificationCenter.default.publisher(for: .omiUserMcpDidChange)
+      .receive(on: DispatchQueue.main)
+      .sink { _ in
+        Task { @MainActor in
+          UserMcpRuntimeRefresh.shared.changeDetected()
+        }
+      }
+
     // Observe changes to Playwright extension mode setting — restart bridge to pick up new env vars
     playwrightExtensionObserver = UserDefaults.standard.publisher(for: \.playwrightUseExtension)
       .dropFirst()
@@ -1685,6 +1738,11 @@ class ChatProvider: ObservableObject {
   private func ensureBridgeStarted(
     authoritativeGeneration: Int? = nil
   ) async -> Bool {
+    // Apply a pending ~/.omi/mcp.json change here — the safe point between
+    // turns: this turn has issued no runtime work yet, and the runtime's
+    // restart still refuses while some other surface's requests are active.
+    // Task chat applies the same pending state at its own boundary.
+    await UserMcpRuntimeRefresh.shared.applyAtTurnBoundary()
     guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
       await presentBridgeStartupFailure(
         BridgeError.authMissing, authoritativeGeneration: authoritativeGeneration)
@@ -1699,6 +1757,29 @@ class ChatProvider: ObservableObject {
       await presentBridgeStartupFailure(error, authoritativeGeneration: authoritativeGeneration)
       return false
     }
+  }
+
+  /// Respawns the shared runtime so a ~/.omi/mcp.json change reaches the
+  /// pi-mono extension, which registers its MCP proxy tools once per spawn.
+  /// Mirrors the Playwright-setting restart: mark the warm bridge stale,
+  /// restart the process, and rebuild readiness. A refused restart (requests
+  /// active elsewhere) leaves the old process alive and serving, so it keeps
+  /// counting as started and the caller's pending change retries later.
+  private func respawnBridgeForUserMcpChange() async throws {
+    log("ChatProvider: user MCP servers changed — restarting agent bridge")
+    agentBridgeStarted = false
+    do {
+      try await resolvedAgentClient().restart()
+    } catch {
+      if await resolvedAgentClient().isAlive {
+        agentBridgeStarted = true
+      }
+      throw error
+    }
+    guard await ensureBridgeStarted() else {
+      throw BridgeError.stopped
+    }
+    log("ChatProvider: agent bridge restarted with current user MCP servers")
   }
 
   private func performBridgeReadinessStartup() async throws -> Bool {
@@ -1791,6 +1872,7 @@ class ChatProvider: ObservableObject {
     journalWriteCoordinator.cancelAll()
     journalOwnerByMessageID.removeAll()
     pendingMessageRatings.removeAll()
+    messageRatingWriteChain.removeAll()
     journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
     // A ChatErrorCard belongs to the session that produced it. Retaining an
     // auth-required card after a successful account switch incorrectly asks
@@ -1925,6 +2007,7 @@ class ChatProvider: ObservableObject {
     notificationContext: String?,
     screenPayload: [String: Any]?,
     includeScreenSource: Bool = true,
+    includeSkillCatalog: Bool = true,
     includePromptCitations: Bool = true,
     requestedModelProfile: String? = nil,
     pinnedSession: AgentSurfaceSession? = nil,
@@ -2010,6 +2093,15 @@ class ChatProvider: ObservableObject {
     }
     let capturedAtMs = Int(Date().timeIntervalSince1970 * 1_000)
     let screenOutcome: AgentContextSourceOutcome = screenPayload == nil ? .empty : .available
+    // One catalog per lane: the ACP lane's user-skills plugin already indexes the
+    // same skills natively, so the compact catalog would reach the model twice.
+    var workspacePayload: [String: Any] = [
+      "workingDirectory": workspacePath,
+      "databaseSchema": cachedDatabaseSchema,
+    ]
+    if includeSkillCatalog, Self.shouldInjectSkillCatalog(adapterId: session.profile.adapterId) {
+      workspacePayload["skillCatalog"] = skillContextProjection()
+    }
     var sources: [(AgentContextSource, AgentContextSourceOutcome, [String: Any], Int?)] = [
       (
         .identity,
@@ -2035,16 +2127,7 @@ class ChatProvider: ObservableObject {
         taskText.isEmpty ? [:] : ["content": taskText],
         nil
       ),
-      (
-        .workspace,
-        .available,
-        [
-          "workingDirectory": workspacePath,
-          "databaseSchema": cachedDatabaseSchema,
-          "skillCatalog": skillContextProjection(),
-        ],
-        nil
-      ),
+      (.workspace, .available, workspacePayload, nil),
       (.surface, .available, surfacePayload, nil),
     ]
     if includeScreenSource {
@@ -2094,6 +2177,9 @@ class ChatProvider: ObservableObject {
         notificationContext: nil,
         screenPayload: nil,
         includeScreenSource: false,
+        // The realtime renderer drops the workspace source entirely, so building
+        // and uploading a skill catalog here is dead work the model never sees.
+        includeSkillCatalog: false,
         includePromptCitations: false
       )
       return KernelTurnProjection.voiceContextSnapshot(
@@ -2118,7 +2204,8 @@ class ChatProvider: ObservableObject {
   func askChatLaneForSpokenAnswer(
     prompt: String,
     invocationID: String,
-    expectedOwnerID: String
+    expectedOwnerID: String,
+    imageData: Data? = nil
   ) async throws -> String {
     guard runtimeOwnerId == expectedOwnerID else { throw RealtimeChatLaneError.ownerChanged }
     guard canAcceptSend, realtimeChatLaneInvocationGate.begin(invocationID) else {
@@ -2158,6 +2245,7 @@ class ChatProvider: ObservableObject {
         session: kernelContext.session,
         surface: surface,
         mode: chatMode.rawValue,
+        imageData: imageData,
         expectedContext: kernelContext.snapshot.freshness,
         reasoningEffort: ChatTurnOwner.mainChat.reasoningEffort,
         onTextDelta: { _ in },
@@ -3237,7 +3325,7 @@ class ChatProvider: ObservableObject {
   // MARK: - CLAUDE.md & Skills Discovery
 
   /// Results from background Claude config discovery
-  private struct ClaudeConfigResult: Sendable {
+  struct ClaudeConfigResult: Sendable {
     let claudeMdContent: String?
     let claudeMdPath: String?
     let skills: [(name: String, description: String, path: String)]
@@ -3248,7 +3336,7 @@ class ChatProvider: ObservableObject {
   }
 
   /// Perform all file I/O for Claude config discovery off the main thread
-  private nonisolated static func loadClaudeConfigFromDisk(workspace: String) -> ClaudeConfigResult {
+  nonisolated static func loadClaudeConfigFromDisk(workspace: String) -> ClaudeConfigResult {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
     let claudeDir = "\(home)/.claude"
     let fm = FileManager.default
@@ -3413,12 +3501,7 @@ class ChatProvider: ObservableObject {
 
   /// Get the set of explicitly disabled skill names from UserDefaults
   func getDisabledSkillNames() -> Set<String> {
-    guard let data = disabledSkillsJSON.data(using: .utf8),
-      let names = try? JSONDecoder().decode([String].self, from: data)
-    else {
-      return []  // Default: nothing disabled = all enabled
-    }
-    return Set(names)
+    Self.disabledSkillNamesFromDefaults()
   }
 
   /// Save the set of disabled skill names to UserDefaults
@@ -3814,6 +3897,7 @@ class ChatProvider: ObservableObject {
     guard surface == mainChatSurfaceReference() else { return }
     messages = []
     pendingMessageRatings.removeAll()
+    messageRatingWriteChain.removeAll()
     resetMessagesPagination()
   }
 
@@ -5444,10 +5528,14 @@ class ChatProvider: ObservableObject {
           toolName: "get_work_context"
         )
       }
+      // The grounded closing question is lifted off the authoritative answer
+      // before anything else reads it, so the chip's words are delivered once —
+      // as a block — and never also sit in the prose.
+      let (answerText, followUpQuestion) = ChatFollowUpTail.split(queryResult.text)
       if messages.contains(where: { $0.id == aiMessageId }) {
         messageText = await finalizeAssistantMessageCitations(
           messageId: aiMessageId,
-          queryText: queryResult.text,
+          queryText: answerText,
           selectedReferences: toolCitationSnapshot.selectedReferences,
           requestedSources: ChatCitationMarkup.explicitlyRequestsSources(effectivePrompt),
           terminalCitationReferences: terminalCitationReferences)
@@ -5471,6 +5559,18 @@ class ChatProvider: ObservableObject {
             terminalStatus: .completed,
             scheduleJournal: false
           )
+          if ChatFollowUpTail.shouldAttach(
+            question: followUpQuestion,
+            visibleText: messages[index].text,
+            failed: false
+          ), let question = followUpQuestion,
+            !messages[index].contentBlocks.contains(where: {
+              if case .followUp = $0 { return true } else { return false }
+            })
+          {
+            messages[index].contentBlocks.append(
+              .followUp(id: ChatFollowUpTail.blockID(messageID: aiMessageId), text: question))
+          }
         }
       } else {
         // The assistant row this turn owns is gone from the transcript while
@@ -5478,7 +5578,7 @@ class ChatProvider: ObservableObject {
         // get here; a transcript reset that failed to revoke the turn lands
         // here too, and then reports a `completed` the user never saw. Name the
         // condition, not one guessed cause.
-        messageText = queryResult.text
+        messageText = answerText
         log(
           "ChatProvider: assistant row \(aiMessageId) missing at completion "
             + "(generation \(sendGen)); response not visible in the transcript"
@@ -6215,6 +6315,16 @@ class ChatProvider: ObservableObject {
     }
   }
 
+  /// What a streaming assistant message shows right now.
+  ///
+  /// The grounded follow-up tail streams in like any other token, so without
+  /// stripping it here the chip's words appear in the prose first and are
+  /// removed only when the turn finalizes. Composed with sentence spacing
+  /// because both are projections of the same accumulated text.
+  static func normalizeStreamingAssistantText(_ text: String) -> String {
+    normalizeAssistantSentenceSpacing(ChatFollowUpTail.strippingPendingTail(text))
+  }
+
   /// Normalize missing spaces after sentence punctuation in assistant messages.
   /// Example: "Hello.World" -> "Hello. World", "Great!Lets go" -> "Great! Lets go"
   ///
@@ -6289,7 +6399,7 @@ class ChatProvider: ObservableObject {
   private func flushStreamingBuffer() {
     streamingBuffer.flush(messages: &messages) { message, text in
       if message.sender == .ai {
-        return Self.normalizeAssistantSentenceSpacing(text)
+        return Self.normalizeStreamingAssistantText(text)
       }
       return text
     }
@@ -6321,7 +6431,7 @@ class ChatProvider: ObservableObject {
         messages: &messages,
         normalizeText: { message, text in
           if message.sender == .ai {
-            return Self.normalizeAssistantSentenceSpacing(text)
+            return Self.normalizeStreamingAssistantText(text)
           }
           return text
         }
@@ -6349,7 +6459,7 @@ class ChatProvider: ObservableObject {
         messages: &messages,
         normalizeText: { message, text in
           if message.sender == .ai {
-            return Self.normalizeAssistantSentenceSpacing(text)
+            return Self.normalizeStreamingAssistantText(text)
           }
           return text
         }
@@ -6641,7 +6751,7 @@ class ChatProvider: ObservableObject {
       messages: &messages,
       normalizeText: { message, text in
         if message.sender == .ai {
-          return Self.normalizeAssistantSentenceSpacing(text)
+          return Self.normalizeStreamingAssistantText(text)
         }
         return text
       }

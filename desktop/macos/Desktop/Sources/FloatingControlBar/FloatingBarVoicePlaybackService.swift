@@ -1100,7 +1100,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
   }
 
-  private nonisolated static func cleanedPlaybackText(from message: ChatMessage?) -> String {
+  nonisolated static func cleanedPlaybackText(from message: ChatMessage?) -> String {
     guard let message else { return "" }
 
     let baseText: String
@@ -1120,6 +1120,14 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
           .citation:
           return nil
+        // The chip is a control, not narration. Speaking it would turn a
+        // tappable next step into an answer that ends by asking out loud.
+        case .followUp:
+          return nil
+        // Nor is the review card: reading three stored memories aloud would narrate the card's
+        // controls instead of the answer.
+        case .memoryReviewCard:
+          return nil
         case .toolCall, .thinking:
           return nil
         }
@@ -1132,9 +1140,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     return collapsedWhitespace.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  private nonisolated static func shouldSpeak(_ text: String) -> Bool {
+  nonisolated static func shouldSpeak(_ text: String) -> Bool {
     let lowercased = text.lowercased()
-    if lowercased == "failed to get a response. please try again." {
+    if FloatingBarAnswerFailureCopy.isFailureCopy(lowercased) {
       return false
     }
     if lowercased.hasPrefix("⚠️") || lowercased.hasPrefix("warning:") {
@@ -1397,4 +1405,29 @@ enum VoiceSynthesisFallbackPolicy {
 private enum PlaybackMode: Sendable {
   case openAI(voiceID: String, instructions: String)
   case systemVoice(ShortcutSettings.VoiceOption)
+}
+
+/// The copy the floating bar shows in place of an answer it could not get.
+///
+/// One home for those strings, because the voice lane must never read them
+/// aloud and the two halves have already drifted once: the empty-response copy
+/// was rewritten while `shouldSpeak` went on matching the retired sentence, so
+/// a voice query that produced nothing had its failure notice spoken. Adding a
+/// line here suppresses it by construction; a copy edit that forgets this type
+/// no longer has a silent failure mode, because the copy *is* this type.
+enum FloatingBarAnswerFailureCopy {
+  /// The turn finished with no answer content at all — no text, no blocks.
+  static let emptyResponse = "Omi couldn't get an answer for that one."
+
+  /// Retired wording. Kept because a transcript written by an older build can
+  /// still hold it, and because staying silent on it costs one string.
+  static let retired = ["Failed to get a response. Please try again."]
+
+  private static let unspoken: Set<String> = Set(
+    ([emptyResponse] + retired).map { $0.lowercased() })
+
+  /// Whether already-lowercased spoken text is one of those notices.
+  static func isFailureCopy(_ lowercasedText: String) -> Bool {
+    unspoken.contains(lowercasedText)
+  }
 }

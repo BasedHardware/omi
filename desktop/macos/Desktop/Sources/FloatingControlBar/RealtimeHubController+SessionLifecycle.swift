@@ -263,7 +263,113 @@ extension RealtimeHubController {
     } else if screenEvidence?.descriptor.turnID == turnID {
       clearScreenGrounding(stage: "cancelled")
     }
+    reviseSealedJournalRowIfUndelivered(turnID: turnID)
     if pendingSessionRefreshReason != nil { applyPendingSessionRefreshIfIdle() }
+  }
+
+  /// The one stable continuity key for a voice turn. `beginTurn` assigns it and
+  /// the sealed-row revision derives it from the reducer's terminal turn ID, so
+  /// both must stay byte-identical.
+  nonisolated static func voiceContinuityKey(for turnID: VoiceTurnID) -> String {
+    "voice:\(turnID.rawValue.uuidString.lowercased())"
+  }
+
+  /// Inverse of `voiceContinuityKey(for:)`: the reducer's terminal turn ID for
+  /// a voice continuity key, so the funnel's write-time delivery re-check can
+  /// match the key against `model.lastTerminal` without extra plumbing.
+  /// Returns nil for any key that is not a `voice:` continuity key.
+  nonisolated static func turnID(forVoiceContinuityKey continuityKey: String) -> VoiceTurnID? {
+    guard continuityKey.hasPrefix("voice:") else { return nil }
+    let suffix = continuityKey.dropFirst("voice:".count)
+    guard let uuid = UUID(uuidString: String(suffix)) else { return nil }
+    return VoiceTurnID(uuid)
+  }
+
+  /// The reducer's already-emitted terminal for this continuity key, when that
+  /// terminal proves the answer never reached the user. Used both to skip a
+  /// now-unconsumable sealed-row marker and to carry the truthful outcome into
+  /// the funnel's own write.
+  static func undeliveredTerminalRevision(
+    forVoiceContinuityKey continuityKey: String,
+    coordinator: VoiceTurnCoordinator = .shared
+  ) -> VoiceJournalSealedRowRevisionPolicy.Revision? {
+    guard let turnID = turnID(forVoiceContinuityKey: continuityKey),
+      let terminal = coordinator.model.lastTerminal,
+      terminal.turnID == turnID
+    else { return nil }
+    return VoiceJournalSealedRowRevisionPolicy.revision(
+      forTerminalReason: terminal.reason,
+      answerDelivered: coordinator.lastTerminalAnswerDelivered,
+      sealedCompletedRowExists: true)
+  }
+
+  /// Registers the sealed-row marker for an optimistic `.success` seal
+  /// synchronously — at funnel enqueue time (provider-response-finish), never
+  /// inside the async persist closure. The funnel's write first awaits
+  /// transcript resolution (bounded by the 20s LID deadline), and the
+  /// reducer's playback fence can terminalize in that window (playback
+  /// failure, barge-in): the terminal's revision must always find the marker,
+  /// or the later `.completed` seal becomes permanent (#12743). Turns that
+  /// already terminalized register nothing — no later terminal can consume
+  /// the marker — and `persistTurnDirectlyToKernel`'s write-time re-check
+  /// carries their outcome instead.
+  func registerSealedCompletedVoiceJournalRow(
+    ownerID: String,
+    assistantText: String,
+    terminal: VoiceTurnTerminalReason,
+    acceptedSpawnOwnerID: String?,
+    idempotencyKey: String,
+    coordinator: VoiceTurnCoordinator = .shared
+  ) {
+    guard terminal == .success,
+      acceptedSpawnOwnerID != ownerID,
+      !RealtimeHubContinuityRestore.kernelOwnsExchange(
+        continuityKey: idempotencyKey,
+        kernelTurnIDs: prefetchedVoiceContextTurnIDs),
+      !assistantText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else { return }
+    if let turnID = Self.turnID(forVoiceContinuityKey: idempotencyKey),
+      coordinator.model.lastTerminal?.turnID == turnID
+    {
+      return
+    }
+    sealedCompletedVoiceJournalRows[idempotencyKey] = SealedCompletedVoiceJournalRow(
+      ownerID: ownerID,
+      surface: FloatingControlBarManager.shared.mainChatSurfaceReference())
+  }
+
+  /// The reducer terminalized a turn whose assistant row was sealed
+  /// `.completed` at provider-response-finish. If the terminal proves the
+  /// answer never reached the user, revise the row through the payload-free
+  /// terminal-revision update — never a second writer (INV-CHAT-1).
+  /// Delivered outcomes leave the sealed row untouched, and the revision
+  /// chains after the turn's in-flight funnel write so the next voice turn's
+  /// context fence still observes the journal settling.
+  private func reviseSealedJournalRowIfUndelivered(turnID: VoiceTurnID) {
+    let continuityKey = Self.voiceContinuityKey(for: turnID)
+    guard let sealed = sealedCompletedVoiceJournalRows.removeValue(forKey: continuityKey) else {
+      return
+    }
+    guard let terminal = VoiceTurnCoordinator.shared.model.lastTerminal,
+      terminal.turnID == turnID,
+      let revision = VoiceJournalSealedRowRevisionPolicy.revision(
+        forTerminalReason: terminal.reason,
+        answerDelivered: VoiceTurnCoordinator.shared.lastTerminalAnswerDelivered,
+        sealedCompletedRowExists: true)
+    else { return }
+    log(
+      "RealtimeHub: revising sealed voice journal row after undelivered answer "
+        + "turn=\(turnID.description) reason=\(revision.terminalReason)")
+    let ownerID = sealed.ownerID
+    let surface = sealed.surface
+    _ = turnPersistenceLedger.enqueueFollowUp(continuityKey: continuityKey) {
+      guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+      return await FloatingControlBarManager.shared.reviseSealedRealtimeAssistantStatus(
+        surface: surface,
+        ownerID: ownerID,
+        continuityKey: continuityKey,
+        terminalReason: revision.terminalReason)
+    }
   }
 
   /// Managed users: fetch a short-lived ephemeral token from the backend (gated by
@@ -800,6 +906,15 @@ extension RealtimeHubController {
   ) -> Task<Bool, Never> {
     let idempotencyKey = turnIdempotencyKey
     let userText = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    // The optimistic `.success` seal is scheduled now, so its revision marker
+    // is registered now too — the reducer's terminal may fire before the
+    // async persist closure runs.
+    registerSealedCompletedVoiceJournalRow(
+      ownerID: ownerID,
+      assistantText: assistantText,
+      terminal: .success,
+      acceptedSpawnOwnerID: nil,
+      idempotencyKey: idempotencyKey)
     return enqueueTurnPersistence(idempotencyKey: idempotencyKey, retainingReceipt: true) { [weak self] in
       await self?.persistTurnDirectlyToKernel(
         ownerID: ownerID,
@@ -818,21 +933,42 @@ extension RealtimeHubController {
   /// a second durable queue.
   /// The single funnel every realtime voice turn is journaled through.
   ///
-  /// `terminal` is required and is the only thing that decides the assistant row's
-  /// status: no caller can assert completion. It replaced an `interrupted: Bool`
-  /// that this body never read, which is why every cut-off turn — barge-in, provider
-  /// error, timeout — was sealed as a completed answer and fed back to the model as
-  /// canonical history on the next press.
+  /// `terminal` and `delivery` together decide the assistant row's status: no
+  /// caller can assert completion. The reason alone once sealed every cut-off
+  /// turn as completed; delivery state now keeps the inverse lie out too — a
+  /// reply the user fully heard before a barge-in is a delivered answer, not a
+  /// cut-off failure the model later re-delivers out of context. A `.success`
+  /// write defaults to `pending` delivery because this funnel runs at
+  /// provider-response-finish, while playback is usually still draining; the
+  /// reducer's terminal later revises the optimistic row if the answer never
+  /// reached the user (#12743).
   func persistTurnDirectlyToKernel(
     ownerID: String,
     userText: String,
     assistantText: String,
     terminal: VoiceTurnTerminalReason,
     idempotencyKey: String,
-    acceptedSpawnOwnerID: String?
+    acceptedSpawnOwnerID: String?,
+    delivery: VoiceTurnJournalStatusPolicy.AnswerDelivery = .pending
   ) async -> Bool {
-    let journalStatus = VoiceTurnJournalStatusPolicy.status(for: terminal)
-    let terminalReason = journalStatus == .completed ? nil : terminal.rawValue
+    var journalStatus = VoiceTurnJournalStatusPolicy.status(
+      for: terminal, delivery: delivery)
+    var terminalReason = journalStatus == .completed ? nil : terminal.rawValue
+    // Delivery re-check at write time: this closure first awaited transcript
+    // resolution (bounded by the 20s LID deadline), and the reducer may have
+    // terminalized in that window — or even before the funnel was enqueued
+    // (a playback failure mid-generation). A `.success` seal must then carry
+    // the terminal's truthful outcome instead of the optimistic completion
+    // (#12743). This complements the sealed-row marker, whose follow-up
+    // revision covers terminals that fire *after* this write.
+    if terminal == .success,
+      journalStatus == .completed,
+      let revision = Self.undeliveredTerminalRevision(
+        forVoiceContinuityKey: idempotencyKey)
+    {
+      journalStatus = revision.status
+      terminalReason = revision.terminalReason
+    }
     guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
       log("RealtimeHub: refusing voice journal write after authenticated owner changed")
       return false
@@ -1114,7 +1250,8 @@ extension RealtimeHubController {
               assistantText: turn.assistantText,
               terminal: .interruptedByBargeIn,
               idempotencyKey: turn.idempotencyKey,
-              acceptedSpawnOwnerID: turn.acceptedSpawnOwnerID) ?? false
+              acceptedSpawnOwnerID: turn.acceptedSpawnOwnerID,
+              delivery: turn.answerDelivered ? .delivered : .notDelivered) ?? false
           }
           return await task.value
         },

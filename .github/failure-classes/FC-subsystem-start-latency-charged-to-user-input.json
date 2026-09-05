@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-subsystem-start-latency-charged-to-user-input",
+  "violated_contract": "A gate that judges a user's input must measure the input, not the subsystem's own start latency. When a push-to-talk turn's admission threshold, its dead-mic recovery judgeability, and its user-facing hint are all computed from the audio the capture managed to deliver, a capture that becomes operational partway through the hold is indistinguishable from a user who tapped: a 947 ms press delivering 0.01 s is discarded as too_short_audible and told to \"Hold longer to record\", while a press whose capture never opened reports zero seconds \u2014 which the dead-mic policy then reads as \"too short to judge\", so the recovery built for exactly this failure never runs. On macOS this was the largest single push-to-talk failure class (capture_never_operational, 357 users / 1,077 attempts in 7 days) and the 0\u21921 activation gap for new users.",
+  "canonical_prevention": "Measure the user's action from the press clock (PTTAttemptLifecycleRecorder.attemptElapsedSeconds) separately from what the subsystem delivered, resolve the two through one pure judgement every discard path shares (PTTTurnDiscardJudgement / PTTDiscardedTurnResolution) so the telemetry class and the user-facing string cannot drift, and keep the resource warm ahead of a predictable input (PTTWarmCaptureAdmission, parked through the existing keep-alive) so the latency is never paid inside the interaction at all.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/PTTCaptureReadinessPolicyTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager*",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/PTT*"
+  ],
+  "status": "open"
+}

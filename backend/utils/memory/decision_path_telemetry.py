@@ -30,6 +30,9 @@ def classify_model_about(
     normalized_user_name = _normalized_subject_label(user_name)
     if normalized_user_name:
         user_aliases.add(normalized_user_name)
+        first_name = normalized_user_name.split(" ", 1)[0]
+        if len(first_name) >= 2:
+            user_aliases.add(first_name)
     if normalized in user_aliases:
         return "primary_user"
     if normalized in {"unknown", "unclear", "uncertain"}:

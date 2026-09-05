@@ -154,6 +154,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .getDailyRecap: stub = "Yesterday: 3 hrs in Xcode, 1 hr in Safari; 2 conversations; 1 task created."
     case .searchScreenHistory: stub = "Found it: yesterday afternoon you were reading the launch doc in Safari."
     case .createActionItem: stub = "Created task: Example task."
+    case .createContextReminder: stub = "I'll remind you next time you're in Pricing Engine."
     case .updateActionItem: stub = "Updated the task."
     case .createCalendarEvent: stub = "Created calendar event: Example event."
     case .spawnAgent: stub = "Started a background agent."
@@ -161,6 +162,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .setDesktopAttentionOverride: stub = "Attention override applied."
     case .screenshot: stub = "Screen captured."
     case .reportScreenObservation: stub = "Screen observation accepted."
+    case .recordInterjectFeedback: stub = #"{"ok":true}"#
     case .pointClick: stub = "Clicked."
     case .none: stub = "ok"
     }

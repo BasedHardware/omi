@@ -377,9 +377,10 @@ enum GeneratedToolCapabilities {
       title: "Load Skill",
       latency: .fastLocal,
       surfaces: Set([.desktopChat]),
-      summary: "Load the full instructions for a named skill listed in available_skills.",
+      summary: "Load a skill progressively: the first call returns metadata, a section table of contents, and the first section; further sections load by part.",
       bullets: [
-      "Use the exact skill name from available_skills."
+      "Use the exact skill name from available_skills.",
+      "Read additional sections with part only when the first section is relevant."
     ]
     ),
     Capability(
@@ -577,7 +578,23 @@ enum GeneratedToolCapabilities {
       summary: "Create a new task, to-do, or reminder.",
       bullets: [
       "Use when the user explicitly asks to add something to their list.",
-      "Pass a concise description and due_at only when the user gave a time."
+      "Pass a concise description and due_at only when the user gave a time.",
+      "For 'next time I'm here' or 'when I open this', use create_context_reminder."
+    ]
+    ),
+    Capability(
+      toolName: "create_context_reminder",
+      title: "Create Context Reminder",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat, .realtimeHub]),
+      summary: "Bind a reminder to the user's current app or document, not to a time.",
+      bullets: [
+      "Use when the user says 'remind me next time I'm here', 'next time I open this', or 'when I'm back in this'.",
+      "The place is captured from the frontmost window automatically; pass only the reminder text.",
+      "Do not use for timed reminders ('tomorrow', 'at 3pm') — those are create_action_item.",
+      "Call when the user asks to be reminded the next time they are in the current app, document, or page.",
+      "Pass only the reminder text. The current frontmost window is captured automatically.",
+      "Do not use for timed reminders; those are create_action_item."
     ]
     ),
     Capability(
@@ -718,19 +735,21 @@ enum GeneratedToolCapabilities {
       "Always call before answering explicit think-hard requests, including 'think carefully', 'go deep', 'don't just guess', and 'what should I do', plus advice, tradeoffs, multi-step plans, or pushback on a weak prior answer.",
       "A short, vague, or first-turn request still counts: call with the question as given instead of answering or asking a clarifying question first.",
       "Also call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. When unsure, escalate.",
-      "Skip only chit-chat, short confirmations, obvious stable facts, or a single fast realtime tool that fully answers the request.",
-      "When current public facts and deeper judgment are both needed, call web_search first and pass its result as context to think_deeper."
+      "Always use the web_search -> think_deeper sequence for historical public research about how, when, or why a company, product, or person did something, and for any public question that may require finding or corroborating multiple sources. First call web_search; after its result arrives, call think_deeper with the original question and that result as context.",
+      "Skip only chit-chat, short confirmations, obvious stable facts, or one narrow current fact that a fast realtime tool fully answers, such as weather, a current price, or a score.",
+      "For historical research or public synthesis, never call think_deeper without fresh public evidence. If no web_search result is present in this turn, call web_search first; then call think_deeper and include the result in context."
     ]
     ),
     Capability(
       toolName: "web_search",
       title: "Web Search",
       latency: .asyncBackground,
-      surfaces: Set([.realtimeHub]),
+      surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Search the live public web through Omi's typed-chat retrieval lane, then speak a grounded answer.",
       bullets: [
       "You MUST use this for current public information such as weather, news, prices, scores, schedules, releases, and officeholders.",
-      "You MUST also use it when the user explicitly asks you to search, browse, look something up online, verify a public fact, or cite sources.",
+      "You MUST also use it for an explicitly requested narrow lookup, verification, or citation of one current public fact.",
+      "Use scope=narrow_current only for a narrow current fact. For historical company or product research, comparisons, or any question likely to need multiple sources or synthesis, use scope=historical_research, then call think_deeper with the original question and the complete search result in context.",
       "Never claim that web search, internet access, or real-time data is unavailable. If this tool fails, say that the lookup failed."
     ]
     ),
@@ -753,6 +772,18 @@ enum GeneratedToolCapabilities {
       bullets: [
       "Only call after screenshot returns the current image.",
       "Submit a concise visual observation, then answer the user's original request naturally."
+    ]
+    ),
+    Capability(
+      toolName: "record_interject_feedback",
+      title: "Record Interject Feedback",
+      latency: .fastLocal,
+      surfaces: Set([.realtimeHub]),
+      summary: "Silently record how the user's utterance relates to the proactive card.",
+      bullets: [
+      "Call silently when the latest utterance is a reply to the quoted card, then speak only the user-facing answer.",
+      "For a question or continuation, use riff or omit this tool; the first audio must be the answer.",
+      "Never speak the verb, a heads-up, or the tool result."
     ]
     ),
     Capability(
@@ -807,6 +838,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","read_tool_output","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","search_tool_output","send_agent_message","set_desktop_attention_override","spawn_agent","think_deeper","update_action_item","update_agent_artifact_lifecycle","web_search"]
+    ["cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","create_context_reminder","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","read_tool_output","record_interject_feedback","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","search_tool_output","send_agent_message","set_desktop_attention_override","spawn_agent","think_deeper","update_action_item","update_agent_artifact_lifecycle","web_search"]
   }
 }

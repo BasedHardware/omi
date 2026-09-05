@@ -12,7 +12,6 @@ covers:
   - app/lib/pages/onboarding/wrapper.dart
   - app/lib/providers/auth_provider.dart
   - app/lib/services/auth_service.dart
-  - app/lib/widgets/consent_bottom_sheet.dart
 preconditions:
   - App must be signed out, showing auth screen with Sign in with Google button
 
@@ -33,14 +32,14 @@ steps:
     verify: true
     expect:
       - kind: text_visible
-        values: ["Data & Privacy", "Continue with Google"]
+        values: ["Privacy Policy", "Terms of Use"]
     evidence:
       - screenshot: step-S2.webp
-    note: "Shows ConsentBottomSheet with data & privacy notices"
+    note: "Auth screen shows inline data & privacy consent notices (terms / privacy policy links)"
 
   - id: S3
     name: Continue through consent
-    do: "Tap 'Continue with Google' button on consent bottom sheet to proceed to Google OAuth"
+    do: "Wait for the Google account picker (system UI) opened by the sign-in tap"
     evidence:
       - screenshot: step-S3.webp
     note: "Opens Google account picker (system UI via Chrome Custom Tab)"

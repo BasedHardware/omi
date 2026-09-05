@@ -47,6 +47,9 @@ def users():
             delete_collection_recursive=MagicMock(),
             document_id_from_seed=lambda seed: "id",
             get_firestore_client=MagicMock(),
+            get_data_plane_firestore_client=MagicMock(),
+            get_customer_firestore_client=MagicMock(),
+            data_plane_db=MagicMock(),
         ),
         "database.firestore_cache": _module(
             "database.firestore_cache", CachePolicy=MagicMock(), get_or_fetch=MagicMock(), invalidate=MagicMock()

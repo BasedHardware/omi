@@ -1,6 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { structuredTurnFallbackText } from "./content-block-fallback.js";
 import { conversationTurnFromRow } from "./conversation-turns.js";
+import {
+  decideAttempt,
+  DEFERRAL_OUTBOX_POLICY,
+  drainIsolated,
+  JOURNAL_OUTBOX_POLICY,
+} from "./durable-queue.js";
 import { generateAgentId } from "./sqlite-store.js";
 import type {
   AgentStore,
@@ -92,6 +98,14 @@ export interface UpdateJournalTurnInput {
   producingRunId?: string | null;
   producingAttemptId?: string | null;
   metadataJson?: string;
+  /**
+   * Narrow revision authority: the desktop client that optimistically sealed a
+   * row `completed` (before answer delivery resolved) downgrades it to
+   * `failed` once the reducer proves the answer never reached the user
+   * (#12743). Only a payload-free downgrade is accepted, and `metadataJson`
+   * merges into the row's existing metadata instead of replacing it.
+   */
+  terminalRevision?: boolean;
   nowMs?: number;
 }
 
@@ -672,7 +686,24 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
   return store.withTransaction(() => {
     assertConversationOwner(store, input.conversationId, input.ownerId);
     const current = requireJournalTurn(store, input.conversationId, input.turnId);
-    if (input.status !== undefined) assertTurnStatusTransition(current.status, input.status);
+    if (input.terminalRevision === true) {
+      assertTerminalRevisionShape(input);
+    }
+    if (input.status !== undefined) {
+      // The one sanctioned exception to the terminal transition table: the
+      // desktop client that sealed a row `completed` optimistically (before
+      // answer delivery resolved) downgrades it to `failed` when the reducer
+      // proves the answer never reached the user (#12743). Everything else —
+      // including run-linked turns, which the caller rejects earlier — still
+      // goes through the strict table.
+      const sealedCompletionDowngrade =
+        input.terminalRevision === true
+        && current.status === "completed"
+        && input.status === "failed";
+      if (!sealedCompletionDowngrade) {
+        assertTurnStatusTransition(current.status, input.status);
+      }
+    }
     if (input.producingRunId !== undefined) {
       assertProducingRunOwner(store, input.producingRunId, input.ownerId);
       if (current.producingRunId !== null && current.producingRunId !== input.producingRunId) {
@@ -713,7 +744,9 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
     const status = input.status ?? current.status;
     const metadataJson = input.metadataJson === undefined
       ? current.metadataJson
-      : validObjectJson(input.metadataJson, "metadataJson");
+      : input.terminalRevision === true
+        ? mergedObjectJson(current.metadataJson, input.metadataJson)
+        : validObjectJson(input.metadataJson, "metadataJson");
     const content = input.content ?? current.content;
     const producingRunId = input.producingRunId === undefined ? current.producingRunId : input.producingRunId;
     const producingAttemptId = input.producingAttemptId === undefined
@@ -1365,7 +1398,8 @@ export function drainChatFirstDeferralOutbox(
        ORDER BY created_at_ms ASC LIMIT ?`,
       [input.ownerId, now, now, limit],
     );
-    return rows.map((row) => {
+    const deliveries: ChatFirstDeferralDelivery[] = [];
+    drainIsolated(rows, (row) => {
       const continuityKey = String(row.continuity_key);
       const deliveryGeneration = Number(row.delivery_generation) + 1;
       const attemptCount = Number(row.attempt_count) + 1;
@@ -1377,7 +1411,7 @@ export function drainChatFirstDeferralOutbox(
         [attemptCount, deliveryGeneration, now + DEFAULT_OUTBOX_LEASE_MS, now, continuityKey, input.ownerId],
       );
       const question = JSON.parse(String(row.question_json)) as Extract<ConversationContentBlock, { type: "questionCard" }>;
-      return {
+      deliveries.push({
         continuityKey,
         ownerId: String(row.owner_id),
         conversationId: String(row.conversation_id),
@@ -1387,8 +1421,10 @@ export function drainChatFirstDeferralOutbox(
         payloadHash: String(row.payload_hash),
         attemptCount,
         deliveryGeneration,
-      };
+      });
+      return { kind: "ack" };
     });
+    return deliveries;
   });
 }
 
@@ -1423,13 +1459,27 @@ export function settleChatFirstDeferralOutbox(
         [now, now, input.continuityKey],
       );
     } else {
-      const retryable = !input.errorCode?.endsWith("_4xx") && attempts < 5;
+      const errorText = boundedOutboxError(input.errorCode);
+      const outcome = input.errorCode?.endsWith("_4xx")
+        ? { kind: "reject" as const, errorText, reason: errorText }
+        : { kind: "retry" as const, errorText, reason: errorText };
+      const decision = decideAttempt({
+        attemptCount: attempts,
+        outcome,
+        policy: DEFERRAL_OUTBOX_POLICY,
+        nowMs: now,
+      });
       store.execute(
         `UPDATE chat_first_deferral_outbox
          SET status = ?, available_at_ms = ?, lease_expires_at_ms = NULL,
              last_error_code = ?, updated_at_ms = ? WHERE continuity_key = ?`,
-        [retryable ? "retrying" : "failed", retryable ? now + Math.min(30_000, attempts * 1_000) : now,
-          boundedOutboxError(input.errorCode), now, input.continuityKey],
+        [
+          decision.terminal ? "failed" : "retrying",
+          decision.retryAtMs ?? now,
+          decision.errorText,
+          now,
+          input.continuityKey,
+        ],
       );
     }
     return true;
@@ -2828,7 +2878,8 @@ export function drainBackendConversationDeleteOutbox(
        LIMIT ?`,
       [ownerId, now, now, limit],
     );
-    return candidates.map((candidate) => {
+    const deliveries: BackendConversationDeleteDelivery[] = [];
+    drainIsolated(candidates, (candidate) => {
       const operationId = String(candidate.operation_id);
       store.execute(
         `UPDATE backend_conversation_delete_outbox
@@ -2838,8 +2889,10 @@ export function drainBackendConversationDeleteOutbox(
          WHERE operation_id = ?`,
         [now + leaseMs, now, operationId],
       );
-      return requireBackendConversationDelete(store, operationId);
+      deliveries.push(requireBackendConversationDelete(store, operationId));
+      return { kind: "ack" };
     });
+    return deliveries;
   });
 }
 
@@ -3024,7 +3077,7 @@ export function drainBackendTurnOutbox(
 
     const deliveries: BackendTurnDelivery[] = [];
     const quarantined: string[] = [];
-    for (const candidate of candidates) {
+    drainIsolated(candidates, (candidate) => {
       const turnId = String(candidate.turn_id);
       const currentOutbox = requireOutboxRecord(store, turnId);
       const turn = requireJournalTurn(store, currentOutbox.conversationId, turnId);
@@ -3038,14 +3091,24 @@ export function drainBackendTurnOutbox(
         // stall that persists across restarts because the row is durable).
         // Parking to 'failed' excludes it from future selection; a later
         // `updateJournalTurn` re-stamps the hash and re-arms it to 'pending'.
+        const decision = decideAttempt({
+          attemptCount: Math.max(currentOutbox.attemptCount, 1),
+          outcome: {
+            kind: "reject",
+            errorText: OUTBOX_CANONICAL_HASH_MISMATCH_CODE,
+            reason: "malformed",
+          },
+          policy: JOURNAL_OUTBOX_POLICY,
+          nowMs: now,
+        });
         store.execute(
           `UPDATE backend_turn_outbox
-           SET status = 'failed', last_error_code = ?, lease_expires_at_ms = NULL, updated_at_ms = ?
+           SET status = ?, last_error_code = ?, lease_expires_at_ms = NULL, updated_at_ms = ?
            WHERE turn_id = ?`,
-          [OUTBOX_CANONICAL_HASH_MISMATCH_CODE, now, turnId],
+          [decision.terminal ? "failed" : "retrying", decision.errorText, now, turnId],
         );
         quarantined.push(turnId);
-        continue;
+        return { kind: "ack" };
       }
       const journalState = requireJournalState(store, currentOutbox.conversationId);
       store.execute(
@@ -3059,7 +3122,8 @@ export function drainBackendTurnOutbox(
       );
       const outbox = requireOutboxRecord(store, turnId);
       deliveries.push({ ...outbox, clientMessageId: turnId, turn, payload });
-    }
+      return { kind: "ack" };
+    });
     if (input.onQuarantine) {
       for (const turnId of quarantined) input.onQuarantine(turnId);
     }
@@ -3303,11 +3367,20 @@ export function getJournalObservability(
     `SELECT status, COUNT(*) AS count FROM backend_turn_outbox${deliveryWhere} GROUP BY status`,
     input.ownerId ? [input.ownerId] : [],
   );
+  const ownerFilter = input.ownerId ? " AND owner_id = ?" : "";
+  const oldestParams = input.ownerId ? [input.ownerId, input.ownerId, input.ownerId] : [];
   const oldest = store.getOptionalRow(
-    `SELECT MIN(created_at_ms) AS oldest
-     FROM backend_turn_outbox
-     WHERE status IN ('pending', 'delivering', 'retrying')${input.ownerId ? " AND owner_id = ?" : ""}`,
-    input.ownerId ? [input.ownerId] : [],
+    `SELECT MIN(created_at_ms) AS oldest FROM (
+       SELECT created_at_ms FROM backend_turn_outbox
+       WHERE status IN ('pending', 'delivering', 'retrying')${ownerFilter}
+       UNION ALL
+       SELECT created_at_ms FROM backend_conversation_delete_outbox
+       WHERE status IN ('pending', 'delivering', 'retrying')${ownerFilter}
+       UNION ALL
+       SELECT created_at_ms FROM chat_first_deferral_outbox
+       WHERE status IN ('pending', 'delivering', 'retrying')${ownerFilter}
+     )`,
+    oldestParams,
   );
   return {
     turnStatusCounts: countRows<ConversationTurnStatus>(turnRows),
@@ -3940,7 +4013,7 @@ function questionInteractionTurns(
   };
 }
 
-function enqueueChatFirstDeferral(
+export function enqueueChatFirstDeferral(
   store: AgentStore,
   input: {
     ownerId: string;
@@ -3965,13 +4038,12 @@ function enqueueChatFirstDeferral(
   };
   const payloadHash = sha256(stableJson(payload));
   const existing = store.getOptionalRow(
-    "SELECT payload_hash FROM chat_first_deferral_outbox WHERE continuity_key = ?",
+    "SELECT continuity_key FROM chat_first_deferral_outbox WHERE continuity_key = ?",
     [input.continuityKey],
   );
+  // Identity-keyed adopt: a reused continuity_key keeps the first payload.
+  // The helper would compare the same key to itself after this SELECT.
   if (existing) {
-    if (String(existing.payload_hash) !== payloadHash) {
-      throw new Error("Question deferral continuity key was reused with different content");
-    }
     return;
   }
   store.execute(
@@ -4190,6 +4262,44 @@ function validObjectJson(raw: string, field: string): string {
     throw new Error(`${field} must contain a JSON object`);
   }
   return JSON.stringify(parsed);
+}
+
+/**
+ * Shallow key-merge used only by terminal revisions: the truncation cause
+ * joins the row's existing metadata (model attribution, continuity) instead
+ * of replacing it. The patch's keys win on conflict.
+ */
+function mergedObjectJson(base: string, patch: string): string {
+  const baseObject = parseObjectJson(base);
+  const patchObject = parseObjectJson(patch);
+  if (
+    baseObject === null || Array.isArray(baseObject) || typeof baseObject !== "object"
+    || patchObject === null || Array.isArray(patchObject) || typeof patchObject !== "object"
+  ) {
+    throw new Error("metadataJson must contain a JSON object");
+  }
+  return JSON.stringify({ ...(baseObject as Record<string, unknown>), ...(patchObject as Record<string, unknown>) });
+}
+
+/**
+ * A terminal revision is a payload-free downgrade of an optimistically sealed
+ * completion: status must be `failed`, and no payload or run-identity field
+ * may ride along — the sealed row's content, blocks, resources, and metadata
+ * (beyond the merged terminal reason) stay exactly as written.
+ */
+function assertTerminalRevisionShape(input: UpdateJournalTurnInput): void {
+  if (
+    input.status !== "failed"
+    || input.content !== undefined
+    || input.replaceContentBlocks !== undefined
+    || input.appendContentBlocks !== undefined
+    || input.replaceResources !== undefined
+    || input.appendResources !== undefined
+    || input.producingRunId !== undefined
+    || input.producingAttemptId !== undefined
+  ) {
+    throw new Error("Terminal journal revision must be a payload-free downgrade to failed");
+  }
 }
 
 function parseObjectJson(raw: string): unknown {

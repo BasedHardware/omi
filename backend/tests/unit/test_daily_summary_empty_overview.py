@@ -5,7 +5,13 @@ str(summary_data.get('overview', 'Tap to see your daily summary')). get's defaul
 an ABSENT key. DailySummaryPayload.overview defaults to "", so a thin day yields a present-but-empty
 overview -> get returns "" -> the fallback string is dead code -> an empty daily-summary push. The
 body now falls back to the default text when overview is empty.
+
+The day under test carries a conversation with a real overview so the pre-LLM summary-content
+gate (flip-review F-12) lets generation through: this file pins the *delivery* fallback for a
+generator that returned an empty overview, not the titles-only decline.
 """
+
+from types import SimpleNamespace
 
 import utils.other.notifications as notif
 
@@ -13,6 +19,10 @@ import utils.other.notifications as notif
 class _FakeConvo:
     transcript_segments = [object()]
     discarded = False
+    apps_results: list = []
+
+    def __init__(self) -> None:
+        self.structured = SimpleNamespace(overview='You had 3 conversations today.')
 
 
 def _drive(monkeypatch, overview):
@@ -29,6 +39,10 @@ def _drive(monkeypatch, overview):
     monkeypatch.setattr(notif.daily_summaries_db, 'create_daily_summary', lambda *a, **k: 'sid')
     monkeypatch.setattr(notif.postprocess_executor, 'submit', lambda *a, **k: None)
     monkeypatch.setattr(notif, 'day_summary_webhook', lambda *a, **k: None)
+    # The scheduled send now selects the day's learned memories for the review
+    # card. Without a stub this reaches the real MemoryService and issues a live
+    # Firestore query from a unit test, which hangs under api_core's retry.
+    monkeypatch.setattr(notif, 'memories_learned_payload', lambda *a, **k: [])
     monkeypatch.setattr(notif, 'send_notification', lambda *a, **k: sent.append(a))
 
     notif._send_summary_notification(('u1', ['tok1']))

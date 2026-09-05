@@ -2019,3 +2019,102 @@ def test_scheduler_proceeds_for_ledger_mode_accounts(monkeypatch):
     # into ordinary day planning for this account (which asks the source
     # provider for the pending day's packet).
     assert source_calls != []
+
+
+# --- S5 (§1.8): a basic account is not admitted to the sweep -----------------
+
+
+def _ledger_control(monkeypatch):
+    """An account that has completed ledger cutover, so the writer-mode skip
+    above the plan gate does not fire and the plan gate is what is under test."""
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.read_account_deletion_projection_fence",
+        lambda _uid, db_client: type("Fence", (), {"blocks_projection_writes": False})(),
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.firestore.transactional",
+        lambda function: lambda transaction, *args: function(transaction, *args),
+    )
+    return control
+
+
+def _plan_decision(*, allowed: bool, reason: str):
+    from config.plan_catalog import PlanType
+    from utils.managed_compute import Decision
+
+    return Decision(
+        allowed=allowed,
+        reason=reason,
+        feature="memories",
+        funding_owner="omi",
+        plan=PlanType.basic if not allowed else PlanType.unlimited,
+        plan_resolved=True,
+    )
+
+
+def _run_sweep_for_plan(monkeypatch, *, suppression_on: bool, allowed: bool, reason: str):
+    db = _Db()
+    _ledger_control(monkeypatch)
+    source_calls = []
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.free_tier_memory_suppression_enabled",
+        lambda: suppression_on,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.authorize_managed_compute",
+        lambda *_args, **_kwargs: _plan_decision(allowed=allowed, reason=reason),
+    )
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: source_calls.append(True),
+        timezone_resolver=lambda _uid: "UTC",
+        timezone_reconciler=lambda *_args: True,
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: DailySweepCohortDecision.enabled,
+    )
+    return summary, source_calls, db
+
+
+# red-proof: delete the `if free_tier_memory_suppression_enabled():` block in the scheduler
+def test_basic_account_is_not_admitted_by_the_sweep_producer(monkeypatch):
+    """Named proof (b). Acked, not rejected: a definite plan answer is a
+    successful bounded decision, so the fair page cursor may advance. A reject
+    would burn receipt leases and strand the tail behind an account that is
+    never going to be swept."""
+    summary, source_calls, db = _run_sweep_for_plan(
+        monkeypatch, suppression_on=True, allowed=False, reason="basic_not_entitled"
+    )
+    assert source_calls == [], "a basic account must not reach the candidate producer"
+    assert summary.completed_uids == ("user-1",)
+    assert summary.failed_uids == ()
+    assert summary.blocked_users == 1
+    assert db.store == {}, "a suppressed account must not write cursor or receipt state"
+
+
+def test_paid_account_is_still_swept_with_the_flag_on(monkeypatch):
+    _summary, source_calls, _db = _run_sweep_for_plan(
+        monkeypatch, suppression_on=True, allowed=True, reason="plan_paid"
+    )
+    assert source_calls != [], "a paid account must still reach the candidate producer"
+
+
+def test_flag_off_admits_a_basic_account_exactly_as_today(monkeypatch):
+    """Dark rollout: with the flag off the plan is not consulted at all."""
+    _summary, source_calls, _db = _run_sweep_for_plan(
+        monkeypatch, suppression_on=False, allowed=False, reason="basic_not_entitled"
+    )
+    assert source_calls != []

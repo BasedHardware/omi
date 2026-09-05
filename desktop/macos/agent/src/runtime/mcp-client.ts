@@ -28,15 +28,38 @@ export interface McpPrompt {
 /** Page budget for a cursor-paginated list; far past any real server's tool count. */
 const MAX_LIST_PAGES = 50;
 
+/** First line of a string, capped, or undefined when it is not a usable string. */
+function firstLine(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const line = value.split("\n", 1)[0].trim().slice(0, 120);
+  return line || undefined;
+}
+
 export abstract class McpClient {
   /** What `initialize` said the server offers. Empty until the handshake runs. */
   private capabilities: Record<string, unknown> = {};
+
+  /** One-line server description from the handshake, for the discovery index. */
+  private serverHint = "";
 
   /** Called by each transport with the `initialize` result. */
   protected recordCapabilities(result: unknown): void {
     const declared = (result as { capabilities?: unknown } | undefined)?.capabilities;
     this.capabilities =
       declared && typeof declared === "object" ? (declared as Record<string, unknown>) : {};
+    // `instructions` is the server's own "how to use me"; `title` is its human
+    // name. Either beats the raw server key, which is often a slug.
+    const result_ = (result ?? {}) as {
+      instructions?: unknown;
+      serverInfo?: { title?: unknown };
+    };
+    this.serverHint =
+      firstLine(result_.instructions) ?? firstLine(result_.serverInfo?.title) ?? "";
+  }
+
+  /** One-line server description, or "" when the server declares none. */
+  get serverDescription(): string {
+    return this.serverHint;
   }
 
   /**

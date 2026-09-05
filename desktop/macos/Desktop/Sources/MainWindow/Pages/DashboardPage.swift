@@ -233,7 +233,6 @@ struct DashboardPage: View {
   /// Learned insights ("things about you") — surfaced in the home hub's rotating
   /// knows-list alongside tasks and asks, not just on the Insights page.
   @ObservedObject private var insightStorage = InsightStorage.shared
-  @State private var dismissedKnowsTaskIDs: Set<String> = []
   @State private var homeAskFocusPolicy = HomeAskFocusPolicy()
   @Binding var selectedIndex: Int
   @State private var selectedCatalogApp: OmiApp?
@@ -262,6 +261,18 @@ struct DashboardPage: View {
   /// cycles through fresh suggestions while you're looking at it.
   @State private var knowsRotation = 0
   private let knowsRotationTimer = Timer.publish(every: 7, on: .main, in: .common).autoconnect()
+  /// What the knows-list ledger said when this visit began.
+  ///
+  /// Composition is gated against the state at visit start, so rotating inside
+  /// one visit cannot suppress the rows you are currently looking at; the
+  /// across-visit rules (show cap, dismissal, same calendar day) still bite.
+  /// In-visit dismisses and opens are merged in below.
+  @State private var knowsLedger = HomeKnowsImpressionLedger.empty
+  /// Single mutation owner for that ledger — the view never writes it directly.
+  private var knowsLedgerStore: HomeKnowsImpressionStore { .shared }
+  /// Identity of this page's automation handle, so a stage that is animating out cannot clear the
+  /// handle the one animating in just took. Non-production only; see `knowsAutomationHandle`.
+  @State private var knowsAutomationToken = UUID()
 
   private var selectedApp: OmiApp? {
     guard let appId = chatProvider.selectedAppId else { return nil }
@@ -575,8 +586,8 @@ struct DashboardPage: View {
         isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing,
         app: selectedApp,
         onLoadMore: { await chatProvider.loadMoreMessages() },
-        onRate: { messageId, rating in
-          Task { await chatProvider.rateMessage(messageId, rating: rating) }
+        onRate: { messageId, rating, reason in
+          Task { await chatProvider.rateMessage(messageId, rating: rating, reason: reason) }
         },
         onCitationTap: { citation in
           handleCitationTap(citation)
@@ -606,6 +617,9 @@ struct DashboardPage: View {
           endPoint: .bottom
         )
       )
+
+      ChatQuotaBannerView.Slot()
+        .padding(.horizontal, OmiSpacing.section)
 
       dashboardChatErrorCard
         .padding(.horizontal, OmiSpacing.section)
@@ -808,6 +822,10 @@ struct DashboardPage: View {
           .padding(.bottom, OmiSpacing.sm)
       }
 
+      ChatQuotaBannerView.Slot()
+        .frame(width: askBarWidth)
+        .padding(.bottom, OmiSpacing.sm)
+
       homeAskBar
         .frame(width: askBarWidth)
         .padding(.top, OmiSpacing.xxs)
@@ -822,7 +840,7 @@ struct DashboardPage: View {
   /// an empty home chat — replaces the old greeting hero + knows-list cards.
   private var homeRollingSuggestions: some View {
     VStack(spacing: OmiSpacing.xs) {
-      ForEach(Array(homeKnowsRows.prefix(3))) { row in
+      ForEach(Array(homeKnowsRows.prefix(Self.rollingSuggestionCount))) { row in
         Button {
           openKnowsRow(row)
         } label: {
@@ -856,7 +874,15 @@ struct DashboardPage: View {
       else { return }
       knowsRotation += 1
     }
+    .onAppear { beginKnowsVisit(visibleRows: Self.rollingSuggestionCount) }
+    .onChange(of: knowsImpressionSignature) { _, _ in
+      recordKnowsImpressions(visibleRows: Self.rollingSuggestionCount)
+    }
   }
+
+  /// The chat-mode strip is shorter than the hub list; impressions are recorded
+  /// against what is actually on screen, not the full composition.
+  private static let rollingSuggestionCount = 3
 
   private func rollingSuggestionIcon(_ kind: HomeKnowsRowKind) -> String {
     switch kind {
@@ -904,52 +930,47 @@ struct DashboardPage: View {
     let learned = insightStorage.insightHistory
       .filter { !$0.isDismissed }
       .prefix(12)
-      .map { HomeKnowsInsightCandidate(id: $0.id, text: $0.insight.insight) }
+      .map { HomeKnowsInsightCandidate(id: $0.id, text: $0.insight.insight, updatedAt: $0.createdAt) }
     return recommendations + Array(learned)
   }
 
-  private var homeKnowsRows: [HomeKnowsRow] {
+  private var homeKnowsComposition: HomeKnowsComposition {
     HomeKnowsListComposer.compose(
       tasks: homeKnowsTaskCandidates,
       insights: homeKnowsInsightCandidates,
       tip: homeActionTip,
       questions: homeSuggestedQuestions,
-      dismissedTaskIDs: dismissedKnowsTaskIDs,
+      ledger: knowsLedger,
       rotation: knowsRotation
     )
   }
 
-  /// True when there are more candidates than the hub shows, so rotating cycles
-  /// to genuinely different rows instead of the same set.
-  private var homeKnowsCanRotate: Bool {
-    HomeKnowsListComposer.canRotate(
-      taskCount: homeKnowsTaskCandidates.filter { !dismissedKnowsTaskIDs.contains($0.id) }.count,
-      insightCount: homeKnowsInsightCandidates.count,
-      questionCount: homeSuggestedQuestions.count
-    )
-  }
+  private var homeKnowsRows: [HomeKnowsRow] { homeKnowsComposition.rows }
+
+  /// True when more candidates still qualify than the hub shows, so rotating
+  /// cycles to genuinely different rows instead of the same set.
+  private var homeKnowsCanRotate: Bool { homeKnowsComposition.canRotate }
 
   /// A composed, high-agency nudge for the tip slot when there's no server
   /// insight — one thing you can hand Omi with a tap (it prefills the chat).
   private var homeActionTip: String? {
-    let openCount =
-      homeKnowsTaskCandidates
-      .filter { !dismissedKnowsTaskIDs.contains($0.id) }
-      .count
-    if openCount >= 5 {
+    if homeOpenTaskCount >= 5 {
       return "Sort my open tasks — which 3 actually matter today?"
     }
     return "Recap what I got done today"
+  }
+
+  /// Open, undismissed tasks. Read from the ledger so the greeting and the rows
+  /// agree about what the reader has already waved off.
+  private var homeOpenTaskCount: Int {
+    HomeKnowsListComposer.openTaskCount(homeKnowsTaskCandidates, ledger: knowsLedger)
   }
 
   /// A short, conversational read on the day — what you've been doing and how
   /// much is waiting — shown under the greeting. It absorbs the focus status so
   /// the action rows below stay purely actionable.
   private var homeDailyBrief: String {
-    let openCount =
-      homeKnowsTaskCandidates
-      .filter { !dismissedKnowsTaskIDs.contains($0.id) }
-      .count
+    let openCount = homeOpenTaskCount
     let tail: String
     switch openCount {
     case 0: tail = "nothing's waiting on you."
@@ -960,10 +981,19 @@ struct DashboardPage: View {
     return tail.prefix(1).uppercased() + tail.dropFirst()
   }
 
+  /// Lifecycle and freshness travel with the candidate: the composer owns the
+  /// completed/deleted and past-due exclusions so one place decides what a row
+  /// is allowed to be.
   private var homeKnowsTaskCandidates: [HomeKnowsTaskCandidate] {
     (viewModel.overdueTasks + viewModel.todaysTasks + viewModel.recentTasks)
-      .filter { !$0.completed && !$0.isRetired }
-      .map { HomeKnowsTaskCandidate(id: $0.id, text: $0.description) }
+      .map {
+        HomeKnowsTaskCandidate(
+          id: $0.id,
+          text: $0.description,
+          dueAt: $0.dueAt,
+          updatedAt: $0.updatedAt,
+          isActive: !$0.completed && !$0.isRetired)
+      }
   }
 
   private func homeKnowsList(width: CGFloat) -> some View {
@@ -986,7 +1016,107 @@ struct DashboardPage: View {
       guard homeMode == .hub, !chatProvider.isSending, homeKnowsCanRotate else { return }
       knowsRotation += 1
     }
+    .onAppear {
+      beginKnowsVisit()
+      // Non-production only, and a no-op on a shipped bundle: this is how `home-knows-rotation.yaml`
+      // reaches the rows the hub actually composed. Registered from the hub list rather than the
+      // chat strip because the hub is where all four slots exist; the strip renders three
+      // (`rollingSuggestionCount`) and would report a truncation as a rotation.
+      HomeKnowsAutomationRegistry.register(knowsAutomationHandle)
+    }
+    .onDisappear { HomeKnowsAutomationRegistry.unregister(token: knowsAutomationToken) }
+    .onChange(of: knowsImpressionSignature) { _, _ in recordKnowsImpressions() }
     .accessibilityIdentifier("home-knows-list")
+  }
+
+  /// The page's own knows-list functions, handed to the automation registry.
+  ///
+  /// Read and drive only — every closure forwards to the function the on-screen control calls, so
+  /// the bridge cannot compose a row, decide a suppression, or write the ledger on its own.
+  private var knowsAutomationHandle: HomeKnowsAutomationRegistry.Handle {
+    HomeKnowsAutomationRegistry.Handle(
+      token: knowsAutomationToken,
+      snapshot: {
+        let composition = homeKnowsComposition
+        return HomeKnowsAutomationRegistry.Snapshot(
+          rows: composition.rows.map {
+            HomeKnowsAutomationRegistry.Row(
+              key: $0.ledgerKey, kind: $0.kind.analyticsKind, text: $0.text, showsBefore: $0.showsBefore)
+          },
+          emptySlots: composition.emptySlots.map {
+            HomeKnowsAutomationRegistry.EmptySlot(slot: $0.slot.rawValue, reason: $0.reason.rawValue)
+          },
+          canRotate: composition.canRotate,
+          openTaskCount: homeOpenTaskCount,
+          ledger: knowsLedger)
+      },
+      beginVisit: { beginKnowsVisit() },
+      recordImpressions: { recordKnowsImpressions() },
+      open: { index in
+        let rows = homeKnowsRows
+        guard rows.indices.contains(index) else { return false }
+        openKnowsRow(rows[index])
+        return true
+      },
+      dismiss: { index in
+        let rows = homeKnowsRows
+        guard rows.indices.contains(index), let handler = knowsDismissHandler(for: rows[index]) else {
+          return false
+        }
+        handler(nil)
+        return true
+      })
+  }
+
+  /// Starts a visit to the knows-list: re-reads the ledger (so an account
+  /// switch cannot inherit the previous owner's history) and resets the
+  /// once-per-visit impression de-duplication.
+  private func beginKnowsVisit(visibleRows: Int = HomeKnowsListComposer.maxRows) {
+    knowsLedgerStore.beginVisit()
+    knowsLedger = knowsLedgerStore.snapshot()
+    knowsRotation = 0
+    recordKnowsImpressions(visibleRows: visibleRows)
+  }
+
+  /// Identity of what is currently on screen. Changes when the rotation timer
+  /// advances or the candidate sources change — the moments a new impression
+  /// genuinely happened.
+  private var knowsImpressionSignature: [String] {
+    let composition = homeKnowsComposition
+    return composition.rows.map(\.ledgerKey)
+      + composition.emptySlots.map { "\($0.slot.rawValue)=\($0.reason.rawValue)" }
+  }
+
+  /// Hands every visible row back to the ledger and reports it once per visit.
+  private func recordKnowsImpressions(visibleRows: Int = HomeKnowsListComposer.maxRows) {
+    let composition = homeKnowsComposition
+    for row in composition.rows.prefix(visibleRows) {
+      guard
+        let impression = knowsLedgerStore.recordShown(
+          key: row.ledgerKey, contentHash: row.contentHash)
+      else { continue }
+      AnalyticsManager.shared.trackHomeKnowsRowShown(
+        kind: row.kind.analyticsKind,
+        slot: slot(for: row, in: composition),
+        showsBefore: max(0, impression.shows - 1))
+    }
+    // An empty slot only cost the reader a row when the rail came up short of
+    // what it can show; the chat strip never renders a fourth slot at all.
+    for empty in composition.emptySlots.prefix(max(0, visibleRows - composition.rows.count)) {
+      guard knowsLedgerStore.shouldReportEmptySlot(empty.slot.rawValue) else { continue }
+      AnalyticsManager.shared.trackHomeKnowsSlotEmpty(slot: empty.slot, reason: empty.reason)
+    }
+  }
+
+  /// Which typed slot a rendered row landed in — the filled slots are whatever
+  /// the empty ones are not, in the composer's fixed order.
+  private func slot(for row: HomeKnowsRow, in composition: HomeKnowsComposition) -> HomeKnowsSlot {
+    let empty = Set(composition.emptySlots.map(\.slot))
+    let filled = HomeKnowsSlot.allCases.filter { !empty.contains($0) }
+    guard let index = composition.rows.firstIndex(where: { $0.id == row.id }),
+      index < filled.count
+    else { return .ask }
+    return filled[index]
   }
 
   private func openKnowsRow(_ row: HomeKnowsRow) {
@@ -999,27 +1129,40 @@ struct DashboardPage: View {
       }
       navigate(to: .tasks)
     case .insight(let id):
+      // Nothing opens when the recommendation is gone, and an open is recorded
+      // only once one happened: a row counted as opened is exempt from the show
+      // cap and the same-day rule for good.
       guard let recommendation = intelligenceStore.recommendations.first(where: { $0.id == id })
       else { return }
       Task {
-        if await openRecommendation(recommendation) {
-          await intelligenceStore.recordPrimaryAction(recommendation)
-        }
+        guard await openRecommendation(recommendation) else { return }
+        recordKnowsOpened(row)
+        await intelligenceStore.recordPrimaryAction(recommendation)
       }
+      return
     case .question:
       // Prefill the ask bar so you can glance it over and edit before sending,
       // rather than firing the suggestion blindly.
       chatProvider.draftText = row.text
       homeAskFieldFocused = true
     }
+    recordKnowsOpened(row)
+  }
+
+  private func recordKnowsOpened(_ row: HomeKnowsRow) {
+    knowsLedger.entries[row.ledgerKey] = knowsLedgerStore.recordOpened(
+      key: row.ledgerKey, contentHash: row.contentHash)
   }
 
   private func knowsDismissHandler(for row: HomeKnowsRow) -> ((OmiAPI.TaskIntelligenceFeedbackReason?) -> Void)? {
     switch row.kind {
-    case .task(let id):
-      return { _ in dismissedKnowsTaskIDs.insert(id) }
+    case .task:
+      return { _ in recordKnowsDismiss(row) }
     case .insight(let id):
       return { reason in
+        // Learned insights have no server recommendation behind them; the
+        // ledger is what makes their dismissal stick either way.
+        recordKnowsDismiss(row)
         guard let recommendation = intelligenceStore.recommendations.first(where: { $0.id == id })
         else { return }
         Task { await intelligenceStore.dismiss(recommendation, reason: reason) }
@@ -1027,6 +1170,12 @@ struct DashboardPage: View {
     case .question:
       return nil
     }
+  }
+
+  /// A dismissed row never returns unless its underlying object changes.
+  private func recordKnowsDismiss(_ row: HomeKnowsRow) {
+    knowsLedger.entries[row.ledgerKey] = knowsLedgerStore.recordDismissed(
+      key: row.ledgerKey, contentHash: row.contentHash)
   }
 
   private func knowsLaterHandler(for row: HomeKnowsRow) -> (() -> Void)? {
@@ -1051,8 +1200,8 @@ struct DashboardPage: View {
         isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing,
         app: selectedApp,
         onLoadMore: { await chatProvider.loadMoreMessages() },
-        onRate: { messageId, rating in
-          Task { await chatProvider.rateMessage(messageId, rating: rating) }
+        onRate: { messageId, rating, reason in
+          Task { await chatProvider.rateMessage(messageId, rating: rating, reason: reason) }
         },
         onCitationTap: { citation in
           handleCitationTap(citation)

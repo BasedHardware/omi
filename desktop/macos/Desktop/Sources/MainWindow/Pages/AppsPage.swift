@@ -109,27 +109,6 @@ private struct DismissButtonPressStyle: ButtonStyle {
   }
 }
 
-/// The Apps surface contains three different catalog kinds. Keeping the kind
-/// explicit prevents marketplace filters from looking like they also refine
-/// local imports and memory exports.
-enum AppsCatalogKind: String, CaseIterable, Identifiable {
-  case all = "All"
-  case apps = "Apps"
-  case imports = "Imports"
-  case exports = "Exports"
-
-  var id: String { rawValue }
-
-  var icon: String {
-    switch self {
-    case .all: return "square.grid.2x2"
-    case .apps: return "app.badge"
-    case .imports: return "arrow.down.circle"
-    case .exports: return "arrow.up.circle"
-    }
-  }
-}
-
 enum AppsPageCategoryFilter {
   static let allCategoriesOptionId = ""
   static let allCategoriesTitle = "All Categories"
@@ -235,7 +214,7 @@ struct AppsPage: View {
         QuerySearchBar(
           text: $searchText,
           accessibilityID: "apps-search-field",
-          placeholder: searchPlaceholder
+          placeholder: searchPlaceholder, searchSurface: .apps
         )
 
         VStack(spacing: 0) {
@@ -270,7 +249,10 @@ struct AppsPage: View {
       // query is applied to apps, imports, and exports; a narrower Kind keeps
       // the query local to that catalog.
       guard selectedSection == .apps else { return }
-      guard selectedKind == .apps || selectedKind == .all else { return }
+      guard selectedKind == .apps || selectedKind == .all else {
+        SearchAnalytics.scheduleQueryEntered(surface: .apps, query: newValue) { appsSearchResultCount }
+        return
+      }
       appProvider.searchQuery = newValue
       if !newValue.isEmpty {
         viewAllSection = nil
@@ -280,7 +262,7 @@ struct AppsPage: View {
     }
     .dismissableSheet(isPresented: $showAddMcpServerSheet) {
       AddMcpServerSheet(appProvider: appProvider, onDismiss: { showAddMcpServerSheet = false })
-        .frame(width: 440, height: 340)
+        .frame(width: 460, height: 424)
     }
     .dismissableSheet(item: $selectedLocalMcpServer) { server in
       LocalMcpDetailSheet(
@@ -381,14 +363,23 @@ struct AppsPage: View {
   }
 
   private func selectApp(_ app: OmiApp) {
+    SearchAnalytics.resultOpened(
+      surface: .apps, resultIndex: filteredApps.firstIndex { $0.id == app.id },
+      searchIsActive: hasSearchQuery)
     selectedApp = app
   }
 
   private func selectConnector(_ connector: ImportConnector) {
+    SearchAnalytics.resultOpened(
+      surface: .apps, resultIndex: visibleImportConnectors.firstIndex { $0.id == connector.id },
+      searchIsActive: hasSearchQuery)
     selectedConnector = connector
   }
 
   private func selectDestination(_ destination: MemoryExportDestination) {
+    SearchAnalytics.resultOpened(
+      surface: .apps, resultIndex: visibleExportEntries.firstIndex { $0.destination == destination },
+      searchIsActive: hasSearchQuery)
     selectedExportDestination = destination
   }
 
@@ -647,6 +638,7 @@ struct AppsPage: View {
         appProvider.searchQuery == query
       else { return }
       await appProvider.searchApps()
+      SearchAnalytics.queryEntered(surface: .apps, query: query, resultsCount: appsSearchResultCount)
     }
   }
 
@@ -845,6 +837,12 @@ struct AppsPage: View {
 
   private var hasSearchQuery: Bool {
     !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  private var appsSearchResultCount: Int {
+    selectedKind.searchResultCount(
+      apps: filteredApps.count, imports: visibleImportConnectors.count,
+      exports: visibleExportEntries.count)
   }
 
   private var visibleImportConnectors: [ImportConnector] {

@@ -1586,20 +1586,6 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
             },
           ),
         ),
-        // widget.memory.postprocessing?.status == MemoryPostProcessingStatus.completed
-        // widget.memory.postprocessing?.status != MemoryPostProcessingStatus.not_started
-        //     ? Card(
-        //         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-        //         child: ListTile(
-        //           title: const Text('Compare Transcripts Models'),
-        //           leading: const Icon(Icons.chat),
-        //           trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-        //           onTap: () {
-        //             routeToPage(context, CompareTranscriptsPage(memory: widget.memory));
-        //           },
-        //         ),
-        //       )
-        //     : const SizedBox.shrink(),
       ],
     );
   }

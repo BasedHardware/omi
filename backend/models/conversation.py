@@ -8,8 +8,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from models.audio_file import AudioFile
 from models.calendar_context import CalendarMeetingContext
 from models.chat import Message
+from models.client_processing import ClientProcessing
 from models.conversation_enums import (
     CategoryEnum,
+    ConversationProcessingState,
     ConversationSource,
     ConversationStatus,
     ConversationVisibility,
@@ -293,13 +295,20 @@ class Conversation(BaseModel):
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
     # True when this conversation was transcribed on a third-party (custom STT)
-    # provider, so no Omi transcription credits were consumed. The durable marker
-    # lets post-processing decide whether Omi-paid LLM work (structure, summaries,
-    # memories, action items) should run at all: a custom-STT user without their
-    # own LLM BYOK key must not rack up unbounded Omi LLM cost.
+    # provider, so no Omi transcription credits were consumed. Provenance only:
+    # post-processing does not gate on it — custom-STT conversations get the same
+    # Omi-paid enrichment as any other. The marker keeps custom-STT spend
+    # queryable, and feeds the isolated fair-use lane (#7690).
     uses_custom_stt: bool = False
 
     structured: Structured
+    # Untrusted client-authored display projection. Sibling of structured, never
+    # inside it or external_data. Display only — never an input to intelligence.
+    client_processing: Optional[ClientProcessing] = None
+    # Why `structured` holds the §1.7 deterministic minimum instead of an
+    # enriched summary. Server-authored; absent on every enriched conversation.
+    # Clients read `client_processing` first — see the enum's docstring.
+    processing_state: Optional[ConversationProcessingState] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None

@@ -1468,6 +1468,54 @@ def test_gateway_body_strips_tools_on_the_web_search_lane():
     assert desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION in body['messages'][0]['content']
 
 
+def test_gateway_body_appends_web_search_retrieval_appendix_on_the_last_user_message():
+    request = {
+        'model': 'omi-sonnet',
+        'messages': [
+            {'role': 'system', 'content': 'be concise'},
+            {'role': 'user', 'content': 'how long did Whisper Flow take to build v1?'},
+            {'role': 'assistant', 'content': 'earlier turn'},
+            {'role': 'user', 'content': 'news?'},
+        ],
+        'tools': [{'type': 'function', 'function': {'name': 'weather', 'parameters': {'type': 'object'}}}],
+    }
+    body = desktop_chat._gateway_body(request, desktop_chat.WEB_SEARCH_AUTO_LANE_ID)
+    # The appendix lands on the last user message only, next to the policy
+    # instruction the lane already injects elsewhere in the transcript.
+    assert body['messages'][-1]['content'] == 'news?' + desktop_chat.WEB_SEARCH_RETRIEVAL_APPENDIX
+    assert body['messages'][1]['content'] == 'how long did Whisper Flow take to build v1?'
+    assert desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION in body['messages'][0]['content']
+    assert 'tools' not in body
+    assert 'tool_choice' not in body
+    # Idempotent: re-building the gateway body never stacks appendices.
+    rebuilt = desktop_chat._gateway_body(
+        {'model': 'omi-sonnet', 'messages': body['messages']}, desktop_chat.WEB_SEARCH_AUTO_LANE_ID
+    )
+    assert rebuilt['messages'][-1]['content'] == body['messages'][-1]['content']
+    # Other lanes keep the client question untouched.
+    chat_body = desktop_chat._gateway_body(request)
+    assert chat_body['messages'][3]['content'] == 'news?'
+
+
+def test_gateway_body_appends_web_search_appendix_as_a_text_block_for_multimodal_turns():
+    request = {
+        'model': 'omi-sonnet',
+        'messages': [
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': 'what is in this screenshot?'},
+                    {'type': 'image_url', 'image_url': {'url': 'https://example.com/a.png'}},
+                ],
+            }
+        ],
+    }
+    body = desktop_chat._gateway_body(request, desktop_chat.WEB_SEARCH_AUTO_LANE_ID)
+    blocks = body['messages'][-1]['content']
+    assert blocks[0] == {'type': 'text', 'text': 'what is in this screenshot?'}
+    assert blocks[-1] == {'type': 'text', 'text': desktop_chat.WEB_SEARCH_RETRIEVAL_APPENDIX}
+
+
 def test_gateway_body_normalizes_openai_tool_history_content():
     body = desktop_chat._gateway_body(
         {
@@ -2300,6 +2348,83 @@ def test_gateway_body_drops_client_params_the_gateway_would_reject():
     assert result['stream'] is True
     assert result['model'] == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
     assert result['messages'][0]['role'] == 'user'
+
+
+def test_thinking_escalation_routes_managed_and_drops_tools():
+    body = {
+        'model': 'omi-luna-think',
+        'messages': [{'role': 'user', 'content': 'hello'}],
+        'reasoning_effort': 'high',
+        'tools': [{'type': 'function', 'function': {'name': 'noop', 'parameters': {}}}],
+        'stream': False,
+    }
+
+    assert desktop_chat._uses_managed_chat_agent(body) is True
+    assert desktop_chat._managed_lane_id(body) == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
+
+    result = desktop_chat._gateway_body(body, desktop_chat._managed_lane_id(body))
+    assert result['model'] == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
+    assert result['reasoning_effort'] == 'high'
+    # OpenAI rejects function tools combined with a non-none effort on
+    # gpt-5.6-luna, so the escalation lane never carries client tools.
+    assert 'tools' not in result
+    assert 'tool_choice' not in result
+
+
+def test_thinking_escalation_maps_effort_levels_and_rejects_unknown():
+    base = {
+        'model': 'omi-luna-think',
+        'messages': [{'role': 'user', 'content': 'hello'}],
+    }
+
+    # Missing effort defaults to the product `normal` level (Luna high).
+    assert desktop_chat._gateway_body(dict(base))['reasoning_effort'] == 'high'
+    assert desktop_chat._gateway_body({**base, 'reasoning_effort': 'high'})['reasoning_effort'] == 'high'
+    assert desktop_chat._gateway_body({**base, 'reasoning_effort': 'xhigh'})['reasoning_effort'] == 'xhigh'
+
+    for invalid in ('low', 'medium', 'max', 'ultra', 'none', 7):
+        with pytest.raises(ValueError):
+            desktop_chat._gateway_body({**base, 'reasoning_effort': invalid})
+
+
+def test_thinking_escalation_forwards_image_url_parts_to_the_gateway():
+    data_uri = 'data:image/jpeg;base64,' + 'A' * 16
+    body = {
+        'model': 'omi-luna-think',
+        'reasoning_effort': 'xhigh',
+        'messages': [
+            {'role': 'system', 'content': 'speak only the conclusion'},
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': 'What is on my screen?'},
+                    {'type': 'image_url', 'image_url': {'url': data_uri}},
+                ],
+            },
+        ],
+    }
+
+    result = desktop_chat._gateway_body(body, desktop_chat._managed_lane_id(body))
+    user = result['messages'][1]
+    assert user['content'] == [
+        {'type': 'text', 'text': 'What is on my screen?'},
+        {'type': 'image_url', 'image_url': {'url': data_uri}},
+    ]
+
+
+def test_regular_chat_aliases_still_drop_client_reasoning_effort():
+    """The generic projection must keep dropping SDK-set reasoning_effort.
+
+    Only the validated thinking alias injects a server-authored effort; a
+    regular pi-mono turn with an SDK-set effort still forwards none.
+    """
+    body = {
+        'model': 'omi-sonnet',
+        'messages': [{'role': 'user', 'content': 'hello'}],
+        'reasoning_effort': 'low',
+    }
+    result = desktop_chat._gateway_body(body)
+    assert 'reasoning_effort' not in result
 
 
 def _capture_client_journeys(monkeypatch):

@@ -27,8 +27,8 @@ import {
   type ToolCallEventResult,
   type ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
-import { Type, type TSchema } from "@earendil-works/pi-ai";
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { Type } from "@earendil-works/pi-ai";
+import { appendFile, chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
@@ -36,8 +36,14 @@ import { isSafeSkillName, loadSkillInstructions, searchSkills } from "../agent/d
 import {
   isStdioServer,
   loadLocalMcpConfig,
+  type UserMcpServer,
 } from "../agent/dist/runtime/user-extensions.js";
-import type { McpClient, McpToolBlock } from "../agent/dist/runtime/mcp-client.js";
+import {
+  type McpClient,
+  type McpPrompt,
+  type McpRemoteTool,
+  type McpToolBlock,
+} from "../agent/dist/runtime/mcp-client.js";
 import { McpHttpClient } from "../agent/dist/runtime/mcp-http-client.js";
 import { McpSseClient } from "../agent/dist/runtime/mcp-sse-client.js";
 import { McpStdioClient } from "../agent/dist/runtime/mcp-stdio-client.js";
@@ -484,7 +490,10 @@ export async function appendAudit(entry: AuditEntry): Promise<void> {
   const line = JSON.stringify(entry) + "\n";
   try {
     await mkdir(dirname(path), { recursive: true });
-    await appendFile(path, line, "utf-8");
+    // Owner-only: the log carries command text. `mode` applies at creation;
+    // a file that already exists is tightened at startup by
+    // restrictAuditLogPermissions.
+    await appendFile(path, line, { encoding: "utf-8", mode: 0o600 });
   } catch (err) {
     if (!auditWarned) {
       auditWarned = true;
@@ -493,6 +502,20 @@ export async function appendAudit(entry: AuditEntry): Promise<void> {
         `[omi-provider] audit log unavailable (${msg}); continuing without audit\n`
       );
     }
+  }
+}
+
+/**
+ * Best-effort startup hardening: the audit log carries command text, so an
+ * existing more-permissive file (written by an older build at 0644) is
+ * tightened to 0600. Failures are ignored — appending is best-effort too, and
+ * the 0600 create mode in appendAudit covers new files.
+ */
+export async function restrictAuditLogPermissions(): Promise<void> {
+  try {
+    await chmod(auditLogPath(), 0o600);
+  } catch {
+    // Missing file (nothing to harden yet) or chmod failure — never fatal.
   }
 }
 
@@ -593,14 +616,31 @@ async function callSwiftTool(name: string, input: Record<string, unknown>, signa
   });
 }
 
+/**
+ * Every relayed tool call used to re-read the kernel context file for its
+ * capabilityRef. Cache the parsed value per process, re-validated by a cheap
+ * mtime+size stat so a rewritten context is still picked up; a stat hit skips
+ * the content read entirely. Keyed by path, and failures are not cached — a
+ * context file being rewritten mid-read retries on the next call.
+ */
+let capabilityRefCache: { path: string; ref?: string; mtimeMs: number; size: number } | null = null;
+
 async function omiRelayCapabilityRef(): Promise<string | undefined> {
   const path = process.env.OMI_CONTEXT_FILE;
   if (!path) return undefined;
   try {
+    const fileStat = await stat(path);
+    const cached = capabilityRefCache;
+    if (cached && cached.path === path && cached.mtimeMs === fileStat.mtimeMs && cached.size === fileStat.size) {
+      return cached.ref;
+    }
     const parsed = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
-    return typeof parsed.capabilityRef === "string" && parsed.capabilityRef.length > 0
-      ? parsed.capabilityRef
-      : undefined;
+    const ref =
+      typeof parsed.capabilityRef === "string" && parsed.capabilityRef.length > 0
+        ? parsed.capabilityRef
+        : undefined;
+    capabilityRefCache = { path, ref, mtimeMs: fileStat.mtimeMs, size: fileStat.size };
+    return ref;
   } catch {
     return undefined;
   }
@@ -723,10 +763,13 @@ function loadSkillTool() {
   return defineTool({
     name: "load_skill",
     label: "Load Skill",
-    description: "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    description: "Load a relevant skill progressively: the first call returns metadata, the body's section table of contents, and only the first section's content; additional sections load one at a time with a part number.",
     promptSnippet: "load_skill - Load a relevant skill returned by the catalog or search_skills",
     parameters: Type.Object({
       name: Type.String({ description: "Skill name returned by the compact catalog or search_skills" }),
+      part: Type.Optional(
+        Type.Number({ description: "1-based body section to read. Omit for the overview, section list, and first section." })
+      ),
     }, { additionalProperties: false }),
     async execute(_toolCallId, params) {
       const name = String((params as { name?: unknown }).name ?? "").trim();
@@ -739,10 +782,12 @@ function loadSkillTool() {
           details: undefined,
         };
       }
+      const rawPart = (params as { part?: unknown }).part;
+      const part = rawPart === "all" ? "all" : typeof rawPart === "number" ? rawPart : undefined;
       return {
         content: [{
           type: "text" as const,
-          text: await loadSkillInstructions(name),
+          text: await loadSkillInstructions(name, process.env.OMI_WORKSPACE ?? "", part === undefined ? {} : { part }),
         }],
         details: undefined,
       };
@@ -836,31 +881,42 @@ export async function __registerOmiToolsForTest(pi: ExtensionAPI): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
-// User-added remote MCP servers (managed from the desktop Apps page)
+// User-added MCP servers (~/.omi/mcp.json, managed from the desktop Apps page)
+//
+// Progressive disclosure. The servers are NOT registered tool-by-tool: a user
+// with a handful of servers would put hundreds of verbatim descriptions and
+// JSON schemas into the default tools payload before the model has expressed
+// any interest in one of them. Exactly two proxy tools are registered instead:
+//
+//   mcp_tools_info — discovery. The stable, sorted index of server names and
+//     tool names is embedded in the proxy descriptions below, so identifying
+//   a candidate needs no extra turn; calling it returns full descriptions
+//     and JSON input schemas on demand.
+//   mcp_call — dispatch. Runs a server's tool (or published prompt) by its
+//     REAL names and returns the result content faithfully.
+//
+// The old `mcp_<server>_<tool>` mangling is gone from the model's surface
+// entirely. Everything a server returns is untrusted tool-result data: it is
+// handed back as tool output and never interpolated into system instructions.
 // ---------------------------------------------------------------------------
 
-/**
- * A registered name for one server tool or prompt, unique within the session.
- *
- * The 64-character ceiling means two long names on the same server can truncate
- * to the same string; registering the second then either throws — which, inside
- * the Promise.all over servers, would reject the whole extension and take every
- * Omi tool down with it — or shadows the first so the model calls the wrong one.
- * `taken` keeps the collision to a suffix.
- */
-function mcpToolName(serverName: string, toolName: string, taken?: Set<string>): string {
-  const base = `mcp_${serverName}_${toolName}`.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
-  if (!taken || !taken.has(base)) {
-    taken?.add(base);
-    return base;
-  }
-  for (let suffix = 2; ; suffix += 1) {
-    const candidate = `${base.slice(0, 64 - String(suffix).length - 1)}_${suffix}`;
-    if (taken.has(candidate)) continue;
-    taken.add(candidate);
-    return candidate;
-  }
+type McpServerStatus = "connecting" | "ready" | "failed";
+
+interface McpServerEntry {
+  readonly name: string;
+  readonly client: McpClient;
+  /** 30s for stdio (a first `npx <package>` run downloads it), 10s remote. */
+  readonly discoveryBudgetMs: number;
+  /** stdio servers spawn a child process at start; remote ones open a connection. */
+  readonly kind: "stdio" | "remote";
+  status: McpServerStatus;
+  error?: string;
+  tools: McpRemoteTool[];
+  prompts: McpPrompt[];
 }
+
+/** Every configured server, sorted by name; the proxy tools read this live. */
+let mcpServers: McpServerEntry[] = [];
 
 /**
  * Ceiling on one MCP tool or prompt call. Nothing else settles these: an SSE
@@ -869,6 +925,22 @@ function mcpToolName(serverName: string, toolName: string, taken?: Set<string>):
  * user's turn spins with no way out short of quitting the app.
  */
 const CALL_TIMEOUT_MS = 120_000;
+
+/**
+ * How long the first prompt waits for servers to connect before the proxies
+ * register with whatever has landed so far. This is the only MCP wait on the
+ * turn path — the per-server budgets below are connection timeouts, not
+ * prompt-blocking gates. Servers still connecting keep connecting in the
+ * background: pi's registerTool cannot revise a description after the fact,
+ * but the proxies read live state, so a late server becomes callable anyway
+ * and mcp_tools_info reports its true status.
+ */
+const DEFAULT_MCP_FIRST_TURN_BUDGET_MS = 3_000;
+
+function firstTurnBudgetMs(): number {
+  const raw = Number(process.env.OMI_MCP_FIRST_TURN_BUDGET_MS);
+  return Number.isSafeInteger(raw) && raw >= 0 ? raw : DEFAULT_MCP_FIRST_TURN_BUDGET_MS;
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -880,157 +952,399 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
-async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
-  const logErr = (msg: string) => process.stderr.write(`[user-mcp] ${msg}\n`);
-  const servers = loadLocalMcpConfig(process.env.OMI_LOCAL_MCP_FILE, new Set(), logErr);
-  const takenNames = new Set<string>();
-  await Promise.all(servers.map(async (server) => {
-    let client: McpClient;
-    let discoveryTimeoutMs: number;
-    if (isStdioServer(server)) {
-      client = new McpStdioClient(server.command, server.args, server.env);
-      // A first `npx <package>` run downloads the package; give it room.
-      discoveryTimeoutMs = 30_000;
-    } else {
-      // Headers pass through as configured. `loadLocalMcpConfig` has already turned a
-      // `token` or a stored OAuth `access_token` into an Authorization header, so
-      // unwrapping one here only to have the client rebuild it corrupted any scheme
-      // that was not Bearer.
-      const headers = Object.fromEntries((server.headers ?? []).map((h) => [h.name, h.value]));
-      // An `sse` server publishes a long-lived event stream, not a POST target;
-      // driving it as Streamable HTTP is a 404 on every message.
-      client =
-        server.type === "sse"
-          ? new McpSseClient(server.url, headers)
-          : new McpHttpClient(server.url, headers);
-      discoveryTimeoutMs = 10_000;
-    }
-    // One budget per server for both discovery calls: charging each its own turned a
-    // single wedged stdio server into a minute of blocked startup.
-    const deadline = Date.now() + discoveryTimeoutMs;
-    let tools;
-    try {
-      tools = await withTimeout(client.listTools(), discoveryTimeoutMs);
-    } catch (err) {
-      process.stderr.write(
-        `[user-mcp] ${server.name}: tool discovery failed, server skipped: ${err instanceof Error ? err.message : err}\n`,
-      );
-      client.dispose();
-      return;
-    }
-    for (const tool of tools) {
-      const schema = tool.inputSchema as {
-        properties?: Record<string, unknown>;
-        required?: unknown;
-        additionalProperties?: unknown;
-      };
-      const properties = schema.properties
-        ? typeBoxPropertiesForInputSchema({
-            type: "object",
-            properties: schema.properties,
-            required: Array.isArray(schema.required) ? schema.required as string[] : [],
-            additionalProperties: schema.additionalProperties === true,
-          })
-        : {};
-      pi.registerTool(defineTool({
-        name: mcpToolName(server.name, tool.name, takenNames),
-        label: `${server.name}: ${tool.name}`,
-        description: `${tool.description || tool.name} (from the ${server.name} MCP server)`,
-        parameters: Type.Object(properties, { additionalProperties: schema.additionalProperties === true }),
-        async execute(_toolCallId, params) {
-          // Blocks pass straight through: a capture server's image is the answer,
-          // and pi's tool result carries images alongside text.
-          let content: McpToolBlock[];
-          try {
-            content = await withTimeout(
-              client.callTool(tool.name, (params ?? {}) as Record<string, unknown>),
-              CALL_TIMEOUT_MS,
-            );
-          } catch (err) {
-            content = [
-              {
-                type: "text",
-                text: `Error calling ${tool.name}: ${err instanceof Error ? err.message : err}`,
-              },
-            ];
-          }
-          return { content, details: undefined };
-        },
-      }));
-    }
-    const prompts = await registerUserMcpPrompts(
-      pi, server.name, client, Math.max(1_000, deadline - Date.now()), takenNames);
-    if (tools.length === 0 && prompts === 0) {
-      // Nothing registered means nothing holds this client, and nothing will ever
-      // close it: an SSE server's GET stream and a stdio server's child would stay
-      // open for the whole session with no way to reach them.
-      client.dispose();
-    }
-    process.stderr.write(
-      `[user-mcp] ${server.name}: registered ${tools.length} tools, ${prompts} prompts\n`,
-    );
-  }));
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    timer.unref?.();
+  });
+}
+
+function byName(a: { name: string }, b: { name: string }): number {
+  return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+}
+
+function createMcpClient(server: UserMcpServer): McpClient {
+  if (isStdioServer(server)) {
+    return new McpStdioClient(server.command, server.args, server.env);
+  }
+  // Headers pass through as configured. `loadLocalMcpConfig` has already turned a
+  // `token` or a stored OAuth `access_token` into an Authorization header, so
+  // unwrapping one here only to have the client rebuild it corrupted any scheme
+  // that was not Bearer.
+  const headers = Object.fromEntries((server.headers ?? []).map((h) => [h.name, h.value]));
+  // An `sse` server publishes a long-lived event stream, not a POST target;
+  // driving it as Streamable HTTP is a 404 on every message.
+  return server.type === "sse"
+    ? new McpSseClient(server.url, headers)
+    : new McpHttpClient(server.url, headers);
 }
 
 /**
- * A server's published prompts, each as a tool the model can call.
- *
- * Prompts are where servers put their real workflows ("review this PR"), and a
- * tools-only client never sees them. This chat has no slash-command surface to
- * offer them through, so they become tools: same call path, same audit trail,
- * and the model picks one the way it picks any other.
+ * At most this many stdio servers start at once. Every stdio start is a child
+ * process — often `npx`, which may download a package first — and a large
+ * config used to fire all of those spawns in the same instant. Remote servers
+ * (http/sse) open lightweight connections and deliberately stay unbounded; only
+ * the process-spawning lane shares the bound.
  */
-async function registerUserMcpPrompts(
-  pi: ExtensionAPI,
-  serverName: string,
-  client: McpClient,
-  timeoutMs: number,
-  taken: Set<string>,
-): Promise<number> {
-  let prompts;
-  try {
-    prompts = await withTimeout(client.listPrompts(), timeoutMs);
-  } catch (err) {
-    process.stderr.write(
-      `[user-mcp] ${serverName}: prompt discovery failed, prompts skipped: ${err instanceof Error ? err.message : err}\n`,
-    );
-    return 0;
-  }
+export const MCP_STDIO_START_CONCURRENCY = 8;
 
-  for (const prompt of prompts) {
-    const properties: Record<string, TSchema> = {};
-    for (const argument of prompt.arguments) {
-      properties[argument.name] = Type.String({
-        ...(argument.description ? { description: argument.description } : {}),
-      });
+/**
+ * Start discovery for every entry, returning the promises for the caller to
+ * race against the first-turn budget. stdio entries share the concurrency
+ * bound above — a worker pool claims the next entry as each discovery
+ * settles — while remote entries start immediately. Never rejects: the start
+ * function is responsible for its own error handling.
+ */
+export function startMcpDiscoveries<T extends { kind: "stdio" | "remote" }>(
+  entries: readonly T[],
+  start: (entry: T) => Promise<void>,
+): Promise<unknown>[] {
+  const stdio = entries.filter((entry) => entry.kind === "stdio");
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(MCP_STDIO_START_CONCURRENCY, stdio.length) },
+    async () => {
+      // The event loop is single-threaded, so claiming the next index before
+      // the first await cannot race another worker.
+      while (cursor < stdio.length) {
+        await start(stdio[cursor++]);
+      }
+    },
+  );
+  return [
+    ...workers,
+    ...entries.filter((entry) => entry.kind !== "stdio").map((entry) => start(entry)),
+  ];
+}
+
+/**
+ * One server's tool and prompt discovery under a single budget — the two calls
+ * share one deadline: charging each its own turned a single wedged stdio server
+ * into a minute of blocked startup. Never rejects; the outcome lands on the
+ * entry the proxy tools read.
+ */
+function startMcpDiscovery(entry: McpServerEntry): Promise<void> {
+  return (async () => {
+    const deadline = Date.now() + entry.discoveryBudgetMs;
+    try {
+      const tools = await withTimeout(entry.client.listTools(), entry.discoveryBudgetMs);
+      const prompts = entry.client.supports("prompts")
+        ? await withTimeout(entry.client.listPrompts(), Math.max(1_000, deadline - Date.now()))
+        : [];
+      entry.tools = [...tools].sort(byName);
+      entry.prompts = [...prompts].sort(byName);
+      entry.status = "ready";
+      process.stderr.write(
+        `[user-mcp] ${entry.name}: discovered ${entry.tools.length} tools, ${entry.prompts.length} prompts\n`,
+      );
+      if (entry.tools.length === 0 && entry.prompts.length === 0) {
+        // Nothing to call means nothing holds this client, and nothing will ever
+        // close it: an SSE server's GET stream and a stdio server's child would
+        // stay open for the whole session with no way to reach them.
+        entry.client.dispose();
+      }
+    } catch (err) {
+      entry.status = "failed";
+      entry.error = err instanceof Error ? err.message : String(err);
+      entry.client.dispose();
+      process.stderr.write(
+        `[user-mcp] ${entry.name}: server unavailable: ${entry.error}\n`,
+      );
     }
-    pi.registerTool(defineTool({
-      name: mcpToolName(serverName, `prompt_${prompt.name}`, taken),
-      label: `${serverName}: ${prompt.name}`,
-      description: `${prompt.description || prompt.name} (prompt from the ${serverName} MCP server)`,
-      parameters: Type.Object(properties, {
-        additionalProperties: false,
-        required: prompt.arguments.filter((a) => a.required).map((a) => a.name),
-      }),
-      async execute(_toolCallId, params) {
-        let text: string;
-        try {
-          text = await withTimeout(
-            client.getPrompt(prompt.name, (params ?? {}) as Record<string, unknown>),
-            CALL_TIMEOUT_MS,
-          );
-        } catch (err) {
-          text = `Error getting prompt ${prompt.name}: ${err instanceof Error ? err.message : err}`;
-        }
-        return { content: [{ type: "text" as const, text }], details: undefined };
-      },
-    }));
+  })();
+}
+
+/** Tool names listed inline per server before the index defers to mcp_tools_info. */
+const MCP_INDEX_NAME_CAP = 40;
+const MCP_INDEX_PROMPT_CAP = 10;
+/**
+ * Tool and prompt names are the server's to choose (`listTools` accepts any
+ * non-empty string), so each name is clipped before it rides in the proxy
+ * tools' frozen descriptions — the name caps bound the count, not the size.
+ * A clipped name is still findable: the live mcp_tools_info results always
+ * carry the real, full name.
+ */
+const MCP_INDEX_NAME_WIDTH = 64;
+/** Server lines embedded in the frozen descriptions before deferring to the live index. */
+const MCP_INDEX_SERVER_LINE_CAP = 20;
+
+function clippedName(name: string): string {
+  return name.length <= MCP_INDEX_NAME_WIDTH ? name : `${name.slice(0, MCP_INDEX_NAME_WIDTH)}…`;
+}
+
+function nameList(names: string[], cap: number): string {
+  const clipped = names.map(clippedName);
+  if (clipped.length <= cap) return clipped.join(", ");
+  return `${clipped.slice(0, cap).join(", ")} … +${names.length - cap} more`;
+}
+
+/**
+ * The discovery index: one line per configured server — name, one-line
+ * description if the server declares one, live status, tool names. Sorted and
+ * name-only, because this text rides in the proxy tools' descriptions on every
+ * turn: it must stay compact and never carry tool descriptions or schemas.
+ * Server lines are bounded too: past the cap the description defers to the
+ * live mcp_tools_info index instead of growing with the user's config.
+ */
+function mcpIndexText(): string {
+  if (mcpServers.length === 0) return "No user MCP servers are configured.";
+  const lines = mcpServers.slice(0, MCP_INDEX_SERVER_LINE_CAP).map((entry) => {
+    const hint = entry.client.serverDescription;
+    if (entry.status === "connecting") {
+      // Neutral wording: pi cannot revise a registered description, so a
+      // literal "connecting…" here would outlive the connection it described.
+      // The live index — mcp_tools_info with no arguments — reports real status.
+      return `- ${entry.name}: status at registration — call mcp_tools_info with no arguments for live status`;
+    }
+    if (entry.status === "failed") {
+      return `- ${entry.name}: unavailable (${entry.error ?? "unknown error"})`;
+    }
+    const tools = `tools (${entry.tools.length}): ${nameList(entry.tools.map((tool) => tool.name), MCP_INDEX_NAME_CAP)}`;
+    const prompts = entry.prompts.length
+      ? `; prompts (${entry.prompts.length}): ${nameList(entry.prompts.map((prompt) => prompt.name), MCP_INDEX_PROMPT_CAP)}`
+      : "";
+    return `- ${entry.name}${hint ? ` — ${hint}` : ""}: ${tools}${prompts}`;
+  });
+  if (mcpServers.length > MCP_INDEX_SERVER_LINE_CAP) {
+    lines.push(
+      `… +${mcpServers.length - MCP_INDEX_SERVER_LINE_CAP} more — call mcp_tools_info with no arguments for the live index`,
+    );
   }
-  return prompts.length;
+  return lines.join("\n");
+}
+
+/**
+ * Server names for the mcp_call description: names only, count-bounded. The
+ * full name-only tool index rides once, in mcp_tools_info's description —
+ * duplicating it in both proxies cost its size again on every turn. Server
+ * names need no clipping: loadLocalMcpConfig admits 1-64 chars only.
+ */
+function mcpServerNameLine(): string {
+  if (mcpServers.length === 0) return "none";
+  const names = mcpServers.slice(0, MCP_INDEX_SERVER_LINE_CAP).map((entry) => entry.name);
+  if (mcpServers.length > MCP_INDEX_SERVER_LINE_CAP) {
+    names.push(
+      `… +${mcpServers.length - MCP_INDEX_SERVER_LINE_CAP} more — call mcp_tools_info with no arguments for the live index`,
+    );
+  }
+  return names.join(", ");
+}
+
+function mcpTextResult(text: string) {
+  return { content: [{ type: "text" as const, text }], details: undefined };
+}
+
+function findServer(name: string): McpServerEntry | undefined {
+  return mcpServers.find((entry) => entry.name === name);
+}
+
+function mcpToolsInfoTool() {
+  return defineTool({
+    name: "mcp_tools_info",
+    label: "MCP Tools Info",
+    description:
+      "Discover the user's MCP servers. With no arguments, returns the live index of configured servers " +
+      "and their tool names. Pass server (and optionally tool) to get full descriptions and JSON input " +
+      "schemas for one server or one tool. Run this before mcp_call whenever the index below is not enough.\n\n" +
+      `Configured servers right now:\n${mcpIndexText()}`,
+    parameters: Type.Object({
+      server: Type.Optional(Type.String({ description: "A server name from the index" })),
+      tool: Type.Optional(Type.String({ description: "A tool or prompt name on that server" })),
+    }, { additionalProperties: false }),
+    async execute(_toolCallId, params) {
+      const serverName = typeof params.server === "string" ? params.server : undefined;
+      const toolName = typeof params.tool === "string" ? params.tool : undefined;
+      if (!serverName) {
+        return mcpTextResult(JSON.stringify({ servers: mcpServerSummaries() }, null, 2));
+      }
+      const entry = findServer(serverName);
+      if (!entry) {
+        return mcpTextResult(`Error: unknown MCP server '${serverName}'. ${mcpIndexText()}`);
+      }
+      if (entry.status === "connecting") {
+        return mcpTextResult(`MCP server '${serverName}' is still connecting; call again in a moment.`);
+      }
+      if (entry.status === "failed") {
+        return mcpTextResult(`MCP server '${serverName}' is unavailable: ${entry.error ?? "unknown error"}`);
+      }
+      if (toolName) {
+        const tool = entry.tools.find((candidate) => candidate.name === toolName);
+        if (tool) {
+          return mcpTextResult(JSON.stringify({
+            server: entry.name,
+            kind: "tool",
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+          }, null, 2));
+        }
+        const prompt = entry.prompts.find((candidate) => candidate.name === toolName);
+        if (prompt) {
+          return mcpTextResult(JSON.stringify({
+            server: entry.name,
+            kind: "prompt",
+            name: prompt.name,
+            description: prompt.description,
+            arguments: prompt.arguments,
+          }, null, 2));
+        }
+        return mcpTextResult(
+          `Error: server '${serverName}' has no tool or prompt named '${toolName}'. ` +
+            `Tools: ${nameList(entry.tools.map((candidate) => candidate.name), MCP_INDEX_NAME_CAP)}.`,
+        );
+      }
+      return mcpTextResult(JSON.stringify({
+        server: entry.name,
+        status: entry.status,
+        ...(entry.client.serverDescription ? { description: entry.client.serverDescription } : {}),
+        tools: entry.tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+        })),
+        prompts: entry.prompts.map((prompt) => ({
+          name: prompt.name,
+          description: prompt.description,
+          arguments: prompt.arguments,
+        })),
+      }, null, 2));
+    },
+  });
+}
+
+interface McpServerSummary {
+  name: string;
+  status: McpServerStatus;
+  description?: string;
+  error?: string;
+  tools?: string[];
+  prompts?: string[];
+}
+
+/** The live no-argument mcp_tools_info view: names and status, never schemas. */
+function mcpServerSummaries(): McpServerSummary[] {
+  return mcpServers.map((entry) => ({
+    name: entry.name,
+    status: entry.status,
+    ...(entry.client.serverDescription ? { description: entry.client.serverDescription } : {}),
+    ...(entry.error ? { error: entry.error } : {}),
+    ...(entry.status === "ready"
+      ? {
+          tools: entry.tools.map((tool) => tool.name),
+          prompts: entry.prompts.map((prompt) => prompt.name),
+        }
+      : {}),
+  }));
+}
+
+function mcpCallTool() {
+  return defineTool({
+    name: "mcp_call",
+    label: "MCP Call",
+    description:
+      "Run a tool (or a published prompt) on one of the user's MCP servers, by its real server and tool " +
+      "names, and get its result content back — text, and images when the tool answers with one.\n\n" +
+      // Server names only: the tool index rides once, in mcp_tools_info's
+      // description — duplicating it here cost its full size again per turn.
+      `Configured servers right now: ${mcpServerNameLine()}\n` +
+      "Call mcp_tools_info first for the tool index and, when you need it, a tool's full description and input schema.",
+    parameters: Type.Object({
+      server: Type.String({ description: "Server name from the mcp_tools_info index" }),
+      tool: Type.String({ description: "Tool (or prompt) name on that server" }),
+      arguments: Type.Optional(Type.Unknown({
+        description: "Arguments object matching the tool's JSON input schema",
+      })),
+    }, { additionalProperties: false }),
+    async execute(_toolCallId, params) {
+      const entry = findServer(params.server);
+      if (!entry) {
+        return mcpTextResult(
+          `Error: unknown MCP server '${params.server}'. ` +
+            `Configured servers: ${mcpServers.map((candidate) => candidate.name).join(", ") || "none"}.`,
+        );
+      }
+      if (entry.status === "connecting") {
+        return mcpTextResult(`Error: MCP server '${entry.name}' is still connecting; call again in a moment.`);
+      }
+      if (entry.status === "failed") {
+        return mcpTextResult(`Error: MCP server '${entry.name}' is unavailable: ${entry.error ?? "unknown error"}`);
+      }
+      const args = (params.arguments ?? {}) as Record<string, unknown>;
+      if (entry.tools.some((candidate) => candidate.name === params.tool)) {
+        // A tool and a prompt sharing a name resolve to the tool; the prompt
+        // stays reachable through its own listing.
+        let content: McpToolBlock[];
+        try {
+          // Blocks pass straight through: a capture server's image is the answer,
+          // and pi's tool result carries images alongside text.
+          content = await withTimeout(entry.client.callTool(params.tool, args), CALL_TIMEOUT_MS);
+        } catch (err) {
+          return mcpTextResult(
+            `Error calling ${entry.name}/${params.tool}: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+        return { content, details: undefined };
+      }
+      if (entry.prompts.some((candidate) => candidate.name === params.tool)) {
+        try {
+          return mcpTextResult(await withTimeout(entry.client.getPrompt(params.tool, args), CALL_TIMEOUT_MS));
+        } catch (err) {
+          return mcpTextResult(
+            `Error getting prompt ${entry.name}/${params.tool}: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+      }
+      return mcpTextResult(
+        `Error: server '${entry.name}' has no tool or prompt named '${params.tool}'. ` +
+          "Call mcp_tools_info with this server's name for the full list.",
+      );
+    },
+  });
+}
+
+/**
+ * Connect every configured server, then register the two proxy tools.
+ *
+ * Deterministic: servers are sorted by name, their tools and prompts are
+ * sorted by name, and the proxies go in in one pass after the await window —
+ * there are no per-tool registrations left to race, and the index text is
+ * built from that sorted snapshot.
+ *
+ * Non-blocking first turn: the turn path waits at most the short global
+ * budget above, not any server's own connection timeout. Whatever landed by
+ * then is in the embedded index; the rest finishes in the background and is
+ * picked up live by the proxies, which report each server's true state.
+ */
+async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
+  const logErr = (msg: string) => process.stderr.write(`[user-mcp] ${msg}\n`);
+  const servers = loadLocalMcpConfig(process.env.OMI_LOCAL_MCP_FILE, new Set(), logErr)
+    .sort(byName);
+  mcpServers = servers.map((config) => ({
+    name: config.name,
+    client: createMcpClient(config),
+    discoveryBudgetMs: isStdioServer(config) ? 30_000 : 10_000,
+    kind: isStdioServer(config) ? "stdio" : "remote",
+    status: "connecting",
+    tools: [],
+    prompts: [],
+  }));
+  // stdio spawns share the bounded start pool; remote connects are unbounded.
+  const probes = startMcpDiscoveries(mcpServers, startMcpDiscovery);
+  await Promise.race([Promise.allSettled(probes), sleep(firstTurnBudgetMs())]);
+  pi.registerTool(mcpToolsInfoTool());
+  pi.registerTool(mcpCallTool());
+  // Stragglers keep connecting; startMcpDiscovery never rejects, and each
+  // completion updates the entry the proxies read and logs its outcome.
 }
 
 export async function __registerUserMcpToolsForTest(pi: ExtensionAPI): Promise<void> {
   await registerUserMcpTools(pi);
+}
+
+/** Test-only: dispose every client and drop the registry between tests. */
+export function __resetUserMcpForTest(): void {
+  for (const entry of mcpServers) entry.client.dispose();
+  mcpServers = [];
 }
 
 // ---------------------------------------------------------------------------
@@ -1038,6 +1352,9 @@ export async function __registerUserMcpToolsForTest(pi: ExtensionAPI): Promise<v
 // ---------------------------------------------------------------------------
 
 export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
+  // Best-effort, never fatal: tighten a pre-existing audit log to owner-only.
+  void restrictAuditLogPermissions();
+
   const baseUrl = process.env.OMI_API_BASE_URL || "https://api.omi.me/v2";
   const apiKey = process.env.OMI_API_KEY || "";
 
@@ -1147,11 +1464,12 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
   // These forward to Swift via the OMI_BRIDGE_PIPE Unix socket.
   void registerOmiTools(pi);
 
-  // Remote MCP servers the user added from the Apps page. Awaited (pi waits
-  // for async extension factories) so the tools exist before the first prompt.
-  // Servers are discovered concurrently, each under one budget covering both its
-  // tool and prompt discovery — 10s remote, 30s local (a first `npx <package>`
-  // run downloads it). A failing server is skipped, never fatal.
+  // User MCP servers from the Apps page, exposed through the two proxy tools
+  // (progressive disclosure). Awaited (pi waits for async extension factories)
+  // but bounded by a short global budget — a wedged server delays the first
+  // turn by that budget once, never by its own connection timeout, and
+  // stragglers are picked up live afterwards. A failing server is reported
+  // through the proxies, never fatal.
   await registerUserMcpTools(pi);
 }
 
