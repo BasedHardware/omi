@@ -219,6 +219,10 @@ struct JITTriggerSnapshot: Codable, Equatable, Sendable {
   let rows: [JITTriggerSnapshotRow]
   let policy: JITTriggerRuntimePolicy
   let failureReason: String?
+  /// The profile timezone and current budget day used by the server's
+  /// reservation transaction. Optional for compatibility with older servers.
+  let budgetDay: String?
+  let budgetTimezone: String?
 
   enum CodingKeys: String, CodingKey {
     case ownerID = "owner_id"
@@ -228,12 +232,15 @@ struct JITTriggerSnapshot: Codable, Equatable, Sendable {
     case snapshotRevision = "snapshot_revision"
     case complete, rows, policy
     case failureReason = "failure_reason"
+    case budgetDay = "budget_day"
+    case budgetTimezone = "budget_timezone"
   }
 
   init(
     ownerID: String, accountGeneration: Int, headCommitID: String, commitSequence: Int,
     snapshotRevision: String, complete: Bool, rows: [JITTriggerSnapshotRow],
-    policy: JITTriggerRuntimePolicy = .ratifiedV1, failureReason: String?
+    policy: JITTriggerRuntimePolicy = .ratifiedV1, failureReason: String?,
+    budgetDay: String? = nil, budgetTimezone: String? = nil
   ) {
     self.ownerID = ownerID
     self.accountGeneration = accountGeneration
@@ -244,6 +251,8 @@ struct JITTriggerSnapshot: Codable, Equatable, Sendable {
     self.rows = rows
     self.policy = policy
     self.failureReason = failureReason
+    self.budgetDay = budgetDay
+    self.budgetTimezone = budgetTimezone
   }
 }
 

@@ -15833,6 +15833,31 @@
             "title": "Account Generation",
             "type": "integer"
           },
+          "budget_day": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Day"
+          },
+          "budget_timezone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Timezone"
+          },
           "commit_sequence": {
             "minimum": 0.0,
             "title": "Commit Sequence",
