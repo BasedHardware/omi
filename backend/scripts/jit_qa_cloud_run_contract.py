@@ -124,15 +124,14 @@ def validate_static_configuration(
         raise JITQAContractError("run_once must be true or false")
     if run_once == "false" and confirmation:
         raise JITQAContractError("execution confirmation is only valid with run_once=true")
-    if images is not None:
-        expected = {"backend", "desktop", "gateway", "drain", "sweep"}
-        if set(images) != expected:
-            raise JITQAContractError(f"exactly these QA images are required: {sorted(expected)}")
-        for name, image in images.items():
-            require_digest_image(image, label=f"{name} image")
+    expected = {"backend", "desktop", "gateway", "drain", "sweep"}
+    if images is None or set(images) != expected:
+        raise JITQAContractError(f"exactly these QA images are required: {sorted(expected)}")
+    for name, image in images.items():
+        require_digest_image(image, label=f"{name} image")
 
 
-def validate_environment(environment: Mapping[str, str]) -> None:
+def validate_environment(environment: Mapping[str, str], *, profile: str) -> None:
     """Reject credential selectors and non-QA runtime identity values."""
 
     for name in _FORBIDDEN_CREDENTIAL_ENV:
@@ -148,8 +147,19 @@ def validate_environment(environment: Mapping[str, str]) -> None:
     for name, value in expected.items():
         if environment.get(name) != value:
             raise JITQAContractError(f"{name} must be {value}")
-    if environment.get("KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST") != QA_UID:
-        raise JITQAContractError("ledger drain allowlist must contain only the QA UID")
+    try:
+        expected_profile = resource_environment(profile)[0]
+    except JITQAContractError:
+        raise
+    if profile == "drain":
+        if environment.get("KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST") != QA_UID:
+            raise JITQAContractError("ledger drain allowlist must contain only the QA UID")
+    elif environment.get("KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST"):
+        raise JITQAContractError("ledger drain allowlist is only valid on the drain profile")
+    if expected_profile.get("KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST") != environment.get(
+        "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST"
+    ):
+        raise JITQAContractError(f"environment does not match the {profile} QA profile")
 
 
 def validate_qa_http_environment(environment: Mapping[str, str], *, gateway_url: str, redis_host: str) -> None:
@@ -364,6 +374,7 @@ def resource_environment(
         return (
             {
                 **identity,
+                "MEMORY_ENABLED": "on",
                 "KNOWLEDGE_LEDGER_DRAIN_ENABLED": "false",
                 "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST": QA_UID,
                 "OMI_JIT_QA_AUTH_ONLY": "true",
@@ -375,6 +386,7 @@ def resource_environment(
         return (
             {
                 **identity,
+                "MEMORY_ENABLED": "on",
                 "MEMORY_DAILY_MEMORY_SWEEP_ENABLED": "false",
                 "MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH": "false",
                 "MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED": "false",
@@ -445,7 +457,7 @@ def main() -> int:
                 sweep_kill_switch=args.sweep_kill_switch,
                 run_once=args.run_once,
                 confirmation=args.confirmation,
-                images=images or None,
+                images=images,
             )
         elif args.command == "environment":
             if args.environment_json is None:
@@ -453,7 +465,9 @@ def main() -> int:
             environment = json.loads(args.environment_json.read_text(encoding="utf-8"))
             if not isinstance(environment, dict):
                 raise JITQAContractError("environment JSON must be an object")
-            validate_environment(environment)
+            if args.profile is None:
+                raise JITQAContractError("environment validation requires --profile")
+            validate_environment(environment, profile=args.profile)
         elif args.command == "execution":
             validate_execution(
                 run_once=args.run_once,

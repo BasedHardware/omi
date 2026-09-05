@@ -33,8 +33,8 @@ def firebase_verify_only_enabled(environ: Mapping[str, str] | None = None) -> bo
     source = os.environ if environ is None else environ
     return source.get("OMI_JIT_QA_LOCAL_STACK", "").strip() == "1" or (
         source.get("OMI_JIT_QA_AUTH_ONLY", "").strip().casefold() in {"1", "true", "yes", "on"}
-        and source.get("OMI_ENV_STAGE") == "dev"
-        and source.get("GOOGLE_CLOUD_PROJECT") == "based-hardware-dev"
+        and (source.get("OMI_ENV_STAGE") or "").strip().casefold() == "dev"
+        and (source.get("GOOGLE_CLOUD_PROJECT") or "").strip() == "based-hardware-dev"
     )
 
 

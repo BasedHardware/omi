@@ -44,7 +44,12 @@ def enforce_jit_qa_uid(uid: str, environ: Mapping[str, str] | None = None) -> No
     values = os.environ if environ is None else environ
     if not _truthy(values.get(QA_AUTH_ONLY_ENV)):
         return
-    if values.get(QA_STAGE_ENV) != "dev" or values.get(QA_PROJECT_ENV) != QA_PROJECT:
+    # Keep this normalization aligned with the Firebase verify-only fence and
+    # Firestore client fence.  Cloud Run env values can carry whitespace from
+    # generated manifests, while stage names are case-insensitive.
+    stage = (values.get(QA_STAGE_ENV) or "").strip().casefold()
+    project = (values.get(QA_PROJECT_ENV) or "").strip()
+    if stage != "dev" or project != QA_PROJECT:
         raise JITQAAdmissionError("JIT QA auth-only mode requires the based-hardware-dev dev project")
     allowed = tuple(item.strip() for item in values.get(QA_UID_ALLOWLIST_ENV, "").split(",") if item.strip())
     if len(allowed) != 1 or "/" in allowed[0]:

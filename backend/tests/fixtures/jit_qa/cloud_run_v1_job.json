@@ -19,6 +19,7 @@
                 {"name": "OMI_FIRESTORE_DATA_PLANE_PROJECT", "value": "based-hardware-dev"},
                 {"name": "FIRESTORE_DATABASE_ID", "value": "jit-qa"},
                 {"name": "FIREBASE_AUTH_PROJECT_ID", "value": "based-hardware"},
+                {"name": "MEMORY_ENABLED", "value": "on"},
                 {"name": "KNOWLEDGE_LEDGER_DRAIN_ENABLED", "value": "false"},
                 {"name": "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
                 {"name": "OMI_JIT_QA_AUTH_ONLY", "value": "true"},

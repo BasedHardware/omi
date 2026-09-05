@@ -65,6 +65,9 @@ def _revision(resource: Mapping[str, Any], *, label: str) -> str:
     revision = status.get("latestReadyRevisionName") if isinstance(status, Mapping) else None
     if not isinstance(revision, str) or not _REVISION_RE.fullmatch(revision):
         raise ValueError(f"{label} has no exact ready revision")
+    created = status.get("latestCreatedRevisionName") if isinstance(status, Mapping) else None
+    if created is not None and created != revision:
+        raise ValueError(f"{label} has a newer non-serving revision than the ready revision")
     traffic = status.get("traffic") if isinstance(status, Mapping) else None
     serving = (
         [
@@ -94,6 +97,7 @@ def build_receipt(
     source_sha: str,
     python_resource: Mapping[str, Any],
     desktop_resource: Mapping[str, Any],
+    gateway_resource: Mapping[str, Any],
     python_url: str,
     desktop_url: str,
     gateway_url: str,
@@ -128,6 +132,8 @@ def build_receipt(
         "python_image_digest": _image(python_resource, kind="service", label="python image"),
         "desktop_revision": _revision(desktop_resource, label="desktop service"),
         "desktop_image_digest": _image(desktop_resource, kind="service", label="desktop image"),
+        "gateway_revision": _revision(gateway_resource, label="gateway service"),
+        "gateway_image_digest": _image(gateway_resource, kind="service", label="gateway image"),
         "dependency_vector": {
             "firestore": "based-hardware-dev",
             "redis": "jit-qa-redis:basic-1GiB",
@@ -145,6 +151,7 @@ def main() -> int:
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--python-json", type=Path, required=True)
     parser.add_argument("--desktop-json", type=Path, required=True)
+    parser.add_argument("--gateway-json", type=Path, required=True)
     parser.add_argument("--python-url", required=True)
     parser.add_argument("--desktop-url", required=True)
     parser.add_argument("--gateway-url", required=True)
@@ -156,6 +163,7 @@ def main() -> int:
         source_sha=args.source_sha,
         python_resource=_load(args.python_json),
         desktop_resource=_load(args.desktop_json),
+        gateway_resource=_load(args.gateway_json),
         python_url=args.python_url,
         desktop_url=args.desktop_url,
         gateway_url=args.gateway_url,

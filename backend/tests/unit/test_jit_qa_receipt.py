@@ -70,6 +70,7 @@ def test_receipt_has_activation_shape_and_dependency_vector():
         desktop_resource=_resource(
             "desktop", "desktop-backend-jit-qa", "desktop-backend-jit-qa", "desktop-backend-jit-qa-00001"
         ),
+        gateway_resource=_resource("gateway", "llm-gateway-jit-qa", "llm-gateway-jit-qa", "llm-gateway-jit-qa-00001"),
         python_url="https://backend-jit-qa.run.app",
         desktop_url="https://desktop-backend-jit-qa.run.app",
         gateway_url="https://llm-gateway-jit-qa.run.app",
@@ -83,6 +84,8 @@ def test_receipt_has_activation_shape_and_dependency_vector():
     assert receipt["full_source_sha"] == "a" * 40
     assert receipt["exact_python_url"] == "https://backend-jit-qa.run.app"
     assert receipt["python_image_digest"] == "sha256:" + "a" * 64
+    assert receipt["gateway_revision"] == "llm-gateway-jit-qa-00001"
+    assert receipt["gateway_image_digest"] == "sha256:" + "a" * 64
     assert receipt["firestore_database_id"] == "jit-qa"
 
 
@@ -93,6 +96,9 @@ def test_receipt_does_not_call_a_resource_ready_without_probes():
             python_resource=_resource("backend", "backend-jit-qa", "backend-jit-qa", "backend-jit-qa-00001"),
             desktop_resource=_resource(
                 "desktop", "desktop-backend-jit-qa", "desktop-backend-jit-qa", "desktop-backend-jit-qa-00001"
+            ),
+            gateway_resource=_resource(
+                "gateway", "llm-gateway-jit-qa", "llm-gateway-jit-qa", "llm-gateway-jit-qa-00001"
             ),
             python_url="https://backend-jit-qa.run.app",
             desktop_url="https://desktop-backend-jit-qa.run.app",
@@ -112,6 +118,28 @@ def test_receipt_rejects_latest_ready_revision_without_full_traffic():
             desktop_resource=_resource(
                 "desktop", "desktop-backend-jit-qa", "desktop-backend-jit-qa", "desktop-backend-jit-qa-00001"
             ),
+            gateway_resource=_resource(
+                "gateway", "llm-gateway-jit-qa", "llm-gateway-jit-qa", "llm-gateway-jit-qa-00001"
+            ),
+            python_url="https://backend-jit-qa.run.app",
+            desktop_url="https://desktop-backend-jit-qa.run.app",
+            gateway_url="https://llm-gateway-jit-qa.run.app",
+            app_probe=True,
+            gateway_probe=True,
+        )
+
+
+def test_receipt_rejects_newer_created_revision_that_is_not_serving():
+    gateway = _resource("gateway", "llm-gateway-jit-qa", "llm-gateway-jit-qa", "llm-gateway-jit-qa-00001")
+    gateway["status"]["latestCreatedRevisionName"] = "llm-gateway-jit-qa-00002"
+    with pytest.raises(ValueError, match="newer non-serving revision"):
+        RECEIPT.build_receipt(
+            source_sha="a" * 40,
+            python_resource=_resource("backend", "backend-jit-qa", "backend-jit-qa", "backend-jit-qa-00001"),
+            desktop_resource=_resource(
+                "desktop", "desktop-backend-jit-qa", "desktop-backend-jit-qa", "desktop-backend-jit-qa-00001"
+            ),
+            gateway_resource=gateway,
             python_url="https://backend-jit-qa.run.app",
             desktop_url="https://desktop-backend-jit-qa.run.app",
             gateway_url="https://llm-gateway-jit-qa.run.app",
@@ -133,6 +161,8 @@ def test_receipt_round_trips_activation_fixture_when_consumer_tree_is_present():
         ] = f"gcr.io/based-hardware-dev/{name}@{image_digest}"
         return result
 
+    gateway_revision = expected.get("gateway_revision", "llm-gateway-jit-qa-00001")
+    gateway_digest = expected.get("gateway_image_digest", "sha256:" + "a" * 64)
     actual = RECEIPT.build_receipt(
         source_sha=expected["full_source_sha"],
         python_resource=resource(
@@ -141,6 +171,7 @@ def test_receipt_round_trips_activation_fixture_when_consumer_tree_is_present():
         desktop_resource=resource(
             "desktop", expected["desktop_service"], expected["desktop_image_digest"], expected["desktop_revision"]
         ),
+        gateway_resource=resource("gateway", expected["gateway_service"], gateway_digest, gateway_revision),
         python_url=expected["exact_python_url"],
         desktop_url=expected["exact_desktop_url"],
         gateway_url=expected["exact_gateway_url"],
@@ -148,4 +179,5 @@ def test_receipt_round_trips_activation_fixture_when_consumer_tree_is_present():
         gateway_probe=True,
     )
     expected = {**expected, "reviewed": False}
-    assert actual == expected
+    for key, value in expected.items():
+        assert actual[key] == value

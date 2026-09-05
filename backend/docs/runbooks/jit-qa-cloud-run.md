@@ -60,11 +60,12 @@ polls the exact returned execution through `status.conditions[type=Completed]`,
 then reads the QA database's apply-control, migration-completion, and bounded
 projection documents and requires matching writer/head/epoch fences, stable
 ledger mode, zero live legacy rows, and a nonempty completed scan. Only that
-durable proof makes a sweep eligible. A sweep additionally requires
-the separate literal `RUN_MODEL_EXPERIMENT`; that path is the paid-model
-approval boundary and is capped at eight candidates and `$0.05` per run. A
-deployment-only dispatch performs no model work. Execution artifacts contain
-resource and execution identities only, never customer content.
+durable proof makes a sweep eligible. This closed deployment workflow has no
+paid-model execution stage: the sweep model gate and kill switch remain false,
+and `run_once` only admits the bounded ledger drain. Model qualification
+requires a separately reviewed workflow and budget receipt. A deployment-only
+dispatch performs no model work. Execution artifacts contain resource and
+execution identities only, never customer content.
 
 Verification reads each deployed Cloud Run resource and checks the immutable
 image digest, exact environment and secret bindings, runtime identity, fixed

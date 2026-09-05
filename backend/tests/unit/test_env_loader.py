@@ -48,6 +48,17 @@ def test_cloud_jit_qa_firebase_is_verify_only_without_blocking_firestore_adc() -
     assert isinstance(credential.get_credential(), AnonymousCredentials)
 
 
+def test_cloud_jit_qa_verify_only_fence_normalizes_stage_and_project() -> None:
+    credential = firebase_verify_only_credential(
+        {
+            "OMI_JIT_QA_AUTH_ONLY": " TRUE ",
+            "OMI_ENV_STAGE": " DEV ",
+            "GOOGLE_CLOUD_PROJECT": " based-hardware-dev ",
+        }
+    )
+    assert credential is not None
+
+
 def test_local_jit_qa_blocks_firebase_auth_mutations() -> None:
     class FakeAuth:
         pass

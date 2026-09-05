@@ -223,6 +223,31 @@ def test_named_qa_database_fails_closed_outside_isolated_dev(monkeypatch):
         client_module.get_data_plane_firestore_client()
 
 
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("OMI_ENV_STAGE", "prod"),
+        ("OMI_ENV_STAGE", ""),
+        ("GOOGLE_CLOUD_PROJECT", "based-hardware"),
+        ("OMI_FIRESTORE_DATA_PLANE_PROJECT", None),
+    ],
+)
+def test_named_qa_database_rejects_any_non_dev_auth_fence(monkeypatch, name, value):
+    _reset_caches(monkeypatch)
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
+    monkeypatch.setenv("OMI_FIRESTORE_DATA_PLANE_PROJECT", "based-hardware-dev")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware-dev")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setenv("OMI_JIT_QA_AUTH_ONLY", "true")
+    monkeypatch.setenv("FIRESTORE_DATABASE_ID", "jit-qa")
+    if value is not None:
+        monkeypatch.setenv(name, value)
+    else:
+        monkeypatch.delenv(name, raising=False)
+    with pytest.raises(RuntimeError, match="isolated development JIT QA fence"):
+        client_module._build_firestore_client()
+
+
 def test_regular_firestore_factory_uses_named_qa_database(monkeypatch):
     monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
     monkeypatch.setenv("OMI_FIRESTORE_DATA_PLANE_PROJECT", "based-hardware-dev")

@@ -312,7 +312,11 @@ def _verify_ws_auth(authorization: str) -> str:
 
     try:
         token = authorization.split(' ')[1]
-        return verify_token(token)
+        uid = verify_token(token)
+        enforce_jit_qa_uid(uid)
+        return uid
+    except JITQAAdmissionError as e:
+        raise WebSocketException(code=1008, reason="Account is not admitted to isolated JIT QA") from e
     except (InvalidIdTokenError, CertificateFetchError) as e:
         close_code, reason = _get_ws_auth_close(e)
         _log_ws_auth_rejection(close_code, e)
@@ -484,7 +488,9 @@ def _verify_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
     if not token:
         raise ValueError("Missing token")
 
-    return verify_token(token)
+    uid = verify_token(token)
+    enforce_jit_qa_uid(uid)
+    return uid
 
 
 async def get_current_user_uid_from_ws_message(
@@ -497,7 +503,10 @@ async def get_current_user_uid_from_ws_message(
     Pass ``websocket`` so account-cutover enforcement can fence product surfaces
     such as ``/v4/web/listen`` the same way header-auth listen does.
     """
-    uid = await run_blocking(critical_executor, _verify_user_uid_from_ws_message, message)
+    try:
+        uid = await run_blocking(critical_executor, _verify_user_uid_from_ws_message, message)
+    except JITQAAdmissionError as error:
+        raise WebSocketException(code=1008, reason="Account is not admitted to isolated JIT QA") from error
     await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
     if cutover_enforcement_enabled() and websocket is not None:
         await run_blocking(

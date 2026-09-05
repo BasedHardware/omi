@@ -22,6 +22,13 @@ def test_qa_admission_accepts_only_the_explicit_dev_uid():
         enforce_jit_qa_uid("other-user", _env())
 
 
+def test_qa_admission_normalizes_stage_and_project():
+    enforce_jit_qa_uid(
+        "qa-user",
+        _env(OMI_ENV_STAGE=" DEV ", GOOGLE_CLOUD_PROJECT=" based-hardware-dev "),
+    )
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

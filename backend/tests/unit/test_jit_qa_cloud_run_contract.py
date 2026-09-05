@@ -70,6 +70,21 @@ def test_static_configuration_is_dev_only_and_requires_five_immutable_images():
     )
 
 
+def test_static_configuration_requires_all_immutable_images():
+    with pytest.raises(CONTRACT.JITQAContractError, match="exactly these QA images"):
+        CONTRACT.validate_static_configuration(
+            project="based-hardware-dev",
+            region="us-central1",
+            auth_project="based-hardware",
+            uid=CONTRACT.QA_UID,
+            drain_enabled="false",
+            sweep_enabled="false",
+            sweep_kill_switch="false",
+            run_once="false",
+            confirmation="",
+        )
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [
@@ -112,10 +127,21 @@ def test_execution_requires_explicit_confirmation_and_keeps_kill_switch_closed()
 def test_environment_rejects_customer_credential_and_wrong_data_plane():
     literals, _ = CONTRACT.resource_environment("drain")
     with pytest.raises(CONTRACT.JITQAContractError):
-        CONTRACT.validate_environment({**literals, "SERVICE_ACCOUNT_JSON": "customer-json"})
+        CONTRACT.validate_environment({**literals, "SERVICE_ACCOUNT_JSON": "customer-json"}, profile="drain")
     with pytest.raises(CONTRACT.JITQAContractError):
-        CONTRACT.validate_environment({**literals, "OMI_FIRESTORE_DATA_PLANE_PROJECT": "based-hardware"})
-    CONTRACT.validate_environment({**literals})
+        CONTRACT.validate_environment(
+            {**literals, "OMI_FIRESTORE_DATA_PLANE_PROJECT": "based-hardware"}, profile="drain"
+        )
+    CONTRACT.validate_environment({**literals}, profile="drain")
+
+
+def test_environment_requires_profile_specific_drain_allowlist():
+    literals, _ = CONTRACT.resource_environment("sweep")
+    CONTRACT.validate_environment({**literals}, profile="sweep")
+    with pytest.raises(CONTRACT.JITQAContractError, match="only valid on the drain profile"):
+        CONTRACT.validate_environment(
+            {**literals, "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST": CONTRACT.QA_UID}, profile="sweep"
+        )
 
 
 def test_cloud_run_resource_requires_exact_image_env_secrets_name_and_identity():
@@ -226,6 +252,11 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "RUN_ONCE" in text
     assert "jobs executions describe" in text
     assert "jobs executions describe \"$execution\" --job" not in text
+    assert "--set-env-vars \"$gateway_env\"" in text
+    assert "--set-env-vars \"$drain_env\"" in text
+    assert 'LLM_GATEWAY_ALLOWED_CALLERS=backend,desktop' in text
+    assert 'gcloud firestore databases describe --database "$QA_FIRESTORE_DATABASE"' in text
+    assert 'gcloud redis instances describe "$QA_REDIS_INSTANCE"' in text
     assert "RUN_MODEL_EXPERIMENT" not in text
     assert "MODEL_CONFIRMATION_INPUT" not in text
     assert "gcr.io/${QA_PROJECT}" in text

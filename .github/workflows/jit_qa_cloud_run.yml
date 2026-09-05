@@ -162,6 +162,13 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
       - uses: google-github-actions/setup-gcloud@v3
+      - name: Preflight required development secret metadata before resource mutation
+        run: |
+          set -euo pipefail
+          for secret in ENCRYPTION_SECRET OPENAI_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET"; do
+            gcloud secrets describe "$secret" --project "$QA_PROJECT" >/dev/null
+            gcloud secrets versions describe latest --secret "$secret" --project "$QA_PROJECT" >/dev/null
+          done
       - name: Create or verify the dev-only runtime identity and minimum access
         run: |
           set -euo pipefail
@@ -175,14 +182,18 @@ jobs:
           if ! gcloud firestore databases describe --database "$QA_FIRESTORE_DATABASE" --project "$QA_PROJECT" >/dev/null 2>&1; then
             gcloud firestore databases create --database "$QA_FIRESTORE_DATABASE" --location "$QA_REGION" --type firestore-native --project "$QA_PROJECT" --quiet
           fi
-          gcloud firestore databases describe --database "$QA_FIRESTORE_DATABASE" --project "$QA_PROJECT" --format='value(name,locationId,type)' | grep -F "$QA_FIRESTORE_DATABASE" >/dev/null
-      - name: Preflight required development secret metadata before resource mutation
-        run: |
-          set -euo pipefail
-          for secret in ENCRYPTION_SECRET OPENAI_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET"; do
-            gcloud secrets describe "$secret" --project "$QA_PROJECT" >/dev/null
-            gcloud secrets versions describe latest --secret "$secret" --project "$QA_PROJECT" >/dev/null
-          done
+          db_json="$RUNNER_TEMP/jit-qa-firestore.json"
+          gcloud firestore databases describe --database "$QA_FIRESTORE_DATABASE" --project "$QA_PROJECT" --format=json > "$db_json"
+          python3 - "$db_json" <<'PY'
+          import json, sys
+          database = json.load(open(sys.argv[1], encoding="utf-8"))
+          if not str(database.get("name", "")).endswith("/databases/jit-qa"):
+              raise SystemExit("Firestore database name is not jit-qa")
+          if database.get("locationId") != "us-central1":
+              raise SystemExit("Firestore QA database is outside us-central1")
+          if database.get("type") != "FIRESTORE_NATIVE":
+              raise SystemExit("Firestore QA database is not native mode")
+          PY
       - name: Create or verify the 1 GiB Basic Redis dependency
         id: redis
         run: |
@@ -190,6 +201,21 @@ jobs:
           if ! gcloud redis instances describe "$QA_REDIS_INSTANCE" --project "$QA_PROJECT" --region "$QA_REGION" >/dev/null 2>&1; then
             gcloud redis instances create "$QA_REDIS_INSTANCE" --project "$QA_PROJECT" --region "$QA_REGION" --network "$QA_NETWORK" --tier basic --size 1 --enable-auth --labels managed-by=github-actions,jit-qa=true --quiet
           fi
+          redis_json="$RUNNER_TEMP/jit-qa-redis.json"
+          gcloud redis instances describe "$QA_REDIS_INSTANCE" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$redis_json"
+          python3 - "$redis_json" <<'PY'
+          import json, sys
+          instance = json.load(open(sys.argv[1], encoding="utf-8"))
+          expected_network = "projects/based-hardware-dev/global/networks/default"
+          if instance.get("tier") != "BASIC":
+              raise SystemExit("Redis QA instance must use BASIC tier")
+          if float(instance.get("memorySizeGb", 0)) != 1:
+              raise SystemExit("Redis QA instance must be exactly 1 GiB")
+          if instance.get("authorizedNetwork") != expected_network:
+              raise SystemExit("Redis QA instance uses an unexpected VPC network")
+          if instance.get("authEnabled") is not True:
+              raise SystemExit("Redis QA instance must have AUTH enabled")
+          PY
           redis_host="$(gcloud redis instances describe "$QA_REDIS_INSTANCE" --project "$QA_PROJECT" --region "$QA_REGION" --format='value(host)')"
           [[ "$redis_host" =~ ^[0-9.]+$ ]]
           auth_string="$(gcloud redis instances get-auth-string "$QA_REDIS_INSTANCE" --project "$QA_PROJECT" --region "$QA_REGION" --format='value(authString)')"
@@ -204,6 +230,10 @@ jobs:
           set -euo pipefail
           if ! gcloud secrets describe "$QA_GATEWAY_TOKEN_SECRET" --project "$QA_PROJECT" >/dev/null 2>&1; then
             gcloud secrets create "$QA_GATEWAY_TOKEN_SECRET" --project "$QA_PROJECT" --replication-policy=user-managed --locations="$QA_REGION"
+            openssl rand -hex 32 | gcloud secrets versions add "$QA_GATEWAY_TOKEN_SECRET" --project "$QA_PROJECT" --data-file=- >/dev/null
+          fi
+          token_state="$(gcloud secrets versions describe latest --secret "$QA_GATEWAY_TOKEN_SECRET" --project "$QA_PROJECT" --format='value(state)' 2>/dev/null || true)"
+          if [[ "$token_state" != "ENABLED" ]]; then
             openssl rand -hex 32 | gcloud secrets versions add "$QA_GATEWAY_TOKEN_SECRET" --project "$QA_PROJECT" --data-file=- >/dev/null
           fi
           for secret in ENCRYPTION_SECRET OPENAI_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET" "$QA_REDIS_SECRET" "$QA_GATEWAY_TOKEN_SECRET"; do
@@ -250,7 +280,8 @@ jobs:
           IMAGE: ${{ needs.build.outputs.gateway_image }}
         run: |
           set -euo pipefail
-          gcloud run deploy "$QA_GATEWAY_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --image "$IMAGE" --command uvicorn --args 'llm_gateway.main:app,--host=0.0.0.0,--port=8080' --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --set-env-vars "OMI_ENV_STAGE=dev,GOOGLE_CLOUD_PROJECT=${QA_PROJECT},OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT},FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE},FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT},OMI_JIT_QA_AUTH_ONLY=true,OMI_JIT_QA_UID_ALLOWLIST=${QA_UID},OMI_LLM_GATEWAY_PROD=false,LLM_GATEWAY_ALLOWED_CALLERS=backend,desktop,OMI_LLM_GATEWAY_BUILD_IDENTITY=jit-qa" --set-secrets "OPENAI_API_KEY=OPENAI_API_KEY:latest,ANTHROPIC_API_KEY=${QA_ANTHROPIC_SECRET}:latest,PERPLEXITY_API_KEY=${QA_PERPLEXITY_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
+          gateway_env="^@^OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@OMI_LLM_GATEWAY_PROD=false@LLM_GATEWAY_ALLOWED_CALLERS=backend,desktop@OMI_LLM_GATEWAY_BUILD_IDENTITY=jit-qa"
+          gcloud run deploy "$QA_GATEWAY_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --image "$IMAGE" --command uvicorn --args 'llm_gateway.main:app,--host=0.0.0.0,--port=8080' --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --set-env-vars "$gateway_env" --set-secrets "OPENAI_API_KEY=OPENAI_API_KEY:latest,ANTHROPIC_API_KEY=${QA_ANTHROPIC_SECRET}:latest,PERPLEXITY_API_KEY=${QA_PERPLEXITY_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
       - name: Resolve exact gateway URL
         id: gateway
         run: |
@@ -266,7 +297,7 @@ jobs:
           GATEWAY_URL: ${{ steps.gateway.outputs.gateway_url }}
         run: |
           set -euo pipefail
-          common="OMI_ENV_STAGE=dev,GOOGLE_CLOUD_PROJECT=${QA_PROJECT},OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT},FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE},FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT},OMI_JIT_QA_AUTH_ONLY=true,OMI_JIT_QA_UID_ALLOWLIST=${QA_UID},MEMORY_ENABLED=on,MEMORY_BELIEF_MODEL_ENABLED=true,OMI_LLM_GATEWAY_FEATURE_MODE=gateway,OMI_LLM_CHAT_AGENT_ROUTE=gateway,OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false,OMI_LLM_GATEWAY_URL=${GATEWAY_URL},REDIS_DB_HOST=${REDIS_HOST},REDIS_DB_PORT=6379"
+          common="^@^OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@MEMORY_ENABLED=on@MEMORY_BELIEF_MODEL_ENABLED=true@OMI_LLM_GATEWAY_FEATURE_MODE=gateway@OMI_LLM_CHAT_AGENT_ROUTE=gateway@OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false@OMI_LLM_GATEWAY_URL=${GATEWAY_URL}@REDIS_DB_HOST=${REDIS_HOST}@REDIS_DB_PORT=6379"
           for pair in "$QA_SERVICE:$BACKEND_IMAGE" "$QA_DESKTOP_SERVICE:$DESKTOP_IMAGE"; do
             service="${pair%%:*}"; image="${pair#*:}"
             gcloud run deploy "$service" --project "$QA_PROJECT" --region "$QA_REGION" --image "$image" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --network "$QA_NETWORK" --vpc-egress private-ranges-only --set-env-vars "$common" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,REDIS_DB_PASSWORD=${QA_REDIS_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
@@ -279,9 +310,10 @@ jobs:
           GATEWAY_URL: ${{ steps.gateway.outputs.gateway_url }}
         run: |
           set -euo pipefail
-          base="OMI_ENV_STAGE=dev,GOOGLE_CLOUD_PROJECT=${QA_PROJECT},OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT},FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE},FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT},OMI_JIT_QA_AUTH_ONLY=true,OMI_JIT_QA_UID_ALLOWLIST=${QA_UID},OMI_LLM_GATEWAY_FEATURE_MODE=gateway,OMI_LLM_CHAT_AGENT_ROUTE=gateway,OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false,OMI_LLM_GATEWAY_URL=${GATEWAY_URL},REDIS_DB_HOST=${REDIS_HOST},REDIS_DB_PORT=6379"
-          gcloud run jobs deploy "$QA_DRAIN_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --image "$DRAIN_IMAGE" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --network "$QA_NETWORK" --vpc-egress private-ranges-only --tasks 1 --max-retries 0 --task-timeout 1200s --set-env-vars "${base},KNOWLEDGE_LEDGER_DRAIN_ENABLED=false,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST=${QA_UID}" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
-          gcloud run jobs deploy "$QA_SWEEP_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --image "$SWEEP_IMAGE" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --network "$QA_NETWORK" --vpc-egress private-ranges-only --tasks 1 --max-retries 0 --task-timeout 1200s --set-env-vars "${base},MEMORY_DAILY_MEMORY_SWEEP_ENABLED=false,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=false,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=disabled,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=8,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=false,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,REDIS_DB_PASSWORD=${QA_REDIS_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
+          drain_env="^@^OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@MEMORY_ENABLED=on@KNOWLEDGE_LEDGER_DRAIN_ENABLED=false@KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST=${QA_UID}"
+          sweep_env="^@^OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@MEMORY_ENABLED=on@MEMORY_DAILY_MEMORY_SWEEP_ENABLED=false@MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false@MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=false@MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=disabled@MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=8@MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0@MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=false@MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=@OMI_LLM_GATEWAY_FEATURE_MODE=gateway@OMI_LLM_CHAT_AGENT_ROUTE=gateway@OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false@OMI_LLM_GATEWAY_URL=${GATEWAY_URL}@REDIS_DB_HOST=${REDIS_HOST}@REDIS_DB_PORT=6379"
+          gcloud run jobs deploy "$QA_DRAIN_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --image "$DRAIN_IMAGE" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --network "$QA_NETWORK" --vpc-egress private-ranges-only --tasks 1 --max-retries 0 --task-timeout 1200s --set-env-vars "$drain_env" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
+          gcloud run jobs deploy "$QA_SWEEP_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --image "$SWEEP_IMAGE" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --network "$QA_NETWORK" --vpc-egress private-ranges-only --tasks 1 --max-retries 0 --task-timeout 1200s --set-env-vars "$sweep_env" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,REDIS_DB_PASSWORD=${QA_REDIS_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
       - name: Resolve exact service URLs
         id: urls
         run: |
@@ -368,7 +400,7 @@ jobs:
           GATEWAY_URL: ${{ needs.deploy.outputs.gateway_url }}
         run: |
           set -euo pipefail
-          python3 backend/scripts/jit_qa_receipt.py --source-sha "$SOURCE_SHA" --python-json "$RUNNER_TEMP/jit-qa-contract/backend.json" --desktop-json "$RUNNER_TEMP/jit-qa-contract/desktop.json" --python-url "$PYTHON_URL" --desktop-url "$DESKTOP_URL" --gateway-url "$GATEWAY_URL" --app-probe --gateway-probe --output "$RUNNER_TEMP/jit-qa-receipt.json"
+          python3 backend/scripts/jit_qa_receipt.py --source-sha "$SOURCE_SHA" --python-json "$RUNNER_TEMP/jit-qa-contract/backend.json" --desktop-json "$RUNNER_TEMP/jit-qa-contract/desktop.json" --gateway-json "$RUNNER_TEMP/jit-qa-contract/gateway.json" --python-url "$PYTHON_URL" --desktop-url "$DESKTOP_URL" --gateway-url "$GATEWAY_URL" --app-probe --gateway-probe --output "$RUNNER_TEMP/jit-qa-receipt.json"
       - uses: actions/upload-artifact@v7
         with:
           name: jit-qa-readiness-candidate-${{ github.run_id }}
