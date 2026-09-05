@@ -173,7 +173,7 @@ struct DailyRecapPage: View {
     return Group {
       if !chips.isEmpty {
         ScrollView(.horizontal, showsIndicators: false) {
-          HStack(spacing: OmiSpacing.sm) {
+          HStack(spacing: OmiSpacing.xs) {
             ForEach(chips) { chip in
               statChip(chip)
             }
@@ -186,7 +186,7 @@ struct DailyRecapPage: View {
   }
 
   private func statChip(_ chip: HomeDailySummaryStatsRow.Chip) -> some View {
-    HStack(spacing: OmiSpacing.xxs + 1) {
+    HStack(spacing: OmiSpacing.xxs) {
       Image(systemName: chip.symbol)
         .scaledFont(size: OmiType.micro, weight: .semibold)
         .foregroundStyle(HomePalette.muted)
@@ -200,7 +200,7 @@ struct DailyRecapPage: View {
     }
     .lineLimit(1)
     .fixedSize()
-    .padding(.horizontal, OmiSpacing.sm)
+    .padding(.horizontal, OmiSpacing.xxs + 2)
     .padding(.vertical, OmiSpacing.xxs + 2)
     .background(Capsule().fill(Ink.rowFill))
     .accessibilityElement(children: .combine)
