@@ -538,6 +538,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     Task { await JITTriggerFeedbackClient.shared.installLifecycleRetry() }
 
     Task { await ContextWorkstreamReconciler.shared.start() }
+    Task { await ContextBucketSyncScheduler.shared.start() }
 
     scheduleAppLifecycleMaintenance()
 
@@ -1410,6 +1411,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     TranscriptionRetryService.shared.stop()
 
     Task { await ContextWorkstreamReconciler.shared.stop() }
+    Task { await ContextBucketSyncScheduler.shared.stop() }
 
     // Finalize the active Rewind MP4 chunk while the app is still alive.
     // AVAssetWriter files are not readable until finishWriting writes the trailer.
