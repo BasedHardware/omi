@@ -140,6 +140,59 @@ async function renderReads(props: {enabled: boolean}) {
 beforeEach(() => {
   readsMock.mockReset();
 });
+
+test('orders Home timeline by normalized conversation and memory time', async () => {
+  // Port of superseded #12141 — memories are epoch seconds; conversations are ms.
+  const olderConversation = conversationItem('older-conversation', 'Older');
+  olderConversation.startedAt = '2026-09-01T10:00:00.000Z';
+  olderConversation.createdAt = '2026-09-01T10:00:00.000Z';
+  const newerConversation = conversationItem('newer-conversation', 'Newer');
+  newerConversation.startedAt = '2026-09-03T10:00:00.000Z';
+  newerConversation.createdAt = '2026-09-03T10:00:00.000Z';
+  const memorySeconds = Math.floor(
+    new Date('2026-09-02T12:00:00.000Z').getTime() / 1000,
+  );
+  const memory = {
+    kind: 'memory' as const,
+    id: 'mid-memory',
+    title: 'Memory',
+    summary: 'Memory',
+    searchableText: 'Memory',
+    citations: [] as never[],
+    timestamp: memorySeconds,
+    provenance: {
+      label: null,
+      synthesisVersion: 'v1',
+      inputDigest: 'a',
+      outputDigest: 'b',
+    },
+  };
+  const page = {
+    windowStatus: 'complete' as const,
+    complete: true,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'complete' as const,
+    reasons: [] as string[],
+  };
+  readsMock.mockResolvedValue({
+    conversations: {
+      status: 'success',
+      value: {items: [olderConversation, newerConversation], page},
+    },
+    memories: {status: 'success', value: {items: [memory], page}},
+    tasks: {status: 'success', value: {items: [], page}},
+  });
+
+  const reads = await renderReads({enabled: true});
+  expect(reads.latest().reads.map(item => item.id)).toEqual([
+    'newer-conversation',
+    'mid-memory',
+    'older-conversation',
+  ]);
+  reads.unmount();
+});
+
 test('a successful refresh inside the live session lands as saved rows', async () => {
   readsMock.mockResolvedValue(successOutcomes(['Account A conversation']));
   const reads = await renderReads({enabled: true});
@@ -236,6 +289,9 @@ test('a retry exposes a dead session after successful reads', async () => {
 
   expect(reads.latest().readOutcomes).toEqual(errorOutcomes);
   expect(reads.latest().reads).toEqual([]);
+  // Non-transient auth failures replace prior rows — the shell must not claim
+  // it is still "showing saved data" once those rows are gone.
+  expect(reads.latest().readsPhase).toBe('unavailable');
   reads.unmount();
 });
 
