@@ -77,28 +77,34 @@ actor PTTLanguageIdentifier {
     // Below ~0.4s there isn't enough speech for either the decoder or the detector.
     guard samples.count >= 6_400 else { return Verdict(languageCode: nil, transcript: nil) }
 
+    let started = Date()
+    guard let text = await decodeText(samples, with: manager, purpose: "decode") else {
+      return Verdict(languageCode: nil, transcript: nil)
+    }
+    let code = Self.detectLanguage(of: text, candidates: candidates)
+    log(
+      "PTTLanguageIdentifier: \(String(format: "%.1f", Double(samples.count) / 16_000))s → "
+        + "lang=\(code ?? "none") in \(Int(Date().timeIntervalSince(started) * 1000))ms"
+    )
+    return Verdict(languageCode: code, transcript: text)
+  }
+
+  /// One decode of `samples` to cleaned text, or nil when it produced no
+  /// letters or failed. Shared by both callers so transcript cleanup has one
+  /// home. The TDT decoder emits literal "<unk>" for out-of-vocabulary tokens
+  /// (slangy vowels etc.) — never show that in a chat bubble or paste it.
+  private func decodeText(_ samples: [Float], with manager: AsrManager, purpose: String) async -> String? {
     do {
       var ds = try TdtDecoderState()
-      let started = Date()
       let result = try await manager.transcribe(samples, decoderState: &ds, language: nil)
-      // The TDT decoder emits literal "<unk>" for out-of-vocabulary tokens (slangy
-      // vowels etc.) — never show that in a chat bubble.
       let text = result.text
         .replacingOccurrences(of: "<unk>", with: "")
         .replacingOccurrences(of: "  ", with: " ")
         .trimmingCharacters(in: .whitespacesAndNewlines)
-      guard text.contains(where: { $0.isLetter }) else {
-        return Verdict(languageCode: nil, transcript: nil)
-      }
-      let code = Self.detectLanguage(of: text, candidates: candidates)
-      log(
-        "PTTLanguageIdentifier: \(String(format: "%.1f", Double(samples.count) / 16_000))s → "
-          + "lang=\(code ?? "none") in \(Int(Date().timeIntervalSince(started) * 1000))ms"
-      )
-      return Verdict(languageCode: code, transcript: text)
+      return text.contains(where: { $0.isLetter }) ? text : nil
     } catch {
-      logError("PTTLanguageIdentifier: decode failed", error: error)
-      return Verdict(languageCode: nil, transcript: nil)
+      logError("PTTLanguageIdentifier: \(purpose) failed", error: error)
+      return nil
     }
   }
 
@@ -113,18 +119,7 @@ actor PTTLanguageIdentifier {
     guard let manager = await loadedManager() else { return nil }
     let samples = Self.int16ToFloat32(pcm16k)
     guard samples.count >= 6_400 else { return nil }
-    do {
-      var ds = try TdtDecoderState()
-      let result = try await manager.transcribe(samples, decoderState: &ds, language: nil)
-      let text = result.text
-        .replacingOccurrences(of: "<unk>", with: "")
-        .replacingOccurrences(of: "  ", with: " ")
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-      return text.contains(where: { $0.isLetter }) ? text : nil
-    } catch {
-      logError("PTTLanguageIdentifier: voice-typing decode failed", error: error)
-      return nil
-    }
+    return await decodeText(samples, with: manager, purpose: "voice-typing decode")
   }
 
   /// Text-level language detection, biased toward (but not constrained to) `candidates`.

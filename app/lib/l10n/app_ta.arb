@@ -10801,6 +10801,16 @@
     "pendantFullSyncBlocked": "Pendant-இன் சேமிப்பகம் நிரம்பிவிட்டது, அது இன்னும் பதிவு பயன்முறையில் உள்ளது, எனவே சேமிக்கப்பட்ட ஆடியோவை மாற்ற முடியாது. பதிவை நிறுத்த Pendant-இன் பொத்தானை அழுத்தி, பின்னர் மீண்டும் ஒத்திசைக்கவும்.",
     "conversationsNotCapturedCount": "பதிவு செய்யப்படவில்லை ({count})",
     "transcriptionNoAudio": "நகலெடுப்பு ஆடியோவைப் பெறவில்லை",
+    "chatBlockTask": "பணி",
+    "chatBlockGoal": "இலக்கு",
+    "chatBlockConversation": "உரையாடல்",
+    "chatBlockMemory": "நினைவு",
+    "chatBlockQuestion": "கேள்வி",
+    "chatBlockOpenInGoals": "இலக்குகளில் திறக்க",
+    "chatBlockOpenConversation": "உரையாடலைத் திறக்க",
+    "chatBlockOpenInMemories": "நினைவுகளில் திறக்க",
+    "chatBlockUnavailable": "இனி கிடைக்கவில்லை",
+    "chatBlockRecommendedNextSteps": "பரிந்துரைக்கப்பட்ட அடுத்த படிகள்",
     "couldNotLoadMemories": "நினைவுகளை ஏற்ற முடியவில்லை",
     "couldNotLoadKnowledgeGraph": "அறிவு வரைபடத்தை ஏற்ற முடியவில்லை"
 }

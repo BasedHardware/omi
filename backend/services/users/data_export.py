@@ -266,24 +266,21 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
                 yield ",\n"
             first = False
             yield "    " + json.dumps(conv, default=_json_default, indent=4)
-            # Do not trust the marker alone: legacy conversations may have a
-            # photo subcollection without ``has_photos``.
-            conversation_id = str(conv.get("id") or "")
-            if conversation_id:
-                for photo in conversations_db.get_conversation_photos(uid, conversation_id) or []:
-                    if not isinstance(photo, Mapping):
-                        continue
-                    if photo_count:
-                        photo_spool.write(",\n")
-                    photo_spool.write("    ")
-                    json.dump(
-                        _export_photo_manifest(uid, conversation_id, photo, require_bytes=False),
-                        photo_spool,
-                        default=_json_default,
-                        indent=4,
-                    )
-                    photo_count += 1
         yield "\n  ],\n"
+
+        for conversation_id, photo in conversations_db.iter_all_conversation_photos(uid):
+            if not isinstance(photo, Mapping):
+                continue
+            if photo_count:
+                photo_spool.write(",\n")
+            photo_spool.write("    ")
+            json.dump(
+                _export_photo_manifest(uid, str(conversation_id), photo, require_bytes=False),
+                photo_spool,
+                default=_json_default,
+                indent=4,
+            )
+            photo_count += 1
 
         if photo_count:
             yield '  "conversation_photo_manifest": [\n'

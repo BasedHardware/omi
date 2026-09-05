@@ -3235,6 +3235,16 @@
     "pendantFullSyncBlocked": "La memoria del Pendant è piena ed è ancora in modalità registrazione, quindi l'audio memorizzato non può essere trasferito. Premi il pulsante del Pendant per interrompere la registrazione, poi sincronizza di nuovo.",
     "conversationsNotCapturedCount": "Non registrato ({count})",
     "transcriptionNoAudio": "La trascrizione non riceve audio",
+    "chatBlockTask": "Attività",
+    "chatBlockGoal": "Obiettivo",
+    "chatBlockConversation": "Conversazione",
+    "chatBlockMemory": "Ricordo",
+    "chatBlockQuestion": "Domanda",
+    "chatBlockOpenInGoals": "Apri in Obiettivi",
+    "chatBlockOpenConversation": "Apri conversazione",
+    "chatBlockOpenInMemories": "Apri in Ricordi",
+    "chatBlockUnavailable": "Non è più disponibile",
+    "chatBlockRecommendedNextSteps": "Prossimi passi consigliati",
     "couldNotLoadMemories": "Impossibile caricare i ricordi",
     "couldNotLoadKnowledgeGraph": "Impossibile caricare il grafo della conoscenza"
 }

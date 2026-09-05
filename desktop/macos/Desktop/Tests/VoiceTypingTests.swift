@@ -126,7 +126,7 @@ final class VoiceTypeSessionTests: XCTestCase {
       return true
     }
     func copy(_ text: String) { copied.append(text) }
-    func caretFollowsWordCharacter() -> Bool { caretAfterWord }
+    func caretNeedsSeparatingSpace() -> Bool { caretAfterWord }
     func focusTarget() -> String? { focus }
   }
 
@@ -204,6 +204,18 @@ final class VoiceTypeSessionTests: XCTestCase {
     XCTAssertEqual(sink.pasted, [" I think so"])
   }
 
+  func testTheSeparatingSpaceFollowsWordsAndClosingPunctuationOnly() {
+    // Continuing a line: after a word, or after the punctuation that ended
+    // one. Never after whitespace or something that opens what follows — a
+    // rule on all non-whitespace put "( hello" and "\" hello" on screen.
+    for character: Character in ["a", "Z", "9", "é", ".", ",", "?", ")", "”", "%"] {
+      XCTAssertTrue(PasteboardTextInsertionSink.needsSeparatingSpace(after: character), "after \(character)")
+    }
+    for character: Character in [" ", "\n", "\t", "(", "[", "\"", "“", "/", "-", "@", "_"] {
+      XCTAssertFalse(PasteboardTextInsertionSink.needsSeparatingSpace(after: character), "after \(character)")
+    }
+  }
+
   func testADictationAtALineStartAddsNoSpace() {
     let (session, sink) = makeSession()
     sink.caretAfterWord = false
@@ -259,6 +271,18 @@ final class VoiceTypeSessionTests: XCTestCase {
     XCTAssertTrue(sink.copied.isEmpty)
   }
 
+  func testTextWithNothingInItDeliversNothing() {
+    // A breath decoded as "." or "…" is not a dictation: nothing is pasted
+    // and nothing is left on the clipboard.
+    for text in [".", "…", ", ,", "?!"] {
+      let (session, sink) = makeSession()
+      XCTAssertNotNil(session.payload(from: "Type hello"))
+      XCTAssertEqual(session.deliver(text), .none, text)
+      XCTAssertTrue(sink.pasted.isEmpty)
+      XCTAssertTrue(sink.copied.isEmpty)
+    }
+  }
+
   func testANewTurnForgetsThePreviousClaim() {
     let (session, sink) = makeSession()
     XCTAssertTrue(session.claim(transcript: "Type hello"))
@@ -291,6 +315,22 @@ final class DictationFormatterTests: XCTestCase {
     XCTAssertEqual(
       DictationFormatter.format("the hummer and the umbrella"),
       "The hummer and the umbrella")
+  }
+
+  func testAFillerSpellingInsideStructuredTextIsNotAFiller() {
+    // Only a standalone spoken token is a filler: not a piece of an address,
+    // a hyphenated word, a unit, or a path.
+    XCTAssertEqual(DictationFormatter.format("mail john@um.com today"), "Mail john@um.com today")
+    XCTAssertEqual(DictationFormatter.format("she said uh-huh and left"), "She said uh-huh and left")
+    XCTAssertEqual(DictationFormatter.format("the bolt is 10 mm long"), "The bolt is 10 mm long")
+    XCTAssertEqual(DictationFormatter.format("open /tmp/um/notes"), "Open /tmp/um/notes")
+  }
+
+  func testAFillerAtASentenceBoundaryKeepsTheSentencePunctuation() {
+    // ", um." carried the full stop: the filler goes, the sentence still ends.
+    XCTAssertEqual(DictationFormatter.format("I think, um. Next point"), "I think. Next point")
+    XCTAssertEqual(DictationFormatter.format("really, uh? Sure"), "Really? Sure")
+    XCTAssertEqual(DictationFormatter.format("Um. Hello there"), "Hello there")
   }
 
   func testEnglishOnlyFillersAreKeptInOtherLanguages() {
@@ -355,6 +395,44 @@ final class DictationPolisherTests: XCTestCase {
     // into a paragraph.
     XCTAssertNil(DictationPolisher.accept("Hello there, how are you doing today my friend", for: "hello"))
     XCTAssertEqual(DictationPolisher.accept("Hello!", for: "hello"), "Hello!")
+  }
+
+  func testAPlaceholderAboutTheTextIsRefused() {
+    // Observed live: a near-empty dictation came back as "(No text provided)"
+    // and the placeholder was pasted into the document.
+    XCTAssertNil(DictationPolisher.accept("(No text provided)", for: "so"))
+    XCTAssertNil(DictationPolisher.accept("[inaudible]", for: "hm so"))
+    XCTAssertNil(DictationPolisher.accept("...", for: "so"))
+    // A dictation that itself opens with a bracket keeps it.
+    XCTAssertEqual(DictationPolisher.accept("(See attached.)", for: "(see attached)"), "(See attached.)")
+  }
+
+  func testARewriteOfTheSameLengthButDifferentWordsIsRefused() {
+    // Word count alone let an answer, a summary, or a hallucination of a
+    // similar length through. The rewrite must be made of the speaker's words.
+    let original = "please send the report to the team by friday and copy me on it"
+    XCTAssertNil(
+      DictationPolisher.accept("The weather this weekend looks sunny with a light breeze from the west.", for: original)
+    )
+    XCTAssertNil(DictationPolisher.accept("Sure! I have sent the report to the team and copied you.", for: original))
+  }
+
+  func testNumbersAddressesAndSelfCorrectionsStillPassTheWordCheck() {
+    // The words the model is meant to rewrite are not held against it.
+    XCTAssertEqual(
+      DictationPolisher.accept(
+        "Call me on extension 4512 around 4pm.", for: "call me on extension four five one two around four pm"),
+      "Call me on extension 4512 around 4pm.")
+    XCTAssertEqual(
+      DictationPolisher.accept("My email is john@example.com.", for: "my email is john at example dot com"),
+      "My email is john@example.com.")
+    XCTAssertEqual(
+      DictationPolisher.accept("Meet at four, then dinner.", for: "um meet at three no four uh then dinner"),
+      "Meet at four, then dinner.")
+    // Spoken punctuation becomes punctuation; the words are unchanged.
+    XCTAssertEqual(
+      DictationPolisher.accept("Hello, how are you?", for: "hello comma how are you question mark"),
+      "Hello, how are you?")
   }
 
   func testOrdinaryOnScreenWordsAreNotOfferedAsSpellingHints() {
@@ -525,6 +603,33 @@ final class DictationTranscriberTests: XCTestCase {
     }
   }
 
+  func testCancellingTheTurnStopsTranscriptionWithoutFallingBack() async {
+    // A superseded turn must not keep working towards a paste: no on-device
+    // fallback, no fallback record, just nothing.
+    let calls = Calls()
+    let stalled = StalledRequest()
+    let transcriber = DictationTranscriber(
+      isOnline: true,
+      backend: { _ in
+        calls.backend()
+        return try await stalled.run()
+      },
+      onDevice: { _ in
+        calls.onDevice()
+        return "type hello from the device"
+      },
+      didFallBack: { calls.fallback($0) })
+    let audio = self.audio
+    let task = Task { await transcriber.transcribe(audio) }
+    // The backend has been asked (its call is synchronous up to the stall).
+    while calls.backendCalls == 0 { await Task.yield() }
+    task.cancel()
+    let result = await task.value
+    XCTAssertNil(result)
+    XCTAssertEqual(calls.onDeviceCalls, 0)
+    XCTAssertTrue(calls.fallbacks.isEmpty)
+  }
+
   func testABackendThatNeverAnswersIsTimedOutOntoTheDevice() async {
     let calls = Calls()
     let stalled = StalledRequest()
@@ -544,6 +649,68 @@ final class DictationTranscriberTests: XCTestCase {
     XCTAssertEqual(result?.source, .onDevice)
     XCTAssertEqual(calls.fallbacks, ["timeout"])
     XCTAssertEqual(calls.backendCalls, 1)
+  }
+}
+
+final class DeadlinedOperationTests: XCTestCase {
+
+  /// An operation that does not observe cancellation at all — the shape of a
+  /// request stuck in a token refresh or a decoder mid-buffer.
+  private final class Uncooperative: @unchecked Sendable {
+    private var continuation: CheckedContinuation<String, Error>?
+    private let lock = NSLock()
+    func run() async throws -> String {
+      try await withCheckedThrowingContinuation { continuation in
+        lock.lock()
+        self.continuation = continuation
+        lock.unlock()
+      }
+    }
+    func finish(_ value: String) {
+      lock.lock()
+      let pending = continuation
+      continuation = nil
+      lock.unlock()
+      pending?.resume(returning: value)
+    }
+  }
+
+  func testTheDeadlineDoesNotWaitForAnOperationThatIgnoresCancellation() async {
+    let stuck = Uncooperative()
+    let started = Date()
+    do {
+      _ = try await DeadlinedOperation.run(seconds: 0.02) { try await stuck.run() }
+      XCTFail("expected a timeout")
+    } catch DeadlinedOperation.Failure.timedOut {
+      // The cap is the promise: the return did not wait on the stuck work.
+      XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+    } catch {
+      XCTFail("unexpected \(error)")
+    }
+    // A late answer is dropped, not delivered.
+    stuck.finish("too late")
+  }
+
+  func testAResultInsideTheDeadlineIsReturned() async throws {
+    let value = try await DeadlinedOperation.run(seconds: 5) { "prompt" }
+    XCTAssertEqual(value, "prompt")
+  }
+
+  func testCancellingTheCallerSurfacesAsCancellationNotTimeout() async {
+    let stuck = Uncooperative()
+    let task = Task { () throws -> String in
+      try await DeadlinedOperation.run(seconds: 5) { try await stuck.run() }
+    }
+    task.cancel()
+    do {
+      _ = try await task.value
+      XCTFail("expected cancellation")
+    } catch is CancellationError {
+      // Correct: the caller was cancelled, nothing timed out.
+    } catch {
+      XCTFail("unexpected \(error)")
+    }
+    stuck.finish("too late")
   }
 }
 
@@ -567,34 +734,64 @@ final class VoiceTypeWakeWordProbeScheduleTests: XCTestCase {
     XCTAssertEqual(schedule.probesTaken, 0)
   }
 
-  func testTheFirstProbeFiresUnderASecondOfVoiceAndThenRetries() {
+  /// Feeds voiced chunks the way the manager does — starting every probe the
+  /// moment it is due — and returns the 1-based chunk index each probe started on.
+  private static func probeStarts(chunkBytes: Int, chunks: Int) -> (VoiceTypeWakeWordProbeSchedule, [Int]) {
     var schedule = VoiceTypeWakeWordProbeSchedule()
-    var probeChunks: [Int] = []
-    for index in 1...100 where schedule.observe(chunk: Self.chunk(voiced: true)) {
-      probeChunks.append(index)
+    var starts: [Int] = []
+    for index in 1...chunks where schedule.observe(chunk: chunk(voiced: true, bytes: chunkBytes)) {
+      schedule.beginProbe()
+      starts.append(index)
     }
+    return (schedule, starts)
+  }
+
+  func testTheFirstProbeFiresUnderASecondOfVoiceAndThenRetries() {
+    let (schedule, probeChunks) = Self.probeStarts(chunkBytes: 3_200, chunks: 100)
     // 3,200 voiced bytes per chunk. The first probe must land well under a
     // second of voice so the dots turn red right after "type"; there are
     // several quick retries and then no more.
     XCTAssertEqual(schedule.probesTaken, VoiceTypeWakeWordProbeSchedule.voicedByteThresholds.count)
-    let firstProbeVoicedSeconds = Double(probeChunks[0] * 3_200) / 32_000
-    XCTAssertLessThan(firstProbeVoicedSeconds, 0.55)
+    guard let firstProbeChunk = probeChunks.first else { return XCTFail("no probe was ever due") }
+    XCTAssertLessThan(Double(firstProbeChunk * 3_200) / 32_000, 0.55)
   }
 
   func testRealMicrophoneChunksSmallerThanAWindowStillScheduleProbes() {
     // Live: the 48 kHz IOProc buffer resampled to 16 kHz arrives as ~342-byte
     // chunks, smaller than one 20 ms window, so no chunk ever measured as
     // voice and no probe ever ran on a real hold.
-    var schedule = VoiceTypeWakeWordProbeSchedule()
-    var probeChunks: [Int] = []
-    for index in 1...600 where schedule.observe(chunk: Self.chunk(voiced: true, bytes: 342)) {
-      probeChunks.append(index)
-    }
+    let (_, probeChunks) = Self.probeStarts(chunkBytes: 342, chunks: 600)
     // The first probe still lands under a second of voice with real-sized
     // chunks; all the configured retries fire and then no more.
     XCTAssertEqual(probeChunks.count, VoiceTypeWakeWordProbeSchedule.voicedByteThresholds.count)
-    let firstProbeVoicedSeconds = Double(probeChunks[0] * 342) / 32_000
-    XCTAssertLessThan(firstProbeVoicedSeconds, 0.6)
+    guard let firstProbeChunk = probeChunks.first else { return XCTFail("no probe was ever due") }
+    XCTAssertLessThan(Double(firstProbeChunk * 342) / 32_000, 0.6)
+  }
+
+  func testADueProbeWaitsForABusyDecoderInsteadOfBeingSpent() {
+    // A slow model load can hold one decode across several thresholds. The
+    // slots that fall meanwhile are not consumed: the probe stays due until
+    // the caller can start it, so the wake word is still listened for.
+    var schedule = VoiceTypeWakeWordProbeSchedule()
+    for _ in 0..<5 { _ = schedule.observe(chunk: Self.chunk(voiced: true)) }
+    XCTAssertTrue(schedule.isProbeDue)
+    schedule.beginProbe()
+    XCTAssertEqual(schedule.probesTaken, 1)
+    // The decoder is busy through the next two thresholds (0.7 s, 1.0 s).
+    var dueWhileBusy = 0
+    for _ in 0..<8 where schedule.observe(chunk: Self.chunk(voiced: true)) { dueWhileBusy += 1 }
+    XCTAssertGreaterThan(dueWhileBusy, 1, "the due probe is reported on every chunk until taken")
+    XCTAssertEqual(schedule.probesTaken, 1, "nothing was spent while the decoder was busy")
+    // Free again: the pending probe starts on the next chunk, and one only.
+    XCTAssertTrue(schedule.observe(chunk: Self.chunk(voiced: true)))
+    schedule.beginProbe()
+    XCTAssertEqual(schedule.probesTaken, 2)
+    XCTAssertTrue(schedule.isProbeDue, "the 1.0 s slot is still owed")
+    schedule.beginProbe()
+    XCTAssertEqual(schedule.probesTaken, 3)
+    XCTAssertFalse(schedule.isProbeDue)
+    schedule.beginProbe()
+    XCTAssertEqual(schedule.probesTaken, 3, "beginProbe without a due probe spends nothing")
   }
 
   func testSilenceBetweenWordsDoesNotCountTowardsTheThreshold() {
@@ -614,6 +811,7 @@ final class VoiceTypeWakeWordProbeScheduleTests: XCTestCase {
     var schedule = VoiceTypeWakeWordProbeSchedule()
     // Just past the first threshold (0.45 s ≈ 5 voiced chunks), before the next.
     for _ in 0..<5 { _ = schedule.observe(chunk: Self.chunk(voiced: true)) }
+    schedule.beginProbe()
     XCTAssertEqual(schedule.probesTaken, 1)
     schedule.decide()
     for _ in 0..<50 {

@@ -69,7 +69,6 @@ Local full T0 (includes backend preflight + pytest desktop contracts):
 | Rewind artifact persistence / recovery / privacy admission | T2 |
 | ChatProvider / agent runtime | T0 + T3 |
 | Sidebar / navigation | T1 |
-| Home stage (hub/chat/connect), chat-first shell | T2 (`home-stage.yaml`, cohort bundle) |
 | Spatial overlay | T1 (`spatial-overlay-harness.sh`) |
 | Memories / tasks CRUD surfaces | T2 |
 | Secondary surfaces (detail, vocabulary, goals, billing, privacy mutations) | T2 + Live P2 for manual-only |
@@ -93,7 +92,6 @@ Local T2 and fault suites remain available as engineering QA tools. They do not 
 | `tasks` | v2 | typed bridge | 2 | Navigate + snapshot |
 | `settings-basic` | v2 | typed bridge | 2 | Settings sections + Advanced snapshot |
 | `dashboard` | v2 | typed bridge | 2 | Dashboard load + conversation list snapshot |
-| `home-stage` | v2 | typed bridge | 2 | Home hub/chat/connect via `homeMode` assertions — chat-first bundle only (that shell mounts the stage) |
 | `chat-fault-5xx` | v2 | typed bridge | fault | Backend 5xx via `omi-fault-inject` (`--fault-suite`) |
 | `language` | v2 | typed bridge | 2 | Transcription language set + snapshot |
 | `tasks-crud` | v2 | typed bridge | 2 | Task create/toggle/delete via bridge |

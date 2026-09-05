@@ -150,14 +150,41 @@ enum NotchVoiceMorphGeometry {
     return t * t
   }
 
-  /// The dot colour for a blend: the listening white with the tint mixed in.
-  static func dictationDotColor(blend rawBlend: CGFloat) -> Color {
+  /// How long the red takes to fade back once the dictation ends — the key
+  /// came up, the turn closed. Slower than the ease-in: the arrival is a
+  /// signal worth noticing, the departure is not.
+  static let dictationTintFadeDuration: TimeInterval = 0.55
+
+  /// Ease-out blend `elapsed` seconds after the dictation ended, starting
+  /// from `peak` — wherever the ease-in had got to, so a release during the
+  /// ease-in fades from that partial red rather than jumping to full red
+  /// first. Smooth in and out of the fade, never below zero.
+  static func dictationFadeBlend(elapsed: TimeInterval, from peak: CGFloat, reduceMotion: Bool) -> CGFloat {
+    if reduceMotion { return 0 }
+    let t = clamp(CGFloat(elapsed / dictationTintFadeDuration))
+    return clamp(peak) * (1 - smoothStep(t))
+  }
+
+  /// The dot colour for a blend: `base` — the colour the dot would otherwise
+  /// be — with the tint mixed in. While dictating the base is the listening
+  /// white; during the fade it is whatever the dot is returning to, so the
+  /// red eases straight into a status colour rather than through white.
+  static func dictationDotColor(
+    blend rawBlend: CGFloat, base: (red: CGFloat, green: CGFloat, blue: CGFloat) = (1, 1, 1)
+  ) -> Color {
     let blend = clamp(rawBlend)
     return Color(
-      red: 1 + (dictationTint.red - 1) * blend,
-      green: 1 + (dictationTint.green - 1) * blend,
-      blue: 1 + (dictationTint.blue - 1) * blend
+      red: base.red + (dictationTint.red - base.red) * blend,
+      green: base.green + (dictationTint.green - base.green) * blend,
+      blue: base.blue + (dictationTint.blue - base.blue) * blend
     ).opacity(0.98)
+  }
+
+  /// sRGB components of a dot colour, for mixing. White when the colour
+  /// cannot be resolved (a dynamic system colour off the main thread).
+  static func components(of color: Color) -> (red: CGFloat, green: CGFloat, blue: CGFloat) {
+    guard let resolved = NSColor(color).usingColorSpace(.sRGB) else { return (1, 1, 1) }
+    return (resolved.redComponent, resolved.greenComponent, resolved.blueComponent)
   }
 
   private static func smoothStep(_ value: CGFloat) -> CGFloat {
@@ -257,19 +284,86 @@ final class VoiceLevelSmoother {
   }
 }
 
+/// Where the dictation tint is in its life: easing in from the moment the
+/// wake word was heard, easing out from the moment the dictation ended.
+/// Pure, so the transitions and the blend can be tested against a clock.
+struct NotchDictationTint: Equatable {
+  enum Phase: Equatable {
+    case off
+    case easingIn(since: Date)
+    /// Fading from `peak`, the blend at the instant the dictation ended.
+    case easingOut(since: Date, peak: CGFloat)
+  }
+
+  private(set) var phase: Phase = .off
+
+  /// Whether the dots still need frames: the timeline must not pause on the
+  /// last red frame while a fade is under way.
+  var isAnimating: Bool {
+    if case .off = phase { return false }
+    return true
+  }
+
+  /// Applies the presentation's dictating flag at `now`. Turning off begins a
+  /// fade from wherever the ease-in had got to; turning on again mid-fade
+  /// restarts the ease-in from that same partial red rather than from white.
+  mutating func update(isDictating: Bool, at now: Date, reduceMotion: Bool) {
+    switch (phase, isDictating) {
+    case (.off, true):
+      phase = .easingIn(since: now)
+    case (.easingOut(_, _), true):
+      let current = blend(at: now, reduceMotion: reduceMotion)
+      // Rewind the start so the ease-in resumes at `current`.
+      let resumed = NotchVoiceMorphGeometry.dictationTintDuration * Double(sqrt(current))
+      phase = .easingIn(since: now.addingTimeInterval(-resumed))
+    case (.easingIn(_), false):
+      let peak = blend(at: now, reduceMotion: reduceMotion)
+      phase = peak > 0 ? .easingOut(since: now, peak: peak) : .off
+    case (.easingIn, true), (.easingOut, false), (.off, false):
+      break
+    }
+  }
+
+  /// A fade that has run its course is over; called from the timeline so the
+  /// animation can pause once the dots are back to their resting colour.
+  mutating func settleIfFaded(at now: Date, reduceMotion: Bool) {
+    guard case .easingOut = phase else { return }
+    // Below what a 3.8pt dot can show; also sidesteps the last float ulp of
+    // an elapsed-versus-duration comparison.
+    if blend(at: now, reduceMotion: reduceMotion) < 0.005 {
+      phase = .off
+    }
+  }
+
+  /// 0 = the dot's own colour, 1 = full red.
+  func blend(at now: Date, reduceMotion: Bool) -> CGFloat {
+    switch phase {
+    case .off:
+      return 0
+    case .easingIn(let since):
+      return NotchVoiceMorphGeometry.dictationBlend(elapsed: now.timeIntervalSince(since), reduceMotion: reduceMotion)
+    case .easingOut(let since, let peak):
+      return NotchVoiceMorphGeometry.dictationFadeBlend(
+        elapsed: now.timeIntervalSince(since), from: peak, reduceMotion: reduceMotion)
+    }
+  }
+}
+
 struct NotchVoiceMorphMark: View {
   let dotColors: [Color]
   let isListening: Bool
   let isThinking: Bool
   var isSpeaking: Bool = false
   /// The hold has been recognised as a dictation: the dots ease to red and
-  /// keep whatever motion the presentation already has.
+  /// keep whatever motion the presentation already has. When it ends they
+  /// ease back out rather than snapping.
   var isDictating: Bool = false
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var morphProgress: CGFloat = 0
-  /// When the dictation tint began easing in; nil while not dictating.
-  @State private var dictationTintStart: Date?
+  @State private var dictationTint = NotchDictationTint()
+  /// Ends the fade-out's claim on the timeline once it has run its course.
+  @State private var dictationFadeSettle: Task<Void, Never>?
   /// Reference peaks measured on real hardware: close-mic speech ~0.03–0.2
   /// RMS after the capture noise floor; post-mixer reply speech ~0.1–0.25.
   /// The mic side attacks tight so the wave snaps to syllables, but its peak
@@ -283,7 +377,9 @@ struct NotchVoiceMorphMark: View {
     minPeak: 0.1, attackTau: 0.012, releaseTau: 0.09)
 
   var body: some View {
-    TimelineView(.animation(paused: !isListening && !isThinking && !isSpeaking && !isDictating)) { timeline in
+    TimelineView(
+      .animation(paused: !isListening && !isThinking && !isSpeaking && !isDictating && !dictationTint.isAnimating)
+    ) { timeline in
       Canvas { context, size in
         draw(into: &context, size: size, date: timeline.date)
       }
@@ -295,11 +391,22 @@ struct NotchVoiceMorphMark: View {
       setMorphProgress(NotchVoiceMorphGeometry.targetProgress(isListening: listening))
     }
     .onChange(of: isDictating, initial: true) { _, dictating in
-      dictationTintStart = dictating ? (dictationTintStart ?? Date()) : nil
+      let now = Date()
+      dictationTint.update(isDictating: dictating, at: now, reduceMotion: reduceMotion)
+      dictationFadeSettle?.cancel()
+      dictationFadeSettle = nil
+      guard case .easingOut = dictationTint.phase else { return }
+      // The fade keeps the timeline running; once it is done, let it pause.
+      dictationFadeSettle = Task { @MainActor in
+        let fade = reduceMotion ? 0 : NotchVoiceMorphGeometry.dictationTintFadeDuration
+        try? await Task.sleep(nanoseconds: UInt64(fade * 1_000_000_000))
+        guard !Task.isCancelled else { return }
+        dictationTint.settleIfFaded(at: Date(), reduceMotion: reduceMotion)
+      }
     }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(
-      isListening ? "Listening" : isSpeaking ? "Speaking" : isThinking ? "Thinking" : "Omi")
+      isDictating ? "Dictating" : isListening ? "Listening" : isSpeaking ? "Speaking" : isThinking ? "Thinking" : "Omi")
   }
 
   private func setMorphProgress(_ progress: CGFloat) {
@@ -375,18 +482,28 @@ struct NotchVoiceMorphMark: View {
       // A dictation tints every dot red, eased in from the moment the wake
       // word was heard, on top of whatever motion the presentation has:
       // the waveform keeps spiking while listening, the ring keeps turning
-      // while the paste is prepared. Only the colour changes.
-      let dictationBlend = NotchVoiceMorphGeometry.dictationBlend(
-        elapsed: dictationTintStart.map { date.timeIntervalSince($0) },
-        reduceMotion: reduceMotion)
-      let color =
-        dictationBlend > 0
-        ? NotchVoiceMorphGeometry.dictationDotColor(blend: dictationBlend)
-        : isListening || speakingPresentation
-          ? NotchGlass.primary.opacity(0.98)
-          : dotColors.indices.contains(index)
-            ? dotColors[index]
-            : NotchGlass.primary.opacity(0.96)
+      // while the paste is prepared. Only the colour changes. When the
+      // dictation ends the red eases back out into whatever the dot is
+      // returning to — the white of a still-listening bar, or an agent's
+      // status colour — instead of snapping.
+      let restingColor: Color =
+        isListening || speakingPresentation
+        ? NotchGlass.primary.opacity(0.98)
+        : dotColors.indices.contains(index)
+          ? dotColors[index]
+          : NotchGlass.primary.opacity(0.96)
+      let dictationBlend = dictationTint.blend(at: date, reduceMotion: reduceMotion)
+      // Branch on the state, not the blend: the first dictation frame has a
+      // zero blend, and it must start from white, never from a status colour.
+      let color: Color
+      if isDictating {
+        color = NotchVoiceMorphGeometry.dictationDotColor(blend: dictationBlend)
+      } else if dictationBlend > 0 {
+        color = NotchVoiceMorphGeometry.dictationDotColor(
+          blend: dictationBlend, base: NotchVoiceMorphGeometry.components(of: restingColor))
+      } else {
+        color = restingColor
+      }
       let rect = CGRect(
         x: position.x - dotDiameter / 2,
         y: position.y - dotDiameter / 2,

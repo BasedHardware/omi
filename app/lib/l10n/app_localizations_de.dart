@@ -10003,6 +10003,36 @@ class AppLocalizationsDe extends AppLocalizations {
   String get tapPlusToStartRecording => 'Tap + to start recording';
 
   @override
+  String get chatBlockTask => 'Aufgabe';
+
+  @override
+  String get chatBlockGoal => 'Ziel';
+
+  @override
+  String get chatBlockConversation => 'Gespräch';
+
+  @override
+  String get chatBlockMemory => 'Erinnerung';
+
+  @override
+  String get chatBlockQuestion => 'Frage';
+
+  @override
+  String get chatBlockOpenInGoals => 'In Zielen öffnen';
+
+  @override
+  String get chatBlockOpenConversation => 'Gespräch öffnen';
+
+  @override
+  String get chatBlockOpenInMemories => 'In Erinnerungen öffnen';
+
+  @override
+  String get chatBlockUnavailable => 'Nicht mehr verfügbar';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Empfohlene nächste Schritte';
+
+  @override
   String get couldNotLoadMemories => 'Erinnerungen konnten nicht geladen werden';
 
   @override

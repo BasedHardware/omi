@@ -1053,11 +1053,16 @@ version = "0.2.3"
 sdist = { url = "https://files.pythonhosted.org/packages/cd/05/0a34433a064256a578f1783a10da6df098ceaa4a57bbeaa96a6c0352786b/pure_eval-0.2.3.tar.gz", upload-time = 2024-07-21T12:58:21Z, size = 19752, hashes = { sha256 = "5f4e983f40564c576c7c8635ae88db5956bb2229d7e9237d03b3c0b0190eaf42" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/8e/37/efad0257dc6e593a18957422533ff0f87ede7c9c6ea010a2177d738fb82f/pure_eval-0.2.3-py3-none-any.whl", upload-time = 2024-07-21T12:58:20Z, size = 11842, hashes = { sha256 = "1db8e35b67b3d218d818ae653e27f06c3aa420901fa7b081ca98cbedc874e0d0" } }]
 
+# TODO(#12758): pyarrow pinned at 19.0.1 for GCP buildpack/rmgpgab manylinux2014
+# (23.x is manylinux_2_28-only → sdist fail). Drop when trigger uses Dockerfile/uv.
 [[packages]]
 name = "pyarrow"
-version = "23.0.1"
-sdist = { url = "https://files.pythonhosted.org/packages/88/22/134986a4cc224d593c1afde5494d18ff629393d74cc2eddb176669f234a4/pyarrow-23.0.1.tar.gz", upload-time = 2026-02-16T10:14:12Z, size = 1167336, hashes = { sha256 = "b8c5873e33440b2bc2f4a79d2b47017a89c5a24116c055625e6f2ee50523f019" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/0b/62/96459ef5b67957eac38a90f541d1c28833d1b367f014a482cb63f3b7cd2d/pyarrow-23.0.1-cp311-cp311-manylinux_2_28_x86_64.whl", upload-time = 2026-02-16T10:09:25Z, size = 47562811, hashes = { sha256 = "26d50dee49d741ac0e82185033488d28d35be4d763ae6f321f97d1140eb7a0e9" } }]
+version = "19.0.1"
+sdist = { url = "https://files.pythonhosted.org/packages/7f/09/a9046344212690f0632b9c709f9bf18506522feb333c894d0de81d62341a/pyarrow-19.0.1.tar.gz", upload-time = 2025-02-18T18:55:57Z, size = 1129437, hashes = { sha256 = "3bf266b485df66a400f282ac0b6d1b500b9d2ae73314a153dbe97d6d5cc8a99e" } }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a2/7a/845d151bb81a892dfb368bf11db584cf8b216963ccce40a5cf50a2492a18/pyarrow-19.0.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2025-02-18T18:52:36Z, size = 42178045, hashes = { sha256 = "f24faab6ed18f216a37870d8c5623f9c044566d75ec586ef884e13a02a9d62c5" } },
+    { url = "https://files.pythonhosted.org/packages/b8/82/20f3c290d6e705e2ee9c1fa1d5a0869365ee477e1788073d8b548da8b64c/pyarrow-19.0.1-cp311-cp311-manylinux_2_28_x86_64.whl", upload-time = 2025-02-18T18:52:48Z, size = 42084055, hashes = { sha256 = "49a3aecb62c1be1d822f8bf629226d4a96418228a42f5b40835c1f10d42e4db6" } },
+]
 
 [[packages]]
 name = "pyasn1"

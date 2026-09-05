@@ -3235,6 +3235,16 @@
     "pendantFullSyncBlocked": "Pendant의 저장 공간이 가득 찼고 아직 녹음 모드이므로 저장된 오디오를 전송할 수 없습니다. Pendant의 버튼을 눌러 녹음을 중지한 다음 다시 동기화하세요.",
     "conversationsNotCapturedCount": "기록되지 않음 ({count})",
     "transcriptionNoAudio": "전사가 오디오를 받지 못하고 있습니다",
+    "chatBlockTask": "작업",
+    "chatBlockGoal": "목표",
+    "chatBlockConversation": "대화",
+    "chatBlockMemory": "메모리",
+    "chatBlockQuestion": "질문",
+    "chatBlockOpenInGoals": "목표에서 열기",
+    "chatBlockOpenConversation": "대화 열기",
+    "chatBlockOpenInMemories": "메모리에서 열기",
+    "chatBlockUnavailable": "더 이상 사용할 수 없음",
+    "chatBlockRecommendedNextSteps": "권장 다음 단계",
     "couldNotLoadMemories": "추억을 불러올 수 없습니다",
     "couldNotLoadKnowledgeGraph": "지식 그래프를 불러올 수 없습니다"
 }

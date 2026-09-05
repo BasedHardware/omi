@@ -31,13 +31,83 @@ struct DailySummaryRecord: Decodable, Identifiable, Equatable {
   struct ActionItem: Decodable, Equatable {
     let description: String?
     let priority: String?
+    /// The conversation the task came from, when the backend resolved one. The dedicated recap
+    /// page deep-links it; nothing else reads it.
+    let sourceConversationId: String?
     let completed: Bool?
+
+    enum CodingKeys: String, CodingKey {
+      case description, priority, completed
+      case sourceConversationId = "source_conversation_id"
+    }
+
+    init(
+      description: String?, priority: String? = nil, sourceConversationId: String? = nil,
+      completed: Bool? = nil
+    ) {
+      self.description = description
+      self.priority = priority
+      self.sourceConversationId = sourceConversationId
+      self.completed = completed
+    }
   }
 
   struct Highlight: Decodable, Equatable {
     let topic: String?
     let emoji: String?
     let summary: String?
+    /// Every conversation the day's discussion of this topic drew on, so the recap page can open
+    /// the source instead of asserting the summary line.
+    let conversationIds: [String]?
+
+    enum CodingKeys: String, CodingKey {
+      case topic, emoji, summary
+      case conversationIds = "conversation_ids"
+    }
+
+    init(
+      topic: String?, emoji: String? = nil, summary: String? = nil,
+      conversationIds: [String]? = nil
+    ) {
+      self.topic = topic
+      self.emoji = emoji
+      self.summary = summary
+      self.conversationIds = conversationIds
+    }
+  }
+
+  /// A question the day left open. `conversation_id` points at the conversation that raised it.
+  struct UnresolvedQuestion: Decodable, Equatable {
+    let question: String?
+    let conversationId: String?
+
+    enum CodingKeys: String, CodingKey {
+      case question
+      case conversationId = "conversation_id"
+    }
+  }
+
+  /// A decision the day settled. `conversation_id` points at the conversation that produced it.
+  struct DecisionMade: Decodable, Equatable {
+    let decision: String?
+    let conversationId: String?
+
+    enum CodingKeys: String, CodingKey {
+      case decision
+      case conversationId = "conversation_id"
+    }
+  }
+
+  /// One learning from the day, as LLM prose. Unlike `LearnedMemory` it addresses no memory row,
+  /// so it renders as text with an optional source link and nothing more.
+  struct KnowledgeNugget: Decodable, Equatable {
+    let insight: String?
+    let conversationId: String?
+
+    enum CodingKeys: String, CodingKey {
+      case insight
+      case conversationId = "conversation_id"
+    }
   }
 
   /// One memory the day actually produced, addressed by its canonical id.
@@ -87,6 +157,9 @@ struct DailySummaryRecord: Decodable, Identifiable, Equatable {
   let stats: Stats?
   let highlights: [Highlight]?
   let actionItems: [ActionItem]?
+  let unresolvedQuestions: [UnresolvedQuestion]?
+  let decisionsMade: [DecisionMade]?
+  let knowledgeNuggets: [KnowledgeNugget]?
   /// Empty rather than optional: "the field is absent" and "the day produced nothing to review"
   /// are the same thing for every reader, and an older backend must not make the card ambiguous.
   let memoriesLearned: [LearnedMemory]
@@ -96,6 +169,9 @@ struct DailySummaryRecord: Decodable, Identifiable, Equatable {
     case createdAt = "created_at"
     case dayEmoji = "day_emoji"
     case actionItems = "action_items"
+    case unresolvedQuestions = "unresolved_questions"
+    case decisionsMade = "decisions_made"
+    case knowledgeNuggets = "knowledge_nuggets"
     case memoriesLearned = "memories_learned"
   }
 
@@ -113,6 +189,11 @@ struct DailySummaryRecord: Decodable, Identifiable, Equatable {
     stats = try container.decodeIfPresent(Stats.self, forKey: .stats)
     highlights = try container.decodeIfPresent([Highlight].self, forKey: .highlights)
     actionItems = try container.decodeIfPresent([ActionItem].self, forKey: .actionItems)
+    unresolvedQuestions = try container.decodeIfPresent(
+      [UnresolvedQuestion].self, forKey: .unresolvedQuestions)
+    decisionsMade = try container.decodeIfPresent([DecisionMade].self, forKey: .decisionsMade)
+    knowledgeNuggets = try container.decodeIfPresent(
+      [KnowledgeNugget].self, forKey: .knowledgeNuggets)
     // A malformed entry must not cost the reader the whole summary, and a memory with no id
     // cannot be voted on or corrected, so it is not a review row at all. Entries decode
     // independently: one bad element drops itself, not every valid row beside it. The outer
@@ -127,7 +208,9 @@ struct DailySummaryRecord: Decodable, Identifiable, Equatable {
   init(
     id: String, date: String?, createdAt: String? = nil, headline: String?, overview: String?,
     dayEmoji: String? = nil, stats: Stats? = nil, highlights: [Highlight]? = nil,
-    actionItems: [ActionItem]? = nil, memoriesLearned: [LearnedMemory] = []
+    actionItems: [ActionItem]? = nil, unresolvedQuestions: [UnresolvedQuestion]? = nil,
+    decisionsMade: [DecisionMade]? = nil, knowledgeNuggets: [KnowledgeNugget]? = nil,
+    memoriesLearned: [LearnedMemory] = []
   ) {
     self.id = id
     self.date = date
@@ -138,6 +221,9 @@ struct DailySummaryRecord: Decodable, Identifiable, Equatable {
     self.stats = stats
     self.highlights = highlights
     self.actionItems = actionItems
+    self.unresolvedQuestions = unresolvedQuestions
+    self.decisionsMade = decisionsMade
+    self.knowledgeNuggets = knowledgeNuggets
     self.memoriesLearned = memoriesLearned
   }
 }
@@ -161,6 +247,13 @@ extension APIClient {
     let bounded = min(max(limit, 1), 100)
     let response: DailySummariesListResponse = try await get("v1/users/daily-summaries?limit=\(bounded)")
     return response.summaries
+  }
+
+  /// One recap by id. The recap route persists identity only, so the page it
+  /// opens re-reads the record by id — a relaunch onto the route re-fetches
+  /// rather than restoring stale text.
+  func getDailySummary(id: String) async throws -> DailySummaryRecord {
+    try await get("v1/users/daily-summaries/\(id)")
   }
 
   /// Generate (or return) a recap for a local calendar date. No push is sent.

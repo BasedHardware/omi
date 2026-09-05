@@ -221,6 +221,13 @@ struct ScopedDefaultsKey {
     Self(rawValue: "dailySummary.lastSeenID.v1.\(ownerID)")
   }
 
+  /// Owner-scoped id of the daily summary that was on screen when the owner last cleared Chat.
+  /// The card is chrome rather than a turn (INV-CHAT-1), so clearing the transcript cannot
+  /// delete it — this is what makes Clear take it away anyway, until a newer summary arrives.
+  static func dailySummaryClearedID(ownerID: String) -> Self {
+    Self(rawValue: "dailySummary.clearedID.v1.\(ownerID)")
+  }
+
   static func importConnectorAvailabilityText(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
   }
@@ -251,12 +258,6 @@ struct ScopedDefaultsKey {
     Self(rawValue: "suggestionTaskNudgeLedger.v1.\(ownerID)")
   }
 
-  /// Owner-scoped record of which Home knows-list rows have already been shown,
-  /// opened, or dismissed. Without it a thin candidate source repeats the same
-  /// four rows on every visit; owner-scoped for the same bleed class as above.
-  static func homeKnowsImpressions(ownerID: String) -> Self {
-    Self(rawValue: "homeKnows.impressions.v1.\(ownerID)")
-  }
 }
 
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.

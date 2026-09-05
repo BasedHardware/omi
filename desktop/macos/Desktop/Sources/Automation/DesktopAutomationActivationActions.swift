@@ -7,12 +7,10 @@
 //  (`openMainAppChat(prefilledDraft:)`) so `chat_drafts_snapshot` can show the draft landed unsent,
 //  `tap_chat_follow_up_chip` performs the chip's own send so the `followup` question origin is
 //  observable end to end, and `seed_memory_review_fixture` / `memory_review_snapshot` /
-//  `memory_review_vote` bring up and drive the "Things I learned today" rows, and the
-//  `home_knows_*` family drives one visit to the Home hub's knows-list at a time. Every one is a
+//  `memory_review_vote` bring up and drive the "Things I learned today" rows. Every one is a
 //  second caller of production code, never a second implementation.
 //
-//  Registered from `DesktopAutomationActionRegistry.registerBuiltins()` next to the Home-stage
-//  actions.
+//  Registered from `DesktopAutomationActionRegistry.registerBuiltins()`.
 //
 
 import Foundation
@@ -41,6 +39,9 @@ extension DesktopAutomationActionRegistry {
       }
       return [
         "hasSummary": "true",
+        // Opaque identity, not content: a harness uses it to drive the recap
+        // route (`DailyRecapRouteRef`), whose page re-fetches by id.
+        "summaryId": latest.id,
         "date": latest.date ?? "",
         "dateLabel": ChatDailySummaryPresentation.dateLabel(for: latest.date, now: Date()) ?? "",
         "headlineLength": String(latest.headline?.count ?? 0),
@@ -53,6 +54,31 @@ extension DesktopAutomationActionRegistry {
         // a flow cannot tell a card that bounded its rows from a day that produced only three.
         "memoriesLearnedCount": String(latest.memoriesLearned.count),
         "followUp": ChatDailySummaryPresentation.followUpQuestion(for: latest.date, now: Date()),
+      ]
+    }
+
+    register(
+      name: "open_daily_recap_page",
+      summary:
+        "Open the dedicated daily-recap page for a summary id through the typed recap route "
+        + "(same `ChatFirstShellNavigation.openDailyRecap` the recap rows call)",
+      params: ["recordID", "date"],
+      category: "chat",
+      surfaces: ["main_chat"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "open_daily_recap_page is disabled on production bundles"]
+      }
+      let recordID = params["recordID"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      guard !recordID.isEmpty else { return ["error": "missing 'recordID'"] }
+      let date = params["date"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let before = ChatFirstShellNavigation.shared.route
+      ChatFirstShellNavigation.shared.openDailyRecap(
+        DailyRecapRouteRef(recordID: recordID, date: date))
+      return [
+        "requested": "true",
+        "previousRoute": before.stableName,
+        "route": ChatFirstShellNavigation.shared.route.stableName,
       ]
     }
 
@@ -123,7 +149,6 @@ extension DesktopAutomationActionRegistry {
     }
 
     registerMemoryReviewActions()
-    registerHomeKnowsActions()
   }
 
   // MARK: - Memory review card
@@ -264,492 +289,4 @@ extension DesktopAutomationActionRegistry {
     }
   }
 
-  // MARK: - Home knows-list
-
-  /// Seed, reset, read, and drive the Home hub's knows-list.
-  ///
-  /// The rows are composed inside `DashboardPage`'s `body` and published nowhere, and the ledger
-  /// they are gated against is `UserDefaults`-backed and outlives the app. So before this the list
-  /// was unreachable twice over: a flow could not read which rows the hub bound, and could not put
-  /// the ledger into a known state to make the next visit's answer mean anything.
-  ///
-  /// `home_knows_reset` gives the ledger a known state, `seed_home_knows_tasks` gives the composer
-  /// a known task source, and the rest go through `HomeKnowsAutomationRegistry` — the page's own
-  /// `beginKnowsVisit`, `recordKnowsImpressions`, `openKnowsRow` and dismiss handler. Every emit
-  /// they report is read at the `AnalyticsManager` seam, so a flow asserts what production emitted
-  /// rather than what the bridge recomputed.
-  private func registerHomeKnowsActions() {
-    register(
-      name: "home_knows_reset",
-      summary:
-        "Clear the Home knows-list impression ledger for the signed-in owner so the next visit "
-        + "starts from no history (non-production only)",
-      params: [],
-      category: "home",
-      surfaces: ["home"],
-      sideEffects: ["erases the knows-list impression ledger for the signed-in account"]
-    ) { _ in
-      guard AppBuild.isNonProduction else {
-        return ["error": "home_knows_reset is disabled on production bundles"]
-      }
-      let before = HomeKnowsImpressionStore.shared.snapshot().entries.count
-      HomeKnowsImpressionStore.shared.resetForAutomation()
-      // Deliberately does not touch the mounted page: `beginKnowsVisit` would immediately record a
-      // visit's impressions, and the flow's first observed visit would then be its second.
-      return [
-        "clearedEntries": String(before),
-        "entries": String(HomeKnowsImpressionStore.shared.snapshot().entries.count),
-      ]
-    }
-
-    register(
-      name: "seed_home_knows_tasks",
-      summary:
-        "Create the knows-list fixture tasks through the production TasksStore path and reload the "
-        + "dashboard lanes the hub composes from",
-      params: ["timeoutMs"],
-      category: "home",
-      surfaces: ["home"],
-      sideEffects: ["creates and replaces tasks on the signed-in local account"]
-    ) { params in
-      guard AppBuild.isNonProduction else {
-        return ["error": "seed_home_knows_tasks is disabled on production bundles"]
-      }
-      let removed = await HomeKnowsFixture.removeSeededTasks()
-      // Created back to front: ties in the freshness order break on the most recently updated
-      // candidate, so the catalog's first entry has to be the last one written to be the hub's
-      // first row.
-      for text in HomeKnowsFixture.taskCatalog.reversed() {
-        guard await TasksStore.shared.createTask(description: text, dueAt: nil, priority: nil) != nil else {
-          return ["error": "createTask failed for \(text)"]
-        }
-      }
-      // `createTask` only inserts into `incompleteTasks`; the three dashboard lanes the hub reads
-      // (`overdueTasks` / `todaysTasks` / `tasksWithoutDueDate`) are a separate SQLite read.
-      await TasksStore.shared.loadDashboardTasks()
-      let timeoutMs = Int(params["timeoutMs"] ?? "") ?? 8000
-      let visible = await HomeKnowsFixture.waitForSeededCandidates(timeoutMs: timeoutMs)
-      return [
-        "removedExisting": String(removed),
-        "createdCount": String(HomeKnowsFixture.taskCatalog.count),
-        "candidateCount": String(visible),
-      ]
-    }
-
-    register(
-      name: "clear_home_knows_tasks",
-      summary: "Delete the knows-list fixture tasks again (flow teardown)",
-      params: [],
-      category: "home",
-      surfaces: ["home"],
-      sideEffects: ["deletes the fixture tasks it created on the signed-in local account"]
-    ) { _ in
-      guard AppBuild.isNonProduction else {
-        return ["error": "clear_home_knows_tasks is disabled on production bundles"]
-      }
-      let removed = await HomeKnowsFixture.removeSeededTasks()
-      await TasksStore.shared.loadDashboardTasks()
-      return ["removed": String(removed)]
-    }
-
-    register(
-      name: "home_knows_snapshot",
-      summary: "Rows the mounted Home knows-list composed, the slots it left empty, and why",
-      params: [],
-      category: "home",
-      surfaces: ["home"],
-      safety: "read_only"
-    ) { _ in
-      guard AppBuild.isNonProduction else {
-        return ["error": "home_knows_snapshot is disabled on production bundles"]
-      }
-      guard let handle = HomeKnowsAutomationRegistry.mounted else {
-        return ["error": "no Home knows-list is mounted", "mounted": "false"]
-      }
-      return HomeKnowsFixture.detail(handle.snapshot())
-    }
-
-    register(
-      name: "home_knows_visit",
-      summary:
-        "Start a new visit to the mounted knows-list (the same `beginKnowsVisit` the list's "
-        + "onAppear calls) and report the `desktop_home_knows_row` events it emitted",
-      params: [],
-      category: "home",
-      surfaces: ["home"]
-    ) { _ in
-      guard AppBuild.isNonProduction else {
-        return ["error": "home_knows_visit is disabled on production bundles"]
-      }
-      guard let handle = HomeKnowsAutomationRegistry.mounted else {
-        return ["error": "no Home knows-list is mounted", "mounted": "false"]
-      }
-      let emits = HomeKnowsFixture.capturingEmits { handle.beginVisit() }
-      return HomeKnowsFixture.detail(handle.snapshot()).merging(emits) { current, _ in current }
-    }
-
-    register(
-      name: "home_knows_impressions",
-      summary:
-        "Re-run the list's impression reporting without starting a new visit, and report what it "
-        + "emitted — zero, once a visit has already reported its rows",
-      params: [],
-      category: "home",
-      surfaces: ["home"]
-    ) { _ in
-      guard AppBuild.isNonProduction else {
-        return ["error": "home_knows_impressions is disabled on production bundles"]
-      }
-      guard let handle = HomeKnowsAutomationRegistry.mounted else {
-        return ["error": "no Home knows-list is mounted", "mounted": "false"]
-      }
-      let emits = HomeKnowsFixture.capturingEmits { handle.recordImpressions() }
-      return HomeKnowsFixture.detail(handle.snapshot()).merging(emits) { current, _ in current }
-    }
-
-    register(
-      name: "home_knows_open",
-      summary:
-        "Open the visible knows-list row carrying `text` (the row's own tap) and report the ledger "
-        + "entry it wrote",
-      params: ["text"],
-      category: "home",
-      surfaces: ["home"]
-    ) { params in
-      guard AppBuild.isNonProduction else {
-        return ["error": "home_knows_open is disabled on production bundles"]
-      }
-      guard let handle = HomeKnowsAutomationRegistry.mounted else {
-        return ["error": "no Home knows-list is mounted", "mounted": "false"]
-      }
-      let text = params["text"] ?? ""
-      guard let index = handle.snapshot().rows.firstIndex(where: { $0.text == text }) else {
-        return ["error": "no row on screen carries that text", "onScreen": "false"]
-      }
-      guard handle.open(index) else { return ["error": "row \(index) refused the open"] }
-      // Read back through the store, not the page: a task row navigates to Tasks as it opens, so
-      // the list may already be unmounted behind this call.
-      return HomeKnowsFixture.ledgerDetail(text: text)
-        .merging(["opened": "true"]) { current, _ in current }
-    }
-
-    register(
-      name: "home_knows_dismiss",
-      summary:
-        "Dismiss the visible knows-list row carrying `text` (the row's own ✕) and report the ledger "
-        + "entry it wrote",
-      params: ["text"],
-      category: "home",
-      surfaces: ["home"]
-    ) { params in
-      guard AppBuild.isNonProduction else {
-        return ["error": "home_knows_dismiss is disabled on production bundles"]
-      }
-      guard let handle = HomeKnowsAutomationRegistry.mounted else {
-        return ["error": "no Home knows-list is mounted", "mounted": "false"]
-      }
-      let text = params["text"] ?? ""
-      guard let index = handle.snapshot().rows.firstIndex(where: { $0.text == text }) else {
-        return ["error": "no row on screen carries that text", "onScreen": "false"]
-      }
-      guard handle.dismiss(index) else {
-        return ["error": "row \(index) has no dismiss (question rows carry none)"]
-      }
-      return HomeKnowsFixture.ledgerDetail(text: text)
-        .merging(["dismissed": "true"]) { current, _ in current }
-    }
-
-    register(
-      name: "home_knows_probe",
-      summary:
-        "What the ledger says about one fixture task, and whether the list is showing it right now",
-      params: ["text"],
-      category: "home",
-      surfaces: ["home"],
-      safety: "read_only"
-    ) { params in
-      guard AppBuild.isNonProduction else {
-        return ["error": "home_knows_probe is disabled on production bundles"]
-      }
-      let text = params["text"] ?? ""
-      var detail = HomeKnowsFixture.ledgerDetail(text: text)
-      // Addressed by row text rather than by slot on purpose. Which slot a row lands in depends on
-      // every other candidate the account happens to carry, but whether *this* row is on screen and
-      // what the ledger says about it are facts about this row alone — the only shape of assertion
-      // that stays honest on an account the flow did not create from scratch.
-      if let handle = HomeKnowsAutomationRegistry.mounted {
-        detail["mounted"] = "true"
-        detail["present"] = handle.snapshot().rows.contains { $0.text == text } ? "true" : "false"
-      } else {
-        detail["mounted"] = "false"
-      }
-      return detail
-    }
-  }
-}
-
-/// Fixture tasks, the slot-named projections, and the analytics capture the `home_knows_*` actions
-/// report through.
-///
-/// Harness scaffolding only: nothing here composes a row, decides a suppression, or names a
-/// rotation reason. Every value it reports came out of `HomeKnowsListComposer`, the impression
-/// ledger, or the `AnalyticsManager` emit seam.
-@MainActor
-enum HomeKnowsFixture {
-  /// Asserted verbatim by `home-knows-rotation.yaml`: change one and change the flow in the same
-  /// commit. Deliberately not marker-templated — the harness substitutes `[[MARKER:…]]`, and these
-  /// strings are compared for exact equality as the hub's own row text.
-  /// Three, not two: the hub gives tasks exactly two of its four slots, so the third is the one a
-  /// flow can reach only after a dismissal has freed a slot — which is how the dismissal is proved
-  /// to have changed the list rather than only the ledger.
-  static let taskCatalog = [
-    "Send Priya the storage migration summary",
-    "Book the Thursday design review room",
-    "Reply to the vendor security questionnaire",
-  ]
-
-  /// The ledger entry for one fixture task, read through the store rather than the page.
-  ///
-  /// The key is `HomeKnowsRotationPolicy.taskKey` applied to the id the dashboard lanes carry — the
-  /// shipped keying function called a second time, so a flow can never assert against a key the
-  /// composer would not have used.
-  static func ledgerDetail(text: String) -> [String: String] {
-    let store = TasksStore.shared
-    let lanes = store.overdueTasks + store.todaysTasks + store.tasksWithoutDueDate
-    guard let task = lanes.first(where: { $0.description == text }) else {
-      return ["error": "no dashboard-lane task carries that text", "known": "false"]
-    }
-    let key = HomeKnowsRotationPolicy.taskKey(task.id)
-    let entry = HomeKnowsImpressionStore.shared.snapshot().entry(key)
-    return [
-      "known": "true",
-      "key": key,
-      "shows": String(entry?.shows ?? 0),
-      "wasOpened": entry?.lastOpenedAt == nil ? "false" : "true",
-      "wasDismissed": entry?.dismissedAt == nil ? "false" : "true",
-    ]
-  }
-
-  /// Remove any fixture task left by an earlier run before creating this run's.
-  ///
-  /// A knows-list row is keyed by task id, not by text, so two runs' copies of the same sentence
-  /// are two candidates: the second run would open on a list that already looks right and prove
-  /// nothing about the rules underneath it.
-  static func removeSeededTasks() async -> Int {
-    let doomed = TasksStore.shared.tasks.filter { taskCatalog.contains($0.description) }
-    for task in doomed {
-      await TasksStore.shared.deleteTask(task)
-    }
-    return doomed.count
-  }
-
-  /// How many of the fixture tasks the hub's own candidate lanes can see.
-  static func waitForSeededCandidates(timeoutMs: Int) async -> Int {
-    let deadline = Date().addingTimeInterval(Double(max(0, timeoutMs)) / 1000.0)
-    while seededCandidateCount() < taskCatalog.count {
-      guard Date() < deadline else { break }
-      try? await Task.sleep(nanoseconds: 100_000_000)
-    }
-    return seededCandidateCount()
-  }
-
-  private static func seededCandidateCount() -> Int {
-    let store = TasksStore.shared
-    let lanes = store.overdueTasks + store.todaysTasks + store.tasksWithoutDueDate
-    return lanes.filter { taskCatalog.contains($0.description) }.count
-  }
-
-  /// Installs the knows-list telemetry capture for the duration of `body` and projects what it saw.
-  ///
-  /// `rotated_out_reason` is the rotation policy's verdict and is readable nowhere after the emit
-  /// consumes it, so it is observed at the seam rather than recomputed here.
-  static func capturingEmits(_ body: @MainActor () -> Void) -> [String: String] {
-    let previous = AnalyticsManager.homeKnowsTelemetryCaptureForTests
-    var rows: [String: String] = [:]
-    var empties: [String: String] = [:]
-    var count = 0
-    AnalyticsManager.homeKnowsTelemetryCaptureForTests = { event, properties in
-      guard event == AnalyticsManager.homeKnowsRowEvent else { return }
-      count += 1
-      let slot = properties["slot"] as? String ?? ""
-      let kind = properties["kind"] as? String ?? ""
-      if kind == "empty" {
-        empties[slot] = properties["rotated_out_reason"] as? String ?? ""
-      } else {
-        rows[slot] = "\(kind):\(properties["shows_before"] as? Int ?? -1)"
-      }
-    }
-    body()
-    AnalyticsManager.homeKnowsTelemetryCaptureForTests = previous
-
-    var detail = ["emittedCount": String(count)]
-    for slot in HomeKnowsSlot.allCases {
-      detail["emitted_row_" + slot.rawValue] = rows[slot.rawValue] ?? ""
-      detail["emitted_empty_" + slot.rawValue] = empties[slot.rawValue] ?? ""
-    }
-    return detail
-  }
-
-  /// What the list currently shows, named by slot rather than by index.
-  ///
-  /// Slot-named because the row array is the composer's fixed slot order with the empty slots
-  /// removed, so the index of a task row moves when the tip above it rotates out — and a flow
-  /// asserting `row2` would then be asserting nothing in particular.
-  static func detail(_ snapshot: HomeKnowsAutomationRegistry.Snapshot) -> [String: String] {
-    var detail: [String: String] = [
-      "mounted": "true",
-      "rowCount": String(snapshot.rows.count),
-      "canRotate": snapshot.canRotate ? "true" : "false",
-      "openTaskCount": String(snapshot.openTaskCount),
-      "ledgerEntries": String(snapshot.ledger.entries.count),
-    ]
-    let taskRows = snapshot.rows.filter { $0.kind == "task" }
-    detail["taskRowCount"] = String(taskRows.count)
-    for (index, row) in taskRows.prefix(2).enumerated() {
-      detail["taskRow\(index)_text"] = row.text
-      detail["taskRow\(index)_showsBefore"] = String(row.showsBefore)
-    }
-    for (index, row) in snapshot.rows.prefix(4).enumerated() {
-      detail["row\(index)_kind"] = row.kind
-      detail["row\(index)_text"] = row.text
-    }
-    let empties = Dictionary(snapshot.emptySlots.map { ($0.slot, $0.reason) }) { current, _ in current }
-    for slot in HomeKnowsSlot.allCases {
-      detail["emptySlot_" + slot.rawValue] = empties[slot.rawValue] ?? ""
-    }
-    return detail
-  }
-}
-
-/// Fixture rows, wire types, and the two bounded waits the memory-review actions need.
-///
-/// Separated from the closures only so the actions above read as what they drive. Everything here
-/// is harness scaffolding; none of it decides anything about a verdict.
-@MainActor
-enum MemoryReviewFixture {
-  static let seedEndpoint = "v1/dev-harness/daily-summary/seed"
-  /// Four, so a flow can seed more learned memories than the card renders and prove the bound.
-  static let defaultCount = 4
-
-  struct CatalogRow {
-    let content: String
-    let category: MemoryCategory
-  }
-
-  /// Deterministic and asserted verbatim by `memory-review.yaml`: change one and change the flow
-  /// in the same commit.
-  static let catalog: [CatalogRow] = [
-    CatalogRow(content: "Prefers async standups over daily calls.", category: .system),
-    CatalogRow(content: "Ships desktop releases on Wednesdays.", category: .workflow),
-    CatalogRow(content: "Reviews the storage migration with Priya.", category: .interesting),
-    CatalogRow(content: "Keeps a written weekly plan before Monday.", category: .system),
-  ]
-
-  static func rows(count: Int) -> [CatalogRow]? {
-    guard count >= 1, count <= catalog.count else { return nil }
-    return Array(catalog.prefix(count))
-  }
-
-  struct WireMemory: Encodable {
-    let memoryID: String
-    let content: String
-    let category: String
-
-    enum CodingKeys: String, CodingKey {
-      case memoryID = "memory_id"
-      case content, category
-    }
-  }
-
-  struct SeedRequest: Encodable {
-    let memories: [WireMemory]
-  }
-
-  struct SeedResponse: Decodable {
-    let status: String
-    let summaryID: String
-    let date: String
-    let memoriesLearned: Int
-
-    enum CodingKeys: String, CodingKey {
-      case status, date
-      case summaryID = "summary_id"
-      case memoriesLearned = "memories_learned"
-    }
-  }
-
-  /// Bounded so an error string can never carry an unbounded response body into flow evidence.
-  static func reason(_ error: Error) -> String {
-    String(String(describing: error).prefix(200))
-  }
-
-  static func event(for verdict: String) -> MemoryReviewEvent? {
-    switch verdict {
-    case "accept": return .accept
-    case "reject": return .reject
-    default: return nil
-    }
-  }
-
-  /// What one row shows, named by index so a flow can assert two rows in one snapshot.
-  static func rowDetail(
-    index: Int, item: MemoryReviewItem, store: MemoryReviewCardStore
-  ) -> [String: String] {
-    let model = store.row(item.memoryID)
-    let prefix = "row\(index)_"
-    return [
-      prefix + "id": item.memoryID,
-      prefix + "content": item.content,
-      prefix + "category": item.categoryLabel ?? "",
-      prefix + "verdict": verdictName(model.displayed),
-      prefix + "status": model.statusText ?? "",
-      prefix + "settled": model.isSettled ? "true" : "false",
-      prefix + "faded": model.isFaded ? "true" : "false",
-      prefix + "busy": model.isBusy ? "true" : "false",
-      prefix + "error": model.errorMessage ?? "",
-    ]
-  }
-
-  private static func verdictName(_ verdict: MemoryReviewVerdict) -> String {
-    switch verdict {
-    case .none: return "none"
-    case .accepted: return "accepted"
-    case .rejected: return "rejected"
-    case .updated: return "updated"
-    }
-  }
-
-  /// How many rows the mounted section bound, once the store's refresh has reached the card.
-  ///
-  /// Waits for the section built from *these* memory ids, not merely for a mounted section. A
-  /// re-run of the flow overwrites the same day's summary with freshly created memories, and the
-  /// previous run's card — same content, already voted on — stays mounted until SwiftUI rebuilds
-  /// it. Waiting on "any rows" would read that one and see a settled verdict on a row the flow
-  /// has not clicked yet.
-  static func waitForMountedRows(seeded ids: Set<String>, timeoutMs: Int) async -> Int {
-    await waitUntil(timeoutMs: timeoutMs) {
-      guard let items = MemoryReviewCardRegistry.mounted?.items, !items.isEmpty else { return false }
-      return items.allSatisfy { ids.contains($0.memoryID) }
-    }
-    let items = MemoryReviewCardRegistry.mounted?.items ?? []
-    return items.allSatisfy { ids.contains($0.memoryID) } ? items.count : 0
-  }
-
-  /// True when the row's request finished inside the budget. A timeout is reported rather than
-  /// thrown: the row detail beside it says what the row settled on, which is the finding.
-  static func waitForSettled(
-    store: MemoryReviewCardStore, item: MemoryReviewItem, timeoutMs: Int
-  ) async -> Bool {
-    await waitUntil(timeoutMs: timeoutMs) { !store.row(item.memoryID).isBusy }
-  }
-
-  @discardableResult
-  private static func waitUntil(timeoutMs: Int, _ isDone: @MainActor () -> Bool) async -> Bool {
-    let deadline = Date().addingTimeInterval(Double(max(0, timeoutMs)) / 1000.0)
-    while !isDone() {
-      guard Date() < deadline else { return false }
-      try? await Task.sleep(nanoseconds: 100_000_000)
-    }
-    return true
-  }
 }

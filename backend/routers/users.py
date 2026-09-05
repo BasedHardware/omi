@@ -50,7 +50,6 @@ from database.users import (
     claim_deletion_wipe_for_task,
     get_user_transcription_preferences,
     resolve_deletion_wipe_job_id,
-    resolve_legacy_deletion_wipe_uid,
     set_user_transcription_preferences,
 )
 from config.stt_provider_policy import supports_live_multilingual_mode
@@ -377,34 +376,16 @@ async def run_account_deletion_wipe(
         payload = await request.json()
         if not isinstance(payload, dict):
             raise ValueError('payload must be a JSON object')
-        if 'job_id' in payload:
-            wipe_job_id = payload['job_id']
-            if not isinstance(wipe_job_id, str) or not wipe_job_id:
-                raise ValueError('job_id must be a non-empty string')
-            resolution_fn = resolve_deletion_wipe_job_id
-            resolution_arg = wipe_job_id
-            payload_kind = 'job_id'
-        else:
-            # TODO(#9760): Remove this legacy branch after the Cloud Tasks max-retry window has elapsed.
-            legacy_uid = payload.get('uid')
-            if not isinstance(legacy_uid, str) or not legacy_uid:
-                raise ValueError('job_id must be a non-empty string')
-            resolution_fn = resolve_legacy_deletion_wipe_uid
-            resolution_arg = legacy_uid
-            payload_kind = 'legacy_uid'
+        if 'job_id' not in payload:
+            raise ValueError('job_id must be a non-empty string')
+        wipe_job_id = payload['job_id']
+        if not isinstance(wipe_job_id, str) or not wipe_job_id:
+            raise ValueError('job_id must be a non-empty string')
+        resolution_fn = resolve_deletion_wipe_job_id
+        resolution_arg = wipe_job_id
     except Exception as e:
         logger.error(f'account_deletion handler: invalid payload, dropping task: {sanitize(str(e))}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
-
-    if task_authentication.audience == 'legacy_sync' and payload_kind != 'legacy_uid':
-        logger.warning('account_deletion handler: dropping job-ID payload with legacy sync audience')
-        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'legacy_audience_for_job_id'})
-
-    if payload_kind == 'legacy_uid' and task_authentication.audience != 'legacy_sync':
-        logger.warning('account_deletion handler: dropping legacy uid payload with non-legacy audience')
-        return JSONResponse(
-            status_code=200, content={'status': 'dropped', 'reason': 'legacy_uid_requires_legacy_audience'}
-        )
 
     try:
         resolution = await run_blocking(db_executor, resolution_fn, resolution_arg)
@@ -415,9 +396,7 @@ async def run_account_deletion_wipe(
     resolution_outcome = resolution.get('outcome') if isinstance(resolution, dict) else None
     uid = resolution.get('uid') if isinstance(resolution, dict) else None
     if resolution_outcome != 'resolved' or not isinstance(uid, str) or not uid:
-        logger.warning(
-            'account_deletion handler: dropping task payload_kind=%s resolution=%s', payload_kind, resolution_outcome
-        )
+        logger.warning('account_deletion handler: dropping task resolution=%s', resolution_outcome)
         return JSONResponse(
             status_code=200, content={'status': 'dropped', 'reason': resolution_outcome or 'invalid_job'}
         )
@@ -799,12 +778,17 @@ def set_memory_summary_rating(
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/analytics/memory_summary', tags=['v1'], response_model=MemorySummaryRatingResponse)
-def get_memory_summary_rating(
-    memory_id: str,
-    _: str = Depends(auth.get_current_user_uid),
-):
-    return {'has_rating': False}
+@router.get(
+    '/v1/users/analytics/memory_summary',
+    tags=['v1'],
+    response_model=MemorySummaryRatingResponse,
+    dependencies=[Depends(auth.get_current_user_uid)],
+)
+def get_memory_summary_rating(memory_id: str):
+    rating = get_conversation_summary_rating_score(memory_id)
+    if not rating:
+        return {'has_rating': False}
+    return {'has_rating': rating.get('value', -1) != -1, 'rating': rating.get('value', -1)}
 
 
 @router.post('/v1/users/analytics/chat_message', tags=['v1'], response_model=UserStatusResponse)

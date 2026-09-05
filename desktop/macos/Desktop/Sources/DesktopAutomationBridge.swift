@@ -138,6 +138,10 @@ enum DesktopAutomationLaunchOptions {
 }
 
 struct DesktopAutomationSnapshot: Codable, Sendable {
+  /// The app has one shell. Flows and the navigation-visibility policy still read
+  /// `shellVariant`, so it is pinned here rather than removed from the contract.
+  static let singleShellVariant = "chat_first"
+
   var bridgeEnabled: Bool
   var bridgePort: UInt16
   var bundleIdentifier: String
@@ -146,14 +150,14 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var selectedTabIndex: Int?
   var selectedSettingsSection: String?
   var highlightedSettingId: String?
-  var usesLegacyHomeDesign: Bool
-  /// Home stage mode: `hub`, `chat`, or `connect`. Written only by `DashboardPage`, which is the only
-  /// view that renders the stage; nil whenever nothing on screen has one — which includes the whole
-  /// legacy shell, whose Home is the query surface. Never defaulted: see `HomeStageAutomationPolicy`.
+  /// Home stage mode: `hub`, `chat`, or `connect`. `DashboardPage` was the only view that ever
+  /// rendered that stage and it no longer exists, so this is now always nil. Kept in the snapshot
+  /// so an older flow reading it sees "no stage" rather than a missing key.
   var homeMode: String?
-  /// `loading`, `legacy`, or `chat_first`; never a local rollout preference.
+  /// Always `chat_first` on a mounted shell: the app has exactly one. Nil only before the shell has
+  /// reported state. Never a local preference.
   var shellVariant: String?
-  /// Stable typed route for the Chat-first shell. Nil for the legacy shell.
+  /// Stable typed route for the one shell.
   var chatFirstRoute: String?
   /// Set only by the mounted Chat-first destination after it has appeared. This
   /// keeps a successful navigation response equivalent to the target being
@@ -167,6 +171,7 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   /// never an analytics dimension or a persisted navigation value.
   var focusedEntityID: String?
   var isFocusedEntityAcknowledged: Bool
+  /// Retained for snapshot compatibility; the legacy sidebar shell is gone, so it is always false.
   var showsPrimarySidebar: Bool
   var isSidebarCollapsed: Bool
   var hasCompletedOnboarding: Bool
@@ -179,6 +184,8 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var askOmiFocused: Bool
   var floatingBarFrame: String?
   var floatingBarVoiceListening: Bool
+  /// The current hold has been recognised as a dictation (the notch's red tint).
+  var floatingBarVoiceDictating: Bool
   var floatingBarVoiceResponseActive: Bool
   var floatingBarUsesNotchIsland: Bool
   var updatedAt: String
@@ -464,7 +471,6 @@ final class DesktopAutomationStateStore {
     selectedTabIndex: nil,
     selectedSettingsSection: nil,
     highlightedSettingId: nil,
-    usesLegacyHomeDesign: false,
     homeMode: nil,
     shellVariant: nil,
     chatFirstRoute: nil,
@@ -485,6 +491,7 @@ final class DesktopAutomationStateStore {
     askOmiFocused: false,
     floatingBarFrame: nil,
     floatingBarVoiceListening: false,
+    floatingBarVoiceDictating: false,
     floatingBarVoiceResponseActive: false,
     floatingBarUsesNotchIsland: false,
     updatedAt: ISO8601DateFormatter().string(from: Date())
@@ -583,6 +590,7 @@ private func liveAutomationSnapshotFromMainActor() async -> DesktopAutomationSna
       isAskOmiFocused: floating.isAskOmiFocused,
       frame: floating.frame,
       isVoiceListening: floating.isVoiceListening,
+      isVoiceDictating: floating.isVoiceDictating,
       isVoiceResponseActive: floating.isVoiceResponseActive,
       usesNotchIsland: floating.usesNotchIsland,
       isAppActive: NSApp.isActive
@@ -594,6 +602,7 @@ private func liveAutomationSnapshotFromMainActor() async -> DesktopAutomationSna
     snapshot.askOmiFocused = floating.isAskOmiFocused
     snapshot.floatingBarFrame = floating.frame
     snapshot.floatingBarVoiceListening = floating.isVoiceListening
+    snapshot.floatingBarVoiceDictating = floating.isVoiceDictating
     snapshot.floatingBarVoiceResponseActive = floating.isVoiceResponseActive
     snapshot.floatingBarUsesNotchIsland = floating.usesNotchIsland
     snapshot.isAppActive = floating.isAppActive
@@ -1531,12 +1540,16 @@ final class DesktopAutomationActionRegistry {
         let pcm16k = try? Data(contentsOf: URL(fileURLWithPath: path)),
         !pcm16k.isEmpty
       else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
-      let paceMs = UInt64(params["pace_ms"] ?? "") ?? 0
-      let settleMs = UInt64(params["settle_ms"] ?? "") ?? 0
+      // Bounded so the nanosecond conversion below cannot trap on a typo.
+      let maxWaitMs: UInt64 = 10 * 60 * 1_000
+      let paceMs = min(UInt64(params["pace_ms"] ?? "") ?? 0, maxWaitMs)
+      let settleMs = min(UInt64(params["settle_ms"] ?? "") ?? 0, maxWaitMs)
       // Default 100 ms. Pass 342 to mimic what the CoreAudio IOProc hands a
       // 48 kHz device's capture after resampling — chunk size has already
-      // hidden one bug that only a real microphone showed.
-      let chunkSize = max(2, Int(params["chunk_bytes"] ?? "") ?? 3_200)
+      // hidden one bug that only a real microphone showed. Always a whole
+      // number of 16-bit samples, so an odd size cannot shear the PCM framing.
+      let requestedChunk = Int(params["chunk_bytes"] ?? "") ?? 3_200
+      let chunkSize = max(2, requestedChunk - requestedChunk % 2)
 
       var result = PushToTalkManager.shared.beginRealtimePushToTalkForAutomation()
       guard result["listening"] == "true" else { return result }

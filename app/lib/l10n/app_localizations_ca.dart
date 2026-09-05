@@ -9977,6 +9977,36 @@ class AppLocalizationsCa extends AppLocalizations {
   String get tapPlusToStartRecording => 'Tap + to start recording';
 
   @override
+  String get chatBlockTask => 'Tasca';
+
+  @override
+  String get chatBlockGoal => 'Objectiu';
+
+  @override
+  String get chatBlockConversation => 'Conversa';
+
+  @override
+  String get chatBlockMemory => 'Record';
+
+  @override
+  String get chatBlockQuestion => 'Pregunta';
+
+  @override
+  String get chatBlockOpenInGoals => 'Obre a Objectius';
+
+  @override
+  String get chatBlockOpenConversation => 'Obre la conversa';
+
+  @override
+  String get chatBlockOpenInMemories => 'Obre a Records';
+
+  @override
+  String get chatBlockUnavailable => 'Ja no està disponible';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Propers passos recomanats';
+
+  @override
   String get couldNotLoadMemories => 'No s\'han pogut carregar els records';
 
   @override

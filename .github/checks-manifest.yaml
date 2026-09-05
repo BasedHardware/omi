@@ -264,6 +264,16 @@ checks:
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-grdb-insert-idiom.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#11204: a mutating didInsert never witnesses PersistableRecord's non-mutating insert, so a direct record.insert(db) drops the rowid silently onto an optional field; two shipped instances went undetected until unrelated work tripped over them"
+  - id: desktop-single-chat-shell-self-test
+    command: ["python3", "desktop/macos/scripts/check-single-chat-shell.py", "--self-test"]
+    triggers: ["desktop/macos/scripts/check-single-chat-shell.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the tripwire must keep failing on each shape it was written for, and keep passing on prose that merely names one"
+  - id: desktop-single-chat-shell
+    command: ["python3", "desktop/macos/scripts/check-single-chat-shell.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-single-chat-shell.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#12598: the app mounted one of two shells behind a preference, and six content-block kinds rendered as controls on one and as nothing on the other; both grow back one symbol at a time"
   - id: brand-ui-ratchet-tests
     command: ["python3", ".github/scripts/test_check_brand_ui.py"]
     triggers: [".github/scripts/check_brand_ui.py", ".github/scripts/test_check_brand_ui.py", ".github/checks-manifest.yaml"]

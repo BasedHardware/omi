@@ -340,7 +340,13 @@ final class JITProactivityDeliveryTests: XCTestCase {
         return true
       }, authorizationCurrent: { _ in true }, authorizationSnapshotProvider: { authorization })
     await recovered.installLifecycleRetry()
-    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+    // On the main thread, as `performEffectiveOwnerTransition` posts it. Posting
+    // from this async test body instead delivered it straight onto a cooperative
+    // thread, where the first `@MainActor` observer to have been constructed by
+    // an earlier suite trapped on entry and took the whole test host with it.
+    await MainActor.run {
+      NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+    }
     for _ in 0..<20 {
       if await recovered.pendingCount(ownerID: "owner") == 0 { break }
       // omi-test-quality: wall-clock-wait -- lifecycle observer scheduling has no injectable clock

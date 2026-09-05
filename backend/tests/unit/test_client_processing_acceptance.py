@@ -1134,3 +1134,57 @@ def test_rejected_payload_provenance_is_sanitized_single_line(monkeypatch, stack
     assert device_class == oversize[:PROVENANCE_LOG_MAX_CHARS]
     assert len(device_class) == PROVENANCE_LOG_MAX_CHARS
     _assert_no_managed(spies)
+
+
+def test_projection_payload_imports_while_the_models_package_is_stubbed() -> None:
+    """Importing this module must survive a stubbed ``models`` package (#12779).
+
+    ``utils.conversations.projection_payload`` is deliberately import-light — its own
+    docstring says importing it must not drag in the coordinator's module graph. A
+    module-scope ``from models.client_processing import ...`` broke that quietly: seven
+    suites under ``tests/unit`` replace ``sys.modules['models']`` with a stub, and while
+    one is installed, merely *collecting* any module that reaches this one fails with
+    ``ModuleNotFoundError: No module named 'models.client_processing'``.
+
+    That is how `main` went red for unrelated PRs: the failure lands during collection of
+    a later, alphabetically-sorted suite, so it reads as a broken test file rather than as
+    leaked global state. This drives the real mechanism — stub the package the way those
+    suites do, then import through a fresh module object.
+    """
+    import sys
+    import importlib
+    from types import ModuleType
+
+    saved = sys.modules.get('models')
+    saved_module = sys.modules.pop('utils.conversations.projection_payload', None)
+    # Also evict the submodule. Leaving it cached makes this test vacuous: a cached
+    # models.client_processing satisfies the import without ever consulting the stub's
+    # __path__, so the module-scope version passes too. In CI the submodule genuinely
+    # has not been imported yet when the polluted collection happens.
+    saved_submodule = sys.modules.pop('models.client_processing', None)
+    try:
+        # Exactly the shape the polluting suites install: a bare package whose empty
+        # __path__ makes every models.* submodule unimportable.
+        stub = ModuleType('models')
+        stub.__path__ = []  # type: ignore[attr-defined]
+        sys.modules['models'] = stub
+
+        module = importlib.import_module('utils.conversations.projection_payload')
+        assert module is not None
+    finally:
+        sys.modules.pop('utils.conversations.projection_payload', None)
+        if saved is None:
+            sys.modules.pop('models', None)
+        else:
+            sys.modules['models'] = saved
+        if saved_submodule is not None:
+            sys.modules['models.client_processing'] = saved_submodule
+        if saved_module is not None:
+            sys.modules['utils.conversations.projection_payload'] = saved_module
+
+    # The deferred import still resolves once the stub is gone, so laziness bought
+    # collection-time resilience without breaking the function itself.
+    from utils.conversations.projection_payload import strip_client_processing
+
+    payload = {'client_processing': {'x': 1}, 'keep': 'me'}
+    assert strip_client_processing(payload) == {'keep': 'me'}

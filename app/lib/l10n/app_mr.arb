@@ -10801,6 +10801,16 @@
     "pendantFullSyncBlocked": "Pendant चे स्टोरेज भरले आहे आणि ते अजूनही रेकॉर्डिंग मोडमध्ये आहे, त्यामुळे साठवलेला ऑडिओ हस्तांतरित करता येत नाही. रेकॉर्डिंग थांबवण्यासाठी Pendant चे बटण दाबा, नंतर पुन्हा सिंक करा.",
     "conversationsNotCapturedCount": "रेकॉर्ड झाले नाही ({count})",
     "transcriptionNoAudio": "ट्रान्सक्रिप्शन ऑडिओ घेत नाही",
+    "chatBlockTask": "कार्य",
+    "chatBlockGoal": "ध्येय",
+    "chatBlockConversation": "संभाषण",
+    "chatBlockMemory": "स्मृती",
+    "chatBlockQuestion": "प्रश्न",
+    "chatBlockOpenInGoals": "ध्येयांमध्ये उघडा",
+    "chatBlockOpenConversation": "संभाषण उघडा",
+    "chatBlockOpenInMemories": "स्मृतींमध्ये उघडा",
+    "chatBlockUnavailable": "आता उपलब्ध नाही",
+    "chatBlockRecommendedNextSteps": "शिफारस केलेली पुढील पावले",
     "couldNotLoadMemories": "आठवणी लोड करता आल्या नाहीत",
     "couldNotLoadKnowledgeGraph": "ज्ञान आलेख लोड करता आला नाही"
 }

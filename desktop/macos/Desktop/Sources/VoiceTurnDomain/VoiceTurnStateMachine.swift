@@ -270,6 +270,10 @@ package enum VoiceTurnTerminalReason: String, Equatable, Sendable, CaseIterable 
   case captureNotReady = "capture_not_ready"
   case transcriptionFailed = "transcription_failed"
   case providerFailed = "provider_failed"
+  /// The turn was recorded with no network path and was not a dictation:
+  /// nothing offline can answer it. Distinct from `providerFailed`, which
+  /// blames a provider that was reached.
+  case noNetwork = "no_network"
   case providerNoResponse = "provider_no_response"
   case hubWarmTimeout = "hub_warm_timeout"
   case deferredCommitTimeout = "deferred_commit_timeout"
@@ -368,6 +372,8 @@ package enum VoiceTurnUICopy {
       return "Couldn't save that reply — try again"
     case .providerFailed, .providerNoResponse, .deferredCommitTimeout:
       return "Couldn't get a voice reply — try again"
+    case .noNetwork:
+      return "No network — say “type …” to dictate offline"
     case .bargeInReplacementTimeout:
       return "Previous reply was interrupted — try again"
     case .toolTimeout:

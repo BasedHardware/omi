@@ -18465,6 +18465,66 @@ abstract class AppLocalizations {
   /// **'Tap + to start recording'**
   String get tapPlusToStartRecording;
 
+  /// Eyebrow label on a chat task card block
+  ///
+  /// In en, this message translates to:
+  /// **'Task'**
+  String get chatBlockTask;
+
+  /// Eyebrow label on a chat goal link block
+  ///
+  /// In en, this message translates to:
+  /// **'Goal'**
+  String get chatBlockGoal;
+
+  /// Eyebrow label on a chat conversation/capture link block
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation'**
+  String get chatBlockConversation;
+
+  /// Eyebrow label on a chat memory link block
+  ///
+  /// In en, this message translates to:
+  /// **'Memory'**
+  String get chatBlockMemory;
+
+  /// Eyebrow label on a chat question card block
+  ///
+  /// In en, this message translates to:
+  /// **'Question'**
+  String get chatBlockQuestion;
+
+  /// Action on a chat goal link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Goals'**
+  String get chatBlockOpenInGoals;
+
+  /// Action on a chat conversation link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open conversation'**
+  String get chatBlockOpenConversation;
+
+  /// Action on a chat memory link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Memories'**
+  String get chatBlockOpenInMemories;
+
+  /// Status shown when a chat block's entity no longer exists
+  ///
+  /// In en, this message translates to:
+  /// **'No longer available'**
+  String get chatBlockUnavailable;
+
+  /// Header above recommended action items on a chat conversation link block
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended next steps'**
+  String get chatBlockRecommendedNextSteps;
+
   /// Retryable error when fetching memories failed instead of returning an empty list
   ///
   /// In en, this message translates to:

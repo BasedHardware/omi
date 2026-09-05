@@ -43,6 +43,7 @@
     "fuse.js": "^7.0.0",
     "idb": "^8.0.3",
     "leaflet": "^1.9.4",
+    "liquid-gooey": "^0.2.1",
     "lodash": "^4.17.21",
     "lucide-react": "^0.438.0",
     "mixpanel-browser": "^2.73.0",

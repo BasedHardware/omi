@@ -3213,6 +3213,16 @@
     "pendantFullSyncBlocked": "L'emmagatzematge del Pendant és ple i encara està en mode de gravació, així que l'àudio desat no es pot transferir. Prem el botó del Pendant per aturar la gravació i torna a sincronitzar.",
     "conversationsNotCapturedCount": "No enregistrat ({count})",
     "transcriptionNoAudio": "La transcripció no rep àudio",
+    "chatBlockTask": "Tasca",
+    "chatBlockGoal": "Objectiu",
+    "chatBlockConversation": "Conversa",
+    "chatBlockMemory": "Record",
+    "chatBlockQuestion": "Pregunta",
+    "chatBlockOpenInGoals": "Obre a Objectius",
+    "chatBlockOpenConversation": "Obre la conversa",
+    "chatBlockOpenInMemories": "Obre a Records",
+    "chatBlockUnavailable": "Ja no està disponible",
+    "chatBlockRecommendedNextSteps": "Propers passos recomanats",
     "couldNotLoadMemories": "No s'han pogut carregar els records",
     "couldNotLoadKnowledgeGraph": "No s'ha pogut carregar el graf de coneixement"
 }

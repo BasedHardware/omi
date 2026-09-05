@@ -10801,6 +10801,16 @@
     "pendantFullSyncBlocked": "Pohrana Pendanta je puna i još je u načinu snimanja, pa se pohranjeni zvuk ne može prenijeti. Pritisnite gumb na Pendantu da zaustavite snimanje, a zatim ponovno sinkronizirajte.",
     "conversationsNotCapturedCount": "Nije snimljeno ({count})",
     "transcriptionNoAudio": "Transkripcija ne prima zvuk",
+    "chatBlockTask": "Zadatak",
+    "chatBlockGoal": "Cilj",
+    "chatBlockConversation": "Razgovor",
+    "chatBlockMemory": "Sjećanje",
+    "chatBlockQuestion": "Pitanje",
+    "chatBlockOpenInGoals": "Otvori u Ciljevima",
+    "chatBlockOpenConversation": "Otvori razgovor",
+    "chatBlockOpenInMemories": "Otvori u Sjećanjima",
+    "chatBlockUnavailable": "Više nije dostupno",
+    "chatBlockRecommendedNextSteps": "Preporučeni sljedeći koraci",
     "couldNotLoadMemories": "Nije moguće učitati uspomene",
     "couldNotLoadKnowledgeGraph": "Nije moguće učitati graf znanja"
 }

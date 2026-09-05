@@ -849,3 +849,140 @@ final class ChatCitationTests: XCTestCase {
     XCTAssertEqual(consumed.references.map(\.sourceID), ["conversation-20"])
   }
 }
+
+/// A rendered component is already the citation of the thing it draws.
+final class ChatCitationRenderedEntityTests: XCTestCase {
+  private let task = ChatCitationReference(
+    ordinal: 1, kind: .task, sourceID: "task-1", title: "Do YC application")
+  private let memory = ChatCitationReference(
+    ordinal: 2, kind: .memory, sourceID: "memory-9", title: "Prefers mornings")
+
+  func testTheSourceRailDropsEntitiesTheTurnAlreadyDraws() {
+    XCTAssertEqual(
+      ChatCitationMarkup.appendingSelectedSources(
+        to: "Here are your tasks.",
+        selectedReferences: [task],
+        renderedEntityIDs: ["task-1"]),
+      "Here are your tasks.",
+      "a task card opens the same task the marker would, and says what it is")
+  }
+
+  func testTheSourceRailStillCarriesWhatNothingDraws() {
+    XCTAssertEqual(
+      ChatCitationMarkup.appendingSelectedSources(
+        to: "Here are your tasks.",
+        selectedReferences: [task, memory],
+        renderedEntityIDs: ["task-1"]),
+      "Here are your tasks.\n\nSources: [2]",
+      "the memory has no component, so it keeps its marker")
+  }
+
+  func testRenderedEntitiesAreReadFromEveryComponentKind() {
+    let identifiers = ChatCitationMarkup.renderedEntityIDs(in: [
+      .taskCard(id: "b1", taskId: "task-1"),
+      .goalLink(id: "b2", goalId: "goal-1", summary: "Ship"),
+      .captureLink(id: "b3", conversationId: "conv-1", momentTimestampMs: nil, summary: "Call"),
+      .memoryLink(id: "b4", memoryId: "memory-9", summary: "Mornings"),
+      .text(id: "b5", text: "prose"),
+    ])
+    XCTAssertEqual(identifiers, ["task-1", "goal-1", "conv-1", "memory-9"])
+  }
+}
+
+/// A follow-up that cites a number it never retrieved is pointing at the list
+/// the reader was shown a turn ago. "Pick one conversation from that day",
+/// answered without a tool call, wrote `[1]` for the first conversation of the
+/// previous answer — and drew it as plain text beside a title nobody could open.
+final class ChatCitationInheritanceTests: XCTestCase {
+  private func reference(_ ordinal: Int, id: String, title: String) -> ChatCitationReference {
+    ChatCitationReference(ordinal: ordinal, kind: .conversation, sourceID: id, title: title)
+  }
+
+  private func answer(_ id: String, text: String, references: [ChatCitationReference] = [])
+    -> ChatMessage
+  {
+    ChatMessage(
+      id: id,
+      text: text,
+      sender: .ai,
+      contentBlocks: references.map { .citation(id: "citation-\($0.ordinal)", reference: $0) })
+  }
+
+  func testAFollowUpWithoutItsOwnSourcesBorrowsTheOrdinalItCites() {
+    let chess = reference(1, id: "conv-chess", title: "Chess, Minecraft Testing")
+    let earlier = answer(
+      "list", text: "You spoke with Paul [5] and about chess [1].",
+      references: [chess, reference(5, id: "conv-paul", title: "Paul")])
+    let followUp = answer("pick", text: "The most interesting one was **Chess.** [1]")
+
+    let inherited = ChatCitationMarkup.inheritedReferences(
+      citedIn: followUp, resolved: [], earlierTurns: [earlier])
+
+    XCTAssertEqual(inherited, [chess])
+  }
+
+  func testATurnsOwnProvenanceOutranksAnEarlierTurnsSameNumber() {
+    let stale = reference(1, id: "conv-stale", title: "Last week")
+    let fresh = reference(1, id: "conv-fresh", title: "Today")
+    let earlier = answer("list", text: "Earlier [1].", references: [stale, reference(2, id: "conv-two", title: "Two")])
+    let current = answer("now", text: "Fresh claim [1], and an older one [2].")
+
+    let inherited = ChatCitationMarkup.inheritedReferences(
+      citedIn: current, resolved: [fresh], earlierTurns: [earlier])
+
+    XCTAssertEqual(inherited.map(\.sourceID), ["conv-two"], "only the number this turn cannot resolve is borrowed")
+  }
+
+  func testTheNearestTurnThatHasTheNumberWins() {
+    let older = answer("older", text: "[1]", references: [reference(1, id: "conv-older", title: "Older")])
+    let newer = answer("newer", text: "[1]", references: [reference(1, id: "conv-newer", title: "Newer")])
+    let followUp = answer("pick", text: "That one [1].")
+
+    let inherited = ChatCitationMarkup.inheritedReferences(
+      citedIn: followUp, resolved: [], earlierTurns: [older, newer])
+
+    XCTAssertEqual(inherited.map(\.sourceID), ["conv-newer"])
+  }
+
+  func testLookbackIsBounded() {
+    let distant = answer("distant", text: "[1]", references: [reference(1, id: "conv-distant", title: "Distant")])
+    let between = answer("between", text: "No sources here.")
+    let followUp = answer("pick", text: "That one [1].")
+
+    XCTAssertTrue(
+      ChatCitationMarkup.inheritedReferences(
+        citedIn: followUp, resolved: [], earlierTurns: [distant, between], lookback: 1
+      ).isEmpty)
+    XCTAssertEqual(
+      ChatCitationMarkup.inheritedReferences(
+        citedIn: followUp, resolved: [], earlierTurns: [distant, between], lookback: 2
+      ).map(\.sourceID),
+      ["conv-distant"])
+  }
+
+  func testUserTurnsAndTheMessageItselfAreNeverASource() {
+    let user = ChatMessage(
+      id: "user", text: "[1]", sender: .user,
+      contentBlocks: [.citation(id: "citation-1", reference: reference(1, id: "conv-user", title: "User"))])
+    let followUp = answer("pick", text: "That one [1].", references: [])
+
+    XCTAssertTrue(
+      ChatCitationMarkup.inheritedReferences(
+        citedIn: followUp, resolved: [], earlierTurns: [user, followUp]
+      ).isEmpty)
+  }
+
+  @MainActor
+  func testProjectionBindsTheBorrowedReferenceSoTheMarkerOpens() {
+    let chess = reference(1, id: "conv-chess", title: "Chess, Minecraft Testing")
+    var messages = [
+      answer("list", text: "About chess [1].", references: [chess]),
+      answer("pick", text: "The most interesting one was **Chess.** [1]"),
+    ]
+
+    ChatProvider.inheritCitationsAcrossTurns(&messages)
+
+    XCTAssertEqual(messages[1].inlineCitationReferences, [chess])
+    XCTAssertEqual(messages[0].inlineCitationReferences, [chess], "the source turn is untouched")
+  }
+}

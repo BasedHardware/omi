@@ -72,6 +72,14 @@ enum DictationPolisher {
   /// it by half.
   static let acceptableWordRatio: ClosedRange<Double> = 0.5...1.5
 
+  /// The least share of the rewrite's ordinary words that must already occur
+  /// in the original. A cleanup keeps the speaker's words; a rewrite that is
+  /// mostly new words is an answer, a summary, or a hallucination, whatever
+  /// its length. Words containing a digit or "@" are left out of the count:
+  /// numbers, times, and addresses are the words the model is *meant* to
+  /// rewrite ("four pm" → "4pm", "john at example dot com" → an address).
+  static let minimumSharedWordFraction = 0.6
+
   /// The model answering, apologising, or narrating instead of cleaning. Only
   /// refused when the original did not open the same way, since "I'm sorry I
   /// missed your call" is a perfectly good dictation.
@@ -129,7 +137,17 @@ enum DictationPolisher {
     where text.count >= 2 && text.first == open && text.last == close && source.first != open {
       text = String(text.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    guard !text.isEmpty else { return nil }
+    guard !text.isEmpty, hasContent(text) else { return nil }
+    // A note about the text instead of the text: "(No text provided)",
+    // "[inaudible]". Observed live — a near-empty dictation came back as the
+    // parenthesised placeholder and it was pasted. Only a rewrite that is
+    // wrapped whole, when the speaker's text was not, is refused.
+    if let open = text.first, let close = text.last,
+      [("(", ")"), ("[", "]"), ("{", "}")].contains(where: { $0.0 == open && $0.1 == close }),
+      source.first != open
+    {
+      return nil
+    }
     let loweredCandidate = text.lowercased()
     let loweredSource = source.lowercased()
     for opening in refusalOpenings
@@ -146,7 +164,37 @@ enum DictationPolisher {
     } else if candidateWords > sourceWords + 3 {
       return nil
     }
+    guard sharesEnoughWords(candidate: text, source: source) else { return nil }
     return text
+  }
+
+  /// Whether `candidate` is lexically a version of `source` rather than a
+  /// different text of a similar length. Judged on the candidate's side: the
+  /// original may lose fillers, false starts, and self-corrections, but the
+  /// rewrite may not gain words the speaker never said. Too few comparable
+  /// words (a one- or two-word dictation) is not evidence either way.
+  static func sharesEnoughWords(candidate: String, source: String) -> Bool {
+    let comparable = contentWords(candidate).filter { word in
+      !word.contains(where: { $0.isNumber }) && !word.contains("@")
+    }
+    guard comparable.count >= 3 else { return true }
+    let sourceWords = Set(contentWords(source))
+    let shared = comparable.filter { sourceWords.contains($0) }.count
+    return Double(shared) / Double(comparable.count) >= minimumSharedWordFraction
+  }
+
+  /// Whether there is anything to type: at least one letter or digit.
+  /// Punctuation alone is a recognizer's shrug, not a dictation.
+  static func hasContent(_ text: String) -> Bool {
+    text.contains(where: { $0.isLetter || $0.isNumber })
+  }
+
+  private static func contentWords(_ text: String) -> [String] {
+    let edges = CharacterSet.punctuationCharacters.union(.symbols)
+    return text.lowercased()
+      .split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+      .map { $0.trimmingCharacters(in: edges) }
+      .filter { !$0.isEmpty }
   }
 
   /// Runs the model with a hard deadline. Any failure is the caller's cue to
@@ -158,19 +206,17 @@ enum DictationPolisher {
     timeout: TimeInterval = DictationPolisher.timeout
   ) async throws -> String? {
     let system = systemPrompt(context: context)
-    let candidate: String = try await withThrowingTaskGroup(of: String.self) { group in
-      group.addTask {
+    // The deadline is enforced at the boundary (`DeadlinedOperation`): a
+    // request stuck before its first cancellation check — in the auth header
+    // refresh, say — is abandoned at the cap, not waited for.
+    let candidate: String
+    do {
+      candidate = try await DeadlinedOperation.run(seconds: timeout) {
         try await client.sendTextRequest(
           prompt: text, systemPrompt: system, maxRetries: 0, timeout: timeout, thinkingBudget: 0)
       }
-      group.addTask {
-        try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-        throw PolishError.timedOut
-      }
-      let first = try await group.next()
-      group.cancelAll()
-      guard let first else { throw PolishError.timedOut }
-      return first
+    } catch DeadlinedOperation.Failure.timedOut {
+      throw PolishError.timedOut
     }
     return accept(candidate, for: text)
   }

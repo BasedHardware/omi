@@ -13,17 +13,17 @@ protocol TextInsertionSink: AnyObject {
   func paste(_ text: String) -> Bool
   /// Leaves `text` on the clipboard for the user to paste themselves.
   func copy(_ text: String)
-  /// Whether the character just before the caret is part of a word — i.e. the
-  /// dictation is continuing a line, so it needs a separating space first.
-  /// False when there is no caret context to read.
-  func caretFollowsWordCharacter() -> Bool
+  /// Whether the dictation is continuing a line — the caret sits right after
+  /// a word or the punctuation that closed one — so it needs a separating
+  /// space first. False when there is no caret context to read.
+  func caretNeedsSeparatingSpace() -> Bool
   /// Identifies where a paste would land right now — the frontmost
-  /// application. Nil when it cannot be read.
+  /// application and its key window. Nil when it cannot be read.
   func focusTarget() -> String?
 }
 
 extension TextInsertionSink {
-  func caretFollowsWordCharacter() -> Bool { false }
+  func caretNeedsSeparatingSpace() -> Bool { false }
   func focusTarget() -> String? { nil }
 }
 
@@ -116,16 +116,52 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
     pasteboard.setString(text, forType: .string)
   }
 
+  /// The frontmost application and its key window. The window is what
+  /// catches focus moving *within* the app while the recognizer runs — a new
+  /// document, a sheet, a chat switched to another thread — which a pid alone
+  /// cannot see. Read from the window list, which needs no permission: the
+  /// frontmost app's topmost normal-layer window is its key window.
   func focusTarget() -> String? {
     guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
-    return "\(app.processIdentifier):\(app.bundleIdentifier ?? "")"
+    let window = Self.keyWindowNumber(ownedBy: app.processIdentifier).map(String.init) ?? "?"
+    return "\(app.processIdentifier):\(app.bundleIdentifier ?? ""):\(window)"
   }
+
+  private static func keyWindowNumber(ownedBy pid: pid_t) -> Int? {
+    let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+    guard let windows = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[CFString: Any]] else {
+      return nil
+    }
+    // Front to back; the first normal-layer window the app owns is its key window.
+    for window in windows {
+      guard let owner = window[kCGWindowOwnerPID] as? pid_t, owner == pid,
+        let layer = window[kCGWindowLayer] as? Int, layer == 0,
+        let number = window[kCGWindowNumber] as? Int
+      else { continue }
+      return number
+    }
+    return nil
+  }
+
+  /// Whether dictation landing after `character` needs a space before it: yes
+  /// after a word or the punctuation that closes one ("sentence." + "Next"),
+  /// no after whitespace or anything that opens what follows — a bracket, a
+  /// quote, a slash, a hyphen, "@". A rule on all non-whitespace put a stray
+  /// space after "(" and after an opening quote.
+  nonisolated static func needsSeparatingSpace(after character: Character) -> Bool {
+    if character.isWhitespace || character.isNewline { return false }
+    if character.isLetter || character.isNumber { return true }
+    return !Self.openers.contains(character)
+  }
+  private nonisolated static let openers: Set<Character> = [
+    "(", "[", "{", "<", "\"", "'", "“", "‘", "«", "/", "\\", "-", "–", "—", "_", "@", "#", "$", "€", "£", "~", "`",
+  ]
 
   /// Reads one character behind the caret through Accessibility. A second
   /// dictation into the same line landed flush against the first ("voiceI
   /// think") because nothing knew what the caret was sitting after. Only the
   /// one character is fetched (`AXStringForRange`), never the document.
-  func caretFollowsWordCharacter() -> Bool {
+  func caretNeedsSeparatingSpace() -> Bool {
     var focusedRef: CFTypeRef?
     guard
       AXUIElementCopyAttributeValue(
@@ -149,7 +185,7 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
         element, kAXStringForRangeParameterizedAttribute as CFString, parameter, &textRef) == .success,
       let text = textRef as? String, let character = text.last
     else { return false }
-    return !character.isWhitespace && !character.isNewline
+    return Self.needsSeparatingSpace(after: character)
   }
 
   private func postCommandV() -> Bool {

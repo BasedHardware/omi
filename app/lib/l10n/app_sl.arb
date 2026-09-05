@@ -10801,6 +10801,16 @@
     "pendantFullSyncBlocked": "Pomnilnik Pendanta je poln in je še vedno v načinu snemanja, zato shranjenega zvoka ni mogoče prenesti. Pritisnite gumb na Pendantu, da ustavite snemanje, nato znova sinhronizirajte.",
     "conversationsNotCapturedCount": "Ni posneto ({count})",
     "transcriptionNoAudio": "Transkripcija ne prejema zvoka",
+    "chatBlockTask": "Opravilo",
+    "chatBlockGoal": "Cilj",
+    "chatBlockConversation": "Pogovor",
+    "chatBlockMemory": "Spomin",
+    "chatBlockQuestion": "Vprašanje",
+    "chatBlockOpenInGoals": "Odpri v Ciljih",
+    "chatBlockOpenConversation": "Odpri pogovor",
+    "chatBlockOpenInMemories": "Odpri v Spominih",
+    "chatBlockUnavailable": "Ni več na voljo",
+    "chatBlockRecommendedNextSteps": "Priporočeni naslednji koraki",
     "couldNotLoadMemories": "Spominov ni bilo mogoče naložiti",
     "couldNotLoadKnowledgeGraph": "Grafa znanja ni bilo mogoče naložiti"
 }

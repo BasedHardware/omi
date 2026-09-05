@@ -1,0 +1,13 @@
+{
+  "version": "0.12.293",
+  "date": "2026-09-05",
+  "changes": [
+    "A long reply now stays whole once it finishes instead of collapsing to its first paragraph, and asking by voice what's on your list returns the same tasks the Tasks page shows — including ones overdue by more than a week and ones that have been sitting there without a date",
+    "Added \"Select Text\" to every chat message — it opens a selectable copy you can drag through and copy from — alongside a right-click Copy, a tighter transcript, and a mark on any reply that was cut off",
+    "Every account now gets the same chat window, and every card in a reply — tasks, goals, conversations, memories, captures, questions — is something you can act on wherever you read it",
+    "Voice typing: the notch's red dots now ease back out when the dictation ends instead of snapping to white",
+    "Voice typing: a hold that heard nothing to type pastes nothing and leaves your clipboard alone, and the cleanup no longer strips letters out of addresses, hyphenated words, or units",
+    "Voice typing: if you switch documents in the same app while a dictation is being transcribed, the text is copied for you to paste instead of landing in the new document",
+    "Voice typing with no network: a spoken question now says \"No network — say “type …” to dictate offline\" instead of reporting a failed reply"
+  ]
+}

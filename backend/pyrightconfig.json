@@ -59,7 +59,6 @@
         "scripts/stt/a_generate_samples_from_device.py",
         "scripts/stt/b_clean_samples.py",
         "scripts/stt/c_generate_models.py",
-        "scripts/stt/d_test_models.py",
         "scripts/stt/e_upload_test_samples.py",
         "scripts/stt/f_test_picovoice.py",
         "scripts/stt/g_pyannote_api.py",

@@ -28,6 +28,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/NetworkReachability.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTLanguageIdentifier.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DeadlinedOperation.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationFormatter.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationPolisher.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationTranscriber.swift

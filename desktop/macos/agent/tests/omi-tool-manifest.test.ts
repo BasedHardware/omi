@@ -301,9 +301,15 @@ describe("omi tool manifest", () => {
     expect(toolNamesForAdapter("pi-mono", {
       surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
     })).toEqual(expect.arrayContaining(["get_canonical_goals", "render_chat_blocks", "search_chat_history", "show_rewind_evidence"]));
-    expect(enabled.find((tool) => tool.name === "render_chat_blocks")?.description).toContain(
-      "call this in the same turn whenever you retrieve, create, or summarize tasks",
-    );
+    // The tool is for entities the user asked for or acted on, not for every
+    // entity a turn happened to read. The old "render whenever you retrieve"
+    // wording stacked three conversation cards above a summary that had merely
+    // cited those conversations.
+    const renderDescription = enabled.find((tool) => tool.name === "render_chat_blocks")?.description ?? "";
+    expect(renderDescription).toContain("when the entity IS the answer");
+    expect(renderDescription).toContain("sources belong in citations");
+    expect(renderDescription).toContain("Render at most three");
+    expect(renderDescription).not.toContain("whenever you retrieve");
     expect(enabled.find((tool) => tool.name === "render_chat_blocks")?.description).toContain(
       "never use a local SQLite/execute_sql numeric row ID",
     );
@@ -483,5 +489,26 @@ describe("omi tool manifest", () => {
       expect(tool.capabilityDoc.summary, `${tool.name} capabilityDoc.summary`).toBeTruthy();
       expect(tool.capabilityDoc.bullets.length, `${tool.name} capabilityDoc.bullets`).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("native component guidance", () => {
+  const byName = (name: string) =>
+    [...omiToolManifest, ...chatFirstToolManifest].find((tool) => tool.name === name);
+
+  it("teaches conversation and memory retrieval to render the component when the entity is the answer", () => {
+    expect(byName("get_conversations")?.promptGuidelines?.join("\n")).toContain("captureLink");
+    expect(byName("get_conversations")?.promptGuidelines?.join("\n")).toContain("'pick one'");
+    expect(byName("search_conversations")?.promptGuidelines?.join("\n")).toContain("captureLink");
+    expect(byName("get_memories")?.promptGuidelines?.join("\n")).toContain("memoryLink");
+    expect(byName("search_memories")?.promptGuidelines?.join("\n")).toContain("memoryLink");
+    expect(byName("get_action_items")?.promptGuidelines?.join("\n")).toContain("a count, never their names");
+  });
+
+  it("makes the component the default for anything Omi draws natively, with prose reserved for reading", () => {
+    const lead = byName("render_chat_blocks")?.promptGuidelines?.[0] ?? "";
+    expect(lead).toContain("Default to a component");
+    expect(lead).toContain("a summary, a recap, an analysis, a comparison, a count");
+    expect(lead).toContain("a bold title with a citation number is not a substitute");
   });
 });

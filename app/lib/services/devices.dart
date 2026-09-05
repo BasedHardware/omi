@@ -55,6 +55,7 @@ class DeviceService {
   final Map<Object, IDeviceServiceSubsciption> _subscriptions = {};
 
   DeviceConnection? _connection;
+  DeviceConnection? get connection => _connection;
   List<BtDevice> get devices => _devices;
 
   DeviceServiceStatus get status => _status;

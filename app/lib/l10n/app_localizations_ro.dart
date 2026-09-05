@@ -9967,6 +9967,36 @@ class AppLocalizationsRo extends AppLocalizations {
   String get tapPlusToStartRecording => 'Tap + to start recording';
 
   @override
+  String get chatBlockTask => 'Sarcină';
+
+  @override
+  String get chatBlockGoal => 'Obiectiv';
+
+  @override
+  String get chatBlockConversation => 'Conversație';
+
+  @override
+  String get chatBlockMemory => 'Amintire';
+
+  @override
+  String get chatBlockQuestion => 'Întrebare';
+
+  @override
+  String get chatBlockOpenInGoals => 'Deschide în Obiective';
+
+  @override
+  String get chatBlockOpenConversation => 'Deschide conversația';
+
+  @override
+  String get chatBlockOpenInMemories => 'Deschide în Amintiri';
+
+  @override
+  String get chatBlockUnavailable => 'Nu mai este disponibil';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Pașii următori recomandați';
+
+  @override
   String get couldNotLoadMemories => 'Nu s-au putut încărca amintirile';
 
   @override
