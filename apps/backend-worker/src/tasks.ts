@@ -21,12 +21,14 @@ type StoredTask = {
   revision: string | null;
 };
 
-export function parseTaskLimit(value: string | null | undefined): number {
+export function parseTaskLimit(
+  value: string | null | undefined
+): number | null {
+  // Align with parseLimit for conversations/memories/chat: invalid values are
+  // rejected by the HTTP layer, not silently clamped to the default.
   if (value === null || value === undefined) return 100;
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1) return 100;
-  if (parsed > 100) return 100;
-  return parsed;
+  if (!/^(?:[1-9]|[1-9][0-9]|100)$/.test(value)) return null;
+  return Number(value);
 }
 export async function readTasks(
   db: D1Database,
