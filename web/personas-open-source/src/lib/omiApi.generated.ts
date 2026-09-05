@@ -1047,6 +1047,49 @@ export interface CleanerMemory {
   reviewed_source?: string | null;
 }
 
+export interface CleanupCandidateMeta {
+  description: string;
+  id: string;
+  strategy: string;
+}
+
+export interface CleanupExecuteRequest {
+  excluded_ids?: Array<string>;
+  session_id: string;
+}
+
+export interface CleanupExecuteResponse {
+  deleted_count: number;
+}
+
+export interface CleanupPreviewRequest {
+  age_days?: number;
+  llm_confidence_threshold?: number;
+  overdue_days?: number;
+  scan_cursor?: string | null;
+  similarity_threshold?: number;
+  strategies?: Array<string>;
+}
+
+export interface CleanupPreviewResponse {
+  breakdown: Record<string, unknown>;
+  candidate_ids: Array<string>;
+  candidate_meta: Array<CleanupCandidateMeta>;
+  expires_in_seconds: number;
+  next_scan_cursor?: string | null;
+  sample: Array<CleanupSampleItem>;
+  scan_cap: number;
+  scan_truncated: boolean;
+  session_id: string;
+  total_candidates: number;
+  total_open_action_items: number;
+}
+
+export interface CleanupSampleItem {
+  description: string;
+  strategy: string;
+}
+
 export interface ClickUpListsResponse {
   lists?: Array<Record<string, unknown>>;
 }
@@ -4969,6 +5012,12 @@ export interface OmiApiSchemas {
   "CheckVerificationRequest": CheckVerificationRequest;
   "CheckVerificationResponse": CheckVerificationResponse;
   "CleanerMemory": CleanerMemory;
+  "CleanupCandidateMeta": CleanupCandidateMeta;
+  "CleanupExecuteRequest": CleanupExecuteRequest;
+  "CleanupExecuteResponse": CleanupExecuteResponse;
+  "CleanupPreviewRequest": CleanupPreviewRequest;
+  "CleanupPreviewResponse": CleanupPreviewResponse;
+  "CleanupSampleItem": CleanupSampleItem;
   "ClickUpListsResponse": ClickUpListsResponse;
   "ClickUpSpacesResponse": ClickUpSpacesResponse;
   "ClickUpTeamsResponse": ClickUpTeamsResponse;
@@ -5548,6 +5597,26 @@ export interface OmiApiPaths {
       operationId: "batch_delete_action_items_v1_action_items_batch_delete_post";
       responses: {
         "200": BatchDeleteActionItemsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/action-items/cleanup/execute": {
+    post: {
+      operationId: "cleanup_execute_v1_action_items_cleanup_execute_post";
+      responses: {
+        "200": CleanupExecuteResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/action-items/cleanup/preview": {
+    post: {
+      operationId: "cleanup_preview_v1_action_items_cleanup_preview_post";
+      responses: {
+        "200": CleanupPreviewResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -10012,6 +10081,48 @@ export async function batch_update_action_items_v1_action_items_batch_patch(head
 export async function batch_delete_action_items_v1_action_items_batch_delete_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: BatchDeleteActionItemsRequest, init?: OmiApiClientInit): Promise<BatchDeleteActionItemsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/action-items/batch-delete`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function cleanup_execute_v1_action_items_cleanup_execute_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CleanupExecuteRequest, init?: OmiApiClientInit): Promise<CleanupExecuteResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/action-items/cleanup/execute`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function cleanup_preview_v1_action_items_cleanup_preview_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CleanupPreviewRequest, init?: OmiApiClientInit): Promise<CleanupPreviewResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/action-items/cleanup/preview`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
@@ -18505,4 +18616,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 435 client methods generated.
+// Total: 437 client methods generated.

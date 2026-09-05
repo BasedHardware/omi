@@ -6748,6 +6748,225 @@
         "title": "CleanerMemory",
         "type": "object"
       },
+      "CleanupCandidateMeta": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "strategy": {
+            "title": "Strategy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "strategy",
+          "description"
+        ],
+        "title": "CleanupCandidateMeta",
+        "type": "object"
+      },
+      "CleanupExecuteRequest": {
+        "properties": {
+          "excluded_ids": {
+            "description": "Candidate IDs from the preview to keep (not delete)",
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Ids",
+            "type": "array"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "title": "CleanupExecuteRequest",
+        "type": "object"
+      },
+      "CleanupExecuteResponse": {
+        "properties": {
+          "deleted_count": {
+            "title": "Deleted Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted_count"
+        ],
+        "title": "CleanupExecuteResponse",
+        "type": "object"
+      },
+      "CleanupPreviewRequest": {
+        "properties": {
+          "age_days": {
+            "default": 30,
+            "description": "Threshold for stale_age strategy",
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Age Days",
+            "type": "integer"
+          },
+          "llm_confidence_threshold": {
+            "default": 0.92,
+            "description": "Confidence threshold for llm_relevance",
+            "maximum": 1.0,
+            "minimum": 0.5,
+            "title": "Llm Confidence Threshold",
+            "type": "number"
+          },
+          "overdue_days": {
+            "default": 7,
+            "description": "Threshold for overdue strategy",
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Overdue Days",
+            "type": "integer"
+          },
+          "scan_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Resume token from a prior cleanup preview to scan the next oldest open tasks",
+            "title": "Scan Cursor"
+          },
+          "similarity_threshold": {
+            "default": 0.92,
+            "description": "Similarity threshold for semantic_dedup",
+            "maximum": 1.0,
+            "minimum": 0.5,
+            "title": "Similarity Threshold",
+            "type": "number"
+          },
+          "strategies": {
+            "default": [
+              "stale_age"
+            ],
+            "description": "Strategies to apply: stale_age, overdue, semantic_dedup, llm_relevance, conversation_context, vague",
+            "items": {
+              "type": "string"
+            },
+            "title": "Strategies",
+            "type": "array"
+          }
+        },
+        "title": "CleanupPreviewRequest",
+        "type": "object"
+      },
+      "CleanupPreviewResponse": {
+        "properties": {
+          "breakdown": {
+            "additionalProperties": true,
+            "title": "Breakdown",
+            "type": "object"
+          },
+          "candidate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Candidate Ids",
+            "type": "array"
+          },
+          "candidate_meta": {
+            "items": {
+              "$ref": "#/components/schemas/CleanupCandidateMeta"
+            },
+            "title": "Candidate Meta",
+            "type": "array"
+          },
+          "expires_in_seconds": {
+            "title": "Expires In Seconds",
+            "type": "integer"
+          },
+          "next_scan_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass on the next preview to continue scanning from the oldest remaining open tasks",
+            "title": "Next Scan Cursor"
+          },
+          "sample": {
+            "items": {
+              "$ref": "#/components/schemas/CleanupSampleItem"
+            },
+            "title": "Sample",
+            "type": "array"
+          },
+          "scan_cap": {
+            "description": "Per-strategy Firestore scan cap (see _ACTION_ITEMS_LIST_HARD_MAX)",
+            "title": "Scan Cap",
+            "type": "integer"
+          },
+          "scan_truncated": {
+            "description": "True when more open tasks remain beyond this preview's oldest-first scan window",
+            "title": "Scan Truncated",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "total_candidates": {
+            "title": "Total Candidates",
+            "type": "integer"
+          },
+          "total_open_action_items": {
+            "description": "True count of the user's open action items, independent of any scan cap",
+            "title": "Total Open Action Items",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_id",
+          "total_candidates",
+          "breakdown",
+          "sample",
+          "candidate_ids",
+          "candidate_meta",
+          "expires_in_seconds",
+          "total_open_action_items",
+          "scan_cap",
+          "scan_truncated"
+        ],
+        "title": "CleanupPreviewResponse",
+        "type": "object"
+      },
+      "CleanupSampleItem": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "strategy": {
+            "title": "Strategy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "strategy"
+        ],
+        "title": "CleanupSampleItem",
+        "type": "object"
+      },
       "ClickUpListsResponse": {
         "properties": {
           "lists": {
@@ -30258,6 +30477,182 @@
           }
         ],
         "summary": "Batch Delete Action Items",
+        "tags": [
+          "action-items"
+        ]
+      }
+    },
+    "/v1/action-items/cleanup/execute": {
+      "post": {
+        "description": "Delete the candidates staged by a prior preview call.",
+        "operationId": "cleanup_execute_v1_action_items_cleanup_execute_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleanupExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupExecuteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Cleanup Execute",
+        "tags": [
+          "action-items"
+        ]
+      }
+    },
+    "/v1/action-items/cleanup/preview": {
+      "post": {
+        "description": "Compute cleanup candidates and stage them server-side.\nReturns a session_id, summary counts, and a small sample for user review.\nDoes not delete anything.",
+        "operationId": "cleanup_preview_v1_action_items_cleanup_preview_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleanupPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Cleanup Preview",
         "tags": [
           "action-items"
         ]

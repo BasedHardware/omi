@@ -64,6 +64,10 @@ def _rate_limit_stubs():
     redis_db_stub = ModuleType("database.redis_db")
     redis_db_stub._RATE_LIMIT_LUA = MagicMock(return_value=[1, 3600])
     redis_db_stub.try_acquire_listen_lock = MagicMock(return_value=True)
+    redis_db_stub.r = MagicMock()
+    # generic_cache.py imports try_catch_decorator from redis_db; passthrough so
+    # decorated functions remain callable under the stub.
+    redis_db_stub.try_catch_decorator = lambda f: f
 
     def _check_rate_limit(key, policy, max_requests, window):
         """Real Python logic from redis_db.check_rate_limit, with mockable Lua."""

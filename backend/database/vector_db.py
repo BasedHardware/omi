@@ -1001,6 +1001,31 @@ def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]) -> No
     logger.info(f'delete_action_item_vectors_batch count={len(vector_ids)}')
 
 
+def fetch_action_item_vectors(uid: str, action_item_ids: List[str]) -> dict[str, List[float]]:
+    """
+    Bulk-fetch action item vectors from Pinecone in batches of 100.
+    Returns a map of action_item_id → embedding values.
+    Missing vectors (not yet indexed) are silently omitted.
+    """
+    if index is None or not action_item_ids:
+        return {}
+
+    result = {}
+    batch_size = 100  # Pinecone fetch uses GET; keep IDs per call small to avoid 414
+    for i in range(0, len(action_item_ids), batch_size):
+        batch_ids = action_item_ids[i : i + batch_size]
+        vector_ids = [f'{uid}-ai-{aid}' for aid in batch_ids]
+        try:
+            response = index.fetch(ids=vector_ids, namespace=ACTION_ITEMS_NAMESPACE)
+            for vid, vec in response.vectors.items():
+                aid = vid.replace(f'{uid}-ai-', '', 1)
+                result[aid] = vec.values
+        except Exception as e:
+            logger.warning(f'fetch_action_item_vectors batch failed: {e}')
+    logger.info(f'fetch_action_item_vectors uid={uid} requested={len(action_item_ids)} fetched={len(result)}')
+    return result
+
+
 def delete_conversation_vectors_batch(uid: str, conversation_ids: List[str]) -> None:
     """Delete a user's conversation vectors (ns1) in one batched, chunked call.
 
