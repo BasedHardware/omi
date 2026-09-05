@@ -682,7 +682,7 @@ def aggregate_accounting_events(events: list[AccountingEvent]) -> AccountingAggr
     jit_events = [event for event in events if event.jit_run_id]
     if not jit_events:
         return None
-    run_ids = {event.jit_run_id for event in jit_events}
+    run_ids = {event.jit_run_id for event in jit_events if event.jit_run_id is not None}
     if len(run_ids) != 1:
         raise ValueError('cannot aggregate multiple JIT run IDs')
     cost_known = all(
@@ -894,7 +894,7 @@ def _estimate_cost(
         )
     if usage.unit_type != 'tokens':
         return CostStatus.UNPRICED, None, None, None, 'non_token_unit_rate_missing'
-    rate_card = _rate_card_for(provider, model)
+    rate_card = rate_card_for(provider, model)
     if rate_card is None:
         return CostStatus.UNPRICED, None, None, None, 'rate_card_missing'
     # The tier that applies is decided by total request context — cached,
@@ -948,12 +948,12 @@ def _estimate_cost(
         cost_basis = 'flex_batch_token_rates_excludes_cache_storage'
     else:
         cost_basis = 'marginal_token_rates_excludes_cache_storage'
-    cost = _rounded_micro_usd(numerator)
-    savings = _rounded_micro_usd(cache_savings_numerator)
+    cost = rounded_micro_usd(numerator)
+    savings = rounded_micro_usd(cache_savings_numerator)
     return CostStatus.ESTIMATED, cost, savings, rate_card.rate_card_id, cost_basis
 
 
-def _rounded_micro_usd(numerator: int) -> int:
+def rounded_micro_usd(numerator: int) -> int:
     if numerator >= 0:
         return (numerator + TOKENS_PER_MILLION // 2) // TOKENS_PER_MILLION
     return -((-numerator + TOKENS_PER_MILLION // 2) // TOKENS_PER_MILLION)
@@ -1010,7 +1010,7 @@ def _load_rate_cards() -> dict[tuple[str, str], RateCard]:
     return cards
 
 
-def _rate_card_for(provider: str, model: str) -> RateCard | None:
+def rate_card_for(provider: str, model: str) -> RateCard | None:
     return _load_rate_cards().get((provider.strip().lower(), model.strip()))
 
 

@@ -732,8 +732,8 @@ def test_jit_stream_route_binds_authenticated_owner_to_reservation(monkeypatch):
         settlements.append(kwargs)
         return True
 
-    monkeypatch.setattr(openai_compatible, '_reserve_jit_attempt', reserve_jit_attempt)
-    monkeypatch.setattr(openai_compatible, '_settle_jit_attempt', settle_jit_attempt)
+    monkeypatch.setattr(openai_compatible, 'reserve_jit_attempt', reserve_jit_attempt)
+    monkeypatch.setattr(openai_compatible, 'settle_jit_attempt', settle_jit_attempt)
     app.dependency_overrides[dependencies.get_gateway_config] = _streaming_enabled_gateway_config
     app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
     try:
@@ -1019,7 +1019,7 @@ async def test_jit_stream_receipt_reframes_split_and_coalesced_sse(monkeypatch, 
         settled.append(kwargs)
         return True
 
-    monkeypatch.setattr(openai_compatible, '_settle_jit_attempt', settle_jit_attempt)
+    monkeypatch.setattr(openai_compatible, 'settle_jit_attempt', settle_jit_attempt)
     config = _streaming_enabled_gateway_config()
     resolved = resolve_chat_completion_route(config, valid_request(stream=True))
     route = openai_compatible.selected_serving_route(resolved)

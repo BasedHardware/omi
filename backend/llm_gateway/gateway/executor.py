@@ -447,7 +447,7 @@ async def _execute_route(
     raise GatewayInvalidRouteConfigError(f'route {route.route_artifact_id} has no provider refs')
 
 
-def _jit_reservation_units(request: Mapping[str, Any]) -> dict[str, int | str | None]:
+def jit_reservation_units(request: Mapping[str, Any]) -> dict[str, int | str | None]:
     """Build conservative units for the shared JIT reservation authority.
 
     The router has already applied the qualification input/output caps. The
@@ -470,7 +470,7 @@ def _jit_reservation_units(request: Mapping[str, Any]) -> dict[str, int | str | 
     }
 
 
-async def _reserve_jit_attempt(
+async def reserve_jit_attempt(
     *,
     owner_uid: str,
     run_id: str,
@@ -504,7 +504,7 @@ async def _reserve_jit_attempt(
     )
 
 
-async def _settle_jit_attempt(
+async def settle_jit_attempt(
     reservation: JITAttemptReservation | None,
     *,
     provider: str,
@@ -574,8 +574,8 @@ async def _attempt_provider(
         reservation: JITAttemptReservation | None = None
         if jit_run_id is not None:
             try:
-                units = _jit_reservation_units(provider_request)
-                reservation = await _reserve_jit_attempt(
+                units = jit_reservation_units(provider_request)
+                reservation = await reserve_jit_attempt(
                     owner_uid=cast(str, jit_owner_uid),
                     run_id=jit_run_id,
                     contract_version=cast(str, jit_contract_version),
@@ -597,7 +597,7 @@ async def _attempt_provider(
                 return None, GatewayInvalidRequestError('JIT provider attempt budget exhausted')
         timeout_ms = int((deadline_monotonic - monotonic()) * 1000)
         if timeout_ms <= 0:
-            await _settle_jit_attempt(
+            await settle_jit_attempt(
                 reservation,
                 provider=provider_ref.provider,
                 model=provider_ref.model,
@@ -626,7 +626,7 @@ async def _attempt_provider(
                     error_class='none',
                     metadata=response.accounting,
                 )
-            if not await _settle_jit_attempt(
+            if not await settle_jit_attempt(
                 reservation,
                 provider=provider_ref.provider,
                 model=provider_ref.model,
@@ -636,7 +636,7 @@ async def _attempt_provider(
                 return None, GatewayInvalidRequestError('JIT provider budget settlement rejected')
             return response, None
         except ProviderFailure as exc:
-            await _settle_jit_attempt(
+            await settle_jit_attempt(
                 reservation,
                 provider=provider_ref.provider,
                 model=provider_ref.model,
@@ -658,7 +658,7 @@ async def _attempt_provider(
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 return None, error
         except asyncio.CancelledError:
-            await _settle_jit_attempt(
+            await settle_jit_attempt(
                 reservation,
                 provider=provider_ref.provider,
                 model=provider_ref.model,
@@ -678,7 +678,7 @@ async def _attempt_provider(
                 )
             raise
         except Exception:
-            await _settle_jit_attempt(
+            await settle_jit_attempt(
                 reservation,
                 provider=provider_ref.provider,
                 model=provider_ref.model,

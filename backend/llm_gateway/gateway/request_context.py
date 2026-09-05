@@ -61,7 +61,7 @@ def jit_budget_headers_for(request: Request, *, owner_uid: str | None = None) ->
     # The client may request tighter bounds, never looser ones.
     if values[0] > 3 or values[1] > 2_048 or values[2] > 32_768 or values[3] > 50_000:
         raise ValueError('JIT budget exceeds qualification ceiling')
-    return JITBudgetHeaders(contract, run_id, *values, owner_uid)
+    return JITBudgetHeaders(contract, run_id, values[0], values[1], values[2], values[3], owner_uid)
 
 
 def request_id_for(request: Request) -> str:

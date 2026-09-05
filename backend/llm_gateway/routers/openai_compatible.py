@@ -40,9 +40,9 @@ from llm_gateway.gateway.errors import (
 )
 from llm_gateway.gateway.executor import (
     ProviderRegistry,
-    _jit_reservation_units,
-    _reserve_jit_attempt,  # type: ignore[reportPrivateUsage]  # shared gateway JIT budget boundary
-    _settle_jit_attempt,
+    jit_reservation_units,
+    reserve_jit_attempt,
+    settle_jit_attempt,
     execute_chat_completion,
     _map_provider_failure,  # type: ignore[reportPrivateUsage]  # shared gateway failure mapper
     output_budget_for,
@@ -524,8 +524,8 @@ async def _prepared_streaming_iterator(
         _request_stream_usage(provider_request, provider_ref.provider)
         if jit_run_id is not None:
             try:
-                units = _jit_reservation_units(provider_request)
-                reservation = await _reserve_jit_attempt(
+                units = jit_reservation_units(provider_request)
+                reservation = await reserve_jit_attempt(
                     owner_uid=cast(str, jit_owner_uid),
                     run_id=jit_run_id,
                     contract_version=cast(str, jit_contract_version),
@@ -557,7 +557,7 @@ async def _prepared_streaming_iterator(
                 if first_chunk:
                     break
         except StopAsyncIteration:
-            await _settle_jit_attempt(
+            await settle_jit_attempt(
                 reservation,
                 provider=provider_ref.provider,
                 model=provider_ref.model,
@@ -574,7 +574,7 @@ async def _prepared_streaming_iterator(
                 cache_requested=cache_requested_for_openai_request(provider_request),
             )
         except ProviderFailure as exc:
-            await _settle_jit_attempt(
+            await settle_jit_attempt(
                 reservation,
                 provider=provider_ref.provider,
                 model=provider_ref.model,
@@ -663,7 +663,7 @@ async def _stream_with_terminal_metrics(
         )
         if accounting_context is not None:
             schedule_attempt_trace(accounting_context, trace)
-        await _settle_jit_attempt(
+        await settle_jit_attempt(
             prepared.reservation,
             provider=prepared.provider,
             model=prepared.model,

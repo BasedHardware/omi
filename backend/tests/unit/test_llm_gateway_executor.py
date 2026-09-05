@@ -54,7 +54,7 @@ async def test_jit_budget_reserve_and_settle_use_db_executor(monkeypatch):
     monkeypatch.setattr(executor, 'run_blocking', fake_run_blocking)
 
     assert (
-        await executor._reserve_jit_attempt(
+        await executor.reserve_jit_attempt(
             owner_uid='user-123',
             run_id='jit-run',
             contract_version='jit-cloud-qa-v1',
@@ -70,7 +70,7 @@ async def test_jit_budget_reserve_and_settle_use_db_executor(monkeypatch):
         )
         is reservation
     )
-    assert await executor._settle_jit_attempt(
+    assert await executor.settle_jit_attempt(
         reservation,
         provider='openai',
         model='gpt-5.6-luna',

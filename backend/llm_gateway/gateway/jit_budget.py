@@ -16,7 +16,7 @@ from typing import Any, Literal
 
 from google.cloud import firestore
 
-from llm_gateway.gateway.accounting import _rate_card_for, _rounded_micro_usd
+from llm_gateway.gateway.accounting import rate_card_for, rounded_micro_usd
 
 _COLLECTION = 'jit_cloud_qa_budgets_v1'
 MAX_ATTEMPTS = 3
@@ -52,13 +52,13 @@ def _client() -> Any:
     return get_firestore_client()
 
 
-def _positive_int(value: int, *, name: str, maximum: int) -> int:
+def _positive_int(value: object, *, name: str, maximum: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value > maximum:
         raise ValueError(f'{name} must be an integer in the range 1..{maximum}')
     return value
 
 
-def _nonnegative_int(value: int, *, name: str, maximum: int) -> int:
+def _nonnegative_int(value: object, *, name: str, maximum: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0 or value > maximum:
         raise ValueError(f'{name} must be an integer in the range 0..{maximum}')
     return value
@@ -85,7 +85,7 @@ def _worst_case_cost_micro_usd(
     total_context_tokens = input_tokens + cached_input_tokens + cache_write_tokens
     if total_context_tokens > MAX_INPUT_TOKENS:
         raise ValueError('JIT input token envelope exceeds the qualification ceiling')
-    card = _rate_card_for(provider, model)
+    card = rate_card_for(provider, model)
     if card is None:
         raise ValueError('JIT provider/model has no trusted rate card')
     rates = card.effective_rates(total_context_tokens)
@@ -101,7 +101,7 @@ def _worst_case_cost_micro_usd(
     )
     if cache_write_rate is not None:
         numerator += cache_write_tokens * cache_write_rate
-    return max(_rounded_micro_usd(numerator), 0), card.rate_card_id
+    return max(rounded_micro_usd(numerator), 0), card.rate_card_id
 
 
 def reserve_jit_provider_attempt(
@@ -202,7 +202,7 @@ def reserve_jit_provider_attempt(
 def settle_jit_provider_attempt(
     *,
     reservation: JITAttemptReservation,
-    cost_micro_usd: int | None,
+    cost_micro_usd: object,
     status: SettlementStatus,
 ) -> bool:
     """Settle a trusted result; unknown cost permanently blocks the run."""
