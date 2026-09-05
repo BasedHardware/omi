@@ -17,11 +17,6 @@ on:
         required: false
         default: ''
         type: string
-      model_execution_confirmation:
-        description: Type RUN_MODEL_EXPERIMENT only after separate paid-model approval
-        required: false
-        default: ''
-        type: string
 
 env:
   QA_PROJECT: based-hardware-dev
@@ -181,6 +176,13 @@ jobs:
             gcloud firestore databases create --database "$QA_FIRESTORE_DATABASE" --location "$QA_REGION" --type firestore-native --project "$QA_PROJECT" --quiet
           fi
           gcloud firestore databases describe --database "$QA_FIRESTORE_DATABASE" --project "$QA_PROJECT" --format='value(name,locationId,type)' | grep -F "$QA_FIRESTORE_DATABASE" >/dev/null
+      - name: Preflight required development secret metadata before resource mutation
+        run: |
+          set -euo pipefail
+          for secret in ENCRYPTION_SECRET OPENAI_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET"; do
+            gcloud secrets describe "$secret" --project "$QA_PROJECT" >/dev/null
+            gcloud secrets versions describe latest --secret "$secret" --project "$QA_PROJECT" >/dev/null
+          done
       - name: Create or verify the 1 GiB Basic Redis dependency
         id: redis
         run: |
@@ -374,7 +376,7 @@ jobs:
           if-no-files-found: error
 
   execute:
-    name: Execute explicit drain, then separately approved model sweep
+    name: Execute explicit drain after durable-proof admission
     if: inputs.run_once == true
     needs: [admit, provision, deploy, verify]
     environment: development
@@ -391,15 +393,12 @@ jobs:
         env:
           RUN_ONCE_INPUT: ${{ inputs.run_once }}
           CONFIRMATION_INPUT: ${{ inputs.confirmation }}
-          MODEL_CONFIRMATION_INPUT: ${{ inputs.model_execution_confirmation }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import os
           if os.environ["RUN_ONCE_INPUT"] != "true" or os.environ["CONFIRMATION_INPUT"] != "RUN_ONCE":
               raise SystemExit("explicit RUN_ONCE confirmation is required")
-          if os.environ["MODEL_CONFIRMATION_INPUT"] not in {"", "RUN_MODEL_EXPERIMENT"}:
-              raise SystemExit("invalid model experiment confirmation")
           PY
       - name: Execute and wait for the exact ledger drain
         run: |
@@ -416,7 +415,7 @@ jobs:
           PY
           execution="$(cat "$RUNNER_TEMP/jit-qa-execution/drain.name")"
           for _ in $(seq 1 80); do
-            gcloud run jobs executions describe "$execution" --job "$QA_DRAIN_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$RUNNER_TEMP/jit-qa-execution/drain.state.json"
+            gcloud run jobs executions describe "$execution" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$RUNNER_TEMP/jit-qa-execution/drain.state.json"
             state="$(python3 - "$RUNNER_TEMP/jit-qa-execution/drain.state.json" <<'PY'
           import json, sys
           payload = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -466,35 +465,6 @@ jobs:
               raise SystemExit("durable ledger projection has no nonempty completed scan")
           print("durable ledger completion proof passed")
           PY
-      - name: Execute sweep only after drain success and separate paid-model approval
-        if: inputs.model_execution_confirmation == 'RUN_MODEL_EXPERIMENT'
-        run: |
-          set -euo pipefail
-          gcloud run jobs execute "$QA_SWEEP_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --update-env-vars "MEMORY_DAILY_MEMORY_SWEEP_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=gpt-5.6-luna,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=8,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0.05,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=jit-processing-v1,OMI_JIT_QA_AUTH_ONLY=true,OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}" --format=json > "$RUNNER_TEMP/jit-qa-execution/sweep.json"
-          python3 - "$RUNNER_TEMP/jit-qa-execution/sweep.json" <<'PY' > "$RUNNER_TEMP/jit-qa-execution/sweep.name"
-          import json, sys
-          payload = json.load(open(sys.argv[1], encoding="utf-8"))
-          name = payload.get("metadata", {}).get("name")
-          if not isinstance(name, str) or not name.startswith("daily-memory-sweep-qa-job-"):
-              raise SystemExit("missing exact returned sweep execution")
-          print(name)
-          PY
-          execution="$(cat "$RUNNER_TEMP/jit-qa-execution/sweep.name")"
-          for _ in $(seq 1 80); do
-            gcloud run jobs executions describe "$execution" --job "$QA_SWEEP_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$RUNNER_TEMP/jit-qa-execution/sweep.state.json"
-            state="$(python3 - "$RUNNER_TEMP/jit-qa-execution/sweep.state.json" <<'PY'
-          import json, sys
-          payload = json.load(open(sys.argv[1], encoding="utf-8"))
-          condition = next((item for item in payload.get("status", {}).get("conditions", []) if item.get("type") == "Completed"), None)
-          print("running" if condition is None or condition.get("status") not in {"True", "False"} else "succeeded" if condition.get("status") == "True" else "failed")
-          PY
-          )"
-            [[ "$state" == succeeded ]] && break
-            [[ "$state" != failed ]] || { echo 'QA sweep failed' >&2; exit 1; }
-            sleep 15
-          done
-          [[ "$state" == succeeded ]]
-          echo 'sweep execution admitted only after successful drain and explicit model approval' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
           name: jit-qa-execution-receipt-${{ github.run_id }}

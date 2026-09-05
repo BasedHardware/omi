@@ -224,6 +224,10 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "iam policy" not in text
     assert "--max-retries 0" in text
     assert "RUN_ONCE" in text
+    assert "jobs executions describe" in text
+    assert "jobs executions describe \"$execution\" --job" not in text
+    assert "RUN_MODEL_EXPERIMENT" not in text
+    assert "MODEL_CONFIRMATION_INPUT" not in text
     assert "gcr.io/${QA_PROJECT}" in text
     assert "vars.GCP_PROJECT_ID" not in text
     assert "environment: prod" not in text

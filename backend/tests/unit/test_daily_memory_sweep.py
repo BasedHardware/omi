@@ -1436,6 +1436,11 @@ def test_completed_day_model_candidates_are_staged_before_apply_and_reused(monke
 def test_completed_day_agent_assigns_folders_for_unopened_conversations(monkeypatch):
     db = _Db()
     control = _open_control(monkeypatch)
+    refreshes = []
+    monkeypatch.setattr(
+        "database.folders.update_folder_conversation_count",
+        lambda uid, folder_id: refreshes.append((uid, folder_id)),
+    )
     db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
     local_date = date(2026, 8, 23)
     window = completed_local_day_window(local_date, "UTC")
@@ -1486,11 +1491,17 @@ def test_completed_day_agent_assigns_folders_for_unopened_conversations(monkeypa
     staged = next(payload for path, payload in db.store.items() if "daily_summary_staged" in path)
     assert staged["folder_assignments"] == [{"conversation_id": "conversation-1", "folder_id": "folder-1"}]
     assert db.store["users/user-1/conversations/conversation-1"]["folder_id"] == "folder-1"
+    assert refreshes == [("user-1", "folder-1")]
 
 
 def test_folder_backstop_never_overwrites_and_requires_obligation(monkeypatch):
     from utils.memory.daily_memory_sweep import _apply_daily_sweep_folder_assignments
 
+    refreshes = []
+    monkeypatch.setattr(
+        "database.folders.update_folder_conversation_count",
+        lambda uid, folder_id: refreshes.append((uid, folder_id)),
+    )
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep.firestore.transactional",
         lambda function: lambda transaction, *args: function(transaction, *args),
@@ -1518,6 +1529,7 @@ def test_folder_backstop_never_overwrites_and_requires_obligation(monkeypatch):
     assert db.store["users/user-1/conversations/filed"]["folder_id"] == "existing"
     assert "folder_id" not in db.store["users/user-1/conversations/eager"]
     assert db.store["users/user-1/conversations/open-pending"]["folder_id"] == "folder-1"
+    assert refreshes == [("user-1", "folder-1")]
 
 
 def test_completed_day_memory_without_valid_citation_is_dropped(monkeypatch):
