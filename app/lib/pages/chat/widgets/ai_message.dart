@@ -1317,7 +1317,9 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               if (widget.messageText.isEmpty) return;
               HapticFeedback.lightImpact();
-              await Share.share(widget.messageText, sharePositionOrigin: shareSheetOrigin());
+              await SharePlus.instance.share(
+                ShareParams(text: widget.messageText, sharePositionOrigin: shareSheetOrigin()),
+              );
               PlatformManager.instance.analytics.track(
                 'Chat Message Shared',
                 properties: {'message': widget.messageText},
