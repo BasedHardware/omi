@@ -518,6 +518,10 @@ RCT_EXPORT_MODULE(OmiAuth)
 - (void)performRequest:(NSURLRequest *)request completion:(void (^)(NSDictionary *, NSError *))completion {
   NSURLSessionConfiguration *configuration = NSURLSessionConfiguration.ephemeralSessionConfiguration;
   configuration.HTTPCookieStorage = nil;
+  // Match OmiBackendModule token-bearing fetches: hang forever is worse than a
+  // retryable timeout during Google/Firebase exchange + session refresh.
+  configuration.timeoutIntervalForRequest = 30;
+  configuration.timeoutIntervalForResource = 60;
   NSURLSession *session = [NSURLSession sessionWithConfiguration:configuration];
   [[session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
     NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class]
@@ -547,6 +551,8 @@ RCT_EXPORT_MODULE(OmiAuth)
   refresh.HTTPBody = [body dataUsingEncoding:NSUTF8StringEncoding];
   NSURLSessionConfiguration *configuration = NSURLSessionConfiguration.ephemeralSessionConfiguration;
   configuration.HTTPCookieStorage = nil;
+  configuration.timeoutIntervalForRequest = 30;
+  configuration.timeoutIntervalForResource = 60;
   NSURLSession *networkSession = [NSURLSession sessionWithConfiguration:configuration];
   [[networkSession dataTaskWithRequest:refresh completionHandler:
       ^(NSData *data, NSURLResponse *response, NSError *error) {
