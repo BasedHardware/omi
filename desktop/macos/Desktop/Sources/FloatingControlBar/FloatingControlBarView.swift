@@ -295,7 +295,7 @@ struct FloatingControlBarView: View {
           // Shortcut legend + capture controls, hugging the trailing edge of the
           // expanded surface — the notch's right side, revealed on hover.
           VStack {
-            NotchSystemControlsView(progress: notchSwitcherProgress)
+            NotchSystemControlsView(progress: notchSwitcherProgress, onHide: hideNotchFromControls)
               .padding(
                 .top,
                 notchChromeHeight
@@ -1071,6 +1071,18 @@ struct FloatingControlBarView: View {
         .scaledFont(size: OmiType.caption)
         .foregroundColor(.secondary)
     }
+  }
+
+  /// The hover surface's Hide control. Closes the hover rows first so the island retracts as
+  /// the collapsed header rather than the expanded panel, then runs the bar's own hide path —
+  /// retract, order out, persist `isEnabled = false` — the same end state as switching
+  /// "Show floating bar" off in Settings.
+  private func hideNotchFromControls() {
+    agentSwitcherCollapseWorkItem?.cancel()
+    agentSwitcherCollapseWorkItem = nil
+    state.setNotchHoverMenuOpen(false)
+    notchLogoHovering = false
+    onHide()
   }
 
   private func setAgentSwitcherHovering(_ hovering: Bool) {
