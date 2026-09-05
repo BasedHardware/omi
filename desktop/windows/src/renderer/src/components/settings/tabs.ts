@@ -7,6 +7,7 @@ import {
   Brain,
   Bot,
   AudioLines,
+  CloudUpload,
   CreditCard,
   Keyboard,
   Bell,
@@ -19,6 +20,7 @@ export type SettingsTabId =
   | 'memories'
   | 'agents'
   | 'transcription'
+  | 'offline-audio'
   | 'rewind'
   | 'notifications'
   | 'privacy'
@@ -33,6 +35,7 @@ export const SETTINGS_TABS: { id: SettingsTabId; label: string; Icon: LucideIcon
   { id: 'memories', label: 'Memories', Icon: Brain },
   { id: 'agents', label: 'Agents', Icon: Bot },
   { id: 'transcription', label: 'Transcription', Icon: AudioLines },
+  { id: 'offline-audio', label: 'Offline audio', Icon: CloudUpload },
   { id: 'rewind', label: 'Rewind', Icon: History },
   { id: 'notifications', label: 'Notifications', Icon: Bell },
   { id: 'privacy', label: 'Privacy', Icon: ShieldCheck },
