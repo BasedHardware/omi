@@ -189,22 +189,30 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     if (backend === undefined || backend === null) {
       return () => undefined;
     }
+    // Capture the session this load belongs to. send() bumps mutation so an
+    // in-flight setMessages(page) cannot wipe optimistic rows — but that same
+    // bump must not discard the history page (cursor + prior messages). Always
+    // merge into whatever the session already shows; workspace reload / gate
+    // drop clear messages before bumping the epoch.
+    const session = chatSessionEpochRef.current;
     const mutation = chatMutationSeqRef.current;
     loadNewestChatHistory(backend)
       .then(page => {
-        if (active && mutation === chatMutationSeqRef.current) {
-          page.messages.forEach(message =>
-            stableChatMessageIds.add(message.id),
-          );
-          setMessages(page.messages);
-          setOlderChatCursor(page.olderCursor);
-          setHasOlderChat(page.hasOlder);
-          setChatError(null);
+        if (!active || chatSessionEpochRef.current !== session) {
+          return;
         }
+        page.messages.forEach(message => stableChatMessageIds.add(message.id));
+        setMessages(current =>
+          reconcileCanonicalChatHistory(current, page.messages),
+        );
+        setOlderChatCursor(page.olderCursor);
+        setHasOlderChat(page.hasOlder);
+        setChatError(null);
       })
       .catch(error => {
         if (
           active &&
+          chatSessionEpochRef.current === session &&
           mutation === chatMutationSeqRef.current &&
           (!macDesktop || onboardingRequired === false)
         ) {
