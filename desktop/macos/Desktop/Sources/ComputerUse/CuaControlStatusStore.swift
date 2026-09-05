@@ -38,16 +38,24 @@ final class CuaControlStatusStore: ObservableObject {
   /// user somewhere that cannot help.
   @Published private(set) var screenNeedsRelaunch = false
 
+  /// One grant as the surfaces name it. A named type rather than a tuple
+  /// because a row is passed to a view, and a three-part tuple in a view
+  /// signature stops saying what it is.
+  struct Listed {
+    let permission: CuaPermission
+    let title: String
+    let detail: String
+  }
+
   /// Two of these live in the same System Settings pane and are still two
   /// separate grants, so each is named by what it lets Omi do rather than by the
   /// pane it is found in.
-  static let listed: [(permission: CuaPermission, title: String, detail: String)] = [
-    (.postEvents, "Input", "Move the pointer, click, and type. Accessibility pane."),
-    (
-      .accessibility, "Reading controls",
-      "List another app's controls and press them by name. Accessibility pane."
-    ),
-    (.screenRecording, "Screen", "Take screenshots. Screen Recording pane."),
+  static let listed: [Listed] = [
+    Listed(permission: .postEvents, title: "Input", detail: "move the pointer, click, and type"),
+    Listed(
+      permission: .accessibility, title: "Reading controls",
+      detail: "read another app's controls and press them by name"),
+    Listed(permission: .screenRecording, title: "Screen", detail: "take screenshots"),
   ]
 
   private let gate: CuaControlGate

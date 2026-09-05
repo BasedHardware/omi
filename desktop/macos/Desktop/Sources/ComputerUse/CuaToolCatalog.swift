@@ -37,6 +37,14 @@ struct CuaTool: @unchecked Sendable {
   let name: String
   let description: String
   let inputSchema: [String: Any]
+
+  /// The first sentence of the description, for a person scanning the list.
+  /// The rest is aimed at the model — when to prefer another tool, what an id
+  /// means — and reads as noise to anyone else.
+  var summary: String {
+    guard let end = description.firstIndex(of: ".") else { return description }
+    return String(description[..<end])
+  }
 }
 
 /// The computer-use tools, and what each one does.

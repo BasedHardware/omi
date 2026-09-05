@@ -17,6 +17,7 @@ struct McpServersSection: View {
   /// Drives the built-in server card's status line; it renders through the same
   /// card as every other server, with the gate's state standing in for a probe.
   @ObservedObject private var cuaStatus = CuaControlStatusStore.shared
+
   private let cuaPermissionPoll = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
   private var servers: [LocalMcpStore.Entry] {
@@ -25,7 +26,7 @@ struct McpServersSection: View {
     // — the status line naming what is missing — is how computer control is
     // discovered at all, so it is synthesized when absent and pinned first.
     let builtIn = LocalMcpStore.Entry(
-      name: CuaMcpRegistration.serverName, summary: CuaMcpRegistration.endpointURL, isCommand: false)
+      name: CuaMcpRegistration.serverName, summary: CuaControlCopy.cardDetail, isCommand: false)
     listed.removeAll { $0.name == builtIn.name }
     if matchesSearch(builtIn.name, builtIn.summary, query: searchText) {
       listed.insert(builtIn, at: 0)
@@ -1183,6 +1184,9 @@ struct SkillEditorSheet: View {
 struct LocalMcpDetailSheet: View {
   let server: LocalMcpStore.Entry
   @ObservedObject var appProvider: AppProvider
+  /// Only the built-in server uses this, to offer the relaunch a Screen
+  /// Recording grant needs before macOS hands it to this process.
+  var appState: AppState?
   let onDismiss: () -> Void
 
   @State private var confirmingDelete = false
@@ -1197,19 +1201,27 @@ struct LocalMcpDetailSheet: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-      HStack(alignment: .top) {
-        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text(server.name)
-            .scaledFont(size: OmiType.title, weight: .semibold)
-            .foregroundColor(Ink.primary)
-          Text(subtitle)
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-        }
-        Spacer()
-        DismissButton(action: onDismiss)
-      }
+      header
 
+      // The built-in server's whole surface is its own block: switch, grants,
+      // tools, and how to reach the endpoint. Repeating the endpoint above it
+      // said the same thing the card already said, and its block sizes itself,
+      // so nothing here pins a height it does not need.
+      if server.isBuiltIn {
+        ComputerUsePermissionsBlock(appState: appState)
+      } else {
+        userServerContent
+        Spacer(minLength: 0)
+      }
+    }
+    .padding(OmiSpacing.lg)
+    .background(Ink.surface)
+  }
+
+  /// Everything a server the user added shows: where it runs, whether it
+  /// answers, how to sign in, and how to remove it.
+  private var userServerContent: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       VStack(alignment: .leading, spacing: OmiSpacing.md) {
         labelled(server.isCommand ? "Runs on your Mac" : "Endpoint") {
           Text(server.summary)
@@ -1219,29 +1231,24 @@ struct LocalMcpDetailSheet: View {
             .fixedSize(horizontal: false, vertical: true)
         }
 
-        if !server.isBuiltIn {
-          labelled("Status") {
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text(status.label)
+        labelled("Status") {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text(status.label)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(status.isHealthy ? Ink.primary : Ink.secondary)
+            if let detail = status.detail {
+              Text(detail)
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(status.isHealthy ? Ink.primary : Ink.secondary)
-              if let detail = status.detail {
-                Text(detail)
-                  .scaledFont(size: OmiType.caption)
-                  .foregroundColor(Ink.secondary)
-                  .fixedSize(horizontal: false, vertical: true)
-              }
+                .foregroundColor(Ink.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
           }
         }
 
         // A remote server can refuse us for two different reasons, and the fix differs: OAuth needs a
         // browser round trip, an API key needs the key. Both live here because a card that reports
-        // "Needs sign-in" with nothing to press is a dead end. The built-in server needs neither —
-        // its token is minted and kept by the app — and carries its permissions block instead.
-        if server.isBuiltIn {
-          ComputerUsePermissionsBlock()
-        } else if !server.isCommand {
+        // "Needs sign-in" with nothing to press is a dead end.
+        if !server.isCommand {
           labelled("Authentication") {
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               Button(action: signIn) {
@@ -1281,49 +1288,78 @@ struct LocalMcpDetailSheet: View {
       }
 
       Text(
-        server.isBuiltIn
-          ? "Its tools reach chat automatically — right away, or with your next message if a reply is in flight."
-          : "Configured in ~/.omi/mcp.json. Changes reach chat automatically — right away, or with your next message if a reply is in flight."
+        "Configured in ~/.omi/mcp.json. Changes reach chat automatically — right away, or with your next message if a reply is in flight."
       )
       .scaledFont(size: OmiType.caption)
       .foregroundColor(Ink.secondary)
       .fixedSize(horizontal: false, vertical: true)
 
-      // The built-in entry follows the computer-control gate, so there is no Remove for it.
-      if !server.isBuiltIn {
-        HStack {
-          Spacer()
-          Button {
-            if confirmingDelete {
-              LocalMcpStore.removeServer(name: server.name)
-              Task {
-                await appProvider.fetchUserExtensions()
-                onDismiss()
-              }
-            } else {
-              confirmingDelete = true
+      HStack {
+        Spacer()
+        Button {
+          if confirmingDelete {
+            LocalMcpStore.removeServer(name: server.name)
+            Task {
+              await appProvider.fetchUserExtensions()
+              onDismiss()
             }
-          } label: {
-            Text(confirmingDelete ? "Confirm Remove" : "Remove")
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(Ink.errorRed)
-              .padding(.horizontal, OmiSpacing.md)
-              .frame(height: 28)
-              .background(Ink.errorRed.opacity(0.1))
-              .cornerRadius(OmiChrome.chipRadius)
+          } else {
+            confirmingDelete = true
           }
-          .buttonStyle(.plain)
+        } label: {
+          Text(confirmingDelete ? "Confirm Remove" : "Remove")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(Ink.errorRed)
+            .padding(.horizontal, OmiSpacing.md)
+            .frame(height: 28)
+            .background(Ink.errorRed.opacity(0.1))
+            .cornerRadius(OmiChrome.chipRadius)
         }
+        .buttonStyle(.plain)
+      }
+    }
+  }
+
+  /// The icon tile, name and subtitle, in the language the Add MCP Server sheet
+  /// already uses — the two are the same modal family.
+  private var header: some View {
+    HStack(alignment: .top, spacing: OmiSpacing.md) {
+      Image(systemName: icon)
+        .scaledFont(size: OmiType.subheading, weight: .medium)
+        .foregroundColor(Ink.primary)
+        .frame(width: 40, height: 40)
+        .background(
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+            .fill(Ink.rowFill)
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+            .strokeBorder(Ink.separator, lineWidth: 1)
+        )
+
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+        Text(server.name)
+          .scaledFont(size: OmiType.heading, weight: .semibold)
+          .foregroundColor(Ink.primary)
+        Text(subtitle)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
       }
 
-      Spacer(minLength: 0)
+      Spacer(minLength: OmiSpacing.md)
+
+      DismissButton(action: onDismiss)
     }
-    .padding(OmiSpacing.lg)
-    .background(Ink.surface)
+  }
+
+  private var icon: String {
+    if server.isBuiltIn { return "macbook" }
+    return server.isCommand ? "terminal" : "server.rack"
   }
 
   private var subtitle: String {
-    if server.isBuiltIn { return "Built-in" }
+    if server.isBuiltIn { return "Built-in · \(CuaToolCatalog.tools.count) tools" }
     // "Local" here used to mean "configured locally", which read as a claim
     // about where a remote server runs.
     return server.isCommand ? "Local command" : "Remote server"

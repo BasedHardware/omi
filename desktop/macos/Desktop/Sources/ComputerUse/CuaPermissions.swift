@@ -192,6 +192,14 @@ enum CuaPermission: String, CaseIterable, Sendable {
     NSWorkspace.shared.open(settingsURL)
   }
 
+  /// Whether macOS has already spent its one prompt for this grant. A caller
+  /// that opens System Settings unconditionally puts the pane on top of the
+  /// dialog it just raised; this is how it asks which of the two is the move.
+  @MainActor
+  static func hasBeenRequested(_ permission: CuaPermission) -> Bool {
+    requested.contains(permission)
+  }
+
   /// Screen Recording granted after this process launched.
   ///
   /// `CGPreflightScreenCaptureAccess` flips to true the moment the box is
