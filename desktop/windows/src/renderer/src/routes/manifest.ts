@@ -1,7 +1,15 @@
 import { memo, createElement } from 'react'
 import type { ComponentType, ReactElement } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { House, GanttChartSquare, ListChecks, History, LayoutGrid, Lightbulb } from 'lucide-react'
+import {
+  House,
+  GanttChartSquare,
+  ListChecks,
+  History,
+  LayoutGrid,
+  Lightbulb,
+  Activity as ActivityIcon
+} from 'lucide-react'
 import { Home } from '../pages/Home'
 import { Conversations } from '../pages/Conversations'
 import { Memories } from '../pages/Memories'
@@ -12,6 +20,7 @@ import { Goals } from '../pages/Goals'
 import { Apps } from '../pages/Apps'
 import { Rewind } from '../pages/Rewind'
 import { Insights } from '../pages/Insights'
+import { Activity } from '../pages/Activity'
 import { LiveConversation } from '../pages/LiveConversation'
 import { KnowledgeGraph } from '../pages/KnowledgeGraph'
 import { CONVERSATIONS_PATH } from '../lib/conversations/conversationsPanelActivity'
@@ -79,6 +88,7 @@ const GoalsPanel = memo(Goals)
 const AppsPanel = memo(Apps)
 const RewindPanel = memo(Rewind)
 const InsightsPanel = memo(Insights)
+const ActivityPanel = memo(Activity)
 
 // Shared path constants — keep panel activity predicates and the manifest in sync.
 export const HOME_PATH = '/home'
@@ -184,6 +194,18 @@ export const routeManifest: RouteEntry[] = [
     path: '/insights',
     Component: InsightsPanel,
     nav: { label: 'Insights', Icon: Lightbulb, order: 5 },
+    escapeToHome: true
+  },
+  {
+    // Appended rather than placed near Home so the existing rail order is
+    // unchanged. Deliberately no Ctrl+N: macOS reaches this surface as a tab
+    // inside the Memory hub rather than as a destination, so it binds no key
+    // there either, and the rail item is the discovery path here.
+    id: 'activity',
+    kind: 'panel',
+    path: '/activity',
+    Component: ActivityPanel,
+    nav: { label: 'Activity', Icon: ActivityIcon, order: 6 },
     escapeToHome: true
   }
 ]
