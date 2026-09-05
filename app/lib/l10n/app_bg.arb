@@ -3213,6 +3213,16 @@
     "pendantFullSyncBlocked": "Паметта на Pendant е пълна и той все още е в режим на запис, затова съхраненото аудио не може да бъде прехвърлено. Натиснете бутона на Pendant, за да спрете записа, и след това синхронизирайте отново.",
     "conversationsNotCapturedCount": "Не е записано ({count})",
     "transcriptionNoAudio": "Транскрипцията не получава аудио",
+    "chatBlockTask": "Задача",
+    "chatBlockGoal": "Цел",
+    "chatBlockConversation": "Разговор",
+    "chatBlockMemory": "Спомен",
+    "chatBlockQuestion": "Въпрос",
+    "chatBlockOpenInGoals": "Отваряне в „Цели“",
+    "chatBlockOpenConversation": "Отваряне на разговора",
+    "chatBlockOpenInMemories": "Отваряне в „Спомени“",
+    "chatBlockUnavailable": "Вече не е налично",
+    "chatBlockRecommendedNextSteps": "Препоръчани следващи стъпки",
     "couldNotLoadMemories": "Неуспешно зареждане на спомените",
     "couldNotLoadKnowledgeGraph": "Неуспешно зареждане на графа на знанията"
 }

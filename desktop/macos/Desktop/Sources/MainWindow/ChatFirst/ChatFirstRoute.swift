@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -11,6 +12,12 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
   case goals
   case memories
   case more(ChatFirstMorePage)
+  /// The day's full recap. Carries identity only, never content: the page
+  /// re-reads the record through the shared store or the API, so a relaunch
+  /// onto a persisted recap route re-fetches (or degrades gracefully) instead
+  /// of restoring stale text. Not a primary destination — no sidebar chip and
+  /// no automation name routes here; only an opening recap row does.
+  case dailyRecap(DailyRecapRouteRef)
 
   var stableName: String {
     switch self {
@@ -20,6 +27,7 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     case .goals: return "goals"
     case .memories: return "memories"
     case .more(let page): return "more.\(page.stableName)"
+    case .dailyRecap: return "daily-recap"
     }
   }
 
@@ -31,6 +39,7 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     case .goals: return .goals
     case .memories: return .memories
     case .more: return .more
+    case .dailyRecap: return .dailyRecap
     }
   }
 
@@ -42,13 +51,14 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     case .goals: return "Goals"
     case .memories: return "Memories"
     case .more(let page): return page.title
+    case .dailyRecap: return "Daily recap"
     }
   }
 
   var isPrimaryDestination: Bool {
     switch self {
     case .chat, .conversations, .tasks, .goals, .memories: return true
-    case .more: return false
+    case .more, .dailyRecap: return false
     }
   }
 
@@ -82,6 +92,10 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     let normalized = target.lowercased().replacingOccurrences(of: "-", with: "_")
     switch normalized {
     case "dashboard", "home": return .chat
+    // `help` used to name a "Help from Founder" page no shell mounted. Getting
+    // help from a person lives in Settings → About (the Community card), so the
+    // legacy name resolves to the destination that actually exists.
+    case "help": return .more(.settings)
     case "rewind": return .more(.rewind)
     case "apps", "integrations": return .more(.apps)
     case "permissions": return .more(.permissions)
@@ -89,6 +103,22 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     default: return nil
     }
   }
+}
+
+extension ChatFirstRoute {
+  /// True for the automation names that mean "get help from a person". The root
+  /// pre-selects the About section for these before routing to Settings.
+  static func isHelpAutomationTarget(_ target: String) -> Bool {
+    target.lowercased().replacingOccurrences(of: "-", with: "_") == "help"
+  }
+}
+
+/// Identity for a recap route: which record, which day. Both are stable wire
+/// values, so the persisted route survives a relaunch and the page it opens
+/// can re-fetch (or fall back) from them alone.
+struct DailyRecapRouteRef: Hashable, Codable, Sendable {
+  var recordID: String
+  var date: String
 }
 
 enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
@@ -189,6 +219,11 @@ private struct ChatFirstPersistedNavigation: Codable, Equatable {
 final class ChatFirstShellNavigation: ObservableObject {
   static let storageKey = "chatFirstShell.windowNavigation.v1"
 
+  /// The one navigation owner. The main window binds it, and the auxiliary Chat
+  /// surfaces (task panel, floating/notch) bind the same instance so a content
+  /// block tapped anywhere routes the single shell rather than a private copy.
+  static let shared = ChatFirstShellNavigation()
+
   @Published private(set) var route: ChatFirstRoute
   /// The destination currently mounted by SwiftUI. This is deliberately
   /// separate from `route`: navigation commands are not complete until the
@@ -199,6 +234,10 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// the paginated list, this transient value is the exact server record the
   /// user validated and asked to open.
   @Published private(set) var pendingConversation: ServerConversation?
+  /// The primary route the reader was on when a recap row opened the recap
+  /// page. The page's back chevron returns there. Transient like a focus —
+  /// never persisted, reset on owner change, and only ever a primary route.
+  @Published private(set) var dailyRecapOrigin: ChatFirstRoute?
   /// A related-entity link can intentionally land in a different primary
   /// destination (for example, a Goal's task list). This is transient like the
   /// focus itself and is never restored across launches.
@@ -237,6 +276,7 @@ final class ChatFirstShellNavigation: ObservableObject {
     pendingFocus = nil
     pendingConversation = nil
     pendingFocusDestination = nil
+    dailyRecapOrigin = nil
     visibleRoute = nil
     lastAcknowledgedFocusKind = nil
     focusedEntityID = nil
@@ -262,8 +302,10 @@ final class ChatFirstShellNavigation: ObservableObject {
   ) {
     guard destination.isPrimaryDestination else { return }
     // A direct tab selection supersedes any exact conversation deep-link that
-    // has not yet been consumed by the Conversations host.
+    // has not yet been consumed by the Conversations host — and any recap page
+    // it may have been the back target of.
     pendingConversation = nil
+    dailyRecapOrigin = nil
     // Selecting the already-mounted tab is a no-op. Clearing visibleRoute here
     // used to leave the automation state permanently "not visible" because
     // SwiftUI correctly did not remount the unchanged destination.
@@ -273,6 +315,7 @@ final class ChatFirstShellNavigation: ObservableObject {
       return
     }
     invalidateLinkResolutions()
+    ChatSwitchPerfLog.beginSwitch(destination: "selectPrimary:\(destination.stableName)")
     route = destination
     visibleRoute = nil
     clearFocus()
@@ -282,6 +325,10 @@ final class ChatFirstShellNavigation: ObservableObject {
 
   @discardableResult
   func handleEscapeNavigation() -> Bool {
+    if case .dailyRecap = route {
+      closeDailyRecap()
+      return true
+    }
     guard route != .chat else { return false }
     selectPrimary(.chat)
     return true
@@ -289,12 +336,14 @@ final class ChatFirstShellNavigation: ObservableObject {
 
   func selectMore(_ page: ChatFirstMorePage) {
     pendingConversation = nil
+    dailyRecapOrigin = nil
     if route == .more(page) {
       invalidateLinkResolutions()
       clearFocus()
       return
     }
     invalidateLinkResolutions()
+    ChatSwitchPerfLog.beginSwitch(destination: "selectMore:\(page.stableName)")
     route = .more(page)
     visibleRoute = nil
     clearFocus()
@@ -313,6 +362,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// navigation; no legacy page can receive a pending focus.
   func open(focus: ChatFirstPendingFocus, destination: ChatFirstRoute) {
     guard destination.isPrimaryDestination else { return }
+    presentMainWindowIfNeeded()
     pendingConversation = nil
     invalidateLinkResolutions()
     route = destination
@@ -338,6 +388,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   func open(conversation: ServerConversation, destination: ChatFirstRoute) {
     guard destination.isPrimaryDestination else { return }
     guard !conversation.id.isEmpty else { return }
+    presentMainWindowIfNeeded()
     invalidateLinkResolutions()
     route = destination
     visibleRoute = nil
@@ -346,8 +397,38 @@ final class ChatFirstShellNavigation: ObservableObject {
     focusedEntityID = nil
     isFocusedEntityAcknowledged = false
     pendingConversation = conversation
+    dailyRecapOrigin = nil
     persistNavigation()
     analytics(.routeEntered(route: destination.analyticsRoute, origin: .chatDeeplink))
+  }
+
+  /// Opens the day's recap page from a recap row (Chat transcript or Activity).
+  /// The route records the primary surface the reader came from, so the page's
+  /// back chevron returns there instead of always bouncing to Chat.
+  func openDailyRecap(_ ref: DailyRecapRouteRef) {
+    presentMainWindowIfNeeded()
+    // Capture the origin BEFORE the route moves — it is where the reader is.
+    let origin = route.isPrimaryDestination ? route : ChatFirstRoute.chat
+    invalidateLinkResolutions()
+    route = .dailyRecap(ref)
+    visibleRoute = nil
+    pendingFocus = nil
+    pendingFocusDestination = nil
+    focusedEntityID = nil
+    isFocusedEntityAcknowledged = false
+    pendingConversation = nil
+    dailyRecapOrigin = origin
+    persistNavigation()
+    analytics(.routeEntered(route: .dailyRecap, origin: .chatDeeplink))
+  }
+
+  /// The recap page's back chevron, and Escape while on it: back to the surface
+  /// that opened the recap, or Chat when that surface is gone.
+  func closeDailyRecap() {
+    guard case .dailyRecap = route else { return }
+    let origin = dailyRecapOrigin ?? .chat
+    dailyRecapOrigin = nil
+    selectPrimary(origin, origin: .sidebar)
   }
 
   /// A Goal link validates asynchronously before it opens a typed focus. The
@@ -469,6 +550,19 @@ final class ChatFirstShellNavigation: ObservableObject {
     }
   }
 
+  /// A typed deep link can originate from a surface that is not the main window
+  /// (a content block in the notch or the task panel). Bring the window forward
+  /// so the destination this call selects is actually on screen. Already-key is
+  /// the common case and stays a no-op.
+  private func presentMainWindowIfNeeded() {
+    // `NSApp` is an implicitly unwrapped optional and is genuinely nil in a unit
+    // test host, so it is read through an explicit optional rather than touched.
+    let application: NSApplication? = NSApp
+    guard let application else { return }
+    if let window = application.mainWindow, window.isKeyWindow, window.isVisible { return }
+    AppDelegate.summonWindowTarget()?.openMainAppWindow()
+  }
+
   private func persistNavigation() {
     let persisted = ChatFirstPersistedNavigation(route: route, isSidebarCollapsed: isSidebarCollapsed)
     defaults.set(try? JSONEncoder().encode(persisted), forKey: Self.storageKey)
@@ -487,6 +581,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   private func resetOwnerScopedTransientState() {
     invalidateLinkResolutions()
     pendingConversation = nil
+    dailyRecapOrigin = nil
     clearFocus()
     lastAcknowledgedFocusKind = nil
   }
@@ -502,30 +597,14 @@ final class ChatFirstShellNavigation: ObservableObject {
 
 }
 
-/// An immutable per-root sampling result. A failed, missing, stale, or
-/// owner-mismatched control response resolves to legacy. Once resolved for an
-/// owner it never live-swaps; owner replacement fails closed for this launch.
-enum ChatFirstShellVariant: Equatable {
-  case unresolved
-  case legacy
-  case chatFirst(ChatFirstCapabilityProjection)
-
-  var projection: ChatFirstCapabilityProjection? {
-    guard case .chatFirst(let projection) = self else { return nil }
-    return projection
-  }
-
-  var stableName: String {
-    switch self {
-    case .unresolved: return "loading"
-    case .legacy: return "legacy"
-    case .chatFirst: return "chat_first"
-    }
-  }
-}
-
-struct ChatFirstShellCapabilitySample: Equatable {
-  private(set) var variant: ChatFirstShellVariant = .unresolved
+/// An immutable per-root sampling result for the server-owned chat-first
+/// capability. It never selects a shell — there is exactly one — and only says
+/// whether the capability-gated kernel features may engage this launch. A
+/// failed, missing, stale, or owner-mismatched control response resolves to
+/// capability-off; content blocks still render either way.
+struct ChatFirstCapabilitySample: Equatable {
+  private(set) var isResolved = false
+  private(set) var projection: ChatFirstCapabilityProjection?
   private(set) var sampledOwnerID: String?
 
   mutating func resolve(
@@ -533,29 +612,30 @@ struct ChatFirstShellCapabilitySample: Equatable {
     requestedOwnerID: String?,
     ownerIsStillCurrent: Bool
   ) {
-    guard case .unresolved = variant else { return }
+    guard !isResolved else { return }
+    isResolved = true
     guard let ownerID = requestedOwnerID, !ownerID.isEmpty, ownerIsStillCurrent else {
-      variant = .legacy
+      projection = nil
       return
     }
     sampledOwnerID = ownerID
-    if let control, let projection = ChatFirstCapabilityProjection(control: control) {
-      variant = .chatFirst(projection)
-    } else {
-      variant = .legacy
+    guard let control else {
+      projection = nil
+      return
     }
+    projection = ChatFirstCapabilityProjection(control: control)
   }
 
   mutating func ownerDidChange(to ownerID: String?) {
     guard let sampledOwnerID else { return }
     guard sampledOwnerID == ownerID else {
-      variant = .legacy
+      projection = nil
       return
     }
   }
 
   mutating func failClosed() {
-    variant = .legacy
+    projection = nil
   }
 }
 

@@ -3257,6 +3257,16 @@
     "pendantFullSyncBlocked": "Pendant 的存储空间已满，且仍处于录音模式，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。",
     "conversationsNotCapturedCount": "未记录 ({count})",
     "transcriptionNoAudio": "转录未接收到音频",
+    "chatBlockTask": "任务",
+    "chatBlockGoal": "目标",
+    "chatBlockConversation": "对话",
+    "chatBlockMemory": "记忆",
+    "chatBlockQuestion": "问题",
+    "chatBlockOpenInGoals": "在目标中打开",
+    "chatBlockOpenConversation": "打开对话",
+    "chatBlockOpenInMemories": "在记忆中打开",
+    "chatBlockUnavailable": "已不再可用",
+    "chatBlockRecommendedNextSteps": "建议的后续步骤",
     "couldNotLoadMemories": "无法加载回忆",
     "couldNotLoadKnowledgeGraph": "无法加载知识图谱"
 }

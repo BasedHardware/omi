@@ -3303,7 +3303,8 @@ class FloatingControlBarManager {
         ownerID: RuntimeOwnerIdentity.currentOwnerId() ?? "",
         title: "Couldn't reach Omi",
         message: message,
-        assistantId: "reach_error"
+        assistantId: "reach_error",
+        kind: .functional
       )
     )
   }
@@ -3526,7 +3527,9 @@ class FloatingControlBarManager {
     message: String,
     assistantId: String,
     sound: NotificationSound,
-    kind: ProactiveNotificationKind? = nil,
+    /// Required: what this card *is*. There is no assistant-id fallback — see
+    /// `FloatingBarNotification.init`.
+    kind: ProactiveNotificationKind,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     jitFeedbackContext: JITTriggerFeedbackContext? = nil,
@@ -4686,6 +4689,10 @@ class FloatingControlBarManager {
       // read your inbox…" into the user's conversation history as though it
       // were an observation is noise they cannot act on there.
       notification.assistantId != IntegrationNudgeCoordinator.assistantID,
+      // Trial and onboarding cards are product copy — billing state and
+      // permission help — not something Omi observed. Writing them into the
+      // transcript is the same noise the integration offer above is excluded for.
+      notification.kind.isJournaled,
       // The meeting summary share card must not journal either: the durable
       // Chat surface for a finished meeting is the conversation-link card the
       // backend already materializes, and journaling here would produce a

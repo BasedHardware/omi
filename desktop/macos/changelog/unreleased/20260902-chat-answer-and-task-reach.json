@@ -1,0 +1,3 @@
+{
+  "change": "A long reply now stays whole once it finishes instead of collapsing to its first paragraph, and asking by voice what's on your list returns the same tasks the Tasks page shows — including ones overdue by more than a week and ones that have been sitting there without a date"
+}

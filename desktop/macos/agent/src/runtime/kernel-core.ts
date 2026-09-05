@@ -151,7 +151,14 @@ function runtimeAdapterMetadata(input: ExecuteAgentRunInput, session: AgentSessi
     ...(input.metadata ?? {}),
     executionRole: session.executionRole,
     providerBoundary: session.providerBoundary,
-    surfaceKind: session.surfaceKind,
+    // The run's surface, not the session's. One shell means main Chat and the
+    // floating bar project the same conversation, so a session first registered
+    // by the floating bar keeps `surface_kind = floating_chat` while main-Chat
+    // runs execute on it. Every chat-first gate downstream — the pi-mono env,
+    // `effectiveChatFirstCapability`, the tool projection — admits `main_chat`
+    // only, so stamping the session's surface here told them a main-Chat turn
+    // was a floating one and the model was never offered `render_chat_blocks`.
+    surfaceKind: input.surfaceKind || session.surfaceKind,
     chatFirstUi: input.admittedContextSnapshot?.capabilities.chatFirstUi === true,
     chatFirstControlGeneration:
       input.admittedContextSnapshot?.capabilities.chatFirstControlGeneration ?? null,
@@ -166,6 +173,7 @@ import {
 import type { ToolInvocationIdentity } from "./tool-invocation-ledger.js";
 import { normalizeOmiToolName } from "./omi-tool-manifest.js";
 import { routeExternalSurfaceTool } from "./external-surface-tool-policy.js";
+import type { ChatFirstCapabilityProjection } from "./chat-first-capability.js";
 import {
   applyExecutionProfileToSession,
   readSessionExecutionProfile,
@@ -198,8 +206,29 @@ export class KernelCore {
   protected readonly bindingResolutionLocks = new Map<string, Promise<void>>();
   protected readonly contextDeliveryByBinding = new Map<string, ContextDeliveryCursor>();
   protected readonly toolCapabilities: RunToolCapabilityBroker;
+  /**
+   * The one immutable server-derived Main Chat sample for this process, keyed
+   * `ownerId:sessionId`. Process-local only: never back this with SQLite or a
+   * user preference.
+   *
+   * It lives on the base class because *run admission* needs it, not only
+   * session resolution. A run that builds its own context snapshot without it
+   * projects a capability-off tool surface, and the adapter metadata derived
+   * from that snapshot is what decides whether the model is offered
+   * `render_chat_blocks` at all.
+   */
+  protected readonly chatFirstCapabilities = new Map<string, ChatFirstCapabilityProjection>();
   private transactionDepth = 0;
   private pendingSubscriberEvents: AgentEvent[] = [];
+
+  protected chatFirstCapability(
+    sessionId: string,
+    ownerId: string,
+    surfaceKind?: string
+  ): ChatFirstCapabilityProjection | undefined {
+    if (surfaceKind !== "main_chat") return undefined;
+    return this.chatFirstCapabilities.get(`${ownerId}:${sessionId}`);
+  }
 
   constructor(options: AgentRuntimeKernelOptions) {
     this.store = options.store;
@@ -839,6 +868,12 @@ export class KernelCore {
             session.ownerId,
             Date.now(),
             input.surfaceKind,
+            // Main Chat runs arrive with no client-supplied snapshot, so this
+            // branch builds every one of them. Dropping the capability here
+            // made the run's own snapshot say capability-off however the shell
+            // had resolved it, and that snapshot is what
+            // `runtimeAdapterMetadata` hands the adapter.
+            this.chatFirstCapability(session.sessionId, session.ownerId, input.surfaceKind),
           );
       const expectationCount = [
         input.expectedContextSnapshotVersion,
@@ -885,6 +920,12 @@ export class KernelCore {
           prompt: input.prompt,
           producingTurnId: input.producingTurnId ?? null,
           metadata: input.metadata ?? {},
+          // The surface this run was admitted for, which is not always the one
+          // its session was first registered under: one shell means main Chat
+          // and the floating bar share a session. Recorded here because the
+          // tool-capability broker has to gate on the run, and the session row
+          // is the wrong authority for that.
+          surfaceKind: input.surfaceKind,
           contextSnapshotVersion: contextSnapshot.version,
           contextSnapshotGeneration: contextSnapshot.snapshotGeneration,
           contextRendererFingerprint: contextSnapshot.rendererFingerprint,

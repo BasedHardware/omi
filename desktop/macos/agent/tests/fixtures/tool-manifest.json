@@ -3687,6 +3687,11 @@
     "label": "Get Conversations",
     "description": "Retrieve user conversations with summaries, action items, metadata. Use for time-based queries or recaps.",
     "promptSnippet": "get_conversations - Retrieve conversations by date range",
+    "promptGuidelines": [
+      "If the user asked to see, find, open, pick or choose a conversation — 'show me the call with Paul', 'which one was most interesting', 'find the meeting about pricing' — the conversation is the answer: render it as a captureLink block ({type:'captureLink', conversationId:'<canonical id from this result>', summary:'...'}) with render_chat_blocks, and keep the prose to one lead-in line. Do not answer with a bold title and a citation number in place of the component.",
+      "A follow-up that narrows an earlier result — 'pick one', 'the second one', 'tell me more about that one' — still renders the component for what it picks.",
+      "A recap of a day, a summary, a comparison, a count, or a list longer than three is prose that cites the conversations inline instead."
+    ],
     "latency": "fast network",
     "inputSchema": {
       "type": "object",
@@ -3770,6 +3775,10 @@
     "label": "Search Conversations",
     "description": "Search conversations by topic or exact canonical ID/share link.",
     "promptSnippet": "search_conversations - Find conversations about a topic or exact ID/share link",
+    "promptGuidelines": [
+      "If the user asked to find, see, open or pick a conversation, the match is the answer: render it as a captureLink block ({type:'captureLink', conversationId:'<canonical id from this result>', summary:'...'}) with render_chat_blocks and keep the prose to one lead-in line. Up to three matches render; say how many more there are.",
+      "When the conversation is only evidence for something you are answering in prose — what was decided, whether it happened, what someone said — cite it inline and render nothing."
+    ],
     "latency": "fast network",
     "inputSchema": {
       "type": "object",
@@ -3853,6 +3862,10 @@
     "label": "Get Memories",
     "description": "Retrieve user memories - facts, preferences, habits. Use for 'what do you know about me?' type questions.",
     "promptSnippet": "get_memories - Retrieve stored facts and preferences",
+    "promptGuidelines": [
+      "If the user asked to see, review, find or pick specific memories, the memories are the answer: render the ones that matter as memoryLink blocks ({type:'memoryLink', memoryId:'<id from this result>', summary:'...'}) with render_chat_blocks — a count in prose, never a bulleted copy of the cards.",
+      "'What do you know about me' and other summaries, comparisons or long lists answer in prose and cite the memories inline instead."
+    ],
     "latency": "fast network",
     "inputSchema": {
       "type": "object",
@@ -3929,6 +3942,10 @@
     "label": "Search Memories",
     "description": "Semantic search across user memories. Find memories about a topic using AI embeddings.",
     "promptSnippet": "search_memories - Find memories about a topic",
+    "promptGuidelines": [
+      "If the user asked to find, see or pick a memory, the match is the answer: render up to three as memoryLink blocks ({type:'memoryLink', memoryId:'<id from this result>', summary:'...'}) with render_chat_blocks and keep the prose to one lead-in line.",
+      "When a memory is only evidence for an answer in prose, cite it inline and render nothing."
+    ],
     "latency": "fast network",
     "inputSchema": {
       "type": "object",
@@ -4544,6 +4561,10 @@
     "label": "Get Action Items",
     "description": "Retrieve user tasks from Omi backend. Filter by completion status or due date.",
     "promptSnippet": "get_action_items - Retrieve tasks",
+    "promptGuidelines": [
+      "If the user asked to see, review, pick from or work through their tasks, the tasks are the answer: render the few that matter as taskCard blocks with render_chat_blocks. Say how many there are in total — a count, never their names. Naming them in the message, as a list or as bullets, prints every card twice: once as words that cannot be ticked off and once as the card itself.",
+      "If a task is only evidence for something you are answering in prose — how many are open, whether one exists, what a day contained — cite it inline and render nothing."
+    ],
     "latency": "fast network",
     "inputSchema": {
       "type": "object",
@@ -4617,12 +4638,12 @@
       "title": "Get Action Items",
       "summary": "Retrieve the user's tasks with optional completion and due-date filters.",
       "bullets": [
-        "Use for completed tasks, date ranges, or the full task list.",
-        "For voice, prefer get_tasks for plain overdue/due-today questions."
+        "Use for completed tasks or an explicit date range.",
+        "For voice, prefer get_tasks for any plain question about the open list."
       ]
     },
     "voice": {
-      "realtimeDescription": "Read the user's tasks / to-dos from the backend, with optional filters. Use for COMPLETED tasks ('what did I finish'), a DATE RANGE ('what's due next week'), or the FULL list ('all my tasks') — for plain 'what's due today / overdue', prefer get_tasks. Fast synchronous read. Speak a short summary of what it returns."
+      "realtimeDescription": "Read the user's tasks / to-dos from the backend, with optional filters. Use for COMPLETED tasks ('what did I finish') or a DATE RANGE ('what's due next week') — for any plain question about the open list, prefer get_tasks. Fast synchronous read. Speak a short summary of what it returns."
     }
   },
   {
@@ -5319,14 +5340,14 @@
     ],
     "capabilityDoc": {
       "title": "Get Tasks",
-      "summary": "Read the user's overdue and due-today tasks locally.",
+      "summary": "Read the user's open tasks locally: overdue, due today, and undated.",
       "bullets": [
         "Use for plain voice questions like what are my tasks, what's due today, or what's on my list.",
-        "Prefer get_action_items for completed tasks, date ranges, or the full list."
+        "Prefer get_action_items for completed tasks or an explicit date range."
       ]
     },
     "voice": {
-      "realtimeDescription": "Read the user's tasks (overdue + due today) locally and get them back as text to speak. Fast synchronous read — use this for 'what are my tasks', 'what's due today', 'what's on my list'. Reading tasks is always a direct call, never background work."
+      "realtimeDescription": "Read the user's open tasks locally and get them back as text to speak: everything overdue, everything due today, and everything on the list with no due date. This is the same list the Tasks page shows, so an empty result means the user genuinely has no open tasks — never say they have none without calling this first. Fast synchronous read — use it for 'what are my tasks', 'what's due today', 'what's on my list', 'what should I work on'. Reading tasks is always a direct call, never background work."
     }
   },
   {

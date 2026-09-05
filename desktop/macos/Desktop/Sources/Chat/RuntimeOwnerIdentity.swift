@@ -185,6 +185,18 @@ private final class EffectiveOwnerAuthorizationRevocation: @unchecked Sendable {
 extension Notification.Name {
   /// Effective owner changed (sign-in, sign-out, account switch, or an
   /// automation override). Carries no owner id or other user content.
+  ///
+  /// **Post it on the main thread.** `performEffectiveOwnerTransition` does
+  /// (`await MainActor.run`), and observers depend on both halves of that:
+  /// `NotificationCenter` delivers synchronously on the posting thread, which is
+  /// what lets a surface fence itself *during* the transition rather than a
+  /// runloop later — see `IntegrationNudgeCoordinator`. Most observers are
+  /// `@MainActor` types whose sink closure carries an isolation check on entry,
+  /// so a post from a background thread fails `dispatch_assert_queue` and traps,
+  /// taking the whole process rather than one observer. Nothing inside the
+  /// closure can guard against that: the check runs before its first statement,
+  /// and hopping upstream would trade the crash for losing the synchronous
+  /// fence. The poster is the only place that can be both correct and prompt.
   static let runtimeOwnerDidChange = Notification.Name("com.omi.desktop.runtimeOwnerDidChange")
 }
 

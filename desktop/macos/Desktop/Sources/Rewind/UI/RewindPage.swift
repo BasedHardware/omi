@@ -609,12 +609,16 @@ struct RewindPage: View {
     .help(captureStateHelp)
   }
 
+  /// The knob shows the setting (right = capture enabled); the label shows reality.
+  /// "Off" therefore only ever appears next to a left knob — when capture is enabled
+  /// but health reports it not flowing, the label names the failure instead, or the
+  /// control reads as contradicting itself (red pill, knob right, "Capture Off").
   private var captureStateLabel: String {
     switch screenCaptureHealth {
     case .active: return "Capture On"
     case .temporarilyUnavailable: return "Capture Paused"
     case .recovering: return "Capture Recovering"
-    case .stopped: return "Capture Off"
+    case .stopped: return isMonitoring ? "Capture Stopped" : "Capture Off"
     }
   }
 

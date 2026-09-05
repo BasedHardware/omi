@@ -402,6 +402,7 @@ final class InterjectWiringTests: XCTestCase {
       title: "Insight",
       message: "Body",
       assistantId: "context-director",
+      kind: .insight,
       context: FloatingBarNotificationContext(
         sourceTitle: "Insight",
         assistantId: "context-director",

@@ -9921,6 +9921,36 @@ class AppLocalizationsCs extends AppLocalizations {
   String get tapPlusToStartRecording => 'Tap + to start recording';
 
   @override
+  String get chatBlockTask => 'Úkol';
+
+  @override
+  String get chatBlockGoal => 'Cíl';
+
+  @override
+  String get chatBlockConversation => 'Konverzace';
+
+  @override
+  String get chatBlockMemory => 'Vzpomínka';
+
+  @override
+  String get chatBlockQuestion => 'Otázka';
+
+  @override
+  String get chatBlockOpenInGoals => 'Otevřít v Cílech';
+
+  @override
+  String get chatBlockOpenConversation => 'Otevřít konverzaci';
+
+  @override
+  String get chatBlockOpenInMemories => 'Otevřít ve Vzpomínkách';
+
+  @override
+  String get chatBlockUnavailable => 'Již není k dispozici';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Doporučené další kroky';
+
+  @override
   String get couldNotLoadMemories => 'Nepodařilo se načíst vzpomínky';
 
   @override

@@ -9914,6 +9914,36 @@ class AppLocalizationsEt extends AppLocalizations {
   String get tapPlusToStartRecording => 'Tap + to start recording';
 
   @override
+  String get chatBlockTask => 'Ülesanne';
+
+  @override
+  String get chatBlockGoal => 'Eesmärk';
+
+  @override
+  String get chatBlockConversation => 'Vestlus';
+
+  @override
+  String get chatBlockMemory => 'Mälestus';
+
+  @override
+  String get chatBlockQuestion => 'Küsimus';
+
+  @override
+  String get chatBlockOpenInGoals => 'Ava eesmärkides';
+
+  @override
+  String get chatBlockOpenConversation => 'Ava vestlus';
+
+  @override
+  String get chatBlockOpenInMemories => 'Ava mälestustes';
+
+  @override
+  String get chatBlockUnavailable => 'Pole enam saadaval';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Soovitatud järgmised sammud';
+
+  @override
   String get couldNotLoadMemories => 'Mälestusi ei õnnestunud laadida';
 
   @override

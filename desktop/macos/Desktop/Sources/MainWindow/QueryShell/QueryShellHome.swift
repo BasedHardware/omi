@@ -17,9 +17,6 @@
 //  It paints **no background**. The window's ground is AppKit's (`ShellGlassGround`); the two panels
 //  here wear the app's glass through `inkGlassPanel` and nothing else does.
 //
-//  The legacy hub is still here, behind the `useLegacyHomeDesign` setting that already gated it, so
-//  the change is reversible by the person it happened to rather than by a rebuild.
-//
 //  **This is the app's only chat destination**, which makes it the only place the controls of the
 //  deleted standalone chat page can live (`6be26e85bc`; INV-NAV-1 forbids bringing that page back).
 //  So this file also hosts: the chat overflow menu (copy / clear / AI settings), the way back into
@@ -44,16 +41,10 @@ struct QueryShellHome: View {
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   @ObservedObject private var tasksStore = TasksStore.shared
   var taskChatCoordinator: TaskChatCoordinator? = nil
-  /// The Chat-first shell keeps the existing modern Home presentation even when the reversible legacy
-  /// preference is enabled. This is presentation-only; capability sampling and rich-block access
-  /// remain owned by `ChatFirstShell`.
-  var forceModernPresentation: Bool = false
-  /// Non-nil only for the sampled Chat-first main-chat surface. It enables the existing inline entity
-  /// controls without creating another provider or transcript.
-  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
-  @Binding var selectedIndex: Int
+  /// Typed navigation and the interactable content-block controls. Every Chat
+  /// surface has one; it creates no second provider or transcript.
+  let chatFirstRichBlockContext: ChatFirstRichBlockContext
 
-  @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
   @AppStorage(MemoryHubDestination.storageKey) private var memoryDestinationRawValue =
     MemoryHubDestination.memories.rawValue
 
@@ -86,10 +77,16 @@ struct QueryShellHome: View {
   /// Measured rather than assumed: the composer is at its resting height most of the time but grows
   /// with a staged-file row, with a second line of draft and with the reader's font scale, and a
   /// reserve that ignores that is a reserve that puts the panel back off the bottom edge the first
-  /// time somebody drops a file on it. The reporter is a `background` `GeometryReader`, which cannot
-  /// affect layout, and the value it feeds only ever flows *downwards* — the composer's height never
-  /// depends on the panel's — so there is no measurement loop. One state for both placements, because
-  /// there is only ever one composer on screen (`QueryComposerPlacement`).
+  /// time somebody drops a file on it. The reporter is `onGeometryChange`, which cannot affect
+  /// layout, and the value it feeds only ever flows *downwards* — the composer's height never
+  /// depends on the panel's — so there is no measurement loop. One state for both placements,
+  /// because there is only ever one composer on screen (`QueryComposerPlacement`).
+  ///
+  /// The height travels through a callback rather than a `PreferenceKey`: a preference written at
+  /// the composer and read at this surface's root makes SwiftUI run a reduce over one combiner pair
+  /// per node of everything mounted between them — the whole transcript on the chat surface — and
+  /// that collection dominated the measured cost of every switch into Chat. The callback feeds the
+  /// identical value into the identical state.
   @State private var composerHeight: CGFloat = QueryShellLayout.barMinHeight
   /// **The caret, as a claim rather than a flag.** Monotonic, and every increment lands the caret in
   /// the bar. `@FocusState` cannot do that job any more: the field is an `NSTextView` that SwiftUI's
@@ -97,26 +94,15 @@ struct QueryShellHome: View {
   /// since given away — which is precisely the case the `didBecomeActive` claim below exists for.
   @State private var caretClaims = 0
 
-  private var usesLegacyPresentation: Bool {
-    !HomeDesignPresentation.queryShellOwnsItsPanels(
-      useLegacyHomeDesign: useLegacyHomeDesign,
-      forceModernPresentation: forceModernPresentation)
-  }
-
   var body: some View {
-    if usesLegacyPresentation {
-      DashboardPage(
-        viewModel: viewModel,
-        homeStatusStore: homeStatusStore,
-        appState: appState,
-        appProvider: appProvider,
-        chatProvider: chatProvider,
-        memoriesViewModel: memoriesViewModel,
-        taskChatCoordinator: taskChatCoordinator,
-        selectedIndex: $selectedIndex)
-    } else {
-      querySurface
-    }
+    // `markOnce`: body re-evaluates on every local state change (search text,
+    // composer height); only the first evaluation after the route change is
+    // the switch's mount work. The detail classifies cold vs warm switches.
+    // `let _ =` keeps the Void result out of the ViewBuilder's expression list.
+    let _ = ChatSwitchPerfLog.markOnce(
+      "QueryShellHome.body",
+      detail: "messages=\(chatProvider.messages.count) isLoading=\(chatProvider.isLoading)")
+    querySurface
   }
 
   private var querySurface: some View {
@@ -159,11 +145,10 @@ struct QueryShellHome: View {
                   ChatQuotaBannerView.Slot()
                   composerBar(draft: draft)
                 }
-                .background {
-                  GeometryReader { footer in
-                    Color.clear.preference(
-                      key: QueryComposerHeightKey.self, value: footer.size.height)
-                  }
+                .onGeometryChange(for: CGFloat.self) {
+                  $0.size.height
+                } action: { measured in
+                  reportComposerHeight(measured)
                 }
               }
             }
@@ -171,10 +156,6 @@ struct QueryShellHome: View {
             panelBody(request: QueryShellRequest(text: searchText, filters: filters))
           }
           Spacer(minLength: 0)
-        }
-        .onPreferenceChange(QueryComposerHeightKey.self) { measured in
-          guard measured > 0, measured != composerHeight else { return }
-          composerHeight = measured
         }
         .frame(width: lane)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -184,13 +165,13 @@ struct QueryShellHome: View {
     // A typed character belongs in the field even when the field is not focused: this is a search
     // surface, and a search surface that swallows the first letter you type is broken.
     .onAppear {
+      ChatSwitchPerfLog.mark("QueryShellHome.appear")
       takePendingDraftIfAny()
       claimCaret()
     }
     // A prefilled draft (first-real-app card, daily-summary follow-up) lands in the composer,
-    // focused and unsent. The legacy presentation's Dashboard consumes the same request itself.
+    // focused and unsent. This is the app's only chat destination, so it is the only consumer.
     .onReceive(NotificationCenter.default.publisher(for: .openMainChatRequested)) { _ in
-      guard !usesLegacyPresentation else { return }
       takePendingDraftIfAny()
     }
     // **Coming back to Omi puts the caret back in the field.** This surface's whole job is to be typed
@@ -239,7 +220,6 @@ struct QueryShellHome: View {
     // search text, so an action that promises the conversation must clear it or its effect lands
     // hidden behind the results panel while the bridge reports success.
     .onReceive(NotificationCenter.default.publisher(for: .homeStageOpenChat)) { _ in
-      guard !usesLegacyPresentation else { return }
       searchText = HomeBridgeIntent.openChat.searchTextAfter(searchText)
       claimCaret()
     }
@@ -247,18 +227,17 @@ struct QueryShellHome: View {
     // The bridge action posts this and reports success, so an unobserved notification here would
     // be the "bridge answered ok and nothing happened" defect this file's actions exist to avoid.
     .onReceive(NotificationCenter.default.publisher(for: .homeStageClose)) { _ in
-      guard !usesLegacyPresentation else { return }
       searchText = HomeBridgeIntent.closePanel.searchTextAfter(searchText)
       claimCaret()
     }
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAsk)) { note in
-      guard !usesLegacyPresentation, let query = note.userInfo?["query"] as? String else { return }
+      guard let query = note.userInfo?["query"] as? String else { return }
       searchText = HomeBridgeIntent.ask.searchTextAfter(searchText)
       chatProvider.draftText = query
       ask()
     }
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAttach)) { note in
-      guard !usesLegacyPresentation, let path = note.userInfo?["path"] as? String else { return }
+      guard let path = note.userInfo?["path"] as? String else { return }
       searchText = HomeBridgeIntent.attach.searchTextAfter(searchText)
       stageAttachments([URL(fileURLWithPath: path)])
     }
@@ -300,6 +279,18 @@ struct QueryShellHome: View {
       references: chatProvider.pendingComposerReferences,
       onReferenceRemoved: { chatProvider.removeComposerReference(id: $0) }
     )
+    // The footer unit (quota banner + composer) is measured where it is
+    // composed, so the bar itself carries no height reporting of its own.
+  }
+
+  /// Receives the composer's measured height — the same guarded write the
+  /// preference reader used to perform, minus the preference traversal.
+  private func reportComposerHeight(_ measured: CGFloat) {
+    // The composer's real height has been measured and fed back — the bar is
+    // laid out and usable at its resting geometry.
+    ChatSwitchPerfLog.markOnce("composerMeasured")
+    guard measured > 0, measured != composerHeight else { return }
+    composerHeight = measured
   }
 
   /// The seam value the panel and its body are handed, **assembled rather than stored**: the text
@@ -478,7 +469,7 @@ struct QueryShellHome: View {
   }
 
   private func takePendingDraftIfAny() {
-    guard !usesLegacyPresentation, let draft = MainChatNavigationRequestStore.shared.consumeDraft() else { return }
+    guard let draft = MainChatNavigationRequestStore.shared.consumeDraft() else { return }
     // Leave search-results mode first, or the prefilled composer stays hidden behind the results.
     searchText = HomeBridgeIntent.openChat.searchTextAfter(searchText)
     chatProvider.draftText = draft
@@ -489,28 +480,15 @@ struct QueryShellHome: View {
 
   /// Opens the exact conversation a spine row is about.
   ///
-  /// The row carries the whole record, so the typed deep link can hand it straight to the
-  /// Conversations host. The id-only path below stays for the shell that has no typed navigation
-  /// owner, where this page mounts the Conversations host itself.
+  /// The row carries the whole record, so the typed deep link hands it straight to the
+  /// Conversations host rather than re-resolving it by id.
   private func openConversationRecord(_ conversation: ServerConversation) {
-    if let context = chatFirstRichBlockContext {
-      context.navigation.open(conversation: conversation)
-      return
-    }
-    openConversation(conversation.id)
+    chatFirstRichBlockContext.navigation.open(conversation: conversation)
   }
 
-  /// Opens the exact memory a spine row is about, on the same terms the Brain Map's citations use:
-  /// leave this surface only once the memory actually resolved.
+  /// Opens the exact memory a spine row is about, on the same terms the Brain Map's citations use.
   private func openMemory(_ memory: SpineMemory) {
-    if let context = chatFirstRichBlockContext {
-      context.navigation.open(focus: .memory(id: memory.id))
-      return
-    }
-    Task {
-      await MemoryAtlasCitationOpen.open(
-        id: memory.id, in: memoriesViewModel, leave: { navigate(.memories) })
-    }
+    chatFirstRichBlockContext.navigation.open(focus: .memory(id: memory.id))
   }
 
   /// Opens the real Conversations page on the real conversation — never a copy of it here (INV-NAV-1).
@@ -528,72 +506,57 @@ struct QueryShellHome: View {
     navigate(.conversation)
   }
 
-  private func openMemories() {
-    navigate(.memories)
-  }
-
   /// Typed citation routing stays at the shell boundary. The inline renderer knows presentation;
   /// this root owns navigation and preserves exact entity identity where the destination supports it.
   private func openCitation(_ reference: ChatCitationReference) {
     guard reference.canOpen else { return }
-    if let context = chatFirstRichBlockContext {
-      switch reference.kind {
-      case .conversation:
-        let moment = reference.momentTimestampMs.map { TimeInterval($0) / 1_000 }
-        context.navigation.open(focus: .capture(id: reference.sourceID, momentTs: moment))
-      case .memory:
-        context.navigation.open(focus: .memory(id: reference.sourceID))
-      case .task:
-        context.navigation.open(focus: .task(id: reference.sourceID))
-      case .goal:
-        context.navigation.open(focus: .goal(id: reference.sourceID))
-      case .screenshot:
-        guard let id = RewindCitationFocusState.parseScreenshotID(reference.sourceID) else { return }
-        RewindCitationFocusState.shared.request(id)
-        context.navigation.selectMore(.rewind)
-      case .web:
-        if let url = reference.url { NSWorkspace.shared.open(url) }
-      case .unavailable:
-        break
-      }
-      return
-    }
-
+    let navigation = chatFirstRichBlockContext.navigation
     switch reference.kind {
     case .conversation:
-      openConversation(reference.sourceID)
+      openConversationCitation(reference)
     case .memory:
-      Task { @MainActor in
-        guard await memoriesViewModel.openMemory(id: reference.sourceID) else { return }
-        openMemories()
-      }
+      navigation.open(focus: .memory(id: reference.sourceID))
     case .task:
-      // TasksPage has a typed, owner-bound handoff. Resolve the exact task before changing pages;
-      // selecting the Tasks tab alone would silently discard the citation's identity.
-      Task { @MainActor in
-        guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
-          let task = try? await APIClient.shared.getActionItem(
-            id: reference.sourceID,
-            expectedOwnerId: authorization.ownerID,
-            authorizationSnapshot: authorization),
-          RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
-        else { return }
-        guard !task.isRetired else { return }
-        TaskNavigationRequestStore.shared.request(task: task)
-        selectedIndex = SidebarNavItem.tasks.rawValue
-      }
+      navigation.open(focus: .task(id: reference.sourceID))
     case .goal:
-      // QueryAnswerThread marks this kind unavailable in the legacy shell before rendering. Keep
-      // the routing boundary fail-closed as defense in depth.
-      return
+      navigation.open(focus: .goal(id: reference.sourceID))
     case .screenshot:
       guard let id = RewindCitationFocusState.parseScreenshotID(reference.sourceID) else { return }
       RewindCitationFocusState.shared.request(id)
-      openRewind()
+      navigation.selectMore(.rewind)
     case .web:
       if let url = reference.url { NSWorkspace.shared.open(url) }
     case .unavailable:
       break
+    }
+  }
+
+  /// A conversation citation must open the conversation it names. The agent
+  /// cites desktop and phone recordings as readily as Omi-device captures, but
+  /// the capture focus resolves through the archive's source-scoped fetch —
+  /// navigating first used to strand a non-capture citation on the
+  /// Conversations list with nothing opened. Fetch the unscoped record, then
+  /// let its own provenance pick the route.
+  private func openConversationCitation(_ reference: ChatCitationReference) {
+    let navigation = chatFirstRichBlockContext.navigation
+    let resolutionGeneration = navigation.beginConversationLinkResolution()
+    Task { @MainActor in
+      let fetched = try? await APIClient.shared.getConversation(id: reference.sourceID)
+      guard
+        let route = ChatFirstConversationLinkPolicy.citationRoute(
+          forFetched: fetched,
+          requestedID: reference.sourceID,
+          momentTimestampMs: reference.momentTimestampMs)
+      else { return }
+      switch route {
+      case .captureFocus(let momentTs):
+        navigation.open(focus: .capture(id: reference.sourceID, momentTs: momentTs))
+      case .exactRecord:
+        guard let conversation = fetched else { return }
+        navigation.completeConversationLinkResolution(
+          conversation: conversation,
+          generation: resolutionGeneration)
+      }
     }
   }
 
@@ -612,10 +575,17 @@ struct QueryShellHome: View {
   /// `QueryShellRoute` rather than restating a rail index and a hub raw value at its own call site —
   /// which is how one of them ends up pointing somewhere the others do not.
   private func navigate(_ route: QueryShellRoute) {
-    if let hubView = route.memoryDestination {
+    let navigation = chatFirstRichBlockContext.navigation
+    OmiMotion.withGated(.easeOut(duration: 0.08)) {
+      guard let hubView = route.memoryDestination else {
+        navigation.selectLegacyDestination(route.navItem)
+        return
+      }
+      // Both halves of the hub state move together — the persisted view and the
+      // typed route that decides which host is mounted (see `ChatFirstShell`).
       memoryDestinationRawValue = hubView.rawValue
+      navigation.selectPrimary(MemoryHubSelectionPolicy.chatFirstRoute(for: hubView))
     }
-    OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = route.navItem.rawValue }
   }
 
   // MARK: - The corpus
@@ -632,27 +602,17 @@ struct QueryShellHome: View {
   }
 
   private func loadScreenCount() async {
+    let startedAt = DispatchTime.now()
     // Rewind's pool opens asynchronously after launch, and this is a `.task` that runs once — so an
     // ask that lands before it is open under-reports the archive by its entire size for the rest of
     // the session. That is what made the corner read "390 results · of 147 captured": 147 was the
     // conversations and memories alone, with the whole screen archive counted as nothing.
     guard await SpineScreenIndex.poolWhenReady() != nil else {
       screenCount = 0
+      ChatSwitchPerfLog.span("screenCountTask", startedAt: startedAt)
       return
     }
     screenCount = (try? await RewindDatabase.shared.getScreenshotCount()) ?? 0
-  }
-}
-
-/// The composer's height, reported up to the surface that has to fit a panel around it.
-///
-/// `max` rather than last-writer-wins: only one composer is mounted at a time, but a preference that
-/// reduced to the newest value would let a transient zero from a view being torn down — which is
-/// exactly what a mode change does to the placement it is leaving — shrink the reserve and let the
-/// panel run off the window for a frame.
-private struct QueryComposerHeightKey: PreferenceKey {
-  static let defaultValue: CGFloat = 0
-  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-    value = max(value, nextValue())
+    ChatSwitchPerfLog.span("screenCountTask", startedAt: startedAt)
   }
 }

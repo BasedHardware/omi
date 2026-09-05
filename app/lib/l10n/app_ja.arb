@@ -3211,6 +3211,16 @@
     "pendantFullSyncBlocked": "Pendantのストレージが満杯で、まだ録音モードのままのため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。",
     "conversationsNotCapturedCount": "未記録 ({count})",
     "transcriptionNoAudio": "文字起こしが音声を受信していません",
+    "chatBlockTask": "タスク",
+    "chatBlockGoal": "目標",
+    "chatBlockConversation": "会話",
+    "chatBlockMemory": "メモリー",
+    "chatBlockQuestion": "質問",
+    "chatBlockOpenInGoals": "目標で開く",
+    "chatBlockOpenConversation": "会話を開く",
+    "chatBlockOpenInMemories": "メモリーで開く",
+    "chatBlockUnavailable": "現在は利用できません",
+    "chatBlockRecommendedNextSteps": "おすすめの次のステップ",
     "couldNotLoadMemories": "記憶を読み込めませんでした",
     "couldNotLoadKnowledgeGraph": "ナレッジグラフを読み込めませんでした"
 }

@@ -3213,6 +3213,16 @@
     "pendantFullSyncBlocked": "Úložiště Pendantu je plné a stále je v režimu nahrávání, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu zastavte nahrávání a poté znovu synchronizujte.",
     "conversationsNotCapturedCount": "Nezaznamenáno ({count})",
     "transcriptionNoAudio": "Transkripce nepřijímá zvuk",
+    "chatBlockTask": "Úkol",
+    "chatBlockGoal": "Cíl",
+    "chatBlockConversation": "Konverzace",
+    "chatBlockMemory": "Vzpomínka",
+    "chatBlockQuestion": "Otázka",
+    "chatBlockOpenInGoals": "Otevřít v Cílech",
+    "chatBlockOpenConversation": "Otevřít konverzaci",
+    "chatBlockOpenInMemories": "Otevřít ve Vzpomínkách",
+    "chatBlockUnavailable": "Již není k dispozici",
+    "chatBlockRecommendedNextSteps": "Doporučené další kroky",
     "couldNotLoadMemories": "Nepodařilo se načíst vzpomínky",
     "couldNotLoadKnowledgeGraph": "Nepodařilo se načíst graf znalostí"
 }

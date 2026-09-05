@@ -67,6 +67,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdownChatTypography.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+AutomationSnapshot.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge+ResponseContext.swift
   - desktop/macos/Desktop/Sources/Chat/AgentQueryResult.swift

@@ -39,8 +39,6 @@ extension OmiAPI.WorkstreamDetailProjection: @unchecked Sendable {}
 extension AssistantSettingsResponse: @unchecked Sendable {}
 extension OmiAPI.RecommendationSubjectKind: @unchecked Sendable {}
 extension OmiAPI.GoalStatus: @unchecked Sendable {}
-extension DashboardRecommendation: @unchecked Sendable {}
-extension DashboardRecommendationDestination: @unchecked Sendable {}
 extension OmiAPI.FeedbackSubjectKind: @unchecked Sendable {}
 extension OmiAPI.ArtifactDescriptorCreate: @unchecked Sendable {}
 extension OmiAPI.ContinuationCheckpointUpsert: @unchecked Sendable {}

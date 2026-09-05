@@ -3235,6 +3235,16 @@
     "pendantFullSyncBlocked": "Pendanti mälu on täis ja see on endiselt salvestusrežiimis, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja seejärel sünkrooni uuesti.",
     "conversationsNotCapturedCount": "Salvestamata ({count})",
     "transcriptionNoAudio": "Transkriptsioon ei saa heli",
+    "chatBlockTask": "Ülesanne",
+    "chatBlockGoal": "Eesmärk",
+    "chatBlockConversation": "Vestlus",
+    "chatBlockMemory": "Mälestus",
+    "chatBlockQuestion": "Küsimus",
+    "chatBlockOpenInGoals": "Ava eesmärkides",
+    "chatBlockOpenConversation": "Ava vestlus",
+    "chatBlockOpenInMemories": "Ava mälestustes",
+    "chatBlockUnavailable": "Pole enam saadaval",
+    "chatBlockRecommendedNextSteps": "Soovitatud järgmised sammud",
     "couldNotLoadMemories": "Mälestusi ei õnnestunud laadida",
     "couldNotLoadKnowledgeGraph": "Teadmiste graafi ei õnnestunud laadida"
 }

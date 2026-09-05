@@ -64,6 +64,15 @@ struct TaskChatPanel: View {
           onLoadMore: {},
           onRate: { _, _, _ in },
           localSendToken: taskState.localSendToken,
+          // The task panel renders the same interactable content blocks as the
+          // main window; taps route the one shell (`ChatFirstRichBlockContext.auxiliary`).
+          chatFirstRichBlockContext: .auxiliary(chatProvider: coordinator.chatProvider),
+          // The compact window, like the main chat's host: without it this panel
+          // mounts the 500-row default eagerly, which measured 910 ms and 607
+          // native views for 400 messages against 114 ms and 84 compact (see the
+          // comment on QueryAnswerThread's host). "Show older messages" is the
+          // way back to the rest of a long thread.
+          transcriptWindowPolicy: .compactHome,
           enablesPromptTimeline: false,
           // This thread is about one task; the day's summary belongs in the main chat.
           showsDailySummary: false,

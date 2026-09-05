@@ -38,6 +38,9 @@ struct MemoryReviewItem: Identifiable, Equatable, Sendable {
 enum MemoryReviewSource: String, Sendable {
   /// The "Things I learned today" section of the daily summary card in Chat.
   case dailySummaryChat = "daily_summary_chat"
+  /// The same section on the dedicated daily-recap page (the sheet the Chat pill and the
+  /// Activity day open). Matches mobile's telemetry source of the same name.
+  case dailySummaryDetail = "daily_summary_detail"
   /// A `memoryReviewCard` content block rendered in the Chat-first transcript.
   case chatBlock = "chat_block"
 }

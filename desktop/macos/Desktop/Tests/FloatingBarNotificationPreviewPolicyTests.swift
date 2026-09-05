@@ -450,11 +450,12 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
   @MainActor
   func testNotificationsAreNotPersistentByDefault() {
     let plain = FloatingBarNotification(
-      ownerID: "owner", title: "t", message: "m", assistantId: "default")
+      ownerID: "owner", title: "t", message: "m", assistantId: "default", kind: .functional)
     XCTAssertFalse(plain.isPersistent)
     let share = FloatingBarNotification(
       ownerID: "owner", title: "t", message: "m",
       assistantId: MeetingActionItemBannerPolicy.assistantID,
+      kind: .meetingNotes,
       action: .meetingSummaryShare(conversationID: "c1", recipients: []),
       isPersistent: true)
     XCTAssertTrue(share.isPersistent)

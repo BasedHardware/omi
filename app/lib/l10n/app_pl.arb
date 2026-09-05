@@ -3270,6 +3270,16 @@
     "pendantFullSyncBlocked": "Pamięć Pendanta jest pełna i wciąż jest on w trybie nagrywania, więc zapisanego dźwięku nie można przenieść. Naciśnij przycisk Pendanta, aby zatrzymać nagrywanie, a następnie zsynchronizuj ponownie.",
     "conversationsNotCapturedCount": "Nie nagrano ({count})",
     "transcriptionNoAudio": "Transkrypcja nie odbiera dźwięku",
+    "chatBlockTask": "Zadanie",
+    "chatBlockGoal": "Cel",
+    "chatBlockConversation": "Rozmowa",
+    "chatBlockMemory": "Wspomnienie",
+    "chatBlockQuestion": "Pytanie",
+    "chatBlockOpenInGoals": "Otwórz w Celach",
+    "chatBlockOpenConversation": "Otwórz rozmowę",
+    "chatBlockOpenInMemories": "Otwórz we Wspomnieniach",
+    "chatBlockUnavailable": "Już niedostępne",
+    "chatBlockRecommendedNextSteps": "Zalecane kolejne kroki",
     "couldNotLoadMemories": "Nie udało się wczytać wspomnień",
     "couldNotLoadKnowledgeGraph": "Nie udało się wczytać grafu wiedzy"
 }
