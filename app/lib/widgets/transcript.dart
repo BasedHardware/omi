@@ -390,7 +390,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     _scrollController.jumpTo((_scrollController.offset - dy).clamp(position.minScrollExtent, position.maxScrollExtent));
   }
 
-  void _endReaderDrag() {
+  void _endReaderDrag(int pointer) {
+    if (_readerDragPointer != pointer) return;
     final recovered = _readerDragRecovered && !_readerDragTakenOverByNative;
     _readerDragPointer = null;
     _lastReaderPointerPosition = null;
@@ -409,6 +410,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final currentScroll = _scrollController.offset;
     final isAtBottom = _scrollController.position.maxScrollExtent - currentScroll <= 24;
     _userHasScrolled = !isAtBottom;
+    if (isAtBottom && !_isUserScrolling) {
+      // Settled at the live edge: resume follow. Do not clear this during an
+      // active drag — a reader who has only moved a few pixels must still win.
+      _userInterruptedAutoScroll = false;
+    }
     final scrollState = widget.scrollState;
     if (scrollState != null) {
       String? anchorId;
@@ -569,7 +575,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   Future<void> _scrollToBottomGently({bool animated = true, bool force = false}) {
     if (!_scrollController.hasClients) return Future.value();
-    if (!force && widget.followLatest && (_userHasScrolled || _isUserScrolling)) return Future.value();
+    if (!force && widget.followLatest && (_userHasScrolled || _isUserScrolling || _userInterruptedAutoScroll)) {
+      return Future.value();
+    }
     _followAgain = true;
     final activeFollow = _activeFollow;
     if (activeFollow != null) return activeFollow;
@@ -821,8 +829,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         child: Listener(
           onPointerDown: _onReaderPointerDown,
           onPointerMove: _onReaderPointerMove,
-          onPointerUp: (_) => _endReaderDrag(),
-          onPointerCancel: (_) => _endReaderDrag(),
+          onPointerUp: (event) => _endReaderDrag(event.pointer),
+          onPointerCancel: (event) => _endReaderDrag(event.pointer),
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onTap: () {
