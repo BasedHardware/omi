@@ -1078,9 +1078,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/8e/37/efad0257dc6e593
 
 [[packages]]
 name = "pyarrow"
-version = "23.0.1"
-sdist = { url = "https://files.pythonhosted.org/packages/88/22/134986a4cc224d593c1afde5494d18ff629393d74cc2eddb176669f234a4/pyarrow-23.0.1.tar.gz", upload-time = 2026-02-16T10:14:12Z, size = 1167336, hashes = { sha256 = "b8c5873e33440b2bc2f4a79d2b47017a89c5a24116c055625e6f2ee50523f019" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/00/ca/db94101c187f3df742133ac837e93b1f269ebdac49427f8310ee40b6a58f/pyarrow-23.0.1-cp311-cp311-win_amd64.whl", upload-time = 2026-02-16T10:09:50Z, size = 27527698, hashes = { sha256 = "f00f993a8179e0e1c9713bcc0baf6d6c01326a406a9c23495ec1ba9c9ebf2919" } }]
+version = "19.0.1"
+sdist = { url = "https://files.pythonhosted.org/packages/7f/09/a9046344212690f0632b9c709f9bf18506522feb333c894d0de81d62341a/pyarrow-19.0.1.tar.gz", upload-time = 2025-02-18T18:55:57Z, size = 1129437, hashes = { sha256 = "3bf266b485df66a400f282ac0b6d1b500b9d2ae73314a153dbe97d6d5cc8a99e" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/ff/77/e62aebd343238863f2c9f080ad2ef6ace25c919c6ab383436b5b81cbeef7/pyarrow-19.0.1-cp311-cp311-win_amd64.whl", upload-time = 2025-02-18T18:52:54Z, size = 25283133, hashes = { sha256 = "008a4009efdb4ea3d2e18f05cd31f9d43c388aad29c636112c2966605ba33466" } }]
 
 [[packages]]
 name = "pyasn1"
