@@ -32,6 +32,12 @@ final class CuaControlStatusStore: ObservableObject {
   @Published private(set) var granted: [CuaPermission: Bool] = [:]
   @Published private(set) var failure: String?
 
+  /// Screen Recording ticked after this process launched: TCC says granted and
+  /// capture is dead until Omi restarts. Its own state because it is neither of
+  /// the two a checkbox can express, and reporting it as either one sends the
+  /// user somewhere that cannot help.
+  @Published private(set) var screenNeedsRelaunch = false
+
   /// Two of these live in the same System Settings pane and are still two
   /// separate grants, so each is named by what it lets Omi do rather than by the
   /// pane it is found in.
@@ -46,13 +52,16 @@ final class CuaControlStatusStore: ObservableObject {
 
   private let gate: CuaControlGate
   private let isGranted: @MainActor (CuaPermission) -> Bool
+  private let needsRelaunch: @MainActor () -> Bool
 
   init(
     gate: CuaControlGate = .shared,
-    isGranted: @escaping @MainActor (CuaPermission) -> Bool = { $0.isGranted() }
+    isGranted: @escaping @MainActor (CuaPermission) -> Bool = { $0.isGranted() },
+    needsRelaunch: @escaping @MainActor () -> Bool = { CuaPermission.screenRecordingNeedsRelaunch }
   ) {
     self.gate = gate
     self.isGranted = isGranted
+    self.needsRelaunch = needsRelaunch
     self.isEnabled = gate.isEnabled
     refreshPermissions()
   }
@@ -76,13 +85,14 @@ final class CuaControlStatusStore: ObservableObject {
     if missingGrantCount > 0 {
       return "Needs \(missingGrantCount) grant\(missingGrantCount == 1 ? "" : "s")"
     }
+    if screenNeedsRelaunch { return "Restart to apply" }
     return "Ready"
   }
 
   /// Active, the way a healthy server's tool count is active, only when the
   /// tools can actually run.
   var cardStatusActive: Bool {
-    isEnabled && !isSuspended && missingGrantCount == 0
+    isEnabled && !isSuspended && missingGrantCount == 0 && !screenNeedsRelaunch
   }
 
   /// The sheet's status line: live state and the stop control sit together
@@ -132,6 +142,7 @@ final class CuaControlStatusStore: ObservableObject {
       refreshed[entry.permission] = isGranted(entry.permission)
     }
     granted = refreshed
+    screenNeedsRelaunch = needsRelaunch()
     isEnabled = gate.isEnabled
   }
 

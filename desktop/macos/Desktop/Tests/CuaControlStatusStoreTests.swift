@@ -28,18 +28,22 @@ final class CuaControlStatusStoreTests: XCTestCase {
   }
 
   @MainActor
-  private func makeStore(granted: [CuaPermission], gateEnabled: Bool = true)
-    -> CuaControlStatusStore
-  {
+  private func makeStore(
+    granted: [CuaPermission], gateEnabled: Bool = true, screenNeedsRelaunch: Bool = false
+  ) -> CuaControlStatusStore {
     let gate = CuaControlGate(
       defaults: defaults,
       missingPermission: { _ in nil },
       ownerID: { "owner-1" })
-    if gateEnabled { gate.setEnabled(true) }
+    // Both directions, not just the on one: the suite is shared across the
+    // stores a single test makes, so an unwritten `false` inherits the previous
+    // store's `true` and the case never runs.
+    gate.setEnabled(gateEnabled)
     self.gate = gate
     return CuaControlStatusStore(
       gate: gate,
-      isGranted: { granted.contains($0) })
+      isGranted: { granted.contains($0) },
+      needsRelaunch: { screenNeedsRelaunch })
   }
 
   /// The card reads like every other server card — one status word, colored
@@ -61,6 +65,32 @@ final class CuaControlStatusStoreTests: XCTestCase {
     ready.stopNow()
     XCTAssertEqual(ready.cardStatusText, "Stopped")
     XCTAssertFalse(ready.cardStatusActive)
+  }
+
+  /// A Screen Recording grant given after launch reads as granted to every
+  /// preflight and is dead to ScreenCaptureKit until Omi restarts. Reporting it
+  /// as "Ready" sends the user back to System Settings to redo what they just
+  /// did, so the card carries the one instruction that helps.
+  @MainActor
+  func testAGrantThatOnlyAFreshLaunchCanUseIsNotReady() {
+    let stale = makeStore(
+      granted: [.postEvents, .accessibility, .screenRecording], screenNeedsRelaunch: true)
+
+    XCTAssertEqual(stale.missingGrantCount, 0, "macOS has given every grant")
+    XCTAssertEqual(stale.cardStatusText, "Restart to apply")
+    XCTAssertFalse(stale.cardStatusActive, "the tools cannot run until the next launch")
+
+    // Gate state still outranks it: an off server has no restart worth offering.
+    XCTAssertEqual(
+      makeStore(
+        granted: [.postEvents, .accessibility, .screenRecording], gateEnabled: false,
+        screenNeedsRelaunch: true
+      ).cardStatusText, "Off")
+
+    // And a missing grant is the more actionable of the two.
+    XCTAssertEqual(
+      makeStore(granted: [.screenRecording], screenNeedsRelaunch: true).cardStatusText,
+      "Needs 2 grants")
   }
 
   /// The switch is the whole setup in both directions: turning it off closes the

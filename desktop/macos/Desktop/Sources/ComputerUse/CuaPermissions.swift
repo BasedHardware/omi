@@ -192,6 +192,21 @@ enum CuaPermission: String, CaseIterable, Sendable {
     NSWorkspace.shared.open(settingsURL)
   }
 
+  /// Screen Recording granted after this process launched.
+  ///
+  /// `CGPreflightScreenCaptureAccess` flips to true the moment the box is
+  /// ticked, while ScreenCaptureKit stays bound to the window-server connection
+  /// opened at launch — so every preflight-driven surface reports a working
+  /// grant over a capture path that cannot work until Omi restarts. Reporting
+  /// that window as "granted" sends the user back to System Settings to do
+  /// again the thing they already did.
+  @MainActor
+  static var screenRecordingNeedsRelaunch: Bool {
+    ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+      grantedNow: ScreenCaptureService.checkPermission(),
+      grantedAtLaunch: ScreenCaptureService.grantedAtProcessStart)
+  }
+
   /// The grant if it is there, or a refusal that has already asked for it.
   ///
   /// "Use what Omi already has, ask for the rest" in one call: a tool never has

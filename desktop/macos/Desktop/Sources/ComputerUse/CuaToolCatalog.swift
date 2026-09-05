@@ -305,6 +305,18 @@ enum CuaToolCatalog {
     return .text(lines.joined(separator: "\n"))
   }
 
+  /// What a failed capture tells the model.
+  ///
+  /// A grant given after launch is not a missing grant, and the two need
+  /// different sentences: telling someone to grant a permission they just
+  /// granted is a loop with no exit, because the preflight the refusal check
+  /// reads has already flipped to true.
+  static func captureFailureMessage(needsRelaunch: Bool) -> String {
+    needsRelaunch
+      ? "Capture failed. Screen Recording is granted, but macOS only hands it to a fresh launch — ask the user to restart Omi, then try again."
+      : "Capture failed. Screen Recording permission may be missing — grant it in System Settings ▸ Privacy & Security ▸ Screen Recording."
+  }
+
   private static func screenshot(_ args: CuaArguments) async -> CuaToolResult {
     if let refusal = await refusal(needs: [.screenRecording]) {
       return .error(refusal.message)
@@ -333,9 +345,8 @@ enum CuaToolCatalog {
       await MainActor.run { CuaPermission.markGranted(.screenRecording) }
     }
     guard let capture, let png = CuaScreenObserver.pngData(from: capture.image) else {
-      return .error(
-        "Capture failed. Screen Recording permission may be missing — grant it in System Settings ▸ Privacy & Security ▸ Screen Recording."
-      )
+      let needsRelaunch = await MainActor.run { CuaPermission.screenRecordingNeedsRelaunch }
+      return .error(captureFailureMessage(needsRelaunch: needsRelaunch))
     }
     let frameID = CuaFrameRegistry.shared.store(capture.geometry)
     let size = capture.geometry.imageSize

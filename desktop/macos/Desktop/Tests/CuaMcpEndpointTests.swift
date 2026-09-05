@@ -167,4 +167,18 @@ final class CuaMcpEndpointTests: XCTestCase {
     let unknown = await CuaToolCatalog.call("not_a_tool", arguments: [:])
     XCTAssertTrue(unknown.isError)
   }
+
+  /// The two ways a capture fails need different sentences. A grant given after
+  /// launch already reads as granted to the preflight the refusal check
+  /// consults, so telling the user to grant it again is a loop with no exit.
+  func testCaptureFailureNamesTheRestartRatherThanTheGrantItAlreadyHas() {
+    let stale = CuaToolCatalog.captureFailureMessage(needsRelaunch: true)
+    XCTAssertTrue(stale.contains("restart Omi"))
+    XCTAssertFalse(
+      stale.contains("System Settings"), "it is granted; sending them back there cannot help")
+
+    let missing = CuaToolCatalog.captureFailureMessage(needsRelaunch: false)
+    XCTAssertTrue(missing.contains("System Settings"))
+    XCTAssertFalse(missing.contains("restart Omi"))
+  }
 }
