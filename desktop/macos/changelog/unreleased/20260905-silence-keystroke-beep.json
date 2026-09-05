@@ -1,0 +1,3 @@
+{
+  "change": "Typing when no text field is focused no longer plays the system alert sound."
+}

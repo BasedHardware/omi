@@ -710,12 +710,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   override var canBecomeKey: Bool { true }
   override var canBecomeMain: Bool { false }
 
+  /// Unhandled keys stop here. This panel has no window controller, so `super.keyDown` has no next
+  /// responder to pass to and answers with `noResponderFor(_:)` — the alert sound — every time the
+  /// user types while the input field is not first responder (hover menu open, response showing).
+  /// Escape is the one key the window itself acts on; everything else is deliberately absorbed.
   override func keyDown(with event: NSEvent) {
     if event.keyCode == 53 {  // Escape
       handleEscapeKey()
-      return
     }
-    super.keyDown(with: event)
   }
 
   func handleEscapeKey() {
