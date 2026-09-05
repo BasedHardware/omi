@@ -15,6 +15,12 @@ enum ProactiveNotificationKind: String, Equatable, CaseIterable {
   case trial
   /// First-run permission help. Never journaled, for the same reason.
   case onboarding
+  /// The daily recap's once-a-day announcement. Never journaled: the recap's
+  /// transcript presence is the dedicated `ChatDailyRecapRow` day boundary, and
+  /// INV-CHAT-1 makes the recap chrome rather than a turn — a journaled bell
+  /// card would be a second, degraded copy (title truncated, no day stats) of
+  /// a row the transcript already renders.
+  case dailyRecap = "daily_recap"
   case suggestion
   case insight
   case task
@@ -52,6 +58,7 @@ enum ProactiveNotificationKind: String, Equatable, CaseIterable {
     case "integration_connect": return .integration
     case "trial": return .trial
     case "onboarding": return .onboarding
+    case "daily_recap": return .dailyRecap
     default: return .functional
     }
   }
@@ -60,7 +67,7 @@ enum ProactiveNotificationKind: String, Equatable, CaseIterable {
   /// journal. See `FloatingControlBarManager.persistNotificationMessageIfNeeded`.
   var isJournaled: Bool {
     switch self {
-    case .trial, .onboarding: return false
+    case .trial, .onboarding, .dailyRecap: return false
     case .general, .functional, .suggestion, .insight, .task, .memory, .goal, .meetingNotes,
       .resurface, .integration:
       return true

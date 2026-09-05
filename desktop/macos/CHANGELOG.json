@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.298",
+      "date": "2026-09-05",
+      "changes": [
+        "Improved proactive knowledge tools and standing notification setup in Chat"
+      ]
+    },
+    {
       "version": "0.12.297",
       "date": "2026-09-05",
       "changes": [

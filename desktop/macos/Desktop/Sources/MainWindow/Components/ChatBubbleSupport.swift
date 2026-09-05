@@ -479,6 +479,11 @@ struct ProactiveNotificationBadge: Equatable {
       // Never journaled, so never rendered as a transcript row. Kept exhaustive
       // so a future decision to journal them has to state its badge here.
       (label, systemImage) = ("Omi", "bell")
+    case .dailyRecap:
+      // Never journaled either — the recap's transcript presence is the
+      // dedicated `ChatDailyRecapRow` day boundary, not a bell card. Kept
+      // exhaustive for the same reason.
+      (label, systemImage) = ("Daily Recap", "calendar")
     }
   }
 }

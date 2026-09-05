@@ -86,6 +86,40 @@ describe("withFreshness", () => {
 });
 
 describe("crash-rate date keys", () => {
+  it("keeps today's bucket when successive clock reads advance", () => {
+    const RealDate = Date;
+    const instant = RealDate.parse("2026-09-05T23:22:00.000Z");
+    let reads = 0;
+    class AdvancingDate extends RealDate {
+      constructor(value?: string | number | Date) {
+        super(
+          value === undefined
+            ? instant + reads++
+            : value instanceof RealDate
+            ? value.getTime()
+            : value
+        );
+      }
+    }
+    vi.stubGlobal("Date", AdvancingDate);
+    try {
+      const series = buildDateSeries(
+        3,
+        { "2026-09-05": 5 },
+        { "2026-09-05": 100 }
+      );
+      expect(series).toHaveLength(4);
+      expect(series.at(-1)).toEqual({
+        date: "2026-09-05",
+        crashes: 5,
+        users: 100,
+        crashFreeRate: 95,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("builds UTC date keys so they join with PostHog's toDate() buckets", () => {
     const series = buildDateSeries(2, {}, {});
     const expected = new Date().toISOString().slice(0, 10);
