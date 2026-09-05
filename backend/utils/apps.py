@@ -316,13 +316,15 @@ def get_popular_apps() -> List[App]:
             set_generic_cache(cache_key, reduced_apps, 60 * 30)  # 30 minutes cached
             popular_apps = reduced_apps
 
+        usable_apps = _records_with_ids(popular_apps)
+
         # Process apps (add installs, reviews, ratings)
-        app_ids = [app['id'] for app in popular_apps]
+        app_ids = [app['id'] for app in usable_apps]
         apps_install = get_apps_installs_count(app_ids)
         apps_reviews = get_apps_reviews(app_ids)
 
         apps: List[App] = []
-        for app in popular_apps:
+        for app in usable_apps:
             app_dict = app
             app_dict['installs'] = apps_install.get(app['id'], 0)
             reviews = apps_reviews.get(app['id'], {})
