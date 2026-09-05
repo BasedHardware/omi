@@ -271,6 +271,18 @@ final class VoiceTypeSessionTests: XCTestCase {
     XCTAssertTrue(sink.copied.isEmpty)
   }
 
+  func testTextWithNothingInItDeliversNothing() {
+    // A breath decoded as "." or "…" is not a dictation: nothing is pasted
+    // and nothing is left on the clipboard.
+    for text in [".", "…", ", ,", "?!"] {
+      let (session, sink) = makeSession()
+      XCTAssertNotNil(session.payload(from: "Type hello"))
+      XCTAssertEqual(session.deliver(text), .none, text)
+      XCTAssertTrue(sink.pasted.isEmpty)
+      XCTAssertTrue(sink.copied.isEmpty)
+    }
+  }
+
   func testANewTurnForgetsThePreviousClaim() {
     let (session, sink) = makeSession()
     XCTAssertTrue(session.claim(transcript: "Type hello"))
@@ -383,6 +395,16 @@ final class DictationPolisherTests: XCTestCase {
     // into a paragraph.
     XCTAssertNil(DictationPolisher.accept("Hello there, how are you doing today my friend", for: "hello"))
     XCTAssertEqual(DictationPolisher.accept("Hello!", for: "hello"), "Hello!")
+  }
+
+  func testAPlaceholderAboutTheTextIsRefused() {
+    // Observed live: a near-empty dictation came back as "(No text provided)"
+    // and the placeholder was pasted into the document.
+    XCTAssertNil(DictationPolisher.accept("(No text provided)", for: "so"))
+    XCTAssertNil(DictationPolisher.accept("[inaudible]", for: "hm so"))
+    XCTAssertNil(DictationPolisher.accept("...", for: "so"))
+    // A dictation that itself opens with a bracket keeps it.
+    XCTAssertEqual(DictationPolisher.accept("(See attached.)", for: "(see attached)"), "(See attached.)")
   }
 
   func testARewriteOfTheSameLengthButDifferentWordsIsRefused() {

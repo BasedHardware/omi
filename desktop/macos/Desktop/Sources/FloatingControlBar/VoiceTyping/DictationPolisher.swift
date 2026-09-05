@@ -137,7 +137,17 @@ enum DictationPolisher {
     where text.count >= 2 && text.first == open && text.last == close && source.first != open {
       text = String(text.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    guard !text.isEmpty else { return nil }
+    guard !text.isEmpty, hasContent(text) else { return nil }
+    // A note about the text instead of the text: "(No text provided)",
+    // "[inaudible]". Observed live — a near-empty dictation came back as the
+    // parenthesised placeholder and it was pasted. Only a rewrite that is
+    // wrapped whole, when the speaker's text was not, is refused.
+    if let open = text.first, let close = text.last,
+      [("(", ")"), ("[", "]"), ("{", "}")].contains(where: { $0.0 == open && $0.1 == close }),
+      source.first != open
+    {
+      return nil
+    }
     let loweredCandidate = text.lowercased()
     let loweredSource = source.lowercased()
     for opening in refusalOpenings
@@ -171,6 +181,12 @@ enum DictationPolisher {
     let sourceWords = Set(contentWords(source))
     let shared = comparable.filter { sourceWords.contains($0) }.count
     return Double(shared) / Double(comparable.count) >= minimumSharedWordFraction
+  }
+
+  /// Whether there is anything to type: at least one letter or digit.
+  /// Punctuation alone is a recognizer's shrug, not a dictation.
+  static func hasContent(_ text: String) -> Bool {
+    text.contains(where: { $0.isLetter || $0.isNumber })
   }
 
   private static func contentWords(_ text: String) -> [String] {

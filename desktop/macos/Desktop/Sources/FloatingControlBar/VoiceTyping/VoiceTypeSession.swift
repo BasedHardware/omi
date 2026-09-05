@@ -123,7 +123,9 @@ final class VoiceTypeSession {
     }
     guard latch == .typing else { return .none }
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return .none }
+    // Nothing detected means nothing typed: not an empty paste, and not a
+    // stray "." or "…" the recognizer produced from a breath.
+    guard DictationPolisher.hasContent(trimmed) else { return .none }
     if let aimed = releaseFocusTarget {
       let current = sink.focusTarget()
       if current == nil || current != aimed {
