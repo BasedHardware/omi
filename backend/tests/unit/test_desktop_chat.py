@@ -1122,6 +1122,7 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
                     'choices': [{'message': {'content': 'hello'}}],
                     'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
                 },
+                headers={'x-omi-jit-gateway-receipt': 'trusted-receipt'},
                 request=httpx.Request('POST', url),
             )
 
@@ -1134,11 +1135,21 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
         x_app_platform=None,
         x_omi_chat_contract_version=None,
         x_omi_request_id=None,
+        x_omi_jit_contract_version='jit-cloud-qa-v1',
+        x_omi_jit_run_id='jit-relay-run-1',
+        x_omi_jit_max_attempts='3',
+        x_omi_jit_max_output_tokens='2048',
+        x_omi_jit_max_input_tokens='32768',
+        x_omi_jit_max_spend_micro_usd='50000',
     )
 
     assert b'"id":"chat-1"' in response.body
     assert client.calls[0]['url'] == 'http://gateway.test/v1/chat/completions'
     assert client.calls[0]['headers']['X-Omi-Request-ID']
+    assert client.calls[0]['headers']['X-Omi-Jit-Contract-Version'] == 'jit-cloud-qa-v1'
+    assert client.calls[0]['headers']['X-Omi-Jit-Run-Id'] == 'jit-relay-run-1'
+    assert client.calls[0]['headers']['X-Omi-Jit-Max-Attempts'] == '3'
+    assert response.headers['X-Omi-Jit-Gateway-Receipt'] == 'trusted-receipt'
     assert client.calls[0]['json']['model'] == 'omi:auto:chat-agent'
     assert recorded and recorded[0][0] == 'user-1'
     assert recorded[0][1].input_tokens == 3
@@ -2164,6 +2175,15 @@ def test_gateway_request_headers_omit_app_platform_when_client_sent_none():
     headers = desktop_chat._gateway_request_headers('request-1', desktop_chat.CHAT_AGENT_AUTO_LANE_ID, None)
 
     assert 'X-Omi-App-Platform' not in headers
+
+
+def test_jit_qualification_headers_forward_only_versioned_bounded_contract():
+    headers = desktop_chat._jit_headers_for_forward('jit-cloud-qa-v1', 'a' * 64, '3', '2048', '32768', '50000')
+    assert headers['X-Omi-Jit-Run-Id'] == 'a' * 64
+    assert headers['X-Omi-Jit-Max-Attempts'] == '3'
+    with pytest.raises(ValueError):
+        desktop_chat._jit_headers_for_forward('jit-cloud-qa-v1', 'a' * 64, '4', '2048', '32768', '50000')
+    assert desktop_chat._jit_headers_for_forward(None, None, None, None, None, None) == {}
 
 
 def _count_cache_control(value):

@@ -1398,11 +1398,50 @@ def _gateway_feature_for_lane(lane_id: str) -> str:
 
 
 def _gateway_request_headers(
-    request_id: str, lane_id: str = CHAT_AGENT_AUTO_LANE_ID, platform: str | None = None
+    request_id: str,
+    lane_id: str = CHAT_AGENT_AUTO_LANE_ID,
+    platform: str | None = None,
+    jit_headers: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     headers = llm_gateway_headers(feature=_gateway_feature_for_lane(lane_id), platform=platform)
     headers['X-Omi-Request-ID'] = request_id
+    if jit_headers:
+        headers.update(jit_headers)
     return headers
+
+
+def _jit_headers_for_forward(
+    contract_version: str | None,
+    run_id: str | None,
+    max_attempts: str | None,
+    max_output_tokens: str | None,
+    max_input_tokens: str | None,
+    max_spend_micro_usd: str | None,
+) -> dict[str, str]:
+    values = (contract_version, run_id, max_attempts, max_output_tokens, max_input_tokens, max_spend_micro_usd)
+    if all(value is None for value in values):
+        return {}
+    if (
+        contract_version != 'jit-cloud-qa-v1'
+        or not run_id
+        or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,127}', run_id)
+    ):
+        raise ValueError('invalid JIT qualification headers')
+    try:
+        numeric = [int(value or '') for value in values[2:]]
+    except ValueError as exc:
+        raise ValueError('invalid JIT qualification budget') from exc
+    ceilings = (3, 2_048, 32_768, 50_000)
+    if any(value <= 0 or value > ceiling for value, ceiling in zip(numeric, ceilings, strict=True)):
+        raise ValueError('JIT qualification budget exceeds QA ceiling')
+    return {
+        'X-Omi-Jit-Contract-Version': contract_version,
+        'X-Omi-Jit-Run-Id': run_id,
+        'X-Omi-Jit-Max-Attempts': str(numeric[0]),
+        'X-Omi-Jit-Max-Output-Tokens': str(numeric[1]),
+        'X-Omi-Jit-Max-Input-Tokens': str(numeric[2]),
+        'X-Omi-Jit-Max-Spend-Micro-Usd': str(numeric[3]),
+    }
 
 
 def _record_gateway_result(
@@ -1438,6 +1477,7 @@ async def _stream_gateway(
     request_id: str = 'unknown',
     platform: str | None = None,
     lane_id: str = CHAT_AGENT_AUTO_LANE_ID,
+    jit_headers: Mapping[str, str] | None = None,
 ) -> AsyncIterator[bytes]:
     usage_token = set_usage_context(uid, _gateway_feature_for_lane(lane_id))
     frame_buffer = bytearray()
@@ -1454,7 +1494,7 @@ async def _stream_gateway(
             async with get_llm_gateway_client().stream(
                 'POST',
                 f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                headers=_gateway_request_headers(request_id, lane_id, platform),
+                headers=_gateway_request_headers(request_id, lane_id, platform, jit_headers),
                 json=gateway_payload,
             ) as response:
                 if response.status_code >= 400:
@@ -1659,9 +1699,36 @@ async def _chat_completions_unobserved(
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
     x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
     x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
+    x_omi_jit_contract_version: str | None = None,
+    x_omi_jit_run_id: str | None = None,
+    x_omi_jit_max_attempts: str | None = None,
+    x_omi_jit_max_output_tokens: str | None = None,
+    x_omi_jit_max_input_tokens: str | None = None,
+    x_omi_jit_max_spend_micro_usd: str | None = None,
 ) -> JSONResponse | StreamingResponse:
     if x_omi_chat_contract_version not in {None, '1'}:
         raise HTTPException(status_code=426, detail='Unsupported chat contract version')
+    # Direct unit callers invoke the FastAPI endpoint without dependency
+    # injection, so omitted Header defaults arrive as Param objects.  Treat
+    # those as absent just as the HTTP adapter does; only actual strings may
+    # activate the explicit JIT qualification capability.
+    jit_header_values = tuple(
+        value if isinstance(value, str) else None
+        for value in (
+            x_omi_jit_contract_version,
+            x_omi_jit_run_id,
+            x_omi_jit_max_attempts,
+            x_omi_jit_max_output_tokens,
+            x_omi_jit_max_input_tokens,
+            x_omi_jit_max_spend_micro_usd,
+        )
+    )
+    try:
+        jit_headers = _jit_headers_for_forward(
+            *jit_header_values,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     request_id = x_omi_request_id or str(uuid4())
     stub_headers = {
         'Cache-Control': 'no-cache',
@@ -1730,7 +1797,7 @@ async def _chat_completions_unobserved(
     if body.get('stream') is True:
         if gateway_mode:
             return StreamingResponse(
-                _stream_gateway(gateway_payload, uid, request_id, x_app_platform, public_model),
+                _stream_gateway(gateway_payload, uid, request_id, x_app_platform, public_model, jit_headers),
                 media_type='text/event-stream',
                 headers={
                     'Cache-Control': 'no-cache',
@@ -1767,7 +1834,7 @@ async def _chat_completions_unobserved(
             async with get_llm_gateway_semaphore():
                 response = await get_llm_gateway_client().post(
                     f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                    headers=_gateway_request_headers(request_id, public_model, x_app_platform),
+                    headers=_gateway_request_headers(request_id, public_model, x_app_platform, jit_headers),
                     json=gateway_payload,
                 )
             response.raise_for_status()
@@ -1780,12 +1847,15 @@ async def _chat_completions_unobserved(
             _record_gateway_result(lane_id=public_model, outcome='success', reason='ok', request_id=request_id)
             result_recorded = True
             await _record_usage(uid, _openai_usage_as_anthropic(response_body.get('usage')))
+            response_headers = {
+                'X-Omi-Chat-Contract-Version': '1',
+                'X-Request-Id': request_id,
+            }
+            if jit_headers and response.headers.get('x-omi-jit-gateway-receipt'):
+                response_headers['X-Omi-Jit-Gateway-Receipt'] = response.headers['x-omi-jit-gateway-receipt']
             return JSONResponse(
                 response_body,
-                headers={
-                    'X-Omi-Chat-Contract-Version': '1',
-                    'X-Request-Id': request_id,
-                },
+                headers=response_headers,
             )
         except HTTPException:
             raise
@@ -1837,6 +1907,12 @@ async def chat_completions(
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
     x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
     x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
+    x_omi_jit_contract_version: str | None = Header(None, alias='X-Omi-Jit-Contract-Version'),
+    x_omi_jit_run_id: str | None = Header(None, alias='X-Omi-Jit-Run-Id'),
+    x_omi_jit_max_attempts: str | None = Header(None, alias='X-Omi-Jit-Max-Attempts'),
+    x_omi_jit_max_output_tokens: str | None = Header(None, alias='X-Omi-Jit-Max-Output-Tokens'),
+    x_omi_jit_max_input_tokens: str | None = Header(None, alias='X-Omi-Jit-Max-Input-Tokens'),
+    x_omi_jit_max_spend_micro_usd: str | None = Header(None, alias='X-Omi-Jit-Max-Spend-Micro-Usd'),
     user_agent: str | None = Header(None, alias='User-Agent'),
 ) -> JSONResponse | StreamingResponse:
     attempt = ClientJourneyAttempt(
@@ -1850,6 +1926,12 @@ async def chat_completions(
             x_app_platform=x_app_platform,
             x_omi_chat_contract_version=x_omi_chat_contract_version,
             x_omi_request_id=x_omi_request_id,
+            x_omi_jit_contract_version=x_omi_jit_contract_version,
+            x_omi_jit_run_id=x_omi_jit_run_id,
+            x_omi_jit_max_attempts=x_omi_jit_max_attempts,
+            x_omi_jit_max_output_tokens=x_omi_jit_max_output_tokens,
+            x_omi_jit_max_input_tokens=x_omi_jit_max_input_tokens,
+            x_omi_jit_max_spend_micro_usd=x_omi_jit_max_spend_micro_usd,
         )
     except asyncio.CancelledError:
         attempt.cancel()

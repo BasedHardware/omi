@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 import json
 from typing import Any, cast
@@ -17,7 +17,10 @@ from llm_gateway.gateway.accounting import (
     ProviderResponseMetadata,
     UsageStatus,
     cache_requested_for_openai_request,
+    encode_jit_gateway_receipt,
     image_usage,
+    jit_gateway_receipt_for_trace,
+    jit_gateway_receipt_sse_frame,
     openai_usage_from_sse_payload,
 )
 from llm_gateway.gateway.accounting_sink import schedule_attempt_trace
@@ -37,6 +40,8 @@ from llm_gateway.gateway.errors import (
 )
 from llm_gateway.gateway.executor import (
     ProviderRegistry,
+    _jit_reservation_units,
+    _settle_jit_attempt,
     execute_chat_completion,
     _map_provider_failure,  # type: ignore[reportPrivateUsage]  # shared gateway failure mapper
     output_budget_for,
@@ -56,7 +61,8 @@ from llm_gateway.gateway.metrics import (
 )
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, completion_size_bucket, output_budget_bucket
 from llm_gateway.gateway.providers import ProviderFailure
-from llm_gateway.gateway.request_context import request_id_for
+from llm_gateway.gateway.jit_budget import JITAttemptReservation, reserve_jit_provider_attempt
+from llm_gateway.gateway.request_context import JITBudgetHeaders, jit_budget_headers_for, request_id_for
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, resolve_chat_completion_route
 from llm_gateway.gateway.schemas import FailureClass, RouteArtifact, RouteServingClass
 from llm_gateway.gateway.sse import SSEEventDecoder
@@ -87,6 +93,14 @@ async def create_chat_completion(
     attempt_trace = AttemptTrace()
     try:
         request_body = await _request_json(request)
+        try:
+            jit_budget = jit_budget_headers_for(request, owner_uid=caller.user_uid)
+            if jit_budget is not None and not caller.user_uid:
+                raise ValueError('JIT budget requires authenticated owner attribution')
+        except ValueError as exc:
+            raise GatewayInvalidRequestError(str(exc), param='x-omi-jit-contract-version') from exc
+        if jit_budget is not None:
+            _apply_jit_request_budget(request_body, jit_budget)
         resolved_route = resolve_chat_completion_route(config, request_body)
         credentials = _resolve_credentials(request, caller)
         credential_source = credentials.source.value
@@ -96,6 +110,7 @@ async def create_chat_completion(
             api_surface='openai_chat_completions',
             payer='byok' if credentials.mode.value == 'byok' else 'omi',
             fallback_feature=resolved_route.lane.lane_id,
+            jit_budget=jit_budget,
         )
         is_streaming = resolved_route.validated_request.forwarded_params.get('stream') is True
         if is_streaming:
@@ -107,12 +122,22 @@ async def create_chat_completion(
                 request_id=request_id,
                 accounting_context=accounting_context,
                 attempt_trace=attempt_trace,
+                max_provider_attempts=jit_budget.max_attempts if jit_budget is not None else None,
+                jit_max_spend_micro_usd=jit_budget.max_spend_micro_usd if jit_budget is not None else None,
+                jit_owner_uid=jit_budget.owner_uid if jit_budget is not None else None,
+                jit_run_id=jit_budget.run_id if jit_budget is not None else None,
+                jit_contract_version=jit_budget.contract_version if jit_budget is not None else None,
             )
         result = await execute_chat_completion(
             resolved_route,
             credentials,
             provider_registry,
             attempt_trace=attempt_trace,
+            max_provider_attempts=jit_budget.max_attempts if jit_budget is not None else None,
+            jit_max_spend_micro_usd=jit_budget.max_spend_micro_usd if jit_budget is not None else None,
+            jit_run_id=jit_budget.run_id if jit_budget is not None else None,
+            jit_contract_version=jit_budget.contract_version if jit_budget is not None else None,
+            jit_owner_uid=jit_budget.owner_uid if jit_budget is not None else None,
         )
         schedule_attempt_trace(accounting_context, attempt_trace)
         _safe_observe(
@@ -127,7 +152,7 @@ async def create_chat_completion(
             request_id=request_id,
             api_surface='openai_chat_completions',
         )
-        return JSONResponse(content=result.response)
+        return JSONResponse(content=result.response, headers=_jit_receipt_headers(accounting_context, attempt_trace))
     except asyncio.CancelledError:
         if accounting_context is not None:
             schedule_attempt_trace(accounting_context, attempt_trace)
@@ -421,6 +446,11 @@ async def _streaming_response(
     request_id: str,
     accounting_context: AccountingContext,
     attempt_trace: AttemptTrace,
+    max_provider_attempts: int | None = None,
+    jit_max_spend_micro_usd: int | None = None,
+    jit_owner_uid: str | None = None,
+    jit_run_id: str | None = None,
+    jit_contract_version: str | None = None,
 ) -> StreamingResponse:
     route = selected_serving_route(resolved_route)
     output_budget = output_budget_for(resolved_route, route)
@@ -431,6 +461,11 @@ async def _streaming_response(
         provider_registry,
         route,
         attempt_trace=attempt_trace,
+        max_provider_attempts=max_provider_attempts,
+        jit_max_spend_micro_usd=jit_max_spend_micro_usd,
+        jit_owner_uid=jit_owner_uid,
+        jit_run_id=jit_run_id,
+        jit_contract_version=jit_contract_version,
     )
     async_iterator = _stream_with_terminal_metrics(
         prepared,
@@ -456,6 +491,7 @@ class _PreparedStream:
     fallback_used: bool
     fallback_reason: str | None
     cache_requested: bool = False
+    reservation: JITAttemptReservation | None = None
 
 
 async def _prepared_streaming_iterator(
@@ -465,10 +501,18 @@ async def _prepared_streaming_iterator(
     route: RouteArtifact,
     *,
     attempt_trace: AttemptTrace,
+    max_provider_attempts: int | None = None,
+    jit_max_spend_micro_usd: int | None = None,
+    jit_owner_uid: str | None = None,
+    jit_run_id: str | None = None,
+    jit_contract_version: str | None = None,
 ) -> _PreparedStream:
     last_error: GatewayError | None = None
     first_failure: str | None = None
     for provider_ref in [route.primary, *route.fallbacks]:
+        if max_provider_attempts is not None and len(attempt_trace.attempts) >= max_provider_attempts:
+            raise GatewayInvalidRequestError('JIT provider attempt budget exhausted')
+        reservation: JITAttemptReservation | None = None
         provider = provider_registry.provider_for(provider_ref.provider)
         if provider is None:
             raise GatewayInvalidRouteConfigError(f'provider is not supported for this route: {provider_ref.provider}')
@@ -477,6 +521,29 @@ async def _prepared_streaming_iterator(
             continue
         provider_request = provider_request_for(resolved_route, provider_ref)
         _request_stream_usage(provider_request, provider_ref.provider)
+        if jit_run_id is not None:
+            try:
+                units = _jit_reservation_units(provider_request)
+                reservation = reserve_jit_provider_attempt(
+                    owner_uid=jit_owner_uid,
+                    run_id=jit_run_id,
+                    contract_version=jit_contract_version,
+                    max_attempts=max_provider_attempts,
+                    max_spend_micro_usd=jit_max_spend_micro_usd or 50_000,
+                    provider=provider_ref.provider,
+                    model=provider_ref.model,
+                    input_tokens=int(units['input_tokens']),
+                    cached_input_tokens=int(units['cached_input_tokens']),
+                    output_tokens=int(units['output_tokens']),
+                    cache_write_tokens=int(units['cache_write_tokens']),
+                    cache_ttl=units['cache_ttl'],
+                )
+            except ValueError as exc:
+                raise GatewayInvalidRequestError(str(exc)) from exc
+            except Exception as exc:
+                raise GatewayInvalidRequestError('JIT budget authority unavailable') from exc
+            if reservation is None:
+                raise GatewayInvalidRequestError('JIT provider attempt budget exhausted')
         stream = stream_chat_completion(
             provider_request,
             provider_ref=provider_ref,
@@ -489,6 +556,13 @@ async def _prepared_streaming_iterator(
                 if first_chunk:
                     break
         except StopAsyncIteration:
+            _settle_jit_attempt(
+                reservation,
+                provider=provider_ref.provider,
+                model=provider_ref.model,
+                metadata=None,
+                status='failed',
+            )
             return _PreparedStream(
                 first_chunk=None,
                 stream=stream,
@@ -499,6 +573,13 @@ async def _prepared_streaming_iterator(
                 cache_requested=cache_requested_for_openai_request(provider_request),
             )
         except ProviderFailure as exc:
+            _settle_jit_attempt(
+                reservation,
+                provider=provider_ref.provider,
+                model=provider_ref.model,
+                metadata=None,
+                status='failed',
+            )
             last_error = _map_provider_failure(exc, credentials, provider_ref)
             attempt_trace.record(
                 provider=provider_ref.provider,
@@ -522,6 +603,7 @@ async def _prepared_streaming_iterator(
             fallback_used=first_failure is not None,
             fallback_reason=first_failure,
             cache_requested=cache_requested_for_openai_request(provider_request),
+            reservation=reservation,
         )
     if last_error is not None:
         raise last_error
@@ -549,6 +631,7 @@ async def _stream_with_terminal_metrics(
     completion_characters = 0
     finish_reason = 'unknown'
     usage_metadata: ProviderResponseMetadata | None = None
+    passthrough_buffer = b''
     output_budget = output_budget or OutputBudgetDecision(source='none', max_completion_tokens=None)
 
     async def observe_terminal(*, outcome: str, error_class: str, phase: str) -> None:
@@ -579,6 +662,13 @@ async def _stream_with_terminal_metrics(
         )
         if accounting_context is not None:
             schedule_attempt_trace(accounting_context, trace)
+        _settle_jit_attempt(
+            prepared.reservation,
+            provider=prepared.provider,
+            model=prepared.model,
+            metadata=usage_metadata if outcome == 'success' else None,
+            status='succeeded' if outcome == 'success' else ('cancelled' if outcome == 'cancelled' else 'failed'),
+        )
         _safe_observe(
             lambda: observe_route_result(
                 started_at,
@@ -613,37 +703,59 @@ async def _stream_with_terminal_metrics(
             api_surface='openai_chat_completions',
         )
 
-    async def inspect_chunk(chunk: bytes) -> None:
-        nonlocal completion_characters, finish_reason, terminal_marker_seen, usage_metadata
-        for event in decoder.feed(chunk):
-            if event.data.strip() == '[DONE]':
-                terminal_marker_seen = True
-                await observe_terminal(outcome='success', error_class='none', phase='terminal_marker')
-                continue
-            payload = _stream_payload(event.data)
-            if payload is not None:
-                observed_usage = openai_usage_from_sse_payload(
-                    payload,
-                    cache_requested=prepared.cache_requested,
-                )
-                if observed_usage is not None:
-                    usage_metadata = observed_usage
-            completion_characters += _stream_completion_character_count(event.data)
-            observed_finish_reason = _stream_finish_reason(event.data)
-            if observed_finish_reason is not None:
-                finish_reason = observed_finish_reason
+    async def inspect_chunk(chunk: bytes) -> list[bytes]:
+        nonlocal completion_characters, finish_reason, terminal_marker_seen, usage_metadata, passthrough_buffer
+        emitted: list[bytes] = []
+        passthrough_buffer += chunk
+        if len(passthrough_buffer) > 1024 * 1024:
+            raise ValueError('SSE frame exceeds bounded decoder buffer')
+        while b'\n\n' in passthrough_buffer or b'\r\n\r\n' in passthrough_buffer:
+            # Normalize only the framing boundary; the decoder applies the
+            # same newline normalization when inspecting the payload.
+            normalized = passthrough_buffer.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
+            if b'\n\n' not in normalized:
+                break
+            frame, passthrough_buffer = normalized.split(b'\n\n', 1)
+            frame_bytes = frame + b'\n\n'
+            frame_events = decoder.feed(frame_bytes)
+            for event in frame_events:
+                if event.data.strip() == '[DONE]':
+                    terminal_marker_seen = True
+                    await observe_terminal(outcome='success', error_class='none', phase='terminal_marker')
+                    receipt = (
+                        jit_gateway_receipt_for_trace(accounting_context, trace)
+                        if accounting_context is not None
+                        else None
+                    )
+                    if receipt is not None:
+                        emitted.append(jit_gateway_receipt_sse_frame(receipt))
+                    continue
+                payload = _stream_payload(event.data)
+                if payload is not None:
+                    observed_usage = openai_usage_from_sse_payload(
+                        payload,
+                        cache_requested=prepared.cache_requested,
+                    )
+                    if observed_usage is not None:
+                        usage_metadata = observed_usage
+                completion_characters += _stream_completion_character_count(event.data)
+                observed_finish_reason = _stream_finish_reason(event.data)
+                if observed_finish_reason is not None:
+                    finish_reason = observed_finish_reason
+            emitted.append(frame_bytes)
+        return emitted
 
     if prepared.first_chunk is None:
         await observe_terminal(outcome='error', error_class='empty_stream_before_output', phase='before_output')
         return
 
     try:
-        await inspect_chunk(prepared.first_chunk)
-        yield prepared.first_chunk
+        for emitted in await inspect_chunk(prepared.first_chunk):
+            yield emitted
         async for chunk in prepared.stream:
             if chunk:
-                await inspect_chunk(chunk)
-                yield chunk
+                for emitted in await inspect_chunk(chunk):
+                    yield emitted
     except asyncio.CancelledError:
         await observe_terminal(
             outcome='cancelled',
@@ -683,6 +795,7 @@ def _accounting_context(
     api_surface: str,
     payer: str,
     fallback_feature: str,
+    jit_budget: JITBudgetHeaders | None = None,
 ) -> AccountingContext:
     feature = caller.usage_feature or fallback_feature
     return AccountingContext.create(
@@ -693,7 +806,50 @@ def _accounting_context(
         api_surface=api_surface,
         payer=payer,
         app_platform=caller.app_platform,
+        jit_run_id=jit_budget.run_id if jit_budget is not None else None,
+        jit_contract_version=jit_budget.contract_version if jit_budget is not None else None,
     )
+
+
+def _jit_receipt_headers(context: AccountingContext, trace: AttemptTrace) -> dict[str, str]:
+    """Return a receipt only for the explicit QA capability."""
+    receipt = jit_gateway_receipt_for_trace(context, trace)
+    if receipt is None:
+        return {}
+    return {'x-omi-jit-gateway-receipt': encode_jit_gateway_receipt(receipt)}
+
+
+def _apply_jit_request_budget(request_body: dict[str, Any], budget: JITBudgetHeaders) -> None:
+    """Apply a qualification-only output cap and conservative input preflight."""
+    if _contains_jit_unsupported_modality(request_body):
+        raise GatewayInvalidRequestError(
+            'JIT qualification currently accepts text-only provider inputs',
+            param='messages',
+        )
+    # A character-count heuristic underestimates non-ASCII text and ignores
+    # tool/system fields. UTF-8 bytes are a conservative tokenizer-independent
+    # upper bound (every token consumes at least one byte), so the QA gate
+    # fails closed before a provider attempt rather than guessing low.
+    estimated_input_tokens = len(json.dumps(request_body, separators=(',', ':'), ensure_ascii=False).encode('utf-8'))
+    if estimated_input_tokens > budget.max_input_tokens:
+        raise GatewayInvalidRequestError('JIT input budget exceeded', param='messages')
+    for key in ('max_tokens', 'max_completion_tokens'):
+        value = request_body.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            request_body[key] = min(value, budget.max_output_tokens)
+    if 'max_tokens' not in request_body and 'max_completion_tokens' not in request_body:
+        request_body['max_completion_tokens'] = budget.max_output_tokens
+
+
+def _contains_jit_unsupported_modality(value: object) -> bool:
+    """Reject image/audio payloads whose billable input envelope is not tokenized here."""
+    if isinstance(value, Mapping):
+        if value.get('type') in {'image_url', 'image', 'input_audio', 'audio'}:
+            return True
+        return any(_contains_jit_unsupported_modality(child) for child in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_jit_unsupported_modality(child) for child in value)
+    return False
 
 
 def _request_stream_usage(request: dict[str, Any], provider: str) -> None:

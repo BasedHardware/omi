@@ -124,6 +124,7 @@ const QUERY_WIRE_FIELDS = new Set([
   "expectedCapabilityVersion",
   "reasoningEffort",
   "jitKnowledgeToolsEnabled",
+  "jitBudget",
 ]);
 
 export class JsonlTransport {
@@ -199,6 +200,17 @@ export class JsonlTransport {
       context.adapterSessionId = result.adapterSessionId ?? undefined;
       if (context.revoked) return;
 
+      let adapterReceipt: {
+        jitCostStatus?: "estimated" | "unknown";
+        jitEstimatedCostUsd?: number | null;
+        jitProviderAttempts?: number;
+        jitReceiptAttemptIDs?: string[];
+      } | undefined;
+      try {
+        const parsed = result.run.resultJson ? JSON.parse(result.run.resultJson) as unknown : undefined;
+        if (parsed && typeof parsed === "object") adapterReceipt = parsed as typeof adapterReceipt;
+      } catch { /* result JSON is optional diagnostic data */ }
+
       const resultMessage = {
         type: "result" as const,
         text: result.text,
@@ -211,6 +223,10 @@ export class JsonlTransport {
         outputTokens: result.run.outputTokens ?? Math.ceil(result.text.length / 4),
         cacheReadTokens: result.run.cacheReadTokens ?? 0,
         cacheWriteTokens: result.run.cacheWriteTokens ?? 0,
+        jitCostStatus: adapterReceipt?.jitCostStatus,
+        jitEstimatedCostUsd: adapterReceipt?.jitEstimatedCostUsd,
+        jitProviderAttempts: adapterReceipt?.jitProviderAttempts,
+        jitReceiptAttemptIDs: adapterReceipt?.jitReceiptAttemptIDs,
         modelsUsed: context.modelsUsed ? [...context.modelsUsed] : undefined,
         artifacts: result.artifacts.map(serializeArtifact),
         completionDeltaArtifacts: result.completionDeltaArtifacts?.map(serializeArtifact),
@@ -227,7 +243,12 @@ export class JsonlTransport {
       const errorMessage = {
         type: "error" as const,
         message: failure.userMessage,
-        failure,
+        failure: input.metadata?.jitBudget
+          ? { ...failure, jitCostStatus: "unknown" as const, jitEstimatedCostUsd: null }
+          : failure,
+        ...(input.metadata?.jitBudget
+          ? { jitCostStatus: "unknown" as const, jitEstimatedCostUsd: null }
+          : {}),
       };
       this.send(this.withCorrelation(errorMessage, context));
     } finally {
@@ -528,6 +549,7 @@ export class JsonlTransport {
         contextCapabilityVersion: snapshot.capabilityVersion,
         ...(message.reasoningEffort ? { reasoningEffort: message.reasoningEffort } : {}),
         ...(message.jitKnowledgeToolsEnabled === true ? { jitKnowledgeToolsEnabled: true } : {}),
+        ...(message.jitBudget ? { jitBudget: message.jitBudget } : {}),
       },
     };
   }

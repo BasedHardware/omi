@@ -11,6 +11,7 @@ from llm_gateway.gateway.credentials import build_byok_credential_context, build
 from llm_gateway.gateway.errors import (
     GatewayCapabilityMismatchError,
     GatewayCredentialFailureError,
+    GatewayInvalidRequestError,
     GatewayInvalidRouteConfigError,
     GatewayProviderFailureError,
     GatewayProviderRequestRejectedError,
@@ -285,6 +286,34 @@ async def test_executor_retries_provider_up_to_max_attempts_before_fallback():
     # Primary tried 3 times (max_attempts), then fallback once
     assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-5.6-luna', 'gpt-5.6-luna', 'gpt-4o-mini']
     assert result.response['choices'][0]['message']['content'] == '{"answer":"fallback"}'
+
+
+@pytest.mark.asyncio
+async def test_executor_stops_jit_attempts_at_qualification_ceiling():
+    route = active_route_with_fallbacks([]).model_copy(
+        update={'retry': type(gateway_config().route_artifacts[ACTIVE_ROUTE].retry)(max_attempts=3)}
+    )
+    resolved = resolve_chat_completion_route(config_with_active_route(route), valid_request())
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            fake_success_response(route.primary),
+        ]
+    )
+    trace = AttemptTrace()
+
+    with pytest.raises(GatewayInvalidRequestError, match='JIT provider attempt budget exhausted'):
+        await execute_chat_completion(
+            resolved,
+            omi_credentials(),
+            ProviderRegistry({'openai': provider}),
+            attempt_trace=trace,
+            max_provider_attempts=2,
+        )
+
+    assert len(provider.calls) == 2
+    assert len(trace.attempts) == 2
 
 
 @pytest.mark.asyncio

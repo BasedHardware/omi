@@ -273,7 +273,8 @@ actor ProactiveLaneClient {
         rollout: Self.jitState(object["rollout"]),
         killSwitch: Self.jitState(object["kill_switch"]),
         effective: Self.jitState(object["effective"]),
-        killSwitchPresent: object["kill_switch"] != nil)
+        killSwitchPresent: object["kill_switch"] != nil,
+        budgetContractVersion: object["budget_contract_version"] as? String)
       let rawTTL = object["cache_ttl_seconds"] as? Int ?? 60
       let ttl = min(max(rawTTL, 15), 15 * 60)
       jitFlagsCache = (

@@ -41,6 +41,9 @@ import {
   MCP_STDIO_START_CONCURRENCY,
   omiRequestIdFromRelayContext,
   omiReasoningEffortFromRelayContext,
+  omiJitBudgetFromRelayContext,
+  omiJitGatewayReceiptFromHeader,
+  omiJitGatewayReceiptFromSSE,
   omiBuiltInToolPolicyFromRelayContext,
   applyOmiProviderHeaders,
   OMI_CHAT_CONTRACT_VERSION,
@@ -71,6 +74,69 @@ test("reasoning effort relay: strict two-token allowlist", () => {
   assert.equal(omiReasoningEffortFromRelayContext('{"reasoningEffort":"max"}'), undefined);
   assert.equal(omiReasoningEffortFromRelayContext('{"requestId":"req_1"}'), undefined);
   assert.equal(omiReasoningEffortFromRelayContext("not json"), undefined);
+});
+
+test("JIT budget relay is bounded and emits only opaque accounting headers", () => {
+  const raw = JSON.stringify({
+    jitBudget: {
+      contractVersion: "jit-cloud-qa-v1",
+      executionID: "a".repeat(64),
+      maxProviderAttempts: 3,
+      maxOutputTokensPerAttempt: 2048,
+      maxNormalizedInputTokensPerAttempt: 32768,
+      maxEstimatedSpendMicroUSD: 50000,
+    },
+  });
+  assert.equal(omiJitBudgetFromRelayContext(raw)?.executionID, "a".repeat(64));
+  assert.equal(omiJitBudgetFromRelayContext(JSON.stringify({ jitBudget: { executionID: "bad id" } })), undefined);
+  const headers: Record<string, string> = {};
+  applyOmiProviderHeaders(headers, raw);
+  assert.equal(headers["x-omi-jit-contract-version"], "jit-cloud-qa-v1");
+  assert.equal(headers["x-omi-jit-run-id"], "a".repeat(64));
+  assert.equal(headers["x-omi-jit-max-attempts"], "3");
+  assert.equal(headers["x-omi-jit-max-output-tokens"], "2048");
+  assert.equal(headers["x-omi-jit-max-input-tokens"], "32768");
+  assert.equal(headers["x-omi-jit-max-spend-micro-usd"], "50000");
+});
+
+test("JIT gateway receipt parser accepts trusted header and terminal SSE framing", () => {
+  const receipt = {
+    schema_version: "jit-gateway-receipt-v1",
+    run_id: "a".repeat(64),
+    contract_version: "jit-cloud-qa-v1",
+    attempts: [{
+      attempt_id: "invocation:1",
+      provider: "openai",
+      configured_model: "gpt-5.6-luna",
+      actual_model_version: "gpt-5.6-luna-20260901",
+      provider_response_id: "resp_1",
+      rate_card_id: "openai:gpt-5.6-luna:v1",
+      cost_basis: "rate_card",
+      usage_status: "confirmed",
+      cost_status: "estimated",
+      normalized_uncached_input_tokens: 10,
+      cached_input_tokens: 2,
+      cache_write_tokens: 0,
+      output_tokens: 4,
+      estimated_cost_micro_usd: 7,
+    }],
+    aggregate: {
+      attempt_count: 1,
+      normalized_uncached_input_tokens: 10,
+      cached_input_tokens: 2,
+      cache_write_tokens: 0,
+      output_tokens: 4,
+      estimated_cost_micro_usd: 7,
+      cost_status: "estimated",
+    },
+  };
+  const encoded = Buffer.from(JSON.stringify(receipt)).toString("base64url");
+  assert.equal(omiJitGatewayReceiptFromHeader(encoded)?.aggregate.estimatedCostMicroUSD, 7);
+  assert.equal(
+    omiJitGatewayReceiptFromSSE(`data: {"choices":[]}\n\nevent: omi_jit_receipt\ndata: ${JSON.stringify({ omi_jit_receipt: receipt })}\n\ndata: [DONE]\n\n`)?.attempts[0]?.provider,
+    "openai",
+  );
+  assert.equal(omiJitGatewayReceiptFromHeader("not-base64"), undefined);
 });
 
 test("built-in tool authority requires an explicit kernel default token", () => {
