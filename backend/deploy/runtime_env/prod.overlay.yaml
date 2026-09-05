@@ -427,6 +427,10 @@ overlay:
             value: based-hardware
           MEMORY_ENABLED:
             value: 'on'
+          KNOWLEDGE_LEDGER_DRAIN_ENABLED:
+            value: 'false'
+          KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
+            value: ''
       day3-reengagement-email-job:
         flags:
           --task-timeout: 900s

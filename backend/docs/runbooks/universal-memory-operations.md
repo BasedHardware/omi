@@ -5,8 +5,9 @@
 **Scope:** the universal canonical writer, dual-format reader, historical
 compatibility adapter, and Short-term maintenance job.
 
-There is no UID enrollment, allowlist, dogfood activation, or general account
-backfill. Every authenticated user follows one memory/task authority. Existing
+There is no product UID enrollment, dogfood activation, or general account
+backfill. The drain's dev-only operational allowlist is a safety fence, not
+product enrollment. Every authenticated user follows one memory/task authority. Existing
 historical documents are read in place and materialized only when that item is
 mutated.
 
@@ -19,8 +20,10 @@ mutated.
 | `MEMORY_CANONICAL_MAINTENANCE_ENABLED` | `memory-maintenance-job` only | Enables scheduled Short-term normalization, TTL audit, consolidation, and outbox drain. |
 | `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` | maintenance job | Global L2 cost/incident switch. Required processing, TTL audit, and outbox ownership remain independent. |
 | consolidation batch/candidate caps | maintenance job | Bound one L2 call and one pass. |
+| `KNOWLEDGE_LEDGER_DRAIN_ENABLED` | `knowledge-ledger-drain-job` | Explicit operational gate; default off. The dev overlay is the only enabled environment until a separate rollout decision. |
+| `KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST` | `knowledge-ledger-drain-job` | Dev safety fence for the two owner test accounts; it is not product enrollment and must remain empty when the job gate is off. |
 | shared JIT admission + kill switch | `knowledge-ledger-drain-job` | Re-authorizes every account and row before migration; unavailable authority fails closed. |
-| ledger drain page cap/cursor | `knowledge-ledger-drain-job` | Scans at most 20 apply-control documents per hourly run and advances only after every account in the page completes without an error. |
+| ledger drain page cap/cursor | `knowledge-ledger-drain-job` | Global rollout scans at most 20 apply-control documents per hourly run and advances only after every account in the page completes without an error; the dev allowlist reads only its named controls and has no global cursor side effects. |
 | cursor secret/version/TTL | backend | Unused by the live route; removal requires confirming no separate consumer owns the binding. |
 
 `MEMORY_ENABLED_USERS` and code-owned product UID lists are retired. Runtime

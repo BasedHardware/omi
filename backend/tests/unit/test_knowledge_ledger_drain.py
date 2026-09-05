@@ -142,6 +142,17 @@ def test_inventory_treats_legacy_missing_writer_mode_as_compatibility():
     assert page.uids == ("uid-legacy",)
 
 
+def test_scoped_inventory_reads_only_allowlisted_controls_without_global_cursor():
+    db = _Db([_control("uid-a"), _control("uid-b")])
+
+    page = drain.bounded_ledger_drain_inventory(db, uid_allowlist={"uid-a"})
+
+    assert page.uids == ("uid-a",)
+    assert page.last_path == ""
+    drain.commit_ledger_drain_inventory(db, page)
+    assert not db.document(drain.LEDGER_DRAIN_CURSOR_PATH).get().exists
+
+
 def test_drain_runs_without_waiting_for_short_term_maintenance(monkeypatch):
     page = drain.LedgerDrainInventoryPage(
         uids=("uid-enabled", "uid-disabled"),
@@ -222,6 +233,41 @@ def test_revoked_row_authority_never_publishes(monkeypatch):
 
     assert published == []
     assert summary.authorization_revoked_users == 1
+
+
+def test_drain_allowlist_blocks_unlisted_accounts_before_rollout_or_mutation(monkeypatch):
+    page = drain.LedgerDrainInventoryPage(
+        uids=("uid-unlisted",),
+        last_path="users/uid-unlisted/memory_state/apply_control",
+        cursor_generation=0,
+        scanned_documents=1,
+    )
+    resolved = []
+
+    async def resolve(*args, **kwargs):
+        resolved.append((args, kwargs))
+        return SimpleNamespace(permits_work=True)
+
+    async def run_blocking(_executor, function, *args, **kwargs):
+        if function is inventory:
+            return page
+        if function is drain.commit_ledger_drain_inventory:
+            return None
+        raise AssertionError(f"unlisted account reached {function}")
+
+    def inventory(_db, *, limit):
+        raise AssertionError("run_blocking owns this seam")
+
+    monkeypatch.setattr(drain, "resolve_jit_rollout", resolve)
+    monkeypatch.setattr(drain, "run_blocking", run_blocking)
+
+    summary = asyncio.run(
+        drain.run_knowledge_ledger_drain(db_client=object(), inventory_provider=inventory, uid_allowlist={"uid-owner"})
+    )
+
+    assert resolved == []
+    assert summary.allowlist_blocked_users == 1
+    assert summary.attempted_users == 0
 
 
 def test_drain_retries_the_same_page_when_an_account_fails(monkeypatch):

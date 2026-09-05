@@ -29,10 +29,13 @@ def test_entrypoint_executes_independent_drain(monkeypatch):
     job = JOB
     called = []
 
-    async def run():
+    async def run(**kwargs):
+        assert kwargs["uid_allowlist"] == {"uid-owner"}
         called.append(True)
         return SimpleNamespace(errors=[])
 
+    monkeypatch.setenv(job.ledger_drain.LEDGER_DRAIN_ENABLED_ENV, "true")
+    monkeypatch.setenv(job.ledger_drain.LEDGER_DRAIN_UID_ALLOWLIST_ENV, "uid-owner")
     monkeypatch.setattr(job, "_init_firebase", lambda: None)
     monkeypatch.setattr(job, "run_knowledge_ledger_drain", run)
 
@@ -44,14 +47,43 @@ def test_entrypoint_executes_independent_drain(monkeypatch):
 def test_entrypoint_fails_when_a_page_reports_errors(monkeypatch):
     job = JOB
 
-    async def run():
+    async def run(**_kwargs):
         return SimpleNamespace(errors=["uid=redacted:migration:RuntimeError"])
 
+    monkeypatch.setenv(job.ledger_drain.LEDGER_DRAIN_ENABLED_ENV, "true")
+    monkeypatch.setenv(job.ledger_drain.LEDGER_DRAIN_UID_ALLOWLIST_ENV, "uid-owner")
     monkeypatch.setattr(job, "_init_firebase", lambda: None)
     monkeypatch.setattr(job, "run_knowledge_ledger_drain", run)
 
     with pytest.raises(RuntimeError, match=r"completed with 1 error\(s\)"):
         job.main()
+
+
+def test_entrypoint_default_off_skips_firebase_and_inventory(monkeypatch):
+    job = JOB
+    called = []
+
+    monkeypatch.delenv(job.ledger_drain.LEDGER_DRAIN_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(job, "_init_firebase", lambda: called.append("firebase"))
+    monkeypatch.setattr(job, "run_knowledge_ledger_drain", lambda **_kwargs: called.append("drain"))
+
+    job.main()
+
+    assert called == []
+
+
+def test_entrypoint_enabled_without_allowlist_fails_before_firebase(monkeypatch):
+    job = JOB
+    called = []
+
+    monkeypatch.setenv(job.ledger_drain.LEDGER_DRAIN_ENABLED_ENV, "true")
+    monkeypatch.delenv(job.ledger_drain.LEDGER_DRAIN_UID_ALLOWLIST_ENV, raising=False)
+    monkeypatch.setattr(job, "_init_firebase", lambda: called.append("firebase"))
+
+    with pytest.raises(RuntimeError, match="requires an explicit UID allowlist"):
+        job.main()
+
+    assert called == []
 
 
 @pytest.mark.parametrize(
@@ -92,3 +124,12 @@ def test_runtime_manifest_keeps_the_drain_bounded_and_authorized():
             "POSTHOG_PROJECT_API_KEY",
             "SERVICE_ACCOUNT_JSON",
         }
+
+    dev_env = manifest["environments"]["dev"]["cloud_run"]["jobs"]["knowledge-ledger-drain-job"]["env"]
+    assert dev_env["KNOWLEDGE_LEDGER_DRAIN_ENABLED"]["value"] == "true"
+    assert dev_env["KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST"]["value"] == (
+        "vi7SA9ckQCe4ccobWNxlbdcNdC23,9OqYLlKJv4hmeYpIhwJcHBR975i2"
+    )
+    prod_env = manifest["environments"]["prod"]["cloud_run"]["jobs"]["knowledge-ledger-drain-job"]["env"]
+    assert prod_env["KNOWLEDGE_LEDGER_DRAIN_ENABLED"]["value"] == "false"
+    assert prod_env["KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST"]["value"] == ""

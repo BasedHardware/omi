@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+import os
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, cast
@@ -18,6 +19,7 @@ from typing import Any, cast
 from google.cloud import firestore
 
 from database._client import get_firestore_client
+from database.memory_collections import MemoryCollections
 from models.memory_apply import WriterMode
 from utils.executors import db_executor, run_blocking
 from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout
@@ -34,10 +36,28 @@ LEDGER_ROW_AUTHORIZATION_TIMEOUT_SECONDS = 15.0
 LEDGER_DRAIN_CURSOR_PATH = "knowledge_ledger_migration_control/inventory_cursor"
 LEDGER_DRAIN_CURSOR_SCHEMA_VERSION = 1
 LEDGER_TRANSITION_OWNER = "knowledge-ledger-migration.v1"
+LEDGER_DRAIN_ENABLED_ENV = "KNOWLEDGE_LEDGER_DRAIN_ENABLED"
+LEDGER_DRAIN_UID_ALLOWLIST_ENV = "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST"
 
 
 class LedgerDrainInventoryUnavailable(RuntimeError):
     """The bounded migration inventory or its progress cursor is unavailable."""
+
+
+def ledger_drain_enabled_from_environment() -> bool:
+    """Return the explicit operational gate for the scheduled drain job."""
+
+    return (os.getenv(LEDGER_DRAIN_ENABLED_ENV) or "").strip().lower() in {"1", "true", "on", "yes"}
+
+
+def ledger_drain_uid_allowlist_from_environment() -> frozenset[str]:
+    """Parse the optional job-scoped UID fence without exposing its contents in logs."""
+
+    raw = os.getenv(LEDGER_DRAIN_UID_ALLOWLIST_ENV) or ""
+    values = frozenset(part.strip() for part in raw.split(",") if part.strip())
+    if any("/" in uid or any(character.isspace() for character in uid) for uid in values):
+        raise ValueError(f"{LEDGER_DRAIN_UID_ALLOWLIST_ENV} contains an invalid UID")
+    return values
 
 
 @dataclass(frozen=True)
@@ -53,6 +73,7 @@ class LedgerDrainSummary:
     inventoried_users: int = 0
     scanned_documents: int = 0
     attempted_users: int = 0
+    allowlist_blocked_users: int = 0
     rollout_blocked_users: int = 0
     authorization_revoked_users: int = 0
     remaining_users: int = 0
@@ -114,14 +135,85 @@ def _write_cursor(db_client: Any, page: LedgerDrainInventoryPage) -> None:
         raise LedgerDrainInventoryUnavailable("ledger drain cursor unavailable") from exc
 
 
+def _inventory_page_from_snapshots(
+    snapshots: list[Any],
+    *,
+    last_path: str,
+    cursor_generation: int,
+    track_cursor: bool = True,
+) -> LedgerDrainInventoryPage:
+    uids: list[str] = []
+    for snapshot in snapshots:
+        path = str(getattr(getattr(snapshot, "reference", None), "path", ""))
+        if not path:
+            raise LedgerDrainInventoryUnavailable("ledger drain inventory row has no document path")
+        if track_cursor:
+            last_path = path
+        parts = path.split("/")
+        if len(parts) != 4 or parts[0] != "users" or parts[2:] != ["memory_state", "apply_control"]:
+            continue
+        payload = snapshot.to_dict() if hasattr(snapshot, "to_dict") else None
+        uid = payload.get("uid") if isinstance(payload, dict) else None
+        writer_mode = payload.get("writer_mode", WriterMode.compatibility.value) if isinstance(payload, dict) else None
+        if not isinstance(uid, str) or uid != parts[1] or not uid.strip() or "/" in uid:
+            raise LedgerDrainInventoryUnavailable("ledger drain apply-control row malformed")
+        try:
+            mode = WriterMode(writer_mode)
+        except (TypeError, ValueError) as exc:
+            raise LedgerDrainInventoryUnavailable("ledger drain apply-control row malformed") from exc
+        if mode is WriterMode.ledger:
+            continue
+        if mode is WriterMode.transitioning_to_ledger:
+            owner = cast(dict[str, Any], payload).get("writer_transition_owner")
+            if owner != LEDGER_TRANSITION_OWNER:
+                continue
+        if uid not in uids:
+            uids.append(uid)
+    return LedgerDrainInventoryPage(
+        uids=tuple(uids),
+        last_path=last_path,
+        cursor_generation=cursor_generation,
+        scanned_documents=len(snapshots),
+    )
+
+
+def _bounded_allowlist_inventory(db_client: Any, uid_allowlist: Collection[str]) -> LedgerDrainInventoryPage:
+    """Read only the explicitly scoped accounts, without touching the fair global cursor."""
+
+    raw_uids = tuple(uid_allowlist)
+    if any(not isinstance(uid, str) for uid in raw_uids):
+        raise LedgerDrainInventoryUnavailable("ledger drain UID allowlist is malformed")
+    uids = tuple(sorted({uid.strip() for uid in raw_uids}))
+    if not uids:
+        return LedgerDrainInventoryPage(uids=(), last_path="", cursor_generation=0, scanned_documents=0)
+    if len(uids) > MAX_LEDGER_DRAIN_UIDS_PER_RUN:
+        raise LedgerDrainInventoryUnavailable("ledger drain UID allowlist exceeds the bounded page limit")
+    snapshots: list[Any] = []
+    try:
+        for uid in uids:
+            if not uid or "/" in uid or any(character.isspace() for character in uid):
+                raise LedgerDrainInventoryUnavailable("ledger drain UID allowlist is malformed")
+            snapshot = db_client.document(MemoryCollections(uid=uid).memory_apply_control_state).get()
+            if getattr(snapshot, "exists", False):
+                snapshots.append(snapshot)
+    except LedgerDrainInventoryUnavailable:
+        raise
+    except Exception as exc:
+        raise LedgerDrainInventoryUnavailable("ledger drain allowlist inventory unavailable") from exc
+    return _inventory_page_from_snapshots(snapshots, last_path="", cursor_generation=0, track_cursor=False)
+
+
 def bounded_ledger_drain_inventory(
     db_client: Any,
     *,
     limit: int = MAX_LEDGER_DRAIN_UIDS_PER_RUN,
+    uid_allowlist: Collection[str] | None = None,
 ) -> LedgerDrainInventoryPage:
     """Read one fair, bounded page of canonical apply-control documents."""
 
     bounded_limit = max(1, min(MAX_LEDGER_DRAIN_UIDS_PER_RUN, int(limit)))
+    if uid_allowlist is not None:
+        return _bounded_allowlist_inventory(db_client, uid_allowlist)
     collection_group = getattr(db_client, "collection_group", None)
     if not callable(collection_group):
         raise LedgerDrainInventoryUnavailable("ledger drain apply-control inventory unavailable")
@@ -144,40 +236,10 @@ def bounded_ledger_drain_inventory(
                 cast(Any, collection_group("memory_state")).order_by("__name__").limit(bounded_limit).stream()
             )
 
-        uids: list[str] = []
-        last_path = cursor_path
-        for snapshot in snapshots:
-            path = str(getattr(getattr(snapshot, "reference", None), "path", ""))
-            if not path:
-                raise LedgerDrainInventoryUnavailable("ledger drain inventory row has no document path")
-            last_path = path
-            parts = path.split("/")
-            if len(parts) != 4 or parts[0] != "users" or parts[2:] != ["memory_state", "apply_control"]:
-                continue
-            payload = snapshot.to_dict() if hasattr(snapshot, "to_dict") else None
-            uid = payload.get("uid") if isinstance(payload, dict) else None
-            writer_mode = (
-                payload.get("writer_mode", WriterMode.compatibility.value) if isinstance(payload, dict) else None
-            )
-            if not isinstance(uid, str) or uid != parts[1] or not uid.strip() or "/" in uid:
-                raise LedgerDrainInventoryUnavailable("ledger drain apply-control row malformed")
-            try:
-                mode = WriterMode(writer_mode)
-            except (TypeError, ValueError) as exc:
-                raise LedgerDrainInventoryUnavailable("ledger drain apply-control row malformed") from exc
-            if mode is WriterMode.ledger:
-                continue
-            if mode is WriterMode.transitioning_to_ledger:
-                owner = cast(dict[str, Any], payload).get("writer_transition_owner")
-                if owner != LEDGER_TRANSITION_OWNER:
-                    continue
-            if uid not in uids:
-                uids.append(uid)
-        return LedgerDrainInventoryPage(
-            uids=tuple(uids),
-            last_path=last_path,
+        return _inventory_page_from_snapshots(
+            snapshots,
+            last_path=cursor_path,
             cursor_generation=cursor_generation,
-            scanned_documents=len(snapshots),
         )
     except LedgerDrainInventoryUnavailable:
         raise
@@ -202,13 +264,17 @@ async def run_knowledge_ledger_drain(
     now: datetime | None = None,
     inventory_limit: int = MAX_LEDGER_DRAIN_UIDS_PER_RUN,
     inventory_provider: Callable[..., Any] = bounded_ledger_drain_inventory,
+    uid_allowlist: Collection[str] | None = None,
 ) -> LedgerDrainSummary:
     """Drain and publish one independently inventoried migration page."""
 
     # Resolved per call rather than bound at import, and dispatched off the event loop:
     # building the Firestore client is blocking work like every other db call below.
     client = db_client if db_client is not None else await run_blocking(db_executor, get_firestore_client)
-    page = await run_blocking(db_executor, inventory_provider, client, limit=inventory_limit)
+    inventory_kwargs: dict[str, Any] = {"limit": inventory_limit}
+    if uid_allowlist is not None:
+        inventory_kwargs["uid_allowlist"] = uid_allowlist
+    page = await run_blocking(db_executor, inventory_provider, client, **inventory_kwargs)
     if not isinstance(page, LedgerDrainInventoryPage):
         raise LedgerDrainInventoryUnavailable("ledger drain inventory page malformed")
     summary = LedgerDrainSummary(
@@ -234,6 +300,9 @@ async def run_knowledge_ledger_drain(
         return authorize
 
     for uid in page.uids:
+        if uid_allowlist is not None and uid not in uid_allowlist:
+            summary.allowlist_blocked_users += 1
+            continue
         try:
             decision = await resolve_jit_rollout(uid, stage=JITDecisionStage.INGRESS, force_refresh=True)
         except Exception as exc:
@@ -285,11 +354,12 @@ async def run_knowledge_ledger_drain(
     if not summary.errors:
         await run_blocking(db_executor, commit_ledger_drain_inventory, client, page)
     logger.info(
-        "knowledge_ledger_drain: scanned=%d inventoried=%d attempted=%d blocked=%d revoked=%d "
+        "knowledge_ledger_drain: scanned=%d inventoried=%d attempted=%d allowlist_blocked=%d blocked=%d revoked=%d "
         "remaining=%d cutover=%d migrated_rows=%d errors=%d",
         summary.scanned_documents,
         summary.inventoried_users,
         summary.attempted_users,
+        summary.allowlist_blocked_users,
         summary.rollout_blocked_users,
         summary.authorization_revoked_users,
         summary.remaining_users,
@@ -302,11 +372,15 @@ async def run_knowledge_ledger_drain(
 
 __all__ = [
     "LEDGER_DRAIN_CURSOR_PATH",
+    "LEDGER_DRAIN_ENABLED_ENV",
+    "LEDGER_DRAIN_UID_ALLOWLIST_ENV",
     "LedgerDrainInventoryPage",
     "LedgerDrainInventoryUnavailable",
     "LedgerDrainSummary",
     "MAX_LEDGER_DRAIN_UIDS_PER_RUN",
     "bounded_ledger_drain_inventory",
     "commit_ledger_drain_inventory",
+    "ledger_drain_enabled_from_environment",
+    "ledger_drain_uid_allowlist_from_environment",
     "run_knowledge_ledger_drain",
 ]

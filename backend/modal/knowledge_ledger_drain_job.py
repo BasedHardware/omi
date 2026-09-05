@@ -9,7 +9,12 @@ import os
 
 import firebase_admin
 
-from utils.memory.knowledge_ledger_drain import run_knowledge_ledger_drain
+from utils.memory import knowledge_ledger_drain as ledger_drain
+from utils.memory.knowledge_ledger_drain import (
+    ledger_drain_enabled_from_environment,
+    ledger_drain_uid_allowlist_from_environment,
+    run_knowledge_ledger_drain,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,9 +29,15 @@ def _init_firebase() -> None:
 
 
 def main() -> None:
+    if not ledger_drain_enabled_from_environment():
+        logger.info("knowledge-ledger-drain-job disabled")
+        return
+    uid_allowlist = ledger_drain_uid_allowlist_from_environment()
+    if not uid_allowlist:
+        raise RuntimeError("knowledge-ledger-drain-job requires an explicit UID allowlist")
     _init_firebase()
     logger.info("Starting knowledge-ledger-drain-job...")
-    summary = asyncio.run(run_knowledge_ledger_drain())
+    summary = asyncio.run(run_knowledge_ledger_drain(uid_allowlist=uid_allowlist))
     if summary.errors:
         logger.error("knowledge-ledger-drain errors: %s", ", ".join(summary.errors))
         raise RuntimeError(f"knowledge-ledger-drain completed with {len(summary.errors)} error(s)")
