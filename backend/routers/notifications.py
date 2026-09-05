@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple, cast
 
@@ -15,6 +16,7 @@ from utils.app_integrations import send_app_notification
 import database.notifications as notification_db
 from models.other import FcmTokenResponse, SaveFcmTokenRequest
 from models.integrations import IntegrationNotificationResponse
+from campaign_attribution import CAMPAIGN_ID_MAX_LENGTH, CAMPAIGN_ID_PATTERN
 from utils.notifications import (
     send_notification,
 )
@@ -92,6 +94,21 @@ def save_token(
 
 @router.post('/v1/notification')
 def send_notification_to_user(data: Dict[str, Any], secret_key: str = Header(...)) -> Dict[str, str]:
+    """Send one FCM notification to a user.
+
+    `data.data` is forwarded to FCM untouched and reaches the client as the tap
+    payload. Two keys in it are a convention rather than transport:
+
+      kind         "campaign" marks a marketing or growth send.
+      campaign_id  identifies that campaign. The client emits it back on the
+                   notification tap, and a campaign CTA carries it into
+                   /v2/desktop/download/latest, so sends, opens and downloads
+                   share one id.
+
+    A campaign send without a campaign_id is rejected. Afterwards it is
+    indistinguishable from an untracked send, and the gap only surfaces once the
+    campaign is over and the opens can no longer be recovered.
+    """
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
@@ -99,7 +116,33 @@ def send_notification_to_user(data: Dict[str, Any], secret_key: str = Header(...
     uid = cast(str, data['uid'])
     title = cast(str, data['title'])
     body = cast(str, data['body'])
-    notification_data = cast(Dict[str, Any], data.get('data', {}))
+    # `or {}` rather than a default: an explicit "data": null previously reached
+    # send_notification, which tolerates it, so it must not start raising here.
+    notification_data = cast(Dict[str, Any], data.get('data') or {})
+    if notification_data.get('kind') == 'campaign':
+        campaign_id = notification_data.get('campaign_id')
+        # Validated against the same rule the download CTA enforces. Accepting an
+        # id that /v2/desktop/download/latest rejects would let the send succeed
+        # and the CTA 400, losing the attribution this gate exists to guarantee.
+        if (
+            not isinstance(campaign_id, str)
+            or len(campaign_id) > CAMPAIGN_ID_MAX_LENGTH
+            # fullmatch, not match: Python's `$` also matches just before a
+            # trailing newline, so `re.match` accepts an id ending in one while
+            # the CTA's pydantic pattern (whole-string) rejects it — the exact
+            # send-ok/CTA-400 split this shared rule exists to prevent, and a
+            # newline would break the space-separated log line it feeds. The
+            # pattern itself cannot use `\Z`: pydantic's Rust regex has no such
+            # escape and the Query would fail to build.
+            or not re.fullmatch(CAMPAIGN_ID_PATTERN, campaign_id)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    'data.campaign_id is required when data.kind is "campaign", and must match '
+                    f'{CAMPAIGN_ID_PATTERN} within {CAMPAIGN_ID_MAX_LENGTH} characters'
+                ),
+            )
     send_notification(uid, title, body, notification_data)
     return {'status': 'Ok'}
 

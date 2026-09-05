@@ -139,3 +139,108 @@ def test_check_rate_limit_allows_full_hourly_quota():
     assert allowed[:max_n] == [True] * max_n  # full quota deliverable
     assert allowed[max_n] is False  # only the (max_n + 1)th request is throttled
     assert results[0][1] == max_n - 1  # first send reports the full remaining quota, not one short
+
+
+# --- POST /v1/notification: campaign attribution convention (#12645) -------------
+#
+# `data.data` is forwarded to FCM untouched, so campaign_id is a convention rather
+# than transport. A campaign send that omits it is indistinguishable afterwards
+# from an untracked send, and the gap only surfaces once the campaign is over.
+
+
+def test_campaign_send_without_campaign_id_returns_400(monkeypatch):
+    monkeypatch.setenv('ADMIN_KEY', 'admin-key')
+
+    with pytest.raises(HTTPException) as e:
+        notif_mod.send_notification_to_user(
+            data={'uid': 'uid1', 'title': 't', 'body': 'b', 'data': {'kind': 'campaign'}},
+            secret_key='admin-key',
+        )
+
+    assert e.value.status_code == 400
+    assert 'campaign_id' in e.value.detail
+
+
+def test_campaign_send_with_campaign_id_forwards_the_payload_untouched(monkeypatch):
+    monkeypatch.setenv('ADMIN_KEY', 'admin-key')
+    payload = {'kind': 'campaign', 'campaign_id': 'macos-push-2026-09-02', 'navigate_to': '/chat'}
+
+    with patch.object(notif_mod, 'send_notification') as send:
+        result = notif_mod.send_notification_to_user(
+            data={'uid': 'uid1', 'title': 't', 'body': 'b', 'data': payload},
+            secret_key='admin-key',
+        )
+
+    assert result == {'status': 'Ok'}
+    send.assert_called_once_with('uid1', 't', 'b', payload)
+
+
+def test_non_campaign_send_does_not_require_a_campaign_id(monkeypatch):
+    monkeypatch.setenv('ADMIN_KEY', 'admin-key')
+
+    with patch.object(notif_mod, 'send_notification') as send:
+        result = notif_mod.send_notification_to_user(
+            data={'uid': 'uid1', 'title': 't', 'body': 'b', 'data': {'navigate_to': '/chat'}},
+            secret_key='admin-key',
+        )
+
+    assert result == {'status': 'Ok'}
+    send.assert_called_once_with('uid1', 't', 'b', {'navigate_to': '/chat'})
+
+
+def test_campaign_send_with_a_null_data_body_does_not_500(monkeypatch):
+    # "data": null used to reach send_notification, which tolerates it. The new
+    # campaign gate must not turn that into an AttributeError -> HTTP 500.
+    monkeypatch.setenv('ADMIN_KEY', 'admin-key')
+
+    with patch.object(notif_mod, 'send_notification') as send:
+        result = notif_mod.send_notification_to_user(
+            data={'uid': 'uid1', 'title': 't', 'body': 'b', 'data': None},
+            secret_key='admin-key',
+        )
+
+    assert result == {'status': 'Ok'}
+    send.assert_called_once_with('uid1', 't', 'b', {})
+
+
+@pytest.mark.parametrize(
+    'campaign_id',
+    [
+        'has spaces',
+        'has\nnewline',
+        # A trailing newline specifically: Python's `$` matches just before one,
+        # so re.match let this through the send gate while the CTA 422s it. The
+        # two ends disagreeing is the whole failure this shared rule prevents.
+        'ab\n',
+        'hash#char',
+        '   ',
+        'x' * 65,
+    ],
+)
+def test_campaign_id_the_download_route_would_reject_is_refused_at_send(monkeypatch, campaign_id):
+    # The download CTA constrains campaign_id. Accepting one here that it rejects
+    # would let the send succeed and the CTA 400, losing the attribution outright.
+    monkeypatch.setenv('ADMIN_KEY', 'admin-key')
+
+    with pytest.raises(HTTPException) as e:
+        notif_mod.send_notification_to_user(
+            data={
+                'uid': 'uid1',
+                'title': 't',
+                'body': 'b',
+                'data': {'kind': 'campaign', 'campaign_id': campaign_id},
+            },
+            secret_key='admin-key',
+        )
+
+    assert e.value.status_code == 400
+    assert 'campaign_id' in e.value.detail
+
+
+def test_sender_and_download_route_share_one_campaign_id_rule():
+    # Both ends must read the same constants, not two literals that can drift: a
+    # sender that accepts what the CTA rejects loses the attribution silently.
+    import campaign_attribution
+
+    assert notif_mod.CAMPAIGN_ID_PATTERN is campaign_attribution.CAMPAIGN_ID_PATTERN
+    assert notif_mod.CAMPAIGN_ID_MAX_LENGTH is campaign_attribution.CAMPAIGN_ID_MAX_LENGTH

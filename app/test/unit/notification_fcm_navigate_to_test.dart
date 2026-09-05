@@ -53,4 +53,108 @@ void main() {
       expect(result, isNull);
     });
   });
+
+  group('NotificationUtil.notificationOpenedProperties (#12645)', () {
+    test('carries the campaign id straight off the FCM data map', () {
+      expect(
+        NotificationUtil.notificationOpenedProperties(const {
+          'campaign_id': 'macos-push-2026-09-02',
+          'navigate_to': '/chat/omi',
+          'notification_type': 'campaign',
+        }),
+        {
+          'campaign_id': 'macos-push-2026-09-02',
+          'navigate_to': '/chat/omi',
+          'notification_type': 'campaign',
+        },
+      );
+    });
+
+    test('omits campaign_id entirely when the notification is not a campaign', () {
+      final properties = NotificationUtil.notificationOpenedProperties(const {'navigate_to': '/chat/omi'});
+
+      // Absent rather than null: a query filtering on campaign_id must see only
+      // real campaign traffic.
+      expect(properties.containsKey('campaign_id'), isFalse);
+      expect(properties['navigate_to'], '/chat/omi');
+    });
+
+    test('falls back to the legacy type key when notification_type is absent', () {
+      expect(
+        NotificationUtil.notificationOpenedProperties(const {'type': 'day_summary'})['notification_type'],
+        'day_summary',
+      );
+    });
+
+    test('falls back to the legacy type when notification_type is an empty string', () {
+      // `??` alone would keep the empty value and drop the valid legacy one, so a
+      // sender that sets both would lose its notification type entirely.
+      expect(
+        NotificationUtil.notificationOpenedProperties(
+          const {'notification_type': '', 'type': 'day_summary'},
+        )['notification_type'],
+        'day_summary',
+      );
+    });
+
+    test('prefers notification_type over the legacy type key', () {
+      expect(
+        NotificationUtil.notificationOpenedProperties(
+          const {'notification_type': 'campaign', 'type': 'day_summary'},
+        )['notification_type'],
+        'campaign',
+      );
+    });
+
+    test('drops empty and non-String values instead of reporting them', () {
+      expect(
+        NotificationUtil.notificationOpenedProperties(const {'campaign_id': '', 'navigate_to': 42}),
+        isEmpty,
+      );
+    });
+
+    test('a payload with no recognised keys yields no properties', () {
+      expect(NotificationUtil.notificationOpenedProperties(const {}), isEmpty);
+    });
+  });
+
+  group('NotificationUtil.externalTargetFor (#12645)', () {
+    test('treats an absolute https campaign CTA as external', () {
+      final target = NotificationUtil.externalTargetFor(
+        'https://api.omi.me/v2/desktop/download/latest?campaign_id=macos-push-2026-09-02',
+      );
+
+      expect(target, isNotNull);
+      expect(target!.host, 'api.omi.me');
+      expect(target.queryParameters['campaign_id'], 'macos-push-2026-09-02');
+    });
+
+    test('treats http as external too', () {
+      expect(NotificationUtil.externalTargetFor('http://omi.me/download')?.host, 'omi.me');
+    });
+
+    test('leaves an in-app route alone', () {
+      // Must stay null, or every deep link would try to open in a browser.
+      expect(NotificationUtil.externalTargetFor('/chat/omi'), isNull);
+      expect(NotificationUtil.externalTargetFor('conversations'), isNull);
+    });
+
+    test('refuses schemes other than http and https', () {
+      // A notification payload is attacker-influenced: handing an arbitrary
+      // scheme to the platform launcher would address anything the OS can open.
+      for (final hostile in const [
+        'file:///etc/passwd',
+        'javascript:alert(1)',
+        'mailto:someone@example.com',
+        'tel:+15551234567',
+        'omi://settings',
+      ]) {
+        expect(NotificationUtil.externalTargetFor(hostile), isNull, reason: hostile);
+      }
+    });
+
+    test('refuses a scheme with no authority', () {
+      expect(NotificationUtil.externalTargetFor('https:'), isNull);
+    });
+  });
 }
