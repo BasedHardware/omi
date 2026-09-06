@@ -274,9 +274,10 @@ struct TopNavigationDestinationBadges: Equatable {
 /// press and drag**,
 /// then settles on the nearest segment when you let go (`TopNavigationGlassSegments`). The system's own
 /// `NSSegmentedControl` on the Mac gets the material but not that interaction — it flips between
-/// segments — so the lens is drawn here with `glassEffect` inside one `GlassEffectContainer`, the way
-/// Apple's "Build a SwiftUI app with the new design" session builds custom glass controls. Below 26 it
-/// is the system segmented `Picker`, which is exactly what a macOS `TabView` draws for its tabs.
+/// segments — so the lens is drawn here with `glassEffect` as a plain background layer under the
+/// segment words (not inside a `GlassEffectContainer`, which composites its glass above every non-glass
+/// sibling and washed the selected word out). Below 26 it is the system segmented `Picker`, which is
+/// exactly what a macOS `TabView` draws for its tabs.
 ///
 /// Neither renderer is a hand-drawn pill: hover, shine, Reduce Transparency, Increase Contrast and
 /// accessibility text size all come from the material or the control, not from this file.
@@ -374,65 +375,100 @@ private struct TopNavigationGlassSegments: View {
     return geometry.lensCenterX(forPosition: selectedPosition)
   }
 
+  // The body is a chain of small named pieces rather than one expression: the release compiler
+  // could not type-check the single closure-heavy expression in reasonable time (CI's Release
+  // Compile lane), so the lens, the pointer overlay and the animations each get their own property.
   var body: some View {
-    // One glass shape, so no `GlassEffectContainer`: the container composites its glass above every
-    // non-glass sibling, which put the lens *over* the words and washed the selected one out.
-    // As a plain background layer the lens stays under the labels.
+    animated(pointerCaptured(track))
+      .fixedSize()
+  }
+
+  /// The segments on the bar's own glass, with the lens as a background layer under the words.
+  ///
+  /// One glass shape, so no `GlassEffectContainer`: the container composites its glass above every
+  /// non-glass sibling, which put the lens *over* the words and washed the selected one out. As a
+  /// plain background layer the lens stays under the labels. No glass of the track's own either: the
+  /// bar it sits on is already the glass (`inkGlassPanel`), and a second capsule of material on top
+  /// of it read as a white pill. Only the lens is glass.
+  private var track: some View {
+    segments
+      .padding(TopNavigationGlassSegmentMetrics.trackInset)
+      .background(alignment: .topLeading) { lens }
+      .contentShape(Capsule())
+  }
+
+  private var segments: some View {
     EqualWidthSegments {
       ForEach(Array(items.enumerated()), id: \.element.id) { position, item in
         segment(item, isSelected: position == selectedPosition)
       }
     }
-    .padding(TopNavigationGlassSegmentMetrics.trackInset)
-    .background(alignment: .topLeading) {
-      if let lensCenterX {
-        Capsule()
-          .fill(.clear)
-          // `.clear`, not `.regular`: regular glass on the light bar read as a white pill. Clear glass
-          // keeps the lens's refraction and shine but lets the bar's own colour through.
-          .glassEffect(.clear.interactive(), in: .capsule)
-          .frame(width: max(0, segmentWidth), height: TopNavigationGlassSegmentMetrics.height)
-          // Lifted while held, the way the iOS lens rises off the track under a finger.
-          .scaleEffect(dragX == nil ? 1 : TopNavigationGlassSegmentMetrics.liftScale)
-          .position(
-            x: lensCenterX,
-            y: TopNavigationGlassSegmentMetrics.trackInset + TopNavigationGlassSegmentMetrics.height / 2)
-      }
+  }
+
+  /// The clear glass capsule under the selected segment, or under the pointer while pressed.
+  @ViewBuilder
+  private var lens: some View {
+    if let lensCenterX {
+      Capsule()
+        .fill(.clear)
+        // `.clear`, not `.regular`: regular glass on the light bar read as a white pill. Clear glass
+        // keeps the lens's refraction and shine but lets the bar's own colour through.
+        .glassEffect(.clear.interactive(), in: .capsule)
+        .frame(width: lensWidth, height: TopNavigationGlassSegmentMetrics.height)
+        // Lifted while held, the way the iOS lens rises off the track under a finger.
+        .scaleEffect(lensScale)
+        .position(x: lensCenterX, y: lensCenterY)
     }
-    // No glass of the track's own: the bar it sits on is already the glass (`inkGlassPanel`), and a
-    // second capsule of material on top of it read as a white pill. Only the lens is glass.
-    .contentShape(Capsule())
-    // The press is owned by AppKit, not by a SwiftUI `DragGesture`: the bar around this control is a
-    // `WindowDragGesture` handle that recognises *simultaneously*, so a SwiftUI drag here moved the
-    // lens and the whole window together. An `NSView` that claims the mouse-down keeps the window
-    // still, exactly the way the Rewind scrubber keeps its own drags.
-    .overlay {
+  }
+
+  private var lensWidth: CGFloat { max(0, segmentWidth) }
+
+  private var lensScale: CGFloat { dragX == nil ? 1 : TopNavigationGlassSegmentMetrics.liftScale }
+
+  private var lensCenterY: CGFloat {
+    TopNavigationGlassSegmentMetrics.trackInset + TopNavigationGlassSegmentMetrics.height / 2
+  }
+
+  /// The press is owned by AppKit, not by a SwiftUI `DragGesture`: the bar around this control is a
+  /// `WindowDragGesture` handle that recognises *simultaneously*, so a SwiftUI drag here moved the
+  /// lens and the whole window together. An `NSView` that claims the mouse-down keeps the window
+  /// still, exactly the way the Rewind scrubber keeps its own drags.
+  private func pointerCaptured<Content: View>(_ content: Content) -> some View {
+    content.overlay {
       TopNavigationPointerCapture(
-        onWidthChange: { width in
-          segmentWidth = TopNavigationGlassSegmentGeometry.segmentWidth(
-            forTrackWidth: width, count: items.count, inset: TopNavigationGlassSegmentMetrics.trackInset)
-        },
+        onWidthChange: trackWidthChanged,
         onChanged: { dragX = $0 },
-        onEnded: { x, width in
-          // Geometry from the overlay's own width, not from state: the release must land on the right
-          // segment even before any SwiftUI update has published the measured width.
-          let geometry = TopNavigationGlassSegmentGeometry(
-            segmentWidth: TopNavigationGlassSegmentGeometry.segmentWidth(
-              forTrackWidth: width, count: items.count, inset: TopNavigationGlassSegmentMetrics.trackInset),
-            count: items.count, inset: TopNavigationGlassSegmentMetrics.trackInset)
-          let position = geometry.position(forPointerX: x)
-          dragX = nil
-          guard items.indices.contains(position) else { return }
-          TopNavigationSegmentSelection.press(
-            tag: items[position].index, selectedIndex: selectedIndex, onSelect: onSelect)
-        }
+        onEnded: pointerReleased
       )
     }
-    // The lens slides under the motion gate: with Reduce Motion on it simply appears under the new
-    // segment, exactly as the system's own controls behave.
-    .animation(OmiMotion.gated(.snappy(duration: 0.26)), value: selectedPosition)
-    .animation(OmiMotion.gated(.snappy(duration: 0.18)), value: dragX == nil)
-    .fixedSize()
+  }
+
+  /// The lens slides under the motion gate: with Reduce Motion on it simply appears under the new
+  /// segment, exactly as the system's own controls behave.
+  private func animated<Content: View>(_ content: Content) -> some View {
+    content
+      .animation(OmiMotion.gated(.snappy(duration: 0.26)), value: selectedPosition)
+      .animation(OmiMotion.gated(.snappy(duration: 0.18)), value: dragX == nil)
+  }
+
+  private func trackWidthChanged(_ width: CGFloat) {
+    segmentWidth = TopNavigationGlassSegmentGeometry.segmentWidth(
+      forTrackWidth: width, count: items.count, inset: TopNavigationGlassSegmentMetrics.trackInset)
+  }
+
+  /// Geometry from the overlay's own width, not from state: the release must land on the right
+  /// segment even before any SwiftUI update has published the measured width.
+  private func pointerReleased(atX x: CGFloat, trackWidth width: CGFloat) {
+    let inset = TopNavigationGlassSegmentMetrics.trackInset
+    let geometry = TopNavigationGlassSegmentGeometry(
+      segmentWidth: TopNavigationGlassSegmentGeometry.segmentWidth(
+        forTrackWidth: width, count: items.count, inset: inset),
+      count: items.count, inset: inset)
+    let position = geometry.position(forPointerX: x)
+    dragX = nil
+    guard items.indices.contains(position) else { return }
+    TopNavigationSegmentSelection.press(
+      tag: items[position].index, selectedIndex: selectedIndex, onSelect: onSelect)
   }
 
   private func segment(_ item: TopNavigationItem, isSelected: Bool) -> some View {
