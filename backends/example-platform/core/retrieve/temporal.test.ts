@@ -1,7 +1,22 @@
-import { expect, test } from "bun:test";
-import { resolveTemporal, type TypedTemporalExpr } from "./temporal";
+import { expect, spyOn, test } from "bun:test";
+import { persistValidTime, resolveTemporal, type TypedTemporalExpr } from "./temporal";
 
 const clock = { query_at: "2026-07-30T16:00:00Z", capture_at: "2026-06-15T16:00:00Z" };
+test("G0 persists UTC days across ICU zero-offset representations and rejects malformed offsets", () => {
+  const original = Intl.DateTimeFormat.prototype.formatToParts;
+  for (const offset of ["GMT", "GMT+00:00", "GMT-00:00", "GMT+garbage"]) {
+    const formatter = spyOn(Intl.DateTimeFormat.prototype, "formatToParts").mockImplementation(function (this: Intl.DateTimeFormat, date) {
+      return original.call(this, date).map((part) => part.type === "timeZoneName" ? { ...part, value: offset } : part);
+    });
+    try {
+      const persist = () => persistValidTime({ kind: "absolute", granularity: "day", value: "2026-08-12" }, clock, "UTC");
+      if (offset === "GMT+garbage") expect(persist).toThrow("unsupported timezone or offset: UTC");
+      else expect(persist().resolved_interval).toEqual({ kind: "calendar_interval", start: "2026-08-12T00:00:00.000Z", end: "2026-08-13T00:00:00.000Z", timezone: "UTC", granularity: "day" });
+    } finally {
+      formatter.mockRestore();
+    }
+  }
+});
 const cases: readonly [string, TypedTemporalExpr, string, { start: string; end: string }][] = [
   ["last week", { kind: "relative", anchor: "query", unit: "week", offset: -1 }, "America/New_York", { start: "2026-07-20T04:00:00.000Z", end: "2026-07-27T04:00:00.000Z" }],
   ["last month", { kind: "relative", anchor: "query", unit: "month", offset: -1 }, "America/New_York", { start: "2026-06-01T04:00:00.000Z", end: "2026-07-01T04:00:00.000Z" }],

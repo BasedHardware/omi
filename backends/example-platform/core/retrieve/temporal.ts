@@ -45,6 +45,7 @@ const localDateAt = (instant: string, timezone: string): LocalDate => {
 };
 const offsetMinutesAt = (instantMs: number, timezone: string): number => {
   const value = offsetFormatter(timezone).formatToParts(new Date(instantMs)).find((part) => part.type === "timeZoneName")?.value;
+  if (value === "GMT") return 0;
   const match = value?.match(/^GMT([+-])(\d{2}):(\d{2})$/);
   if (!match) throw new Error(`unsupported timezone or offset: ${timezone}`);
   return (match[1] === "+" ? 1 : -1) * (Number(match[2]) * 60 + Number(match[3]));
