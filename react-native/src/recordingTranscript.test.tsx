@@ -247,11 +247,16 @@ test('opens a recording row into the full transcript detail and retires it on ba
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     await act(async () => {
       renderer = ReactTestRenderer.create(
-        <ConversationsPage outcome={outcome} loading={false} />,
+        <ConversationsPage outcome={outcome} loading={false} embedded />,
       );
     });
     renderers.push(renderer);
     expect(mockRequest).not.toHaveBeenCalled();
+    expect(
+      renderer.root.findAll(
+        node => node.props.accessibilityLabel === 'Search loaded conversations',
+      ).length,
+    ).toBeGreaterThan(0);
     await act(async () =>
       renderer.root
         .findAll(
@@ -264,6 +269,11 @@ test('opens a recording row into the full transcript detail and retires it on ba
     expect(textOf(renderer)).toContain(
       'Actual full transcript beyond the summary',
     );
+    expect(
+      renderer.root.findAll(
+        node => node.props.accessibilityLabel === 'Search loaded conversations',
+      ),
+    ).toHaveLength(0);
     expect(
       renderer.root.findAll(
         node =>

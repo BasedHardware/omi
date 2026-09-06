@@ -542,3 +542,34 @@ export function serviceApps(snapshot: ConnectorsSnapshot): CloudApp[] {
     app => app.hasExternalIntegration || app.connectedAccounts.length > 0,
   );
 }
+
+export async function loadServiceSettings(
+  backend: OmiBackend,
+): Promise<{chatUsed: number; chatLimit: number | null}> {
+  const response = await cloudRequest(
+    backend,
+    'service-settings-read',
+    'GET',
+    '/v1/settings',
+  );
+  const entitlement = object(
+    object(response.body, 'Settings response').entitlement,
+    'Chat allowance',
+  );
+  if (
+    entitlement.limitKey !== 'chat' ||
+    typeof entitlement.used !== 'number' ||
+    !Number.isSafeInteger(entitlement.used) ||
+    entitlement.used < 0 ||
+    (entitlement.limit !== null &&
+      (typeof entitlement.limit !== 'number' ||
+        !Number.isSafeInteger(entitlement.limit) ||
+        entitlement.limit < 0))
+  ) {
+    throw new Error('Chat allowance response is malformed');
+  }
+  return {
+    chatUsed: entitlement.used,
+    chatLimit: entitlement.limit as number | null,
+  };
+}

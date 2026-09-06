@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Platform,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -102,9 +103,11 @@ const ConversationRow = memo(function ConversationRow({
 export function ConversationsPage({
   outcome,
   loading,
+  embedded = false,
 }: {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
+  embedded?: boolean;
 }) {
   const compact = useWindowDimensions().width < 720;
   const conversations = useMemo(
@@ -161,45 +164,58 @@ export function ConversationsPage({
   const filtering = query.trim() !== '' || starredOnly;
 
   return (
-    <View style={styles.conversationPage}>
-      <Text
-        style={[
-          styles.projectionTitle,
-          Platform.OS === 'macos' && styles.macPrimaryText,
-        ]}>
-        Conversations
-      </Text>
-      <View style={styles.conversationDiscovery}>
-        <View style={styles.conversationSearchBox}>
-          <Search accessible={false} color="#777777" size={17} />
-          <TextInput
-            accessibilityLabel="Search loaded conversations"
-            onChangeText={setQuery}
-            placeholder="Search loaded conversations"
-            placeholderTextColor="#666666"
-            style={styles.memorySearchInput}
-            value={query}
-          />
-        </View>
-        <FocusPressable
-          accessibilityLabel="Show starred conversations"
-          accessibilityRole="button"
-          accessibilityState={{selected: starredOnly}}
-          onPress={() => setStarredOnly(value => !value)}
-          style={({pressed}) => [
-            styles.conversationStarFilter,
-            starredOnly && styles.conversationStarFilterActive,
-            pressed && styles.pressed,
+    <View
+      style={[
+        styles.conversationPage,
+        compact && mobileStyles.page,
+        embedded && mobileStyles.embedded,
+      ]}>
+      {!embedded && (
+        <Text
+          style={[
+            styles.projectionTitle,
+            Platform.OS === 'macos' && styles.macPrimaryText,
           ]}>
-          <Text
-            style={[
-              styles.conversationStarFilterText,
-              starredOnly && styles.conversationStarFilterTextActive,
+          Conversations
+        </Text>
+      )}
+      {(!compact || selected === null) && (
+        <View
+          style={[
+            styles.conversationDiscovery,
+            embedded && mobileStyles.discovery,
+          ]}>
+          <View style={styles.conversationSearchBox}>
+            <Search accessible={false} color="#777777" size={17} />
+            <TextInput
+              accessibilityLabel="Search loaded conversations"
+              onChangeText={setQuery}
+              placeholder="Search loaded conversations"
+              placeholderTextColor="#666666"
+              style={styles.memorySearchInput}
+              value={query}
+            />
+          </View>
+          <FocusPressable
+            accessibilityLabel="Show starred conversations"
+            accessibilityRole="button"
+            accessibilityState={{selected: starredOnly}}
+            onPress={() => setStarredOnly(value => !value)}
+            style={({pressed}) => [
+              styles.conversationStarFilter,
+              starredOnly && styles.conversationStarFilterActive,
+              pressed && styles.pressed,
             ]}>
-            Starred
-          </Text>
-        </FocusPressable>
-      </View>
+            <Text
+              style={[
+                styles.conversationStarFilterText,
+                starredOnly && styles.conversationStarFilterTextActive,
+              ]}>
+              Starred
+            </Text>
+          </FocusPressable>
+        </View>
+      )}
       <View style={styles.conversationContent}>
         {(!compact || selected === null) && (
           <ScrollView
@@ -331,3 +347,9 @@ export function ConversationsPage({
     </View>
   );
 }
+
+const mobileStyles = StyleSheet.create({
+  page: {paddingHorizontal: 20, paddingVertical: 16},
+  embedded: {paddingTop: 0, paddingBottom: 0},
+  discovery: {marginTop: 0},
+});

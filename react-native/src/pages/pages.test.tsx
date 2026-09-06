@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
-import {Text} from 'react-native';
+import {Linking, Platform, Text} from 'react-native';
 
 const mockAuth = {
   hasCloudSession: jest.fn(),
@@ -110,4 +110,91 @@ test('a signed-out session still offers the native sign-in', async () => {
   expect(textOf(connectors)).toContain('Signed out');
   expect(textOf(connectors)).toContain('Omi cloud needs a signed-in session.');
   expect(labelsOf(connectors)).toContain('Sign in');
+});
+
+test('web Settings loads real service usage without offering a fake sign-in', async () => {
+  const originalPlatform = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+  mockBackend.request.mockResolvedValue({
+    id: 'service-settings-read',
+    status: 200,
+    body: JSON.stringify({
+      identity: {displayName: 'Staging name'},
+      entitlement: {limitKey: 'chat', used: 7, limit: 100},
+    }),
+  });
+  try {
+    const renderer = await renderPage(SettingsPage);
+    expect(mockAuth.hasCloudSession).not.toHaveBeenCalled();
+    expect(mockBackend.request).toHaveBeenCalledWith({
+      id: 'service-settings-read',
+      method: 'GET',
+      path: '/v1/settings',
+    });
+    expect(textOf(renderer)).toContain('7 of 100 requests used');
+    expect(textOf(renderer)).not.toContain('Staging name');
+    expect(labelsOf(renderer)).not.toContain('Sign in');
+    expect(labelsOf(renderer)).not.toContain('Open app permissions');
+  } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatform,
+    });
+  }
+});
+
+test('Settings exposes real native app permissions even if cloud account reads fail', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  const open = jest.spyOn(Linking, 'openSettings').mockResolvedValue();
+  try {
+    const renderer = await renderPage(SettingsPage);
+    await act(async () =>
+      renderer.root
+        .findAll(
+          node => node.props.accessibilityLabel === 'Open app permissions',
+        )[0]
+        .props.onPress(),
+    );
+    expect(open).toHaveBeenCalledTimes(1);
+  } finally {
+    open.mockRestore();
+  }
+});
+
+test('web Settings hides request details and offers a real retry after failure', async () => {
+  const originalPlatform = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+  mockBackend.request
+    .mockResolvedValueOnce({
+      id: 'service-settings-read',
+      status: 503,
+      body: null,
+    })
+    .mockResolvedValueOnce({
+      id: 'service-settings-read',
+      status: 200,
+      body: JSON.stringify({
+        entitlement: {limitKey: 'chat', used: 1, limit: null},
+      }),
+    });
+  try {
+    const renderer = await renderPage(SettingsPage);
+    expect(textOf(renderer)).toContain(
+      'Settings could not be loaded. Try again.',
+    );
+    expect(textOf(renderer)).not.toContain('service-settings-read');
+    expect(textOf(renderer)).not.toContain('503');
+    await act(async () =>
+      renderer.root
+        .findAll(node => node.props.accessibilityLabel === 'Retry settings')[0]
+        .props.onPress(),
+    );
+    expect(textOf(renderer)).toContain('1 requests used');
+    expect(textOf(renderer)).not.toContain('Settings could not be loaded');
+  } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatform,
+    });
+  }
 });

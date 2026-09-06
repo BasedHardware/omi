@@ -37,7 +37,7 @@ export type MobileProjectionStatus =
   | 'offline'
   | 'error';
 
-export type MobileRoute = 'home' | 'chat' | 'tasks' | 'apps';
+export type MobileRoute = 'home' | 'chat' | 'tasks' | 'apps' | 'settings';
 
 export type MobileTask = {
   id: string;
@@ -67,6 +67,9 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   device: MobileDeviceState;
   deviceMessage?: string | null;
   devicePanel?: React.ReactNode;
+  settingsContent?: React.ReactNode;
+  conversationContent?: React.ReactNode;
+  appsContent?: React.ReactNode;
   tasks: readonly MobileTask[];
   taskStatus: MobileProjectionStatus;
   recaps: readonly MobileRecap[];
@@ -181,6 +184,7 @@ const tabItems = [
   {route: 'chat' as const, label: 'Conversations', Icon: MessageCircle},
   {route: 'tasks' as const, label: 'Tasks', Icon: ListFilter},
   {route: 'apps' as const, label: 'Apps', Icon: Puzzle},
+  {route: 'settings' as const, label: 'Settings', Icon: Settings},
 ];
 
 function MobileTabBar({
@@ -241,6 +245,9 @@ export function MobileAppSurface({
   device,
   deviceMessage,
   devicePanel,
+  settingsContent,
+  conversationContent,
+  appsContent,
   mindMapStatus,
   onAskChange,
   onAskSubmit,
@@ -440,6 +447,8 @@ export function MobileAppSurface({
         ? 'Conversations'
         : activeRoute === 'tasks'
         ? 'Tasks'
+        : activeRoute === 'settings'
+        ? 'Settings'
         : 'Apps';
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -448,15 +457,25 @@ export function MobileAppSurface({
           style={styles.flex}>
           <View style={styles.secondaryHeader}>
             <Text style={styles.secondaryTitle}>{title}</Text>
-            <Pressable
-              accessibilityLabel="Open settings"
-              accessibilityRole="button"
-              onPress={onOpenSettings}
-              style={styles.roundButton}>
-              <Settings color={mobileColor.text} size={20} />
-            </Pressable>
+            {activeRoute !== 'settings' && (
+              <Pressable
+                accessibilityLabel="Open settings"
+                accessibilityRole="button"
+                onPress={onOpenSettings}
+                style={styles.roundButton}>
+                <Settings color={mobileColor.text} size={20} />
+              </Pressable>
+            )}
           </View>
-          {activeRoute === 'tasks' ? (
+          {activeRoute === 'settings' ? (
+            <View accessibilityLabel="Settings stage" style={styles.flex}>
+              {settingsContent}
+            </View>
+          ) : activeRoute === 'apps' && appsContent ? (
+            <View accessibilityLabel="Connectors stage" style={styles.flex}>
+              {appsContent}
+            </View>
+          ) : activeRoute === 'tasks' ? (
             taskStatus === 'ready' ? (
               <FlatList
                 contentContainerStyle={styles.secondaryList}
@@ -483,23 +502,8 @@ export function MobileAppSurface({
               </View>
             )
           ) : activeRoute === 'chat' ? (
-            recapStatus !== 'ready' ? (
-              <View style={styles.secondaryList}>
-                <StatePanel noun="recaps" status={recapStatus} />
-              </View>
-            ) : recaps.length > 0 ? (
-              <FlatList
-                contentContainerStyle={styles.secondaryList}
-                data={recaps}
-                keyExtractor={recap => recap.id}
-                renderItem={({item}) => <RecapCard recap={item} />}
-              />
-            ) : (
-              <View style={styles.secondaryEmpty}>
-                <Text style={styles.secondaryPrompt}>
-                  Your timeline is empty
-                </Text>
-              </View>
+            conversationContent ?? (
+              <StatePanel noun="conversations" status="error" />
             )
           ) : (
             <View style={styles.secondaryEmpty}>

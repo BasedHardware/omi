@@ -83,7 +83,12 @@ test.each([
       }
     });
     expect(control(renderer, stage)).toBeDefined();
-    await act(async () => control(renderer, 'Back to Home').props.onPress());
+    await act(async () =>
+      control(
+        renderer,
+        label === 'Expand' ? 'Back to Home' : 'Home',
+      ).props.onPress(),
+    );
     expect(control(renderer, 'Ask Omi')).toBeDefined();
   },
 );
@@ -176,3 +181,21 @@ test.each([true, false])(
     }
   },
 );
+
+test('Settings remains a selected bottom destination and keeps Apps reachable', async () => {
+  const renderer = await renderApp();
+  await act(async () => control(renderer, 'Settings').props.onPress());
+  expect(control(renderer, 'Settings stage')).toBeDefined();
+  expect(control(renderer, 'Open settings')).toBeUndefined();
+  expect(control(renderer, 'Settings').props.accessibilityState.selected).toBe(
+    true,
+  );
+  expect(control(renderer, 'Account settings')).toBeDefined();
+  await act(async () => control(renderer, 'Apps').props.onPress());
+  expect(control(renderer, 'Connectors stage')).toBeDefined();
+  expect(control(renderer, 'Apps').props.accessibilityState.selected).toBe(
+    true,
+  );
+  await act(async () => control(renderer, 'Home').props.onPress());
+  expect(control(renderer, 'Ask Omi')).toBeDefined();
+});
