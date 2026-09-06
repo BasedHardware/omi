@@ -60,6 +60,7 @@ class OmiBleController(
   private val scanner get() = adapter?.bluetoothLeScanner
   private val handler = Handler(Looper.getMainLooper())
   private val results = ConcurrentHashMap<String, OmiDevice>()
+  private var wearableTicket = 0L
   private var connectedDeviceId: String? = null
   private var gatt: BluetoothGatt? = null
   private var connectionState = "disconnected"
@@ -252,6 +253,20 @@ class OmiBleController(
   @Synchronized
   fun connect(id: String, onDone: (Boolean, String) -> Unit) {
     cancelReconnect()
+    if (gatt != null || pendingConnect != null || wearableTicket != 0L) retireConnection("Omi connection was replaced")
+    wearableTicket = try {
+      OmiWearableService.start(context) { ticket ->
+        handler.post { synchronized(this) {
+          if (wearableTicket == ticket) {
+            cancelReconnect()
+            retireConnection("Omi device connection was stopped")
+          }
+        } }
+      }
+    } catch (_: RuntimeException) {
+      onDone(false, "Open Omi and allow Bluetooth to keep the device connected")
+      return
+    }
     connectAttempt(id, onDone)
   }
 
@@ -451,6 +466,7 @@ class OmiBleController(
             lastEvent = "Omi audio notify is live"
             reconnectDeviceId = connectedDeviceId
             reconnect.ready()
+            OmiWearableService.update(wearableTicket, "Omi connected · Wearable audio available")
             finishConnect(true, lastEvent)
             emitSnapshot()
           }
@@ -630,6 +646,7 @@ class OmiBleController(
       connectedDeviceId = target
       connectionState = "connecting"
       lastEvent = "Reconnecting to Omi (${reconnect.attempts()}/3)"
+      OmiWearableService.update(wearableTicket, lastEvent)
       val token = reconnect.token()
       emitSnapshot()
       handler.postDelayed({
@@ -640,6 +657,8 @@ class OmiBleController(
         }
       }, delay)
     } else {
+      OmiWearableService.stop(wearableTicket)
+      wearableTicket = 0L
       reconnectDeviceId = null
       if (target != null) {
         lastEvent = "Omi reconnect failed. Connect your device to try again."

@@ -57,6 +57,10 @@ class OmiNativeModule(private val context: ReactApplicationContext) : ReactConte
 
   @ReactMethod
   fun connectDevice(id: String, promise: Promise) {
+    if (context.lifecycleState != com.facebook.react.common.LifecycleState.RESUMED) {
+      promise.reject("ACTIVITY_UNAVAILABLE", "Open Omi to connect your device")
+      return
+    }
     ble.connect(id) { ok, message ->
       if (ok) promise.resolve(null) else promise.reject("OMI_DEVICE_UNAVAILABLE", message)
     }
