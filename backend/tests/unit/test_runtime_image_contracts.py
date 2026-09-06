@@ -232,13 +232,17 @@ assert structured.Structured(title="fallback").title == "fallback"
 '''
     environment = dict(os.environ)
     environment['PYTHONPATH'] = str(tmp_path)
-    subprocess.run(
+    result = subprocess.run(
         [sys.executable, '-c', probe],
         cwd=tmp_path,
         env=environment,
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, (
+        'SDK-absent fallback import failed; ' f'stdout={result.stdout[-2000:]!r} stderr={result.stderr[-2000:]!r}'
     )
 
 
