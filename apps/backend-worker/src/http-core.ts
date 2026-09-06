@@ -39,6 +39,10 @@ import {
   parseDeviceSessionCreate,
 } from "./device-sessions";
 import { type RetrievalEnv } from "./retrieval";
+import { type CanonicalService } from "./canonical-service";
+import { readCanonicalMemoryPage } from "./memory-service";
+import { requestCanonicalTasks } from "./canonical-tasks";
+import { readDeviceTranscription } from "./device-transcriptions";
 import { parseTaskLimit, readTasks } from "./tasks";
 import {
   backendError,
@@ -84,6 +88,7 @@ export type CoreEnv = SignedUploadEnv &
     ACCOUNTS?: AccountLocator;
     AI?: RetrievalEnv["AI"] | { run: (...args: never[]) => Promise<unknown> };
     VECTORIZE?: RetrievalEnv["VECTORIZE"];
+    CANONICAL_SERVICE?: CanonicalService;
   };
 
 export type CoreContext = {
@@ -186,7 +191,9 @@ export async function readBoundedJson(
   request: Request,
   maxBytes: number
 ): Promise<
-  { kind: "ok"; value: unknown } | { kind: "invalid" } | { kind: "too_large" }
+  | { kind: "ok"; value: unknown; raw: string }
+  | { kind: "invalid" }
+  | { kind: "too_large" }
 > {
   return readBoundedJsonStream(
     request.body,
@@ -200,7 +207,9 @@ async function readBoundedJsonStream(
   declaredLength: string | null,
   maxBytes: number
 ): Promise<
-  { kind: "ok"; value: unknown } | { kind: "invalid" } | { kind: "too_large" }
+  | { kind: "ok"; value: unknown; raw: string }
+  | { kind: "invalid" }
+  | { kind: "too_large" }
 > {
   if (
     declaredLength !== null &&
@@ -229,12 +238,8 @@ async function readBoundedJsonStream(
     offset += chunk.byteLength;
   }
   try {
-    return {
-      kind: "ok",
-      value: JSON.parse(
-        new TextDecoder("utf-8", { fatal: true }).decode(bytes)
-      ) as unknown,
-    };
+    const raw = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return { kind: "ok", value: JSON.parse(raw) as unknown, raw };
   } catch {
     return { kind: "invalid" };
   }
@@ -785,11 +790,55 @@ export async function handleMemories(context: CoreContext): Promise<Response> {
   const cursor = query.get("cursor") ?? undefined;
   if (limit === null || cursor === "")
     return backendError("bad_request", "edit_request", 400);
+  const contractVersion = context.req.header("x-omi-contract-version");
+  const result = await readCanonicalMemoryPage({
+    service: context.env.CANONICAL_SERVICE,
+    caller: {
+      accountId: context.get("accountId"),
+      authorization: context.req.header("authorization"),
+      stagingApiToken: context.env.API_TOKEN,
+    },
+    query,
+    ...(contractVersion === undefined ? {} : { contractVersion }),
+  });
+  if (result.kind === "page") return result.response;
+  if (result.kind === "denied")
+    return new Response(
+      JSON.stringify({
+        error:
+          result.status === 401
+            ? "unauthorized"
+            : result.status === 403
+            ? "forbidden"
+            : "bad_request",
+      }),
+      {
+        status: result.status,
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "no-store",
+        },
+      }
+    );
   return backendError("projection_unavailable", "retry", 503, true);
 }
 
 export async function handleTasks(context: CoreContext): Promise<Response> {
   const query = new URL(context.req.url).searchParams;
+  if (context.env.CANONICAL_SERVICE !== undefined) {
+    const contractVersion = context.req.header("x-omi-contract-version");
+    return requestCanonicalTasks({
+      service: context.env.CANONICAL_SERVICE,
+      caller: {
+        accountId: context.get("accountId"),
+        authorization: context.req.header("authorization"),
+        stagingApiToken: context.env.API_TOKEN,
+      },
+      method: "GET",
+      query,
+      ...(contractVersion === undefined ? {} : { contractVersion }),
+    });
+  }
   if (
     [...query.keys()].some((key) => key !== "limit" && key !== "cursor") ||
     query.getAll("limit").length > 1 ||
@@ -807,12 +856,59 @@ export async function handleTasks(context: CoreContext): Promise<Response> {
   return json(await readTasks(db, context.get("accountId"), limit, cursor));
 }
 
+export async function handleTaskWrite(context: CoreContext): Promise<Response> {
+  const parsed = await readBoundedJson(context.req.raw, 1_000_000);
+  if (parsed.kind !== "ok")
+    return backendError("bad_request", "edit_request", 400);
+  const contractVersion = context.req.header("x-omi-contract-version");
+  return requestCanonicalTasks({
+    service: context.env.CANONICAL_SERVICE,
+    caller: {
+      accountId: context.get("accountId"),
+      authorization: context.req.header("authorization"),
+      stagingApiToken: context.env.API_TOKEN,
+    },
+    method: "POST",
+    body: parsed.raw,
+    ...(contractVersion === undefined ? {} : { contractVersion }),
+  });
+}
+
+export async function handleTranscription(
+  context: CoreContext
+): Promise<Response> {
+  if (context.env.DB === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const transcription = await readDeviceTranscription(
+    context.env.DB,
+    context.get("accountId"),
+    context.req.param("id")
+  );
+  if (transcription === null)
+    return backendError("not_found", "refresh_history", 404);
+  return json({
+    transcription: {
+      ...transcription,
+      segments:
+        transcription.segments === null
+          ? []
+          : JSON.parse(transcription.segments),
+    },
+  });
+}
+
 export const publicRoutes: readonly CoreRoute[] = [
   { method: "GET", path: "/health", handle: handleHealth },
   { method: "GET", path: "/ready", handle: handleReady },
 ];
 
 export const v1Routes: readonly CoreRoute[] = [
+  { method: "POST", path: "/v1/tasks/ops", handle: handleTaskWrite },
+  {
+    method: "GET",
+    path: "/v1/device-sessions/:id/transcript",
+    handle: handleTranscription,
+  },
   { method: "GET", path: "/v1/settings", handle: handleSettings },
   { method: "GET", path: "/v1/chat-messages", handle: handleChatHistory },
   { method: "POST", path: "/v1/chat-messages", handle: handleChatCreate },

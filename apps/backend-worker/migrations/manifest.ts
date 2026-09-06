@@ -42,5 +42,12 @@ export const D1_MIGRATIONS: readonly D1MigrationManifestEntry[] = Object.freeze(
       sha256:
         "2652bf96d0183899970167de5527c46300910782cdef3c139ac29e02d6ee78f1",
     }),
+    Object.freeze({
+      version: 6,
+      name: "0006_device_transcriptions.sql",
+      fileName: "0006_device_transcriptions.sql",
+      sha256:
+        "1e64b3a13ff926fa1e50d959625a830a09320d8c40a66ecae9a250675b1060a0",
+    }),
   ]
 );
