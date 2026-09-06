@@ -44,12 +44,11 @@ enum SubscriptionEntitlement {
 /// Refresh on TTL and on auth/owner change. Fetch failure is unknown plan
 /// (allow; server decides). BYOK is re-read on every decision so a key change
 /// does not wait for the subscription TTL.
-final class SubscriptionEntitlementService: @unchecked Sendable {
+actor SubscriptionEntitlementService {
   static let shared = SubscriptionEntitlementService()
 
   static let defaultTTL: TimeInterval = 5 * 60
 
-  private let lock = NSLock()
   private var cached: (response: UserSubscriptionResponse, expiresAt: Date)?
   private var inflight: Task<UserSubscriptionResponse?, Never>?
   private var observers: [NSObjectProtocol] = []
@@ -76,11 +75,13 @@ final class SubscriptionEntitlementService: @unchecked Sendable {
       let center = NotificationCenter.default
       observers.append(
         center.addObserver(forName: .userDidSignOut, object: nil, queue: nil) { [weak self] _ in
-          self?.invalidate()
+          guard let self else { return }
+          Task { await self.invalidate() }
         })
       observers.append(
         center.addObserver(forName: .runtimeOwnerDidChange, object: nil, queue: nil) { [weak self] _ in
-          self?.invalidate()
+          guard let self else { return }
+          Task { await self.invalidate() }
         })
     }
   }
@@ -92,17 +93,13 @@ final class SubscriptionEntitlementService: @unchecked Sendable {
   }
 
   func invalidate() {
-    lock.lock()
     cached = nil
     inflight?.cancel()
     inflight = nil
-    lock.unlock()
   }
 
-  var cachedSnapshot: UserSubscriptionResponse? {
-    lock.lock()
-    defer { lock.unlock() }
-    return cached?.response
+  func cachedSnapshot() -> UserSubscriptionResponse? {
+    cached?.response
   }
 
   func decisionForManagedProactivity() async -> SubscriptionEntitlementDecision {
@@ -114,19 +111,14 @@ final class SubscriptionEntitlementService: @unchecked Sendable {
   }
 
   func snapshot() async -> UserSubscriptionResponse? {
-    lock.lock()
     if let cached, cached.expiresAt > now() {
-      let response = cached.response
-      lock.unlock()
-      return response
+      return cached.response
     }
     if let inflight {
-      lock.unlock()
       return await inflight.value
     }
     let task = Task { await self.refresh() }
     inflight = task
-    lock.unlock()
     return await task.value
   }
 
@@ -137,36 +129,30 @@ final class SubscriptionEntitlementService: @unchecked Sendable {
     } catch {
       response = nil
     }
-    lock.lock()
     inflight = nil
     if let response {
       cached = (response, now().addingTimeInterval(ttl))
     }
-    lock.unlock()
     return response
   }
 }
 
 /// Test seam so Gemini / lane clients can pin a decision without touching
 /// `SubscriptionEntitlementService.shared`.
-enum ManagedProactivityDecisionSource {
-  private static let lock = NSLock()
-  nonisolated(unsafe) private static var override: (@Sendable () async -> SubscriptionEntitlementDecision)?
+actor ManagedProactivityDecisionSource {
+  static let shared = ManagedProactivityDecisionSource()
 
-  static func current() async -> SubscriptionEntitlementDecision {
-    lock.lock()
-    let override = self.override
-    lock.unlock()
+  private var override: (@Sendable () async -> SubscriptionEntitlementDecision)?
+
+  func current() async -> SubscriptionEntitlementDecision {
     if let override {
       return await override()
     }
     return await SubscriptionEntitlementService.shared.decisionForManagedProactivity()
   }
 
-  static func setOverride(_ resolve: (@Sendable () async -> SubscriptionEntitlementDecision)?) {
-    lock.lock()
+  func setOverride(_ resolve: (@Sendable () async -> SubscriptionEntitlementDecision)?) {
     override = resolve
-    lock.unlock()
   }
 }
 

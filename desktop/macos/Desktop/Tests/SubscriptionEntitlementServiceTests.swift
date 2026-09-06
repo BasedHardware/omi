@@ -11,9 +11,9 @@ private final class TestFlag: @unchecked Sendable {
 }
 
 final class SubscriptionEntitlementServiceTests: XCTestCase {
-  override func tearDown() {
-    ManagedProactivityDecisionSource.setOverride(nil)
-    super.tearDown()
+  override func tearDown() async throws {
+    await ManagedProactivityDecisionSource.shared.setOverride(nil)
+    try await super.tearDown()
   }
 
   func testIdentifiedBasicWithoutBYOKIsPlanGated() {
@@ -96,6 +96,7 @@ final class SubscriptionEntitlementServiceTests: XCTestCase {
       isByokActive: { false })
     XCTAssertEqual(await service.decisionForManagedProactivity(), .allowManagedProactivity)
     NotificationCenter.default.post(name: .userDidSignOut, object: nil)
+    await service.invalidate()
     XCTAssertEqual(await service.decisionForManagedProactivity(), .allowManagedProactivity)
     XCTAssertEqual(fetches.value, 2)
   }
