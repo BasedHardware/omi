@@ -225,6 +225,8 @@ def test_endpoint_metadata_without_durable_legacy_event_cannot_claim_nano_saving
 
     assert result["status"] == "unknown"
     assert result["cost_micro_usd"] is None
+    assert result["actual_jit_architecture_cost_micro_usd"] is None
+    assert result["actual_jit_architecture_cost_status"] == "unknown"
     assert any("no trusted legacy event" in reason for reason in result["blocking_reasons"])
 
 
@@ -362,6 +364,175 @@ def test_durable_join_blocks_missing_exact_request_event(fixture: dict) -> None:
                 "llm_gateway_attempts": [],
             },
         )
+
+
+def _mark_actual_nano(plan: dict, case_id: str, request_id: str) -> None:
+    case = next(item for item in plan["cases"] if item["case_id"] == case_id)
+    case["jit"]["nano"]["actual_nano_billing"] = {
+        "schema_version": driver.NANO_BILLING_SCHEMA_VERSION,
+        "dispatch": "observed",
+        "lane": "planned",
+        "owner_id": driver.QA_OWNER_UID,
+        "account_generation": 0,
+        "snapshot_revision": "snapshot-1",
+        "budget_day": "2026-09-05",
+        "context_id": "planned:trigger-1",
+        "candidate_id": "candidate-1",
+        "execution_id": "execution-actual-nano",
+        "outcome": "approved",
+        "operation": "proactive_extraction",
+        "request_id": request_id,
+        "usage_status": "reported",
+        "cost_status": "unknown",
+        "attempt_ids": [],
+    }
+
+
+def test_durable_join_separates_actual_nano_from_replay(fixture: dict) -> None:
+    plan = _plan(fixture)
+    actual_request_id = "request-actual-nano"
+    _mark_actual_nano(plan, "actionable_deadline", actual_request_id)
+    actual_receipt, actual_sidecar = _receipt(plan, "actionable_deadline", "jit", "nano", attempt_id="actual-nano")
+    actual_receipt["request_id"] = actual_request_id
+    replay_receipt, replay_sidecar = _receipt(plan, "actionable_deadline", "jit", "nano", attempt_id="replay-nano")
+    observations = []
+    for receipt, sidecar, origin in (
+        (replay_receipt, replay_sidecar, "replay"),
+        (actual_receipt, actual_sidecar, "actual"),
+    ):
+        observations.append(
+            {
+                "case_id": "actionable_deadline",
+                "architecture": "jit",
+                "stage": "nano",
+                "request_id": receipt["request_id"],
+                "run_id": sidecar["run_id"],
+                "evidence_sha256": sidecar["evidence_sha256"],
+                "prompt_sha256": sidecar["prompt_sha256"],
+                "gateway_lane": sidecar["gateway_lane"],
+                "tool_rounds": 0,
+                "receipt_origin": origin,
+            }
+        )
+
+    joined = driver.join_durable_receipts(
+        plan,
+        {
+            "request_observations": observations,
+            "llm_gateway_attempts": [actual_receipt, replay_receipt],
+        },
+    )
+
+    assert [item["attempt_id"] for item in joined["actual_jit_nano_provider_receipts"]] == ["actual-nano"]
+    assert [item["attempt_id"] for item in joined["jit_nano_provider_receipts"]] == ["replay-nano"]
+    assert joined["sidecars"][0]["receipt_origin"] == "replay"
+    assert joined["sidecars"][1]["receipt_origin"] == "actual"
+
+
+def test_actual_nano_receipt_is_cost_source_and_replay_is_excluded(fixture: dict) -> None:
+    plan = _plan(fixture)
+    _mark_actual_nano(plan, "actionable_deadline", "request-actual-nano")
+    legacy_provider_receipts = []
+    jit_gateway_receipts = []
+    sidecars = []
+    actual_nano_provider_receipts = []
+    replay_nano_provider_receipts = []
+    index = 0
+    for case_id in driver.DEFAULT_CASE_IDS:
+        for architecture, stage in (("legacy", "full"), ("jit", "nano"), ("jit", "full")):
+            receipt, sidecar = _receipt(plan, case_id, architecture, stage, attempt_id=f"actual-{index}")
+            if architecture == "legacy":
+                legacy_provider_receipts.append(receipt)
+            elif stage == "nano" and case_id == "actionable_deadline":
+                receipt["request_id"] = "request-actual-nano"
+                sidecar["receipt_origin"] = "actual"
+                actual_nano_provider_receipts.append(receipt)
+                replay, replay_sidecar = _receipt(plan, case_id, architecture, stage, attempt_id="replay-excluded")
+                replay_sidecar["receipt_origin"] = "replay"
+                replay_nano_provider_receipts.append(replay)
+                sidecars.append(replay_sidecar)
+            else:
+                jit_gateway_receipts.append(_jit_gateway_receipt([receipt]))
+            sidecars.append(sidecar)
+            index += 1
+
+    envelope = {
+        "legacy_provider_receipts": legacy_provider_receipts,
+        "jit_nano_provider_receipts": replay_nano_provider_receipts,
+        "actual_jit_nano_provider_receipts": actual_nano_provider_receipts,
+        "jit_gateway_receipts": jit_gateway_receipts,
+        "legacy_receipt_source": "llm_gateway_attempts",
+        "sidecars": sidecars,
+    }
+    result = driver.summarize_receipts(plan, envelope)
+
+    assert result["status"] == "known"
+    assert result["jit_nano_receipt_source"] == "actual_producer"
+    assert result["operations"] == 9
+    assert result["gateway_attempts"] == 10
+    assert result["cost_micro_usd"] == 1_000
+    assert result["actual_jit_architecture_cost_micro_usd"] == 400
+
+    missing_actual = dict(envelope)
+    missing_actual["actual_jit_nano_provider_receipts"] = []
+    blocked = driver.summarize_receipts(plan, missing_actual)
+    assert blocked["status"] == "blocked"
+    assert any("actual producer nano accounting is missing" in reason for reason in blocked["blocking_reasons"])
+
+
+def test_not_dispatched_nano_is_explicit_zero_and_replay_is_optional(fixture: dict) -> None:
+    plan = _plan(fixture)
+    case = next(item for item in plan["cases"] if item["case_id"] == "actionable_deadline")
+    case["jit"]["nano"]["actual_nano_billing"] = {
+        "schema_version": driver.NANO_BILLING_SCHEMA_VERSION,
+        "dispatch": "not_dispatched",
+        "lane": "planned",
+        "owner_id": driver.QA_OWNER_UID,
+        "account_generation": 0,
+        "snapshot_revision": "snapshot-1",
+        "budget_day": "2026-09-05",
+        "context_id": "planned:trigger-1",
+        "candidate_id": "candidate-1",
+        "execution_id": "execution-not-dispatched",
+        "outcome": "not_dispatched",
+        "operation": "proactive_extraction",
+        "usage_status": "not_applicable",
+        "cost_status": "not_applicable",
+        "provider_attempts": 0,
+        "attempt_ids": [],
+    }
+    legacy_provider_receipts = []
+    jit_gateway_receipts = []
+    sidecars = []
+    index = 0
+    for case_id in driver.DEFAULT_CASE_IDS:
+        for architecture, stage in (("legacy", "full"), ("jit", "nano"), ("jit", "full")):
+            if case_id == "actionable_deadline" and architecture == "jit" and stage == "nano":
+                continue
+            receipt, sidecar = _receipt(plan, case_id, architecture, stage, attempt_id=f"no-nano-{index}")
+            sidecars.append(sidecar)
+            if architecture == "legacy":
+                legacy_provider_receipts.append(receipt)
+            else:
+                jit_gateway_receipts.append(_jit_gateway_receipt([receipt]))
+            index += 1
+
+    result = driver.summarize_receipts(
+        plan,
+        {
+            "legacy_provider_receipts": legacy_provider_receipts,
+            "jit_gateway_receipts": jit_gateway_receipts,
+            "legacy_receipt_source": "llm_gateway_attempts",
+            "sidecars": sidecars,
+        },
+    )
+
+    assert result["status"] == "known"
+    assert result["jit_nano_receipt_source"] == "not_dispatched"
+    assert result["operations"] == 8
+    assert result["gateway_attempts"] == 8
+    assert result["cost_micro_usd"] == 800
+    assert result["actual_jit_architecture_cost_micro_usd"] == 300
 
 
 def test_join_receipts_cli_emits_a_sanitized_envelope(

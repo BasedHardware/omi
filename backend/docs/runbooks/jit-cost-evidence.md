@@ -95,9 +95,9 @@ evaluation-time/timezone/context-ID tuple; Node binds that projection to its
 own admitted snapshot and adds this hash. Keep the snapshot hash and Swift
 bucket/context identifiers as separate provenance fields.
 
-The serving desktop source must emit
-`metadata.jitCostEvidenceProjection` beside the same admitted snapshot and
-`metadata.jitBudget` for each qualified turn. The projection is
+The serving desktop source must emit the dedicated run-input field
+`jitCostEvidenceProjection` beside the same admitted snapshot; the JIT budget
+remains in `metadata.jitBudget` for each qualified turn. The projection is
 `omi.jit.proactivity.source_projection.v1` and contains the fixed QA owner,
 budget execution ID, producer lane (`planned` or `ambient`), the admitted
 evidence hash, evaluation time, timezone, context ID, and the exact evaluated
@@ -111,20 +111,19 @@ keeping all prompt bytes private. If the serving source does not emit this
 object, the pair plan must remain blocked rather than reconstructing prompts
 from a fixture.
 
-If those projections are available in the served build, export the private
-prompt inputs before executing the matched
-legacy and nano endpoint operations once per selected case:
+Records from the pre-migration producer may contain the projection under
+`metadata.jitCostEvidenceProjection`. The driver rejects that form by default;
+an operator may use `--allow-legacy-private-metadata-projection` only with the
+owner-only historical QA directory and database (`0700` and `0600`). The
+dedicated run-input field always wins when both forms exist, and metadata is
+never accepted as new source proof.
 
-```sh
-umask 077
-backend/.venv/bin/python backend/scripts/jit_cost_evidence_driver.py \
-  --export-source-projections \
-  --producer-run "planned=$PLANNED_AGENT_RUN_ID" \
-  --producer-run "ambient=$AMBIENT_AGENT_RUN_ID" \
-  --agent-db "$QA_STATE_DIR/omi-agentd.sqlite3" \
-  --projection-output-dir "$RUN_DIR/source-projections" \
-  > "$RUN_DIR/source-projection-export.json"
-```
+If those projections are available in the served build, export the private
+prompt inputs before executing the matched legacy and nano endpoint operations
+once per selected case. The executable export command is in the
+“Executable capture from the approved QA run” section below, where
+`QA_STATE_DIR`, `PLANNED_AGENT_RUN_ID`, and `AMBIENT_AGENT_RUN_ID` are resolved.
+Run that canonical command only after resolving those variables.
 
 The export writes owner-only `planned/` and `ambient/` directories containing
 `legacy.prompt`, `legacy.uncached_prompt`, `nano.prompt`, and the canonical
@@ -141,12 +140,26 @@ exact files from each lane for the endpoint request and capture the response's
    solely for this comparison. The shipped `AgentClient`/Pi path records the
    actual provider attempt IDs and durable gateway accounting.
 
-The matched qualification currently consists of one separately replayed nano
-request plus one already-observed JIT full turn. The nano receipt measures that
-replayed admission call; it is not the original full turn's nano attempt and
-must not be labeled total JIT spend. A total JIT architecture cost requires the
-trusted nano receipt and the observed full-turn gateway receipt, with both
-attempt sets retained and joined to their respective run IDs.
+The matched qualification may contain a separately replayed nano request plus
+one already-observed JIT full turn. When the producer-derived plan contains its
+content-free `nano_billing.request_id`, capture the original nano response with
+the `--capture-agent-run` mode, which emits an actual producer observation from
+the validated private run input; no synthetic headers are needed. The driver
+stores this accounting under `actual_jit_nano_provider_receipts` and
+excludes any separately replayed nano from the actual architecture-cost field
+for that case. If the
+producer nano was observed but its durable accounting is absent, the comparison
+blocks rather than treating replay nano as total JIT spend. When nano was
+observed, a total JIT architecture cost requires its trusted actual receipt and
+the observed full-turn gateway receipt, with every attempt joined to its run
+ID. A source-owned `not_dispatched` nano requires no nano receipt and leaves
+the full-turn receipt as the actual JIT nano contribution of zero.
+The summary's `cost_micro_usd` includes every unique paid attempt in the
+experiment, including diagnostic replay nano calls, for the USD 5 cap;
+`actual_jit_architecture_cost_micro_usd` excludes replay nano and covers the
+observed producer nano plus JIT full turns. A source-owned `not_dispatched`
+nano proves zero actual nano calls for that case; any replay is optional
+diagnostic evidence and is still included only in total experiment spend.
 
 The endpoint response for steps 1 and 2 is insufficient for billing. The
 released `ProactiveLaneClient` envelope contains `operation`, `lane`,
@@ -179,7 +192,8 @@ First join the endpoint observations to the durable rows. The raw file must
 contain `request_observations` (one object per legacy or nano operation) and a
 prompt-free `llm_gateway_attempts` export. Each observation carries `case_id`,
 `architecture`, `stage`, `request_id`, `run_id`, `evidence_sha256`,
-`prompt_sha256`, `gateway_lane`, and `tool_rounds`; the request ID is copied
+`prompt_sha256`, `gateway_lane`, `tool_rounds`, and `receipt_origin` (`replay`
+by default, or `actual` for the producer nano); the request ID is copied
 verbatim from `X-Omi-Request-ID`.
 
 ```sh
@@ -312,7 +326,10 @@ backend/.venv/bin/python backend/scripts/jit_cost_evidence_driver.py \
 ```
 
 Repeat with `--architecture jit --stage nano` for the nano operation. A
-missing or duplicated `X-Omi-Request-ID` blocks the observation. Export its
+missing or duplicated `X-Omi-Request-ID` blocks the observation. Endpoint
+captures are replay observations and keep the default
+`--receipt-origin replay`; the actual producer nano observation comes from
+`--capture-agent-run` as described above. Export its
 durable accounting rows only from the named QA Firestore database, with the
 fixed QA owner and explicit development project fence:
 

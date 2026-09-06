@@ -83,7 +83,13 @@ MAX_JIT_GATEWAY_ATTEMPTS = 500
 PRODUCER_LANES = ("planned", "ambient")
 MAX_PRODUCER_RUNS = len(PRODUCER_LANES)
 SOURCE_PROJECTION_SCHEMA_VERSION = "omi.jit.proactivity.source_projection.v1"
-SOURCE_PROJECTION_METADATA_KEY = "jitCostEvidenceProjection"
+# New producer runs persist the source-owned projection as a dedicated run
+# input field. The metadata spelling is retained only for explicitly opted-in
+# reads of old private QA records during this migration.
+SOURCE_PROJECTION_RUN_INPUT_KEY = "jitCostEvidenceProjection"
+SOURCE_PROJECTION_LEGACY_METADATA_KEY = "jitCostEvidenceProjection"
+SOURCE_PROJECTION_METADATA_KEY = SOURCE_PROJECTION_LEGACY_METADATA_KEY
+NANO_BILLING_SCHEMA_VERSION = "omi.jit.proactivity.nano_billing.v1"
 
 # Only these AccountingEvent fields cross the evidence boundary.  In
 # particular, a broad Firestore export may contain user identifiers or other
@@ -129,6 +135,7 @@ SIDECAR_FIELDS = (
     "system_prompt_sha256",
     "tool_rounds",
     "tool_invocations",
+    "receipt_origin",
 )
 
 
@@ -516,6 +523,10 @@ def build_plan(fixture: Mapping[str, Any], case_ids: Sequence[str]) -> dict[str,
             "join": "sidecar.attempt_ids covers provider attempt IDs; run_id is sidecar-owned and stable for all operations in one case; gateway_run_id is the JIT budget execution ID when it differs",
             "legacy_receipts_key": "legacy_provider_receipts",
             "jit_nano_receipts_key": "jit_nano_provider_receipts",
+            "actual_jit_nano_receipts_key": "actual_jit_nano_provider_receipts",
+            "actual_jit_nano_receipt_origin": (
+                "producer nano_billing.request_id joined to durable llm_gateway_attempts; replay nano is excluded from actual architecture cost"
+            ),
             "jit_receipts_key": "jit_gateway_receipts",
         },
     }
@@ -974,6 +985,140 @@ def _required_identifier(value: Any, label: str) -> str:
     return value.strip()
 
 
+def _validate_nano_billing_observation(
+    raw: Any,
+    *,
+    owner_id: str,
+    producer_lane: str,
+    execution_id: str,
+) -> dict[str, Any]:
+    """Keep the producer's content-free nano observation for a durable join.
+
+    The desktop can identify the actual nano request, but it cannot price it.
+    Accounting rows joined by that exact request ID remain authoritative; this
+    projection deliberately carries no cost estimate.
+    """
+    if not isinstance(raw, Mapping):
+        raise EvidenceError("JIT source projection nano_billing is malformed")
+    if raw.get("schema_version") != NANO_BILLING_SCHEMA_VERSION:
+        raise EvidenceError("JIT source projection nano_billing schema is unsupported")
+    dispatch = raw.get("dispatch")
+    if dispatch not in {"observed", "not_dispatched"}:
+        raise EvidenceError("JIT source projection nano_billing dispatch is invalid")
+    if dispatch == "not_dispatched" and producer_lane == "ambient":
+        raise EvidenceError("ambient JIT nano billing cannot claim not_dispatched")
+    if raw.get("lane") != producer_lane:
+        raise EvidenceError("JIT source projection nano_billing lane differs from producer lane")
+    if raw.get("owner_id") != owner_id:
+        raise EvidenceError("JIT source projection nano_billing owner differs from QA owner")
+    nano_context_id = _required_identifier(raw.get("context_id"), "JIT nano billing context_id")
+
+    result: dict[str, Any] = {
+        "schema_version": NANO_BILLING_SCHEMA_VERSION,
+        "dispatch": dispatch,
+        "lane": producer_lane,
+        "owner_id": owner_id,
+        # This is the nano context identity (for example, a trigger-scoped
+        # ID), not the admitted bucket/context identity in matched_input.
+        "context_id": nano_context_id,
+    }
+    required_string_fields = (
+        "snapshot_revision",
+        "budget_day",
+        "candidate_id",
+        "outcome",
+        "operation",
+        "execution_id",
+    )
+    for field in required_string_fields:
+        result[field] = _required_identifier(raw.get(field), f"JIT nano billing {field}")
+    optional_string_fields = (
+        "request_id",
+        "provider",
+        "provider_model",
+        "provider_response_id",
+        "fallback_class",
+    )
+    for field in optional_string_fields:
+        if field in raw and raw[field] is not None:
+            result[field] = _required_identifier(raw[field], f"JIT nano billing {field}")
+    account_generation = raw.get("account_generation")
+    if isinstance(account_generation, bool) or not isinstance(account_generation, int) or account_generation < 0:
+        raise EvidenceError("JIT nano billing account_generation is invalid")
+    result["account_generation"] = account_generation
+    if dispatch == "observed" and "request_id" not in result:
+        raise EvidenceError("observed JIT nano billing has no exact request_id")
+    if result["execution_id"] != execution_id:
+        raise EvidenceError("JIT nano billing execution_id differs from JIT budget")
+
+    integer_fields = (
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+        "cached_input_tokens",
+        "cache_write_tokens",
+        "provider_attempts",
+    )
+    for field in integer_fields:
+        if field not in raw or raw[field] is None:
+            continue
+        value = raw[field]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise EvidenceError(f"JIT nano billing {field} is invalid")
+        result[field] = value
+
+    usage_status = raw.get("usage_status")
+    if usage_status not in {"reported", "partial", "unknown", "not_applicable"}:
+        raise EvidenceError("JIT source projection nano_billing usage_status is invalid")
+    cost_status = raw.get("cost_status")
+    if cost_status not in {"unknown", "not_applicable"}:
+        raise EvidenceError("JIT source projection nano_billing cost_status must remain unknown")
+    if dispatch == "observed" and cost_status != "unknown":
+        raise EvidenceError("observed JIT nano billing cost_status must remain unknown until durable join")
+    if raw.get("estimated_cost_micro_usd") is not None:
+        raise EvidenceError("JIT source projection nano_billing cannot contain a cost estimate")
+    result["usage_status"] = usage_status
+    result["cost_status"] = cost_status
+
+    attempt_ids = raw.get("attempt_ids")
+    if not isinstance(attempt_ids, list) or len(attempt_ids) > MAX_JIT_GATEWAY_ATTEMPTS:
+        raise EvidenceError("JIT nano billing attempt_ids is required and invalid")
+    normalized_attempt_ids = [_required_identifier(value, "JIT nano billing attempt_id") for value in attempt_ids]
+    if len(set(normalized_attempt_ids)) != len(normalized_attempt_ids):
+        raise EvidenceError("JIT nano billing attempt_ids are duplicated")
+    result["attempt_ids"] = normalized_attempt_ids
+    if dispatch == "not_dispatched":
+        if result.get("provider_attempts") != 0:
+            raise EvidenceError("not_dispatched JIT nano billing requires provider_attempts=0")
+        if normalized_attempt_ids:
+            raise EvidenceError("not_dispatched JIT nano billing requires empty attempt_ids")
+        if result["outcome"] != "not_dispatched":
+            raise EvidenceError("not_dispatched JIT nano billing outcome must be not_dispatched")
+        if usage_status != "not_applicable" or cost_status != "not_applicable":
+            raise EvidenceError("not_dispatched JIT nano billing statuses must be not_applicable")
+        forbidden_fields = {
+            "request_id",
+            "provider",
+            "provider_model",
+            "provider_response_id",
+            "fallback_class",
+            "input_tokens",
+            "output_tokens",
+            "total_tokens",
+            "cached_input_tokens",
+            "cache_write_tokens",
+            "cache_write_ttl",
+            "cache_status",
+            "estimated_cost_micro_usd",
+        }
+        present_forbidden_fields = sorted(field for field in forbidden_fields if field in raw)
+        if present_forbidden_fields:
+            raise EvidenceError(
+                "not_dispatched JIT nano billing contains provider/usage fields: " + ", ".join(present_forbidden_fields)
+            )
+    return result
+
+
 def _optional_opaque(value: Any, label: str) -> str | int | None:
     """Accept only bounded source identities, never arbitrary run metadata."""
     if value is None:
@@ -995,6 +1140,7 @@ def _validate_source_projection(
     evidence_sha256: str,
     expected_full_prompt: str,
     producer_lane: str | None = None,
+    require_nano_billing: bool = True,
 ) -> dict[str, Any]:
     """Validate the producer-owned legacy/nano prompt materialization.
 
@@ -1083,6 +1229,17 @@ def _validate_source_projection(
         "prompt": full_prompt,
         "source_builder": full["source_builder"],
     }
+    nano_billing = None
+    if raw.get("nano_billing") is None:
+        if require_nano_billing:
+            raise EvidenceError("JIT source projection has no required nano_billing observation")
+    else:
+        nano_billing = _validate_nano_billing_observation(
+            raw["nano_billing"],
+            owner_id=owner_id,
+            producer_lane=projection_lane,
+            execution_id=execution_id,
+        )
     return {
         "matched_input": {
             "evaluation_time": str(matched_input["evaluation_time"]),
@@ -1094,6 +1251,7 @@ def _validate_source_projection(
         "nano": nano,
         "full": full_materialization,
         "producer_lane": projection_lane,
+        **({"nano_billing": nano_billing} if nano_billing is not None else {}),
     }
 
 
@@ -1248,6 +1406,36 @@ def _qa_agent_database_path(path: Path) -> Path:
     return resolved
 
 
+def _require_private_historical_agent_database(path: Path) -> Path:
+    """Allow the legacy metadata projection only from private QA state.
+
+    This compatibility path is for records made before the dedicated run
+    input field shipped.  It must not turn a public or shared database's
+    metadata into new source evidence.
+    """
+    resolved = _qa_agent_database_path(path)
+    try:
+        raw_info = path.expanduser().lstat()
+        state_info = resolved.parent.lstat()
+        database_info = resolved.lstat()
+    except OSError as exc:
+        raise EvidenceError(f"historical source projection requires inspectable private QA state: {path}") from exc
+    if stat.S_ISLNK(raw_info.st_mode) or stat.S_ISLNK(state_info.st_mode) or stat.S_ISLNK(database_info.st_mode):
+        raise EvidenceError("historical source projection refuses symlinked QA state")
+    if (
+        not stat.S_ISDIR(state_info.st_mode)
+        or state_info.st_uid != os.getuid()
+        or state_info.st_mode & 0o077
+        or not stat.S_ISREG(database_info.st_mode)
+        or database_info.st_uid != os.getuid()
+        or database_info.st_mode & 0o077
+    ):
+        raise EvidenceError(
+            "historical source projection requires owner-only QA state (0700 directory and 0600 database)"
+        )
+    return resolved
+
+
 def _read_agent_run(
     database_path: Path,
     *,
@@ -1307,6 +1495,7 @@ def _producer_run_materialization(
     agent_run_id: str,
     owner_id: str,
     projection_dir: Path | None = None,
+    allow_legacy_private_metadata_projection: bool = False,
 ) -> dict[str, Any]:
     """Read and validate the content-free producer fields needed for replay.
 
@@ -1385,16 +1574,33 @@ def _producer_run_materialization(
         sanitized = _optional_opaque(value, key)
         if sanitized is not None:
             source_identity[key] = sanitized
-    raw_projection = metadata.get(SOURCE_PROJECTION_METADATA_KEY)
-    if raw_projection is not None and not isinstance(raw_projection, Mapping):
-        raise EvidenceError("agent run JIT source projection is malformed")
-    if raw_projection is None and projection_dir is not None:
+    source_projection_origin: str | None = None
+    if SOURCE_PROJECTION_RUN_INPUT_KEY in input_json:
+        raw_projection = input_json[SOURCE_PROJECTION_RUN_INPUT_KEY]
+        if not isinstance(raw_projection, Mapping):
+            raise EvidenceError("agent run dedicated JIT source projection is malformed")
+        source_projection_origin = "run_input"
+    elif projection_dir is not None:
         projection_path = projection_dir / f"{execution_id}.json"
         try:
             candidate = _load_private_json(projection_path)
         except EvidenceError as exc:
             raise EvidenceError(f"JIT source projection is missing for execution {execution_id}") from exc
         raw_projection = candidate
+        source_projection_origin = "private_sidecar"
+    elif SOURCE_PROJECTION_LEGACY_METADATA_KEY in metadata:
+        if not allow_legacy_private_metadata_projection:
+            raise EvidenceError(
+                "agent run source projection must use the dedicated run-input field; "
+                "legacy metadata projection requires explicit historical-private compatibility"
+            )
+        _require_private_historical_agent_database(database_path)
+        raw_projection = metadata[SOURCE_PROJECTION_LEGACY_METADATA_KEY]
+        if not isinstance(raw_projection, Mapping):
+            raise EvidenceError("historical metadata JIT source projection is malformed")
+        source_projection_origin = "legacy_private_metadata"
+    else:
+        raw_projection = None
     source_projection = None
     if isinstance(raw_projection, Mapping):
         source_projection = _validate_source_projection(
@@ -1407,6 +1613,7 @@ def _producer_run_materialization(
                 (metadata[key] for key in ("producerLane", "proactivityLane", "lane") if key in metadata),
                 None,
             ),
+            require_nano_billing=source_projection_origin != "legacy_private_metadata",
         )
     return {
         "run": run,
@@ -1424,6 +1631,7 @@ def _producer_run_materialization(
         "evidence_sha256": actual_evidence_sha256,
         "source_identity": source_identity,
         "source_projection": source_projection,
+        "source_projection_origin": source_projection_origin,
     }
 
 
@@ -1516,6 +1724,11 @@ def _producer_case(
             "source_owned": True,
             "source_builder": nano_prompt["source_builder"],
         }
+        if isinstance(source_projection.get("nano_billing"), Mapping):
+            # This is only the content-free producer observation. Its request
+            # ID is joined to durable accounting separately from replay nano;
+            # the source projection never supplies a cost.
+            nano["actual_nano_billing"] = dict(source_projection["nano_billing"])
     else:
         legacy = {"route": routes[("legacy", "full")].__dict__, **unavailable}
         nano = {"route": routes[("jit", "nano")].__dict__, **unavailable}
@@ -1638,6 +1851,7 @@ def build_producer_derived_pair_plan(
     producer_runs: Sequence[tuple[str, str]],
     owner_id: str,
     projection_dir: Path | None = None,
+    allow_legacy_private_metadata_projection: bool = False,
 ) -> dict[str, Any]:
     """Build a two-case plan from the actual planned and ambient JIT turns.
 
@@ -1675,6 +1889,7 @@ def build_producer_derived_pair_plan(
             agent_run_id=agent_run_id,
             owner_id=owner_id,
             projection_dir=projection_dir,
+            allow_legacy_private_metadata_projection=allow_legacy_private_metadata_projection,
         )
         # The lane is an explicit operator join key because the current
         # SQLite run schema does not persist a first-class proactivity lane.
@@ -1737,6 +1952,7 @@ def build_producer_derived_plan(
     owner_id: str,
     case_id: str,
     projection_dir: Path | None = None,
+    allow_legacy_private_metadata_projection: bool = False,
 ) -> dict[str, Any]:
     """Backward-compatible one-run producer plan.
 
@@ -1753,6 +1969,7 @@ def build_producer_derived_plan(
         agent_run_id=agent_run_id,
         owner_id=owner_id,
         projection_dir=projection_dir,
+        allow_legacy_private_metadata_projection=allow_legacy_private_metadata_projection,
     )
     case = _producer_case(
         fixture,
@@ -1799,6 +2016,7 @@ def export_source_projection_inputs(
     owner_id: str,
     output_dir: Path,
     projection_dir: Path | None = None,
+    allow_legacy_private_metadata_projection: bool = False,
 ) -> dict[str, Any]:
     """Write private replay inputs emitted by the source-owned producer.
 
@@ -1823,6 +2041,7 @@ def export_source_projection_inputs(
             agent_run_id=lanes[lane],
             owner_id=owner_id,
             projection_dir=projection_dir,
+            allow_legacy_private_metadata_projection=allow_legacy_private_metadata_projection,
         )
         projection = materialization.get("source_projection")
         if not isinstance(projection, Mapping):
@@ -1904,13 +2123,19 @@ def capture_agent_run(
     owner_id: str,
     case_id: str,
     gateway_receipt_path: Path,
+    allow_legacy_private_metadata_projection: bool = False,
 ) -> dict[str, Any]:
     """Capture one completed JIT producer run into a content-free envelope."""
     _require_qa_owner(owner_id)
     agent_run_id = _required_identifier(agent_run_id, "agent_run_id")
     comparison_run_id = _required_identifier(comparison_run_id, "comparison_run_id")
     case, expected = _planned_case_route(plan, case_id=case_id, architecture="jit", stage="full")
-    materialization = _producer_run_materialization(database_path, agent_run_id=agent_run_id, owner_id=owner_id)
+    materialization = _producer_run_materialization(
+        database_path,
+        agent_run_id=agent_run_id,
+        owner_id=owner_id,
+        allow_legacy_private_metadata_projection=allow_legacy_private_metadata_projection,
+    )
     run = materialization["run"]
     tool_rows = materialization["tool_rows"]
     contract_version = materialization["contract_version"]
@@ -1951,12 +2176,32 @@ def capture_agent_run(
     }
     if "system_prompt_sha256" in expected_prompt_hashes:
         sidecar["system_prompt_sha256"] = expected_prompt_hashes["system_prompt_sha256"]
-    return {
+    captured: dict[str, Any] = {
         "schema_version": RECEIPT_SCHEMA_VERSION,
         "status": "captured",
         "sidecars": [_content_free_sidecar(sidecar)],
         "jit_gateway_receipts": [gateway_receipt],
     }
+    source_projection = materialization.get("source_projection")
+    if isinstance(source_projection, Mapping):
+        nano_billing = source_projection.get("nano_billing")
+        if isinstance(nano_billing, Mapping) and nano_billing.get("dispatch") == "observed":
+            request_id = _required_identifier(nano_billing.get("request_id"), "actual producer nano request_id")
+            nano_expected = case["jit"]["nano"]
+            nano_observation: dict[str, Any] = {
+                "case_id": case_id,
+                "architecture": "jit",
+                "stage": "nano",
+                "request_id": request_id,
+                "run_id": comparison_run_id,
+                "evidence_sha256": actual_evidence_sha256,
+                "prompt_sha256": nano_expected["prompt_hashes"]["prompt_sha256"],
+                "gateway_lane": nano_expected["route"]["gateway_lane"],
+                "tool_rounds": 0,
+                "receipt_origin": "actual",
+            }
+            captured["request_observations"] = [nano_observation]
+    return captured
 
 
 def _response_request_id(headers_path: Path) -> str:
@@ -1988,12 +2233,24 @@ def capture_endpoint_observation(
     architecture: str,
     stage: str,
     tool_rounds: int = 0,
+    receipt_origin: str = "replay",
 ) -> dict[str, Any]:
-    """Capture a legacy/nano response header plus source-owned input hashes."""
+    """Capture a legacy/nano response header plus source-owned input hashes.
+
+    A nano observation is a replay by default.  The actual producer nano can
+    opt into ``receipt_origin=actual`` only when the producer-derived plan
+    carries its content-free ``nano_billing.request_id``; this prevents a
+    manually supplied endpoint request from being presented as the original
+    producer operation.
+    """
     _require_qa_owner(owner_id)
     comparison_run_id = _required_identifier(comparison_run_id, "comparison_run_id")
     if (architecture, stage) not in {("legacy", "full"), ("jit", "nano")}:
         raise EvidenceError("endpoint capture only supports legacy/full or jit/nano")
+    if receipt_origin not in {"replay", "actual"}:
+        raise EvidenceError("endpoint receipt_origin must be replay or actual")
+    if receipt_origin == "actual" and (architecture, stage) != ("jit", "nano"):
+        raise EvidenceError("actual receipt_origin is only valid for the JIT nano route")
     if isinstance(tool_rounds, bool) or not isinstance(tool_rounds, int) or tool_rounds < 0:
         raise EvidenceError("endpoint tool_rounds is malformed")
     case, expected = _planned_case_route(plan, case_id=case_id, architecture=architecture, stage=stage)
@@ -2009,16 +2266,24 @@ def capture_endpoint_observation(
     expected_hashes = expected["prompt_hashes"]
     if actual_prompt_sha256 != expected_hashes["prompt_sha256"]:
         raise EvidenceError("endpoint prompt hash does not match the source-derived matched input")
+    request_id = _response_request_id(headers_path)
+    if receipt_origin == "actual":
+        actual_nano = case["jit"]["nano"].get("actual_nano_billing")
+        if not isinstance(actual_nano, Mapping) or actual_nano.get("dispatch") != "observed":
+            raise EvidenceError("actual nano capture requires an observed producer nano billing projection")
+        if actual_nano.get("request_id") != request_id:
+            raise EvidenceError("actual nano response request_id differs from producer nano billing request_id")
     observation: dict[str, Any] = {
         "case_id": case_id,
         "architecture": architecture,
         "stage": stage,
-        "request_id": _response_request_id(headers_path),
+        "request_id": request_id,
         "run_id": comparison_run_id,
         "evidence_sha256": actual_evidence_sha256,
         "prompt_sha256": actual_prompt_sha256,
         "gateway_lane": expected["route"]["gateway_lane"],
         "tool_rounds": tool_rounds,
+        "receipt_origin": receipt_origin,
     }
     for field in ("uncached_prompt_sha256", "system_prompt_sha256"):
         if field in expected_hashes:
@@ -2234,6 +2499,7 @@ def _content_free_observation(item: Mapping[str, Any]) -> dict[str, Any]:
         "system_prompt_sha256",
         "gateway_lane",
         "tool_rounds",
+        "receipt_origin",
     )
     return {key: item[key] for key in fields if key in item}
 
@@ -2244,7 +2510,13 @@ def merge_capture_fragment(path: Path, fragment: Mapping[str, Any]) -> dict[str,
     if path.exists():
         existing = _load_json(path)
     merged: dict[str, Any] = {"schema_version": RECEIPT_SCHEMA_VERSION, "status": "captured"}
-    for key in ("request_observations", "llm_gateway_attempts", "sidecars", "jit_gateway_receipts"):
+    for key in (
+        "request_observations",
+        "llm_gateway_attempts",
+        "sidecars",
+        "jit_gateway_receipts",
+        "actual_jit_nano_provider_receipts",
+    ):
         prior = existing.get(key, [])
         added = fragment.get(key, [])
         if not isinstance(prior, list) or not isinstance(added, list):
@@ -2255,6 +2527,8 @@ def merge_capture_fragment(path: Path, fragment: Mapping[str, Any]) -> dict[str,
             values = [_content_free_accounting_receipt(item) for item in prior + added if isinstance(item, Mapping)]
         elif key == "sidecars":
             values = [_content_free_sidecar(item) for item in prior + added if isinstance(item, Mapping)]
+        elif key == "actual_jit_nano_provider_receipts":
+            values = [_content_free_accounting_receipt(item) for item in prior + added if isinstance(item, Mapping)]
         else:
             values = [_content_free_jit_receipt(item) for item in prior + added if isinstance(item, Mapping)]
         merged[key] = values
@@ -2304,10 +2578,12 @@ def join_durable_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) 
 
     The endpoint response exposes the backend-generated ``X-Omi-Request-ID``.
     An operator records that value in ``request_observations`` and supplies a
-    prompt-free export of ``llm_gateway_attempts``.  This function selects only
+    prompt-free export of ``llm_gateway_attempts``. This function selects only
     rows whose ``request_id`` exactly matches an observed operation, preserves
     every retry attempt, and emits an envelope accepted by
-    ``summarize_receipts``.  Missing or ambiguous joins raise instead of
+    ``summarize_receipts``. An ``actual`` JIT nano observation must match the
+    source projection's exact producer request ID and is kept in a separate
+    receipt list from replay nano. Missing or ambiguous joins raise instead of
     treating a route as free or successful.
     """
     observations = envelope.get("request_observations")
@@ -2329,9 +2605,13 @@ def join_durable_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) 
         seen_attempt_ids.add(attempt_id)
         by_request.setdefault(request_id, []).append(row)
 
-    seen_keys: set[tuple[str, str, str]] = set()
+    # A case may carry both the separately replayed nano call and the actual
+    # producer nano observation.  Their origin is part of the join identity;
+    # without it, the second exact request would be mistaken for a duplicate.
+    seen_keys: set[tuple[str, str, str, str]] = set()
     legacy_receipts: list[dict[str, Any]] = []
     jit_nano_receipts: list[dict[str, Any]] = []
+    actual_jit_nano_receipts: list[dict[str, Any]] = []
     generated_sidecars: list[dict[str, Any]] = []
     joined_attempt_ids: set[str] = set()
     for observation in observations:
@@ -2340,14 +2620,20 @@ def join_durable_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) 
         case_id = _required_string(observation.get("case_id"), "request observation case_id")
         architecture = _required_string(observation.get("architecture"), f"{case_id} architecture")
         stage = _required_string(observation.get("stage"), f"{case_id} stage")
-        key = (case_id, architecture, stage)
-        if key not in index:
-            raise EvidenceError(f"request observation does not match the plan: {key}")
+        receipt_origin = observation.get("receipt_origin", "replay")
+        if receipt_origin not in {"replay", "actual"}:
+            raise EvidenceError(f"request observation has an invalid receipt_origin: {case_id}")
+        if receipt_origin == "actual" and (architecture, stage) != ("jit", "nano"):
+            raise EvidenceError(f"actual receipt_origin is only valid for JIT nano: {case_id}")
+        key = (case_id, architecture, stage, receipt_origin)
+        route_key = (case_id, architecture, stage)
+        if route_key not in index:
+            raise EvidenceError(f"request observation does not match the plan: {route_key}")
         if key in seen_keys:
             raise EvidenceError(f"duplicate request observation for {key}")
         seen_keys.add(key)
         if (architecture, stage) not in {("legacy", "full"), ("jit", "nano")}:
-            raise EvidenceError(f"request observation is not a legacy or nano route: {key}")
+            raise EvidenceError(f"request observation is not a legacy or nano route: {route_key}")
         request_id = _required_string(observation.get("request_id"), f"{key} exact request_id")
         run_id = _required_string(observation.get("run_id"), f"{key} run_id")
         evidence_sha256 = _required_string(observation.get("evidence_sha256"), f"{key} evidence_sha256")
@@ -2355,6 +2641,19 @@ def join_durable_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) 
         tool_rounds = observation.get("tool_rounds")
         if isinstance(tool_rounds, bool) or not isinstance(tool_rounds, int) or tool_rounds < 0:
             raise EvidenceError(f"{key} tool_rounds is missing or invalid")
+        case = next(item for item in plan["cases"] if item["case_id"] == case_id)
+        actual_nano = case.get("jit", {}).get("nano", {}).get("actual_nano_billing")
+        if receipt_origin == "actual":
+            if not isinstance(actual_nano, Mapping) or actual_nano.get("dispatch") != "observed":
+                raise EvidenceError(f"{key} has no observed producer nano billing projection")
+            if actual_nano.get("request_id") != request_id:
+                raise EvidenceError(f"{key} request_id differs from producer nano billing observation")
+        elif (
+            isinstance(actual_nano, Mapping)
+            and actual_nano.get("dispatch") == "observed"
+            and actual_nano.get("request_id") == request_id
+        ):
+            raise EvidenceError(f"{key} exact producer nano request must be marked receipt_origin=actual")
         matched_rows = by_request.get(request_id, [])
         if not matched_rows:
             raise EvidenceError(f"{key} has no durable event for exact request_id")
@@ -2370,6 +2669,7 @@ def join_durable_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) 
             "case_id": case_id,
             "architecture": architecture,
             "stage": stage,
+            "receipt_origin": receipt_origin,
             "gateway_lane": observation.get("gateway_lane"),
             "evidence_sha256": evidence_sha256,
             "prompt_sha256": prompt_sha256,
@@ -2381,6 +2681,10 @@ def join_durable_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) 
         generated_sidecars.append(sidecar)
         if architecture == "legacy":
             legacy_receipts.extend(content_free_rows)
+        elif receipt_origin == "actual":
+            # Actual producer nano spend is kept separate from the optional
+            # replay nano so the same request can never be counted twice.
+            actual_jit_nano_receipts.extend(content_free_rows)
         else:
             # The nano endpoint uses the same durable AccountingEvent schema
             # as legacy proactivity.  ``summarize_receipts`` accepts this
@@ -2406,6 +2710,7 @@ def join_durable_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) 
         "legacy_receipt_source": "llm_gateway_attempts",
         "legacy_provider_receipts": legacy_receipts,
         "jit_nano_provider_receipts": jit_nano_receipts,
+        "actual_jit_nano_provider_receipts": actual_jit_nano_receipts,
         "jit_gateway_receipts": [_content_free_jit_receipt(item) for item in jit_gateway_receipts],
         "sidecars": joined_sidecars,
         "join_contract": "exact request_id; every durable attempt retained; unknown blocks",
@@ -2436,6 +2741,15 @@ def summarize_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) -> 
     provider_receipts: list[tuple[str, Mapping[str, Any], Mapping[str, Any] | None]] = [
         ("legacy", receipt, None) for receipt in legacy_receipts
     ]
+    # The producer's exact nano request is separately joined below. Keep replay
+    # rows in the envelope and in total experiment spend, while the actual list
+    # is the sole nano source for the actual JIT architecture-cost field.
+    actual_jit_nano_receipts = envelope.get("actual_jit_nano_provider_receipts")
+    if not isinstance(actual_jit_nano_receipts, list) or not all(
+        isinstance(item, Mapping) for item in actual_jit_nano_receipts
+    ):
+        actual_jit_nano_receipts = []
+    provider_receipts.extend(("jit_nano_actual", receipt, None) for receipt in actual_jit_nano_receipts)
     provider_receipts.extend(("jit_nano", receipt, None) for receipt in jit_nano_receipts)
     for gateway_receipt in jit_receipts:
         attempts = gateway_receipt.get("attempts")
@@ -2447,10 +2761,41 @@ def summarize_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) -> 
     if not isinstance(sidecars, list) or not all(isinstance(item, Mapping) for item in sidecars):
         sidecars = []
     legacy_receipt_source = envelope.get("legacy_receipt_source")
+    actual_nano_cases = {
+        case["case_id"]
+        for case in plan.get("cases", [])
+        if isinstance(case, Mapping)
+        and isinstance(case.get("jit"), Mapping)
+        and isinstance(case["jit"].get("nano"), Mapping)
+        and isinstance(case["jit"]["nano"].get("actual_nano_billing"), Mapping)
+        and case["jit"]["nano"]["actual_nano_billing"].get("dispatch") == "observed"
+    }
+    not_dispatched_nano_cases = {
+        case["case_id"]
+        for case in plan.get("cases", [])
+        if isinstance(case, Mapping)
+        and isinstance(case.get("jit"), Mapping)
+        and isinstance(case["jit"].get("nano"), Mapping)
+        and isinstance(case["jit"]["nano"].get("actual_nano_billing"), Mapping)
+        and case["jit"]["nano"]["actual_nano_billing"].get("dispatch") == "not_dispatched"
+    }
+    actual_nano_source = (
+        "actual_producer"
+        if actual_jit_nano_receipts
+        else (
+            "replay_endpoint"
+            if actual_nano_cases
+            else "not_dispatched" if not_dispatched_nano_cases else "replay_endpoint"
+        )
+    )
+    actual_nano_seen_cases: set[str] = set()
     if not provider_receipts:
         return {
             "status": "unknown",
             "blocking_reasons": ["no trusted legacy event or JIT gateway receipt"],
+            "jit_nano_receipt_source": actual_nano_source,
+            "actual_jit_architecture_cost_micro_usd": None,
+            "actual_jit_architecture_cost_status": "unknown",
             "gateway_attempts": None,
             "tool_rounds": None,
             "tool_invocations": None,
@@ -2470,6 +2815,7 @@ def summarize_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) -> 
         "tool_invocations": 0,
         "cache_units": 0,
         "cost_micro_usd": 0,
+        "actual_jit_architecture_cost_micro_usd": 0,
     }
     tool_rounds_complete = True
     tool_invocations_complete = True
@@ -2518,7 +2864,23 @@ def summarize_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) -> 
             expected = index.get(key)
             if expected is None:
                 raise EvidenceError(f"receipt does not match the plan: {key}")
-            seen.add(key)
+            optional_replay_nano = (
+                kind != "jit_nano_actual"
+                and key[1:] == ("jit", "nano")
+                and key[0] in (actual_nano_cases | not_dispatched_nano_cases)
+            )
+            if kind == "jit_nano_actual":
+                if sidecar.get("receipt_origin") != "actual":
+                    raise EvidenceError(f"{key} actual nano receipt has no actual producer sidecar")
+                actual_nano_seen_cases.add(key[0])
+            elif kind == "jit_nano" and sidecar.get("receipt_origin") == "actual":
+                raise EvidenceError(f"{key} actual producer nano receipt is in the replay receipt list")
+            # The route is covered by the actual producer receipt when an
+            # observed nano exists. A replay or a no-dispatch diagnostic must
+            # still be priced in total experiment spend, but cannot satisfy
+            # actual JIT route coverage.
+            if not optional_replay_nano:
+                seen.add(key)
             route = expected["route"]
             if sidecar.get("gateway_lane") != route["gateway_lane"]:
                 raise EvidenceError(f"{key} gateway_lane differs from source-derived route")
@@ -2528,7 +2890,7 @@ def summarize_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) -> 
                     raise EvidenceError(f"{key} {field} differs from source-derived route")
             if receipt.get("configured_model") != route["served_model"]:
                 raise EvidenceError(f"{key} configured_model differs from source-derived route")
-            if kind in {"legacy", "jit_nano"}:
+            if kind in {"legacy", "jit_nano", "jit_nano_actual"}:
                 if not isinstance(receipt.get("request_id"), str) or not receipt["request_id"]:
                     raise EvidenceError(f"{key} durable receipt has no exact request_id join")
                 if receipt.get("api_surface") != "openai_chat_completions":
@@ -2556,9 +2918,9 @@ def summarize_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) -> 
                 raise EvidenceError(f"{key} cost_status is not a trusted estimated receipt")
             if receipt.get("usage_status") != "confirmed":
                 raise EvidenceError(f"{key} usage_status is not confirmed")
-            if kind in {"jit", "jit_nano"}:
+            if kind in {"jit", "jit_nano", "jit_nano_actual"}:
                 normalized_input_key = "normalized_uncached_input_tokens"
-                if normalized_input_key not in receipt and kind == "jit_nano":
+                if normalized_input_key not in receipt and kind in {"jit_nano", "jit_nano_actual"}:
                     normalized_input_key = "uncached_input_tokens"
             else:
                 normalized_input_key = "uncached_input_tokens"
@@ -2580,7 +2942,10 @@ def summarize_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) -> 
             cache_write = _required_int(receipt, "cache_write_tokens")
             _required_int(receipt, "output_tokens")
             totals["cache_units"] += cached + cache_write
-            totals["cost_micro_usd"] += _required_int(receipt, "estimated_cost_micro_usd")
+            cost_micro_usd = _required_int(receipt, "estimated_cost_micro_usd")
+            totals["cost_micro_usd"] += cost_micro_usd
+            if kind == "jit_nano_actual" or (kind == "jit" and key[1:] == ("jit", "full")):
+                totals["actual_jit_architecture_cost_micro_usd"] += cost_micro_usd
             if kind == "jit":
                 if (
                     not isinstance(gateway_receipt, Mapping)
@@ -2622,12 +2987,17 @@ def summarize_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) -> 
             if kind == "jit" and id(receipt) == gateway_receipt_id
         )
         errors.extend(_validate_jit_gateway_aggregate(gateway_receipt, attempts, "JIT gateway receipt"))
-    expected_keys = set(index)
+    expected_keys = set(index) - {(case_id, "jit", "nano") for case_id in not_dispatched_nano_cases}
     missing_keys = expected_keys - seen
     if missing_keys:
         errors.append(
             "receipt coverage is incomplete; missing "
             + ", ".join(f"{case}/{architecture}/{stage}" for case, architecture, stage in sorted(missing_keys))
+        )
+    for case_id in sorted(actual_nano_cases - actual_nano_seen_cases):
+        errors.append(
+            f"{case_id}/jit/nano actual producer nano accounting is missing; "
+            "replay nano cannot stand in for actual JIT spend"
         )
     for sidecar_state in sidecar_tool_counters.values():
         if not sidecar_state["seen"]:
@@ -2637,6 +3007,8 @@ def summarize_receipts(plan: Mapping[str, Any], envelope: Mapping[str, Any]) -> 
     return {
         "status": "blocked" if errors else "known",
         "blocking_reasons": errors,
+        "jit_nano_receipt_source": actual_nano_source,
+        "actual_jit_architecture_cost_status": "blocked" if errors else "known",
         **totals,
         # The producer's SQLite ledger has no model-round boundary. Keep the
         # distinction visible and return unknown when any joined sidecar lacks
@@ -2725,6 +3097,11 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="private source projection directory when projections are exported separately from agent metadata",
     )
     parser.add_argument(
+        "--allow-legacy-private-metadata-projection",
+        action="store_true",
+        help="read the pre-migration metadata projection only from owner-only historical QA state",
+    )
+    parser.add_argument(
         "--projection-output-dir",
         type=Path,
         help="private output directory for --export-source-projections",
@@ -2739,6 +3116,12 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--owner-id", default=QA_OWNER_UID, help="must be the fixed isolated QA owner")
     parser.add_argument("--architecture", choices=("legacy", "jit"), help="endpoint architecture")
     parser.add_argument("--stage", choices=("full", "nano"), help="endpoint stage")
+    parser.add_argument(
+        "--receipt-origin",
+        choices=("replay", "actual"),
+        default="replay",
+        help="mark a JIT nano endpoint observation as replay or the source producer operation",
+    )
     parser.add_argument("--request-id", action="append", help="exact Firestore request ID (repeatable)")
     parser.add_argument("--output", type=Path, help="append the sanitized fragment to this raw envelope")
     parser.add_argument("--plan-file", type=Path, help="plan JSON to use with --validate-receipts")
@@ -2769,6 +3152,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 owner_id=args.owner_id,
                 output_dir=args.projection_output_dir,
                 projection_dir=args.projection_dir,
+                allow_legacy_private_metadata_projection=args.allow_legacy_private_metadata_projection,
             )
         elif args.producer_derived_plan:
             if args.producer_runs:
@@ -2788,6 +3172,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     producer_runs=producer_runs,
                     owner_id=args.owner_id,
                     projection_dir=args.projection_dir,
+                    allow_legacy_private_metadata_projection=args.allow_legacy_private_metadata_projection,
                 )
             else:
                 required = {
@@ -2805,6 +3190,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     owner_id=args.owner_id,
                     case_id=args.case_ids[0],
                     projection_dir=args.projection_dir,
+                    allow_legacy_private_metadata_projection=args.allow_legacy_private_metadata_projection,
                 )
         elif args.preflight:
             tool_manifest = None
@@ -2848,6 +3234,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 owner_id=args.owner_id,
                 case_id=case_ids[0],
                 gateway_receipt_path=args.gateway_receipt,
+                allow_legacy_private_metadata_projection=args.allow_legacy_private_metadata_projection,
             )
         elif args.capture_endpoint:
             required = {
@@ -2873,6 +3260,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 case_id=case_ids[0],
                 architecture=args.architecture,
                 stage=args.stage,
+                receipt_origin=args.receipt_origin,
             )
         elif args.export_attempts:
             _require_qa_firestore_environment()

@@ -239,7 +239,7 @@ def _attach_source_projections(database: Path) -> None:
         snapshot = input_json["admittedContextSnapshot"]
         evidence_sha256 = driver._canonical_json_hash(snapshot)
         execution_id = input_json["metadata"]["jitBudget"]["executionID"]
-        input_json["metadata"][driver.SOURCE_PROJECTION_METADATA_KEY] = {
+        input_json[driver.SOURCE_PROJECTION_RUN_INPUT_KEY] = {
             "schema_version": driver.SOURCE_PROJECTION_SCHEMA_VERSION,
             "owner_id": driver.QA_OWNER_UID,
             "execution_id": execution_id,
@@ -273,6 +273,24 @@ def _attach_source_projections(database: Path) -> None:
             "full": {
                 "prompt": full_prompt,
                 "source_builder": "JITProactivityPromptBuilder.fullTurnPrompt",
+            },
+            "nano_billing": {
+                "schema_version": driver.NANO_BILLING_SCHEMA_VERSION,
+                "dispatch": "observed",
+                "lane": lane,
+                "owner_id": driver.QA_OWNER_UID,
+                "account_generation": 1,
+                "snapshot_revision": "revision-1",
+                "budget_day": "2026-09-05",
+                "context_id": f"{lane}:trigger-1",
+                "candidate_id": execution_id,
+                "execution_id": execution_id,
+                "outcome": "approved",
+                "operation": "proactive_extraction",
+                "request_id": f"request-{lane}-nano",
+                "usage_status": "reported",
+                "cost_status": "unknown",
+                "attempt_ids": [],
             },
         }
         connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(input_json), run_id))
@@ -426,6 +444,268 @@ def test_source_owned_pair_projection_is_pinned_and_content_free(tmp_path: Path)
     assert "nano ambient source prompt" not in serialized
 
 
+def test_source_owned_projection_preserves_content_free_actual_nano_observation(tmp_path: Path) -> None:
+    fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    database = _write_pair_agent_db(tmp_path)
+    _attach_source_projections(database)
+    connection = sqlite3.connect(database)
+    input_json = json.loads(
+        connection.execute("SELECT input_json FROM runs WHERE run_id = ?", ("planned-run",)).fetchone()[0]
+    )
+    projection = input_json[driver.SOURCE_PROJECTION_RUN_INPUT_KEY]
+    projection["nano_billing"] = {
+        "schema_version": driver.NANO_BILLING_SCHEMA_VERSION,
+        "dispatch": "observed",
+        "lane": "planned",
+        "owner_id": driver.QA_OWNER_UID,
+        "account_generation": 0,
+        "snapshot_revision": "snapshot-1",
+        "budget_day": "2026-09-05",
+        "context_id": "planned:trigger-1",
+        "candidate_id": "candidate-1",
+        "execution_id": "planned-gateway",
+        "outcome": "approved",
+        "operation": "proactive_extraction",
+        "request_id": "actual-nano-request",
+        "usage_status": "reported",
+        "cost_status": "unknown",
+        "attempt_ids": [],
+    }
+    connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(input_json), "planned-run"))
+    connection.commit()
+    connection.close()
+
+    plan = driver.build_producer_derived_pair_plan(
+        fixture,
+        database_path=database,
+        producer_runs=[("planned", "planned-run"), ("ambient", "ambient-run")],
+        owner_id=driver.QA_OWNER_UID,
+    )
+    observation = plan["cases"][0]["jit"]["nano"]["actual_nano_billing"]
+    assert observation["request_id"] == "actual-nano-request"
+    assert "estimated_cost_micro_usd" not in observation
+
+
+def test_dedicated_run_input_projection_is_authoritative_over_metadata(tmp_path: Path) -> None:
+    fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    database = _write_pair_agent_db(tmp_path)
+    _attach_source_projections(database)
+    connection = sqlite3.connect(database)
+    input_json = json.loads(
+        connection.execute("SELECT input_json FROM runs WHERE run_id = ?", ("planned-run",)).fetchone()[0]
+    )
+    # A malformed legacy copy cannot shadow or invalidate the dedicated field.
+    input_json["metadata"][driver.SOURCE_PROJECTION_LEGACY_METADATA_KEY] = {"unexpected": []}
+    connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(input_json), "planned-run"))
+    connection.commit()
+    connection.close()
+
+    plan = driver.build_producer_derived_pair_plan(
+        fixture,
+        database_path=database,
+        producer_runs=[("planned", "planned-run"), ("ambient", "ambient-run")],
+        owner_id=driver.QA_OWNER_UID,
+    )
+    assert plan["status"] == "producer_matched_two_case_source_owned_baselines"
+
+
+def test_source_projection_requires_swift_nano_billing_and_rejects_ambient_no_dispatch(tmp_path: Path) -> None:
+    fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    database = _write_pair_agent_db(tmp_path)
+    _attach_source_projections(database)
+    connection = sqlite3.connect(database)
+    planned_input = json.loads(
+        connection.execute("SELECT input_json FROM runs WHERE run_id = ?", ("planned-run",)).fetchone()[0]
+    )
+    planned_billing = planned_input[driver.SOURCE_PROJECTION_RUN_INPUT_KEY]["nano_billing"]
+    planned_billing.update(
+        {
+            "dispatch": "not_dispatched",
+            "outcome": "not_dispatched",
+            "usage_status": "not_applicable",
+            "cost_status": "not_applicable",
+            "provider_attempts": 0,
+            "attempt_ids": [],
+        }
+    )
+    planned_billing.pop("request_id")
+    connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(planned_input), "planned-run"))
+    connection.commit()
+    connection.close()
+
+    accepted = driver.build_producer_derived_pair_plan(
+        fixture,
+        database_path=database,
+        producer_runs=[("planned", "planned-run"), ("ambient", "ambient-run")],
+        owner_id=driver.QA_OWNER_UID,
+    )
+    assert accepted["cases"][0]["jit"]["nano"]["actual_nano_billing"]["dispatch"] == "not_dispatched"
+
+    connection = sqlite3.connect(database)
+    planned_input = json.loads(
+        connection.execute("SELECT input_json FROM runs WHERE run_id = ?", ("planned-run",)).fetchone()[0]
+    )
+    planned_billing = planned_input[driver.SOURCE_PROJECTION_RUN_INPUT_KEY]["nano_billing"]
+    planned_billing.pop("provider_attempts")
+    connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(planned_input), "planned-run"))
+    connection.commit()
+    connection.close()
+    with pytest.raises(driver.EvidenceError, match="requires provider_attempts=0"):
+        driver.build_producer_derived_pair_plan(
+            fixture,
+            database_path=database,
+            producer_runs=[("planned", "planned-run"), ("ambient", "ambient-run")],
+            owner_id=driver.QA_OWNER_UID,
+        )
+
+    connection = sqlite3.connect(database)
+    planned_input = json.loads(
+        connection.execute("SELECT input_json FROM runs WHERE run_id = ?", ("planned-run",)).fetchone()[0]
+    )
+    planned_billing = planned_input[driver.SOURCE_PROJECTION_RUN_INPUT_KEY]["nano_billing"]
+    planned_billing["provider_attempts"] = 0
+    planned_billing["attempt_ids"] = ["unexpected-attempt"]
+    connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(planned_input), "planned-run"))
+    connection.commit()
+    connection.close()
+    with pytest.raises(driver.EvidenceError, match="requires empty attempt_ids"):
+        driver.build_producer_derived_pair_plan(
+            fixture,
+            database_path=database,
+            producer_runs=[("planned", "planned-run"), ("ambient", "ambient-run")],
+            owner_id=driver.QA_OWNER_UID,
+        )
+
+    connection = sqlite3.connect(database)
+    planned_input = json.loads(
+        connection.execute("SELECT input_json FROM runs WHERE run_id = ?", ("planned-run",)).fetchone()[0]
+    )
+    planned_billing = planned_input[driver.SOURCE_PROJECTION_RUN_INPUT_KEY]["nano_billing"]
+    planned_billing["attempt_ids"] = []
+    planned_billing["provider"] = "openai"
+    connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(planned_input), "planned-run"))
+    connection.commit()
+    connection.close()
+    with pytest.raises(driver.EvidenceError, match="contains provider/usage fields"):
+        driver.build_producer_derived_pair_plan(
+            fixture,
+            database_path=database,
+            producer_runs=[("planned", "planned-run"), ("ambient", "ambient-run")],
+            owner_id=driver.QA_OWNER_UID,
+        )
+
+    connection = sqlite3.connect(database)
+    planned_input = json.loads(
+        connection.execute("SELECT input_json FROM runs WHERE run_id = ?", ("planned-run",)).fetchone()[0]
+    )
+    planned_billing = planned_input[driver.SOURCE_PROJECTION_RUN_INPUT_KEY]["nano_billing"]
+    planned_billing.pop("provider")
+    planned_billing["outcome"] = "approved"
+    connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(planned_input), "planned-run"))
+    connection.commit()
+    connection.close()
+    with pytest.raises(driver.EvidenceError, match="outcome must be not_dispatched"):
+        driver.build_producer_derived_pair_plan(
+            fixture,
+            database_path=database,
+            producer_runs=[("planned", "planned-run"), ("ambient", "ambient-run")],
+            owner_id=driver.QA_OWNER_UID,
+        )
+
+    connection = sqlite3.connect(database)
+    planned_input = json.loads(
+        connection.execute("SELECT input_json FROM runs WHERE run_id = ?", ("planned-run",)).fetchone()[0]
+    )
+    planned_billing = planned_input[driver.SOURCE_PROJECTION_RUN_INPUT_KEY]["nano_billing"]
+    planned_billing.update(
+        {
+            "outcome": "not_dispatched",
+            "provider_attempts": 0,
+            "attempt_ids": [],
+            "usage_status": "not_applicable",
+            "cost_status": "not_applicable",
+        }
+    )
+    connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(planned_input), "planned-run"))
+    connection.commit()
+    connection.close()
+
+    connection = sqlite3.connect(database)
+    ambient_input = json.loads(
+        connection.execute("SELECT input_json FROM runs WHERE run_id = ?", ("ambient-run",)).fetchone()[0]
+    )
+    ambient_projection = ambient_input[driver.SOURCE_PROJECTION_RUN_INPUT_KEY]
+    ambient_projection["nano_billing"]["dispatch"] = "not_dispatched"
+    ambient_projection["nano_billing"].pop("request_id")
+    ambient_projection["nano_billing"]["usage_status"] = "not_applicable"
+    ambient_projection["nano_billing"]["cost_status"] = "not_applicable"
+    connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(ambient_input), "ambient-run"))
+    connection.commit()
+    connection.close()
+
+    with pytest.raises(driver.EvidenceError, match="ambient JIT nano billing cannot claim not_dispatched"):
+        driver.build_producer_derived_pair_plan(
+            fixture,
+            database_path=database,
+            producer_runs=[("planned", "planned-run"), ("ambient", "ambient-run")],
+            owner_id=driver.QA_OWNER_UID,
+        )
+
+    connection = sqlite3.connect(database)
+    ambient_input = json.loads(
+        connection.execute("SELECT input_json FROM runs WHERE run_id = ?", ("ambient-run",)).fetchone()[0]
+    )
+    ambient_input[driver.SOURCE_PROJECTION_RUN_INPUT_KEY].pop("nano_billing")
+    connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(ambient_input), "ambient-run"))
+    connection.commit()
+    connection.close()
+    with pytest.raises(driver.EvidenceError, match="no required nano_billing observation"):
+        driver.build_producer_derived_pair_plan(
+            fixture,
+            database_path=database,
+            producer_runs=[("planned", "planned-run"), ("ambient", "ambient-run")],
+            owner_id=driver.QA_OWNER_UID,
+        )
+
+
+def test_legacy_metadata_projection_requires_explicit_private_compatibility(tmp_path: Path) -> None:
+    fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    database = _write_pair_agent_db(tmp_path)
+    _attach_source_projections(database)
+    connection = sqlite3.connect(database)
+    for run_id in ("planned-run", "ambient-run"):
+        input_json = json.loads(
+            connection.execute("SELECT input_json FROM runs WHERE run_id = ?", (run_id,)).fetchone()[0]
+        )
+        input_json["metadata"][driver.SOURCE_PROJECTION_LEGACY_METADATA_KEY] = input_json.pop(
+            driver.SOURCE_PROJECTION_RUN_INPUT_KEY
+        )
+        connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(input_json), run_id))
+    connection.commit()
+    connection.close()
+
+    with pytest.raises(driver.EvidenceError, match="dedicated run-input field"):
+        driver.build_producer_derived_pair_plan(
+            fixture,
+            database_path=database,
+            producer_runs=[("planned", "planned-run"), ("ambient", "ambient-run")],
+            owner_id=driver.QA_OWNER_UID,
+        )
+
+    # Historical compatibility is allowed only after the operator explicitly
+    # opts in and the exact QA state is owner-only.
+    database.parent.chmod(0o700)
+    database.chmod(0o600)
+    plan = driver.build_producer_derived_pair_plan(
+        fixture,
+        database_path=database,
+        producer_runs=[("planned", "planned-run"), ("ambient", "ambient-run")],
+        owner_id=driver.QA_OWNER_UID,
+        allow_legacy_private_metadata_projection=True,
+    )
+    assert plan["status"] == "producer_matched_two_case_source_owned_baselines"
+
+
 def test_source_projection_rejects_full_prompt_different_from_admitted_prompt(tmp_path: Path) -> None:
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
     database = _write_pair_agent_db(tmp_path)
@@ -434,7 +714,7 @@ def test_source_projection_rejects_full_prompt_different_from_admitted_prompt(tm
     input_json = json.loads(
         connection.execute("SELECT input_json FROM runs WHERE run_id = ?", ("planned-run",)).fetchone()[0]
     )
-    input_json["metadata"][driver.SOURCE_PROJECTION_METADATA_KEY]["full"]["prompt"] = "different admitted bytes"
+    input_json[driver.SOURCE_PROJECTION_RUN_INPUT_KEY]["full"]["prompt"] = "different admitted bytes"
     connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(input_json), "planned-run"))
     connection.commit()
     connection.close()
@@ -459,7 +739,7 @@ def test_external_source_projection_uses_private_reader_and_rejects_symlink(tmp_
         input_json = json.loads(
             connection.execute("SELECT input_json FROM runs WHERE run_id = ?", (run_id,)).fetchone()[0]
         )
-        projection = input_json["metadata"].pop(driver.SOURCE_PROJECTION_METADATA_KEY)
+        projection = input_json.pop(driver.SOURCE_PROJECTION_RUN_INPUT_KEY)
         execution_id = input_json["metadata"]["jitBudget"]["executionID"]
         projection_path = projection_dir / f"{execution_id}.json"
         driver._write_private_file(projection_path, driver._json_bytes(projection))
@@ -581,7 +861,7 @@ def test_source_projection_rejects_evidence_or_lane_drift(tmp_path: Path) -> Non
     input_json = json.loads(
         connection.execute("SELECT input_json FROM runs WHERE run_id = ?", ("planned-run",)).fetchone()[0]
     )
-    input_json["metadata"][driver.SOURCE_PROJECTION_METADATA_KEY]["producer_lane"] = "ambient"
+    input_json[driver.SOURCE_PROJECTION_RUN_INPUT_KEY]["producer_lane"] = "ambient"
     connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(input_json), "planned-run"))
     connection.commit()
     connection.close()
@@ -675,6 +955,68 @@ def test_capture_pair_member_pins_evidence_and_lane(tmp_path: Path) -> None:
             case_id="planned",
             gateway_receipt_path=planned_receipt,
         )
+
+
+def test_capture_agent_run_emits_actual_nano_request_observation(tmp_path: Path) -> None:
+    fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    database = _write_pair_agent_db(tmp_path)
+    _attach_source_projections(database)
+    connection = sqlite3.connect(database)
+    input_json = json.loads(
+        connection.execute("SELECT input_json FROM runs WHERE run_id = ?", ("planned-run",)).fetchone()[0]
+    )
+    input_json[driver.SOURCE_PROJECTION_RUN_INPUT_KEY]["nano_billing"] = {
+        "schema_version": driver.NANO_BILLING_SCHEMA_VERSION,
+        "dispatch": "observed",
+        "lane": "planned",
+        "owner_id": driver.QA_OWNER_UID,
+        "account_generation": 0,
+        "snapshot_revision": "snapshot-1",
+        "budget_day": "2026-09-05",
+        "context_id": "planned:trigger-1",
+        "candidate_id": "planned-gateway",
+        "execution_id": "planned-gateway",
+        "outcome": "approved",
+        "operation": "proactive_extraction",
+        "request_id": "actual-nano-request",
+        "usage_status": "reported",
+        "cost_status": "unknown",
+        "attempt_ids": [],
+    }
+    connection.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", (json.dumps(input_json), "planned-run"))
+    connection.commit()
+    connection.close()
+    plan = driver.build_producer_derived_pair_plan(
+        fixture,
+        database_path=database,
+        producer_runs=[("planned", "planned-run"), ("ambient", "ambient-run")],
+        owner_id=driver.QA_OWNER_UID,
+    )
+    receipt = tmp_path / "gateway.json"
+    _write_gateway_receipt(receipt, run_id="planned-gateway")
+    captured = driver.capture_agent_run(
+        plan,
+        database_path=database,
+        agent_run_id="planned-run",
+        comparison_run_id="comparison-pair",
+        owner_id=driver.QA_OWNER_UID,
+        case_id="planned",
+        gateway_receipt_path=receipt,
+    )
+    assert captured["request_observations"] == [
+        {
+            "case_id": "planned",
+            "architecture": "jit",
+            "stage": "nano",
+            "request_id": "actual-nano-request",
+            "run_id": "comparison-pair",
+            "evidence_sha256": plan["cases"][0]["matched_input"]["evidence_sha256"],
+            "prompt_sha256": plan["cases"][0]["jit"]["nano"]["prompt_hashes"]["prompt_sha256"],
+            "gateway_lane": plan["cases"][0]["jit"]["nano"]["route"]["gateway_lane"],
+            "tool_rounds": 0,
+            "receipt_origin": "actual",
+        }
+    ]
 
 
 def test_capture_agent_run_rejects_wrong_owner_and_unknown_run(tmp_path: Path) -> None:
@@ -988,4 +1330,52 @@ def test_capture_endpoint_observation_joins_actual_header_and_input_hashes(tmp_p
             case_id="actionable_deadline",
             architecture="legacy",
             stage="full",
+        )
+
+
+def test_capture_endpoint_marks_actual_nano_only_for_source_request(tmp_path: Path) -> None:
+    fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    plan = _plan()
+    case = next(item for item in plan["cases"] if item["case_id"] == "actionable_deadline")
+    actual_request_id = "actual-nano-request"
+    case["jit"]["nano"]["actual_nano_billing"] = {
+        "dispatch": "observed",
+        "request_id": actual_request_id,
+    }
+    fixture_case = next(item for item in fixture["cases"] if item["case_id"] == "actionable_deadline")
+    materialized = driver._materialized_prompts(fixture_case, "jit", "nano")
+    headers = tmp_path / "nano.headers"
+    headers.write_text(f"HTTP/1.1 200 OK\r\nX-Omi-Request-ID: {actual_request_id}\r\n\r\n", encoding="latin-1")
+    evidence = tmp_path / "nano.evidence.json"
+    evidence.write_text(json.dumps(fixture_case["shared_evidence"]), encoding="utf-8")
+    prompt = tmp_path / "nano.prompt.txt"
+    prompt.write_text(materialized["prompt"], encoding="utf-8")
+
+    result = driver.capture_endpoint_observation(
+        plan,
+        headers_path=headers,
+        evidence_path=evidence,
+        prompt_path=prompt,
+        comparison_run_id="comparison-actual-nano",
+        owner_id=driver.QA_OWNER_UID,
+        case_id="actionable_deadline",
+        architecture="jit",
+        stage="nano",
+        receipt_origin="actual",
+    )
+    assert result["request_observations"][0]["receipt_origin"] == "actual"
+
+    headers.write_text("HTTP/1.1 200 OK\r\nX-Omi-Request-ID: other-request\r\n\r\n", encoding="latin-1")
+    with pytest.raises(driver.EvidenceError, match="differs from producer nano billing"):
+        driver.capture_endpoint_observation(
+            plan,
+            headers_path=headers,
+            evidence_path=evidence,
+            prompt_path=prompt,
+            comparison_run_id="comparison-actual-nano-2",
+            owner_id=driver.QA_OWNER_UID,
+            case_id="actionable_deadline",
+            architecture="jit",
+            stage="nano",
+            receipt_origin="actual",
         )
