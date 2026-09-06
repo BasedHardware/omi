@@ -3,7 +3,12 @@ import ReactTestRenderer from 'react-test-renderer';
 
 jest.mock('../src/desktopReadClient', () => {
   const actual = jest.requireActual('../src/desktopReadClient');
-  return {...actual, loadDesktopReads: jest.fn(), loadTasks: jest.fn()};
+  return {
+    ...actual,
+    loadDesktopReads: jest.fn(),
+    loadTasks: jest.fn(),
+    loadConversations: jest.fn(),
+  };
 });
 
 jest.mock('../src/omiNative', () => ({
@@ -18,6 +23,8 @@ import {
   desktopProjectionUnavailableCopy,
   loadDesktopReads,
   loadTasks,
+  loadConversations,
+  ConversationCursorExpiredError,
 } from '../src/desktopReadClient';
 
 const readsMock = loadDesktopReads as jest.Mock;
@@ -141,6 +148,7 @@ async function renderReads(props: {enabled: boolean}) {
 
 beforeEach(() => {
   readsMock.mockReset();
+  (loadConversations as jest.Mock).mockReset();
   (loadTasks as jest.Mock).mockReset();
 });
 
@@ -483,12 +491,132 @@ test('task-only refresh preserves the account epoch and retires late session rea
       resolve = value;
     }),
   );
-  const pending = reads.latest().refreshTasks();
+  let pending!: ReturnType<ReturnType<typeof useDesktopReads>['refreshTasks']>;
+  await ReactTestRenderer.act(async () => {
+    pending = reads.latest().refreshTasks();
+  });
   await reads.rerender({enabled: false});
   await ReactTestRenderer.act(async () => {
     resolve(taskRead);
     await pending;
   });
   expect(reads.latest().readOutcomes).toBeNull();
+  reads.unmount();
+});
+
+function pagedOutcomes() {
+  const result = successOutcomes(['Old page']);
+  if (result.conversations.status === 'success') {
+    result.conversations.value.page = {
+      ...result.conversations.value.page,
+      hasMore: true,
+      complete: false,
+      windowStatus: 'more',
+      nextCursor: 'cursor-one',
+    };
+  }
+  return result;
+}
+
+test('conversation pagination appends one page and ignores duplicate presses', async () => {
+  readsMock.mockResolvedValue(pagedOutcomes());
+  const reads = await renderReads({enabled: true});
+  let release!: (value: unknown) => void;
+  (loadConversations as jest.Mock).mockReturnValue(
+    new Promise(resolve => (release = resolve)),
+  );
+  let pending!: Promise<void>;
+  await ReactTestRenderer.act(async () => {
+    pending = reads.latest().loadMoreConversations();
+    void reads.latest().loadMoreConversations();
+  });
+  expect(loadConversations).toHaveBeenCalledTimes(1);
+  expect(reads.latest().conversationsLoadingMore).toBe(true);
+  const next = successOutcomes(['Next page']).conversations;
+  if (next.status !== 'success') {
+    throw Error('fixture');
+  }
+  await ReactTestRenderer.act(async () => {
+    release(next.value);
+    await pending;
+  });
+  expect(reads.latest().readOutcomes?.conversations).toMatchObject({
+    value: {items: [{title: 'Old page'}, {title: 'Next page'}]},
+  });
+  expect(reads.latest().conversationsLoadingMore).toBe(false);
+  reads.unmount();
+});
+test('an expired conversation cursor replaces the old page once and does not loop', async () => {
+  readsMock.mockResolvedValue(pagedOutcomes());
+  const reads = await renderReads({enabled: true});
+  const fresh = successOutcomes(['Fresh first page']).conversations;
+  if (fresh.status !== 'success') {
+    throw Error('fixture');
+  }
+  (loadConversations as jest.Mock)
+    .mockRejectedValueOnce(new ConversationCursorExpiredError())
+    .mockResolvedValueOnce(fresh.value);
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreConversations();
+  });
+  expect(
+    (loadConversations as jest.Mock).mock.calls.map(call => call[1]),
+  ).toEqual(['cursor-one', undefined]);
+  expect(reads.latest().readOutcomes?.conversations).toMatchObject({
+    value: {items: [{title: 'Fresh first page'}]},
+  });
+  expect(reads.latest().conversationNotice).toContain('refreshed');
+  reads.unmount();
+});
+test.each(['refresh', 'disable'])(
+  'a late conversation page cannot overwrite %s',
+  async action => {
+    readsMock.mockResolvedValue(pagedOutcomes());
+    const reads = await renderReads({enabled: true});
+    let release!: (value: unknown) => void;
+    (loadConversations as jest.Mock).mockReturnValue(
+      new Promise(resolve => (release = resolve)),
+    );
+    let pending!: Promise<void>;
+    await ReactTestRenderer.act(async () => {
+      pending = reads.latest().loadMoreConversations();
+    });
+    if (action === 'disable') {
+      await reads.rerender({enabled: false});
+    } else {
+      readsMock.mockResolvedValue(successOutcomes(['New refresh']));
+      await ReactTestRenderer.act(async () => {
+        await reads.latest().refreshReads(false);
+      });
+    }
+    const stale = successOutcomes(['Late page']).conversations;
+    if (stale.status !== 'success') {
+      throw Error('fixture');
+    }
+    await ReactTestRenderer.act(async () => {
+      release(stale.value);
+      await pending;
+    });
+    expect(JSON.stringify(reads.latest().readOutcomes)).not.toContain(
+      'Late page',
+    );
+    expect(reads.latest().conversationsLoadingMore).toBe(false);
+    reads.unmount();
+  },
+);
+test('failed cursor recovery retains loaded rows and allows explicit retry', async () => {
+  readsMock.mockResolvedValue(pagedOutcomes());
+  const reads = await renderReads({enabled: true});
+  (loadConversations as jest.Mock).mockRejectedValue(
+    new ConversationCursorExpiredError(),
+  );
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreConversations();
+  });
+  expect(loadConversations).toHaveBeenCalledTimes(2);
+  expect(reads.latest().conversationNotice).toContain('Try again');
+  expect(reads.latest().readOutcomes?.conversations).toMatchObject({
+    value: {items: [{title: 'Old page'}]},
+  });
   reads.unmount();
 });

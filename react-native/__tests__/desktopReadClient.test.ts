@@ -146,19 +146,40 @@ const page = (items: unknown[], completenessVersion: string) => ({
 
 const conversation = {
   id: 'conversation-1',
-  structured: {title: 'Morning walk', overview: 'Discussed the launch.'},
-  created_at: '2026-08-14T01:00:00.000Z',
-  updated_at: '2026-08-14T02:00:00.000Z',
-  started_at: '2026-08-14T01:00:00.000Z',
-  finished_at: '2026-08-14T01:30:00.000Z',
+  title: 'Morning walk',
+  overview: 'Discussed the launch.',
+  revision: '1',
+  createdAt: Date.parse('2026-08-14T01:00:00.000Z'),
+  updatedAt: Date.parse('2026-08-14T02:00:00.000Z'),
+  startedAt: Date.parse('2026-08-14T01:00:00.000Z'),
+  finishedAt: Date.parse('2026-08-14T01:30:00.000Z'),
   source: 'omi',
   status: 'completed',
   discarded: false,
   starred: true,
   visibility: 'private',
-  is_locked: false,
-  folder_id: null,
+  isLocked: false,
+  folderId: null,
 };
+
+function conversationPage(items: unknown[], hasMore = false) {
+  return {
+    contractVersion: '1.0.0',
+    items,
+    window: {
+      status: hasMore ? 'more' : 'complete',
+      complete: !hasMore,
+      hasMore,
+      nextCursor: hasMore ? 'next-page' : null,
+    },
+    completeness: {
+      version: 'conversations-completeness-v1',
+      status: 'complete',
+      reasons: [],
+    },
+    absence: items.length ? null : {kind: 'query_gap'},
+  };
+}
 
 const memory = {
   id: 'memory1_abc',
@@ -306,7 +327,10 @@ test('loads and normalizes all three exact desktop read routes', async () => {
   const backend = backendFor(request => {
     paths.push(request.path);
     if (request.path.startsWith('/v1/conversations')) {
-      return {status: 200, body: JSON.stringify([conversation])};
+      return {
+        status: 200,
+        body: JSON.stringify(conversationPage([conversation])),
+      };
     }
     if (request.path.startsWith('/v1/memories')) {
       return {
@@ -376,24 +400,23 @@ test('loads and normalizes all three exact desktop read routes', async () => {
     },
   });
   expect(paths.sort()).toEqual(
-    [
-      '/v1/conversations?limit=50&offset=0',
-      '/v1/memories?limit=50',
-      '/v1/tasks',
-    ].sort(),
+    ['/v1/conversations?limit=50', '/v1/memories?limit=50', '/v1/tasks'].sort(),
   );
 });
 
 test('keeps processing conversations whose title and overview are not ready yet', async () => {
   const backend = backendFor(() => ({
     status: 200,
-    body: JSON.stringify([
-      {
-        ...conversation,
-        structured: {title: '', overview: ''},
-        status: 'processing',
-      },
-    ]),
+    body: JSON.stringify(
+      conversationPage([
+        {
+          ...conversation,
+          title: '',
+          overview: '',
+          status: 'processing',
+        },
+      ]),
+    ),
   }));
 
   await expect(loadConversations(backend)).resolves.toEqual(
@@ -716,27 +739,27 @@ test('marks a full conversation window as potentially incomplete', async () => {
   }));
   const backend = backendFor(() => ({
     status: 200,
-    body: JSON.stringify(conversations),
+    body: JSON.stringify(conversationPage(conversations, true)),
   }));
 
   const result = await loadConversations(backend);
   expect(result.items).toHaveLength(50);
   expect(result.page).toEqual({
-    windowStatus: 'unknown',
+    windowStatus: 'more',
     complete: false,
     hasMore: true,
-    nextCursor: null,
-    completenessStatus: 'unknown',
-    reasons: ['limit_reached'],
+    nextCursor: 'next-page',
+    completenessStatus: 'complete',
+    reasons: [],
   });
 });
 
 test('keeps nullable conversation times while rejecting invalid metadata', async () => {
   const backend = backendFor(() => ({
     status: 200,
-    body: JSON.stringify([
-      {...conversation, started_at: null, finished_at: null},
-    ]),
+    body: JSON.stringify(
+      conversationPage([{...conversation, startedAt: null, finishedAt: null}]),
+    ),
   }));
 
   await expect(loadConversations(backend)).resolves.toMatchObject({
@@ -753,10 +776,12 @@ test('keeps nullable conversation times while rejecting invalid metadata', async
 
   const malformed = backendFor(() => ({
     status: 200,
-    body: JSON.stringify([{...conversation, updated_at: 'not-a-time'}]),
+    body: JSON.stringify(
+      conversationPage([{...conversation, updatedAt: 'not-a-time'}]),
+    ),
   }));
   await expect(loadConversations(malformed)).rejects.toThrow(
-    'updated_at is malformed',
+    'updatedAt is malformed',
   );
 });
 
@@ -945,4 +970,35 @@ test('loadAccountSettings keeps failed slices independent', async () => {
   expect(snapshot.trainingOptedIn).toBe(false);
   expect(snapshot.privateCloudSync).toBe(false);
   expect(snapshot.webhooks).toBeNull();
+});
+
+test('uses the ratified conversation cursor and preserves its completeness declaration', async () => {
+  const paths: string[] = [];
+  const backend = backendFor(request => {
+    paths.push(request.path);
+    return {
+      status: 200,
+      body: JSON.stringify(conversationPage([conversation], true)),
+    };
+  });
+  const result = await loadConversations(backend, 'opaque/+ cursor=');
+  expect(paths).toEqual([
+    '/v1/conversations?limit=50&cursor=opaque%2F%2B%20cursor%3D',
+  ]);
+  expect(result.page.nextCursor).toBe('next-page');
+  await expect(loadConversations(backend, '')).rejects.toThrow(
+    'Conversation cursor is malformed',
+  );
+  expect(paths).toHaveLength(1);
+});
+
+test('rejects duplicate conversation IDs instead of merging an ambiguous page', async () => {
+  await expect(
+    loadConversations(
+      backendFor(() => ({
+        status: 200,
+        body: JSON.stringify(conversationPage([conversation, conversation])),
+      })),
+    ),
+  ).rejects.toThrow('Conversation IDs are duplicated');
 });
