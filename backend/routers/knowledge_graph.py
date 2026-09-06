@@ -1,5 +1,7 @@
 import importlib
+import logging
 import sys
+from datetime import datetime, timezone
 from enum import Enum
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -10,7 +12,7 @@ from database import knowledge_graph as kg_db
 from database._client import get_firestore_client
 from database.auth import get_user_name
 from utils.memory import canonical_graph as canonical_graph_service
-from utils.memory.memory_service import MemoryService
+from utils.memory.brain_map_sources import collect_brain_map_sources
 from utils.executors import db_executor, llm_executor, run_blocking
 from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
@@ -20,6 +22,7 @@ router = APIRouter()
 Payload = Dict[str, Any]
 MemoryPayloads = List[Payload]
 RebuildKnowledgeGraph = Callable[[str, MemoryPayloads, str], Payload]
+logger = logging.getLogger(__name__)
 RateLimitFactory = Callable[[Any, str], Any]
 with_rate_limit: RateLimitFactory = cast(RateLimitFactory, getattr(auth, "with_rate_limit"))
 CANONICAL_GRAPH_MUTATION_CONFLICT = (
@@ -122,6 +125,9 @@ class KnowledgeGraphResponse(BaseModel):
     edge_count: int = 0
     node_limit: int | None = None
     edge_limit: int | None = None
+    #: Where the last Brain Map rebuild stands (``status``, ``started_at``,
+    #: ``finished_at``, counts). Absent until the account has ever rebuilt.
+    rebuild: Optional[Dict[str, Any]] = None
 
 
 class CanonicalKnowledgeGraphResponse(BaseModel):
@@ -130,6 +136,7 @@ class CanonicalKnowledgeGraphResponse(BaseModel):
     has_more: bool
     next_cursor: Optional[str] = None
     catalog_nodes: List[Dict[str, Any]] = []
+    rebuild: Optional[Dict[str, Any]] = None
 
 
 class RebuildResponse(BaseModel):
@@ -166,7 +173,34 @@ def _legacy_knowledge_graph_response(uid: str) -> "KnowledgeGraphResponse":
         edge_count=graph.get('edge_count', len(edges)),
         node_limit=graph.get('node_limit'),
         edge_limit=graph.get('edge_limit'),
+        rebuild=_rebuild_status_payload(uid),
     )
+
+
+def _merged_with_shared_graph(
+    uid: str, page: canonical_graph_service.CanonicalKnowledgeGraphPage
+) -> tuple[List[Payload], List[Payload], bool]:
+    """The canonical page under the shared rebuilt graph, canonical winning.
+
+    A Brain Map rebuild writes what it extracts from conversations, people and
+    goals into the shared store; canonical assertions stay authoritative for
+    the memories they already cover. Only the first page merges, because the
+    shared store has no revision and cannot be paged with the fenced one.
+    """
+    shared = kg_db.get_shared_knowledge_graph(uid)
+    merged = kg_db.merge_shared_graph_records({'nodes': page.nodes, 'edges': page.edges}, shared)
+    return merged['nodes'], merged['edges'], bool(shared['truncated'])
+
+
+def _rebuild_status_payload(uid: str) -> Optional[Payload]:
+    status = kg_db.read_knowledge_graph_rebuild_status(uid)
+    if not status:
+        return None
+    return {
+        key: value.isoformat() if isinstance(value, datetime) else value
+        for key, value in status.items()
+        if key != 'updated_at'
+    }
 
 
 @router.get(
@@ -185,17 +219,22 @@ def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
             limit=page_limit,
             cursor=None,
         )
+        merged_nodes, merged_edges, shared_truncated = _merged_with_shared_graph(uid, page)
         # One memory page may expand into more graph records than the memory
         # page limit. Bound the returned graph itself, not only its source page.
-        nodes = page.nodes[:page_limit]
+        nodes = merged_nodes[:page_limit]
         node_ids = {node.get("id") for node in nodes if node.get("id")}
-        bounded_edges = page.edges[:page_limit]
+        bounded_edges = merged_edges[:page_limit]
         edges = [
             edge for edge in bounded_edges if edge.get("source_id") in node_ids and edge.get("target_id") in node_ids
         ]
         dropped_edges = len(bounded_edges) - len(edges)
         truncated = (
-            bool(page.has_more) or len(page.nodes) > page_limit or len(page.edges) > page_limit or dropped_edges > 0
+            bool(page.has_more)
+            or shared_truncated
+            or len(merged_nodes) > page_limit
+            or len(merged_edges) > page_limit
+            or dropped_edges > 0
         )
     except canonical_graph_service.CanonicalGraphReadUnavailable:
         # Canonical intake is fenced off in production (MEMORY_MODE), so most
@@ -211,6 +250,7 @@ def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
         edge_count=len(edges),
         node_limit=page_limit,
         edge_limit=page_limit,
+        rebuild=_rebuild_status_payload(uid),
     )
 
 
@@ -238,27 +278,54 @@ def get_canonical_knowledge_graph(
         raise HTTPException(status_code=400, detail='invalid_or_stale_cursor') from exc
     except canonical_graph_service.CanonicalGraphReadUnavailable as exc:
         raise HTTPException(status_code=503, detail='canonical_graph_unavailable') from exc
+    nodes, edges = page.nodes, page.edges
+    if cursor is None:
+        nodes, edges, _shared_truncated = _merged_with_shared_graph(uid, page)
     return CanonicalKnowledgeGraphResponse(
-        nodes=page.nodes,
-        edges=page.edges,
+        nodes=nodes,
+        edges=edges,
         has_more=page.has_more,
         next_cursor=page.next_cursor,
         catalog_nodes=getattr(page, 'catalog_nodes', []),
+        rebuild=_rebuild_status_payload(uid) if cursor is None else None,
     )
 
 
 def _rebuild_graph_task(uid: str, user_name: str) -> None:
-    # The gate is re-checked here because it was last answered before the response
-    # was returned. Bailing out must leave the graph exactly as it was, so nothing
-    # upstream of `rebuild_knowledge_graph` may delete it.
-    if _legacy_graph_mutation_decision(uid) is not LegacyGraphMutation.ALLOWED:
+    """Rebuild the shared graph from everything the account knows.
+
+    Only the shared store (``knowledge_nodes``/``knowledge_edges``) is replaced.
+    Canonical assertions are never touched, which is why this no longer needs
+    the canonical-state gate that still guards ``DELETE``: the read merges the
+    two with canonical winning, so a rebuild can only add to what an
+    assertion-backed account sees.
+    """
+    started_at = datetime.now(timezone.utc)
+    client = get_firestore_client()
+    kg_db.write_knowledge_graph_rebuild_status(uid, {'status': 'running', 'started_at': started_at}, db_client=client)
+    try:
+        sources = collect_brain_map_sources(uid, db_client=client)
+        graph = _run_rebuild_knowledge_graph(uid, sources.payloads, user_name)
+    except Exception:
+        logger.exception("Brain Map rebuild failed")
+        kg_db.write_knowledge_graph_rebuild_status(
+            uid,
+            {'status': 'failed', 'started_at': started_at, 'finished_at': datetime.now(timezone.utc)},
+            db_client=client,
+        )
         return
-    memories: MemoryPayloads = [
-        {"id": memory.id, "content": memory.content}
-        for memory in MemoryService(db_client=get_firestore_client()).read(uid, limit=500)
-        if not getattr(memory, "is_locked", False)
-    ]
-    _run_rebuild_knowledge_graph(uid, memories, user_name)
+    kg_db.write_knowledge_graph_rebuild_status(
+        uid,
+        {
+            'status': 'complete',
+            'started_at': started_at,
+            'finished_at': datetime.now(timezone.utc),
+            'nodes_count': len(graph.get('nodes', [])),
+            'edges_count': len(graph.get('edges', [])),
+            'sources': sources.counts,
+        },
+        db_client=client,
+    )
 
 
 @router.post('/v1/knowledge-graph/rebuild', tags=['knowledge_graph'], response_model=RebuildResponse)
@@ -266,12 +333,10 @@ def rebuild_graph(
     background_tasks: BackgroundTasks,
     uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:rebuild")),
 ):
-    _require_legacy_graph_mutation(uid)
     user_name = get_user_name(uid) or ""
-    # No eager delete here: `rebuild_knowledge_graph` clears the graph itself as its
-    # first step, so deleting before scheduling only widens the window where the user
-    # has no graph and nothing is rebuilding one — a task that never runs, or one that
-    # bails on the re-checked gate, would leave them with nothing.
+    # No eager delete here: `rebuild_knowledge_graph` clears the shared graph itself
+    # once the replacement is fully extracted, so deleting before scheduling only
+    # widens the window where the user has no graph and nothing is rebuilding one.
     background_tasks.add_task(_rebuild_graph_task, uid, user_name)
     return RebuildResponse(status="rebuilding", nodes_count=0, edges_count=0)
 

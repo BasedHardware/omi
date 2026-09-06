@@ -111,8 +111,14 @@ flowchart TD
   authoritative provider state before acknowledgement.
 - Canonical graph assertions are derived-state authority. Bounded reads return
   only edges whose endpoints are in the returned node page and mark filtering
-  as truncation; public canonical or retained-assertion delete/rebuild requests
-  return HTTP 409.
+  as truncation; public canonical or retained-assertion delete requests return
+  HTTP 409. Rebuild (`POST /v1/knowledge-graph/rebuild`) is open to every
+  account: it replaces only the shared store (`knowledge_nodes`/`knowledge_edges`)
+  with entities extracted from the account's conversations, people, goals and
+  memories (`utils/memory/brain_map_sources.py`), never touches assertions, and
+  the first graph page merges the two with canonical winning. Progress lives at
+  `users/{uid}/knowledge_graph_meta/rebuild` and is returned as `rebuild` on
+  graph reads.
 - **Workflow** (`action_items`, `goals`) is extracted from the same seam as Memories but stored
   separately. Long-term may absorb a *fact about* a commitment; the task/goal row stays in workflow.
 - Conversation delete cascades to evidence tombstoning on linked Short-term items (`tombstone_source`).
@@ -173,7 +179,7 @@ The legacy pipeline introduced **L1/L2 as processing stages** — **not** the sa
 |--------|----------------|-------------|
 | **Conversations** | `users/{uid}/conversations` | Upstream session records |
 | **Action items / goals** | `action_items`, `goals` | Workflow — unchanged |
-| **Knowledge graph** | `memory_graph_assertions` + shared graph / `knowledge_graph.py` | Per-memory assertions commit with Long-term admission; shared nodes/edges are a referentially closed, bounded read-side projection and legacy merge; public assertion-backed delete/rebuild returns HTTP 409 |
+| **Knowledge graph** | `memory_graph_assertions` + shared graph / `knowledge_graph.py` | Per-memory assertions commit with Long-term admission; shared nodes/edges are a referentially closed, bounded read-side projection rebuilt from the whole account and merged under the assertions; public assertion-backed delete returns HTTP 409, rebuild is always allowed |
 | **Trends** | `trends_db` | Separate derived index from conversations |
 | **Legacy conversation shims** | `plugins_results`, `processing_memory_id` | Mirrored from `apps_results` / `processing_conversation_id`; **retire** when old clients age out |
 

@@ -512,6 +512,14 @@ def test_knowledge_graph_route_exposes_truncation(monkeypatch):
     monkeypatch.setattr(
         kg_router.canonical_graph_service, 'get_canonical_knowledge_graph', lambda *args, **kwargs: page
     )
+    # The route merges the shared rebuilt store under the page; this test is about
+    # the truncation contract, so that store is empty and has never been rebuilt.
+    monkeypatch.setattr(
+        kg_router.kg_db,
+        'get_shared_knowledge_graph',
+        lambda uid, **_kw: {'nodes': [], 'edges': [], 'authoritative_memory_ids': set(), 'truncated': False},
+    )
+    monkeypatch.setattr(kg_router.kg_db, 'read_knowledge_graph_rebuild_status', lambda uid, **_kw: None)
     app = FastAPI()
     app.include_router(kg_router.router)
     app.dependency_overrides[kg_router.auth.get_current_user_uid] = lambda: 'u'
@@ -519,7 +527,7 @@ def test_knowledge_graph_route_exposes_truncation(monkeypatch):
     response = TestClient(app).get('/v1/knowledge-graph')
 
     assert response.status_code == 200
-    assert response.json() == {**payload, 'node_limit': 500, 'edge_limit': 500}
+    assert response.json() == {**payload, 'node_limit': 500, 'edge_limit': 500, 'rebuild': None}
 
 
 def test_knowledge_graph_route_keeps_firebase_auth_dependency():

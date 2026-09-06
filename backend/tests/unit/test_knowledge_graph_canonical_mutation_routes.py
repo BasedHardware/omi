@@ -1,5 +1,11 @@
 """Graph mutation routes must gate on real per-account canonical state.
 
+Rebuild is the exception since the Brain Map redesign: it replaces only the
+shared (rebuilt) store and never touches canonical assertions, and the read
+merges the two with canonical winning, so it is open to every account and
+consults no canonical probe at all. ``DELETE`` still destroys the shared store
+an assertion-backed account may be citing, so it keeps the gate below.
+
 `165c041a93` gated rebuild/delete on a per-account predicate: canonical state
 established, or stored memory-graph assertions. `5724a10084` replaced that body
 with an unconditional `return True`, so every account got
@@ -144,25 +150,6 @@ def test_rebuild_does_not_delete_the_graph_before_the_rebuild_runs(client, monke
     assert deleted == []
 
 
-def test_a_regate_that_flips_after_the_response_leaves_the_graph_intact(client, monkeypatch, deleted, fallbacks):
-    # The task re-checks the gate after the response is returned. An account that
-    # becomes assertion-backed in that window no-ops the rebuild — which used to mean
-    # the legacy graph stayed deleted, with nothing left to own it.
-    _head(monkeypatch, _failed_head(Reason.MISSING_STATE_HEAD))
-    answers = iter([False, True])  # route says legacy, the task's re-check says assertion-backed
-    monkeypatch.setattr(kg_db, "has_stored_memory_graph_assertions", lambda uid, **_kw: next(answers))
-
-    def _must_not_run(*_args: Any, **_kwargs: Any):  # pragma: no cover - asserts absence
-        raise AssertionError("legacy rebuild ran for an account that became assertion-backed")
-
-    monkeypatch.setattr(kg_router, "_run_rebuild_knowledge_graph", _must_not_run)
-
-    response = client.post("/v1/knowledge-graph/rebuild")
-
-    assert response.status_code == 200
-    assert deleted == []
-
-
 def test_the_legacy_rebuild_still_clears_the_graph_itself(monkeypatch):
     # The route relies on this: dropping its eager delete is only safe while
     # `rebuild_knowledge_graph` clears the old graph itself, so a rebuild cannot
@@ -224,12 +211,15 @@ def test_an_established_head_with_zero_assertions_still_conflicts(client, monkey
 
     monkeypatch.setattr(kg_db, "has_stored_memory_graph_assertions", _must_not_be_consulted)
 
+    monkeypatch.setattr(kg_router, "_rebuild_graph_task", lambda uid, user_name: None)
+
     rebuild = client.post("/v1/knowledge-graph/rebuild")
     delete = client.delete("/v1/knowledge-graph")
 
-    assert rebuild.status_code == 409
+    # Rebuild only replaces the shared store and merges under the assertions,
+    # so an established head is not a reason to refuse it.
+    assert rebuild.status_code == 200
     assert delete.status_code == 409
-    assert rebuild.json()["detail"] == kg_router.CANONICAL_GRAPH_MUTATION_CONFLICT
     assert delete.json()["detail"] == kg_router.CANONICAL_GRAPH_MUTATION_CONFLICT
     assert deleted == []
 
@@ -250,8 +240,9 @@ def test_an_unanswered_canonical_probe_must_not_delete_the_legacy_graph(
     delete = client.delete("/v1/knowledge-graph")
 
     assert deleted == []
-    assert scheduled == []
-    assert rebuild.status_code == 503
+    # The rebuild never reads the probe: it cannot harm canonical state.
+    assert scheduled == [UID]
+    assert rebuild.status_code == 200
     assert delete.status_code == 503
     assert delete.json()["detail"] == kg_router.CANONICAL_GRAPH_STATE_UNVERIFIED
 
@@ -284,11 +275,12 @@ def test_stored_assertions_still_conflict_without_a_state_head(client, monkeypat
     # they must not be rebuilt or deleted through here.
     _head(monkeypatch, _failed_head(Reason.MISSING_STATE_HEAD))
     monkeypatch.setattr(kg_db, "has_stored_memory_graph_assertions", lambda uid, **_kw: True)
+    monkeypatch.setattr(kg_router, "_rebuild_graph_task", lambda uid, user_name: None)
 
     rebuild = client.post("/v1/knowledge-graph/rebuild")
     delete = client.delete("/v1/knowledge-graph")
 
-    assert rebuild.status_code == 409
+    assert rebuild.status_code == 200
     assert delete.status_code == 409
     assert deleted == []
 
@@ -305,65 +297,86 @@ def test_the_decision_is_per_account_not_a_constant(monkeypatch):
     assert kg_router._legacy_graph_mutation_decision("uid-arbitrary-account") is kg_router.LegacyGraphMutation.ALLOWED
 
 
-def test_rebuild_task_feeds_unlocked_memories_to_the_legacy_rebuild(monkeypatch):
-    _legacy_principal(monkeypatch)
+class _StatusStore:
+    """Records rebuild status writes in order."""
 
-    class _Memory:
-        def __init__(self, memory_id: str, content: str, is_locked: bool = False):
-            self.id = memory_id
-            self.content = content
-            self.is_locked = is_locked
+    def __init__(self) -> None:
+        self.writes: List[Dict[str, Any]] = []
 
-    class _Service:
-        def __init__(self, **_kwargs: Any):
-            pass
+    def write(self, uid: str, status: Dict[str, Any], *, db_client: Any = None) -> None:
+        assert uid == UID
+        self.writes.append(dict(status))
 
-        def read(self, uid: str, **_kwargs: Any):
-            return [_Memory("m1", "one"), _Memory("m2", "locked", is_locked=True)]
 
-    captured: Dict[str, Any] = {}
-    monkeypatch.setattr(kg_router, "MemoryService", _Service)
+@pytest.fixture
+def status_store(monkeypatch) -> _StatusStore:
+    store = _StatusStore()
+    monkeypatch.setattr(kg_db, "write_knowledge_graph_rebuild_status", store.write)
+    return store
+
+
+def test_rebuild_task_feeds_every_source_to_the_extractor_and_records_completion(monkeypatch, status_store):
+    from utils.memory.brain_map_sources import BrainMapSources
+
+    payloads = [{"id": "m1", "content": "one"}, {"id": "conversation:c1", "content": "Conversation: Standup"}]
+    counts = {"memories": 1, "conversations": 1, "people": 0, "goals": 0}
     monkeypatch.setattr(
         kg_router,
-        "_run_rebuild_knowledge_graph",
-        lambda uid, memories, user_name: captured.update(uid=uid, memories=memories, user_name=user_name),
+        "collect_brain_map_sources",
+        lambda uid, **_kw: BrainMapSources(payloads=payloads, counts=counts),
     )
+    captured: Dict[str, Any] = {}
+
+    def _run(uid: str, memories: List[Dict[str, Any]], user_name: str) -> Dict[str, Any]:
+        captured.update(uid=uid, memories=memories, user_name=user_name)
+        return {"nodes": [{"id": "n1"}, {"id": "n2"}], "edges": [{"id": "e1"}]}
+
+    monkeypatch.setattr(kg_router, "_run_rebuild_knowledge_graph", _run)
 
     kg_router._rebuild_graph_task(UID, "Ada")
 
-    assert captured["memories"] == [{"id": "m1", "content": "one"}]
+    assert captured["memories"] == payloads
     assert captured["user_name"] == "Ada"
+    assert [write["status"] for write in status_store.writes] == ["running", "complete"]
+    done = status_store.writes[-1]
+    assert done["nodes_count"] == 2 and done["edges_count"] == 1
+    assert done["sources"] == counts
+    assert done["finished_at"] >= done["started_at"]
 
 
-def test_rebuild_task_is_a_noop_for_an_assertion_backed_account(monkeypatch):
-    _head(monkeypatch, _failed_head(Reason.MISSING_STATE_HEAD))
-    monkeypatch.setattr(kg_db, "has_stored_memory_graph_assertions", lambda uid, **_kw: True)
+def test_rebuild_task_records_failure_instead_of_leaving_the_status_running(monkeypatch, status_store):
+    def _explode(uid: str, **_kw: Any):
+        raise RuntimeError("firestore unavailable")
+
+    monkeypatch.setattr(kg_router, "collect_brain_map_sources", _explode)
 
     def _must_not_run(*_args: Any, **_kwargs: Any):  # pragma: no cover - asserts absence
-        raise AssertionError("legacy rebuild ran for an assertion-backed account")
+        raise AssertionError("extraction ran without sources")
 
     monkeypatch.setattr(kg_router, "_run_rebuild_knowledge_graph", _must_not_run)
 
     kg_router._rebuild_graph_task(UID, "Ada")
 
+    assert [write["status"] for write in status_store.writes] == ["running", "failed"]
 
-def test_rebuild_task_is_a_noop_when_the_canonical_probe_is_unanswered(monkeypatch):
-    # The task re-runs the decision after the route already deleted the graph.
-    # An unanswered probe must stop it there rather than rebuild blindly.
-    _head(monkeypatch, _failed_head(Reason.READ_FAILED))
-    monkeypatch.setattr(kg_db, "has_stored_memory_graph_assertions", lambda uid, **_kw: False)
 
-    class _Service:
-        def __init__(self, **_kwargs: Any):
-            pass
+def test_rebuild_task_never_touches_canonical_state(monkeypatch, status_store):
+    # The task must not read the canonical probe or delete assertions: it is
+    # allowed for assertion-backed accounts precisely because it cannot.
+    def _must_not_probe(**_kw: Any):  # pragma: no cover - asserts absence
+        raise AssertionError("rebuild consulted the canonical state head")
 
-        def read(self, uid: str, **_kwargs: Any):
-            return []
+    monkeypatch.setattr(kg, "read_memory_v3_trusted_account_generation", _must_not_probe)
+    monkeypatch.setattr(kg_db, "delete_memory_graph_assertion", _must_not_probe)
+    from utils.memory.brain_map_sources import BrainMapSources
 
-    def _must_not_run(*_args: Any, **_kwargs: Any):  # pragma: no cover - asserts absence
-        raise AssertionError("legacy rebuild ran while canonical state was unverified")
-
-    monkeypatch.setattr(kg_router, "MemoryService", _Service)
-    monkeypatch.setattr(kg_router, "_run_rebuild_knowledge_graph", _must_not_run)
+    monkeypatch.setattr(
+        kg_router,
+        "collect_brain_map_sources",
+        lambda uid, **_kw: BrainMapSources(payloads=[], counts={}),
+    )
+    monkeypatch.setattr(kg_router, "_run_rebuild_knowledge_graph", lambda *_a, **_k: {"nodes": [], "edges": []})
 
     kg_router._rebuild_graph_task(UID, "Ada")
+
+    assert status_store.writes[-1]["status"] == "complete"

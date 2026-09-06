@@ -6016,6 +6016,18 @@
             },
             "title": "Nodes",
             "type": "array"
+          },
+          "rebuild": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rebuild"
           }
         },
         "required": [
@@ -16040,6 +16052,18 @@
             },
             "title": "Nodes",
             "type": "array"
+          },
+          "rebuild": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rebuild"
           },
           "truncated": {
             "default": false,
