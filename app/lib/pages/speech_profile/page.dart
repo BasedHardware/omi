@@ -577,18 +577,20 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                                                 // that fills from the bottom; the widget itself keeps
                                                 // only the last three whole lines, so nothing is ever
                                                 // clipped or scrolled.
-                                                child: SizedBox(
-                                                  height: 3 * 18 * 1.4,
-                                                  child: Align(
-                                                    alignment: Alignment.bottomCenter,
-                                                    child: FadeInWordsText(
-                                                      text: provider.text,
-                                                      visibleLines: 3,
-                                                      style: const TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 18,
-                                                        fontWeight: FontWeight.w400,
-                                                        height: 1.4,
+                                                child: ClipRect(
+                                                  child: SizedBox(
+                                                    height: 3 * 18 * 1.4,
+                                                    child: Align(
+                                                      alignment: Alignment.bottomCenter,
+                                                      child: FadeInWordsText(
+                                                        text: provider.text,
+                                                        visibleLines: 3,
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 18,
+                                                          fontWeight: FontWeight.w400,
+                                                          height: 1.4,
+                                                        ),
                                                       ),
                                                     ),
                                                   ),

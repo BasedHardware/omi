@@ -156,11 +156,15 @@ class _FadeInWordsTextState extends State<FadeInWordsText> {
     final gap = (style.fontSize ?? 14) * 0.3;
     final visibleLines = widget.visibleLines;
     if (visibleLines == null) return _wrap(from: 0, style: style, gap: gap);
+    // Each word's Text inherits the ambient DefaultTextStyle (font family,
+    // weight, ...) under [style], so measure with that same effective style
+    // or the replayed line breaks drift from the real ones.
+    final effective = DefaultTextStyle.of(context).style.merge(style);
     return LayoutBuilder(
       builder: (context, constraints) {
         final from = FadeInWordsText.firstVisibleWord(
           words: _words,
-          style: style,
+          style: effective,
           gap: gap,
           maxWidth: constraints.maxWidth,
           visibleLines: visibleLines,

@@ -57,7 +57,7 @@ class SpeechProfileProvider extends ChangeNotifier
 
   /// Words the user must speak before the profile is finalized. The UI shows
   /// a bar filling toward it; reaching it is what completes the recording.
-  static const int targetWordCount = 60;
+  static const int targetWordCount = 40;
   bool _wordTargetReached = false;
 
   int get spokenWordCount => text.trim().isEmpty ? 0 : text.trim().split(RegExp(r'\s+')).length;

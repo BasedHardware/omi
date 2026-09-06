@@ -521,19 +521,21 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                             // A fixed three-line area (20px text at 1.5 line height)
                             // that fills from the bottom; the widget itself keeps only
                             // the last three whole lines, so nothing is clipped.
-                            SizedBox(
-                              height: 3 * 20 * 1.5,
-                              child: Align(
-                                alignment: Alignment.bottomCenter,
-                                child: FadeInWordsText(
-                                  text: provider.text,
-                                  visibleLines: 3,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w400,
-                                    height: 1.5,
-                                    fontFamily: 'Manrope',
+                            ClipRect(
+                              child: SizedBox(
+                                height: 3 * 20 * 1.5,
+                                child: Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: FadeInWordsText(
+                                    text: provider.text,
+                                    visibleLines: 3,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w400,
+                                      height: 1.5,
+                                      fontFamily: 'Manrope',
+                                    ),
                                   ),
                                 ),
                               ),
