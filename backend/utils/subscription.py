@@ -28,6 +28,7 @@ from config.plan_catalog import (
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
 from utils.byok import (
     get_byok_key,
+    get_byok_llm_provider,
     get_byok_uid,
     get_cached_byok_state,
     has_validated_byok_keys,
