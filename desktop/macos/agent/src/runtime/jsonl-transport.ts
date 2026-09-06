@@ -39,6 +39,9 @@ export interface McpServerBuildContext {
   screenContext?: boolean;
   /** See `QueryMessage.jitKnowledgeToolsEnabled` — relayed opaquely, client-side UX gate only. */
   jitKnowledgeToolsEnabled?: boolean;
+  /** Presence of the qualification-only JIT budget selects the bounded
+   * read-only proactive tool projection. */
+  jitProactivity?: boolean;
   executionRole?: "coordinator" | "leaf";
   /** Server-authoritative projection admitted into this exact run snapshot. */
   chatFirstUi?: boolean;
@@ -529,6 +532,7 @@ export class JsonlTransport {
           (source) => source.source === "screen" && source.outcome === "available",
         ),
         jitKnowledgeToolsEnabled: message.jitKnowledgeToolsEnabled === true,
+        ...(message.jitBudget ? { jitProactivity: true } : {}),
         chatFirstUi: snapshot.capabilities.chatFirstUi === true,
         chatFirstControlGeneration: snapshot.capabilities.chatFirstControlGeneration,
       }),

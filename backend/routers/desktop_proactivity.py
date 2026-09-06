@@ -705,7 +705,12 @@ async def _proactive_completion_unobserved(
         assert quota is not None
         await _release_quota(uid, request.operation, quota.reservation_token)
 
+    # Return the same backend-generated correlation id that is sent to the
+    # gateway.  This is a join key for durable gateway-attempt accounting; it
+    # does not grant a caller any authority and is deliberately absent from
+    # the JSON envelope to preserve the client contract.
     request_id = str(uuid4())
+    response.headers["X-Omi-Request-ID"] = request_id
     provider_request: _ProviderRequest | None = None
     length_retry_attempted = False
     try:

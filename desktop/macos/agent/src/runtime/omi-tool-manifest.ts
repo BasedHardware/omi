@@ -122,6 +122,8 @@ export interface OmiToolProjectionContext {
    * or shows tools — it never grants or denies access.
    */
   jitKnowledgeToolsEnabled?: boolean;
+  /** Qualification-only proactive turn projection. */
+  jitProactivity?: boolean;
   executionRole?: "coordinator" | "leaf";
   surfaceKind?: string;
   chatFirstUi?: boolean;
@@ -141,6 +143,15 @@ export interface OmiToolAvailabilitySnapshot {
 
 /** Single generated-policy revision consumed by capability registration. */
 export const OMI_TOOL_MANIFEST_VERSION = 1 as const;
+
+/** Read-only retrieval needed by the bounded JIT proactivity prompt. */
+export const JIT_PROACTIVITY_READ_TOOL_NAMES = [
+  "search_knowledge",
+  "read_playbook",
+  "search_historical_facts",
+  "get_entity_timeline_tool",
+] as const;
+const JIT_PROACTIVITY_READ_TOOL_NAME_SET = new Set<string>(JIT_PROACTIVITY_READ_TOOL_NAMES);
 
 const readOnlyLocal: OmiToolAnnotations = {
   readOnlyHint: true,
@@ -2526,6 +2537,12 @@ export function toolsForAdapter(
   context: OmiToolProjectionContext = {},
 ): OmiToolManifestEntry[] {
   const base = omiToolManifest.filter((tool) => isToolAvailableForContext(tool.adapters[adapterId], context));
+  // JIT proactivity is a bounded read-only service turn. Project the four
+  // ledger retrieval tools only; do not append Chat-first capabilities even
+  // if a caller happens to reuse a main-chat context object.
+  if (context.jitProactivity === true) {
+    return base.filter((tool) => JIT_PROACTIVITY_READ_TOOL_NAME_SET.has(tool.name));
+  }
   if (!isChatFirstMainChat(context)) return base;
   return [
     ...base,

@@ -927,6 +927,20 @@ describe("PiMonoAdapter source-level invariants", () => {
     }).jitKnowledgeToolsEnabled).toBe(false);
   });
 
+  it("derives the bounded proactive projection only from a valid JIT budget", () => {
+    const budget = {
+      contractVersion: "jit-cloud-qa-v1",
+      executionID: "execution-1",
+      maxProviderAttempts: 3,
+      maxOutputTokensPerAttempt: 2048,
+      maxNormalizedInputTokensPerAttempt: 32768,
+      maxEstimatedSpendMicroUSD: 50000,
+    };
+    expect(toolProjectionFromMetadata({ jitBudget: budget }).jitProactivity).toBe(true);
+    expect(toolProjectionFromMetadata({ jitBudget: { ...budget, maxProviderAttempts: 0 } }).jitProactivity).toBe(false);
+    expect(toolProjectionFromMetadata({ jitBudget: budget, jitKnowledgeToolsEnabled: false }).jitKnowledgeToolsEnabled).toBe(false);
+  });
+
   it("keeps the real failed JIT save attempt as an exact regression fixture", () => {
     const fixture = JSON.parse(readFileSync(
       fileURLToPath(new URL("./fixtures/jit-knowledge-tool-gate-regression.json", import.meta.url)),

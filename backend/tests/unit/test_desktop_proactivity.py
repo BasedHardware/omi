@@ -337,8 +337,11 @@ async def test_cancellation_before_reservation_response_leaves_server_lease_to_e
 
 @pytest.mark.asyncio
 async def test_completion_success_attaches_quota_headers(monkeypatch):
+    observed_headers = {}
+
     class GatewayClient:
         async def post(self, url, *, headers, json):
+            observed_headers.update(headers)
             return httpx.Response(
                 200,
                 request=httpx.Request("POST", url),
@@ -365,6 +368,7 @@ async def test_completion_success_attaches_quota_headers(monkeypatch):
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
     monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
+    monkeypatch.setattr(desktop_proactivity, "uuid4", lambda: "request-for-accounting-join")
 
     response = Response()
     result = await desktop_proactivity.proactive_completion(request(), response, uid="user-1")
@@ -372,6 +376,8 @@ async def test_completion_success_attaches_quota_headers(monkeypatch):
     assert response.headers["X-Proactive-Quota-Limit"] == "200"
     assert response.headers["X-Proactive-Quota-Remaining"] == "12"
     assert response.headers["X-Proactive-Quota-Reset"] == "3600"
+    assert response.headers["X-Omi-Request-ID"] == "request-for-accounting-join"
+    assert observed_headers["X-Omi-Request-ID"] == response.headers["X-Omi-Request-ID"]
 
 
 @pytest.mark.asyncio

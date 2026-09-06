@@ -527,7 +527,8 @@ export class PiMonoAdapter implements HarnessAdapter {
     chatFirstUi: boolean;
     controlGeneration: number | null;
     jitKnowledgeToolsEnabled: boolean;
-  } = { chatFirstUi: false, controlGeneration: null, jitKnowledgeToolsEnabled: false };
+    jitProactivity: boolean;
+  } = { chatFirstUi: false, controlGeneration: null, jitKnowledgeToolsEnabled: false, jitProactivity: false };
   private readonly sessionPrefix: string;
   /** True when a token refresh was deferred because a prompt was active */
   private pendingTokenRefresh = false;
@@ -631,6 +632,10 @@ export class PiMonoAdapter implements HarnessAdapter {
     delete env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED;
     if (this.currentToolProjection.jitKnowledgeToolsEnabled) {
       env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED = "true";
+    }
+    delete env.OMI_JIT_PROACTIVITY_MODE;
+    if (this.currentToolProjection.jitProactivity) {
+      env.OMI_JIT_PROACTIVITY_MODE = "true";
     }
     env.OMI_CONTEXT_FILE = this.contextFilePath;
     // User-authored skills from the Apps page: point pi's agent dir at the
@@ -769,12 +774,14 @@ export class PiMonoAdapter implements HarnessAdapter {
     chatFirstUi: boolean;
     controlGeneration: number | null;
     jitKnowledgeToolsEnabled?: boolean;
+    jitProactivity?: boolean;
   }): Promise<void> {
     const normalized: {
       surfaceKind?: string;
       chatFirstUi: boolean;
       controlGeneration: number | null;
       jitKnowledgeToolsEnabled: boolean;
+      jitProactivity: boolean;
     } = projection.surfaceKind === "main_chat" || projection.surfaceKind === "floating_chat"
       ? {
           surfaceKind: projection.surfaceKind,
@@ -787,17 +794,20 @@ export class PiMonoAdapter implements HarnessAdapter {
             ? projection.controlGeneration
             : null,
           jitKnowledgeToolsEnabled: projection.jitKnowledgeToolsEnabled === true,
+          jitProactivity: projection.jitProactivity === true,
         }
       : {
           chatFirstUi: false,
           controlGeneration: null,
           jitKnowledgeToolsEnabled: projection.jitKnowledgeToolsEnabled === true,
+          jitProactivity: projection.jitProactivity === true,
         };
     if (
       normalized.surfaceKind === this.currentToolProjection.surfaceKind
       && normalized.chatFirstUi === this.currentToolProjection.chatFirstUi
       && normalized.controlGeneration === this.currentToolProjection.controlGeneration
       && normalized.jitKnowledgeToolsEnabled === this.currentToolProjection.jitKnowledgeToolsEnabled
+      && normalized.jitProactivity === this.currentToolProjection.jitProactivity
     ) return;
     this.currentToolProjection = normalized;
     if (this.process) await this.stop();
@@ -1747,6 +1757,7 @@ export function toolProjectionFromMetadata(metadata: Record<string, unknown> | u
   chatFirstUi: boolean;
   controlGeneration: number | null;
   jitKnowledgeToolsEnabled: boolean;
+  jitProactivity: boolean;
 } {
   const generation = Number(metadata?.chatFirstControlGeneration);
   const typedSurface = metadata?.surfaceKind === "main_chat"
@@ -1758,17 +1769,20 @@ export function toolProjectionFromMetadata(metadata: Record<string, unknown> | u
     && metadata?.chatFirstUi === true
     && Number.isSafeInteger(generation)
     && generation >= 0;
+  const jitProactivity = relayJitBudget(metadata) !== undefined;
   return typedSurface
     ? {
         surfaceKind: typedSurface,
         chatFirstUi: enabled,
         controlGeneration: enabled ? generation : null,
         jitKnowledgeToolsEnabled: metadata?.jitKnowledgeToolsEnabled === true,
+        jitProactivity,
       }
     : {
         chatFirstUi: false,
         controlGeneration: null,
         jitKnowledgeToolsEnabled: metadata?.jitKnowledgeToolsEnabled === true,
+        jitProactivity,
       };
 }
 
