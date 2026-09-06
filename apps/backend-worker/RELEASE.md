@@ -1,6 +1,6 @@
 # Worker staging release runbook
 
-This runbook applies the D1-authoritative Tasks, Chat, and Attachments migrations and verifies them through an operator-managed safe evidence endpoint before the Worker is deployed or declared ready.
+This runbook applies the D1 Tasks, Chat, Attachments, and Recording migrations and verifies them through an operator-managed safe evidence endpoint before the Worker is deployed or declared ready.
 
 Shared staging bearer credentials cannot select `x-omi-client-id` values beginning with `firebase:`; that namespace requires a verified Firebase session. If storing a device audio chunk fails, the session becomes `failed` and subsequent append or completion requests return 409. Start a new recording session after resolving the storage failure; failed sessions must not be presented as complete recordings.
 
@@ -9,6 +9,16 @@ Migration `0005_device_session_uploads.sql` adds a persisted successful-upload c
 Chat generation sends at most 40 earlier messages and 32 KiB of UTF-8 history to either configured provider, restricted to the current account, chat session, app, and message position. Cancelled assistant responses are excluded. The current message and its bounded text attachments follow that history.
 
 Account Durable Objects serialize D1 admissions across external database awaits so simultaneous retries return the same generation and parallel requests cannot exceed the chat limit.
+
+## Recording processing and canonical services
+
+Migration `0006_device_transcriptions.sql` atomically queues transcription when a nonempty recording changes from open to complete with all uploads acknowledged. It does not backfill old completed recordings. The scheduled handler claims one due recording per minute, with a 15-minute lease, at most five provider attempts, and exponential retry delays capped at 15 minutes. Expired owners cannot publish results after another claim. Audio stays in R2 on processing failure. This recovers processing work; it does not recover audio lost before upload.
+
+The processor accepts firmware PCM8 (codec 1) and Opus (20/21), validates packet continuity, and builds WAV or Ogg for `@cf/openai/whisper-large-v3-turbo`. Limits are 8 MiB of input, 65,536 packets, one hour of decoded audio, and 17 MiB of encoded output. An incomplete initial Opus frame is discarded and reported to the app; subsequent gaps fail processing. Reads use six concurrent R2 requests. The configured 70,000 subrequest allowance requires Workers Paid; verify plan support and expected recording volume before deployment. The one-job-per-minute claim rate is the current throughput ceiling.
+
+`GET /v1/device-sessions/:id/transcript` returns account-scoped processing state, text, segments and any discarded-leading-packet count. Conversations project these recordings as private records and the app reads full text through native authenticated transport.
+
+Optional `CANONICAL_SERVICE` is a Worker service binding exposing the ratified `/v1/memories`, `/v1/tasks`, and `/v1/tasks/ops` routes. Configure its actual deployed target only after provisioning the canonical service with production Firebase verification, durable storage, account/control authority, grant authority and persistent codec keys. The target must independently validate the forwarded Firebase bearer. Shared staging credentials never cross this boundary. Both task reads and writes use this binding when present; an upstream outage does not fall back to a different task authority. Without it, memory reads and task writes fail closed, while existing D1 task reads remain available. No target is invented in `wrangler.jsonc`.
 
 ## Required operator inputs
 
@@ -38,7 +48,7 @@ The checked-in `account_id` and `R2_ACCOUNT_ID` must identify that same account.
 
    ```json
    {
-     "schema_version": "0005_device_session_uploads.sql",
+     "schema_version": "0006_device_transcriptions.sql",
      "migrations": [
        {
          "name": "0001_tasks.sql",
@@ -59,6 +69,10 @@ The checked-in `account_id` and `R2_ACCOUNT_ID` must identify that same account.
        {
          "name": "0005_device_session_uploads.sql",
          "sha256": "2652bf96d0183899970167de5527c46300910782cdef3c139ac29e02d6ee78f1"
+       },
+       {
+         "name": "0006_device_transcriptions.sql",
+         "sha256": "1e64b3a13ff926fa1e50d959625a830a09320d8c40a66ecae9a250675b1060a0"
        }
      ],
      "evidence_id": "ops-20260818-1"

@@ -24,6 +24,8 @@
   "ai": {
     "binding": "AI"
   },
+  "triggers": { "crons": ["* * * * *"] },
+  "limits": { "subrequests": 70000 },
   "durable_objects": {
     "bindings": [
       {

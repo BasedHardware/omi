@@ -97,6 +97,45 @@ export async function readConversations(
   const conversations = [...groups.entries()].map(([id, rows]) =>
     projectConversation(id, rows)
   );
+  const recordings = await db
+    .prepare(
+      "SELECT s.id, s.started_at, s.ended_at, t.state, substr(trim(t.text), 1, 241) AS text, t.updated_at FROM device_transcriptions t JOIN device_sessions s ON s.id = t.session_id AND s.account_id = t.account_id WHERE t.account_id = ? ORDER BY s.started_at DESC"
+    )
+    .bind(accountId)
+    .all<{
+      id: string;
+      started_at: number;
+      ended_at: number | null;
+      state: string;
+      text: string | null;
+      updated_at: number;
+    }>();
+  for (const recording of recordings.results) {
+    conversations.push({
+      id: `recording:${recording.id}`,
+      title: recording.text?.trim()
+        ? displayText(recording.text).slice(0, 80)
+        : "Recording",
+      overview: recording.text === null ? "" : displayText(recording.text),
+      createdAt: recording.started_at,
+      updatedAt: recording.updated_at,
+      startedAt: recording.started_at,
+      finishedAt: recording.ended_at,
+      source: "omi",
+      status:
+        recording.state === "completed"
+          ? "completed"
+          : recording.state === "failed"
+          ? "failed"
+          : "processing",
+      discarded: false,
+      starred: false,
+      visibility: "private",
+      isLocked: false,
+      folderId: null,
+      revision: null,
+    });
+  }
   conversations.sort((left, right) => {
     if (right.updatedAt !== left.updatedAt)
       return right.updatedAt - left.updatedAt;

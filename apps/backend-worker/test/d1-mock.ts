@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { readFileSync } from "node:fs";
 
 const chatSchema = [
   "CREATE TABLE IF NOT EXISTS chat_messages (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, text TEXT NOT NULL, sender TEXT NOT NULL, created_at INTEGER NOT NULL, generation_outcome TEXT, position INTEGER NOT NULL, payload TEXT)",
@@ -23,6 +24,12 @@ const chatSchema = [
 export function createD1Mock(): D1Database {
   const db = new Database(":memory:");
   for (const statement of chatSchema) db.exec(statement);
+  db.exec(
+    readFileSync(
+      new URL("../migrations/0006_device_transcriptions.sql", import.meta.url),
+      "utf8"
+    )
+  );
 
   const prepareStatement = (
     sql: string,
