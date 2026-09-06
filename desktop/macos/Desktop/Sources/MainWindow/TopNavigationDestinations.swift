@@ -316,7 +316,7 @@ struct TopNavigationDestinationRow: View {
         Text(TopNavigationSegmentSelection.title(for: item, badges: badges))
           .tag(Optional(item.index))
           .help(item.tooltip)
-          .accessibilityLabel(item.tooltip)
+          .accessibilityLabel(TopNavigationSegmentSelection.accessibilityLabel(for: item, badges: badges))
           .accessibilityIdentifier("top-navigation-\(item.index)")
       }
     }
@@ -492,7 +492,7 @@ struct TopNavigationDestinationRow: View {
         .frame(maxWidth: .infinity)
         .help(item.tooltip)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(item.tooltip)
+        .accessibilityLabel(TopNavigationSegmentSelection.accessibilityLabel(for: item, badges: badges))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction {
           TopNavigationSegmentSelection.press(
@@ -655,6 +655,15 @@ enum TopNavigationSegmentSelection {
   static func title(for item: TopNavigationItem, badges: TopNavigationDestinationBadges) -> String {
     let count = badges.count(forNavItemIndex: item.index)
     return count > 0 ? "\(item.title) +\(count)" : item.title
+  }
+
+  /// What VoiceOver reads for a segment: the tooltip sentence, then the count a sighted user sees in
+  /// the title (`…, 7 new`). The tooltip alone dropped the count; the title alone drops the sentence.
+  static func accessibilityLabel(for item: TopNavigationItem, badges: TopNavigationDestinationBadges)
+    -> String
+  {
+    let count = badges.count(forNavItemIndex: item.index)
+    return count > 0 ? "\(item.tooltip), \(count) new" : item.tooltip
   }
 }
 

@@ -523,6 +523,23 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       TopNavigationSegmentSelection.title(for: $0, badges: TopNavigationDestinationBadges())
     }
     XCTAssertEqual(quiet, ["Chat", "Memories", "Tasks", "Apps"])
+
+    // VoiceOver hears the count too: the tooltip sentence, then `N new`, and nothing extra at zero.
+    let spoken = TopNavigationRoutes.primaryItems.map {
+      TopNavigationSegmentSelection.accessibilityLabel(for: $0, badges: badges)
+    }
+    XCTAssertEqual(
+      spoken,
+      [
+        "Chat — talk to Omi about everything you've seen and heard",
+        "Memories — everything Omi captured, newest first, 4 new",
+        "Tasks — everything Omi heard you commit to, 7 new",
+        "Apps — connectors, imports and exports",
+      ])
+    let spokenQuiet = TopNavigationRoutes.primaryItems.map {
+      TopNavigationSegmentSelection.accessibilityLabel(for: $0, badges: TopNavigationDestinationBadges())
+    }
+    XCTAssertEqual(spokenQuiet, TopNavigationRoutes.primaryItems.map(\.tooltip))
   }
 
   /// The glass lens follows the pointer but never leaves the track: its centre is clamped to the
@@ -557,12 +574,16 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     /// the view under the pointer is an `NSView` that refuses `mouseDownCanMoveWindow` and consumes the
     /// mouse sequence, so neither AppKit's background move nor SwiftUI's gesture ever sees it.
     ///
-    /// This hosts the real row *inside* the real drag handle in a real window, checks that the view
-    /// hit-tested under a tab is that AppKit owner, then sends the press, the travel and the release to
-    /// it and checks the release lands on the tab under the pointer. (An off-screen window drops
-    /// `sendEvent`, so the events go to the hit view the way the window would route them.)
+    /// This hosts the real row *inside* the real drag handle in a real window and checks two things:
+    /// the view hit-tested under a tab is that AppKit owner and refuses `mouseDownCanMoveWindow` —
+    /// which is the whole mechanism, since AppKit's background move asks exactly that of the hit
+    /// view — and a press, travel and release sent to it land the selection on the tab under the
+    /// pointer. The events go straight to the hit view (an off-screen window drops `sendEvent`), so the
+    /// window's own frame is not something this harness can observe moving; the refusal is the guard.
     @available(macOS 26.0, *)
-    func testDraggingTheSelectionAcrossTheTabsSelectsTheReleasedTabWithoutMovingTheWindow() throws {
+    func testDraggingTheSelectionAcrossTheTabsSelectsTheReleasedTabThroughAViewThatRefusesWindowMoves()
+      throws
+    {
       var selected: [Int] = []
       let row = TopNavigationDestinationRow(
         selectedIndex: SidebarNavItem.dashboard.rawValue,
@@ -574,11 +595,9 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       let window = NSWindow(
         contentRect: NSRect(x: 400, y: 300, width: size.width, height: size.height),
         styleMask: [.borderless], backing: .buffered, defer: false)
-      window.isMovableByWindowBackground = false
       window.contentView = host
       host.frame = NSRect(origin: .zero, size: size)
       host.layoutSubtreeIfNeeded()
-      let originBefore = window.frame.origin
 
       // Four equal segments inside the row's 20 pt padding: press on the second, release on the fourth.
       let items = TopNavigationRoutes.primaryItems
@@ -605,7 +624,6 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       owner.mouseUp(with: try event(.leftMouseUp, at: NSPoint(x: x(3), y: y)))
 
       XCTAssertEqual(selected, [items[3].index], "the release must select the tab under the pointer")
-      XCTAssertEqual(window.frame.origin, originBefore, "dragging the selection must not move the window")
     }
   #endif
 
