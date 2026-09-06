@@ -1,5 +1,6 @@
 import { gatewayFailureEvent } from "./observability";
 import { withTimeout } from "./wire";
+import type { GenerationHistoryMessage } from "./generation-prompt";
 
 const SYSTEM_PROMPT = "You are Omi, a concise and helpful personal assistant.";
 const MAX_TOKENS = 768;
@@ -58,7 +59,8 @@ export const gatewayReady = (env: GatewayEnv): boolean =>
 export const generateViaGateway = async (
   config: GatewayConfig,
   prompt: string,
-  correlationId: string
+  correlationId: string,
+  history: GenerationHistoryMessage[]
 ): Promise<GatewayResult> => {
   try {
     return await withTimeout(GATEWAY_FETCH_TIMEOUT_MS, async (signal) => {
@@ -73,6 +75,7 @@ export const generateViaGateway = async (
           model: config.model,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
+            ...history,
             { role: "user", content: prompt },
           ],
           max_tokens: MAX_TOKENS,
