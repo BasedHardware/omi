@@ -2,6 +2,8 @@
 
 Status: code-side fixes verified locally; production configuration and physical-device validation remain outstanding.
 
+The deployed check now runs the PostgreSQL deletion registry and cleanup participant contracts. The real PostgreSQL runner also executes deletion-receipt qualification. Broader Linux testing found five tables present in the SQL cleanup registry but missing from its typed inventory; the inventories now agree. The combined real-database run passed 28 tests and 1,008 assertions, including cleanup rollback and retained tombstones (`/tmp/v5-audio-batch-deletion-postgres.log`). This verifies the cleanup implementation, not deployment or a live account deletion.
+
 ## Verified changes
 
 - `919dadae`: account partition protection, bounded multi-turn chat context, persisted upload acknowledgment and completion guard. Migration 0005 was applied to the local emulator only.
