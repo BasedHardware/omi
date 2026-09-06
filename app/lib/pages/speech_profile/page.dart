@@ -54,6 +54,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
   String? _frozenText;
   bool? _frozenNoDevice;
   double? _frozenProgress;
+  double? _frozenMicLevel;
 
   /// Keeps the finished recording on screen for [allDoneHold] once the profile
   /// is saved, then reveals All done; resets when a new recording starts.
@@ -64,10 +65,14 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
       _frozenNoDevice = provider.device == null;
       // Recording ends at the target, so the bar stays full until it fades.
       _frozenProgress = 1.0;
+      // The mic stops right after this, which would snap the glow down to
+      // its resting size; hold its last live size until the ease-out.
+      _frozenMicLevel = provider.micLevel;
     } else if (!ended && _frozenText != null) {
       _frozenText = null;
       _frozenNoDevice = null;
       _frozenProgress = null;
+      _frozenMicLevel = null;
     }
     if (provider.profileCompleted) {
       if (_allDoneVisible || _allDoneTimer != null) return;
@@ -357,6 +362,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
           final recordingText = _frozenText ?? provider.text;
           final showMicDisclaimer = _frozenNoDevice ?? (provider.device == null);
           final recordingProgress = _frozenProgress ?? provider.sentenceProgress;
+          final glowLevel = _frozenMicLevel ?? provider.micLevel;
           return MessageListener<SpeechProfileProvider>(
             showInfo: (info) {
               if (info == 'SKIP_UNAVAILABLE') {
@@ -494,17 +500,17 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                                 AnimatedContainer(
                                   duration: Duration(milliseconds: _allDoneVisible ? 450 : 150),
                                   curve: Curves.easeOut,
-                                  width: _allDoneVisible ? 0 : 180 + provider.micLevel * 40,
-                                  height: _allDoneVisible ? 0 : 180 + provider.micLevel * 40,
+                                  width: _allDoneVisible ? 0 : 180 + glowLevel * 40,
+                                  height: _allDoneVisible ? 0 : 180 + glowLevel * 40,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     boxShadow: [
                                       BoxShadow(
                                         color: Colors.white.withValues(
-                                          alpha: _allDoneVisible ? 0 : 0.08 + provider.micLevel * 0.18,
+                                          alpha: _allDoneVisible ? 0 : 0.08 + glowLevel * 0.18,
                                         ),
-                                        blurRadius: _allDoneVisible ? 0 : 32 + provider.micLevel * 24,
-                                        spreadRadius: _allDoneVisible ? 0 : 2 + provider.micLevel * 10,
+                                        blurRadius: _allDoneVisible ? 0 : 32 + glowLevel * 24,
+                                        spreadRadius: _allDoneVisible ? 0 : 2 + glowLevel * 10,
                                       ),
                                     ],
                                   ),
