@@ -487,7 +487,7 @@ struct SettingsSidebar: View {
         .foregroundColor(isSearchFocused ? Ink.accent : Ink.secondary)
         .omiAnimation(.easeInOut(duration: 0.15), value: isSearchFocused)
 
-      TextField("Search settings...", text: $searchQuery)
+      TextField("Search", text: $searchQuery)
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.primary)
