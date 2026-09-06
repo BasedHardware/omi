@@ -94,6 +94,21 @@ def test_projection_digest_hashes_content_without_emitting_it():
     )
 
 
+def test_readiness_invalidation_accepts_missing_marker_but_fails_other_errors(monkeypatch: pytest.MonkeyPatch):
+    def missing_marker(*_args, **_kwargs):
+        raise PROJECTION.ProjectionError("Typesense request returned HTTP 404")
+
+    monkeypatch.setattr(PROJECTION, "_typesense_request", missing_marker)
+    PROJECTION._invalidate_readiness_marker("https://typesense-jit-qa-abc.run.app")
+
+    def unavailable(*_args, **_kwargs):
+        raise PROJECTION.ProjectionError("Typesense request returned HTTP 503")
+
+    monkeypatch.setattr(PROJECTION, "_typesense_request", unavailable)
+    with pytest.raises(PROJECTION.ProjectionError, match="503"):
+        PROJECTION._invalidate_readiness_marker("https://typesense-jit-qa-abc.run.app")
+
+
 def test_build_receipt_requires_a_real_provider_and_consumed_result():
     report = SimpleNamespace(verified=True, indexed_count=1, expected_count=1)
     receipt = PROJECTION.build_projection_receipt(
@@ -162,10 +177,12 @@ def test_build_receipt_requires_a_real_provider_and_consumed_result():
 
 def test_run_projection_rebuilds_then_proves_provider_and_search_consumer(monkeypatch: pytest.MonkeyPatch):
     calls: list[str] = []
+    request_calls: list[tuple[str, str]] = []
     persisted_marker: dict[str, object] = {}
 
     def fake_typesense_request(_base_url, path, *, query=None, method="GET", payload=None):
         calls.append(path)
+        request_calls.append((method, path))
         if path == "/health":
             return {"ok": True}
         if path == f"/collections/{PROJECTION.COLLECTION}":
@@ -185,6 +202,9 @@ def test_run_projection_rebuilds_then_proves_provider_and_search_consumer(monkey
             path
             == f"/collections/{PROJECTION.READINESS_COLLECTION}/documents/{PROJECTION.TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID}"
         ):
+            if method == "DELETE":
+                persisted_marker.clear()
+                return {"success": True}
             return dict(persisted_marker)
         raise AssertionError(path)
 
@@ -233,7 +253,100 @@ def test_run_projection_rebuilds_then_proves_provider_and_search_consumer(monkey
     assert receipt["status"] == "ready"
     assert receipt["readiness_epoch"] == "a" * 40 + ":projection-run-2"
     assert "ensure" in calls and "ledger-schema" in calls
-    assert calls.index("/health") < calls.index(f"/collections/{PROJECTION.READINESS_COLLECTION}/documents")
+    marker_path = (
+        f"/collections/{PROJECTION.READINESS_COLLECTION}/documents/"
+        f"{PROJECTION.TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID}"
+    )
+    assert ("DELETE", marker_path) in request_calls
+    assert request_calls.index(("DELETE", marker_path)) < request_calls.index(
+        ("POST", f"/collections/{PROJECTION.READINESS_COLLECTION}/documents")
+    )
+
+
+def test_failed_consumer_proof_removes_new_readiness_marker(monkeypatch: pytest.MonkeyPatch):
+    request_calls: list[tuple[str, str]] = []
+    persisted_marker: dict[str, object] = {
+        "id": PROJECTION.TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID,
+        "userId": PROJECTION.QA_UID,
+        "projection_epoch": "old-source:old-run",
+    }
+
+    def fake_typesense_request(_base_url, path, *, query=None, method="GET", payload=None):
+        request_calls.append((method, path))
+        if path == "/health":
+            return {"ok": True}
+        if path == f"/collections/{PROJECTION.COLLECTION}":
+            return {"name": PROJECTION.COLLECTION, "fields": [{"name": "memory_id", "type": "string"}]}
+        if path == f"/collections/{PROJECTION.READINESS_COLLECTION}":
+            return {"name": PROJECTION.READINESS_COLLECTION, "fields": list(PROJECTION._READINESS_SCHEMA_FIELDS)}
+        marker_path = (
+            f"/collections/{PROJECTION.READINESS_COLLECTION}/documents/"
+            f"{PROJECTION.TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID}"
+        )
+        if path == marker_path:
+            if method == "DELETE":
+                persisted_marker.clear()
+                return {"success": True}
+            return dict(persisted_marker)
+        if path == f"/collections/{PROJECTION.READINESS_COLLECTION}/documents":
+            assert method == "POST"
+            assert query == {"action": "upsert"}
+            assert isinstance(payload, dict)
+            persisted_marker.update(payload)
+            return {"success": True}
+        raise AssertionError((method, path))
+
+    monkeypatch.setattr(
+        PROJECTION,
+        "_projection_documents",
+        lambda *_args, **_kwargs: [
+            {
+                "id": "atom:one",
+                "memory_id": "one",
+                "userId": PROJECTION.QA_UID,
+                "ledger_schema_version": "knowledge_ledger.v1",
+            }
+        ],
+    )
+
+    class FailingTool:
+        def invoke(self, payload, *, config):
+            assert payload["query"] == "travel plan"
+            assert config["configurable"]["user_id"] == PROJECTION.QA_UID
+            raise RuntimeError("consumer proof unavailable")
+
+    monkeypatch.setattr(PROJECTION, "_typesense_request", fake_typesense_request)
+    monkeypatch.setattr(PROJECTION, "ensure_memories_collection", lambda: None)
+    monkeypatch.setattr(PROJECTION, "ensure_ledger_keyword_schema", lambda: None)
+    monkeypatch.setattr(
+        PROJECTION,
+        "rebuild_atom_keyword_index",
+        lambda uid, db_client: SimpleNamespace(verified=True, indexed_count=1, expected_count=1),
+    )
+    monkeypatch.setattr(PROJECTION, "keyword_search_ledger_memory_ids", lambda *args, **kwargs: ["one"])
+    monkeypatch.setattr(PROJECTION, "search_knowledge", FailingTool())
+    monkeypatch.setattr(PROJECTION.firestore, "Client", lambda **kwargs: object())
+
+    with pytest.raises(RuntimeError, match="consumer proof unavailable"):
+        PROJECTION.run_projection(
+            source_sha="a" * 40,
+            run_id="projection-run-failure",
+            typesense_url="https://typesense-jit-qa-abc.run.app",
+            typesense_image="gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "b" * 64,
+            typesense_base_image=PROJECTION.TYPESENSE_BASE_IMAGE_27_1,
+            query="travel plan",
+            kinds="fact",
+            limit=8,
+            environment=_environment(),
+        )
+
+    marker_path = (
+        f"/collections/{PROJECTION.READINESS_COLLECTION}/documents/"
+        f"{PROJECTION.TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID}"
+    )
+    marker_deletes = [call for call in request_calls if call == ("DELETE", marker_path)]
+    assert len(marker_deletes) == 2
+    assert not persisted_marker
 
 
 def test_projection_documents_uses_typesense_export_jsonl(monkeypatch: pytest.MonkeyPatch):

@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 from urllib.parse import urlencode, urlsplit
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from google.cloud import firestore
@@ -208,6 +209,8 @@ def _typesense_request(
             return json.loads(response.read().decode("utf-8"))
     except ProjectionError:
         raise
+    except HTTPError as exc:
+        raise ProjectionError(f"Typesense request returned HTTP {exc.code}") from exc
     except Exception as exc:  # noqa: BLE001 - preserve a content-free failure boundary
         raise ProjectionError(f"Typesense request unavailable ({type(exc).__name__})") from exc
 
@@ -329,6 +332,27 @@ def _ensure_readiness_collection(base_url: str) -> None:
     required_names = {field["name"] for field in _READINESS_SCHEMA_FIELDS}
     if not required_names.issubset(actual_names):
         raise ProjectionError("Typesense readiness collection schema is missing required fields")
+
+
+def _invalidate_readiness_marker(base_url: str) -> None:
+    """Remove the marker before a rebuild and after any failed consumer proof.
+
+    A missing collection/document is already fail-closed, so a 404 is the
+    expected result for a first bootstrap. Every other response is fatal: the
+    caller must not continue while an older readiness claim might remain
+    visible to the application.
+    """
+
+    try:
+        _typesense_request(
+            base_url,
+            f"/collections/{READINESS_COLLECTION}/documents/{TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID}",
+            method="DELETE",
+        )
+    except ProjectionError as exc:
+        if "HTTP 404" in str(exc):
+            return
+        raise
 
 
 def _write_readiness_marker(
@@ -513,6 +537,11 @@ def run_projection(
     )
     _health_check(base_url)
 
+    # The old claim must disappear before any purge/rebuild mutation. This
+    # prevents a prior successful run from authorizing reads against a partial
+    # or empty projection while this run is in progress.
+    _invalidate_readiness_marker(base_url)
+
     # Explicit named-database construction is part of the proof boundary.  A
     # default Firestore client would make the receipt invalid even if the
     # Typesense query happened to return a result.
@@ -541,42 +570,53 @@ def run_projection(
     if not provider_ids:
         raise ProjectionError("real ledger keyword query returned no candidates")
     readiness_epoch = f"{source_sha}:{run_id}"
-    _write_readiness_marker(
-        base_url,
-        source_sha=source_sha,
-        run_id=run_id,
-        projection_count=len(documents),
-        projection_digest=projection_digest,
-        readiness_epoch=readiness_epoch,
-    )
-    result = search_knowledge.invoke(
-        {"query": query, "kinds": ",".join(sorted(parsed_kinds)), "limit": limit},
-        config={"configurable": {"user_id": QA_UID}},
-    )
-    if (
-        not isinstance(result, str)
-        or result.startswith("Error:")
-        or "No current knowledge ledger entries found." in result
-    ):
-        raise ProjectionError("search_knowledge returned no current QA result")
-    result_ids = _parse_search_result_ids(result)
-    return build_projection_receipt(
-        source_sha=source_sha,
-        run_id=run_id,
-        typesense_url=typesense_url,
-        typesense_image=typesense_image,
-        typesense_base_image=typesense_base_image,
-        query=query,
-        kinds=sorted(parsed_kinds),
-        rebuild_report=report,
-        projection_count=len(documents),
-        projection_digest=projection_digest,
-        schema_digest=schema_digest,
-        schema_fields=schema_fields,
-        provider_ids=provider_ids,
-        result_ids=result_ids,
-        readiness_epoch=readiness_epoch,
-    )
+    marker_write_attempted = True
+    try:
+        _write_readiness_marker(
+            base_url,
+            source_sha=source_sha,
+            run_id=run_id,
+            projection_count=len(documents),
+            projection_digest=projection_digest,
+            readiness_epoch=readiness_epoch,
+        )
+        result = search_knowledge.invoke(
+            {"query": query, "kinds": ",".join(sorted(parsed_kinds)), "limit": limit},
+            config={"configurable": {"user_id": QA_UID}},
+        )
+        if (
+            not isinstance(result, str)
+            or result.startswith("Error:")
+            or "No current knowledge ledger entries found." in result
+        ):
+            raise ProjectionError("search_knowledge returned no current QA result")
+        result_ids = _parse_search_result_ids(result)
+        return build_projection_receipt(
+            source_sha=source_sha,
+            run_id=run_id,
+            typesense_url=typesense_url,
+            typesense_image=typesense_image,
+            typesense_base_image=typesense_base_image,
+            query=query,
+            kinds=sorted(parsed_kinds),
+            rebuild_report=report,
+            projection_count=len(documents),
+            projection_digest=projection_digest,
+            schema_digest=schema_digest,
+            schema_fields=schema_fields,
+            provider_ids=provider_ids,
+            result_ids=result_ids,
+            readiness_epoch=readiness_epoch,
+        )
+    except Exception as exc:
+        if marker_write_attempted:
+            try:
+                _invalidate_readiness_marker(base_url)
+            except ProjectionError as invalidate_exc:
+                raise ProjectionError(
+                    "projection proof failed and readiness marker could not be invalidated"
+                ) from invalidate_exc
+        raise
 
 
 def write_receipt(path: Path, payload: Mapping[str, Any]) -> None:

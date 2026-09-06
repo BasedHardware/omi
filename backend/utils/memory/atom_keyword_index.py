@@ -135,8 +135,13 @@ def require_typesense_projection_ready(uid: str) -> None:
 
     The QA Typesense service uses an ephemeral data directory.  A restarted
     instance can be healthy while its collection is empty, so the backend
-    consumes a marker written only after a complete Firestore rebuild and
-    producer/consumer proof.  The marker lives in Typesense itself; therefore
+    consumes a marker written after a complete Firestore rebuild and producer
+    proof, immediately before the real consumer proof that exercises this
+    gate.  A successful qualification still requires the final consumer
+    receipt; a process death in that short interval can leave a rebuild-ready
+    marker without a qualified receipt, so operators must keep QA execution
+    idle while running the proof and retry after an interrupted run.  The
+    marker lives in Typesense itself; therefore
     a fresh instance fails closed until the rehydration proof writes a new
     epoch.  Normal services leave the gate unset and retain existing behavior.
     """
