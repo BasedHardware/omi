@@ -72,6 +72,7 @@ export const isChatCreate = (value: unknown): value is ChatCreate => {
     isRecordId(item["id"]) &&
     Number.isSafeInteger(item["at"]) &&
     (item["at"] as number) >= 0 &&
+    Number.isFinite(new Date(item["at"] as number).getTime()) &&
     isBoundedString(item["text"], 32_768) &&
     item["sender"] === "human" &&
     Number.isSafeInteger(item["journalRevision"]) &&

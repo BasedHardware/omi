@@ -1530,6 +1530,7 @@ describe("chat create wire validator", () => {
     [{ ...valid, op: "update" }],
     [{ ...valid, opId: "" }],
     [{ ...valid, at: -1 }],
+    [{ ...valid, at: Number.MAX_SAFE_INTEGER }],
     [{ ...valid, text: "" }],
     [{ ...valid, sender: "ai" }],
     [{ ...valid, journalRevision: 0.5 }],
