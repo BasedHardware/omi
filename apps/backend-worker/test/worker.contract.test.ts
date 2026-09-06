@@ -837,11 +837,11 @@ describe("worker request contract", () => {
       absence: { kind: string } | null;
     };
     expect(page.items.map((item) => item.id)).toEqual([
-      "session-alpha",
+      "chat:session-alpha",
       MAIN_CONVERSATION_ID,
     ]);
     expect(page.items[0]).toMatchObject({
-      id: "session-alpha",
+      id: "chat:session-alpha",
       title: "other session",
       overview: "other session",
       source: "chat",
@@ -881,7 +881,7 @@ describe("worker request contract", () => {
     }>;
     expect(records).toHaveLength(2);
     expect(records[0]).toMatchObject({
-      id: "session-alpha",
+      id: "chat:session-alpha",
       structured: { title: "other session", overview: "other session" },
       is_locked: false,
       folder_id: null,
@@ -916,12 +916,14 @@ describe("worker request contract", () => {
       items: Array<{ id: string }>;
       window: { status: string; hasMore: boolean; nextCursor: string | null };
     };
-    expect(firstPage.items.map((item) => item.id)).toEqual(["session-b"]);
+    expect(firstPage.items.map((item) => item.id)).toEqual(["chat:session-b"]);
     expect(firstPage.window.hasMore).toBe(true);
-    expect(firstPage.window.nextCursor).toBe("session-b");
+    expect(firstPage.window.nextCursor).toBe("chat:session-b");
 
     const second = await fetchWorker(
-      `/v1/conversations?limit=1&cursor=${encodeURIComponent("session-b")}`,
+      `/v1/conversations?limit=1&cursor=${encodeURIComponent(
+        "chat:session-b"
+      )}`,
       { headers: authenticatedHeaders }
     );
     expect(second.status).toBe(200);
@@ -934,7 +936,7 @@ describe("worker request contract", () => {
         nextCursor: string | null;
       };
     };
-    expect(secondPage.items.map((item) => item.id)).toEqual(["session-a"]);
+    expect(secondPage.items.map((item) => item.id)).toEqual(["chat:session-a"]);
     expect(secondPage.window).toEqual({
       status: "complete",
       complete: true,
@@ -947,7 +949,7 @@ describe("worker request contract", () => {
     });
     expect(offsetPage.status).toBe(200);
     expect((await offsetPage.json()) as Array<{ id: string }>).toEqual([
-      expect.objectContaining({ id: "session-a" }),
+      expect.objectContaining({ id: "chat:session-a" }),
     ]);
 
     const invalidLimit = await fetchWorker("/v1/conversations?limit=0", {

@@ -12,7 +12,7 @@ type StoredMessage = {
 
 export const CONVERSATIONS_READ_CONTRACT_VERSION = "1.0.0" as const;
 export const CONVERSATIONS_FRONTIER = "frontier-v1:conversations-declared";
-export const MAIN_CONVERSATION_ID = "chat-main";
+export const MAIN_CONVERSATION_ID = "chat:chat-main";
 
 /** Domain conversation as the worker projects it from D1 chat. */
 export type ConversationProjection = {
@@ -219,7 +219,7 @@ function sessionIdOf(row: StoredMessage): string {
     const payload = JSON.parse(row.payload) as Partial<ChatMessage>;
     return typeof payload.chatSessionId === "string" &&
       payload.chatSessionId.length > 0
-      ? payload.chatSessionId
+      ? `chat:${payload.chatSessionId}`
       : MAIN_CONVERSATION_ID;
   } catch {
     return MAIN_CONVERSATION_ID;
