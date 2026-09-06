@@ -13,9 +13,9 @@ import XCTest
 @MainActor
 final class InkGlassTransparencyTests: XCTestCase {
 
-  private func suite() -> UserDefaults {
+  private func suite() throws -> UserDefaults {
     let name = "InkGlassTransparencyTests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: name)!
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
     defaults.removePersistentDomain(forName: name)
     addTeardownBlock { defaults.removePersistentDomain(forName: name) }
     return defaults
@@ -58,14 +58,14 @@ final class InkGlassTransparencyTests: XCTestCase {
 
   // MARK: - The settings object
 
-  func testAFreshInstallStartsAtTheDefault() {
-    let settings = InkGlassTransparencySettings(defaults: suite(), notificationCenter: NotificationCenter())
+  func testAFreshInstallStartsAtTheDefault() throws {
+    let settings = InkGlassTransparencySettings(defaults: try suite(), notificationCenter: NotificationCenter())
     XCTAssertTrue(settings.isDefault)
     XCTAssertEqual(settings.transparency, InkGlass.defaultTransparency, accuracy: 0.0001)
   }
 
-  func testAChangePersistsAndComesBackOnTheNextLaunch() {
-    let defaults = suite()
+  func testAChangePersistsAndComesBackOnTheNextLaunch() throws {
+    let defaults = try suite()
     let first = InkGlassTransparencySettings(defaults: defaults, notificationCenter: NotificationCenter())
     first.transparency = 0.8
     XCTAssertFalse(first.isDefault)
@@ -78,8 +78,8 @@ final class InkGlassTransparencyTests: XCTestCase {
     XCTAssertTrue(third.isDefault)
   }
 
-  func testAnOutOfRangeWriteOrStoredValueIsClamped() {
-    let defaults = suite()
+  func testAnOutOfRangeWriteOrStoredValueIsClamped() throws {
+    let defaults = try suite()
     let settings = InkGlassTransparencySettings(defaults: defaults, notificationCenter: NotificationCenter())
     settings.transparency = 4
     XCTAssertEqual(settings.transparency, 1, accuracy: 0.0001)
@@ -92,9 +92,9 @@ final class InkGlassTransparencyTests: XCTestCase {
       reloaded.transparency, 0, accuracy: 0.0001, "a hand-edited preference cannot produce a negative alpha")
   }
 
-  func testEveryChangeIsAnnouncedOnItsOwnCentre() {
+  func testEveryChangeIsAnnouncedOnItsOwnCentre() throws {
     let center = NotificationCenter()
-    let settings = InkGlassTransparencySettings(defaults: suite(), notificationCenter: center)
+    let settings = InkGlassTransparencySettings(defaults: try suite(), notificationCenter: center)
     var seen: [CGFloat] = []
     let token = center.addObserver(
       forName: InkGlassTransparencySettings.didChangeNotification, object: nil, queue: nil
@@ -138,7 +138,7 @@ final class InkGlassTransparencyTests: XCTestCase {
   /// thinner ground at 1, over the same black backdrop. This is the path a slider in Settings
   /// drives while its thumb is down.
   func testTheSwiftUIPanelFollowsTheSettingsObjectItObserves() throws {
-    let settings = InkGlassTransparencySettings(defaults: suite(), notificationCenter: NotificationCenter())
+    let settings = InkGlassTransparencySettings(defaults: try suite(), notificationCenter: NotificationCenter())
     let size = CGSize(width: 120, height: 60)
     let panel = Color.clear
       .frame(width: size.width, height: size.height)
