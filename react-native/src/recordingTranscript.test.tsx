@@ -332,3 +332,58 @@ test('opens a recording row into the full transcript detail and retires it on ba
     dimensions.mockRestore();
   }
 });
+
+test('conversation list exposes refresh and load more with truthful pending actions', async () => {
+  const {ConversationsPage} = require('./pages/Conversations');
+  const onRefresh = jest.fn(),
+    onLoadMore = jest.fn();
+  const outcome = {
+    status: 'success',
+    value: {
+      items: [],
+      page: {
+        windowStatus: 'more',
+        complete: false,
+        hasMore: true,
+        nextCursor: 'next',
+        completenessStatus: 'complete',
+        reasons: [],
+      },
+    },
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        outcome={outcome}
+        loading={false}
+        onRefresh={onRefresh}
+        onLoadMore={onLoadMore}
+      />,
+    );
+  });
+  renderers.push(renderer);
+  const button = (name: string) =>
+    renderer.root.findAll(node => node.props.accessibilityLabel === name)[0]!;
+  act(() => {
+    button('Refresh conversations').props.onPress();
+    button('Load more conversations').props.onPress();
+  });
+  expect(onRefresh).toHaveBeenCalledTimes(1);
+  expect(onLoadMore).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    renderer.update(
+      <ConversationsPage
+        outcome={outcome}
+        loading={false}
+        loadingMore
+        onRefresh={onRefresh}
+        onLoadMore={onLoadMore}
+        notice="Conversations changed. The list has been refreshed."
+      />,
+    );
+  });
+  expect(button('Refresh conversations').props.disabled).toBe(true);
+  expect(button('Load more conversations').props.disabled).toBe(true);
+  expect(textOf(renderer)).toContain('The list has been refreshed');
+});

@@ -209,6 +209,7 @@ export function desktopRecoveryCopy(
 }
 
 class DesktopProjectionUnavailableError extends Error {}
+export class ConversationCursorExpiredError extends Error {}
 
 function nativeErrorCode(value: unknown): string | null {
   if (value === null || typeof value !== 'object') {
@@ -286,18 +287,6 @@ function nullableInteger(value: unknown, label: string): number | null {
   return value === null ? null : integer(value, label);
 }
 
-function timestamp(value: unknown, label: string): string {
-  const result = string(value, label);
-  if (!Number.isFinite(Date.parse(result))) {
-    throw new Error(`${label} is malformed`);
-  }
-  return result;
-}
-
-function nullableTimestamp(value: unknown, label: string): string | null {
-  return value === null ? null : timestamp(value, label);
-}
-
 function optionalTimestamp(
   record: Record<string, unknown>,
   label: string,
@@ -331,6 +320,15 @@ async function read(
 ): Promise<unknown> {
   const response = await backend.request({id, method: 'GET', path});
   if (response.status !== 200) {
+    if (
+      response.status === 400 &&
+      id === 'desktop-conversations-read' &&
+      path.includes('&cursor=')
+    ) {
+      throw new ConversationCursorExpiredError(
+        'Conversations changed. Refresh the list.',
+      );
+    }
     if (response.status === 401) {
       const unauthorized = new Error(
         desktopBackendUnauthorizedCopy,
@@ -371,7 +369,10 @@ async function read(
 function validatePage(
   value: unknown,
   label: string,
-  completenessVersion: 'recall-completeness-v1' | 'tasks-completeness-v1',
+  completenessVersion:
+    | 'recall-completeness-v1'
+    | 'tasks-completeness-v1'
+    | 'conversations-completeness-v1',
 ): {items: Record<string, unknown>[]; page: ReadPageState} {
   const page = object(value, label);
   if (page.contractVersion !== '1.0.0') {
@@ -433,41 +434,66 @@ function validatePage(
   };
 }
 
+function epochMillisecondsTimestamp(value: unknown, label: string): string {
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    !Number.isFinite(new Date(value).getTime())
+  ) {
+    throw new Error(`${label} is malformed`);
+  }
+  return new Date(value).toISOString();
+}
+function nullableEpochMillisecondsTimestamp(
+  value: unknown,
+  label: string,
+): string | null {
+  return value === null ? null : epochMillisecondsTimestamp(value, label);
+}
+
 export async function loadConversations(
   backend: OmiBackend,
+  cursor: string | null = null,
 ): Promise<DomainRead<ConversationProjection>> {
+  if (cursor !== null && (cursor.length === 0 || cursor.length > 16384)) {
+    throw new Error('Conversation cursor is malformed');
+  }
   const value = await read(
     backend,
     'desktop-conversations-read',
-    '/v1/conversations?limit=50&offset=0',
+    `/v1/conversations?limit=50${
+      cursor === null ? '' : `&cursor=${encodeURIComponent(cursor)}`
+    }`,
   );
-  if (!Array.isArray(value)) {
-    throw new Error('Conversations response is malformed');
-  }
-  const items = value.map((entry, index) => {
-    const record = object(entry, `Conversation ${index}`);
-    const structured = object(
-      record.structured,
-      `Conversation ${index} structured`,
-    );
+  const page = validatePage(
+    value,
+    'Conversations response',
+    'conversations-completeness-v1',
+  );
+  const ids = new Set<string>();
+  const items = page.items.map((record, index) => {
     const id = string(record.id, `Conversation ${index} id`);
-    const title = text(structured.title, `Conversation ${index} title`);
-    const summary = text(structured.overview, `Conversation ${index} overview`);
-    const createdAt = timestamp(
-      record.created_at,
-      `Conversation ${index} created_at`,
+    if (ids.has(id)) {
+      throw new Error('Conversation IDs are duplicated');
+    }
+    ids.add(id);
+    const title = text(record.title, `Conversation ${index} title`);
+    const summary = text(record.overview, `Conversation ${index} overview`);
+    const createdAt = epochMillisecondsTimestamp(
+      record.createdAt,
+      `Conversation ${index} createdAt`,
     );
-    const updatedAt = timestamp(
-      record.updated_at,
-      `Conversation ${index} updated_at`,
+    const updatedAt = epochMillisecondsTimestamp(
+      record.updatedAt,
+      `Conversation ${index} updatedAt`,
     );
-    const startedAt = nullableTimestamp(
-      record.started_at,
-      `Conversation ${index} started_at`,
+    const startedAt = nullableEpochMillisecondsTimestamp(
+      record.startedAt,
+      `Conversation ${index} startedAt`,
     );
-    const finishedAt = nullableTimestamp(
-      record.finished_at,
-      `Conversation ${index} finished_at`,
+    const finishedAt = nullableEpochMillisecondsTimestamp(
+      record.finishedAt,
+      `Conversation ${index} finishedAt`,
     );
     const source = string(record.source, `Conversation ${index} source`);
     const status = string(record.status, `Conversation ${index} status`);
@@ -483,9 +509,9 @@ export async function loadConversations(
     if (!['public', 'private', 'shared'].includes(visibility)) {
       throw new Error(`Conversation ${index} visibility is malformed`);
     }
-    const locked = boolean(record.is_locked, `Conversation ${index} is_locked`);
-    if (record.folder_id !== null && typeof record.folder_id !== 'string') {
-      throw new Error(`Conversation ${index} folder_id is malformed`);
+    const locked = boolean(record.isLocked, `Conversation ${index} isLocked`);
+    if (record.folderId !== null && typeof record.folderId !== 'string') {
+      throw new Error(`Conversation ${index} folderId is malformed`);
     }
     return {
       kind: 'conversation' as const,
@@ -501,23 +527,12 @@ export async function loadConversations(
       status,
       source,
       visibility: visibility as ConversationProjection['visibility'],
-      folderId: record.folder_id as string | null,
+      folderId: record.folderId as string | null,
       locked,
       discarded,
     };
   });
-  const hasMore = items.length === 50;
-  return {
-    items,
-    page: {
-      windowStatus: hasMore ? 'unknown' : 'complete',
-      complete: !hasMore,
-      hasMore,
-      nextCursor: null,
-      completenessStatus: hasMore ? 'unknown' : 'complete',
-      reasons: hasMore ? ['limit_reached'] : [],
-    },
-  };
+  return {items, page: page.page};
 }
 
 export function parseMemoryText(text: string): {

@@ -152,6 +152,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     resetReads,
     refreshReads,
     refreshTasks,
+    conversationsLoadingMore,
+    conversationNotice,
+    loadMoreConversations,
   } = useDesktopReads({
     enabled: onboardingRequired === false,
   });
@@ -914,6 +917,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         activeRoute={activeMobileRoute}
         conversationContent={
           <ConversationsPage
+            onRefresh={() => {
+              void refreshReads(false);
+            }}
+            onLoadMore={() => {
+              void loadMoreConversations();
+            }}
+            loadingMore={conversationsLoadingMore}
+            notice={conversationNotice}
             outcome={readOutcomes?.conversations ?? null}
             loading={
               readsPhase === 'initial-loading' || readsPhase === 'refreshing'
@@ -1359,6 +1370,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                   </ScrollView>
                 ) : route === 'Conversations' ? (
                   <ConversationsPage
+                    onRefresh={() => {
+                      void refreshReads(false);
+                    }}
+                    onLoadMore={() => {
+                      void loadMoreConversations();
+                    }}
+                    loadingMore={conversationsLoadingMore}
+                    notice={conversationNotice}
                     loading={readsPhase === 'initial-loading'}
                     outcome={routeOutcome}
                   />

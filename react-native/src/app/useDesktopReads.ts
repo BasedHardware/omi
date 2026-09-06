@@ -2,6 +2,8 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   loadDesktopReads,
   loadTasks,
+  loadConversations,
+  ConversationCursorExpiredError,
   type TaskRead,
   projectionTimestamp,
   desktopBackendConfigurationCopy,
@@ -44,6 +46,13 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
   // Tracks whether Home ever presented saved rows, independent of the latest
   // refresh outcome, so a failed first load followed by a retry stays truthful.
   const homeReadsLoadedRef = useRef(false);
+  const [conversationsLoadingMore, setConversationsLoadingMore] =
+    useState(false);
+  const [conversationNotice, setConversationNotice] = useState<string | null>(
+    null,
+  );
+  const conversationPagePendingRef = useRef(false);
+  const refreshPendingRef = useRef(false);
   const [readsPhase, setReadsPhase] = useState<ReadsPhase>('initial-loading');
   // Monotonic refresh sequence. Every gate transition and every new refresh
   // bumps it, so a refresh that started under a previous session (or before a
@@ -58,6 +67,10 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
 
   const resetReads = useCallback(() => {
     refreshSeqRef.current += 1;
+    refreshPendingRef.current = false;
+    conversationPagePendingRef.current = false;
+    setConversationsLoadingMore(false);
+    setConversationNotice(null);
     readOutcomesRef.current = null;
     homeReadsLoadedRef.current = false;
     setReadOutcomes(null);
@@ -98,6 +111,10 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
         return;
       }
       const seq = ++refreshSeqRef.current;
+      conversationPagePendingRef.current = false;
+      setConversationsLoadingMore(false);
+      setConversationNotice(null);
+      refreshPendingRef.current = true;
       setReadsPhase(
         initial && readOutcomesRef.current === null
           ? 'initial-loading'
@@ -171,16 +188,100 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
         setReadsPhase(
           showingSavedRows ? 'saved-but-refresh-failed' : 'unavailable',
         );
+      } finally {
+        if (seq === refreshSeqRef.current) {
+          refreshPendingRef.current = false;
+        }
       }
     },
     [enabled],
   );
+
+  const loadMoreConversations = useCallback(async () => {
+    const previous = readOutcomesRef.current;
+    if (
+      !enabled ||
+      omiBackend == null ||
+      conversationPagePendingRef.current ||
+      refreshPendingRef.current ||
+      previous?.conversations.status !== 'success' ||
+      !previous.conversations.value.page.hasMore ||
+      previous.conversations.value.page.nextCursor === null
+    ) {
+      return;
+    }
+    const cursor = previous.conversations.value.page.nextCursor;
+    const sequence = refreshSeqRef.current;
+    conversationPagePendingRef.current = true;
+    setConversationsLoadingMore(true);
+    setConversationNotice(null);
+    try {
+      let replace = false;
+      let next;
+      try {
+        next = await loadConversations(omiBackend, cursor);
+      } catch (error) {
+        if (
+          !(error instanceof ConversationCursorExpiredError) ||
+          sequence !== refreshSeqRef.current
+        ) {
+          throw error;
+        }
+        replace = true;
+        next = await loadConversations(omiBackend);
+      }
+      if (sequence !== refreshSeqRef.current) {
+        return;
+      }
+      const current = readOutcomesRef.current;
+      if (current === null || current.conversations.status !== 'success') {
+        return;
+      }
+      const items = replace
+        ? next.items
+        : [...current.conversations.value.items, ...next.items];
+      if (items.length > 10000) {
+        throw new Error('Conversation list is too large');
+      }
+      if (
+        new Set(items.map(item => item.id)).size !== items.length ||
+        (!replace && next.page.hasMore && next.page.nextCursor === cursor)
+      ) {
+        throw new Error('Conversation page did not advance');
+      }
+      const merged = {
+        ...current,
+        conversations: {status: 'success' as const, value: {...next, items}},
+      };
+      readOutcomesRef.current = merged;
+      setReadOutcomes(merged);
+      if (replace) {
+        setConversationNotice(
+          'Conversations changed. The list has been refreshed.',
+        );
+      }
+    } catch {
+      if (sequence === refreshSeqRef.current) {
+        setConversationNotice(
+          'More conversations could not be loaded. Try again.',
+        );
+      }
+    } finally {
+      if (sequence === refreshSeqRef.current) {
+        conversationPagePendingRef.current = false;
+        setConversationsLoadingMore(false);
+      }
+    }
+  }, [enabled]);
 
   const refreshTasks = useCallback(async (): Promise<TaskRead | null> => {
     if (!enabled || omiBackend == null) {
       return null;
     }
     const sequence = ++refreshSeqRef.current;
+    conversationPagePendingRef.current = false;
+    refreshPendingRef.current = false;
+    setConversationsLoadingMore(false);
     try {
       const tasks = await loadTasks(omiBackend);
       const previous = readOutcomesRef.current;
@@ -224,6 +325,15 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     refreshReads(true).catch(() => undefined);
   }, [enabled, refreshReads, resetReads]);
 
+  useEffect(
+    () => () => {
+      refreshSeqRef.current += 1;
+      conversationPagePendingRef.current = false;
+      refreshPendingRef.current = false;
+    },
+    [],
+  );
+
   const reads = useMemo(() => {
     if (readOutcomes === null) {
       return [];
@@ -251,6 +361,9 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     readOutcomes.memories.status === 'error';
 
   return {
+    conversationsLoadingMore,
+    conversationNotice,
+    loadMoreConversations,
     allHomeReadsUnavailable,
     homeReadsLoadedRef,
     readOutcomes,
