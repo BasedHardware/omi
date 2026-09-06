@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
+import {Text} from 'react-native';
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
@@ -145,11 +146,16 @@ describe('MobileAppSurface', () => {
   });
 
   test.each([
-    ['chat', 'Omi gets simpler'],
+    ['chat', 'Conversation content'],
     ['tasks', 'Prepare product demo'],
     ['apps', 'No apps connected yet'],
   ] as const)('renders the shipping %s destination', (route, copy) => {
-    const tree = renderedText(render({activeRoute: route}));
+    const tree = renderedText(
+      render({
+        activeRoute: route,
+        conversationContent: <Text>Conversation content</Text>,
+      }),
+    );
     expect(tree).toContain(copy);
     expect(tree).not.toContain('Saved data unavailable');
   });
@@ -170,22 +176,12 @@ test('shows recording failures and keeps tasks read-only without a mutation hand
   expect(task.props.accessibilityRole).toBe('text');
 });
 
-test.each(['loading', 'offline', 'error'] as const)(
-  'conversations shows %s instead of claiming an empty timeline',
-  status => {
-    const renderer = render({
-      activeRoute: 'chat',
-      recaps: [],
-      recapStatus: status,
-    });
-    expect(
-      renderer.root.find(
-        node => node.props.accessibilityLabel === `recaps ${status} state`,
-      ),
-    ).toBeDefined();
-    expect(renderedText(renderer)).not.toContain('Your timeline is empty');
-  },
-);
+test('missing conversation content reports unavailable instead of rendering noninteractive recap cards', () => {
+  const renderer = render({activeRoute: 'chat'});
+  expect(renderedText(renderer)).toContain('Couldn’t load conversations');
+  expect(renderedText(renderer)).not.toContain('Omi gets simpler');
+  expect(renderedText(renderer)).not.toContain('Your timeline is empty');
+});
 
 test('task edits wait for authoritative props and preserve a failed draft for retry', () => {
   const onTaskEdit = jest.fn();
