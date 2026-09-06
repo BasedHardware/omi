@@ -61,6 +61,7 @@ export type MobileAppSurfaceProps = {
   capture: MobileCaptureState;
   device: MobileDeviceState;
   deviceMessage?: string | null;
+  devicePanel?: React.ReactNode;
   tasks: readonly MobileTask[];
   taskStatus: MobileProjectionStatus;
   recaps: readonly MobileRecap[];
@@ -220,6 +221,7 @@ export function MobileAppSurface({
   capture,
   device,
   deviceMessage,
+  devicePanel,
   mindMapStatus,
   onAskChange,
   onAskSubmit,
@@ -443,6 +445,7 @@ export function MobileAppSurface({
             <Pressable
               accessibilityLabel="Open Omi device"
               accessibilityRole="button"
+              accessibilityState={{expanded: devicePanel != null}}
               onPress={onOpenDevice}
               style={styles.deviceButton}>
               <View style={styles.lens} />
@@ -480,6 +483,7 @@ export function MobileAppSurface({
         <FlatList
           contentContainerStyle={styles.content}
           data={rows}
+          ListHeaderComponent={devicePanel ? <View>{devicePanel}</View> : null}
           keyExtractor={item => item.key}
           renderItem={renderRow}
           showsVerticalScrollIndicator={false}

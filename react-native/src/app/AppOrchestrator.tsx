@@ -80,6 +80,7 @@ const quickPrompts = [
 function App({initialRoute}: AppProps): React.JSX.Element {
   const {width} = useWindowDimensions();
   const macDesktop = Platform.OS === 'macos';
+  const nativeSessionRequired = macDesktop || Platform.OS === 'ios';
   const compact = width < 1024;
   const desktopWorkspace = macDesktop;
   const floatingPane = width >= 640;
@@ -116,6 +117,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     resolveInitialRoute(initialRoute),
   );
   const [homeChatOpen, setHomeChatOpen] = useState(false);
+  const [devicePanelOpen, setDevicePanelOpen] = useState(false);
   // useOnboarding owns the desktop session gate and needs a reads refresh;
   // useDesktopReads must stay idle until that gate is ready. A latest-ref
   // trampoline breaks the cycle without firing reads before the session.
@@ -135,7 +137,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     signInAndRefresh,
     signOutAndRefresh,
     signingIn,
-  } = useOnboarding(macDesktop, refreshReadsViaRef);
+  } = useOnboarding(nativeSessionRequired, refreshReadsViaRef);
   const {
     allHomeReadsUnavailable,
     readOutcomes,
@@ -144,7 +146,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     resetReads,
     refreshReads,
   } = useDesktopReads({
-    enabled: !macDesktop || onboardingRequired === false,
+    enabled: !nativeSessionRequired || onboardingRequired === false,
   });
   useEffect(() => {
     refreshReadsRef.current = refreshReads;
@@ -160,12 +162,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     nativeSnapshot,
     scanForOmi,
     toggleDevice,
-  } = useNativeDevices({enabled: !macDesktop});
+  } = useNativeDevices({
+    enabled:
+      !macDesktop && (!nativeSessionRequired || onboardingRequired === false),
+  });
   const searchRef = useRef<TextInput>(null);
   useEffect(() => {
     let active = true;
     chatSessionEpochRef.current += 1;
-    if (macDesktop && onboardingRequired !== false) {
+    if (nativeSessionRequired && onboardingRequired !== false) {
       // Leaving a ready session drops the previous session's transcript,
       // cursors, and message bookkeeping so nothing leaks across accounts or
       // flashes on the next sign-in. Busy flags reset too: send() refuses to
@@ -214,12 +219,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           active &&
           chatSessionEpochRef.current === session &&
           mutation === chatMutationSeqRef.current &&
-          (!macDesktop || onboardingRequired === false)
+          (!nativeSessionRequired || onboardingRequired === false)
         ) {
           setChatError(chatHistoryErrorCopy(error));
           // A 401/unconfigured history load can mean the cloud session died;
           // re-probe it instead of keeping a ready shell on dead credentials.
-          if (macDesktop && chatSessionLost(error)) {
+          if (nativeSessionRequired && chatSessionLost(error)) {
             revalidateSession().catch(() => undefined);
           }
         }
@@ -230,7 +235,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   }, [
     animatedChatMessageIds,
     chatEpoch,
-    macDesktop,
+    nativeSessionRequired,
     onboardingRequired,
     revalidateSession,
     stableChatMessageIds,
@@ -303,7 +308,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   // credential-bearing read comes back unauthorized or unconfigured, re-probe
   // the native session and fall back to Welcome if it is really gone.
   useEffect(() => {
-    if (!macDesktop || onboardingRequired !== false || readOutcomes === null) {
+    if (
+      !nativeSessionRequired ||
+      onboardingRequired !== false ||
+      readOutcomes === null
+    ) {
       return;
     }
     const sessionLost = [
@@ -319,7 +328,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     if (sessionLost) {
       revalidateSession().catch(() => undefined);
     }
-  }, [macDesktop, onboardingRequired, readOutcomes, revalidateSession]);
+  }, [
+    nativeSessionRequired,
+    onboardingRequired,
+    readOutcomes,
+    revalidateSession,
+  ]);
 
   useEffect(() => {
     if (homeSearchFocusNonce === 0) {
@@ -472,7 +486,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             ? 'Response interrupted. It may still complete.'
             : chatErrorCopy(error),
         );
-        if (macDesktop && chatSessionLost(error)) {
+        if (nativeSessionRequired && chatSessionLost(error)) {
           revalidateSession().catch(() => undefined);
         }
       }
@@ -548,7 +562,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           return;
         } catch (recoveryError) {
           if (
-            macDesktop &&
+            nativeSessionRequired &&
             chatSessionEpochRef.current === session &&
             chatMutationSeqRef.current === mutation &&
             chatSessionLost(recoveryError)
@@ -559,7 +573,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       }
       if (chatSessionEpochRef.current === session) {
         setChatError('Older messages could not be loaded.');
-        if (macDesktop && chatSessionLost(error)) {
+        if (nativeSessionRequired && chatSessionLost(error)) {
           revalidateSession().catch(() => undefined);
         }
       }
@@ -836,9 +850,25 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       <MobileAppSurface
         activeRoute={activeMobileRoute}
         askValue={draft}
-        capture={{active: false, transcript: ''}}
+        capture={{
+          active: nativeSnapshot?.capture === 'recording',
+          transcript: '',
+        }}
         device={{connected: connectedDevice !== null, label: homeStatus}}
-        deviceMessage={deviceScanMessage}
+        deviceMessage={devicePanelOpen ? null : deviceScanMessage}
+        devicePanel={
+          devicePanelOpen ? (
+            <DeviceSession
+              bluetoothStatusColor={bluetoothStatusColor}
+              deviceBusy={deviceBusy}
+              deviceScanMessage={deviceScanMessage}
+              nativeSnapshot={nativeSnapshot}
+              onScan={scanForOmi}
+              onToggle={toggleDevice}
+              variant="compact"
+            />
+          ) : null
+        }
         mindMapStatus={
           readOutcomes?.memories.status === 'error' ? 'error' : projectionStatus
         }
@@ -850,9 +880,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }}
         onExpandMindMap={() => setRoute('Memories')}
         onOpenCalls={() => setRoute('Conversations')}
-        onOpenDevice={() => {
-          scanForOmi().catch(() => undefined);
-        }}
+        onOpenDevice={() => setDevicePanelOpen(open => !open)}
         onOpenSettings={() => setRoute('Settings')}
         onRouteChange={destination => {
           setHomeChatOpen(false);

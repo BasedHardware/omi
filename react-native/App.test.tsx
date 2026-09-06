@@ -43,7 +43,7 @@ test('macOS first paint and session probe do not require native devices or BLE',
   );
 
   expect(orchestrator).toMatch(
-    /useNativeDevices\(\{\s*enabled:\s*!macDesktop\s*\}\)/,
+    /useNativeDevices\(\{\s*enabled:\s*!macDesktop\s*&&/,
   );
   expect(orchestrator).not.toMatch(/useNativeDevices\(\)/);
   expect(onboarding).toContain('hasCloudSession');

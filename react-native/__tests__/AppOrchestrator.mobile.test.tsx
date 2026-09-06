@@ -2,10 +2,37 @@ import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {TextInput} from 'react-native';
 
+const mockDevice = {id: 'omi-1', name: 'Test Omi', rssi: -50, connected: false};
+const mockNative = {
+  getSnapshot: jest.fn(async () => ({
+    bluetooth: 'poweredOn',
+    devices: [mockDevice],
+    connectedDeviceId: null,
+    phase: 'disconnected',
+    capture: 'idle',
+    lastEvent: '',
+    microphone: 'unknown',
+    notifications: 'unknown',
+  })),
+  startScan: jest.fn(async () => [mockDevice]),
+  connectDevice: jest.fn(async () => undefined),
+  disconnectDevice: jest.fn(async () => undefined),
+};
+
+const mockAuth = {
+  hasCloudSession: jest.fn(async () => true),
+  hasCompletedOnboarding: jest.fn(async () => true),
+  markOnboardingComplete: jest.fn(async () => undefined),
+  signIn: jest.fn(async () => ({signedIn: true})),
+};
+
 jest.mock('../src/omiNative', () => ({
-  omiAuth: null,
+  omiAuth: mockAuth,
   omiBackend: null,
-  omiNative: null,
+  omiNative: mockNative,
+  requestBluetoothScanPermission: async () => true,
+  isBluetoothScanAvailable: (state: string) => state === 'poweredOn',
+  browserScanErrorMessage: () => null,
   subscribeOmiBackendSessionInvalidated: () => () => undefined,
   subscribeOmiNativeEvents: () => () => undefined,
 }));
@@ -72,4 +99,33 @@ test('mobile Ask Omi opens the actual chat and reports a missing backend', async
   await act(async () => control(renderer, 'Ask Omi').props.onSubmitEditing());
   expect(control(renderer, 'Chat scroll region')).toBeDefined();
   expect(JSON.stringify(renderer.toJSON())).toContain('Chat');
+});
+
+test('mobile device panel exposes the existing scan and connection controls', async () => {
+  mockNative.startScan.mockClear();
+  mockNative.connectDevice.mockClear();
+  const renderer = await renderApp();
+  expect(control(renderer, 'Scan for Omi devices')).toBeUndefined();
+  await act(async () => control(renderer, 'Open Omi device').props.onPress());
+  expect(
+    control(renderer, 'Open Omi device').props.accessibilityState.expanded,
+  ).toBe(true);
+  await act(async () =>
+    control(renderer, 'Scan for Omi devices').props.onPress(),
+  );
+  expect(mockNative.startScan).toHaveBeenCalledWith(8);
+  await act(async () => control(renderer, 'Connect Test Omi').props.onPress());
+  expect(mockNative.connectDevice).toHaveBeenCalledWith('omi-1');
+  await act(async () => control(renderer, 'Open Omi device').props.onPress());
+  expect(control(renderer, 'Scan for Omi devices')).toBeUndefined();
+});
+
+test('signed-out iOS waits for the real sign-in before showing the app', async () => {
+  mockAuth.hasCloudSession.mockResolvedValueOnce(false);
+  const renderer = await renderApp();
+  expect(control(renderer, 'First-run onboarding')).toBeDefined();
+  expect(control(renderer, 'Open Omi device')).toBeUndefined();
+  await act(async () => control(renderer, 'Sign in').props.onPress());
+  expect(mockAuth.signIn).toHaveBeenCalled();
+  expect(control(renderer, 'Open Omi device')).toBeDefined();
 });
