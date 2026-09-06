@@ -1374,7 +1374,9 @@ export class PiMonoAdapter implements HarnessAdapter {
     const previous = this.lastForwardedTextChar;
     const next = nextDelta[0];
     if (!previous || !next) return "";
-    const carriesBreak = (c: string) => c === " " || c === "\n";
+    // Whitespace of any kind (\t, \r, …) counts as an existing break — the
+    // provider's own separator must never be doubled by a blank paragraph.
+    const carriesBreak = (c: string) => /\s/.test(c);
     return carriesBreak(previous) || carriesBreak(next) ? "" : "\n\n";
   }
 
@@ -1389,7 +1391,9 @@ export class PiMonoAdapter implements HarnessAdapter {
       if (block.type === "text") {
         const blockText = block.text || "";
         if (blockText) {
-          const carriesBreak = (c: string) => c === " " || c === "\n";
+          // Same whitespace contract as iterationGapDelta: any whitespace
+          // character counts as an existing break.
+          const carriesBreak = (c: string) => /\s/.test(c);
           if (
             separated &&
             text &&

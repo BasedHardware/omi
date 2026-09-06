@@ -1492,6 +1492,22 @@ describe("PiMonoAdapter iteration text separation", () => {
         { type: "text", text: "\n\nNext paragraph." },
       ])
     ).toBe("Ended with a break.\n\n\nNext paragraph.");
+    // Any whitespace character (\t, \r) counts as an existing break at a
+    // tool-separated boundary — no extra blank paragraph is inserted.
+    expect(
+      PiMonoAdapter.terminalText([
+        { type: "text", text: "Ended with a tab.\t" },
+        { type: "toolCall", id: "t", name: "x", arguments: {} },
+        { type: "text", text: "Continuation." },
+      ])
+    ).toBe("Ended with a tab.\tContinuation.");
+    expect(
+      PiMonoAdapter.terminalText([
+        { type: "text", text: "Ended with a carriage return.\r" },
+        { type: "toolCall", id: "t", name: "x", arguments: {} },
+        { type: "text", text: "Continuation." },
+      ])
+    ).toBe("Ended with a carriage return.\rContinuation.");
     expect(PiMonoAdapter.terminalText(undefined)).toBe("");
   });
 });
