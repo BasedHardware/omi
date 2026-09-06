@@ -8,10 +8,11 @@ jest.mock('react-native', () => {
     ({children, ...elementProps}: {children?: React.ReactNode}) =>
       ReactRuntime.createElement(name, elementProps, children);
   return {
-    FlatList: ({data, renderItem, ...listProps}: any) =>
+    FlatList: ({data, renderItem, ListHeaderComponent, ...listProps}: any) =>
       ReactRuntime.createElement(
         'FlatList',
         listProps,
+        ListHeaderComponent,
         data.map((item: any, index: number) =>
           ReactRuntime.cloneElement(renderItem({item, index}), {
             key: item.key ?? item.id,
@@ -126,7 +127,11 @@ describe('MobileAppSurface', () => {
   test('routes and toggles with accessible controls', () => {
     const onRouteChange = jest.fn();
     const onTaskToggle = jest.fn();
-    const renderer = render({onRouteChange, onTaskToggle});
+    const renderer = render({
+      onRouteChange,
+      onTaskToggle,
+      writesAvailable: true,
+    });
     const apps = renderer.root.find(
       node => node.props.accessibilityLabel === 'Apps',
     );
@@ -136,7 +141,7 @@ describe('MobileAppSurface', () => {
     act(() => apps.props.onPress());
     act(() => task.props.onPress());
     expect(onRouteChange).toHaveBeenCalledWith('apps');
-    expect(onTaskToggle).toHaveBeenCalledWith('task-1', true);
+    expect(onTaskToggle).toHaveBeenCalledWith('task-1');
   });
 
   test.each([
@@ -181,3 +186,59 @@ test.each(['loading', 'offline', 'error'] as const)(
     expect(renderedText(renderer)).not.toContain('Your timeline is empty');
   },
 );
+
+test('task edits wait for authoritative props and preserve a failed draft for retry', () => {
+  const onTaskEdit = jest.fn();
+  const onTaskToggle = jest.fn();
+  const onRetryTaskMutation = jest.fn();
+  const onDismissTaskMutation = jest.fn();
+  const props = buildProps({
+    activeRoute: 'tasks',
+    writesAvailable: true,
+    onTaskEdit,
+    onTaskToggle,
+  });
+  const renderer = render(props);
+  const control = (label: string) =>
+    renderer.root.findAll(node => node.props.accessibilityLabel === label)[0];
+  act(() => control('Edit Prepare product demo').props.onPress());
+  act(() => control('Task description').props.onChangeText('Updated task'));
+  act(() => control('Save task description').props.onPress());
+  expect(onTaskEdit).toHaveBeenCalledWith('task-1', 'Updated task');
+  expect(control('Task description').props.value).toBe('Updated task');
+  expect(
+    control('Complete Prepare product demo').props.accessibilityState.checked,
+  ).toBe(false);
+  act(() =>
+    renderer.update(
+      <MobileAppSurface
+        {...props}
+        busyTaskId="task-1"
+        taskMutationError="Could not save"
+        onRetryTaskMutation={onRetryTaskMutation}
+        onDismissTaskMutation={onDismissTaskMutation}
+      />,
+    ),
+  );
+  expect(control('Complete Prepare product demo').props.disabled).toBe(true);
+  expect(control('Save task description').props.disabled).toBe(true);
+  expect(control('Task description').props.value).toBe('Updated task');
+  act(() => control('Retry task change').props.onPress());
+  act(() => control('Dismiss task change').props.onPress());
+  expect(onRetryTaskMutation).toHaveBeenCalledTimes(1);
+  expect(onDismissTaskMutation).toHaveBeenCalledTimes(1);
+  act(() =>
+    renderer.update(
+      <MobileAppSurface
+        {...props}
+        tasks={[{id: 'task-1', title: 'Updated task', completed: true}]}
+      />,
+    ),
+  );
+  expect(control('Reopen Updated task').props.accessibilityState.checked).toBe(
+    true,
+  );
+  act(() => control('Reopen Updated task').props.onPress());
+  expect(onTaskToggle).toHaveBeenCalledWith('task-1');
+  expect(control('Save task description').props.disabled).toBe(true);
+});

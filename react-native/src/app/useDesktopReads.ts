@@ -1,6 +1,8 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   loadDesktopReads,
+  loadTasks,
+  type TaskRead,
   projectionTimestamp,
   desktopBackendConfigurationCopy,
   desktopBackendServiceCopy,
@@ -19,10 +21,10 @@ export type ReadsPhase =
   | 'saved-but-refresh-failed'
   | 'unavailable';
 
-function mergeOutcome<T extends DesktopReadProjection>(
-  current: DomainReadOutcome<T>,
-  next: DomainReadOutcome<T>,
-): DomainReadOutcome<T> {
+function mergeOutcome<T extends DomainReadOutcome<DesktopReadProjection>>(
+  current: T,
+  next: T,
+): T {
   const transientFailure =
     next.status === 'error' &&
     (next.error === desktopBackendServiceCopy ||
@@ -174,6 +176,36 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     [enabled],
   );
 
+  const refreshTasks = useCallback(async (): Promise<TaskRead | null> => {
+    if (!enabled || omiBackend == null) {
+      return null;
+    }
+    const sequence = ++refreshSeqRef.current;
+    try {
+      const tasks = await loadTasks(omiBackend);
+      const previous = readOutcomesRef.current;
+      if (sequence !== refreshSeqRef.current || previous === null) {
+        return null;
+      }
+      const next: DesktopReadOutcomes = {
+        ...previous,
+        tasks: {status: 'success', value: tasks},
+      };
+      readOutcomesRef.current = next;
+      setReadOutcomes(next);
+      setReadsPhase(
+        [next.conversations, next.memories].some(
+          value => value.status === 'error',
+        )
+          ? 'saved-but-refresh-failed'
+          : 'ready',
+      );
+      return tasks;
+    } catch {
+      return null;
+    }
+  }, [enabled]);
+
   useEffect(() => {
     if (!enabled) {
       // Leaving the ready session drops every saved row and phase so the
@@ -226,5 +258,6 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     readsPhase,
     resetReads,
     refreshReads,
+    refreshTasks,
   };
 }

@@ -70,7 +70,8 @@ static BOOL OmiIsCaptureBackendPath(NSString *path) {
       [route hasPrefix:@"/v1/device-sessions/"] ||
       [route isEqualToString:@"/v1/conversations"] ||
       [route isEqualToString:@"/v1/memories"] ||
-      [route isEqualToString:@"/v1/tasks"];
+      [route isEqualToString:@"/v1/tasks"] ||
+      [route isEqualToString:@"/v1/tasks/ops"];
 }
 
 static NSURL *OmiValidatedV5URL(NSString *value) {
@@ -429,11 +430,13 @@ static BOOL OmiApplyAuthorization(NSMutableURLRequest *request, OmiBackendPolicy
 }
 
 static BOOL OmiExamplePlatformRequestSupported(NSString *method, NSString *path) {
-  if (![method isEqualToString:@"GET"]) return NO;
   NSURLComponents *components = [NSURLComponents componentsWithString:path];
   NSString *route = components.path;
-  return [route isEqualToString:@"/v1/conversations"] ||
-      [route isEqualToString:@"/v1/memories"];
+  return ([method isEqualToString:@"GET"] &&
+      ([route isEqualToString:@"/v1/conversations"] ||
+       [route isEqualToString:@"/v1/memories"] ||
+       [route isEqualToString:@"/v1/tasks"])) ||
+      ([method isEqualToString:@"POST"] && [route isEqualToString:@"/v1/tasks/ops"]);
 }
 
 static NSDictionary *OmiDevelopmentBackendUnsupportedResponse(NSString *requestId) {
@@ -690,6 +693,21 @@ RCT_EXPORT_MODULE(OmiBackend)
     BOOL sessionCleared = OmiOwnKeychainCloudSession() == nil;
     completion(self.policy, sessionCleared ? nil : error);
   });
+}
+
+RCT_REMAP_METHOD(createWriteId,
+                 createWriteIdWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  unsigned char bytes[32];
+  if (SecRandomCopyBytes(kSecRandomDefault, sizeof(bytes), bytes) != errSecSuccess) {
+    reject(@"OMI_WRITE_ENTROPY", @"Native write identity is unavailable", nil);
+    return;
+  }
+  NSMutableString *value = [NSMutableString stringWithCapacity:64];
+  for (NSUInteger index = 0; index < sizeof(bytes); index++) {
+    [value appendFormat:@"%02x", bytes[index]];
+  }
+  resolve(value);
 }
 
 RCT_REMAP_METHOD(createRecordingId,

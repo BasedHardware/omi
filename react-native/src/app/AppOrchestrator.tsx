@@ -51,6 +51,7 @@ import {SettingsPage} from '../pages/Settings';
 import {resolveInitialRoute, type Route} from './routes';
 import {DeviceSession, homeConnectionStatus} from './DeviceSession';
 import {useDesktopReads} from './useDesktopReads';
+import {useTaskMutations} from './useTaskMutations';
 import {useOnboarding} from './useOnboarding';
 import {useNativeDevices} from './useNativeDevices';
 import {useReduceMotion} from './useReduceMotion';
@@ -150,8 +151,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     readsPhase,
     resetReads,
     refreshReads,
+    refreshTasks,
   } = useDesktopReads({
     enabled: onboardingRequired === false,
+  });
+  const taskMutations = useTaskMutations({
+    enabled: onboardingRequired === false,
+    outcome: readOutcomes?.tasks ?? null,
+    refreshTasks,
+    revalidateSession,
   });
   useEffect(() => {
     refreshReadsRef.current = refreshReads;
@@ -779,6 +787,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     return (
       <PageShell macDesktop workspaceMaterial>
         <DesktopApp
+          {...taskMutations}
           activeGenerationId={activeGenerationId}
           authError={authError}
           chatBusy={chatBusy}
@@ -878,6 +887,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       route === 'Tasks' ? 'tasks' : route === 'Conversations' ? 'chat' : 'home';
     return (
       <MobileAppSurface
+        {...taskMutations}
         activeRoute={activeMobileRoute}
         askValue={draft}
         capture={{
@@ -1315,6 +1325,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                   />
                 ) : route === 'Tasks' ? (
                   <TasksPage
+                    {...taskMutations}
                     loading={readsPhase === 'initial-loading'}
                     outcome={routeOutcome}
                   />

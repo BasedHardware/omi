@@ -5,6 +5,12 @@ import {loadConnectors, type CloudApp} from '../desktopCloudClient';
 import type {DesktopReadOutcomes} from '../desktopReadClient';
 import {omiBackend} from '../omiNative';
 import {ReadStatus} from '../ui/ReadStatus';
+import {FocusPressable} from '../ui/Pressable';
+import {
+  TaskEditor,
+  TaskMutationStatus,
+  type TaskMutationProps,
+} from '../ui/TaskEditor';
 import {ShippingListInsert} from './ShippingStage';
 import {ConversationRow, EmptyCopy, TaskRow} from './DesktopRows';
 import type {DesktopSession} from './desktopChrome';
@@ -48,7 +54,17 @@ export function LibraryPage({
   );
 }
 
-export function TasksPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
+export function TasksPage({
+  outcomes,
+  onTaskToggle,
+  onTaskEdit,
+  busyTaskId = null,
+  writesAvailable = false,
+  taskMutationError = null,
+  onRetryTaskMutation,
+  onDismissTaskMutation,
+}: TaskMutationProps & {outcomes: DesktopReadOutcomes | null}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
   const outcome = outcomes?.tasks ?? null;
   const tasks = outcome?.status === 'success' ? outcome.value.items : [];
   const emptyCopy =
@@ -59,13 +75,67 @@ export function TasksPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
       : 'No tasks yet';
   return (
     <View style={styles.page}>
+      <TaskMutationStatus
+        writesAvailable={writesAvailable}
+        taskMutationError={taskMutationError}
+        onRetryTaskMutation={onRetryTaskMutation}
+        onDismissTaskMutation={onDismissTaskMutation}
+      />
       <ScrollView
         contentContainerStyle={styles.listContent}
         style={styles.list}>
         {tasks.length > 0 ? (
           tasks.map(item => (
             <ShippingListInsert itemKey={item.id} key={item.id}>
-              <TaskRow item={item} />
+              <View style={styles.taskActions}>
+                <FocusPressable
+                  accessibilityRole={
+                    writesAvailable && onTaskToggle ? 'checkbox' : 'text'
+                  }
+                  accessibilityLabel={`${
+                    item.completed ? 'Reopen' : 'Complete'
+                  } task: ${item.title}`}
+                  accessibilityState={{
+                    checked: item.completed,
+                    disabled:
+                      !writesAvailable ||
+                      !onTaskToggle ||
+                      item.revision === null ||
+                      busyTaskId !== null,
+                    busy: busyTaskId === item.id && taskMutationError === null,
+                  }}
+                  disabled={
+                    !writesAvailable ||
+                    !onTaskToggle ||
+                    item.revision === null ||
+                    busyTaskId !== null
+                  }
+                  onPress={() => onTaskToggle?.(item.id)}
+                  style={styles.taskToggle}>
+                  <TaskRow item={item} />
+                </FocusPressable>
+                {writesAvailable && onTaskEdit && item.revision !== null && (
+                  <FocusPressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit task: ${item.title}`}
+                    disabled={busyTaskId !== null}
+                    accessibilityState={{disabled: busyTaskId !== null}}
+                    onPress={() => setEditingId(item.id)}
+                    style={styles.taskEdit}>
+                    <Text style={styles.rowMeta}>Edit</Text>
+                  </FocusPressable>
+                )}
+              </View>
+              {editingId === item.id && writesAvailable && onTaskEdit && (
+                <TaskEditor
+                  id={item.id}
+                  title={item.title}
+                  busy={busyTaskId !== null}
+                  failed={taskMutationError !== null}
+                  onSave={onTaskEdit}
+                  onClose={() => setEditingId(null)}
+                />
+              )}
             </ShippingListInsert>
           ))
         ) : (
@@ -182,6 +252,14 @@ export function AppsPage({session}: {session: DesktopSession}) {
 
 const styles = StyleSheet.create({
   page: {flex: 1},
+  taskActions: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  taskToggle: {flex: 1, minHeight: 44},
+  taskEdit: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   hubRow: {
     alignItems: 'center',
     flexDirection: 'row',

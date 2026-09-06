@@ -80,13 +80,13 @@ export type TaskGroup = 'Today' | 'Tomorrow' | 'Later';
 
 export function taskGroup(
   dueAt: number | null,
-  nowEpochSeconds: number,
+  nowMilliseconds: number,
 ): TaskGroup {
   if (dueAt === null) {
     return 'Later';
   }
-  const today = Math.floor(nowEpochSeconds / 86400);
-  const dueDay = Math.floor(dueAt / 86400);
+  const today = Math.floor(nowMilliseconds / 86400000);
+  const dueDay = Math.floor(dueAt / 86400000);
   if (dueDay <= today) {
     return 'Today';
   }
@@ -163,10 +163,14 @@ export type DomainReadOutcome<T extends DesktopReadProjection> =
   | {status: 'success'; value: DomainRead<T>}
   | {status: 'error'; error: string};
 
+export type TaskReadOutcome =
+  | {status: 'success'; value: TaskRead}
+  | {status: 'error'; error: string};
+
 export type DesktopReadOutcomes = {
   conversations: DomainReadOutcome<ConversationProjection>;
   memories: DomainReadOutcome<MemoryProjection>;
-  tasks: DomainReadOutcome<TaskProjection>;
+  tasks: TaskReadOutcome;
 };
 
 export const desktopCloudBaseURL = 'https://api.omi.me';
@@ -653,9 +657,9 @@ export async function loadDesktopReads(
     loadMemories(backend),
     loadTasks(backend),
   ]);
-  const outcome = <T extends DesktopReadProjection>(
-    result: PromiseSettledResult<DomainRead<T>>,
-  ): DomainReadOutcome<T> =>
+  const outcome = <T extends DomainRead<DesktopReadProjection>>(
+    result: PromiseSettledResult<T>,
+  ): {status: 'success'; value: T} | {status: 'error'; error: string} =>
     result.status === 'fulfilled'
       ? {status: 'success', value: result.value}
       : {

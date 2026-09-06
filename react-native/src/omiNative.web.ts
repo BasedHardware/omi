@@ -270,6 +270,12 @@ async function browserGenerationEvents(
 }
 
 const browserBackend: OmiBackend = {
+  async createWriteId() {
+    const bytes = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join(
+      '',
+    );
+  },
   async createRecordingId() {
     return globalThis.crypto.randomUUID();
   },

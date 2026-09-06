@@ -90,15 +90,18 @@ export function isExamplePlatformRequestSupported(
   method: string | undefined,
   path: string | undefined,
 ): boolean {
-  if (method !== 'GET' || path === undefined) {
+  if (path === undefined) {
     return false;
   }
   const url = new URL(assertLocalProxyPath(path), 'http://127.0.0.1');
   const backendPath = rewriteLocalProxyPath(`${url.pathname}${url.search}`);
   const backendUrl = new URL(backendPath, 'http://127.0.0.1');
   return (
-    backendUrl.pathname === '/v1/conversations' ||
-    backendUrl.pathname === '/v1/memories'
+    (method === 'GET' &&
+      (backendUrl.pathname === '/v1/conversations' ||
+        backendUrl.pathname === '/v1/memories' ||
+        backendUrl.pathname === '/v1/tasks')) ||
+    (method === 'POST' && backendUrl.pathname === '/v1/tasks/ops')
   );
 }
 

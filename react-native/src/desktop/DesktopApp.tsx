@@ -19,6 +19,7 @@ import {
 import {DesktopChrome, type DesktopRoute} from './DesktopTopChrome';
 import {DesktopHome, DesktopReadBanner} from './DesktopHome';
 import {AppsPage, LibraryPage, TasksPage} from './DesktopPages';
+import type {TaskMutationProps} from '../ui/TaskEditor';
 import {DesktopSettings} from './DesktopSettings';
 import {ShippingStage} from './ShippingStage';
 
@@ -34,7 +35,7 @@ export function DesktopSessionProbe() {
   );
 }
 
-type Props = {
+type Props = TaskMutationProps & {
   activeGenerationId: string | null;
   authError: string | null;
   outcomes: DesktopReadOutcomes | null;
@@ -82,6 +83,7 @@ export function DesktopApp({
   readsPhase,
   session,
   signingIn,
+  ...taskMutations
 }: Props) {
   const [route, setRoute] = useState<DesktopRoute>('Home');
   const omnibarRef = useRef<TextInput>(null);
@@ -158,7 +160,7 @@ export function DesktopApp({
         ) : route === 'Conversations' ? (
           <LibraryPage outcomes={outcomes} />
         ) : route === 'Tasks' ? (
-          <TasksPage outcomes={outcomes} />
+          <TasksPage outcomes={outcomes} {...taskMutations} />
         ) : route === 'Apps' ? (
           <AppsPage session={session} />
         ) : (

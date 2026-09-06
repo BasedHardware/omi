@@ -1,5 +1,7 @@
 module.exports = {
   moduleNameMapper: {
+    '^@omi-core/ratified-contracts/(.*)$':
+      '<rootDir>/../packages/contracts/ratified/dist/$1.js',
     '^lucide-react-native/icons/(.*)$': '<rootDir>/test/lucideIcon.js',
   },
   preset: 'react-native',

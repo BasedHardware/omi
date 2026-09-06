@@ -307,3 +307,11 @@ test("browser setup ignores the old auth-only flag and persists explicit complet
     else Reflect.deleteProperty(globalThis, "localStorage");
   }
 });
+
+test("write identities use independent 32-byte platform entropy", async () => {
+  const first = await omiBackend.createWriteId!();
+  const second = await omiBackend.createWriteId!();
+  expect(first).toMatch(/^[0-9a-f]{64}$/);
+  expect(second).toMatch(/^[0-9a-f]{64}$/);
+  expect(second).not.toBe(first);
+});

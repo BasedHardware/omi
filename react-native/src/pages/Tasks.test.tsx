@@ -1,0 +1,170 @@
+import React from 'react';
+import ReactTestRenderer, {act} from 'react-test-renderer';
+import {TasksPage} from './Tasks';
+import type {TaskMutationProps} from '../ui/TaskEditor';
+import type {TaskProjection} from '../desktopReadClient';
+
+const task: TaskProjection = {
+  kind: 'task',
+  id: 'task-1',
+  title: 'Prepare demo',
+  summary: '',
+  searchableText: '',
+  completed: false,
+  completedAt: null,
+  dueAt: null,
+  owner: null,
+  source: 'chat',
+  provenance: [],
+  sortOrder: 0,
+  indentLevel: 0,
+  createdAt: 1,
+  updatedAt: 1,
+  revision: null,
+};
+const outcome = {
+  status: 'success' as const,
+  value: {
+    items: [task],
+    page: {
+      windowStatus: 'complete' as const,
+      complete: true,
+      hasMore: false,
+      nextCursor: null,
+      completenessStatus: 'complete' as const,
+      reasons: [],
+    },
+  },
+};
+
+function render(props: TaskMutationProps = {}) {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage outcome={outcome} loading={false} {...props} />,
+    );
+  });
+  return renderer;
+}
+function control(renderer: ReactTestRenderer.ReactTestRenderer, label: string) {
+  return renderer.root.findAll(
+    node => node.props.accessibilityLabel === label,
+  )[0];
+}
+
+test('task page remains read-only without write authority', () => {
+  const renderer = render({onTaskToggle: jest.fn(), onTaskEdit: jest.fn()});
+  expect(control(renderer, 'Open Prepare demo').props.disabled).toBe(true);
+  act(() => control(renderer, 'Open task: Prepare demo').props.onPress());
+  expect(control(renderer, 'Task description')).toBeUndefined();
+});
+
+test('task page edits and toggles only through handlers with pending and error recovery', () => {
+  const onTaskToggle = jest.fn();
+  const onTaskEdit = jest.fn();
+  const onDismissTaskMutation = jest.fn();
+  const props = {writesAvailable: true, onTaskToggle, onTaskEdit};
+  const renderer = render(props);
+  act(() => control(renderer, 'Complete Prepare demo').props.onPress());
+  expect(onTaskToggle).toHaveBeenCalledWith('task-1');
+  expect(
+    control(renderer, 'Complete Prepare demo').props.accessibilityState.checked,
+  ).toBe(false);
+  act(() => control(renderer, 'Open task: Prepare demo').props.onPress());
+  act(() => control(renderer, 'Task description').props.onChangeText(''));
+  expect(control(renderer, 'Save task description').props.disabled).toBe(true);
+  act(() =>
+    control(renderer, 'Task description').props.onChangeText('Revised demo'),
+  );
+  act(() => control(renderer, 'Save task description').props.onPress());
+  expect(onTaskEdit).toHaveBeenCalledWith('task-1', 'Revised demo');
+  act(() =>
+    renderer.update(
+      <TasksPage
+        outcome={outcome}
+        loading={false}
+        {...props}
+        busyTaskId="task-1"
+        taskMutationError="Tasks changed. Reload before editing."
+        onDismissTaskMutation={onDismissTaskMutation}
+      />,
+    ),
+  );
+  expect(control(renderer, 'Complete Prepare demo').props.disabled).toBe(true);
+  expect(control(renderer, 'Task description').props.value).toBe(
+    'Revised demo',
+  );
+  expect(control(renderer, 'Retry task change')).toBeUndefined();
+  act(() => control(renderer, 'Dismiss task change').props.onPress());
+  expect(onDismissTaskMutation).toHaveBeenCalledTimes(1);
+});
+
+test('task due dates use canonical epoch milliseconds', () => {
+  const dueAt = Date.UTC(2026, 8, 8);
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        loading={false}
+        outcome={{
+          ...outcome,
+          value: {...outcome.value, items: [{...task, dueAt}]},
+        }}
+      />,
+    );
+  });
+  const expected = new Date(dueAt).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
+  expect(
+    renderer.root.findAll(node => node.props.children === expected).length,
+  ).toBeGreaterThan(0);
+});
+
+test('conflict refresh preserves dirty description while untouched descriptions follow server state', () => {
+  const props = {writesAvailable: true, onTaskEdit: jest.fn()};
+  const renderer = render(props);
+  act(() => control(renderer, 'Open task: Prepare demo').props.onPress());
+  act(() =>
+    renderer.update(
+      <TasksPage
+        loading={false}
+        {...props}
+        outcome={{
+          ...outcome,
+          value: {...outcome.value, items: [{...task, title: 'Server title'}]},
+        }}
+      />,
+    ),
+  );
+  expect(control(renderer, 'Task description').props.value).toBe(
+    'Server title',
+  );
+  act(() =>
+    control(renderer, 'Task description').props.onChangeText(
+      'My unsaved description',
+    ),
+  );
+  act(() =>
+    renderer.update(
+      <TasksPage
+        loading={false}
+        {...props}
+        busyTaskId="task-1"
+        taskMutationError="Task changed. Copy your edit before dismissing."
+        outcome={{
+          ...outcome,
+          value: {
+            ...outcome.value,
+            items: [{...task, title: 'Another server title'}],
+          },
+        }}
+      />,
+    ),
+  );
+  expect(control(renderer, 'Task description').props.value).toBe(
+    'My unsaved description',
+  );
+});

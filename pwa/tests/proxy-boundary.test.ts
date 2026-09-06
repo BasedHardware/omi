@@ -173,7 +173,7 @@ test("vite selects only the allowlisted example platform without browser credent
   expect(proxy[LOCAL_PROXY_PREFIX]?.target).toBe("http://127.0.0.1:4851");
 });
 
-test("example platform permits only candidate-compatible read routes", () => {
+test("example platform permits candidate reads and task operations", () => {
   expect(
     isExamplePlatformRequestSupported(
       "GET",
@@ -186,8 +186,15 @@ test("example platform permits only candidate-compatible read routes", () => {
       "/__omi/api/v1/memories?limit=50&cursor=next"
     )
   ).toBe(true);
+  expect(
+    isExamplePlatformRequestSupported("GET", "/__omi/api/v1/tasks?limit=2")
+  ).toBe(true);
+  expect(
+    isExamplePlatformRequestSupported("POST", "/__omi/api/v1/tasks/ops")
+  ).toBe(true);
   for (const [method, path] of [
-    ["GET", "/__omi/api/v1/tasks"],
+    ["DELETE", "/__omi/api/v1/tasks/ops"],
+    ["POST", "/__omi/api/v1/tasks"],
     ["GET", "/__omi/api/v1/chat-messages?limit=50"],
     ["GET", "/__omi/api/v1/settings"],
     ["POST", "/__omi/api/v1/chat-attachments"],
@@ -243,7 +250,11 @@ test("vite refuses unsupported example platform requests with a typed error", ()
   });
 });
 
-test("vite forwards supported example platform reads", () => {
+test.each([
+  ["GET", "/__omi/api/v1/memories?limit=50"],
+  ["GET", "/__omi/api/v1/tasks?limit=50"],
+  ["POST", "/__omi/api/v1/tasks/ops"],
+])("vite forwards supported example platform request %s %s", (method, url) => {
   const config = viteConfig({
     command: "serve",
     env: {
@@ -257,8 +268,8 @@ test("vite forwards supported example platform reads", () => {
   ];
   const result = option?.bypass?.(
     {
-      method: "GET",
-      url: "/__omi/api/v1/memories?limit=50",
+      method,
+      url,
     } as Parameters<NonNullable<ProxyOptions["bypass"]>>[0],
     {} as Parameters<NonNullable<ProxyOptions["bypass"]>>[1],
     option
