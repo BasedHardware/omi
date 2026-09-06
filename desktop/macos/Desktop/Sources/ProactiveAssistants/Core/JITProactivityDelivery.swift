@@ -61,6 +61,7 @@ struct JITProactivityAgentResult: Sendable {
 
 enum JITProactivityAgentAuthorityError: Error, Equatable {
   case readOnlyModeRequired
+  case qualificationBudgetRequired
   case ownerChanged
 }
 
@@ -68,12 +69,24 @@ enum JITProactivityAgentAuthority {
   typealias Runner = @Sendable (JITProactivityAgentRequest) async throws -> JITProactivityAgentResult
   typealias AuthorizationCheck = @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool
 
+  static func requiresQualificationBudget(bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> Bool {
+    bundleIdentifier == "com.omi.omi-jit-qa"
+  }
+
+  static func validateQualificationBudget(
+    _ budget: JITProactivityAgentBudget?, required: Bool = requiresQualificationBudget()
+  ) throws {
+    if required && budget == nil { throw JITProactivityAgentAuthorityError.qualificationBudgetRequired }
+  }
+
   static func run(
     _ request: JITProactivityAgentRequest,
     runner: Runner,
+    requiresBoundedBudget: Bool = requiresQualificationBudget(),
     authorizationCurrent: AuthorizationCheck = RuntimeOwnerIdentity.isAuthorizationCurrent
   ) async throws -> JITProactivityAgentResult {
     guard request.mode == "ask" else { throw JITProactivityAgentAuthorityError.readOnlyModeRequired }
+    try validateQualificationBudget(request.budget, required: requiresBoundedBudget)
     guard authorizationCurrent(request.authorizationSnapshot) else {
       throw JITProactivityAgentAuthorityError.ownerChanged
     }
@@ -373,6 +386,11 @@ actor JITProactivityDelivery {
     let gate = await MainActor.run { ContextProactivityEngine.liveDeliveryGateInput() }
     guard ContextDeliveryBudget.freeGate(input: gate) == .allowed else {
       return await abandon(execution, reason: "delivery_gate")
+    }
+    do {
+      try JITProactivityAgentAuthority.validateQualificationBudget(execution.agentBudget)
+    } catch {
+      return await abandon(execution, reason: "jit_qualification_budget_unavailable")
     }
     let attempt: ContextDeliveryAttempt
     do {

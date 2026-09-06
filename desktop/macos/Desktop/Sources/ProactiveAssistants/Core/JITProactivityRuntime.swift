@@ -283,6 +283,7 @@ actor JITProactivityRuntime {
           receipt: receipt,
           budgetTimezone: snapshot.budgetTimezone,
           budgetContractVersion: resolved.budgetContractVersion,
+          evaluationTime: evaluationTime,
           authorizationSnapshot: authorizationSnapshot)
       case .boundedPlannedTriage:
         guard let ambiguous = runtimeResult.ambiguous.first,
@@ -305,6 +306,7 @@ actor JITProactivityRuntime {
             receipt: receipt,
             budgetTimezone: snapshot.budgetTimezone,
             budgetContractVersion: resolved.budgetContractVersion,
+            evaluationTime: evaluationTime,
             authorizationSnapshot: authorizationSnapshot)
         }
         return .suppressed(reason: "planned_runtime_rejected")
@@ -490,12 +492,12 @@ actor JITProactivityRuntime {
     receipt: JITTriggerMirrorReceipt,
     budgetTimezone: String?,
     budgetContractVersion: String?,
+    evaluationTime: Date,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async -> JITProactivityDecision {
     guard let context, context.permitsNanoTriage else {
       return .suppressed(reason: "ambient_local_gate")
     }
-    let evaluationTime = evaluationNow()
     let eventTime = observation.occurredAt
     let temporalContext =
       context.temporalContext
@@ -622,9 +624,7 @@ actor JITProactivityRuntime {
       accountGeneration: receipt.accountGeneration,
       policy: receipt.policy,
       derivedIntent: derived,
-      temporalContext: Self.temporalContext(
-        capturedAt: eventTime, evaluatedAt: evaluationTime,
-        timezoneIdentifier: budgetTimezone),
+      temporalContext: temporalContext,
       agentBudget: JITProactivityAgentBudget(
         contractVersion: budgetContractVersion, executionID: candidateID))
     return .deliver(lane: .ambient, id: context.id, continuityKey: continuityKey)

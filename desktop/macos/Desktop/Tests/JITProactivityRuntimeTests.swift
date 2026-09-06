@@ -192,6 +192,28 @@ final class JITProactivityRuntimeTests: XCTestCase {
     XCTAssertEqual(days, ["2026-08-23"])
   }
 
+  func testAmbientAdmissionUsesOneEvaluationInstantAcrossMidnight() async throws {
+    let beforeMidnight = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-06T03:59:59Z"))
+    let clock = AdvancingEvaluationClock(beforeMidnight)
+    let usageReads = UsageReadProbe()
+    let runtime = try wiredRuntime(
+      triggers: [],
+      budgetTimezone: "America/New_York",
+      ambientNanoUsage: { day, _ in
+        await usageReads.record(day)
+        return JITAmbientNanoUsage(used: 8, lastSpentAt: nil)
+      },
+      evaluationNow: { clock.next() })
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(text: "deadline", occurredAt: beforeMidnight),
+      ambient: validAmbient())
+    XCTAssertEqual(decision, .suppressed(reason: "ambient_nano_budget"))
+    let days = await usageReads.days
+    XCTAssertEqual(days, ["2026-09-05"])
+    XCTAssertEqual(clock.count, 1)
+  }
+
   func testMalformedAuthoritativeTimezoneFailsClosedBeforeAmbientSpend() async throws {
     let usageReads = UsageReadProbe()
     let runtime = try wiredRuntime(
@@ -801,6 +823,24 @@ final class JITProactivityRuntimeTests: XCTestCase {
       ambientNanoUsage: ambientNanoUsage,
       claimAmbientNano: claimAmbientNano,
       evaluationNow: resolvedEvaluationNow)
+  }
+
+  private final class AdvancingEvaluationClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private let initial: Date
+    private var reads = 0
+    init(_ initial: Date) { self.initial = initial }
+    func next() -> Date {
+      lock.lock()
+      defer { lock.unlock() }
+      defer { reads += 1 }
+      return initial.addingTimeInterval(TimeInterval(reads * 2))
+    }
+    var count: Int {
+      lock.lock()
+      defer { lock.unlock() }
+      return reads
+    }
   }
 
   private final class MutableDateBox: @unchecked Sendable {

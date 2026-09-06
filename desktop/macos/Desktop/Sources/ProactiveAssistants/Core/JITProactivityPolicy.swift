@@ -76,10 +76,6 @@ struct JITProactivityFlags: Equatable, Sendable {
     self.budgetContractVersion = budgetContractVersion
   }
 
-  var supportsBoundedBudget: Bool {
-    budgetContractVersion == JITProactivityAgentBudget.cloudQAContractVersion
-  }
-
   /// The server-computed `effective` verdict owns admission: the client must
   /// not re-derive a stricter verdict from the raw flags. The complete,
   /// known-good rollout + kill-switch pair remains the fallback for servers

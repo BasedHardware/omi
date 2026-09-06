@@ -13,10 +13,6 @@ struct JITProactivityTemporalContext: Equatable, Sendable {
     return TimeZone(identifier: timezoneIdentifier)
   }
 
-  var hasAuthoritativeTimezone: Bool {
-    timeZone != nil
-  }
-
   /// Prompt text is bounded, content-free metadata.  If capture time is
   /// unavailable, the model is told to avoid temporal claims while retaining
   /// the rest of the proactive decision surface.
