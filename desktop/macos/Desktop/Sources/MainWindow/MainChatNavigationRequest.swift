@@ -19,13 +19,19 @@ final class MainChatNavigationRequestStore {
   /// (the first-real-app notch card, the daily summary's follow-up). Consumed
   /// by whichever shell's composer mounts or is already mounted.
   private(set) var pendingDraft: String?
+  /// Image staged alongside the draft (the first-real-app card attaches the
+  /// screen it saw, so the question has its referent in hand). Same ownership
+  /// rule as the draft: every request replaces the slot, and exactly one
+  /// composer takes what it finds.
+  private(set) var pendingAttachment: ChatAttachment?
 
-  func request(draft: String? = nil) {
+  func request(draft: String? = nil, attachment: ChatAttachment? = nil) {
     isPending = true
     // Every request owns the draft slot: a plain "Continue in Omi" must never
     // surface a suggestion left over from an earlier, unconsumed request.
     let trimmed = draft?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     pendingDraft = trimmed.isEmpty ? nil : draft
+    pendingAttachment = attachment
     NotificationCenter.default.post(name: .openMainChatRequested, object: nil)
   }
 
@@ -42,6 +48,14 @@ final class MainChatNavigationRequestStore {
   func consumeDraft() -> String? {
     defer { pendingDraft = nil }
     return pendingDraft
+  }
+
+  /// Returns the pending attachment, and clears it. Taken together with the
+  /// draft: a request is one unit, and the composer that takes the text is
+  /// the one that stages the image.
+  func consumeAttachment() -> ChatAttachment? {
+    defer { pendingAttachment = nil }
+    return pendingAttachment
   }
 }
 

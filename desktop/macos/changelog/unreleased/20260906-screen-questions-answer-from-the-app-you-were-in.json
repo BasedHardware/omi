@@ -1,0 +1,3 @@
+{
+  "change": "Fixed \"what's on my screen?\" asked from Omi's own window answering with Omi's interface — it now answers from the most recent frame of the app you were actually in, and the first-real-app notch card attaches that frame for you"
+}

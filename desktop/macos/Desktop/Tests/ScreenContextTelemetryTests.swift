@@ -205,10 +205,11 @@ final class ScreenContextTelemetryTests: XCTestCase {
       capturedAt: capturedAt,
       formatter: formatter
     )
-    let deliveredJSON = String(
-      data: try JSONSerialization.data(withJSONObject: delivered, options: [.sortedKeys]),
-      encoding: .utf8
-    )!
+    let deliveredJSON =
+      try String(
+        data: JSONSerialization.data(withJSONObject: delivered, options: [.sortedKeys]),
+        encoding: .utf8
+      ) ?? ""
 
     XCTAssertTrue(deliveredJSON.contains(#""source":"turn_scoped_live_capture""#))
     XCTAssertEqual(
@@ -490,5 +491,213 @@ final class ScreenContextTelemetryTests: XCTestCase {
     XCTAssertTrue(guidance.contains("ONLY if"))
     let permission = payload["permission"] as? [String: String]
     XCTAssertEqual(permission?["screen_recording"], "not_granted")
+  }
+
+  // MARK: - Main-chat explicit evidence (the Omi-frontmost fallback)
+
+  /// Fake store: one ChatGPT row plus, optionally, an excluded one. No GRDB.
+  @MainActor private func fallbackLoader(
+    appName: String = "ChatGPT",
+    ageSeconds: TimeInterval = 30,
+    excludedAppName: String? = "1Password",
+    frameData: Data? = Data([0xFF, 0xD8, 0xFF]),
+    failLoad: Bool = false
+  ) -> RewindFrameLoader {
+    let rows: [Screenshot?] = [
+      excludedAppName.map {
+        Screenshot(
+          id: 1, timestamp: Date().addingTimeInterval(-5), appName: $0)
+      },
+      Screenshot(
+        id: 2, timestamp: Date().addingTimeInterval(-ageSeconds), appName: appName),
+    ]
+    let excluded: Set<String> = excludedAppName.map { [$0] } ?? []
+    return RewindFrameLoader(
+      environment: .init(
+        recentScreenshots: { _ in rows.compactMap { $0 } },
+        activeChunkPath: { nil },
+        loadData: { _ in
+          if failLoad { throw RewindError.screenshotNotFound }
+          return frameData ?? Data()
+        },
+        excludedApps: { excluded }
+      ))
+  }
+
+  /// Lock-protected flag for @Sendable capture closures under test: a plain
+  /// captured `var` cannot cross into a `@Sendable` closure.
+  private final class CaptureFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    var isSet: Bool { lock.withLock { value } }
+    func set() { lock.withLock { value = true } }
+  }
+
+  @MainActor
+  func testMainChatExplicitRequestAnswersFromLastExternalFrameNotLiveCapture() async {
+    let frameData = Data([0xFF, 0xD8, 0xFF, 0xE0])
+    let capturedLive = CaptureFlag()
+    let evidence = await ScreenContextWorkContextBuilder.explicitScreenEvidence(
+      turnOwner: .mainChat,
+      now: Date(),
+      frontmostBundleIdentifier: "com.omi.computer-macos",
+      omiBundleIdentifier: "com.omi.computer-macos",
+      loader: fallbackLoader(frameData: frameData),
+      isScreenRecordingGranted: { true },
+      captureNow: {
+        capturedLive.set()
+        return nil
+      }
+    )
+
+    // The pixels the model receives are the frame's, and no live capture was
+    // taken — the self-portrait never ships alongside the fallback.
+    XCTAssertEqual(evidence.imageData, frameData)
+    XCTAssertFalse(capturedLive.isSet)
+    let screenNow = evidence.payload["screen_now"] as? [String: Any]
+    XCTAssertEqual(screenNow?["source"] as? String, "last_external_frame")
+    XCTAssertEqual(screenNow?["app_name"] as? String, "ChatGPT")
+    XCTAssertEqual((screenNow?["image_delivered_to_model"] as? NSNumber)?.boolValue, true)
+    XCTAssertEqual((screenNow?["omi_frontmost_at_send"] as? NSNumber)?.boolValue, true)
+    let guidance = evidence.payload["guidance"] as? String ?? ""
+    XCTAssertTrue(guidance.contains("ChatGPT"))
+    XCTAssertTrue(guidance.contains("Do not describe Omi"))
+  }
+
+  @MainActor
+  func testMainChatExplicitRequestWithoutFramesFailsHonestNeverSelfPortrait() async {
+    // An empty store (fresh install, capture off): no frame, so the honest
+    // failure payload answers and no capture of Omi's own window is taken.
+    let emptyLoader = RewindFrameLoader(
+      environment: .init(
+        recentScreenshots: { _ in [] },
+        activeChunkPath: { nil },
+        loadData: { _ in throw RewindError.screenshotNotFound },
+        excludedApps: { [] }
+      ))
+    let capturedLive = CaptureFlag()
+    let evidence = await ScreenContextWorkContextBuilder.explicitScreenEvidence(
+      turnOwner: .mainChat,
+      now: Date(),
+      frontmostBundleIdentifier: "com.omi.computer-macos",
+      omiBundleIdentifier: "com.omi.computer-macos",
+      loader: emptyLoader,
+      isScreenRecordingGranted: { true },
+      captureNow: {
+        capturedLive.set()
+        return nil
+      }
+    )
+
+    XCTAssertNil(evidence.imageData)
+    XCTAssertFalse(capturedLive.isSet)
+    XCTAssertEqual(evidence.payload["failure_code"] as? String, "omi_frontmost_no_frame")
+    let screenNow = evidence.payload["screen_now"] as? [String: Any]
+    XCTAssertEqual((screenNow?["available"] as? NSNumber)?.boolValue, false)
+    let guidance = evidence.payload["guidance"] as? String ?? ""
+    XCTAssertTrue(guidance.contains("switch to the app"))
+  }
+
+  @MainActor
+  func testMainChatExplicitRequestWithUnreadableFrameFailsHonest() async {
+    let evidence = await ScreenContextWorkContextBuilder.explicitScreenEvidence(
+      turnOwner: .mainChat,
+      now: Date(),
+      frontmostBundleIdentifier: "com.omi.computer-macos",
+      omiBundleIdentifier: "com.omi.computer-macos",
+      loader: fallbackLoader(failLoad: true),
+      isScreenRecordingGranted: { true },
+      captureNow: {
+        XCTFail("no live capture may be taken for a main-chat explicit ask")
+        return nil
+      }
+    )
+
+    XCTAssertEqual(evidence.imageData, nil)
+    XCTAssertEqual(evidence.payload["failure_code"] as? String, "omi_frontmost_no_frame")
+    let screenNow = evidence.payload["screen_now"] as? [String: Any]
+    XCTAssertEqual(screenNow?["last_external_app_name"] as? String, "ChatGPT")
+  }
+
+  @MainActor
+  func testNonMainChatExplicitRequestStillCapturesLive() async {
+    let liveJPEG = Data([0xFF, 0xD8, 0xFF, 0xDB])
+    let evidence = await ScreenContextWorkContextBuilder.explicitScreenEvidence(
+      turnOwner: .floatingVoice,
+      now: Date(),
+      frontmostBundleIdentifier: "com.openai.chat",
+      omiBundleIdentifier: "com.omi.computer-macos",
+      loader: fallbackLoader(
+        appName: "ChatGPT",
+        frameData: Data(),
+        failLoad: false
+      ),
+      isScreenRecordingGranted: { true },
+      captureNow: { liveJPEG }
+    )
+    // The store is never consulted for a non-main-chat ask — the voice path
+    // interjects while the user is inside the other app — so the pixels are
+    // the live capture's, not the frame's.
+    XCTAssertEqual(evidence.imageData, liveJPEG)
+    let screenNow = evidence.payload["screen_now"] as? [String: Any]
+    XCTAssertEqual(screenNow?["source"] as? String, "turn_scoped_live_capture")
+    XCTAssertEqual((screenNow?["omi_frontmost_at_send"] as? NSNumber)?.boolValue, false)
+  }
+
+  @MainActor
+  func testExplicitRequestWithoutPermissionAnswersPermissionPayloadOnEveryOwner() async {
+    for owner in [ChatTurnOwner.mainChat, .floatingVoice] {
+      let evidence = await ScreenContextWorkContextBuilder.explicitScreenEvidence(
+        turnOwner: owner,
+        now: Date(),
+        frontmostBundleIdentifier: "com.omi.computer-macos",
+        omiBundleIdentifier: "com.omi.computer-macos",
+        loader: fallbackLoader(),
+        isScreenRecordingGranted: { false },
+        captureNow: {
+          XCTFail("no capture without the permission")
+          return nil
+        }
+      )
+      XCTAssertEqual(
+        evidence.payload["failure_code"] as? String, "permission_denied", "\(owner)")
+      XCTAssertNil(evidence.imageData)
+    }
+  }
+
+  func testLastExternalFramePayloadIsSelfContained() throws {
+    let payload = ScreenContextWorkContextBuilder.explicitLastExternalFramePayload(
+      appName: "ChatGPT",
+      windowTitle: "  How do I parse JSON?  ",
+      frameAgeSeconds: 42,
+      capturedAt: Date(timeIntervalSince1970: 1_000)
+    )
+    let json =
+      try String(
+        data: JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+        encoding: .utf8
+      ) ?? ""
+    XCTAssertTrue(json.contains(#""source":"last_external_frame""#))
+    XCTAssertTrue(json.contains("How do I parse JSON?"))
+    XCTAssertTrue(json.contains("Do not describe Omi"))
+    XCTAssertTrue(json.contains("42 seconds"))
+  }
+
+  func testSelfFrontmostUnavailablePayloadCarriesStalenessDetail() throws {
+    let noFrame = ScreenContextWorkContextBuilder.selfFrontmostUnavailablePayload(
+      reason: .noAttachableFrame)
+    let stale = ScreenContextWorkContextBuilder.selfFrontmostUnavailablePayload(
+      reason: .frameTooStale(ageSeconds: 300),
+      lastExternalAppName: "ChatGPT",
+      lastExternalFrameAgeSeconds: 300
+    )
+    XCTAssertEqual(noFrame["failure_code"] as? String, "omi_frontmost_no_frame")
+    XCTAssertEqual(stale["failure_code"] as? String, "omi_frontmost_no_frame")
+    let staleScreen = stale["screen_now"] as? [String: Any]
+    XCTAssertEqual(staleScreen?["last_external_app_name"] as? String, "ChatGPT")
+    XCTAssertEqual(staleScreen?["last_external_frame_age_seconds"] as? Int, 300)
+    let staleGuidance = stale["guidance"] as? String ?? ""
+    XCTAssertTrue(staleGuidance.contains("300 seconds"))
+    XCTAssertFalse((noFrame["guidance"] as? String ?? "").contains("seconds old"))
   }
 }

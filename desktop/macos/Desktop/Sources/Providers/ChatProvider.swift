@@ -5078,18 +5078,17 @@ class ChatProvider: ObservableObject {
           screenContextEligibleForTurn = true
           let screenContextPayload: [String: Any]
           if screenContextReason.isExplicitScreenRequest {
-            // An explicit current-screen question gets one capture
-            // scoped to this exact turn. Never let a Rewind frame or
-            // OCR summary impersonate the image the model receives.
-            if screenRecordingGranted {
-              effectiveImageData = await Task.detached(priority: .userInitiated) {
-                ScreenCaptureManager.captureScreenData()
-              }.value
-            }
-            screenContextPayload = ScreenContextWorkContextBuilder.explicitCurrentScreenPayload(
-              screenRecordingGranted: screenRecordingGranted,
-              imageAttached: effectiveImageData != nil
+            // The policy decides what "my screen" is (see
+            // `ScreenContextFallbackPolicy`): on the main chat the composer is
+            // Omi's own window, so the most recent non-Omi frame stands in;
+            // everywhere else the subject is live and a turn-scoped capture
+            // wins. Never let a Rewind frame or OCR summary impersonate the
+            // image the model receives.
+            let evidence = await ScreenContextWorkContextBuilder.explicitScreenEvidence(
+              turnOwner: turnOwner
             )
+            effectiveImageData = evidence.imageData
+            screenContextPayload = evidence.payload
           } else {
             let rawScreenContextPayloadBox = await ScreenContextWorkContextBuilder.payloadBox(
               arguments: RuntimeJSONPayloadBox(["minutes": 10])

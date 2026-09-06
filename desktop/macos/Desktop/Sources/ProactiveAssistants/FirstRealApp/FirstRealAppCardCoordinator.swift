@@ -150,7 +150,26 @@ final class FirstRealAppCardCoordinator {
       // The seam every prefill already uses. `MainChatNavigationRequestStore`
       // holds the draft until a composer mounts, so this works whether or not
       // the main window exists yet — and it never sends.
-      AppDelegate.summonWindowTarget()?.openMainAppChat(prefilledDraft: prompt)
+      //
+      // The card names the app that was frontmost when it fired, but the chat
+      // window it summons becomes "the screen" the moment it lands, so the
+      // prefilled question carries the most recent frame of a non-Omi app as
+      // its referent (within the same freshness bound the send-time fallback
+      // applies). Fetched *before* the request: the store's notification is
+      // consumed synchronously on composer mount, so an attachment staged
+      // after `request` would miss the composer that takes the draft.
+      Task { @MainActor in
+        let attachment = await RewindFrameLoader.shared.loadLatestAttachableFrame(
+          maxAgeSeconds: ScreenContextFallbackPolicy.maxFallbackFrameAgeSeconds
+        ).flatMap { frame in
+          RecentScreenFrameStaging.attachment(
+            appName: frame.appName,
+            jpegData: frame.data,
+            capturedAt: frame.timestamp
+          )
+        }
+        AppDelegate.summonWindowTarget()?.openMainAppChat(prefilledDraft: prompt, attachedFrame: attachment)
+      }
     },
     scheduler: any FirstRealAppCardScheduling = FirstRealAppCardMainQueueScheduler()
   ) {

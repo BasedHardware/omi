@@ -451,4 +451,28 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
     activateRealApp(on: coordinator)
     XCTAssertEqual(presented.count, 1)
   }
+
+  // MARK: - Attachment handoff contract
+
+  /// The card's handoff is one unit: the composer that takes the draft is the
+  /// one that stages the frame, and a request without an attachment clears any
+  /// stale one — the same slot ownership the draft has always had.
+  func testRequestCarriesDraftAndAttachmentTogetherAndIsConsumedOnce() {
+    let store = MainChatNavigationRequestStore.shared
+    _ = store.consumeDraft()
+    _ = store.consumeAttachment()
+
+    let attachment = ChatAttachment(fileName: "Screen frame (ChatGPT).jpg", mimeType: "image/jpeg")
+    store.request(draft: FirstRealAppCardPolicy.prompt, attachment: attachment)
+
+    XCTAssertTrue(store.isPending)
+    XCTAssertEqual(store.consumeDraft(), "Summarize what's on my screen")
+    XCTAssertEqual(store.consumeAttachment()?.id, attachment.id)
+    XCTAssertNil(store.consumeAttachment(), "a second composer must not re-take the frame")
+
+    // A plain request owns the slot: no attachment may survive from before.
+    store.request(draft: "Continue in Omi")
+    XCTAssertNil(store.consumeAttachment())
+    XCTAssertEqual(store.consumeDraft(), "Continue in Omi")
+  }
 }
