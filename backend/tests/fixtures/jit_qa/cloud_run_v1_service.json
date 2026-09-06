@@ -28,7 +28,7 @@
               {"name": "OMI_LLM_GATEWAY_URL", "value": "https://llm-gateway-jit-qa.invalid"},
               {"name": "REDIS_DB_HOST", "value": "10.0.0.10"},
               {"name": "REDIS_DB_PORT", "value": "6379"},
-              {"name": "TYPESENSE_HOST", "value": "typesense-jit-qa-abc.run.app"},
+              {"name": "TYPESENSE_HOST", "value": "typesense-jit-qa-1031333818730.us-central1.run.app"},
               {"name": "TYPESENSE_HOST_PORT", "value": "443"},
               {"name": "TYPESENSE_PROTOCOL", "value": "https"},
               {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "jit_qa_canonical_memory_atoms"},

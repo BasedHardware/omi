@@ -13,7 +13,7 @@ SCRIPT = ROOT / "scripts" / "jit_qa_typesense_projection.py"
 
 for key, value in {
     "ENCRYPTION_SECRET": "12345678901234567890123456789012",
-    "TYPESENSE_HOST": "typesense-jit-qa-example.run.app",
+    "TYPESENSE_HOST": "typesense-jit-qa-1031333818730.us-central1.run.app",
     "TYPESENSE_HOST_PORT": "443",
     "TYPESENSE_PROTOCOL": "https",
     "TYPESENSE_API_KEY": "qa-typesense-test-key",
@@ -51,15 +51,19 @@ def _environment() -> dict[str, str]:
 
 
 def test_typesense_url_accepts_only_the_named_cloud_run_service():
-    assert PROJECTION.parse_typesense_url("https://typesense-jit-qa-abc.run.app/") == (
-        "https://typesense-jit-qa-abc.run.app",
-        "typesense-jit-qa-abc.run.app",
+    assert PROJECTION.parse_typesense_url("https://typesense-jit-qa-1031333818730.us-central1.run.app/") == (
+        "https://typesense-jit-qa-1031333818730.us-central1.run.app",
+        "typesense-jit-qa-1031333818730.us-central1.run.app",
+    )
+    assert PROJECTION.parse_typesense_url("https://typesense-jit-qa-dt5lrfkkoa-uc.a.run.app/") == (
+        "https://typesense-jit-qa-dt5lrfkkoa-uc.a.run.app",
+        "typesense-jit-qa-dt5lrfkkoa-uc.a.run.app",
     )
     for value in (
         "https://canonical-memory.run.app",
-        "http://typesense-jit-qa-abc.run.app",
+        "http://typesense-jit-qa-1031333818730.us-central1.run.app",
         "http://127.0.0.1:8108",
-        "https://typesense-jit-qa-abc.run.app/other",
+        "https://typesense-jit-qa-1031333818730.us-central1.run.app/other",
     ):
         with pytest.raises(PROJECTION.ProjectionError):
             PROJECTION.parse_typesense_url(value)
@@ -99,14 +103,14 @@ def test_readiness_invalidation_accepts_missing_marker_but_fails_other_errors(mo
         raise PROJECTION.ProjectionError("Typesense request returned HTTP 404")
 
     monkeypatch.setattr(PROJECTION, "_typesense_request", missing_marker)
-    PROJECTION._invalidate_readiness_marker("https://typesense-jit-qa-abc.run.app")
+    PROJECTION._invalidate_readiness_marker("https://typesense-jit-qa-1031333818730.us-central1.run.app")
 
     def unavailable(*_args, **_kwargs):
         raise PROJECTION.ProjectionError("Typesense request returned HTTP 503")
 
     monkeypatch.setattr(PROJECTION, "_typesense_request", unavailable)
     with pytest.raises(PROJECTION.ProjectionError, match="503"):
-        PROJECTION._invalidate_readiness_marker("https://typesense-jit-qa-abc.run.app")
+        PROJECTION._invalidate_readiness_marker("https://typesense-jit-qa-1031333818730.us-central1.run.app")
 
 
 def test_build_receipt_requires_a_real_provider_and_consumed_result():
@@ -114,7 +118,7 @@ def test_build_receipt_requires_a_real_provider_and_consumed_result():
     receipt = PROJECTION.build_projection_receipt(
         source_sha="a" * 40,
         run_id="projection-run-1",
-        typesense_url="https://typesense-jit-qa-abc.run.app",
+        typesense_url="https://typesense-jit-qa-1031333818730.us-central1.run.app",
         typesense_image="gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "b" * 64,
         typesense_base_image=PROJECTION.TYPESENSE_BASE_IMAGE_27_1,
         query="travel plan",
@@ -141,7 +145,7 @@ def test_build_receipt_requires_a_real_provider_and_consumed_result():
         PROJECTION.build_projection_receipt(
             source_sha="a" * 40,
             run_id="projection-run-1",
-            typesense_url="https://typesense-jit-qa-abc.run.app",
+            typesense_url="https://typesense-jit-qa-1031333818730.us-central1.run.app",
             typesense_image="gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "b" * 64,
             typesense_base_image=PROJECTION.TYPESENSE_BASE_IMAGE_27_1,
             query="travel plan",
@@ -159,7 +163,7 @@ def test_build_receipt_requires_a_real_provider_and_consumed_result():
         PROJECTION.build_projection_receipt(
             source_sha="a" * 40,
             run_id="projection-run-1",
-            typesense_url="https://typesense-jit-qa-abc.run.app",
+            typesense_url="https://typesense-jit-qa-1031333818730.us-central1.run.app",
             typesense_image="gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "b" * 64,
             typesense_base_image=PROJECTION.TYPESENSE_BASE_IMAGE_27_1,
             query="travel plan",
@@ -242,7 +246,7 @@ def test_run_projection_rebuilds_then_proves_provider_and_search_consumer(monkey
     receipt = PROJECTION.run_projection(
         source_sha="a" * 40,
         run_id="projection-run-2",
-        typesense_url="https://typesense-jit-qa-abc.run.app",
+        typesense_url="https://typesense-jit-qa-1031333818730.us-central1.run.app",
         typesense_image="gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "b" * 64,
         typesense_base_image=PROJECTION.TYPESENSE_BASE_IMAGE_27_1,
         query="travel plan",
@@ -331,7 +335,7 @@ def test_failed_consumer_proof_removes_new_readiness_marker(monkeypatch: pytest.
         PROJECTION.run_projection(
             source_sha="a" * 40,
             run_id="projection-run-failure",
-            typesense_url="https://typesense-jit-qa-abc.run.app",
+            typesense_url="https://typesense-jit-qa-1031333818730.us-central1.run.app",
             typesense_image="gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "b" * 64,
             typesense_base_image=PROJECTION.TYPESENSE_BASE_IMAGE_27_1,
             query="travel plan",
@@ -370,7 +374,9 @@ def test_projection_documents_uses_typesense_export_jsonl(monkeypatch: pytest.Mo
 
     requests = []
     monkeypatch.setattr(PROJECTION, "urlopen", lambda request, timeout: (requests.append(request), ExportResponse())[1])
-    documents = PROJECTION._projection_documents("https://typesense-jit-qa-abc.run.app", PROJECTION.COLLECTION)
+    documents = PROJECTION._projection_documents(
+        "https://typesense-jit-qa-1031333818730.us-central1.run.app", PROJECTION.COLLECTION
+    )
     assert documents[0]["memory_id"] == "one"
     assert requests[0].full_url.endswith("/documents/export?include_fields=" + "%2C".join(PROJECTION._DIGEST_FIELDS))
 

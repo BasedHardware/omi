@@ -165,6 +165,8 @@ jobs:
           grep -Fq '"id":"smoke-1"' "$export_response"
           grep -Fq '"content":"isolated QA smoke"' "$export_response"
           if [[ "$MODE" == "prove" ]]; then
+            python3 backend/scripts/runtime_image_contracts.py smoke \
+              --dockerfile backend/Dockerfile --image "$runner_tag"
             docker run --rm --entrypoint python3 \
               -e ENCRYPTION_SECRET=jit-qa-import-smoke-secret \
               "$runner_tag" scripts/jit_qa_typesense_projection.py --help >/dev/null
@@ -270,7 +272,7 @@ jobs:
         run: |
           set -euo pipefail
           url="$(gcloud run services describe "$QA_TYPESENSE_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format='value(status.url)')"
-          [[ "$url" =~ ^https://typesense-jit-qa-[a-z0-9-]+\.run\.app$ ]]
+          [[ "$url" =~ ^https://typesense-jit-qa-([a-z0-9-]+-uc\.a\.run\.app|[0-9]+\.us-central1\.run\.app)$ ]]
           echo "typesense_url=$url" >> "$GITHUB_OUTPUT"
       - name: Validate the immutable one-instance service contract
         env:

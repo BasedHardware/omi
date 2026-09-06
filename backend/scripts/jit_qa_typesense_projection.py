@@ -31,7 +31,10 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from models.knowledge_ledger_search import validate_ledger_kinds  # noqa: E402
-from scripts.jit_qa_cloud_run_contract import TYPESENSE_BASE_IMAGE_27_1  # noqa: E402
+from scripts.jit_qa_cloud_run_contract import (  # noqa: E402
+    TYPESENSE_BASE_IMAGE_27_1,
+    is_valid_typesense_qa_host,
+)
 from utils.memory.atom_keyword_index import (  # noqa: E402
     ensure_ledger_keyword_schema,
     ensure_memories_collection,
@@ -141,8 +144,7 @@ def parse_typesense_url(value: str) -> tuple[str, str]:
     host = parsed.hostname or ""
     if (
         parsed.scheme != "https"
-        or not host.endswith(".run.app")
-        or not host.startswith(f"{TYPESENSE_SERVICE}-")
+        or not is_valid_typesense_qa_host(host)
         or parsed.username is not None
         or parsed.password is not None
         or parsed.query

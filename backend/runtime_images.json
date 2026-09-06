@@ -23,6 +23,21 @@
             }
         },
         {
+            "name": "jit-qa-typesense-projection-runner",
+            "dockerfile": "backend/Dockerfile",
+            "deployment_workflows": [".github/workflows/jit_qa_typesense_projection.yml"],
+            "build_context": ".",
+            "source_root": "backend",
+            "workdir": "/app",
+            "entrypoints": ["scripts.jit_qa_typesense_projection"],
+            "image_import_smoke": true,
+            "smoke_environment": {
+                "ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef"
+            },
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": true
+        },
+        {
             "name": "desktop-backend",
             "dockerfile": "backend/Dockerfile.desktop_backend",
             "deployment_workflows": [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml", ".github/workflows/jit_qa_cloud_run.yml"],

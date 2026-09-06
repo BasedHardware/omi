@@ -384,6 +384,19 @@ def test_typesense_resource_accepts_v1_autoscaling_annotations():
     CONTRACT.validate_typesense_cloud_run_resource(resource, expected_image=image)
 
 
+def test_typesense_resource_accepts_cloud_run_service_level_scaling_and_cpu_encoding():
+    image = "gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "f" * 64
+    resource = _typesense_resource(image)
+    template = resource["spec"]["template"]
+    template.pop("scaling")
+    resource["metadata"]["annotations"] = {
+        "run.googleapis.com/minScale": "1",
+        "run.googleapis.com/maxScale": "1",
+    }
+    template["containers"][0]["resources"]["limits"]["cpu"] = "1000m"
+    CONTRACT.validate_typesense_cloud_run_resource(resource, expected_image=image)
+
+
 @pytest.mark.parametrize("profile", ("backend", "desktop", "drain", "sweep"))
 def test_rollout_profiles_require_the_real_posthog_control_plane_secret(profile):
     _, secrets = CONTRACT.resource_environment(profile)
@@ -459,18 +472,22 @@ def test_qa_cloud_run_rendered_typesense_shell_accepts_real_host_and_digest():
             }
         },
     }
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8") as file:
-        json.dump(resource, file)
-        file.flush()
-        result = subprocess.run(
-            [sys.executable, "-", file.name, "b" * 40, "typesense-jit-qa-abc.run.app"],
-            input=rendered,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == image
+    for host in (
+        "typesense-jit-qa-1031333818730.us-central1.run.app",
+        "typesense-jit-qa-dt5lrfkkoa-uc.a.run.app",
+    ):
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8") as file:
+            json.dump(resource, file)
+            file.flush()
+            result = subprocess.run(
+                [sys.executable, "-", file.name, "b" * 40, host],
+                input=rendered,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == image
 
 
 def test_qa_cloud_run_renders_typesense_host_and_key_into_both_http_services():
@@ -485,7 +502,7 @@ def test_qa_cloud_run_renders_typesense_host_and_key_into_both_http_services():
         "QA_TYPESENSE_READINESS_COLLECTION": CONTRACT.TYPESENSE_READINESS_COLLECTION,
         "GATEWAY_URL": "https://llm-gateway-jit-qa-abc.run.app",
         "REDIS_HOST": "10.0.0.10",
-        "TYPESENSE_HOST": "typesense-jit-qa-abc.run.app",
+        "TYPESENSE_HOST": "typesense-jit-qa-1031333818730.us-central1.run.app",
         "SOURCE_SHA": "b" * 40,
     }
     rendered = subprocess.run(
@@ -497,7 +514,7 @@ def test_qa_cloud_run_renders_typesense_host_and_key_into_both_http_services():
     )
     assert rendered.returncode == 0, rendered.stderr
     common = rendered.stdout
-    assert "@TYPESENSE_HOST=typesense-jit-qa-abc.run.app@" in common
+    assert "@TYPESENSE_HOST=typesense-jit-qa-1031333818730.us-central1.run.app@" in common
     assert "@MEMORY_TYPESENSE_COLLECTION=jit_qa_canonical_memory_atoms@" in common
     assert "@MEMORY_TYPESENSE_READINESS_SOURCE_SHA=" + "b" * 40 in common
     deploy_line = next(line for line in text.splitlines() if "--set-secrets" in line and "TYPESENSE_API_KEY" in line)

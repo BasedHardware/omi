@@ -53,12 +53,14 @@ LEDGER_DRAIN_DOCKERFILE = "backend/modal/Dockerfile.knowledge_ledger_drain_job"
 DAILY_SWEEP_DOCKERFILE = "backend/modal/Dockerfile.daily_memory_sweep_job"
 DEFAULT_GATEWAY_URL = "https://llm-gateway-jit-qa.invalid"
 DEFAULT_REDIS_HOST = "10.0.0.10"
-DEFAULT_TYPESENSE_HOST = "typesense-jit-qa-abc.run.app"
+DEFAULT_TYPESENSE_HOST = "typesense-jit-qa-1031333818730.us-central1.run.app"
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _DIGEST_IMAGE_RE = re.compile(r"^gcr\.io/based-hardware-dev/[a-z0-9-]+@sha256:[0-9a-f]{64}$")
 _TYPESENSE_BASE_IMAGE_RE = re.compile(r"^docker\.io/typesense/typesense@sha256:[0-9a-f]{64}$")
-_TYPESENSE_HOST_RE = re.compile(r"^typesense-jit-qa-[a-z0-9-]+\.run\.app$")
+# Cloud Run emits either the regional hostname or the newer hashed ``uc.a``
+# hostname. Both are scoped to the explicitly named QA service.
+_TYPESENSE_HOST_RE = re.compile(r"^typesense-jit-qa-(?:[a-z0-9-]+-uc\.a\.run\.app|[0-9]+\.us-central1\.run\.app)$")
 # Cloud Run's QA service is linux/amd64. This is the reviewed 27.1
 # manifest-list digest, so a dispatch cannot silently select another release.
 TYPESENSE_BASE_IMAGE_27_1 = (
@@ -97,6 +99,12 @@ RUNTIME_SERVICE_ACCOUNT = "jit-qa-runtime@based-hardware-dev.iam.gserviceaccount
 
 class JITQAContractError(ValueError):
     """The proposed QA execution crosses an isolation or rollout boundary."""
+
+
+def is_valid_typesense_qa_host(host: str) -> bool:
+    """Return whether ``host`` is one of the named service's Cloud Run forms."""
+
+    return bool(_TYPESENSE_HOST_RE.fullmatch(host))
 
 
 def require_sha(value: str, *, label: str) -> None:
@@ -236,7 +244,7 @@ def validate_qa_http_environment(
 ) -> None:
     """Require the isolated HTTP service to use the QA auth, gateway and cache."""
 
-    if not _TYPESENSE_HOST_RE.fullmatch(typesense_host):
+    if not is_valid_typesense_qa_host(typesense_host):
         raise JITQAContractError("TYPESENSE_HOST must be the named isolated QA Cloud Run host")
     if typesense_source_sha:
         require_sha(typesense_source_sha, label="MEMORY_TYPESENSE_READINESS_SOURCE_SHA")
@@ -509,14 +517,25 @@ def validate_typesense_cloud_run_resource(
         min_instances = scaling.get("minInstanceCount")
         max_instances = scaling.get("maxInstanceCount")
     else:
-        # Cloud Run's v1-compatible describe output exposes these service
-        # settings as Knative autoscaling annotations on template metadata.
+        # ``gcloud run services describe`` exposes service-level ``--min`` /
+        # ``--max`` as run.googleapis.com annotations. Older v1-shaped
+        # resources put the equivalent Knative annotations on the template.
+        resource_annotations = metadata.get("annotations") if isinstance(metadata, Mapping) else None
         template_metadata = template.get("metadata")
-        annotations = template_metadata.get("annotations") if isinstance(template_metadata, Mapping) else None
+        template_annotations = template_metadata.get("annotations") if isinstance(template_metadata, Mapping) else None
+        annotations = resource_annotations if isinstance(resource_annotations, Mapping) else None
+        if not isinstance(annotations, Mapping) or not any(
+            key in annotations for key in ("run.googleapis.com/minScale", "run.googleapis.com/maxScale")
+        ):
+            annotations = template_annotations
         if not isinstance(annotations, Mapping):
             raise JITQAContractError("Typesense service must declare explicit min/max instance bounds")
-        min_instances = annotations.get("autoscaling.knative.dev/minScale")
-        max_instances = annotations.get("autoscaling.knative.dev/maxScale")
+        min_instances = annotations.get(
+            "run.googleapis.com/minScale", annotations.get("autoscaling.knative.dev/minScale")
+        )
+        max_instances = annotations.get(
+            "run.googleapis.com/maxScale", annotations.get("autoscaling.knative.dev/maxScale")
+        )
         try:
             if min_instances is not None:
                 min_instances = int(min_instances)
@@ -532,7 +551,10 @@ def validate_typesense_cloud_run_resource(
     limits = resources.get("limits") if isinstance(resources, Mapping) else None
     if not isinstance(limits, Mapping):
         raise JITQAContractError("Typesense service must declare CPU and memory limits")
-    if limits.get("cpu") != TYPESENSE_CPU or limits.get("memory") != TYPESENSE_MEMORY:
+    if limits.get("cpu") not in {TYPESENSE_CPU, "1000m"} or limits.get("memory") not in {
+        TYPESENSE_MEMORY,
+        "1024Mi",
+    }:
         raise JITQAContractError("Typesense service must use the bounded 1 CPU / 1 GiB profile")
     service_account = service_template.get(
         "serviceAccountName",
@@ -560,7 +582,7 @@ def resource_environment(
         "FIREBASE_AUTH_PROJECT_ID": AUTH_PROJECT_ID,
     }
     if profile in {"backend", "desktop"}:
-        if not _TYPESENSE_HOST_RE.fullmatch(typesense_host):
+        if not is_valid_typesense_qa_host(typesense_host):
             raise JITQAContractError("TYPESENSE_HOST must be the named isolated QA Cloud Run host")
         if typesense_source_sha:
             require_sha(typesense_source_sha, label="MEMORY_TYPESENSE_READINESS_SOURCE_SHA")
