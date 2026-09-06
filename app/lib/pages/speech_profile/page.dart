@@ -485,21 +485,26 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                           Stack(
                             alignment: Alignment.center,
                             children: [
-                              if (provider.startedRecording && !provider.profileCompleted && !provider.uploadingProfile)
+                              if (provider.startedRecording)
                                 // Mic feedback: a plain white glow behind the device
                                 // graphic that grows brighter/larger with mic level,
-                                // instead of a separate bar meter.
+                                // instead of a separate bar meter. When the finished
+                                // recording fades into All done, the glow eases shut
+                                // over the same 450 ms instead of vanishing.
                                 AnimatedContainer(
-                                  duration: const Duration(milliseconds: 150),
-                                  width: 180 + provider.micLevel * 40,
-                                  height: 180 + provider.micLevel * 40,
+                                  duration: Duration(milliseconds: _allDoneVisible ? 450 : 150),
+                                  curve: Curves.easeOut,
+                                  width: _allDoneVisible ? 0 : 180 + provider.micLevel * 40,
+                                  height: _allDoneVisible ? 0 : 180 + provider.micLevel * 40,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.white.withValues(alpha: 0.08 + provider.micLevel * 0.18),
-                                        blurRadius: 32 + provider.micLevel * 24,
-                                        spreadRadius: 2 + provider.micLevel * 10,
+                                        color: Colors.white.withValues(
+                                          alpha: _allDoneVisible ? 0 : 0.08 + provider.micLevel * 0.18,
+                                        ),
+                                        blurRadius: _allDoneVisible ? 0 : 32 + provider.micLevel * 24,
+                                        spreadRadius: _allDoneVisible ? 0 : 2 + provider.micLevel * 10,
                                       ),
                                     ],
                                   ),
