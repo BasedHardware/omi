@@ -15,6 +15,10 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/AppRuleEditorView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+General.swift
   - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  # General → Transparency drives the glass ground live; the slider's model and the panel that
+  # follows it are the surfaces S2 renders.
+  - desktop/macos/Desktop/Sources/Theme/InkGlassTransparency.swift
+  - desktop/macos/Desktop/Sources/Theme/InkGlass.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/MicrophonePickerCard.swift
 preconditions:

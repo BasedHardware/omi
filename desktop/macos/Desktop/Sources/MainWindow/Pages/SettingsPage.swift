@@ -754,6 +754,8 @@ struct SettingsContentView: View {
   }
 
   @ObservedObject var fontScaleSettings = FontScaleSettings.shared
+  @ObservedObject var glassTransparencySettings = InkGlassTransparencySettings.shared
+  @ObservedObject var reduceTransparencyObserver = InkReduceTransparencyObserver.shared
   @ObservedObject var rewindSettings = RewindSettings.shared
   @State var rewindStats: (total: Int, indexed: Int, storageSize: Int64)? = nil
 }

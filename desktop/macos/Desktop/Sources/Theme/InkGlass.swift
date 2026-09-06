@@ -440,10 +440,16 @@ package struct InkGlassStyle: Equatable, Sendable {
 /// only ever written on the main thread, from `InkGlassView.init`.
 private final class InkGlassObserverToken: @unchecked Sendable {
   var token: (any NSObjectProtocol)?
+  /// The centre the token was registered on; a token removed from the wrong centre stays live.
+  private let center: NotificationCenter
+
+  init(center: NotificationCenter = NSWorkspace.shared.notificationCenter) {
+    self.center = center
+  }
 
   deinit {
     guard let token else { return }
-    NSWorkspace.shared.notificationCenter.removeObserver(token)
+    center.removeObserver(token)
   }
 }
 
@@ -489,6 +495,7 @@ package final class InkGlassView: NSView {
   /// ground gets thinner, not less.
   private let shadowHost = NSView()
   private let observer = InkGlassObserverToken()
+  private let transparencyObserver = InkGlassObserverToken(center: .default)
 
   // A glass surface is visible content: report its extent so transparent windows can keep
   // pass-through margins without ever passing a click through the glass itself.
@@ -555,6 +562,16 @@ package final class InkGlassView: NSView {
     ) { [weak self] _ in
       MainActor.assumeIsolated { self?.applyCurrentSettings() }
     }
+    // The user's own transparency slider, which moves the same alpha and must reach every panel that
+    // is already up — the Settings window the slider is in, and the floating ones behind it — while
+    // the thumb is still moving.
+    transparencyObserver.token = InkGlassTransparencySettings.shared.notificationCenter.addObserver(
+      forName: InkGlassTransparencySettings.didChangeNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.applyCurrentSettings() }
+    }
   }
 
   @available(*, unavailable)
@@ -611,7 +628,9 @@ package final class InkGlassView: NSView {
   }
 
   private func applyCurrentSettings() {
-    apply(reduceTransparency: InkReduceTransparency.isEnabled)
+    apply(
+      reduceTransparency: InkReduceTransparency.isEnabled,
+      transparency: InkGlassTransparencySettings.shared.transparency)
   }
 
   /// One point. A highlight is a *line*, not a gradient band — a band reads as a second, lighter panel
@@ -622,15 +641,20 @@ package final class InkGlassView: NSView {
   /// layout check — would have to hop an actor to read a `1`.
   nonisolated package static let sheenHeight: CGFloat = 1
 
-  /// The panel's whole appearance, from one `Bool`. The only branch in this file.
-  package func apply(reduceTransparency reduced: Bool) {
+  /// The panel's whole appearance, from one `Bool` and the user's transparency. The only branch in
+  /// this file. `transparency` defaults to the shipped scrim so a caller asserting the accessibility
+  /// contract alone reads exactly the design's ground.
+  package func apply(
+    reduceTransparency reduced: Bool,
+    transparency: CGFloat = InkGlass.defaultTransparency
+  ) {
     material.isHidden = !InkGlass.showsMaterial(reduceTransparency: reduced)
     // A specular highlight is a property of *glass*. Under Reduce Transparency this is an opaque sheet
     // and there is no glass for the light to catch, so the highlight goes with the blur — the same rule
     // the material follows, for the same reason.
     sheen.isHidden = reduced
 
-    let alpha = InkGlass.groundAlpha(reduceTransparency: reduced)
+    let alpha = InkGlass.groundAlpha(reduceTransparency: reduced, transparency: transparency)
     // Resolved inside the panel's own (pinned) appearance, not read at file scope: a dynamic `NSColor`
     // converted to a `CGColor` anywhere else freezes whichever appearance happened to be current, which
     // on a Dark machine is exactly the near-black ground this replaces.
@@ -741,22 +765,29 @@ package struct InkGlassPanelModifier: ViewModifier {
   let shadow: InkGlassShadow?
   let requestedReduceTransparency: Bool?
   @ObservedObject private var reduceTransparencyObserver: InkReduceTransparencyObserver
+  /// Observed, not read: a slider in Settings moves this while its thumb is down, and every mounted
+  /// panel has to follow it on that same frame.
+  @ObservedObject private var transparencySettings: InkGlassTransparencySettings
 
   package init(
     cornerRadius: CGFloat,
     shadow: InkGlassShadow?,
     reduceTransparency: Bool? = nil,
-    observer: InkReduceTransparencyObserver = .shared
+    observer: InkReduceTransparencyObserver = .shared,
+    transparency: InkGlassTransparencySettings = .shared
   ) {
     self.cornerRadius = cornerRadius
     self.shadow = shadow
     self.requestedReduceTransparency = reduceTransparency
     _reduceTransparencyObserver = ObservedObject(wrappedValue: observer)
+    _transparencySettings = ObservedObject(wrappedValue: transparency)
   }
 
   @ViewBuilder
   package func body(content: Content) -> some View {
     let reduceTransparency = requestedReduceTransparency ?? reduceTransparencyObserver.isEnabled
+    let groundAlpha = InkGlass.groundAlpha(
+      reduceTransparency: reduceTransparency, transparency: transparencySettings.transparency)
     let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
     // Clip the caller's returned tree before adding the glass background. This keeps content and
@@ -777,7 +808,7 @@ package struct InkGlassPanelModifier: ViewModifier {
           if InkGlass.showsMaterial(reduceTransparency: reduceTransparency) {
             InkGlassBackdrop()
           }
-          Ink.surface.opacity(InkGlass.groundAlpha(reduceTransparency: reduceTransparency))
+          Ink.surface.opacity(groundAlpha)
           // Hidden under Reduce Transparency for the same reason the material is: there is no glass to
           // catch the light.
           //

@@ -1,0 +1,3 @@
+{
+  "change": "Settings → General gains a Transparency slider under Font Size that sets how much of the desktop shows through the app's glass; every panel follows the thumb while you drag, the value persists across launches, and the system Reduce Transparency setting still forces solid panels"
+}
