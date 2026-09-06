@@ -849,8 +849,6 @@ def run_daily_sweep_summary_agent(
                 'max_spend_micro_usd': jit_max_spend_micro_usd,
                 'usage_observed': False,
             }
-            if dispatch_evidence is None:
-                raise RuntimeError('daily sweep dispatch evidence was not initialized')
             casted_requests = dispatch_evidence.setdefault('requests', [])
             if not isinstance(casted_requests, list):
                 raise RuntimeError('daily sweep dispatch evidence requests is malformed')
