@@ -21,7 +21,7 @@ An integration microservice for the [Omi wearable ecosystem](https://github.com/
 
 ## Omi Tools Manifest (`/.well-known/omi-tools.json`)
 
-The service provides an OpenAI-compatible function calling manifest:
+The service provides an Omi tool manifest conforming to the repository's standard format (`schema_version: "1.0"` with top-level `name`, `description`, `endpoint`, `method`, and `parameters`):
 
 | Function Name | Description | Required Arguments |
 |---|---|---|

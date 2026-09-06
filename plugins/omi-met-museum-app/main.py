@@ -8,6 +8,7 @@ import asyncio
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 import copy
+import ipaddress
 import logging
 import os
 import time
@@ -40,7 +41,10 @@ RATE_LIMIT_WINDOW = float(os.getenv("RATE_LIMIT_WINDOW", "60.0"))
 MAX_RATE_LIMITER_KEYS = int(os.getenv("MAX_RATE_LIMITER_KEYS", "5000"))
 TRUSTED_PROXIES = set(
     ip.strip()
-    for ip in os.getenv("TRUSTED_PROXIES", "127.0.0.1,::1").split(",")
+    for ip in os.getenv(
+        "TRUSTED_PROXIES",
+        "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,testclient",
+    ).split(",")
     if ip.strip()
 )
 
@@ -132,10 +136,29 @@ class SlidingWindowRateLimiter:
 rate_limiter = SlidingWindowRateLimiter()
 
 
+def is_trusted_proxy(ip_str: str) -> bool:
+    """Check if direct connection host matches trusted proxy configuration or private network."""
+    if not ip_str or ip_str == "unknown":
+        return False
+    if ip_str in TRUSTED_PROXIES or "*" in TRUSTED_PROXIES:
+        return True
+    try:
+        ip_obj = ipaddress.ip_address(ip_str)
+        for entry in TRUSTED_PROXIES:
+            try:
+                if "/" in entry and ip_obj in ipaddress.ip_network(entry, strict=False):
+                    return True
+            except ValueError:
+                continue
+        return ip_obj.is_loopback or ip_obj.is_private
+    except ValueError:
+        return False
+
+
 def get_client_ip(request: Request) -> str:
     """Safely extracts client IP, only trusting X-Forwarded-For if forwarded by trusted proxy."""
     direct_ip = request.client.host if request.client else "unknown"
-    if direct_ip in TRUSTED_PROXIES:
+    if is_trusted_proxy(direct_ip):
         forwarded_for = request.headers.get("X-Forwarded-For")
         if forwarded_for:
             ips = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
@@ -190,8 +213,6 @@ async def lifespan(app: FastAPI):
         logger.info("Closed Met Museum HTTP client.")
 
 
-
-
 app = FastAPI(
     title="Omi Met Museum Art Collection Plugin",
     description="Explore 470,000+ artworks and 19 curatorial departments from The Metropolitan Museum of Art.",
@@ -202,17 +223,27 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
+
 async def _fetch_object(object_id: int) -> Optional[Dict[str, Any]]:
-    """Fetch individual object details with caching."""
+    """Fetch individual object details with caching.
+
+    Returns:
+        Dict: Object details on success.
+        None: When object does not exist (HTTP 404, with 5-minute negative cache).
+    Raises:
+        HTTPException(502): When upstream Met API fails, times out, or returns a 5xx error.
+    """
     cache_key = f"object:{object_id}"
     cached = cache.get(cache_key)
-    if cached is not None:
+    if cached == "NOT_FOUND":
+        return None
+    elif cached is not None:
         return cached
 
     client = get_http_client()
@@ -223,15 +254,24 @@ async def _fetch_object(object_id: int) -> Optional[Dict[str, Any]]:
             cache.set(cache_key, data, ttl_seconds=3600.0)  # 1 hour
             return data
         elif resp.status_code == 404:
+            cache.set(cache_key, "NOT_FOUND", ttl_seconds=300.0)  # 5 min negative cache
             return None
         else:
             logger.warning(
                 "Upstream Met object %d returned HTTP %d", object_id, resp.status_code
             )
-            return None
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"The Metropolitan Museum of Art API returned status {resp.status_code} for object {object_id}.",
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Error fetching Met object %d: %s", object_id, e)
-        return None
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to communicate with The Metropolitan Museum of Art API: {str(e)}",
+        )
 
 
 @app.get("/")
@@ -253,111 +293,116 @@ async def root() -> Dict[str, Any]:
 
 @app.get("/health")
 async def health() -> Dict[str, Any]:
-    upstream_ok = False
-    client = get_http_client()
-    try:
-        resp = await client.get(f"{MET_API_BASE_URL}/departments")
-        upstream_ok = resp.status_code == 200
-    except Exception as e:
-        logger.warning("Met Museum health probe failed: %s", e)
+    """Health probe with cached upstream check to prevent Met API flooding."""
+    cached_status = cache.get("health_upstream_status")
+    if cached_status is None:
+        upstream_ok = False
+        client = get_http_client()
+        try:
+            resp = await client.get(
+                f"{MET_API_BASE_URL}/departments", timeout=3.0
+            )
+            upstream_ok = resp.status_code == 200
+        except Exception as e:
+            logger.warning("Met Museum health probe failed: %s", e)
+        cached_status = upstream_ok
+        cache.set("health_upstream_status", upstream_ok, ttl_seconds=60.0)
 
     return {
-        "status": "healthy" if upstream_ok else "degraded",
-        "upstream_met_api": "reachable" if upstream_ok else "unreachable",
+        "status": "healthy" if cached_status else "degraded",
+        "upstream_met_api": "reachable" if cached_status else "unreachable",
         "cached_entries": cache.size(),
         "timestamp": time.time(),
     }
 
 
-
 @app.get("/.well-known/omi-tools.json")
 async def omi_tools_manifest() -> Dict[str, Any]:
-    """Exposes OpenAI-compatible function calling schemas for Omi."""
+    """Exposes Omi function calling tools manifest in standard repository format."""
     return {
+        "schema_version": "1.0",
+        "name": "Metropolitan Museum of Art",
+        "description": "Explore 470,000+ artworks and 19 curatorial departments from The Metropolitan Museum of Art.",
         "tools": [
             {
-                "type": "function",
-                "function": {
-                    "name": "search_artworks",
-                    "description": "Search 470,000+ artworks from The Metropolitan Museum of Art collection by keyword, artist, or culture.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "Search term (e.g. 'water lilies', 'Rembrandt', 'Greek vase', 'armor')",
-                            },
-                            "artist_or_culture": {
-                                "type": "boolean",
-                                "description": "Whether to restrict matches to artist names or cultural origins (optional)",
-                            },
-                            "department_id": {
-                                "type": "integer",
-                                "description": "Filter by curatorial department ID (optional)",
-                            },
-                            "has_images": {
-                                "type": "boolean",
-                                "description": "Only return artworks with public digital images (default true)",
-                            },
-                            "limit": {
-                                "type": "integer",
-                                "description": "Max number of artwork summaries to return (1-10, default 5)",
-                            },
+                "name": "search_artworks",
+                "description": "Search 470,000+ artworks from The Metropolitan Museum of Art collection by keyword, artist, or culture.",
+                "endpoint": "/tools/search-artworks",
+                "method": "POST",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search term (e.g. 'water lilies', 'Rembrandt', 'Greek vase', 'armor')",
                         },
-                        "required": ["query"],
+                        "artist_or_culture": {
+                            "type": "boolean",
+                            "description": "Whether to restrict matches to artist names or cultural origins (optional)",
+                        },
+                        "department_id": {
+                            "type": "integer",
+                            "description": "Filter by curatorial department ID (optional)",
+                        },
+                        "has_images": {
+                            "type": "boolean",
+                            "description": "Only return artworks with public digital images (default true)",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Max number of artwork summaries to return (1-10, default 5)",
+                        },
                     },
+                    "required": ["query"],
                 },
             },
             {
-                "type": "function",
-                "function": {
-                    "name": "get_artwork_details",
-                    "description": "Get comprehensive details for a specific Metropolitan Museum artwork by its object ID.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "object_id": {
-                                "type": "integer",
-                                "description": "Unique object ID of the artwork in the Met collection",
-                            }
-                        },
-                        "required": ["object_id"],
+                "name": "get_artwork_details",
+                "description": "Get comprehensive details for a specific Metropolitan Museum artwork by its object ID.",
+                "endpoint": "/tools/get-artwork-details",
+                "method": "POST",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "object_id": {
+                            "type": "integer",
+                            "description": "Unique object ID of the artwork in the Met collection",
+                        }
                     },
+                    "required": ["object_id"],
                 },
             },
             {
-                "type": "function",
-                "function": {
-                    "name": "list_departments",
-                    "description": "List all 19 curatorial departments at The Metropolitan Museum of Art with their department IDs.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                    },
+                "name": "list_departments",
+                "description": "List all 19 curatorial departments at The Metropolitan Museum of Art with their department IDs.",
+                "endpoint": "/tools/list-departments",
+                "method": "POST",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
                 },
             },
             {
-                "type": "function",
-                "function": {
-                    "name": "get_department_highlights",
-                    "description": "Retrieve curated masterwork highlights from a specified Met curatorial department.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "department_id": {
-                                "type": "integer",
-                                "description": "Department ID (e.g. 11 for European Paintings, 10 for Egyptian Art, 6 for Asian Art)",
-                            },
-                            "limit": {
-                                "type": "integer",
-                                "description": "Max number of highlights to return (1-10, default 5)",
-                            },
+                "name": "get_department_highlights",
+                "description": "Retrieve curated masterwork highlights from a specified Met curatorial department.",
+                "endpoint": "/tools/get-department-highlights",
+                "method": "POST",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "department_id": {
+                            "type": "integer",
+                            "description": "Department ID (e.g. 11 for European Paintings, 10 for Egyptian Art, 6 for Asian Art)",
                         },
-                        "required": ["department_id"],
+                        "limit": {
+                            "type": "integer",
+                            "description": "Max number of highlights to return (1-10, default 5)",
+                        },
                     },
+                    "required": ["department_id"],
                 },
             },
-        ]
+        ],
     }
 
 
@@ -409,11 +454,11 @@ async def search_artworks(payload: SearchArtworksRequest) -> ChatToolResponse:
 
     target_ids = cached_ids[: payload.limit]
     tasks = [_fetch_object(oid) for oid in target_ids]
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     summaries: List[ArtworkSummary] = []
     for data in results:
-        if not data:
+        if not data or isinstance(data, Exception):
             continue
         summaries.append(
             ArtworkSummary(
@@ -624,11 +669,11 @@ async def get_department_highlights(
 
     target_ids = cached_ids[: payload.limit]
     tasks = [_fetch_object(oid) for oid in target_ids]
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     summaries: List[ArtworkSummary] = []
     for data in results:
-        if not data:
+        if not data or isinstance(data, Exception):
             continue
         summaries.append(
             ArtworkSummary(

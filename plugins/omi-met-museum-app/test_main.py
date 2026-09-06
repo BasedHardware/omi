@@ -177,12 +177,22 @@ def test_omi_tools_manifest(client):
     response = client.get("/.well-known/omi-tools.json")
     assert response.status_code == 200
     data = response.json()
+    assert data["schema_version"] == "1.0"
     assert "tools" in data
-    tool_names = [t["function"]["name"] for t in data["tools"]]
-    assert "search_artworks" in tool_names
-    assert "get_artwork_details" in tool_names
-    assert "list_departments" in tool_names
-    assert "get_department_highlights" in tool_names
+    assert len(data["tools"]) == 4
+
+    tool_map = {t["name"]: t for t in data["tools"]}
+    assert "search_artworks" in tool_map
+    assert "get_artwork_details" in tool_map
+    assert "list_departments" in tool_map
+    assert "get_department_highlights" in tool_map
+
+    for t in data["tools"]:
+        assert "description" in t
+        assert t["endpoint"].startswith("/tools/")
+        assert t["method"] == "POST"
+        assert "parameters" in t
+        assert t["parameters"]["type"] == "object"
 
 
 def test_search_artworks_success(client):
@@ -264,6 +274,30 @@ def test_get_artwork_details_not_found(client):
     assert "was not found in The Metropolitan Museum of Art collection" in response.json()["response"]
 
 
+def test_get_artwork_details_negative_caching(client):
+    # First lookup: not found, caches "NOT_FOUND"
+    resp1 = client.post("/tools/get-artwork-details", json={"object_id": 9999999})
+    assert resp1.status_code == 200
+    assert cache.get("object:9999999") == "NOT_FOUND"
+
+    # Second lookup hits negative cache
+    resp2 = client.post("/tools/get-artwork-details", json={"object_id": 9999999})
+    assert resp2.status_code == 200
+    assert "was not found" in resp2.json()["response"]
+
+
+def test_get_artwork_details_upstream_failure(monkeypatch):
+    mock_client = httpx.AsyncClient(
+        transport=MockTransport(object_status=500),
+        headers={"User-Agent": "OmiTestApp/1.0"},
+    )
+    monkeypatch.setattr("main.http_client", mock_client)
+    with TestClient(app) as c:
+        response = c.post("/tools/get-artwork-details", json={"object_id": 437112})
+        assert response.status_code == 502
+        assert "The Metropolitan Museum of Art API returned status 500" in response.json()["detail"]
+
+
 def test_get_artwork_details_invalid_id(client):
     response = client.post("/tools/get-artwork-details", json={"object_id": 0})
     assert response.status_code == 422
@@ -299,6 +333,18 @@ def test_get_department_highlights_success(client):
     assert "Bouquet of Sunflowers" in text
 
 
+def test_get_department_highlights_empty(monkeypatch):
+    mock_client = httpx.AsyncClient(
+        transport=MockTransport(search_total=0),
+        headers={"User-Agent": "OmiTestApp/1.0"},
+    )
+    monkeypatch.setattr("main.http_client", mock_client)
+    with TestClient(app) as c:
+        resp = c.post("/tools/get-department-highlights", json={"department_id": 999})
+        assert resp.status_code == 200
+        assert "No curated highlights found for Met department ID `999`" in resp.json()["response"]
+
+
 def test_lru_cache_operations():
     lru = LRUCache(max_size=3)
     lru.set("a", 1, ttl_seconds=10.0)
@@ -318,13 +364,14 @@ def test_lru_cache_operations():
 
 def test_lru_cache_ttl_expiry():
     lru = LRUCache(max_size=5)
-    lru.set("temp", "expired_val", ttl_seconds=0.01)
-    time.sleep(0.02)
+    lru.set("temp", "expired_val", ttl_seconds=100.0)
+    # Hermetic zero-sleep: directly backdate timestamp past expiry
+    lru._cache["temp"] = (time.time() - 10.0, "expired_val")
     assert lru.get("temp") is None
 
 
 def test_sliding_window_rate_limiter():
-    limiter = SlidingWindowRateLimiter(requests_per_window=3, window_seconds=1.0)
+    limiter = SlidingWindowRateLimiter(requests_per_window=3, window_seconds=60.0)
     ip = "192.168.1.100"
 
     assert limiter.is_allowed(ip) is True
@@ -332,16 +379,9 @@ def test_sliding_window_rate_limiter():
     assert limiter.is_allowed(ip) is True
     assert limiter.is_allowed(ip) is False  # 4th request blocked
 
-    # After window passes, requests allowed again
-    time.sleep(1.05)
+    # Hermetic zero-sleep: simulate window passing by aging timestamps
+    limiter._records[ip] = [time.time() - 120.0 for _ in range(3)]
     assert limiter.is_allowed(ip) is True
-
-
-def test_rate_limiter_spoof_prevention(client):
-    # Public IP should not be trusted if it sends X-Forwarded-For
-    headers = {"X-Forwarded-For": "1.1.1.1"}
-    resp = client.get("/")
-    assert resp.status_code == 200
 
 
 def test_rate_limiter_blocks_via_api(client):
@@ -353,21 +393,47 @@ def test_rate_limiter_blocks_via_api(client):
     assert "Rate limit exceeded" in resp.json()["detail"]
 
 
-def test_get_department_highlights_empty(monkeypatch):
-    mock_client = httpx.AsyncClient(
-        transport=MockTransport(search_total=0),
-        headers={"User-Agent": "OmiTestApp/1.0"},
+def test_rate_limiter_trusted_proxy_forwarded_ip(client):
+    # testclient is in TRUSTED_PROXIES, so X-Forwarded-For is extracted
+    ip1 = "198.51.100.11"
+    ip2 = "198.51.100.22"
+
+    # Exhaust rate limit for ip1
+    for _ in range(60):
+        rate_limiter.is_allowed(ip1)
+
+    # Request with ip1 in X-Forwarded-For should receive 429
+    resp_blocked = client.post(
+        "/tools/list-departments",
+        json={},
+        headers={"X-Forwarded-For": ip1},
     )
-    monkeypatch.setattr("main.http_client", mock_client)
-    with TestClient(app) as c:
-        resp = c.post("/tools/get-department-highlights", json={"department_id": 999})
-        assert resp.status_code == 200
-        assert "No curated highlights found for Met department ID `999`" in resp.json()["response"]
+    assert resp_blocked.status_code == 429
+
+    # Request with ip2 in X-Forwarded-For has its own quota and succeeds
+    resp_allowed = client.post(
+        "/tools/list-departments",
+        json={},
+        headers={"X-Forwarded-For": ip2},
+    )
+    assert resp_allowed.status_code == 200
 
 
-def test_trusted_proxy_forwarded_ip_used(client):
-    # Simulate request coming through trusted loopback proxy with X-Forwarded-For
-    headers = {"X-Forwarded-For": "203.0.113.195"}
-    resp = client.get("/")
-    assert resp.status_code == 200
+def test_rate_limiter_untrusted_proxy_spoof_prevention(client, monkeypatch):
+    # Direct host is untrusted, so X-Forwarded-For is ignored and direct IP is used
+    monkeypatch.setattr("main.is_trusted_proxy", lambda ip: False)
+    spoofed_ip = "198.51.100.99"
+
+    # Exhaust quota for direct connection host "testclient"
+    for _ in range(60):
+        rate_limiter.is_allowed("testclient")
+
+    # Even though X-Forwarded-For specifies spoofed_ip, the untrusted client is blocked
+    resp = client.post(
+        "/tools/list-departments",
+        json={},
+        headers={"X-Forwarded-For": spoofed_ip},
+    )
+    assert resp.status_code == 429
+
 

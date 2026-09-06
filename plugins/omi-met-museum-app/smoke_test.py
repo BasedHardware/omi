@@ -10,11 +10,12 @@ import sys
 from fastapi.testclient import TestClient
 from main import app
 
-sys.stdout.reconfigure(encoding="utf-8")
-
 
 def run_smoke_tests() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     print("🚀 Starting Metropolitan Museum of Art Smoke Tests...")
+
     with TestClient(app) as client:
         # 1. Health Probe
         print("\n1. Testing GET /health...")
@@ -31,7 +32,7 @@ def run_smoke_tests() -> None:
         assert resp.status_code == 200
         manifest = resp.json()
         tools = manifest.get("tools", [])
-        tool_names = [t.get("function", {}).get("name") for t in tools]
+        tool_names = [t.get("name") for t in tools]
         expected_tools = ["search_artworks", "get_artwork_details", "list_departments", "get_department_highlights"]
         for expected in expected_tools:
             assert expected in tool_names, f"Missing tool {expected} in manifest"
