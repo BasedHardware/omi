@@ -199,7 +199,10 @@ class ConversationMapPage extends StatelessWidget {
                 const SizedBox(height: 16),
                 for (final group in groups)
                   Semantics(
-                    key: ValueKey('conversation_map_group_${group.membershipKey}'),
+                    // The established per-place tappable key (this was the
+                    // marker's); kept stable for automation that predates the
+                    // static preview.
+                    key: ValueKey('conversation_map_marker_${group.membershipKey}'),
                     button: true,
                     label: _groupLabel(context, group),
                     child: GestureDetector(

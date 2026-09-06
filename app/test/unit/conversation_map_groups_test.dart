@@ -144,7 +144,7 @@ void main() {
     // One static preview over every cluster anchor, one row per place.
     expect(find.byKey(const ValueKey('conversation_map_preview')), findsOneWidget);
     expect(find.byType(OmiMapPreview), findsOneWidget);
-    final group = find.byKey(const ValueKey('conversation_map_group_first%2Csecond'));
+    final group = find.byKey(const ValueKey('conversation_map_marker_first%2Csecond'));
     expect(group, findsOneWidget);
 
     await tester.tap(group);
