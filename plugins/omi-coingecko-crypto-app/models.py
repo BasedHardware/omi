@@ -34,7 +34,10 @@ class GetCryptoPriceRequest(BaseModel):
     @field_validator("vs_currency")
     @classmethod
     def normalize_vs_currency(cls, v: str) -> str:
-        return v.strip().lower()
+        cleaned = v.strip().lower()
+        if len(cleaned) < 2:
+            raise ValueError("vs_currency must contain at least 2 non-whitespace characters (e.g. 'usd').")
+        return cleaned
 
     @field_validator("coin_ids")
     @classmethod
@@ -90,4 +93,7 @@ class GetCryptoMarketOverviewRequest(BaseModel):
     @field_validator("vs_currency")
     @classmethod
     def normalize_vs_currency(cls, v: str) -> str:
-        return v.strip().lower()
+        cleaned = v.strip().lower()
+        if len(cleaned) < 2:
+            raise ValueError("vs_currency must contain at least 2 non-whitespace characters (e.g. 'usd').")
+        return cleaned

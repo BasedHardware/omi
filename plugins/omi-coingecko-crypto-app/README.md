@@ -65,7 +65,7 @@ curl -X POST http://localhost:8080/tools/search_crypto_coins \
 **Response:**
 ```json
 {
-  "result": "Cryptocurrency search results for 'sol':\n1. Solana (SOL) — Rank #5 | ID: solana\n2. Solv Protocol (SOLV) — Rank #240 | ID: solv-protocol\n3. Solstice (SLX) — Unranked | ID: solstice",
+  "result": "Cryptocurrency search results for 'sol':\n1. Solana (SOL) - Rank #5 | ID: solana\n2. Solv Protocol (SOLV) - Rank #240 | ID: solv-protocol\n3. Solstice (SLX) - Unranked | ID: solstice",
   "error": null
 }
 ```

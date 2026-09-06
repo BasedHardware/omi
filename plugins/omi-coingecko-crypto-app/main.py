@@ -43,31 +43,52 @@ app = FastAPI(
 )
 
 
+def _get_currency_symbol(currency_code: str) -> str:
+    """Return appropriate currency symbol or prefix."""
+    code = currency_code.lower()
+    symbols = {
+        "usd": "$",
+        "eur": "EUR ",
+        "gbp": "GBP ",
+        "jpy": "JPY ",
+        "cad": "CAD ",
+        "aud": "AUD ",
+        "chf": "CHF ",
+        "cny": "CNY ",
+        "inr": "INR ",
+    }
+    return symbols.get(code, f"{code.upper()} ")
+
+
 def _format_currency(amount: Optional[float], currency_symbol: str = "$", decimals: int = 2) -> str:
-    """Format numerical prices cleanly."""
+    """Format numerical prices cleanly with precision preservation for micro-values."""
     if amount is None:
         return "N/A"
+    if amount == 0:
+        return f"{currency_symbol}0.00"
     if amount >= 1.0:
         return f"{currency_symbol}{amount:,.{decimals}f}"
     if amount >= 0.0001:
         return f"{currency_symbol}{amount:,.4f}"
-    return f"{currency_symbol}{amount:,.8f}"
+    if amount >= 1e-8:
+        return f"{currency_symbol}{amount:,.8f}"
+    return f"{currency_symbol}{amount:.4e}"
 
 
-def _format_compact_usd(value: Optional[float]) -> str:
-    """Format large numbers into human-readable compact units (e.g. $1.25B, $500M)."""
+def _format_compact(value: Optional[float], currency_symbol: str = "$") -> str:
+    """Format large numbers into human-readable compact units (e.g. $1.25B, EUR 500M)."""
     if value is None or value == 0:
         return "N/A"
     abs_v = abs(value)
     if abs_v >= 1e12:
-        return f"${value / 1e12:.2f}T"
+        return f"{currency_symbol}{value / 1e12:.2f}T"
     if abs_v >= 1e9:
-        return f"${value / 1e9:.2f}B"
+        return f"{currency_symbol}{value / 1e9:.2f}B"
     if abs_v >= 1e6:
-        return f"${value / 1e6:.2f}M"
+        return f"{currency_symbol}{value / 1e6:.2f}M"
     if abs_v >= 1e3:
-        return f"${value / 1e3:.2f}K"
-    return f"${value:,.2f}"
+        return f"{currency_symbol}{value / 1e3:.2f}K"
+    return f"{currency_symbol}{value:,.2f}"
 
 
 def _format_percentage(change: Optional[float]) -> str:
@@ -260,7 +281,7 @@ async def get_crypto_price(req: GetCryptoPriceRequest) -> ChatToolResponse:
                 error=f"No pricing data found for '{coin_ids_str}'. Please verify the coin IDs using the search tool."
             )
 
-        currency_symbol = "EUR " if vs == "eur" else ("GBP " if vs == "gbp" else ("JPY " if vs == "jpy" else "$"))
+        currency_symbol = _get_currency_symbol(vs)
         lines = [f"Cryptocurrency Prices ({vs.upper()}):"]
 
         for coin_id in req.coin_ids:
@@ -276,8 +297,8 @@ async def get_crypto_price(req: GetCryptoPriceRequest) -> ChatToolResponse:
 
             formatted_price = _format_currency(price, currency_symbol)
             formatted_change = _format_percentage(change_24h)
-            formatted_mcap = _format_compact_usd(mcap)
-            formatted_vol = _format_compact_usd(vol_24h)
+            formatted_mcap = _format_compact(mcap, currency_symbol)
+            formatted_vol = _format_compact(vol_24h, currency_symbol)
 
             display_name = coin_id.replace("-", " ").title()
             lines.append(
@@ -370,7 +391,7 @@ async def get_crypto_market_overview(req: GetCryptoMarketOverviewRequest) -> Cha
         if not markets:
             return ChatToolResponse(error="Failed to retrieve cryptocurrency market rankings.")
 
-        currency_symbol = "EUR " if vs == "eur" else ("GBP " if vs == "gbp" else ("JPY " if vs == "jpy" else "$"))
+        currency_symbol = _get_currency_symbol(vs)
         lines = [f"Top {len(markets)} Cryptocurrencies by Market Cap ({vs.upper()}):"]
 
         for coin in markets:
@@ -383,7 +404,7 @@ async def get_crypto_market_overview(req: GetCryptoMarketOverviewRequest) -> Cha
 
             formatted_price = _format_currency(price, currency_symbol)
             formatted_change = _format_percentage(change)
-            formatted_mcap = _format_compact_usd(mcap)
+            formatted_mcap = _format_compact(mcap, currency_symbol)
 
             lines.append(f"{rank}. {name} ({symbol}): {formatted_price} (24h: {formatted_change}) | MCap: {formatted_mcap}")
 

@@ -69,8 +69,16 @@ async def run_smoke_tests():
         print("\n--- 7. Testing Error Handling & Missing Coins ---")
         missing_req = GetCryptoPriceRequest(coin_ids=["non-existent-token-xyz-123"], vs_currency="usd")
         missing_res = await get_crypto_price(missing_req)
-        print("Non-existent Coin Handling:\n", missing_res.result or missing_res.error)
-        assert missing_res.result is not None or missing_res.error is not None
+        print("Non-existent Coin Handling:\n", missing_res.error)
+        assert missing_res.error is not None, "Expected error response for non-existent coin ID, but got a result"
+        assert "non-existent-token-xyz-123" in missing_res.error, "Error message should mention the invalid coin ID"
+
+        # Verify whitespace-only vs_currency rejection
+        try:
+            GetCryptoPriceRequest(coin_ids=["bitcoin"], vs_currency="  ")
+            assert False, "Should have rejected whitespace-only vs_currency"
+        except ValueError:
+            pass
 
     print("\n[SUCCESS] ALL 7 SMOKE TESTS PASSED SUCCESSFULLY!")
 
