@@ -147,7 +147,9 @@ def test_seed_runtime_help_is_deferred_until_auth_and_secret_manager_resolution(
     command = step["run"]
     assert "gcloud secrets versions access latest" in command
     assert "--secret=ENCRYPTION_SECRET" in command
-    assert 'export ENCRYPTION_SECRET="$(' in command
+    assert 'ENCRYPTION_SECRET="$(' in command
+    assert 'export ENCRYPTION_SECRET="$(' not in command
+    assert "export ENCRYPTION_SECRET" in command
     assert "jit_qa_seed_and_verify.py --help" in command
     assert "unset ENCRYPTION_SECRET" in command
 
@@ -156,8 +158,19 @@ def test_seed_runtime_help_is_deferred_until_auth_and_secret_manager_resolution(
     assert "gcloud secrets versions access latest" in action_command
     assert "jit_qa_seed_and_verify.py" in action_command
     assert "--secret=ENCRYPTION_SECRET" in action_command
+    assert 'export ENCRYPTION_SECRET="$(' not in action_command
     assert "indexes-plan" in action_command
     assert "indexes-apply" in action_command
+
+    drain_step = _step("Execute three bounded drain pages and verify durable proof")
+    drain_command = drain_step["run"]
+    assert 'ENCRYPTION_SECRET="$(' in drain_command
+    assert 'export ENCRYPTION_SECRET="$(' not in drain_command
+    assert "export ENCRYPTION_SECRET" in drain_command
+    assert "unset ENCRYPTION_SECRET" in drain_command
+    import_condition = step["if"]
+    for operation in ("drain-verify", "rollforward"):
+        assert f"inputs.operation == '{operation}'" in import_condition
 
 
 def test_mutating_seed_step_executes_with_source_sha_and_sanitized_artifact_only():
@@ -233,7 +246,8 @@ def test_qa_provision_enables_only_the_fixed_development_redis_api_before_resour
             "  [[ \" $* \" != *\" --limit=1 \"* ]] || exit 0\n"
             "  [[ $(cat \"$STATE\") == enabled ]] && printf 'redis.googleapis.com\\n'; exit 0\n"
             "fi\n"
-            "if [[ \"${1:-}\" == services && \"${2:-}\" == enable ]]; then printf 'enabled\\n' > \"$STATE\"; exit 0; fi\n"
+            "if [[ \"${1:-}\" == services && \"${2:-}\" == enable ]]; then "
+            "printf 'enabled\\n' > \"$STATE\"; exit 0; fi\n"
             "echo \"unexpected gcloud command: $*\" >&2\n"
             "exit 2\n",
             encoding="utf-8",

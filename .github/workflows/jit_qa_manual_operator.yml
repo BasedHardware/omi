@@ -240,7 +240,7 @@ jobs:
           timeout --foreground --kill-after=5s 60s gcloud projects describe "$QA_PROJECT" --format='value(projectId)' | grep -Fx "$QA_PROJECT" >/dev/null
 
       - name: Verify seed runtime imports with the named QA secret
-        if: ${{ inputs.operation == 'bootstrap' || inputs.operation == 'prepare' || inputs.operation == 'inspect' || inputs.operation == 'rollback' }}
+        if: ${{ inputs.operation == 'bootstrap' || inputs.operation == 'prepare' || inputs.operation == 'inspect' || inputs.operation == 'drain-verify' || inputs.operation == 'rollback' || inputs.operation == 'rollforward' }}
         env:
           GOOGLE_CLOUD_PROJECT: ${{ env.QA_PROJECT }}
           GCLOUD_PROJECT: ${{ env.QA_PROJECT }}
@@ -256,12 +256,13 @@ jobs:
         run: |
           set -euo pipefail
           unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH
-          export ENCRYPTION_SECRET="$(timeout --foreground --kill-after=5s 60s gcloud secrets versions access latest \
+          ENCRYPTION_SECRET="$(timeout --foreground --kill-after=5s 60s gcloud secrets versions access latest \
             --secret=ENCRYPTION_SECRET --project "$QA_PROJECT")"
           [[ "${#ENCRYPTION_SECRET}" -ge 32 ]] || {
             echo "ERROR: named QA encryption secret is unavailable or too short." >&2
             exit 1
           }
+          export ENCRYPTION_SECRET
           PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_seed_and_verify.py --help >/dev/null
           unset ENCRYPTION_SECRET
 
@@ -357,12 +358,13 @@ jobs:
           unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH
           operator_dir="$RUNNER_TEMP/jit-qa-operator"
           if [[ "$OPERATION" == bootstrap || "$OPERATION" == prepare || "$OPERATION" == inspect || "$OPERATION" == rollback ]]; then
-            export ENCRYPTION_SECRET="$(timeout --foreground --kill-after=5s 60s gcloud secrets versions access latest \
+            ENCRYPTION_SECRET="$(timeout --foreground --kill-after=5s 60s gcloud secrets versions access latest \
               --secret=ENCRYPTION_SECRET --project "$QA_PROJECT")"
             [[ "${#ENCRYPTION_SECRET}" -ge 32 ]] || {
               echo "ERROR: named QA encryption secret is unavailable or too short." >&2
               exit 1
             }
+            export ENCRYPTION_SECRET
           fi
           case "$OPERATION" in
             bootstrap)
@@ -439,6 +441,13 @@ jobs:
           set -euo pipefail
           unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH
           operator_dir="$RUNNER_TEMP/jit-qa-operator"
+          ENCRYPTION_SECRET="$(timeout --foreground --kill-after=5s 60s gcloud secrets versions access latest \
+            --secret=ENCRYPTION_SECRET --project "$QA_PROJECT")"
+          [[ "${#ENCRYPTION_SECRET}" -ge 32 ]] || {
+            echo "ERROR: named QA encryption secret is unavailable or too short." >&2
+            exit 1
+          }
+          export ENCRYPTION_SECRET
           gcloud_bounded() {
             timeout --foreground --kill-after=5s 60s gcloud "$@"
           }
@@ -579,6 +588,7 @@ jobs:
           }
           print(json.dumps(receipt, sort_keys=True))
           PY
+          unset ENCRYPTION_SECRET
           rm -f "$operator_dir"/*.json "$operator_dir"/*.logs.json "$operator_dir"/*.state.json "$operator_dir"/*.launch.json
 
       - name: Upload content-free operator receipt
