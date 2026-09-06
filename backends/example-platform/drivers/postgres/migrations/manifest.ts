@@ -278,4 +278,6 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     sha256: "01ee0462f89bbae065603c3f9e9490917d748d511715af67896a26e8cf81f234",
   }),
   Object.freeze({ version: 46, name: "memory-render-responses", fileName: "0046-memory-render-responses.sql", sha256: "3004273b10a6cbc55992295b7df0b1d02daff97952fcade30e9b52b65e9abf6a" }),
+  Object.freeze({version:47,name:"task-storage",fileName:"0047-task-storage.sql",sha256:"1545057919d081ee48ec9bfde7ed1e07965518df9d158ab79e8cc2d7c3ec9d11"}),
+  Object.freeze({ version: 48, name: "listen-audio-uploads", fileName: "0048-listen-audio-uploads.sql", sha256: "b7594b05c18a4f38567fd8f4e5c0a0be90f9745133b3e8cd9296bc01f1798451" }),
 ]);

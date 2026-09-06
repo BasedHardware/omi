@@ -60,10 +60,11 @@ const exactOptions = (
 /** @internal Shared fixed-query authorization construction for PG read/write runtimes. */
 export const createPostgresFirebaseAuthorizationRuntime = (
   optionsValue: PostgresFirebaseAuthorizationRuntimeOptions,
-  capability: "memories.read" | "memories.write" | "memories.export",
+  capability: "memories.read" | "memories.write" | "memories.export" | "tasks.read" | "tasks.write" | "listen.capture.write",
 ): PostgresFirebaseAuthorizationRuntimeBinding => {
   if (capability !== "memories.read" && capability !== "memories.write"
-    && capability !== "memories.export") {
+    && capability !== "memories.export" && capability !== "tasks.read"
+    && capability !== "tasks.write" && capability !== "listen.capture.write") {
     throw new TypeError("invalid PostgreSQL Firebase runtime capability");
   }
   const options = exactOptions(optionsValue);
@@ -75,12 +76,8 @@ export const createPostgresFirebaseAuthorizationRuntime = (
   if (typeof withTransaction !== "function" || isProxy(withTransaction)) {
     throw new TypeError("invalid PostgreSQL Firebase runtime pool");
   }
-  const stablePool: PostgresTransactionPool = Object.freeze({
-    withTransaction: (transactionOptions, callback) => withTransaction.call(
-      pool,
-      transactionOptions,
-      callback,
-    ),
+  const stablePool = Object.freeze<PostgresTransactionPool>({
+    withTransaction: withTransaction.bind(pool) as PostgresTransactionPool["withTransaction"],
   });
   const fixedQuery = Object.freeze({
     query: (statement: SqlStatement) => stablePool.withTransaction(

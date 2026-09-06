@@ -74,7 +74,7 @@ export interface TasksReadRouteDependencies {
   readonly prepareRead: (principal: DevPrincipal) => PreparedTasksRead;
   /** The write fence's existing per-account projection store. */
   readonly fence: {
-    readonly store: AccountControlProjectionStore;
+    readonly store: Pick<AccountControlProjectionStore, "read">;
   };
   readonly counter: ServedCounter;
 }
@@ -139,7 +139,11 @@ const hasDuplicateQueryParameters = (rawUrl: string): boolean => {
  */
 export const TASKS_READ_PATH = "/v1/tasks";
 
-export const registerTasksReadRoutes = (app: Hono, deps: TasksReadRouteDependencies): void => {
+export const registerTasksReadRoutes = (app: Hono, deps: TasksReadRouteDependencies | { readonly executeRequest: (request: Request) => Promise<Response> }): void => {
+  if ("executeRequest" in deps) {
+    app.get(TASKS_READ_PATH, context => deps.executeRequest(context.req.raw));
+    return;
+  }
   const handler = async (context: {
     req: {
       url: string;

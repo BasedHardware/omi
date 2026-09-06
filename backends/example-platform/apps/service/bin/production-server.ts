@@ -1,4 +1,5 @@
 import { createPostgresRenderResponseRepository } from "../../../drivers/postgres/product-projection-repository";
+import type { PostgresFirebaseAuthorizationRuntimeOptions } from "../../../drivers/postgres/firebase-authorized-runtime-support";
 import { createPersistedRenderModel } from "../../../drivers/model/persisted-render";
 import { createFirebaseAdminIdTokenAdapter } from "../../../drivers/firebase/admin-id-token";
 import { createHttpRenderModel } from "../../../drivers/model/http-render";
@@ -19,7 +20,13 @@ export async function startProductionServer(env: Readonly<Record<string, string 
   const pool = createPostgresJsTransactionPool({
     connectionString: config.databaseUrl, databaseSocketDirectory: config.databaseSocketDirectory, maxConnections: 4, connectTimeoutSeconds: 10,
   });
-  const cursor = createProductionCursor({ active_key_id: "v1", keys: [{ key_id: "v1", secret: config.cursorKey }] });
+  const cursorSigningKeyset = { active_key_id: "v1", keys: [{ key_id: "v1", secret: config.cursorKey }] };
+  const cursor = createProductionCursor(cursorSigningKeyset);
+  const authorization: PostgresFirebaseAuthorizationRuntimeOptions = {
+    pool, project_id: config.projectId, application_id: config.applicationId,
+    runtime_mode: "deployed", id_token_adapter: identity.adapter,
+    database_generation_digest: config.databaseGeneration, context_ttl_seconds: 60,
+  };
   const runtime = createPostgresFirebaseAuthorizedMemoryServiceProcess({
     pool,
     readiness: createPostgresProductionRuntimeReadiness(pool, config.databaseGeneration),
@@ -28,12 +35,10 @@ export async function startProductionServer(env: Readonly<Record<string, string 
       counter: createServedCounter(),
       now_epoch_seconds: () => Math.floor(Date.now() / 1000),
       mcp_handler: () => Response.json({ error: "unavailable" }, { status: 503, headers: { "cache-control": "no-store" } }),
+      tasks: { authorization, codecRootSecret: config.codecKey, cursorSigningKeyset },
+      device_sessions: authorization,
       memory_read: {
-        authorization: {
-          pool, project_id: config.projectId, application_id: config.applicationId,
-          runtime_mode: "deployed", id_token_adapter: identity.adapter,
-          database_generation_digest: config.databaseGeneration, context_ttl_seconds: 60,
-        },
+        authorization,
         product: {
           account_timezone: config.accountTimezone, codec_root_secret: config.codecKey,
           verify_cursor: cursor.verifyCursor, issue_cursor: cursor.issueCursor,
@@ -69,7 +74,7 @@ export async function startProductionServer(env: Readonly<Record<string, string 
   });
   let inFlight = 0;
   const server = Bun.serve({
-    hostname: "0.0.0.0", port: config.port, idleTimeout: 120, maxRequestBodySize: 65536,
+    hostname: "0.0.0.0", port: config.port, idleTimeout: 120, maxRequestBodySize: 2 * 1024 * 1024,
     async fetch(request) {
       const path = new URL(request.url).pathname;
       if (path === "/health" || path === "/ready") return runtime.fetch(request);
@@ -111,7 +116,7 @@ if (import.meta.main) {
   }, 45000);
   startProductionServer(process.env).then(({ stop }) => {
     clearTimeout(startupDeadline);
-    console.info("omi-platform ready: memories.read; other product capabilities unavailable");
+    console.info("omi-platform ready: memories.read, tasks, device audio uploads");
     const shutdown = () => {
       const deadline = setTimeout(() => process.exit(1), 8000);
       stop().then(() => { clearTimeout(deadline); process.exit(0); }, () => process.exit(1));

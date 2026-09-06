@@ -15,10 +15,12 @@ account/grant authority.
 Build from this backend directory with
 `docker build --platform linux/amd64 -t omi-platform-dev .`.
 
-This increment serves authenticated canonical memory reads. Tasks, chat, listen,
-device capture, and authenticated MCP are not implemented by this entry. MCP
-returns 503; unregistered routes retain the canonical shell's refusal. It is
-not full backend parity or production qualification.
+This increment serves authenticated canonical memory reads, task reads and
+mutations, and indexed device audio uploads. All three use the same database
+generation and Firebase authorization configuration inside the readiness and
+shutdown boundary. Audio upload completion does not certify transcription or
+conversation formation. Chat and authenticated MCP remain unavailable; MCP
+returns 503. This is not full backend parity or production qualification.
 
 Required configuration:
 
@@ -114,7 +116,8 @@ issuance producer.
 
 ## Current limits and remaining qualification
 
-The entry admits two simultaneous domain reads with a four-connection pool.
+The entry admits two simultaneous domain requests with a four-connection pool
+and a 2-MiB HTTP body ceiling; individual routes enforce their smaller limits.
 Each request has a shared 25-second cancellation budget, propagated through the
 PostgreSQL authority transactions and gateway fetch/body consumption. Gateway
 requests also enforce 256-KiB input/output limits. Invalid or ungrounded citations
