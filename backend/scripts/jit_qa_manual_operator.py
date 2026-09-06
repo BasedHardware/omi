@@ -17,14 +17,21 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping
 
-PROJECT = "based-hardware-dev"
-REGION = "us-central1"
-DATABASE = "jit-qa"
-UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
-JOB = "knowledge-ledger-drain-qa-job"
-RUNTIME_SERVICE_ACCOUNT = "jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com"
+# The deployed-resource contract is owned by the QA deployment workflow.  Keep
+# this consumer on that same contract instead of maintaining a second copy of
+# its environment and Secret Manager bindings.
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+import jit_qa_cloud_run_contract as qa_contract  # noqa: E402
+
+PROJECT = qa_contract.PROJECT_ID
+REGION = qa_contract.REGION
+DATABASE = qa_contract.FIRESTORE_DATABASE_ID
+UID = qa_contract.QA_UID
+JOB = qa_contract.LEDGER_DRAIN_JOB
+RUNTIME_SERVICE_ACCOUNT = qa_contract.RUNTIME_SERVICE_ACCOUNT
 SOURCE_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-IMAGE_RE = re.compile(r"^gcr\.io/based-hardware-dev/knowledge-ledger-drain-qa-job@sha256:[0-9a-f]{64}$")
 EXECUTION_RE = re.compile(r"^knowledge-ledger-drain-qa-job-[a-z0-9-]+$")
 SUMMARY_RE = re.compile(
     r"knowledge_ledger_drain:\s+"
@@ -39,6 +46,52 @@ SUMMARY_RE = re.compile(
     r"migrated_rows=(?P<migrated>\d+)\s+"
     r"errors=(?P<errors>\d+)"
 )
+SUMMARY_EXPECTATIONS: dict[str, dict[str, int]] = {
+    "first": {
+        "inventoried_users": 1,
+        "scanned_documents": 1,
+        "attempted_users": 1,
+        "allowlist_blocked_users": 0,
+        "rollout_blocked_users": 0,
+        "authorization_revoked_users": 0,
+        "remaining_users": 1,
+        "cutover_users": 0,
+        "migrated_rows": 100,
+    },
+    "second": {
+        "inventoried_users": 1,
+        "scanned_documents": 1,
+        "attempted_users": 1,
+        "allowlist_blocked_users": 0,
+        "rollout_blocked_users": 0,
+        "authorization_revoked_users": 0,
+        "remaining_users": 0,
+        "cutover_users": 1,
+        "migrated_rows": 1,
+    },
+    "retry": {
+        "inventoried_users": 0,
+        "scanned_documents": 1,
+        "attempted_users": 0,
+        "allowlist_blocked_users": 0,
+        "rollout_blocked_users": 0,
+        "authorization_revoked_users": 0,
+        "remaining_users": 0,
+        "cutover_users": 0,
+        "migrated_rows": 0,
+    },
+    "rollforward": {
+        "inventoried_users": 1,
+        "scanned_documents": 1,
+        "attempted_users": 1,
+        "allowlist_blocked_users": 0,
+        "rollout_blocked_users": 0,
+        "authorization_revoked_users": 0,
+        "remaining_users": 0,
+        "cutover_users": 1,
+        "migrated_rows": 0,
+    },
+}
 
 
 class OperatorError(ValueError):
@@ -51,75 +104,8 @@ def require_source_sha(value: str) -> str:
     return value
 
 
-def _containers(resource: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    """Read both Cloud Run v1 and v2 job response shapes."""
-
-    paths = (
-        ("spec", "template", "template", "spec", "containers"),
-        ("spec", "template", "template", "containers"),
-        ("spec", "template", "spec", "template", "spec", "containers"),
-        ("spec", "template", "spec", "template", "containers"),
-    )
-    for path in paths:
-        value: object = resource
-        for key in path:
-            value = value.get(key) if isinstance(value, Mapping) else None
-        if value is not None:
-            if isinstance(value, list) and len(value) == 1 and isinstance(value[0], Mapping):
-                return [value[0]]
-            raise OperatorError("QA drain job must have exactly one application container")
-    raise OperatorError("QA drain job has no supported container shape")
-
-
-def _env(container: Mapping[str, Any]) -> tuple[dict[str, str], set[str]]:
-    values: dict[str, str] = {}
-    secret_names: set[str] = set()
-    entries = container.get("env")
-    if not isinstance(entries, list):
-        raise OperatorError("QA drain job environment is missing")
-    for entry in entries:
-        if not isinstance(entry, Mapping) or not isinstance(entry.get("name"), str):
-            raise OperatorError("QA drain job environment entry is malformed")
-        name = str(entry["name"])
-        if name in values or name in secret_names:
-            raise OperatorError(f"QA drain job environment repeats {name}")
-        if "value" in entry:
-            if not isinstance(entry["value"], str):
-                raise OperatorError(f"QA drain job value for {name} is malformed")
-            values[name] = entry["value"]
-            continue
-        source = entry.get("valueSource", entry.get("valueFrom"))
-        if isinstance(source, Mapping):
-            reference = source.get("secretKeyRef")
-            if isinstance(reference, Mapping):
-                secret = reference.get("secret", reference.get("name"))
-                version = reference.get("version", reference.get("key"))
-                if secret == name and version == "latest":
-                    secret_names.add(name)
-                    continue
-        raise OperatorError(f"QA drain job environment binding for {name} is malformed")
-    return values, secret_names
-
-
-def _service_account(resource: Mapping[str, Any]) -> str | None:
-    for path in (
-        ("spec", "template", "spec", "template", "spec", "serviceAccount"),
-        ("spec", "template", "spec", "template", "spec", "serviceAccountName"),
-        ("spec", "template", "template", "serviceAccount"),
-        ("spec", "template", "template", "serviceAccountName"),
-        ("spec", "template", "spec", "serviceAccount"),
-        ("spec", "template", "spec", "serviceAccountName"),
-    ):
-        value: object = resource
-        for key in path:
-            value = value.get(key) if isinstance(value, Mapping) else None
-        if value is not None:
-            return str(value)
-    return None
-
-
 def validate_job_resource(resource: Mapping[str, Any], *, source_sha: str) -> dict[str, str]:
-    """Validate the live job's identity, source label, digest, and QA fence."""
+    """Validate the live job with the deployment workflow's shared contract."""
 
     require_source_sha(source_sha)
     metadata = resource.get("metadata")
@@ -128,35 +114,28 @@ def validate_job_resource(resource: Mapping[str, Any], *, source_sha: str) -> di
     labels = metadata.get("labels")
     if not isinstance(labels, Mapping) or labels.get("jit-qa") != "true" or labels.get("source-sha") != source_sha:
         raise OperatorError("QA drain job source admission label is missing or stale")
-    container = _containers(resource)[0]
+    try:
+        container = qa_contract._containers(resource, kind="job")[0]
+    except qa_contract.JITQAContractError as exc:
+        raise OperatorError(str(exc)) from exc
     image = container.get("image")
-    if not isinstance(image, str) or not IMAGE_RE.fullmatch(image):
+    if not isinstance(image, str) or not re.fullmatch(
+        r"gcr\.io/based-hardware-dev/knowledge-ledger-drain-qa-job@sha256:[0-9a-f]{64}", image
+    ):
         raise OperatorError("QA drain job must serve the immutable development image digest")
-    if _service_account(resource) != RUNTIME_SERVICE_ACCOUNT:
-        raise OperatorError("QA drain job uses an unexpected runtime service account")
-    if container.get("envFrom"):
-        raise OperatorError("QA drain job may not inherit an environment bundle")
-    values, secrets = _env(container)
-    expected = {
-        "OMI_ENV_STAGE": "dev",
-        "GOOGLE_CLOUD_PROJECT": PROJECT,
-        "OMI_FIRESTORE_DATA_PLANE_PROJECT": PROJECT,
-        "FIRESTORE_DATABASE_ID": DATABASE,
-        "FIREBASE_AUTH_PROJECT_ID": "based-hardware",
-        "MEMORY_ENABLED": "on",
-        "KNOWLEDGE_LEDGER_DRAIN_ENABLED": "false",
-        "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST": UID,
-        "OMI_JIT_QA_AUTH_ONLY": "true",
-        "OMI_JIT_QA_UID_ALLOWLIST": UID,
-    }
-    for name, expected_value in expected.items():
-        if values.get(name) != expected_value:
-            raise OperatorError(f"QA drain job environment {name} is not the fixed QA value")
-    if secrets != {"ENCRYPTION_SECRET", "POSTHOG_PROJECT_API_KEY"}:
-        raise OperatorError("QA drain job has an unexpected secret binding")
-    forbidden = {"SERVICE_ACCOUNT_JSON", "GOOGLE_APPLICATION_CREDENTIALS", "FIREBASE_AUTH_CREDENTIALS_PATH"}
-    if forbidden.intersection(values) or forbidden.intersection(secrets):
-        raise OperatorError("QA drain job contains a customer credential selector")
+    expected_environment, expected_secret_bindings = qa_contract.resource_environment("drain")
+    try:
+        qa_contract.validate_cloud_run_resource(
+            resource,
+            kind="job",
+            expected_image=image,
+            expected_environment=expected_environment,
+            expected_secret_bindings=expected_secret_bindings,
+            expected_name=JOB,
+            expected_service_account=RUNTIME_SERVICE_ACCOUNT,
+        )
+    except qa_contract.JITQAContractError as exc:
+        raise OperatorError(str(exc)) from exc
     return {"job": JOB, "image": image, "source_sha": source_sha, "database": DATABASE, "uid": UID}
 
 
@@ -226,6 +205,20 @@ def summary_from_logs(payload: object) -> dict[str, Any]:
     }
 
 
+def validate_summary(summary: Mapping[str, Any], *, phase: str) -> dict[str, Any]:
+    """Require the exact content-free counters for one bounded drain phase."""
+
+    expected = SUMMARY_EXPECTATIONS.get(phase)
+    if expected is None:
+        raise OperatorError(f"unknown drain phase {phase!r}")
+    if not isinstance(summary.get("errors"), list) or summary.get("errors"):
+        raise OperatorError(f"{phase} drain reported errors")
+    for key, value in expected.items():
+        if summary.get(key) != value:
+            raise OperatorError(f"{phase} drain {key}={summary.get(key)!r}; expected {value!r}")
+    return dict(summary)
+
+
 def _firestore_value(document: Mapping[str, Any], field: str) -> Any:
     fields = document.get("fields")
     entry = fields.get(field) if isinstance(fields, Mapping) else None
@@ -243,6 +236,20 @@ def _firestore_value(document: Mapping[str, Any], field: str) -> Any:
     return None
 
 
+def _required_string(document: Mapping[str, Any], field: str) -> str:
+    value = _firestore_value(document, field)
+    if not isinstance(value, str) or not value.strip():
+        raise OperatorError(f"durable proof is missing non-empty {field}")
+    return value
+
+
+def _required_int(document: Mapping[str, Any], field: str, *, minimum: int) -> int:
+    value = _firestore_value(document, field)
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise OperatorError(f"durable proof has invalid {field}")
+    return value
+
+
 def validate_durable_state(
     control: Mapping[str, Any],
     completion: Mapping[str, Any],
@@ -250,24 +257,59 @@ def validate_durable_state(
 ) -> dict[str, Any]:
     """Validate the named account's content-free post-drain fences."""
 
-    control_mode = _firestore_value(control, "writer_mode")
+    if _required_string(control, "uid") != UID:
+        raise OperatorError("durable proof belongs to an unexpected QA identity")
+    control_mode = _required_string(control, "writer_mode")
     if control_mode != "ledger":
         raise OperatorError("durable proof has no stable ledger writer")
-    if _firestore_value(completion, "status") != "complete" or _firestore_value(completion, "blocking_row_count") != 0:
+    control_head = _required_string(control, "head_commit_id")
+    control_account_generation = _required_int(control, "account_generation", minimum=0)
+    control_source_generation = _required_int(control, "source_generation", minimum=0)
+    control_writer_epoch = _required_int(control, "writer_epoch", minimum=1)
+    if _required_string(completion, "schema_version") != "knowledge_ledger.v1":
+        raise OperatorError("durable ledger completion has an unexpected schema")
+    if (
+        _required_string(completion, "status") != "complete"
+        or _required_int(completion, "blocking_row_count", minimum=0) != 0
+    ):
         raise OperatorError("durable ledger completion is incomplete")
-    if _firestore_value(control, "head_commit_id") != _firestore_value(completion, "source_head_commit_id"):
+    completion_head = _required_string(completion, "source_head_commit_id")
+    completion_writer_epoch = _required_int(completion, "writer_epoch", minimum=1)
+    if control_head != completion_head:
         raise OperatorError("durable ledger completion head fence mismatches apply-control")
-    if _firestore_value(control, "writer_epoch") != _firestore_value(completion, "writer_epoch"):
+    if control_writer_epoch != completion_writer_epoch:
         raise OperatorError("durable ledger completion epoch fence mismatches apply-control")
-    if _firestore_value(projection, "status") != "complete" or _firestore_value(projection, "legacy_row_count") != 0:
+    if _required_string(projection, "schema_version") != "knowledge_ledger_prompt_projection.v1":
+        raise OperatorError("durable prompt projection has an unexpected schema")
+    if _required_string(projection, "status") != "complete" or _required_string(projection, "uid") != UID:
+        raise OperatorError("durable prompt projection is incomplete or foreign")
+    projection_head = _required_string(projection, "source_head_commit_id")
+    projection_account_generation = _required_int(projection, "account_generation", minimum=0)
+    projection_source_generation = _required_int(projection, "source_generation", minimum=0)
+    projection_writer_epoch = _required_int(projection, "writer_epoch", minimum=1)
+    if projection_head != control_head or projection_head != completion_head:
+        raise OperatorError("durable prompt projection head fence mismatches canonical state")
+    if projection_account_generation != control_account_generation:
+        raise OperatorError("durable prompt projection account generation mismatches apply-control")
+    if projection_source_generation != control_source_generation:
+        raise OperatorError("durable prompt projection source generation mismatches apply-control")
+    if projection_writer_epoch != control_writer_epoch or projection_writer_epoch != completion_writer_epoch:
+        raise OperatorError("durable prompt projection epoch fence mismatches canonical state")
+    if _required_int(projection, "legacy_row_count", minimum=0) != 0:
         raise OperatorError("durable prompt projection is incomplete")
-    scanned = _firestore_value(projection, "scanned_row_count")
-    if _firestore_value(projection, "blocking_row_count") != 0 or not isinstance(scanned, int) or scanned <= 0:
+    if _required_int(projection, "blocking_row_count", minimum=0) != 0:
+        raise OperatorError("durable prompt projection is incomplete")
+    scanned = _required_int(projection, "scanned_row_count", minimum=1)
+    if scanned <= 0:
         raise OperatorError("durable prompt projection has no completed nonempty scan")
     return {
         "writer_mode": control_mode,
         "completion_status": "complete",
         "projection_status": "complete",
+        "head_commit_id": control_head,
+        "account_generation": control_account_generation,
+        "source_generation": control_source_generation,
+        "writer_epoch": control_writer_epoch,
         "scanned_row_count": scanned,
     }
 
@@ -298,6 +340,9 @@ def main(argv: list[str] | None = None) -> int:
     state.add_argument("--execution-json", type=Path, required=True)
     logs = sub.add_parser("summary")
     logs.add_argument("--logs-json", type=Path, required=True)
+    validated = sub.add_parser("validate-summary")
+    validated.add_argument("--summary-json", type=Path, required=True)
+    validated.add_argument("--phase", choices=tuple(SUMMARY_EXPECTATIONS), required=True)
     durable = sub.add_parser("durable")
     durable.add_argument("--control-json", type=Path, required=True)
     durable.add_argument("--completion-json", type=Path, required=True)
@@ -317,6 +362,8 @@ def main(argv: list[str] | None = None) -> int:
             print(execution_state(_load_mapping(args.execution_json)))
         elif args.command == "summary":
             print(json.dumps(summary_from_logs(_load(args.logs_json)), sort_keys=True))
+        elif args.command == "validate-summary":
+            print(json.dumps(validate_summary(_load_mapping(args.summary_json), phase=args.phase), sort_keys=True))
         else:
             print(
                 json.dumps(

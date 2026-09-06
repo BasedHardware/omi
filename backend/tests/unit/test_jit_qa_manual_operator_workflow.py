@@ -1,6 +1,22 @@
+import os
+import json
+import subprocess
+from tempfile import TemporaryDirectory
+
 from pathlib import Path
 
+import yaml
+
 WORKFLOW = Path(__file__).resolve().parents[2] / ".." / ".github" / "workflows" / "jit_qa_manual_operator.yml"
+
+
+def _workflow_steps():
+    document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    return document["jobs"]["operate"]["steps"]
+
+
+def _step(name: str):
+    return next(step for step in _workflow_steps() if step.get("name") == name)
 
 
 def test_manual_operator_is_main_only_and_qa_fenced():
@@ -18,7 +34,7 @@ def test_manual_operator_is_main_only_and_qa_fenced():
 
 def test_manual_operator_uses_existing_seed_contract_without_deploying_resources():
     text = WORKFLOW.read_text(encoding="utf-8")
-    for operation in ("bootstrap", "prepare", "inspect", "drain-verify", "rollback"):
+    for operation in ("bootstrap", "prepare", "inspect", "drain-verify", "rollback", "rollforward"):
         assert operation in text
     assert "jit_qa_seed_and_verify.py bootstrap" in text
     assert "jit_qa_seed_and_verify.py" in text
@@ -32,3 +48,139 @@ def test_manual_operator_uses_existing_seed_contract_without_deploying_resources
     assert "gcloud scheduler" not in text
     assert "docker build" not in text
     assert "api.omi.me" not in text
+
+
+def test_every_workflow_shell_block_is_valid_bash():
+    for step in _workflow_steps():
+        command = step.get("run")
+        if command:
+            result = subprocess.run(
+                ["bash", "-n", "-o", "pipefail", "-c", command],
+                capture_output=True,
+                text=True,
+            )
+            assert result.returncode == 0, f"{step['name']}: {result.stderr}"
+
+
+def test_dependency_setup_executes_pinned_runtime_help_smoke_with_qa_environment():
+    step = _step("Install pinned backend runtime and verify operator imports")
+    assert step["env"]["OMI_FIRESTORE_DATA_PLANE_PROJECT"] == "${{ env.QA_PROJECT }}"
+    assert step["env"]["FIREBASE_AUTH_PROJECT_ID"] == "based-hardware"
+    assert "pylock.runtime.toml" in step["run"]
+    assert "scripts/jit_qa_seed_and_verify.py --help" in step["run"]
+
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        (root / "backend" / "scripts").mkdir(parents=True)
+        (root / "backend" / "scripts" / "jit_qa_manual_operator.py").write_text("", encoding="utf-8")
+        (root / "backend" / "scripts" / "jit_qa_seed_and_verify.py").write_text("", encoding="utf-8")
+        fake_bin = root / "fake-bin"
+        fake_bin.mkdir()
+        (fake_bin / "uv").write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "if [[ ${1:-} == venv ]]; then mkdir -p \"$2/bin\"; fi\n"
+            "if [[ ${1:-} == venv ]]; then cat > \"$2/bin/python\" <<'PY'\n"
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "printf '%s\\n' \"$*\" >> \"$CALL_LOG\"\n"
+            "exit 0\n"
+            "PY\nchmod +x \"$2/bin/python\"; fi\n",
+            encoding="utf-8",
+        )
+        (fake_bin / "uv").chmod(0o755)
+        github_path = root / "github-path"
+        environment = {
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "GITHUB_PATH": str(github_path),
+            "CALL_LOG": str(root / "python-calls"),
+            "OMI_ENV_STAGE": "dev",
+            "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
+            "GCLOUD_PROJECT": "based-hardware-dev",
+            "OMI_FIRESTORE_DATA_PLANE_PROJECT": "based-hardware-dev",
+            "FIRESTORE_DATABASE_ID": "jit-qa",
+            "FIREBASE_AUTH_PROJECT_ID": "based-hardware",
+            "MEMORY_ENABLED": "on",
+            "OMI_JIT_QA_AUTH_ONLY": "true",
+            "OMI_JIT_QA_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
+            "KNOWLEDGE_LEDGER_DRAIN_ENABLED": "false",
+            "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
+        }
+        result = subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", step["run"]],
+            cwd=root / "backend",
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        calls = (root / "python-calls").read_text(encoding="utf-8").splitlines()
+        assert any("scripts/jit_qa_manual_operator.py --help" in call for call in calls)
+        assert any("scripts/jit_qa_seed_and_verify.py --help" in call for call in calls)
+
+
+def test_mutating_seed_step_executes_with_source_sha_and_sanitized_artifact_only():
+    step = _step("Run read-only or seed operator action")
+    assert "SOURCE_SHA" in step["env"]
+    assert '"$operator_dir/artifacts/operator-receipt.json"' in step["run"]
+    assert 'unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON GOOGLE_APPLICATION_CREDENTIALS' in step["run"]
+
+
+def test_seed_bash_step_runs_with_fake_cli_and_cannot_lose_source_sha():
+    step = _step("Run read-only or seed operator action")
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        runner_temp = root / "runner-temp"
+        operator_dir = runner_temp / "jit-qa-operator"
+        (operator_dir / "artifacts").mkdir(parents=True)
+        (operator_dir / "source.json").write_text(
+            '{"deployed_source_sha":"' + "a" * 40 + '","current_main_sha":"' + "b" * 40 + '"}',
+            encoding="utf-8",
+        )
+        fake_python = root / "fake-python"
+        fake_python.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "if [[ ${1:-} == backend/scripts/jit_qa_seed_and_verify.py ]]; then\n"
+            "  echo '{\"result\":\"PASS\"}'\n"
+            "  exit 0\n"
+            "fi\n"
+            "exec python3 \"$@\"\n",
+            encoding="utf-8",
+        )
+        fake_python.chmod(0o755)
+        environment = {
+            "PATH": os.environ["PATH"],
+            "RUNNER_TEMP": str(runner_temp),
+            "QA_PYTHON": str(fake_python),
+            "QA_PROJECT": "based-hardware-dev",
+            "QA_DATABASE": "jit-qa",
+            "QA_UID": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
+            "OPERATION": "inspect",
+            "RUN_ID": "qa-proof-20260905",
+            "CONFIRMATION": "",
+            "SOURCE_SHA": "a" * 40,
+            "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
+            "GCLOUD_PROJECT": "based-hardware-dev",
+            "OMI_ENV_STAGE": "dev",
+            "OMI_FIRESTORE_DATA_PLANE_PROJECT": "based-hardware-dev",
+            "FIRESTORE_DATABASE_ID": "jit-qa",
+            "FIREBASE_AUTH_PROJECT_ID": "based-hardware",
+            "MEMORY_ENABLED": "on",
+            "OMI_JIT_QA_AUTH_ONLY": "true",
+            "OMI_JIT_QA_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
+            "KNOWLEDGE_LEDGER_DRAIN_ENABLED": "false",
+            "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
+        }
+        result = subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", step["run"]],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        receipt = json.loads((operator_dir / "artifacts" / "operator-receipt.json").read_text(encoding="utf-8"))
+        assert receipt["source_sha"] == "a" * 40
+        assert not (operator_dir / "operation.json").exists()
+        assert [path.name for path in (operator_dir / "artifacts").iterdir()] == ["operator-receipt.json"]

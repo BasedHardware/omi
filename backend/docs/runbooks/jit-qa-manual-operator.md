@@ -3,8 +3,11 @@
 `.github/workflows/jit_qa_manual_operator.yml` is the operator entrypoint for
 the already deployed isolated QA plane. It does not deploy a service or job,
 create a Scheduler trigger, build an image, call a model, or change a global
-flag. Every dispatch must be from `main` and must name the exact current
-`main` commit with a successful first-attempt Release Eligibility run.
+flag. Every dispatch must be from `main` and must name the immutable deployed
+QA source SHA with a successful first-attempt Release Eligibility run. That
+SHA must be an ancestor of current `main`; the workflow records both the
+deployed source and the operator's current-main checkout so an unrelated main
+commit does not force a QA image rebuild.
 
 The fixed data-plane tuple is:
 
@@ -23,7 +26,10 @@ or rollback, it reads the named job and rejects a different project, job name,
 runtime service account, source label, image tag, customer credential selector,
 Firestore database, or UID allowlist. The image must be a `gcr.io` development
 image pinned by a SHA-256 digest and its `source-sha` label must equal the
-admitted commit.
+admitted deployed source SHA. Before any credentialed operation, the runner
+installs the pinned `backend/pylock.runtime.toml` environment and runs both
+operator and seed `--help` import checks under the complete QA data-plane
+environment.
 
 Run the actions in this order for a fresh named database:
 
@@ -41,6 +47,9 @@ Run the actions in this order for a fresh named database:
 5. `rollback` with `ROLLBACK_QA` only after a reviewed successful proof. This
    calls the canonical writer-transition rollback helper and checks that all
    synthetic rows/evidence remain present with the same metadata digest.
+6. `rollforward` with `ROLLFORWARD_QA` after rollback. This executes one
+   bounded retry, requires zero migrated rows and one cutover, then verifies
+   the canonical ledger fences are restored.
 
 The `drain-verify` receipt joins the exact execution names to the aggregate
 producer counters, the seed verifier result, and the Firestore completion and
@@ -48,7 +57,9 @@ prompt-projection fences. It contains no row content or provider payload. A
 successful emulator proof is a code-contract result and cannot substitute for
 the named Cloud Run execution and its real rollout/admission path.
 
-The workflow artifacts are content-free and should be retained with the
-separate isolated-plane readiness receipt. If any precondition fails, preserve
-the failed artifact and fix the named QA resource or data-plane state before
-retrying; do not point the operator at the shared development job.
+The uploaded workflow artifact is limited to the content-free operator receipt;
+raw Cloud Run descriptions, logs, Firestore documents, and temporary launch
+files remain outside the artifact staging directory. Retain the receipt with
+the separate isolated-plane readiness receipt. If any precondition fails,
+preserve the failed receipt and fix the named QA resource or data-plane state
+before retrying; do not point the operator at the shared development job.

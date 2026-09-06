@@ -82,8 +82,8 @@ def test_job_contract_requires_immutable_source_admitted_qa_resource():
 @pytest.mark.parametrize(
     "changes, message",
     [
-        ({"GOOGLE_CLOUD_PROJECT": "based-hardware"}, "fixed QA value"),
-        ({"KNOWLEDGE_LEDGER_DRAIN_ENABLED": "true"}, "fixed QA value"),
+        ({"GOOGLE_CLOUD_PROJECT": "based-hardware"}, "unexpected value"),
+        ({"KNOWLEDGE_LEDGER_DRAIN_ENABLED": "true"}, "unexpected value"),
     ],
 )
 def test_job_contract_rejects_wrong_environment(changes, message):
@@ -106,7 +106,7 @@ def test_job_contract_rejects_tagged_image_stale_source_and_customer_binding():
     resource["spec"]["template"]["spec"]["template"]["spec"]["containers"][0]["env"].append(
         {"name": "GOOGLE_APPLICATION_CREDENTIALS", "value": "/customer/key.json"}
     )
-    with pytest.raises(OPERATOR.OperatorError, match="customer credential"):
+    with pytest.raises(OPERATOR.OperatorError, match="forbidden credential"):
         OPERATOR.validate_job_resource(resource, source_sha=SOURCE_SHA)
 
 
@@ -153,16 +153,80 @@ def test_summary_parser_maps_content_free_cloud_log_line():
     assert OPERATOR.summary_from_logs(list_payload)["migrated_rows"] == 100
 
 
-def test_durable_state_requires_matching_fences_and_nonempty_projection():
-    control = _firestore_document(writer_mode="ledger", head_commit_id="head", writer_epoch=2)
-    completion = _firestore_document(
-        status="complete", blocking_row_count=0, source_head_commit_id="head", writer_epoch=2
+def test_summary_validation_requires_phase_specific_rollforward_counters():
+    first = OPERATOR.summary_from_logs(
+        {
+            "message": (
+                "knowledge_ledger_drain: scanned=1 inventoried=1 attempted=1 allowlist_blocked=0 "
+                "blocked=0 revoked=0 remaining=1 cutover=0 migrated_rows=100 errors=0"
+            )
+        }
     )
-    projection = _firestore_document(status="complete", legacy_row_count=0, blocking_row_count=0, scanned_row_count=101)
+    assert OPERATOR.validate_summary(first, phase="first")["migrated_rows"] == 100
+    rollforward = dict(first)
+    rollforward.update(remaining_users=0, cutover_users=1, migrated_rows=0)
+    assert OPERATOR.validate_summary(rollforward, phase="rollforward")["cutover_users"] == 1
+    with pytest.raises(OPERATOR.OperatorError, match="rollforward drain"):
+        OPERATOR.validate_summary(first, phase="rollforward")
+
+
+def test_durable_state_requires_matching_fences_and_nonempty_projection():
+    control = _firestore_document(
+        uid=OPERATOR.UID,
+        writer_mode="ledger",
+        head_commit_id="head",
+        account_generation=3,
+        source_generation=4,
+        writer_epoch=2,
+    )
+    completion = _firestore_document(
+        schema_version="knowledge_ledger.v1",
+        status="complete",
+        blocking_row_count=0,
+        source_head_commit_id="head",
+        writer_epoch=2,
+    )
+    projection = _firestore_document(
+        schema_version="knowledge_ledger_prompt_projection.v1",
+        status="complete",
+        uid=OPERATOR.UID,
+        source_head_commit_id="head",
+        account_generation=3,
+        source_generation=4,
+        writer_epoch=2,
+        legacy_row_count=0,
+        blocking_row_count=0,
+        scanned_row_count=101,
+    )
     assert OPERATOR.validate_durable_state(control, completion, projection)["scanned_row_count"] == 101
     with pytest.raises(OPERATOR.OperatorError, match="head fence"):
         OPERATOR.validate_durable_state(
             control,
-            _firestore_document(status="complete", blocking_row_count=0, source_head_commit_id="other", writer_epoch=2),
+            _firestore_document(
+                schema_version="knowledge_ledger.v1",
+                status="complete",
+                blocking_row_count=0,
+                source_head_commit_id="other",
+                writer_epoch=2,
+            ),
             projection,
+        )
+    with pytest.raises(OPERATOR.OperatorError, match="missing non-empty head_commit_id"):
+        OPERATOR.validate_durable_state(
+            _firestore_document(
+                uid=OPERATOR.UID,
+                writer_mode="ledger",
+                head_commit_id="",
+                account_generation=3,
+                source_generation=4,
+                writer_epoch=2,
+            ),
+            completion,
+            projection,
+        )
+    with pytest.raises(OPERATOR.OperatorError, match="account generation"):
+        OPERATOR.validate_durable_state(
+            control,
+            completion,
+            {**projection, "fields": {**projection["fields"], "account_generation": {"integerValue": "9"}}},
         )

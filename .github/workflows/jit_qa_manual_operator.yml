@@ -13,8 +13,9 @@ on:
           - inspect
           - drain-verify
           - rollback
+          - rollforward
       source_sha:
-        description: Exact current main SHA with first-attempt Release Eligibility proof
+        description: Immutable deployed QA source SHA with first-attempt Release Eligibility proof
         required: true
         type: string
       run_id:
@@ -22,7 +23,7 @@ on:
         required: false
         type: string
       confirmation:
-        description: Use PREPARE_QA, DRAIN_VERIFY_QA, or ROLLBACK_QA for mutating operations
+        description: Use PREPARE_QA, DRAIN_VERIFY_QA, ROLLFORWARD_QA, or ROLLBACK_QA for mutating operations
         required: false
         type: string
 
@@ -33,6 +34,7 @@ env:
   QA_UID: vi7SA9ckQCe4ccobWNxlbdcNdC23
   QA_DRAIN_JOB: knowledge-ledger-drain-qa-job
   QA_RUNTIME_SERVICE_ACCOUNT: jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com
+  QA_PYTHON: backend/.venv/bin/python
 
 concurrency:
   group: jit-qa-manual-operator-development
@@ -48,6 +50,7 @@ jobs:
       contents: read
       id-token: write
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - name: Checkout the current main source
         uses: actions/checkout@v7
@@ -85,7 +88,7 @@ jobs:
             exit 1
           fi
           case "$OPERATION:$CONFIRMATION" in
-            bootstrap:PREPARE_QA|prepare:PREPARE_QA|inspect:|drain-verify:DRAIN_VERIFY_QA|rollback:ROLLBACK_QA) ;;
+            bootstrap:PREPARE_QA|prepare:PREPARE_QA|inspect:|drain-verify:DRAIN_VERIFY_QA|rollforward:ROLLFORWARD_QA|rollback:ROLLBACK_QA) ;;
             *)
               echo "ERROR: confirmation does not match the selected QA operation." >&2
               exit 1
@@ -93,8 +96,12 @@ jobs:
           esac
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           main_sha="$(git rev-parse --verify 'refs/remotes/origin/main^{commit}')"
-          [[ "$SOURCE_SHA" == "$main_sha" ]] || {
-            echo "ERROR: main advanced or source_sha is stale; refusing the operation." >&2
+          git cat-file -e "$SOURCE_SHA^{commit}" || {
+            echo "ERROR: source_sha is not present in the checked-out repository." >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "$SOURCE_SHA" "$main_sha" || {
+            echo "ERROR: deployed source_sha is not an ancestor of current main." >&2
             exit 1
           }
           proof_path="$RUNNER_TEMP/release-eligibility-${SOURCE_SHA}.json"
@@ -106,21 +113,58 @@ jobs:
             --repository "$GITHUB_REPOSITORY" \
             --workflow-runs "$proof_path" \
             --require-first-attempt
-          git checkout --detach "$SOURCE_SHA"
-          [[ "$(git rev-parse HEAD)" == "$SOURCE_SHA" ]]
-          install -d -m 700 "$RUNNER_TEMP/jit-qa-operator"
-          python3 - "$SOURCE_SHA" "$main_sha" "$OPERATION" "$RUN_ID" <<'PY' > "$RUNNER_TEMP/jit-qa-operator/source.json"
+          git checkout --detach "$main_sha"
+          operator_checkout_sha="$(git rev-parse HEAD)"
+          [[ "$operator_checkout_sha" == "$main_sha" ]]
+          install -d -m 700 "$RUNNER_TEMP/jit-qa-operator/artifacts"
+          python3 - "$SOURCE_SHA" "$main_sha" "$operator_checkout_sha" "$OPERATION" "$RUN_ID" <<'PY' > "$RUNNER_TEMP/jit-qa-operator/source.json"
           import json
           import sys
 
           print(json.dumps({
               "schema_version": "omi.jit.qa.operator.source.v1",
-              "source_sha": sys.argv[1],
-              "main_sha": sys.argv[2],
-              "operation": sys.argv[3],
-              "run_id": sys.argv[4],
+              "deployed_source_sha": sys.argv[1],
+              "current_main_sha": sys.argv[2],
+              "operator_checkout_sha": sys.argv[3],
+              "operation": sys.argv[4],
+              "run_id": sys.argv[5],
+              "deployed_source_is_ancestor": True,
           }, sort_keys=True))
           PY
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Set up pinned uv
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          version: "0.11.13"
+          enable-cache: true
+          cache-dependency-glob: backend/pylock*.toml
+
+      - name: Install pinned backend runtime and verify operator imports
+        working-directory: backend
+        env:
+          OMI_ENV_STAGE: dev
+          GOOGLE_CLOUD_PROJECT: ${{ env.QA_PROJECT }}
+          GCLOUD_PROJECT: ${{ env.QA_PROJECT }}
+          OMI_FIRESTORE_DATA_PLANE_PROJECT: ${{ env.QA_PROJECT }}
+          FIRESTORE_DATABASE_ID: ${{ env.QA_DATABASE }}
+          FIREBASE_AUTH_PROJECT_ID: based-hardware
+          MEMORY_ENABLED: "on"
+          OMI_JIT_QA_AUTH_ONLY: "true"
+          OMI_JIT_QA_UID_ALLOWLIST: ${{ env.QA_UID }}
+          KNOWLEDGE_LEDGER_DRAIN_ENABLED: "false"
+          KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST: ${{ env.QA_UID }}
+        run: |
+          set -euo pipefail
+          uv venv .venv
+          uv pip sync pylock.runtime.toml --python .venv/bin/python
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          .venv/bin/python scripts/jit_qa_manual_operator.py --help >/dev/null
+          PYTHONPATH=. .venv/bin/python scripts/jit_qa_seed_and_verify.py --help >/dev/null
 
       - name: Authenticate to the development project
         uses: google-github-actions/auth@v3
@@ -138,25 +182,25 @@ jobs:
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
-          gcloud config set project "$QA_PROJECT" >/dev/null
-          actual_project="$(gcloud config get-value project 2>/dev/null)"
+          timeout --foreground --kill-after=5s 60s gcloud config set project "$QA_PROJECT" >/dev/null
+          actual_project="$(timeout --foreground --kill-after=5s 60s gcloud config get-value project 2>/dev/null)"
           [[ "$actual_project" == "$QA_PROJECT" ]] || {
             echo "ERROR: gcloud resolved project $actual_project, expected $QA_PROJECT." >&2
             exit 1
           }
-          gcloud projects describe "$QA_PROJECT" --format='value(projectId)' | grep -Fx "$QA_PROJECT" >/dev/null
+          timeout --foreground --kill-after=5s 60s gcloud projects describe "$QA_PROJECT" --format='value(projectId)' | grep -Fx "$QA_PROJECT" >/dev/null
 
       - name: Verify the deployed immutable QA drain job
-        if: ${{ inputs.operation == 'drain-verify' || inputs.operation == 'rollback' }}
+        if: ${{ inputs.operation == 'drain-verify' || inputs.operation == 'rollforward' || inputs.operation == 'rollback' }}
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
           set -euo pipefail
-          gcloud run jobs describe "$QA_DRAIN_JOB" \
+          timeout --foreground --kill-after=5s 60s gcloud run jobs describe "$QA_DRAIN_JOB" \
             --project "$QA_PROJECT" \
             --region "$QA_REGION" \
             --format=json > "$RUNNER_TEMP/jit-qa-operator/job.json"
-          python3 backend/scripts/jit_qa_manual_operator.py validate-job \
+          "$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py validate-job \
             --source-sha "$SOURCE_SHA" \
             --resource-json "$RUNNER_TEMP/jit-qa-operator/job.json" \
             > "$RUNNER_TEMP/jit-qa-operator/job-contract.json"
@@ -167,39 +211,49 @@ jobs:
           OPERATION: ${{ inputs.operation }}
           RUN_ID: ${{ inputs.run_id }}
           CONFIRMATION: ${{ inputs.confirmation }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
           GOOGLE_CLOUD_PROJECT: ${{ env.QA_PROJECT }}
           GCLOUD_PROJECT: ${{ env.QA_PROJECT }}
+          OMI_ENV_STAGE: dev
+          OMI_FIRESTORE_DATA_PLANE_PROJECT: ${{ env.QA_PROJECT }}
           FIRESTORE_DATABASE_ID: ${{ env.QA_DATABASE }}
+          FIREBASE_AUTH_PROJECT_ID: based-hardware
+          MEMORY_ENABLED: "on"
+          OMI_JIT_QA_AUTH_ONLY: "true"
+          OMI_JIT_QA_UID_ALLOWLIST: ${{ env.QA_UID }}
+          KNOWLEDGE_LEDGER_DRAIN_ENABLED: "false"
+          KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST: ${{ env.QA_UID }}
         run: |
           set -euo pipefail
-          unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH
+          unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON GOOGLE_APPLICATION_CREDENTIALS FIREBASE_AUTH_CREDENTIALS_PATH
           operator_dir="$RUNNER_TEMP/jit-qa-operator"
           case "$OPERATION" in
             bootstrap)
-              PYTHONPATH=backend python3 backend/scripts/jit_qa_seed_and_verify.py bootstrap \
+              PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_seed_and_verify.py bootstrap \
                 > "$operator_dir/operation.json"
               ;;
             prepare)
-              PYTHONPATH=backend python3 backend/scripts/jit_qa_seed_and_verify.py \
+              PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_seed_and_verify.py \
                 --run-id "$RUN_ID" prepare > "$operator_dir/operation.json"
               ;;
             inspect)
-              PYTHONPATH=backend python3 backend/scripts/jit_qa_seed_and_verify.py \
+              PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_seed_and_verify.py \
                 --run-id "$RUN_ID" inspect > "$operator_dir/operation.json"
               ;;
             rollback)
-              PYTHONPATH=backend python3 backend/scripts/jit_qa_seed_and_verify.py \
+              PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_seed_and_verify.py \
                 --run-id "$RUN_ID" rollback --confirmation "$CONFIRMATION" \
                 > "$operator_dir/operation.json"
               ;;
           esac
-          python3 - "$OPERATION" "$RUN_ID" "$SOURCE_SHA" "$operator_dir/operation.json" <<'PY' \
-            > "$operator_dir/operator-receipt.json"
+          "$QA_PYTHON" - "$OPERATION" "$RUN_ID" "$SOURCE_SHA" "$operator_dir/operation.json" "$operator_dir/source.json" <<'PY' \
+            > "$operator_dir/artifacts/operator-receipt.json"
           import json
           import sys
           from pathlib import Path
 
           payload = json.loads(Path(sys.argv[4]).read_text(encoding="utf-8"))
+          source = json.loads(Path(sys.argv[5]).read_text(encoding="utf-8"))
           print(json.dumps({
               "schema_version": "omi.jit.qa.manual.operator.v1",
               "status": "PASS",
@@ -209,22 +263,36 @@ jobs:
               "project": "based-hardware-dev",
               "database": "jit-qa",
               "uid": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
+              "source": source,
               "result": payload,
           }, sort_keys=True))
           PY
+          rm -f "$operator_dir/operation.json"
 
       - name: Execute three bounded drain pages and verify durable proof
-        if: ${{ inputs.operation == 'drain-verify' }}
+        if: ${{ inputs.operation == 'drain-verify' || inputs.operation == 'rollforward' }}
         env:
+          OPERATION: ${{ inputs.operation }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           RUN_ID: ${{ inputs.run_id }}
           GOOGLE_CLOUD_PROJECT: ${{ env.QA_PROJECT }}
           GCLOUD_PROJECT: ${{ env.QA_PROJECT }}
+          OMI_ENV_STAGE: dev
+          OMI_FIRESTORE_DATA_PLANE_PROJECT: ${{ env.QA_PROJECT }}
           FIRESTORE_DATABASE_ID: ${{ env.QA_DATABASE }}
+          FIREBASE_AUTH_PROJECT_ID: based-hardware
+          MEMORY_ENABLED: "on"
+          OMI_JIT_QA_AUTH_ONLY: "true"
+          OMI_JIT_QA_UID_ALLOWLIST: ${{ env.QA_UID }}
+          KNOWLEDGE_LEDGER_DRAIN_ENABLED: "false"
+          KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST: ${{ env.QA_UID }}
         run: |
           set -euo pipefail
-          unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH
+          unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON GOOGLE_APPLICATION_CREDENTIALS FIREBASE_AUTH_CREDENTIALS_PATH
           operator_dir="$RUNNER_TEMP/jit-qa-operator"
+          gcloud_bounded() {
+            timeout --foreground --kill-after=5s 60s gcloud "$@"
+          }
 
           run_drain() {
             local phase="$1"
@@ -233,21 +301,21 @@ jobs:
             local state_file="$operator_dir/${phase}.state.json"
             local logs_file="$operator_dir/${phase}.logs.json"
             local summary_file="$operator_dir/${phase}.summary.json"
-            gcloud run jobs execute "$QA_DRAIN_JOB" \
+            gcloud_bounded run jobs execute "$QA_DRAIN_JOB" \
               --project "$QA_PROJECT" \
               --region "$QA_REGION" \
               --update-env-vars "KNOWLEDGE_LEDGER_DRAIN_ENABLED=true,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST=${QA_UID}" \
               --format=json > "$launch_file"
             local execution
-            execution="$(python3 backend/scripts/jit_qa_manual_operator.py execution-name \
+            execution="$("$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py execution-name \
               --execution-json "$launch_file")"
             local state=running
             for _ in $(seq 1 130); do
-              gcloud run jobs executions describe "$execution" \
+              gcloud_bounded run jobs executions describe "$execution" \
                 --project "$QA_PROJECT" \
                 --region "$QA_REGION" \
                 --format=json > "$state_file"
-              state="$(python3 backend/scripts/jit_qa_manual_operator.py execution-state \
+              state="$("$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py execution-state \
                 --execution-json "$state_file")"
               if [[ "$state" == succeeded || "$state" == failed ]]; then
                 break
@@ -260,71 +328,96 @@ jobs:
             }
             printf '%s\n' "$execution" > "$execution_file"
             filter="resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${QA_DRAIN_JOB}\" AND labels.\"run.googleapis.com/execution_name\"=\"${execution}\""
-            gcloud logging read "$filter" \
-              --project "$QA_PROJECT" \
-              --freshness=1h \
-              --limit=100 \
-              --format=json > "$logs_file"
-            python3 backend/scripts/jit_qa_manual_operator.py summary \
-              --logs-json "$logs_file" > "$summary_file"
+            local summary_ready=0
+            for _ in $(seq 1 12); do
+              if gcloud_bounded logging read "$filter" \
+                --project "$QA_PROJECT" \
+                --freshness=1h \
+                --limit=100 \
+                --format=json > "$logs_file"; then
+                if "$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py summary \
+                  --logs-json "$logs_file" > "$summary_file" && \
+                  "$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py validate-summary \
+                  --summary-json "$summary_file" --phase "$phase" > "$summary_file.validated"; then
+                  mv "$summary_file.validated" "$summary_file"
+                  summary_ready=1
+                  break
+                fi
+              fi
+              sleep 5
+            done
+            [[ "$summary_ready" == 1 ]] || {
+              echo "ERROR: content-free QA drain logs did not become visible or valid for $execution." >&2
+              exit 1
+            }
             rm -f "$launch_file" "$state_file" "$logs_file"
             # A run override must not leave the persistent job gate open.
-            gcloud run jobs describe "$QA_DRAIN_JOB" \
+            gcloud_bounded run jobs describe "$QA_DRAIN_JOB" \
               --project "$QA_PROJECT" \
               --region "$QA_REGION" \
               --format=json > "$operator_dir/job.json"
-            python3 backend/scripts/jit_qa_manual_operator.py validate-job \
+            "$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py validate-job \
               --source-sha "$SOURCE_SHA" \
               --resource-json "$operator_dir/job.json" \
               > "$operator_dir/job-contract.json"
           }
 
-          run_drain first
-          run_drain second
-          run_drain retry
+          if [[ "$OPERATION" == rollforward ]]; then
+            run_drain rollforward
+            PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_seed_and_verify.py \
+              --run-id "$RUN_ID" inspect > "$operator_dir/seed-verify.json"
+          else
+            run_drain first
+            run_drain second
+            run_drain retry
+            PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_seed_and_verify.py \
+              --run-id "$RUN_ID" verify \
+              --first-summary "$operator_dir/first.summary.json" \
+              --second-summary "$operator_dir/second.summary.json" \
+              --retry-summary "$operator_dir/retry.summary.json" \
+              > "$operator_dir/seed-verify.json"
+          fi
 
-          PYTHONPATH=backend python3 backend/scripts/jit_qa_seed_and_verify.py \
-            --run-id "$RUN_ID" verify \
-            --first-summary "$operator_dir/first.summary.json" \
-            --second-summary "$operator_dir/second.summary.json" \
-            --retry-summary "$operator_dir/retry.summary.json" \
-            > "$operator_dir/seed-verify.json"
-
-          token="$(gcloud auth print-access-token)"
+          token="$(gcloud_bounded auth print-access-token)"
           base="https://firestore.googleapis.com/v1/projects/${QA_PROJECT}/databases/${QA_DATABASE}/documents/users/${QA_UID}"
           for path in memory_state/apply_control memory_control/knowledge_ledger_migration memory_control/knowledge_ledger_prompt_projection; do
-            curl --fail-with-body --silent --show-error \
+            timeout --foreground --kill-after=5s 30s curl --fail-with-body --silent --show-error \
+              --connect-timeout 10 --max-time 25 \
               -H "Authorization: Bearer ${token}" \
               "${base}/${path}" > "$operator_dir/${path##*/}.json"
           done
-          python3 backend/scripts/jit_qa_manual_operator.py durable \
+          "$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py durable \
             --control-json "$operator_dir/apply_control.json" \
             --completion-json "$operator_dir/knowledge_ledger_migration.json" \
             --projection-json "$operator_dir/knowledge_ledger_prompt_projection.json" \
             > "$operator_dir/durable-proof.json"
-          python3 - "$SOURCE_SHA" "$RUN_ID" "$operator_dir" <<'PY' > "$operator_dir/operator-receipt.json"
+          "$QA_PYTHON" - "$SOURCE_SHA" "$RUN_ID" "$operator_dir" "$OPERATION" <<'PY' > "$operator_dir/artifacts/operator-receipt.json"
           import json
           import sys
           from pathlib import Path
 
           root = Path(sys.argv[3])
+          operation = sys.argv[4]
+          source = json.loads((root / "source.json").read_text(encoding="utf-8"))
+          phases = ("rollforward",) if operation == "rollforward" else ("first", "second", "retry")
           execution_names = {
               phase: (root / f"{phase}.execution.json").read_text(encoding="utf-8").strip()
-              for phase in ("first", "second", "retry")
+              for phase in phases
           }
           summaries = {
               phase: json.loads((root / f"{phase}.summary.json").read_text(encoding="utf-8"))
-              for phase in ("first", "second", "retry")
+              for phase in phases
           }
           receipt = {
               "schema_version": "omi.jit.qa.manual.operator.v1",
               "status": "PASS",
-              "operation": "drain-verify",
+              "operation": operation,
               "source_sha": sys.argv[1],
               "run_id": sys.argv[2],
               "project": "based-hardware-dev",
               "database": "jit-qa",
               "uid": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
+              "source": source,
               "job": "knowledge-ledger-drain-qa-job",
               "job_contract": json.loads((root / "job-contract.json").read_text(encoding="utf-8")),
               "executions": execution_names,
@@ -336,11 +429,12 @@ jobs:
           }
           print(json.dumps(receipt, sort_keys=True))
           PY
+          rm -f "$operator_dir"/*.json "$operator_dir"/*.logs.json "$operator_dir"/*.state.json "$operator_dir"/*.launch.json
 
       - name: Upload content-free operator receipt
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: jit-qa-manual-operator-${{ github.run_id }}
-          path: ${{ runner.temp }}/jit-qa-operator
+          path: ${{ runner.temp }}/jit-qa-operator/artifacts
           if-no-files-found: warn
