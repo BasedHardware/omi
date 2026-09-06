@@ -113,7 +113,7 @@ const nestedAuthorization = (serviceOptions: unknown): Readonly<{
 }> => {
   const service = exactRecordWithOptional(serviceOptions, [
     "counter", "mcp_handler", "memory_read", "now_epoch_seconds",
-  ], ["observability", "tasks", "device_sessions"]);
+  ], ["observability", "tasks", "device_sessions", "transcription_source"]);
   const memoryRead = exactRecord(service["memory_read"], ["authorization", "product"]);
   const authorization = exactRecord(memoryRead["authorization"], [
     "application_id", "context_ttl_seconds", "database_generation_digest",

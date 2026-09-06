@@ -1,5 +1,7 @@
 import { createPostgresFirebaseDeviceSessionRuntime } from "./firebase-device-session-runtime";
 import { createPostgresDeviceSessionUploadRepository } from "./listen-finalization-repository";
+import { createPostgresDeviceTranscriptionRepository } from "./listen-finalization-repository";
+import { transcribeDeviceSession } from "./device-transcription";
 import { createPostgresRenderResponseRepository } from "./product-projection-repository";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -1655,16 +1657,17 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         (firebase_project_id,firebase_uid,account_id,principal_id,source_control_revision) VALUES($1,$2,$3,$4,17)`, [deviceProject,deviceUid,accountId,principalId]);
       await ownerSql.unsafe(`INSERT INTO omi_memory.firebase_application_credential_bindings
         (account_id,firebase_project_id,firebase_uid,principal_id,application_id,credential_id) VALUES($1,$2,$3,$4,$5,$6)`, [accountId,deviceProject,deviceUid,principalId,applicationId,credentialId]);
-      const ingress = createPostgresFirebaseDeviceSessionRuntime({
+      const ingressOptions = {
         pool: appRolePool, project_id: deviceProject, runtime_mode: "deployed", application_id: applicationId,
         context_ttl_seconds: 60, database_generation_digest: QUALIFICATION_DATABASE_GENERATION_DIGEST,
-        id_token_adapter: { verification_source: "firebase_production", verifyIdToken: async token => ({
+        id_token_adapter: { verification_source: "firebase_production", verifyIdToken: async (token: string) => ({
           aud: deviceProject, iss: `https://securetoken.google.com/${deviceProject}`,
           uid: token === "device.qa.valid" ? deviceUid : "unbound-other-user",
           sub: token === "device.qa.valid" ? deviceUid : "unbound-other-user",
           exp: now + 3600, iat: now - 60, auth_time: now - 60,
         }) },
-      });
+      } as const;
+      const ingress = createPostgresFirebaseDeviceSessionRuntime(ingressOptions);
       const deviceRequest = (path: string, method: string, value?: unknown, token = "device.qa.valid") => ingress.fetch(new Request(`https://service.example${path}`, {
         method, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(value === undefined ? {} : { body: JSON.stringify(value) }),
       }));
@@ -1681,6 +1684,110 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       const fetchedUpload = await deviceRequest(`/v1/device-sessions/${httpSession.id}`, "GET");
       expect(fetchedUpload.status).toBe(200);
       expect(await fetchedUpload.json()).toMatchObject({ session: { state: "complete", byteCount: audio.length, chunkCount: 1 } });
+
+      const transcriptions = createPostgresDeviceTranscriptionRepository({ pool: appRolePool });
+      const newRecording = async () => {
+        const session = await uploads.open(context, { captureId: crypto.randomUUID(), deviceId: "real-pg-transcription", codec: 1 });
+        const packet = new Uint8Array(16003).fill(128); packet.set([0, 0, 0]);
+        await uploads.append(context, session.id, 0, packet);
+        await uploads.complete(context, session.id);
+        return session;
+      };
+      const transcript = { durationSeconds: 1, segments: Array.from({ length: 130 }, (_, index) => ({ text: `Synthetic protocol fixture ${index}`, start: 0, end: 0.9 })) };
+      const paidSession = await newRecording();
+      let providerCalls = 0, providerEntered!: () => void, releaseProvider!: () => void;
+      const enteredProvider = new Promise<void>(resolve => { providerEntered = resolve; });
+      const providerRelease = new Promise<void>(resolve => { releaseProvider = resolve; });
+      const delayedSource = { transcribe: async () => { providerCalls += 1; providerEntered(); await providerRelease; return transcript; } };
+      let shouldInterruptPublication = true;
+      let failedTranscriptionStatement: string | undefined;
+      const interruptPublicationPool: PostgresTransactionPool = {
+        withTransaction: (options, callback) => appRolePool.withTransaction(options, connection => callback({
+          ...connection,
+          async query<Row extends Record<string, unknown>>(statement: import("./connection").SqlStatement): Promise<readonly Row[]> {
+            if (shouldInterruptPublication && statement.name === "listen.transcription.append_segments") throw new Error("synthetic_process_failure_after_paid_result");
+            try { return await connection.query<Row>(statement); }
+            catch (cause) { failedTranscriptionStatement = `${statement.name}:${(cause as { code?: string }).code ?? "unknown"}`; throw cause; }
+          },
+        })),
+      };
+      const firstTranscription = transcribeDeviceSession({ pool: interruptPublicationPool, authorize: async () => context,
+        sessionId: paidSession.id, source: delayedSource, signal: new AbortController().signal });
+      const firstOutcome = firstTranscription.catch(cause => cause);
+      await enteredProvider;
+      const concurrent = await transcribeDeviceSession({ pool: appRolePool, authorize: async () => context,
+        sessionId: paidSession.id, source: delayedSource, signal: new AbortController().signal });
+      expect(concurrent?.state).toBe("running");
+      expect(providerCalls).toBe(1);
+      releaseProvider();
+      expect(await firstOutcome).toBeInstanceOf(Error);
+      expect(failedTranscriptionStatement).toBeUndefined();
+      expect(await transcriptions.read(context, paidSession.id)).toMatchObject({ state: "running", providerResult: transcript });
+      shouldInterruptPublication = false;
+      const resumed = await transcribeDeviceSession({ pool: appRolePool, authorize: async () => context,
+        sessionId: paidSession.id, source: { transcribe: async () => { throw new Error("paid_provider_must_not_repeat"); } }, signal: new AbortController().signal });
+      expect(resumed).toMatchObject({ state: "completed", providerResult: transcript });
+      expect(await transcribeDeviceSession({ pool: appRolePool, authorize: async () => context,
+        sessionId: paidSession.id, source: delayedSource, signal: new AbortController().signal })).toEqual(resumed);
+      expect(providerCalls).toBe(1);
+      const publicationCount = await ownerSql.unsafe<{ segments: number; finalizations: number }[]>(`SELECT
+        (SELECT count(*)::int FROM omi_memory.listen_capture_segments WHERE account_id=$1 AND session_id=$2) AS segments,
+        (SELECT count(*)::int FROM omi_memory.listen_formation_finalizations WHERE account_id=$1 AND session_id=$2) AS finalizations`, [accountId, paidSession.id]);
+      expect([...publicationCount]).toEqual([{ segments: 130, finalizations: 1 }]);
+      const silence = await newRecording();
+      expect(await transcribeDeviceSession({ pool: appRolePool, authorize: async () => context, sessionId: silence.id,
+        source: { transcribe: async () => ({ durationSeconds: 1, segments: [] }) }, signal: new AbortController().signal }))
+        .toMatchObject({ state: "completed", providerResult: { segments: [] } });
+      expect((await ownerSql.unsafe<{ count: number }[]>("SELECT count(*)::int AS count FROM omi_memory.listen_formation_finalizations WHERE account_id=$1 AND session_id=$2", [accountId, silence.id]))[0]?.count).toBe(0);
+      const staleRecording = await newRecording();
+      const oldLease = crypto.randomUUID(), newLease = crypto.randomUUID();
+      expect(await transcriptions.claim(context, staleRecording.id, oldLease)).toMatchObject({ owned: true });
+      await ownerSql.unsafe("UPDATE omi_memory.listen_audio_transcriptions SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE account_id=$1 AND session_id=$2", [accountId, staleRecording.id]);
+      expect(await transcriptions.claim(context, staleRecording.id, newLease)).toMatchObject({ owned: true });
+      await expect(transcriptions.save(context, staleRecording.id, oldLease, transcript, 0, null, false)).rejects.toMatchObject({ code: "transition_invalid" });
+      expect(await transcriptions.save(context, staleRecording.id, newLease, transcript, 0, null, false)).toMatchObject({ providerResult: transcript });
+      await expect(appRolePool.withTransaction({ isolationLevel: "serializable", accessMode: "read only" }, connection => connection.query({ name: "qa.raw_transcription_denied", text: "SELECT provider_result FROM omi_memory.listen_audio_transcriptions", values: [] }))).rejects.toMatchObject({ code: "42501" });
+      const httpTranscriptionSession = await newRecording();
+      let speechCalls = 0;
+      const transcriptionIngress = createPostgresFirebaseDeviceSessionRuntime(ingressOptions, { transcribe: async () => { speechCalls += 1; return transcript; } });
+      const transcriptionRequest = (method: string, action: string, token = "device.qa.valid") => transcriptionIngress.fetch(new Request(`https://service.example/v1/device-sessions/${httpTranscriptionSession.id}/${action}`, { method, headers: { authorization: `Bearer ${token}` } }));
+      expect((await deviceRequest(`/v1/device-sessions/${httpTranscriptionSession.id}/transcribe`, "POST")).status).toBe(503);
+      expect((await transcriptionRequest("POST", "transcribe", "other.qa.valid")).status).toBe(403);
+      expect(speechCalls).toBe(0);
+      const transcribedResponse = await transcriptionRequest("POST", "transcribe");
+      expect(transcribedResponse.status).toBe(200);
+      expect(await transcribedResponse.json()).toMatchObject({ transcription: { sessionId: httpTranscriptionSession.id, state: "completed", segments: transcript.segments } });
+      expect((await transcriptionRequest("POST", "transcribe")).status).toBe(200);
+      expect((await transcriptionRequest("GET", "transcript")).status).toBe(200);
+      expect(speechCalls).toBe(1);
+      const tokenExpirySession = await newRecording();
+      let tokenExpired = false;
+      const expiringIngress = createPostgresFirebaseDeviceSessionRuntime({ ...ingressOptions, id_token_adapter: {
+        verification_source: "firebase_production", verifyIdToken: async token => ({ ...await ingressOptions.id_token_adapter.verifyIdToken(token), exp: tokenExpired ? Math.floor(Date.now()/1000)-1 : now+3600 }),
+      } }, { transcribe: async () => { tokenExpired = true; return transcript; } });
+      expect((await expiringIngress.fetch(new Request(`https://service.example/v1/device-sessions/${tokenExpirySession.id}/transcribe`, { method: "POST", headers: { authorization: "Bearer device.qa.valid" } }))).status).toBe(401);
+      expect(await transcriptions.read(context, tokenExpirySession.id)).toMatchObject({ state: "running", providerResult: null });
+      const disconnectedSession = await newRecording();
+      const disconnected = new AbortController();
+      let disconnectedProviderCalls = 0;
+      const disconnectingIngress = createPostgresFirebaseDeviceSessionRuntime(ingressOptions, { transcribe: async () => {
+        disconnectedProviderCalls += 1; disconnected.abort(); return transcript;
+      } });
+      expect((await disconnectingIngress.fetch(new Request(`https://service.example/v1/device-sessions/${disconnectedSession.id}/transcribe`, {
+        method: "POST", headers: { authorization: "Bearer device.qa.valid" }, signal: disconnected.signal,
+      }))).status).toBe(503);
+      expect(await transcriptions.read(context, disconnectedSession.id)).toMatchObject({ state: "running", providerResult: transcript });
+      expect((await ownerSql.unsafe<{ count: number }[]>("SELECT count(*)::int AS count FROM omi_memory.listen_capture_segments WHERE account_id=$1 AND session_id=$2", [accountId, disconnectedSession.id]))[0]?.count).toBe(0);
+      expect((await disconnectingIngress.fetch(new Request(`https://service.example/v1/device-sessions/${disconnectedSession.id}/transcribe`, {
+        method: "POST", headers: { authorization: "Bearer device.qa.valid" },
+      }))).status).toBe(200);
+      expect(disconnectedProviderCalls).toBe(1);
+      const multibyteSession = await newRecording();
+      const oversized = { durationSeconds: 1, segments: Array.from({ length: 334 }, () => ({ text: "文".repeat(1000), start: 0, end: 1 })) };
+      expect(await transcribeDeviceSession({ pool: appRolePool, authorize: async () => context, sessionId: multibyteSession.id,
+        source: { transcribe: async () => oversized }, signal: new AbortController().signal }))
+        .toMatchObject({ state: "failed", providerResult: null, errorCode: "invalid_transcript" });
+      expect((await ownerSql.unsafe<{ count: number }[]>("SELECT count(*)::int AS count FROM omi_memory.listen_capture_segments WHERE account_id=$1 AND session_id=$2", [accountId, multibyteSession.id]))[0]?.count).toBe(0);
 
 
       await ownerSql.begin(async (transaction) => {
@@ -1718,7 +1825,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           "memory_strategy_definitions",
           "listen_formation_outbox", "listen_conversation_finalization_intents",
           "listen_formation_finalizations", "listen_capture_segments",
-          "listen_capture_audio_chunks", "listen_capture_audio_uploads",
+          "listen_audio_transcriptions", "listen_capture_audio_chunks", "listen_capture_audio_uploads",
           "listen_capture_session_state_revisions", "listen_capture_sessions",
         ]) {
           await transaction.unsafe(`DELETE FROM omi_memory.${table} WHERE account_id = $1`, [accountId]);

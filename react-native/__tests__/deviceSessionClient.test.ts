@@ -3,6 +3,7 @@ import {
   completeDeviceSession,
   DeviceSessionBackendError,
   openDeviceSession,
+  transcribeDeviceSession,
 } from '../src/deviceSessionClient';
 import type {NativeHttpRequest, OmiBackend} from '../src/omiNative';
 
@@ -38,6 +39,41 @@ function backend(
     cancelGenerationEvents: async () => {},
   };
 }
+
+test('resumes transcription through bodyless native transport and validates account-scoped reply', async () => {
+  const requests: NativeHttpRequest[] = [];
+  const transcription = {
+    sessionId: 'recording-one',
+    state: 'running',
+    text: null,
+    segments: [],
+    language: null,
+    errorCode: null,
+    updatedAt: 1,
+    discardedLeadingPackets: 0,
+  };
+  const client = backend(request => {
+    requests.push(request);
+    return {status: 202, body: JSON.stringify({transcription})};
+  });
+  await expect(
+    transcribeDeviceSession(client, 'recording-one'),
+  ).resolves.toMatchObject({state: 'running'});
+  expect(requests[0]).toEqual({
+    id: 'device-session-transcribe-recording-one',
+    method: 'POST',
+    path: '/v1/device-sessions/recording-one/transcribe',
+  });
+  await expect(
+    transcribeDeviceSession(client, 'other-recording'),
+  ).rejects.toThrow('did not acknowledge');
+  await expect(
+    transcribeDeviceSession(
+      backend(() => ({status: 503, body: null})),
+      'recording-one',
+    ),
+  ).rejects.toBeInstanceOf(DeviceSessionBackendError);
+});
 
 test('opens a device session on the worker path and refuses invented transcripts', async () => {
   const captured: NativeHttpRequest[] = [];

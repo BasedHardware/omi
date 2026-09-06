@@ -35,6 +35,8 @@ export const createMemoryServiceApp = (
     app.get("/v1/device-sessions/:id", context => deviceSessions.fetch(context.req.raw));
     app.post("/v1/device-sessions/:id/audio", context => deviceSessions.fetch(context.req.raw));
     app.post("/v1/device-sessions/:id/complete", context => deviceSessions.fetch(context.req.raw));
+    app.post("/v1/device-sessions/:id/transcribe", context => deviceSessions.fetch(context.req.raw));
+    app.get("/v1/device-sessions/:id/transcript", context => deviceSessions.fetch(context.req.raw));
   }
   return app;
 };

@@ -187,3 +187,10 @@ resource "google_secret_manager_secret_iam_member" "gateway_access" {
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.runtime.email}"
 }
+
+resource "google_secret_manager_secret_iam_member" "transcription_access" {
+  project   = local.project
+  secret_id = "DEEPGRAM_API_KEY"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.runtime.email}"
+}

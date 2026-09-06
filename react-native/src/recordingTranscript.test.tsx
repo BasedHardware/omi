@@ -100,6 +100,11 @@ test('shows pending state truthfully and reloads a completed result', async () =
       .props.onPress(),
   );
   expect(textOf(renderer)).toContain('Persisted transcript');
+  expect(mockRequest).toHaveBeenLastCalledWith({
+    id: expect.any(String),
+    method: 'POST',
+    path: '/v1/device-sessions/session-one/transcribe',
+  });
 });
 
 test('keeps failed processing and failed reads distinct without showing internal errors', async () => {
@@ -118,6 +123,37 @@ test('keeps failed processing and failed reads distinct without showing internal
   );
   expect(textOf(renderer)).toContain('Transcript could not be loaded.');
   expect(textOf(renderer)).not.toContain('private upstream details');
+});
+
+test('a pending resume remains truthful without polling and a new recording starts with a read', async () => {
+  mockRequest.mockResolvedValueOnce(response('session-one', 'queued'));
+  const renderer = await render('session-one');
+  mockRequest.mockResolvedValueOnce({
+    ...response('session-one', 'running'),
+    status: 202,
+  });
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node => node.props.accessibilityLabel === 'Reload recording transcript',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('Transcription is in progress.');
+  expect(mockRequest).toHaveBeenCalledTimes(2);
+  mockRequest.mockResolvedValueOnce(
+    response('session-two', 'completed', 'Current recording'),
+  );
+  await act(async () =>
+    renderer.update(
+      <RecordingTranscript sessionId="session-two" revision="1" />,
+    ),
+  );
+  expect(mockRequest).toHaveBeenLastCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    path: '/v1/device-sessions/session-two/transcript',
+  });
 });
 
 test('retires a delayed read when the selected recording changes', async () => {

@@ -12,11 +12,13 @@ const input = () => ({
   accountTimezone: "UTC",
   gatewayUrl: "https://gateway.example.test",
   renderLane: "omi:auto:memory-render",
+  transcriptionModel: "nova-3",
   secretVersions: {
     OMI_DATABASE_URL: "1",
     OMI_CODEC_KEY_HEX: "2",
     OMI_CURSOR_KEY_HEX: "3",
     OMI_LLM_GATEWAY_SERVICE_TOKEN: "4",
+    OMI_TRANSCRIPTION_API_KEY: "5",
   },
   residentRevisions: [] as Array<{
     name: string;
@@ -47,6 +49,7 @@ test("initial private development service declares actual first-revision traffic
     "omi-platform-dev-runtime@based-hardware-dev.iam.gserviceaccount.com"
   );
   expect(manifest.spec.template.spec.containerConcurrency).toBe(2);
+  expect(manifest.spec.template.spec.timeoutSeconds).toBe(150);
   expect(
     manifest.spec.template.metadata.annotations[
       "autoscaling.knative.dev/maxScale"
@@ -66,7 +69,7 @@ test("initial private development service declares actual first-revision traffic
     manifest.spec.template.spec.containers[0]!.env.filter(
       (item) => "valueFrom" in item
     )
-  ).toHaveLength(4);
+  ).toHaveLength(5);
   expect(
     manifest.spec.template.spec.containers[0]!.startupProbe.httpGet.path
   ).toBe("/ready");
