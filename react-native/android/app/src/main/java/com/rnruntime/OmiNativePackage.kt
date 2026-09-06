@@ -7,6 +7,6 @@ import com.facebook.react.uimanager.ViewManager
 
 class OmiNativePackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
-    listOf(OmiNativeModule(reactContext), OmiBackendModule(reactContext))
+    listOf(OmiNativeModule(reactContext), OmiBackendModule(reactContext), OmiAuthModule(reactContext))
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> = emptyList()
 }

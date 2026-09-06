@@ -95,6 +95,13 @@ export function useOnboarding(
 
   const completeFirstRun = signInAndRefresh;
 
+  const cancelSignIn = useCallback(async () => {
+    ++authOperationRef.current;
+    setSigningIn(false);
+    setAuthError(null);
+    await omiAuth?.cancelSignIn();
+  }, []);
+
   const signOutAndRefresh = useCallback(async () => {
     const auth = omiAuth;
     if (auth === undefined || auth === null) {
@@ -158,6 +165,7 @@ export function useOnboarding(
 
   return {
     authError,
+    cancelSignIn,
     completeFirstRun,
     onboardingRequired,
     revalidateSession,

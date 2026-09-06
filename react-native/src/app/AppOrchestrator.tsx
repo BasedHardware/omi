@@ -80,7 +80,8 @@ const quickPrompts = [
 function App({initialRoute}: AppProps): React.JSX.Element {
   const {width} = useWindowDimensions();
   const macDesktop = Platform.OS === 'macos';
-  const nativeSessionRequired = macDesktop || Platform.OS === 'ios';
+  const nativeSessionRequired =
+    macDesktop || Platform.OS === 'ios' || Platform.OS === 'android';
   const compact = width < 1024;
   const desktopWorkspace = macDesktop;
   const floatingPane = width >= 640;
@@ -131,6 +132,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   );
   const {
     authError,
+    cancelSignIn,
     completeFirstRun,
     onboardingRequired,
     revalidateSession,
@@ -643,6 +645,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
 
   const firstRunOnboarding = (
     <Onboarding
+      onCancelSignIn={() => {
+        cancelSignIn().catch(() => undefined);
+      }}
       error={authError}
       onSignIn={() => {
         completeFirstRun().catch(() => undefined);
@@ -772,6 +777,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           }}
           onStop={() => {
             stopGeneration().catch(() => undefined);
+          }}
+          onCancelSignIn={() => {
+            cancelSignIn().catch(() => undefined);
           }}
           onSignIn={() => {
             signInAndRefresh().catch(() => undefined);

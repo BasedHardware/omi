@@ -1,6 +1,7 @@
 import React, {useEffect, useRef} from 'react';
-import {Animated, Easing, StyleSheet, Text, View} from 'react-native';
+import {Animated, Easing, Platform, StyleSheet, Text, View} from 'react-native';
 import {useReduceMotion} from '../app/useReduceMotion';
+import {desktopTokens} from '../desktop/tokens';
 import {Button} from './Button';
 import {OmiAvatar} from './OmiAvatar';
 import {tokens} from './tokens';
@@ -10,13 +11,16 @@ const DOTS_SIZE = 104;
 export function Onboarding({
   error,
   onSignIn,
+  onCancelSignIn,
   signingIn,
 }: {
   error?: string | null;
   onSignIn: () => void;
+  onCancelSignIn?: () => void;
   signingIn: boolean;
 }) {
   const reduceMotion = useReduceMotion();
+  const desktop = Platform.OS === 'macos';
   const opacity = useRef(new Animated.Value(1)).current;
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -61,16 +65,21 @@ export function Onboarding({
             reduceMotion={reduceMotion}
             size={DOTS_SIZE}
             tone="ink"
+            inkColor={desktop ? desktopTokens.color.ink : undefined}
           />
         </Animated.View>
-        <Text accessibilityRole="header" style={styles.title}>
+        <Text
+          accessibilityRole="header"
+          style={[styles.title, desktop && styles.desktopTitle]}>
           Welcome to Omi
         </Text>
-        <Text style={styles.copy}>
+        <Text style={[styles.copy, desktop && styles.desktopCopy]}>
           Sign in to access your conversations and memories.
         </Text>
         {error == null ? null : (
-          <Text accessibilityLabel="Sign-in error" style={styles.error}>
+          <Text
+            accessibilityLabel="Sign-in error"
+            style={[styles.error, desktop && styles.desktopCopy]}>
             {error}
           </Text>
         )}
@@ -80,9 +89,19 @@ export function Onboarding({
           disabled={signingIn}
           onPress={onSignIn}
           size="large"
-          style={styles.signIn}>
+          labelStyle={desktop && styles.desktopButtonLabel}
+          style={[styles.signIn, desktop && styles.desktopButton]}>
           {signingIn ? 'Signing in…' : 'Sign in'}
         </Button>
+        {signingIn && onCancelSignIn ? (
+          <Button
+            accessibilityLabel="Cancel sign in"
+            onPress={onCancelSignIn}
+            labelStyle={desktop && styles.desktopTitle}
+            variant="ghost">
+            Cancel
+          </Button>
+        ) : null}
       </View>
     </View>
   );
@@ -127,4 +146,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   signIn: {marginTop: tokens.space.sm, paddingHorizontal: 28},
+  desktopTitle: {color: desktopTokens.color.ink},
+  desktopCopy: {color: desktopTokens.color.inkMuted},
+  desktopButton: {backgroundColor: desktopTokens.color.dark},
+  desktopButtonLabel: {color: desktopTokens.color.white},
 });

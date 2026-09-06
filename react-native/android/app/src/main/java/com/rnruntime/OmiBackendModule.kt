@@ -6,8 +6,14 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
+import com.facebook.react.modules.core.DeviceEventManagerModule
+import java.util.concurrent.atomic.AtomicInteger
 import java.net.URI
 import java.net.URL
+import java.net.URLEncoder
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -32,8 +38,29 @@ private data class BackendPolicy(
 
 class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
   private val executor = Executors.newCachedThreadPool()
+  private val listeners = AtomicInteger()
+  private data class ActiveGeneration(val stream: OmiGenerationStream, val promise: Promise,
+    val finished: AtomicBoolean = AtomicBoolean())
+  private val generations = ConcurrentHashMap<String, ActiveGeneration>()
 
   override fun getName() = "OmiBackend"
+
+  @ReactMethod
+  fun addListener(eventName: String) {
+    if (eventName == "omiBackendSessionInvalidated") listeners.incrementAndGet()
+  }
+
+  @ReactMethod
+  fun removeListeners(count: Double) {
+    listeners.updateAndGet { (it - count.toInt()).coerceAtLeast(0) }
+  }
+
+  private fun emitSessionInvalidated() {
+    cancelAllGenerations()
+    if (listeners.get() > 0) reactApplicationContext
+      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+      .emit("omiBackendSessionInvalidated", Arguments.createMap())
+  }
 
   @ReactMethod
   fun request(value: ReadableMap, promise: Promise) {
@@ -50,12 +77,105 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
 
   @ReactMethod
   fun generationEvents(generationId: String, lastEventId: String?, promise: Promise) {
-    promise.reject("OMI_HTTP_UNCONFIGURED", "Android generation streaming is unavailable")
+    val path = generationPath(generationId)
+    if (path == null) {
+      promise.reject("OMI_HTTP_INVALID_REQUEST", "Native generation request is invalid")
+      return
+    }
+    val stream = try { OmiGenerationStream(lastEventId) } catch (_: IllegalArgumentException) {
+      promise.reject("OMI_HTTP_INVALID_REQUEST", "Native generation cursor is invalid")
+      return
+    }
+    val active = ActiveGeneration(stream, promise)
+    if (generations.putIfAbsent(generationId, active) != null) {
+      promise.reject("OMI_HTTP_INVALID_REQUEST", "Generation request is already active")
+      return
+    }
+    executor.execute {
+      try {
+        var currentPolicy: BackendPolicy? = null
+        val result = stream.run({ cursor ->
+          val policy = resolvedPolicy() ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Native generation session is unavailable")
+          if (policy.kind == CredentialKind.ExamplePlatform) throw TransportException("OMI_DEV_BACKEND_UNSUPPORTED", "Generation is unsupported by the selected development backend")
+          val base = requestBaseURL(policy, path) ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Native generation origin is unavailable")
+          val url = URL(base.toURL(), "$path/events")
+          if (!sameOrigin(url, base.toURL())) throw TransportException("OMI_HTTP_INVALID_REQUEST", "Native generation origin is invalid")
+          currentPolicy = policy
+          OmiBackendTransport.openConnection(url).apply {
+            requestMethod = "GET"
+            connectTimeout = 15_000
+            readTimeout = 30_000
+            setRequestProperty("authorization", "Bearer ${policy.token}")
+            setRequestProperty("x-omi-contract-version", CONTRACT_VERSION)
+            setRequestProperty("accept", "text/event-stream")
+            setRequestProperty("cache-control", "no-cache")
+            if (policy.kind != CredentialKind.Cloud || !isCloudHost(url.host)) setRequestProperty("x-omi-client-id", policy.clientId)
+            if (cursor != null) setRequestProperty("last-event-id", cursor)
+          }
+        }, { data -> JSONObject(data).optString("kind") in setOf("done", "failed", "cancelled") }, { status ->
+          val policy = currentPolicy
+          if (status == 401 && policy?.kind == CredentialKind.Cloud &&
+            OmiCloudSession.invalidateToken(reactApplicationContext, policy.token)) emitSessionInvalidated()
+        })
+        if (active.finished.compareAndSet(false, true)) promise.resolve(Arguments.createMap().apply {
+          putString("id", generationId)
+          putInt("status", result.status)
+          putString("body", result.body)
+          if (result.retryAfterSeconds == null) putNull("retryAfterSeconds") else putInt("retryAfterSeconds", result.retryAfterSeconds)
+        })
+      } catch (error: Exception) {
+        if (active.finished.compareAndSet(false, true)) {
+          if (error is TransportException) promise.reject(error.code, error.message)
+          else promise.reject("OMI_HTTP_TRANSPORT", "Native generation transport failed")
+        }
+      } finally {
+        generations.remove(generationId, active)
+      }
+    }
   }
 
   @ReactMethod
   fun cancelGenerationEvents(generationId: String, promise: Promise) {
-    promise.resolve(null)
+    val path = generationPath(generationId)
+    if (path == null) {
+      promise.reject("OMI_HTTP_INVALID_REQUEST", "Native generation request is invalid")
+      return
+    }
+    val active = generations[generationId]
+    executor.execute {
+      try {
+        val response = performRequest(Arguments.createMap().apply {
+          putString("id", generationId)
+          putString("method", "DELETE")
+          putString("path", path)
+        })
+        if (response.getInt("status") !in setOf(202, 204)) throw TransportException("OMI_HTTP_TRANSPORT", "Generation cancellation was not accepted")
+        if (active != null && generations.remove(generationId, active)) cancelGeneration(active)
+        promise.resolve(null)
+      } catch (error: Exception) {
+        if (error is TransportException) promise.reject(error.code, error.message)
+        else promise.reject("OMI_HTTP_TRANSPORT", "Native generation cancellation failed")
+      }
+    }
+  }
+
+  private fun generationPath(id: String): String? = if (id.isEmpty() || id.length > 256) null
+    else "/v1/chat-generations/" + URLEncoder.encode(id, "UTF-8").replace("+", "%20")
+
+  private fun cancelGeneration(active: ActiveGeneration) {
+    if (active.finished.compareAndSet(false, true)) active.promise.reject("OMI_HTTP_CANCELLED", "Native generation request was cancelled")
+    active.stream.cancel()
+  }
+
+  fun cancelAllGenerations() {
+    generations.entries.toList().forEach { (id, active) ->
+      if (generations.remove(id, active)) cancelGeneration(active)
+    }
+  }
+
+  override fun invalidate() {
+    cancelAllGenerations()
+    super.invalidate()
   }
 
   private fun performRequest(value: ReadableMap): com.facebook.react.bridge.WritableMap {
@@ -103,6 +223,8 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     }
     try {
       val status = connection.responseCode
+      if (status == 401 && policy.kind == CredentialKind.Cloud &&
+        OmiCloudSession.invalidateToken(reactApplicationContext, policy.token)) emitSessionInvalidated()
       val responseBytes = (if (status >= 400) connection.errorStream else connection.inputStream)?.readBytes()
       val responseBody = responseBytes?.toString(StandardCharsets.UTF_8)
       val retryAfter = connection.getHeaderField("Retry-After")?.toIntOrNull()
@@ -139,8 +261,11 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
         kind = if (developmentBackend.isNotEmpty()) CredentialKind.ExamplePlatform else CredentialKind.Local,
       )
     }
-    val cloud = environment["OMI_CLOUD_API_TOKEN"].orEmpty().ifEmpty { environment["OMI_API_TOKEN"].orEmpty() }
-    if (cloud.isEmpty()) return null
+    val cloud = OmiCloudSession.token(reactApplicationContext).orEmpty()
+    if (cloud.isEmpty()) {
+      emitSessionInvalidated()
+      return null
+    }
     val v5URL = environment["OMI_V5_BACKEND_URL"].orEmpty()
     return BackendPolicy(
       url = URI(CLOUD_ORIGIN),

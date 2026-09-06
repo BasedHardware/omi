@@ -41,6 +41,7 @@ export type OmiAuthSignOutResult = {
 
 export type OmiAuth = {
   signIn(): Promise<OmiAuthSignInResult>;
+  cancelSignIn(): Promise<void>;
   signOut(): Promise<OmiAuthSignOutResult>;
   hasCloudSession(): Promise<boolean>;
   hasCompletedOnboarding(): Promise<boolean>;

@@ -50,6 +50,7 @@ type Props = {
   chatError: string | null;
   onRefresh: () => void;
   onSignIn: () => void;
+  onCancelSignIn?: () => void;
   onSignOut: () => void | Promise<void>;
   onDraftChange: (value: string) => void;
   onLoadOlderChat: () => void;
@@ -73,6 +74,7 @@ export function DesktopApp({
   onSend,
   onStop,
   onSignIn,
+  onCancelSignIn,
   onSignOut,
   onWorkspaceReload,
   outcomes,
@@ -107,6 +109,7 @@ export function DesktopApp({
         <Onboarding
           error={authError}
           onSignIn={onSignIn}
+          onCancelSignIn={onCancelSignIn}
           signingIn={signingIn}
         />
       </View>

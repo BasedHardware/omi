@@ -7,6 +7,7 @@ const mockAuth = {
   markOnboardingComplete: jest.fn(async () => undefined),
   signIn: jest.fn(),
   signOut: jest.fn(),
+  cancelSignIn: jest.fn(async () => undefined),
 };
 let mockBackendSessionInvalidatedListener: (() => void) | undefined;
 
@@ -17,6 +18,7 @@ jest.mock('../src/omiNative', () => ({
     markOnboardingComplete: () => mockAuth.markOnboardingComplete(),
     signIn: () => mockAuth.signIn(),
     signOut: () => mockAuth.signOut(),
+    cancelSignIn: () => mockAuth.cancelSignIn(),
   },
   subscribeOmiBackendSessionInvalidated: (listener: () => void) => {
     mockBackendSessionInvalidatedListener = listener;
@@ -76,6 +78,7 @@ beforeEach(() => {
   mockAuth.markOnboardingComplete.mockReset();
   mockAuth.signIn.mockReset();
   mockAuth.signOut.mockReset();
+  mockAuth.cancelSignIn.mockClear();
   mockAuth.markOnboardingComplete.mockResolvedValue(undefined);
 });
 
@@ -337,4 +340,36 @@ test('a Mac without the native auth module stays on Welcome instead of faking re
   });
   expect(latest!.onboardingRequired).toBe(true);
   jest.dontMock('../src/omiNative');
+});
+
+test('cancel retires a pending sign-in without clearing or accepting a session', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  let resolveSignIn!: (value: {signedIn: boolean}) => void;
+  mockAuth.signIn.mockImplementation(
+    () =>
+      new Promise(resolve => {
+        resolveSignIn = resolve;
+      }),
+  );
+  const refresh = jest.fn(async () => undefined);
+  const hook = await renderOnboarding(true, refresh);
+  let pending!: Promise<void>;
+  await ReactTestRenderer.act(async () => {
+    pending = hook.latest().signInAndRefresh();
+  });
+  expect(hook.latest().signingIn).toBe(true);
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().cancelSignIn();
+  });
+  expect(mockAuth.cancelSignIn).toHaveBeenCalledTimes(1);
+  expect(hook.latest().signingIn).toBe(false);
+  await ReactTestRenderer.act(async () => {
+    resolveSignIn({signedIn: true});
+    await pending;
+  });
+  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(mockAuth.markOnboardingComplete).not.toHaveBeenCalled();
+  expect(mockAuth.signOut).not.toHaveBeenCalled();
+  expect(refresh).not.toHaveBeenCalled();
 });
