@@ -7,6 +7,14 @@ on:
         description: Exact current main SHA with a successful first-attempt Release Eligibility proof
         required: true
         type: string
+      mode:
+        description: Bootstrap an intentionally unready service, or rehydrate and prove current-ledger retrieval
+        required: true
+        default: prove
+        type: choice
+        options:
+          - bootstrap
+          - prove
       typesense_base_image:
         description: Reviewed docker.io/typesense/typesense image pinned by sha256 digest (27.1)
         required: true
@@ -14,7 +22,7 @@ on:
         type: string
       query:
         description: A real lexical term present in an active QA ledger row; never use a fabricated response
-        required: true
+        required: false
         type: string
       run_id:
         description: Lowercase namespaced projection run identifier
@@ -33,6 +41,7 @@ env:
   QA_RUNTIME_SERVICE_ACCOUNT: jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com
   QA_TYPESENSE_IMAGE_NAME: typesense-jit-qa
   QA_RUNNER_IMAGE_NAME: jit-qa-typesense-projection-runner
+  QA_MODE: ${{ inputs.mode }}
 
 concurrency:
   group: jit-qa-typesense-projection
@@ -93,6 +102,9 @@ jobs:
       - name: Validate source, target, and upstream Typesense digest
         env:
           SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
+          MODE: ${{ inputs.mode }}
+          RUN_ID: ${{ inputs.run_id }}
+          QUERY: ${{ inputs.query }}
           TYPESENSE_BASE_IMAGE: ${{ inputs.typesense_base_image }}
         run: |
           set -euo pipefail
@@ -100,26 +112,73 @@ jobs:
             --project "$QA_PROJECT" --region "$QA_REGION" --auth-project "$QA_AUTH_PROJECT" \
             --uid "$QA_UID" --database "$QA_FIRESTORE_DATABASE" \
             --base-image "$TYPESENSE_BASE_IMAGE" --source-sha "$SOURCE_SHA"
+          [[ "$MODE" == "bootstrap" || "$MODE" == "prove" ]]
+          [[ "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,63}$ ]]
+          if [[ "$MODE" == "prove" && -z "${QUERY//[[:space:]]/}" ]]; then
+            echo "prove mode requires a real active-ledger query" >&2
+            exit 1
+          fi
       - name: Build and publish immutable images
         id: images
         env:
           SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
+          MODE: ${{ inputs.mode }}
           TYPESENSE_BASE_IMAGE: ${{ inputs.typesense_base_image }}
         run: |
           set -euo pipefail
           gcloud auth configure-docker gcr.io --quiet
           typesense_tag="gcr.io/${QA_PROJECT}/${QA_TYPESENSE_IMAGE_NAME}:${SOURCE_SHA}"
-          runner_tag="gcr.io/${QA_PROJECT}/${QA_RUNNER_IMAGE_NAME}:${SOURCE_SHA}"
           docker build --file backend/Dockerfile.jit_qa_typesense --build-arg "TYPESENSE_BASE_IMAGE=${TYPESENSE_BASE_IMAGE}" --tag "$typesense_tag" .
-          docker build --file backend/Dockerfile --tag "$runner_tag" .
+          if [[ "$MODE" == "prove" ]]; then
+            runner_tag="gcr.io/${QA_PROJECT}/${QA_RUNNER_IMAGE_NAME}:${SOURCE_SHA}"
+            docker build --file backend/Dockerfile --tag "$runner_tag" .
+          fi
+
+          smoke_name="jit-qa-typesense-smoke-${GITHUB_RUN_ID}"
+          smoke_port=18108
+          smoke_key="jit-qa-typesense-local-smoke-key"
+          cleanup_smoke() { docker rm -f "$smoke_name" >/dev/null 2>&1 || true; }
+          trap cleanup_smoke EXIT
+          docker run --detach --name "$smoke_name" --publish "$smoke_port:8080" \
+            --env "TYPESENSE_API_KEY=$smoke_key" --env TYPESENSE_DATA_DIR=/tmp/typesense "$typesense_tag" >/dev/null
+          smoke_url="http://127.0.0.1:${smoke_port}"
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error "$smoke_url/health" | grep -q '"ok":true'; then
+              break
+            fi
+            if [[ "$attempt" == 30 ]]; then
+              echo "Typesense wrapper health smoke did not become ready" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error -X POST "$smoke_url/collections" \
+            -H "X-TYPESENSE-API-KEY: $smoke_key" -H 'Content-Type: application/json' \
+            --data '{"name":"jit_qa_smoke","fields":[{"name":"content","type":"string"}]}' >/dev/null
+          curl --fail --silent --show-error -X POST "$smoke_url/collections/jit_qa_smoke/documents?action=upsert" \
+            -H "X-TYPESENSE-API-KEY: $smoke_key" -H 'Content-Type: application/json' \
+            --data '{"id":"smoke-1","content":"isolated QA smoke"}' >/dev/null
+          export_response="$RUNNER_TEMP/typesense-export.jsonl"
+          curl --fail --silent --show-error \
+            -H "X-TYPESENSE-API-KEY: $smoke_key" \
+            "$smoke_url/collections/jit_qa_smoke/documents/export?include_fields=id,content" > "$export_response"
+          grep -Fq '"id":"smoke-1"' "$export_response"
+          grep -Fq '"content":"isolated QA smoke"' "$export_response"
+          if [[ "$MODE" == "prove" ]]; then
+            docker run --rm --entrypoint python3 \
+              -e ENCRYPTION_SECRET=jit-qa-import-smoke-secret \
+              "$runner_tag" scripts/jit_qa_typesense_projection.py --help >/dev/null
+          fi
           docker push "$typesense_tag" >/dev/null
-          docker push "$runner_tag" >/dev/null
           typesense_digest="$(gcloud container images describe "$typesense_tag" --format='value(image_summary.digest)')"
-          runner_digest="$(gcloud container images describe "$runner_tag" --format='value(image_summary.digest)')"
           [[ "$typesense_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
-          [[ "$runner_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
           echo "typesense_image=gcr.io/${QA_PROJECT}/${QA_TYPESENSE_IMAGE_NAME}@${typesense_digest}" >> "$GITHUB_OUTPUT"
-          echo "runner_image=gcr.io/${QA_PROJECT}/${QA_RUNNER_IMAGE_NAME}@${runner_digest}" >> "$GITHUB_OUTPUT"
+          if [[ "$MODE" == "prove" ]]; then
+            docker push "$runner_tag" >/dev/null
+            runner_digest="$(gcloud container images describe "$runner_tag" --format='value(image_summary.digest)')"
+            [[ "$runner_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            echo "runner_image=gcr.io/${QA_PROJECT}/${QA_RUNNER_IMAGE_NAME}@${runner_digest}" >> "$GITHUB_OUTPUT"
+          fi
 
   provision:
     name: Verify named QA Firestore and provision dedicated key metadata
@@ -232,6 +291,7 @@ jobs:
   rehydrate:
     name: Rehydrate and prove real current-ledger keyword retrieval
     needs: [admit, build, deploy]
+    if: ${{ inputs.mode == 'prove' }}
     environment: development
     permissions:
       contents: read
@@ -281,4 +341,68 @@ jobs:
         with:
           name: jit-qa-typesense-projection-${{ inputs.run_id }}
           path: ${{ runner.temp }}/jit-qa-typesense/projection.json
+          if-no-files-found: error
+
+  bootstrap:
+    name: Bootstrap an intentionally unready Typesense service
+    needs: [admit, deploy]
+    if: ${{ inputs.mode == 'bootstrap' }}
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Verify the service is healthy but intentionally unready
+        env:
+          SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
+          RUN_ID: ${{ inputs.run_id }}
+          TYPESENSE_URL: ${{ needs.deploy.outputs.typesense_url }}
+        run: |
+          set -euo pipefail
+          api_key="$(gcloud secrets versions access latest --secret "$QA_TYPESENSE_SECRET" --project "$QA_PROJECT")"
+          curl --fail --silent --show-error "$TYPESENSE_URL/health" | python3 -c 'import json,sys; payload=json.load(sys.stdin); assert payload.get("ok") is True'
+          marker_status="$(curl --silent --show-error -o "$RUNNER_TEMP/typesense-marker.json" -w '%{http_code}' \
+            -H "X-TYPESENSE-API-KEY: $api_key" \
+            "$TYPESENSE_URL/collections/jit_qa_typesense_readiness/documents/jit_qa_projection_readiness")"
+          [[ "$marker_status" == "404" ]] || {
+            echo "bootstrap requires an absent readiness marker; run prove to rehydrate an existing service" >&2
+            exit 1
+          }
+          collection_status="$(curl --silent --show-error -o "$RUNNER_TEMP/typesense-collection.json" -w '%{http_code}' \
+            -H "X-TYPESENSE-API-KEY: $api_key" \
+            "$TYPESENSE_URL/collections/$QA_TYPESENSE_COLLECTION")"
+          [[ "$collection_status" == "404" ]] || {
+            echo "bootstrap requires an empty projection collection; run prove to repair an existing service" >&2
+            exit 1
+          }
+          receipt="$RUNNER_TEMP/jit-qa-typesense/bootstrap.json"
+          install -d -m 700 "${receipt%/*}"
+          cat > "$receipt" <<JSON
+          {
+            "schema_version": "omi.jit.qa.typesense.projection.v1",
+            "status": "not_qualified",
+            "qualification": "bootstrap_unready",
+            "project": "$QA_PROJECT",
+            "region": "$QA_REGION",
+            "firestore_database_id": "$QA_FIRESTORE_DATABASE",
+            "uid": "$QA_UID",
+            "typesense_service": "$QA_TYPESENSE_SERVICE",
+            "typesense_url": "$TYPESENSE_URL",
+            "source_sha": "$SOURCE_SHA",
+            "run_id": "$RUN_ID",
+            "readiness_marker": "absent",
+            "projection_collection": "absent",
+            "next_step": "Create an active intent-backed ledger row through QA Chat, then dispatch mode=prove with a matching real lexical query."
+          }
+          JSON
+          chmod 0600 "$receipt"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jit-qa-typesense-bootstrap-${{ inputs.run_id }}
+          path: ${{ runner.temp }}/jit-qa-typesense/bootstrap.json
           if-no-files-found: error

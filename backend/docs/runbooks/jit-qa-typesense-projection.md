@@ -80,6 +80,25 @@ probe. The projection workflow's readiness receipt remains the source of the
 expected immutable Typesense image digest; no normal-dev or production
 Typesense endpoint is an acceptable substitute.
 
+Dispatch `mode=bootstrap` first when the named QA database does not yet contain
+an active intent-backed ledger row. This builds, smoke-tests, and deploys the
+Typesense service, then emits a `not_qualified` receipt only after confirming
+that both the readiness marker and projection collection are absent. The
+backend's readiness gate therefore remains closed while QA Chat creates the
+first row; ordinary Chat write and extraction paths are unaffected because the
+gate applies only to current-ledger search. Once QA Chat has saved a real
+current fact, document, or trigger, dispatch `mode=prove` with a matching
+lexical query to rebuild, write the readiness epoch, and emit the lexical proof
+receipt.
+
+The build job runs the wrapper image locally before publishing it: it starts
+the pinned Typesense server with a synthetic smoke key, checks health, creates
+and upserts a synthetic document, and verifies the real JSONL export endpoint.
+In `prove` mode it also runs the projection runner's `--help` under a harmless
+encryption-secret fixture so import failures stop before publication. The local
+smoke is an image check only; it does not access Firestore, QA secrets, Chat,
+or a model provider.
+
 To retire the QA projection, first stop any QA execution, then delete only the
 `typesense-jit-qa` service and dedicated key secret in `based-hardware-dev`.
 The named Firestore database remains governed by the existing QA cleanup and

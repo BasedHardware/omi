@@ -7,6 +7,7 @@ import pytest
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = BACKEND_ROOT / "scripts" / "jit_qa_cloud_run_contract.py"
 WORKFLOW = BACKEND_ROOT.parent / ".github" / "workflows" / "jit_qa_cloud_run.yml"
+TYPESENSE_WORKFLOW = BACKEND_ROOT.parent / ".github" / "workflows" / "jit_qa_typesense_projection.yml"
 
 
 def _load_contract():
@@ -374,3 +375,16 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "gcr.io/${QA_PROJECT}" in text
     assert "vars.GCP_PROJECT_ID" not in text
     assert "environment: prod" not in text
+
+
+def test_typesense_workflow_smokes_images_before_publish_and_has_unready_bootstrap():
+    text = TYPESENSE_WORKFLOW.read_text(encoding="utf-8")
+    assert "mode:" in text
+    assert "- bootstrap" in text and "- prove" in text
+    assert "docker run --detach --name \"$smoke_name\"" in text
+    assert '"$smoke_url/collections/jit_qa_smoke/documents/export?include_fields=id,content"' in text
+    assert 'scripts/jit_qa_typesense_projection.py --help' in text
+    assert "if: ${{ inputs.mode == 'prove' }}" in text
+    assert "if: ${{ inputs.mode == 'bootstrap' }}" in text
+    assert '"status": "not_qualified"' in text
+    assert '"readiness_marker": "absent"' in text
