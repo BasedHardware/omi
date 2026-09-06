@@ -195,15 +195,19 @@ struct RewindTrackBar: View {
       onScroll: onScroll
     )
     .frame(height: RewindTrackNSView.height)
-    .padding(.horizontal, 18)
-    .padding(.top, 4)
+    .padding(.horizontal, RewindStageFit.horizontalInset)
+    .padding(.top, Self.topPadding)
   }
+
+  /// The air above the track. Published so the control bar above it can close the gap to the same
+  /// distance the stage keeps on its other side.
+  nonisolated static let topPadding: CGFloat = 4
 }
 
 // MARK: - Stage chrome
 
-/// The controls that sit **on** the frame: the segment chevrons on its edges, the timestamp pill at
-/// bottom-left and the zoom cluster at bottom-right.
+/// The controls that sit **on** the frame: the segment chevrons on its left and right edges, and
+/// nothing else.
 ///
 /// **They pin to the photograph, not to the stage, and that is the whole point of the type.** The
 /// chrome is an overlay on the stage, so it used to take the stage's edges — right only while the
@@ -214,25 +218,25 @@ struct RewindTrackBar: View {
 /// frame's own edge. `RewindStageFit` answers where the picture actually is and everything here is
 /// laid out inside that rectangle.
 ///
-/// **The pill and the zoom buttons carry a material, and that is not the banned second material.**
+/// **The date pill and the zoom cluster are not here any more.** They used to sit in the picture's
+/// bottom corners, over whatever the capture happened to show there — a menu bar, a status line, the
+/// very text someone scrubbed to — and a control over the content it hides is a control in the wrong
+/// place. They live in `RewindStageControlBar`, on the glass directly under the picture.
+///
+/// **The chevrons carry a material, and that is not the banned second material.**
 /// `GlassContentChromeTests` holds content pages to "InkGlass is the only material in this app",
 /// because a material stacked *inside* the panel reads as a muddy patch of the same glass. These
 /// controls are not on the panel — they are on a photograph of somebody's screen, which can be any
 /// colour at all, and a flat fill legible over a dark editor disappears over a white document. It is
 /// the same exemption `glassMediaMat` already carves out for the player, for the same reason: a
-/// viewport onto rendered media is not a glass surface. The chevrons take the material too now, for
-/// exactly that reason — they used to sit out on the stage's margin, where `Ink.rowFill` was correct,
-/// and they now sit on the picture, where it would not be.
+/// viewport onto rendered media is not a glass surface.
 struct RewindStageChrome: View {
   let screenshots: [Screenshot]
   let currentIndex: Int
   /// The decoded frame's own size, or nil before one has arrived. The chrome belongs to the picture,
   /// so it cannot place itself without the picture's shape.
   let imageSize: CGSize?
-  @ObservedObject var window: RewindTrackWindowModel
   let onSelect: (Int) -> Void
-  @Binding var showsDatePicker: Bool
-  let datePicker: AnyView
 
   var body: some View {
     GeometryReader { proxy in
@@ -251,58 +255,13 @@ struct RewindStageChrome: View {
   }
 
   private var controls: some View {
-    ZStack {
-      // Chevrons sit on the frame's own left and right edges.
-      HStack {
-        chevron(forward: false)
-        Spacer(minLength: 0)
-        chevron(forward: true)
-      }
-      .padding(.horizontal, 10)
-
-      VStack {
-        Spacer(minLength: 0)
-        HStack(alignment: .bottom) {
-          timestampPill
-          Spacer(minLength: 0)
-          controlCluster
-        }
-      }
-      .padding(14)
+    // Chevrons sit on the frame's own left and right edges.
+    HStack {
+      chevron(forward: false)
+      Spacer(minLength: 0)
+      chevron(forward: true)
     }
-  }
-
-  // MARK: Bottom-left: the date/time pill
-
-  private var timestampPill: some View {
-    Button {
-      showsDatePicker.toggle()
-    } label: {
-      HStack(spacing: 6) {
-        Image(systemName: "calendar")
-          .font(.system(size: 11, weight: .medium))
-        Text(timestampLabel)
-          .font(.system(size: 12, weight: .medium))
-        Image(systemName: "chevron.down")
-          .font(.system(size: 8, weight: .bold))
-          .foregroundStyle(Ink.secondary)
-      }
-      .foregroundStyle(Ink.primary)
-      .padding(.horizontal, 11)
-      .padding(.vertical, 6)
-      .background(
-        Capsule(style: .continuous)
-          .fill(.regularMaterial)
-          .overlay(Capsule(style: .continuous).strokeBorder(Ink.hairline, lineWidth: 1)))
-    }
-    .buttonStyle(.plain)
-    .popover(isPresented: $showsDatePicker, arrowEdge: .bottom) { datePicker }
-    .help("Jump to a day")
-  }
-
-  private var timestampLabel: String {
-    guard screenshots.indices.contains(currentIndex) else { return "—" }
-    return screenshots[currentIndex].formattedDateCompact
+    .padding(.horizontal, 10)
   }
 
   // MARK: Edges: one app stretch at a time
@@ -349,7 +308,91 @@ struct RewindStageChrome: View {
     return index
   }
 
-  // MARK: Bottom-right: the zoom cluster
+}
+
+// MARK: - Stage control bar
+
+/// Where the row of controls under the picture sits, as values a test can hold rather than literals
+/// inside a `body`.
+///
+/// The row shares the stage's horizontal inset and the track's, so the pill's leading edge, the
+/// stage's leading edge and the track's leading edge are one line down the panel. A row inset
+/// differently from the objects above and below it reads as belonging to neither.
+enum RewindStageControlBarLayout {
+  /// Delegated to the stage, never restated: the picture and its controls keep one margin.
+  static var horizontalInset: CGFloat { RewindStageFit.horizontalInset }
+
+  /// The control height. The pill and the zoom buttons are the same height so the row has one
+  /// baseline, and it matches the stage chrome's circle buttons so the two families read as one.
+  static let controlHeight: CGFloat = 30
+
+  /// The air under the row, before the track's own top padding. The stage already carries its
+  /// `verticalInset` above the row, so the row sits the same distance from the picture as it does
+  /// from the track.
+  static var bottomGap: CGFloat { RewindStageFit.verticalInset - RewindTrackBar.topPadding }
+}
+
+/// The date pill and the zoom cluster, in a row on the glass directly under the picture.
+///
+/// **On the panel, so on the panel's fills.** These controls used to sit on the photograph, where a
+/// flat fill could vanish against whatever the capture showed and `.regularMaterial` was the
+/// exemption that kept them legible. Under the picture they are on `InkGlass` like every other
+/// control on a content page, and a material stacked inside the panel is exactly the muddy second
+/// glass `GlassContentChromeTests` forbids — so they take `Ink.rowFill` and a hairline, the same
+/// dress as the rest of the page's chrome.
+struct RewindStageControlBar: View {
+  let screenshots: [Screenshot]
+  let currentIndex: Int
+  @ObservedObject var window: RewindTrackWindowModel
+  @Binding var showsDatePicker: Bool
+  let datePicker: AnyView
+
+  var body: some View {
+    HStack(alignment: .center) {
+      timestampPill
+      Spacer(minLength: 0)
+      controlCluster
+    }
+    .padding(.horizontal, RewindStageControlBarLayout.horizontalInset)
+    .padding(.bottom, RewindStageControlBarLayout.bottomGap)
+  }
+
+  // MARK: Leading: the date/time pill
+
+  private var timestampPill: some View {
+    Button {
+      showsDatePicker.toggle()
+    } label: {
+      HStack(spacing: 6) {
+        Image(systemName: "calendar")
+          .font(.system(size: 11, weight: .medium))
+        Text(timestampLabel)
+          .font(.system(size: 12, weight: .medium))
+        Image(systemName: "chevron.down")
+          .font(.system(size: 8, weight: .bold))
+          .foregroundStyle(Ink.secondary)
+      }
+      .foregroundStyle(Ink.primary)
+      .padding(.horizontal, 11)
+      .frame(height: RewindStageControlBarLayout.controlHeight)
+      .background(
+        Capsule(style: .continuous)
+          .fill(Ink.rowFill)
+          .overlay(Capsule(style: .continuous).strokeBorder(Ink.hairline, lineWidth: 1)))
+    }
+    .buttonStyle(.plain)
+    // Opens upward, over the picture: the track under the row is what the user is about to scrub,
+    // and a popover that lands on it hides the thing the date it picks will move.
+    .popover(isPresented: $showsDatePicker, arrowEdge: .top) { datePicker }
+    .help("Jump to a day")
+  }
+
+  private var timestampLabel: String {
+    guard screenshots.indices.contains(currentIndex) else { return "—" }
+    return screenshots[currentIndex].formattedDateCompact
+  }
+
+  // MARK: Trailing: the zoom cluster
 
   private var controlCluster: some View {
     HStack(spacing: 8) {
@@ -376,10 +419,13 @@ struct RewindStageChrome: View {
       Image(systemName: systemName)
         .font(.system(size: 12, weight: .medium))
         .foregroundStyle(Ink.primary)
-        .frame(width: 30, height: 30)
+        .frame(
+          width: RewindStageControlBarLayout.controlHeight,
+          height: RewindStageControlBarLayout.controlHeight
+        )
         .background(
           Circle()
-            .fill(.regularMaterial)
+            .fill(Ink.rowFill)
             .overlay(Circle().strokeBorder(Ink.hairline, lineWidth: 1)))
     }
     .buttonStyle(.plain)

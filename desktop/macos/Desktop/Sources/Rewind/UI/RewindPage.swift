@@ -729,7 +729,8 @@ struct RewindPage: View {
       frameDisplay
         .frame(maxHeight: .infinity)
 
-      // Timeline and controls at bottom
+      // The picture's own controls, then the track
+      stageControls
       bottomControls
     }
   }
@@ -854,7 +855,8 @@ struct RewindPage: View {
       frameDisplay
         .frame(maxHeight: .infinity)
 
-      // Timeline and controls
+      // The picture's own controls, then the track
+      stageControls
       bottomControls
     }
   }
@@ -1019,9 +1021,11 @@ struct RewindPage: View {
               }
             }
             .clipShape(frameShape)
-            // A border keyed to the app the frame belongs to, so the picture and its segment on the
-            // track are visibly the same stretch of the day.
-            .overlay(frameShape.strokeBorder(frameBorderColor, lineWidth: 2))
+            // A neutral hairline, never the app's palette colour: the track segment already says which
+            // app this is, and a coloured ring around a photograph of a screen reads as a selection
+            // state rather than as a frame. The hairline only keeps a white capture from dissolving
+            // into the light glass under it.
+            .overlay(frameShape.strokeBorder(Ink.hairline, lineWidth: 1))
             .shadow(color: .black.opacity(0.08), radius: 8)
             // **The stage is a preview, not the frame.** It is fit to whatever the pane happens to
             // be, which on a half-width window is a fraction of a 5120pt capture — enough to
@@ -1063,11 +1067,18 @@ struct RewindPage: View {
         // The overlay lands on the *padded* stage, so the chrome re-derives the picture's rect in
         // that space. It needs the frame's shape to do it.
         imageSize: currentImage?.size,
-        window: trackWindow,
-        onSelect: { seekToIndex($0) },
-        showsDatePicker: $showDatePicker,
-        datePicker: AnyView(dayPicker))
+        onSelect: { seekToIndex($0) })
     }
+  }
+
+  /// The date pill and the zoom cluster, on the glass directly under the picture rather than on it.
+  private var stageControls: some View {
+    RewindStageControlBar(
+      screenshots: activeScreenshots,
+      currentIndex: currentIndex,
+      window: trackWindow,
+      showsDatePicker: $showDatePicker,
+      datePicker: AnyView(dayPicker))
   }
 
   private var frameShape: RoundedRectangle {
@@ -1085,13 +1096,6 @@ struct RewindPage: View {
     let frames = screenshots.map { QuickLookFrame(screenshot: $0) }
     ScreenFrameQuickLook.shared.present(
       frames, startingAt: frames[currentIndex].id)
-  }
-
-  /// Nil is an honest outcome: with no frame resolved the border is a neutral hairline rather than an
-  /// invented colour.
-  private var frameBorderColor: Color {
-    guard activeScreenshots.indices.contains(currentIndex) else { return Ink.hairline }
-    return RewindPalette.color(forApp: activeScreenshots[currentIndex].appName)
   }
 
   // MARK: - Bottom Controls

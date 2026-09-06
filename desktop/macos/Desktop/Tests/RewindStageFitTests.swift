@@ -6,8 +6,8 @@ import XCTest
 /// Where Rewind's photograph lands on its stage, and therefore where the controls that belong to it
 /// have to be.
 ///
-/// **The defect this holds shut.** The timestamp pill, the zoom cluster and the two segment chevrons
-/// are an overlay on the stage, so they used to pin to the *stage's* edges. That is right only while
+/// **The defect this holds shut.** The two segment chevrons are an overlay on the stage, so they used
+/// to pin to the *stage's* edges. That is right only while
 /// the picture fills the stage, and it does not: a screen capture is around 1.8 wide while the stage
 /// at the app's own default window width is around 2.55, so the picture is height-bound with a wide
 /// band of empty glass down each side. The chevron then sat a long way from the frame it steps

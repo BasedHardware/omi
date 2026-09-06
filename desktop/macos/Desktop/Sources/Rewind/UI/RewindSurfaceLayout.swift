@@ -77,9 +77,8 @@ enum RewindSurfaceLayout {
 
 /// The stage inside the player panel, and where a picture of a given shape lands on it.
 ///
-/// **This exists because the chrome was pinned to the wrong rectangle.** The timestamp pill, the
-/// zoom cluster and the two segment chevrons are an `.overlay` on the stage, so they pinned to the
-/// *stage's* edges. That is correct only while the photograph fills the stage. It does not: a screen
+/// **This exists because the chrome was pinned to the wrong rectangle.** The two segment chevrons
+/// are an `.overlay` on the stage, so they pinned to the *stage's* edges. That is correct only while the photograph fills the stage. It does not: a screen
 /// capture is around 1.8 wide, and at the app's default 1450 pt window the stage is 2.55 — so the
 /// picture is height-bound and there are roughly 200 pt of empty glass down each side of it. The
 /// chevron then sits 200 pt away from the frame it steps through, floating on nothing, which is what
