@@ -4487,7 +4487,16 @@ class ChatProvider: ObservableObject {
     onJournalFinalized: (@MainActor (_ accepted: Bool) -> Void)? = nil
   ) async -> String? {
     let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedText.isEmpty || questionInteraction != nil || questionContinuation != nil else { return nil }
+    // A file or conversation staged with no words is a message in its own right; its caption and
+    // model prompt are resolved once the staged items are settled below.
+    let isAttachmentOnlySend =
+      trimmedText.isEmpty
+      && Self.hasSendableSubject(
+        text: trimmedText,
+        attachmentCount: pendingAttachments.count,
+        referenceCount: pendingComposerReferences.count)
+    guard !trimmedText.isEmpty || isAttachmentOnlySend || questionInteraction != nil || questionContinuation != nil
+    else { return nil }
     var effectivePrompt = trimmedText
 
     // Guard against concurrent sendMessage calls.
@@ -4837,6 +4846,13 @@ class ChatProvider: ObservableObject {
       }
       attachmentsForMessage = pendingAttachments
       pendingAttachments.removeAll()
+    }
+    // The row and the journal carry a caption (both require non-empty user text); the model is told
+    // separately that the attachments are the whole message — see `modelPrompt` at the query.
+    if isAttachmentOnlySend {
+      effectivePrompt = Self.attachmentOnlyCaption(
+        attachmentCount: attachmentsForMessage.count,
+        referenceCount: composerReferencesForMessage.count)
     }
     if turnUsesOmiAccount {
       usageLimiter.recordQuery()
@@ -5393,9 +5409,15 @@ class ChatProvider: ObservableObject {
       activeBridgeSendGeneration = sendGen
       agentQueryStarted = true
       let queryResult: AgentClient.QueryResult
+      let modelPrompt =
+        isAttachmentOnlySend
+        ? Self.attachmentOnlyModelPrompt(
+          attachmentCount: attachmentsForMessage.count,
+          referenceCount: composerReferencesForMessage.count)
+        : effectivePrompt
       do {
         queryResult = try await resolvedAgentClient().query(
-          prompt: ChatPromptBuilder.currentTimePrompt(for: effectivePrompt),
+          prompt: ChatPromptBuilder.currentTimePrompt(for: modelPrompt),
           session: kernelContext.session,
           surface: resolvedSurface,
           mode: chatMode.rawValue,
@@ -5719,10 +5741,13 @@ class ChatProvider: ObservableObject {
         }
       }
 
-      // Fire-and-forget: check if user's message mentions goal progress
-      let chatText = effectivePrompt
-      Task.detached(priority: .background) {
-        await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
+      // Fire-and-forget: check if user's message mentions goal progress.
+      // An attachment-only caption ("1 file attached") has none to find.
+      if !isAttachmentOnlySend {
+        let chatText = effectivePrompt
+        Task.detached(priority: .background) {
+          await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
+        }
       }
       completedResponseText = messageText
     } catch {
@@ -5985,7 +6010,9 @@ class ChatProvider: ObservableObject {
         // replaces the prompt with a canned answer the reader picked rather
         // than typed, and that has no business landing in their composer.
         restoreComposerAfterFailedTurn(trimmedText, turnOwner: turnOwner)
-        lastFailedPrompt = failureNotice.retryable ? effectivePrompt : nil
+        // An attachment-only turn has no retryable prompt: the send consumed the attachments, and
+        // re-sending the caption alone would ask about files that are no longer there.
+        lastFailedPrompt = failureNotice.retryable && !isAttachmentOnlySend ? effectivePrompt : nil
       } else if let bridgeError = error as? BridgeError, case .stopped = bridgeError,
         stopReason(for: sendGen) == .userStop, hadPartialResponse
       {

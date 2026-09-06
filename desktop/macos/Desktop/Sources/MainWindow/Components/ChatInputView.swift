@@ -254,12 +254,13 @@ struct ChatInputView: View {
     }
   }
 
-  /// Send is enabled when there's text OR (when supported) any attachment ready
-  /// to ship — Flutter allows sending attachments without text.
+  /// Send is enabled when there's text OR (when supported) any attachment or
+  /// staged reference ready to ship — the attachment is the message.
   private var canSend: Bool {
     guard !hasMarkedText else { return false }
     if hasText { return true }
     if attachmentsEnabled && !currentAttachments.isEmpty { return true }
+    if !references.isEmpty { return true }
     return false
   }
 

@@ -53,6 +53,33 @@ final class QueryShellTests: XCTestCase {
     XCTAssertEqual(submission.mode, .answer)
   }
 
+  /// **A staged file with no words is a send.** Dropping a PDF on the bar and pressing return used to
+  /// resolve to `.none`, so the only way to ask about an attachment was to invent words for it.
+  func testAStagedItemWithNoWordsSubmitsAsAnAsk() {
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "", hasAttachments: true), .ask)
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "   ", hasAttachments: true), .ask)
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "", hasAttachments: false), .none)
+
+    let submission = QueryShellSubmission.resolve(text: "  ", hasAttachments: true)
+    XCTAssertEqual(submission.action, .ask)
+    XCTAssertEqual(submission.question, "", "An empty question: the attachment is the message")
+    XCTAssertEqual(submission.text, "", "The send consumes the field as it does for words")
+    XCTAssertEqual(submission.mode, .answer)
+  }
+
+  /// The ledger admits the resolved attachment-only submit — and once the send has consumed the
+  /// attachments there is nothing for `Try again` to re-send.
+  func testTheLedgerAdmitsAnAttachmentOnlySubmitButOffersNoRetryForIt() {
+    var ledger = QueryShellSendLedger()
+    XCTAssertNil(ledger.planSubmit(nil), "A bare empty field resolved to no question at all")
+    guard let plan = ledger.planSubmit("") else { return XCTFail("an attachment-only send is a plan") }
+    XCTAssertTrue(plan.countsAsQuestion)
+    XCTAssertNil(ledger.planSubmit("", providerBusy: true), "Return during a turn is still refused")
+
+    ledger.recordAccepted(plan)
+    XCTAssertNil(ledger.planRetry(), "The caption alone would ask about files that are gone")
+  }
+
   /// An inert key must not move the reader. Before this, an empty field was itself read as "go back
   /// to the list", so emptying the bar to type a follow-up ejected you from the conversation.
   func testAnInertSubmitMovesNothingAndKeepsTheReaderInTheirConversation() {
