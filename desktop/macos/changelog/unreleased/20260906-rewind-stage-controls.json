@@ -1,3 +1,3 @@
 {
-  "change": "Rewind's screenshot no longer wears the app-coloured outline, and the date pill and zoom buttons moved off the picture into their own row directly beneath it, aligned with the timeline"
+  "change": "Rewind's screenshot no longer wears the app-coloured outline, and every control that used to sit on the picture — the date pill, the previous/next app buttons and the zoom buttons — moved into one row directly beneath it, with the app buttons centred as simple glass circles"
 }

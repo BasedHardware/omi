@@ -204,95 +204,17 @@ struct RewindTrackBar: View {
   nonisolated static let topPadding: CGFloat = 4
 }
 
-// MARK: - Stage chrome
+// MARK: - App steps
 
-/// The controls that sit **on** the frame: the segment chevrons on its left and right edges, and
-/// nothing else.
-///
-/// **They pin to the photograph, not to the stage, and that is the whole point of the type.** The
-/// chrome is an overlay on the stage, so it used to take the stage's edges — right only while the
-/// picture fills the stage, which it does not. Measured on the running app at its default 1450 pt
-/// window the stage is 2.55 wide against a capture's 1.81, so the picture is height-bound and there
-/// is a wide band of empty glass down each side of it. The left chevron therefore sat about 200 pt
-/// away from the frame it steps through, reading as a control floating on nothing rather than as the
-/// frame's own edge. `RewindStageFit` answers where the picture actually is and everything here is
-/// laid out inside that rectangle.
-///
-/// **The date pill and the zoom cluster are not here any more.** They used to sit in the picture's
-/// bottom corners, over whatever the capture happened to show there — a menu bar, a status line, the
-/// very text someone scrubbed to — and a control over the content it hides is a control in the wrong
-/// place. They live in `RewindStageControlBar`, on the glass directly under the picture.
-///
-/// **The chevrons carry a material, and that is not the banned second material.**
-/// `GlassContentChromeTests` holds content pages to "InkGlass is the only material in this app",
-/// because a material stacked *inside* the panel reads as a muddy patch of the same glass. These
-/// controls are not on the panel — they are on a photograph of somebody's screen, which can be any
-/// colour at all, and a flat fill legible over a dark editor disappears over a white document. It is
-/// the same exemption `glassMediaMat` already carves out for the player, for the same reason: a
-/// viewport onto rendered media is not a glass surface.
-struct RewindStageChrome: View {
-  let screenshots: [Screenshot]
-  let currentIndex: Int
-  /// The decoded frame's own size, or nil before one has arrived. The chrome belongs to the picture,
-  /// so it cannot place itself without the picture's shape.
-  let imageSize: CGSize?
-  let onSelect: (Int) -> Void
-
-  var body: some View {
-    GeometryReader { proxy in
-      // The overlay is applied after the stage's padding, so `proxy` is the *outer* stage and the
-      // fit has to cross both spaces. `pictureRectInStage` is that composition, so this cannot get
-      // half-applied.
-      let picture = RewindStageFit.pictureRectInStage(image: imageSize ?? .zero, stage: proxy.size)
-      controls
-        .frame(width: picture.width, height: picture.height)
-        .offset(x: picture.minX, y: picture.minY)
-        // Nothing to belong to yet. Hidden rather than parked somewhere plausible: chrome that
-        // shows up in a corner and then jumps onto the picture reads as a glitch.
-        .opacity(picture.isEmpty ? 0 : 1)
-        .accessibilityHidden(picture.isEmpty)
-    }
-  }
-
-  private var controls: some View {
-    // Chevrons sit on the frame's own left and right edges.
-    HStack {
-      chevron(forward: false)
-      Spacer(minLength: 0)
-      chevron(forward: true)
-    }
-    .padding(.horizontal, 10)
-  }
-
-  // MARK: Edges: one app stretch at a time
-
-  private func chevron(forward: Bool) -> some View {
-    let target = adjacentSegmentIndex(forward: forward)
-    return Button {
-      if let target { onSelect(target) }
-    } label: {
-      Image(systemName: forward ? "chevron.right" : "chevron.left")
-        .font(.system(size: 13, weight: .semibold))
-        .foregroundStyle(Ink.primary)
-        .frame(width: 30, height: 44)
-        .background(
-          RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(.regularMaterial)
-            .overlay(
-              RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Ink.hairline, lineWidth: 1)))
-    }
-    .buttonStyle(.plain)
-    // Vanishes rather than greying out: a disabled control still advertises a step that does not
-    // exist, and over a photograph a dimmed chip reads as part of the picture.
-    .opacity(target == nil ? 0 : 1)
-    .disabled(target == nil)
-    .keyboardShortcut(forward ? .rightArrow : .leftArrow, modifiers: [.option])
-    .help(forward ? "Next app" : "Previous app")
-  }
-
-  /// The first capture of the next (or previous) app stretch, or nil at either end.
-  private func adjacentSegmentIndex(forward: Bool) -> Int? {
+/// One app stretch at a time: where the previous and the next stretch begin, as a pure function so
+/// the stepping is a test rather than a click.
+enum RewindAppStep {
+  /// The first capture of the next (or previous) app stretch, or nil at either end. Backward lands on
+  /// the *start* of the previous stretch, not its last frame, so two presses walk two apps back
+  /// rather than one press per frame.
+  static func adjacentSegmentIndex(in screenshots: [Screenshot], from currentIndex: Int, forward: Bool)
+    -> Int?
+  {
     guard screenshots.indices.contains(currentIndex) else { return nil }
     let app = screenshots[currentIndex].appName
     if forward {
@@ -307,7 +229,6 @@ struct RewindStageChrome: View {
     while index > 0, screenshots[index - 1].appName == previousApp { index -= 1 }
     return index
   }
-
 }
 
 // MARK: - Stage control bar
@@ -322,9 +243,12 @@ enum RewindStageControlBarLayout {
   /// Delegated to the stage, never restated: the picture and its controls keep one margin.
   static var horizontalInset: CGFloat { RewindStageFit.horizontalInset }
 
-  /// The control height. The pill and the zoom buttons are the same height so the row has one
-  /// baseline, and it matches the stage chrome's circle buttons so the two families read as one.
+  /// The control height. The pill, the app-step circles and the zoom circles are all this tall so
+  /// the row has one baseline and the three families read as one.
   static let controlHeight: CGFloat = 30
+
+  /// The air between two circles that belong together — the previous/next pair, the zoom pair.
+  static let pairSpacing: CGFloat = 8
 
   /// The air under the row, before the track's own top padding. The stage already carries its
   /// `verticalInset` above the row, so the row sits the same distance from the picture as it does
@@ -332,20 +256,28 @@ enum RewindStageControlBarLayout {
   static var bottomGap: CGFloat { RewindStageFit.verticalInset - RewindTrackBar.topPadding }
 }
 
-/// The date pill and the zoom cluster, in a row on the glass directly under the picture.
+/// The row on the glass directly under the picture: the date pill at the leading edge, the
+/// previous/next app circles in the centre, the zoom cluster at the trailing edge.
 ///
-/// **On the panel, so on the panel's fills.** These controls used to sit on the photograph, where a
-/// flat fill could vanish against whatever the capture showed and `.regularMaterial` was the
-/// exemption that kept them legible. Under the picture they are on `InkGlass` like every other
-/// control on a content page, and a material stacked inside the panel is exactly the muddy second
-/// glass `GlassContentChromeTests` forbids — so they take `Ink.rowFill` and a hairline, the same
-/// dress as the rest of the page's chrome.
+/// **Nothing sits on the photograph any more.** The pill and the zoom cluster used to live in the
+/// picture's bottom corners and the app-step chevrons on its left and right edges — all of them
+/// over whatever the capture happened to show there, a menu bar, a status line, the very text
+/// someone scrubbed to. A control over the content it hides is a control in the wrong place, so
+/// the whole set is one row beneath the picture, and the picture is only the picture.
+///
+/// **On the panel, so on the panel's fills.** Over a photograph these controls needed a system
+/// material to stay legible against any colour a capture could show. Under the picture they are on
+/// `InkGlass` like every other control on a content page, and a material stacked inside the panel
+/// is exactly the muddy second glass `GlassContentChromeTests` forbids — so every control here is
+/// `Ink.rowFill` under a hairline, the same dress as the rest of the page's chrome. The app-step
+/// buttons are the same circle as the zoom buttons, not a taller chip: one shape for one row.
 struct RewindStageControlBar: View {
   let screenshots: [Screenshot]
   let currentIndex: Int
   @ObservedObject var window: RewindTrackWindowModel
   @Binding var showsDatePicker: Bool
   let datePicker: AnyView
+  let onSelect: (Int) -> Void
 
   var body: some View {
     HStack(alignment: .center) {
@@ -353,6 +285,9 @@ struct RewindStageControlBar: View {
       Spacer(minLength: 0)
       controlCluster
     }
+    // Centred on the row, not between the pill and the zoom cluster: the pill's width changes with
+    // the date, and a pair that drifted with it would never sit under the picture's middle.
+    .overlay { appSteps }
     .padding(.horizontal, RewindStageControlBarLayout.horizontalInset)
     .padding(.bottom, RewindStageControlBarLayout.bottomGap)
   }
@@ -392,10 +327,31 @@ struct RewindStageControlBar: View {
     return screenshots[currentIndex].formattedDateCompact
   }
 
+  // MARK: Centre: one app stretch at a time
+
+  private var appSteps: some View {
+    HStack(spacing: RewindStageControlBarLayout.pairSpacing) {
+      appStep(forward: false)
+      appStep(forward: true)
+    }
+  }
+
+  private func appStep(forward: Bool) -> some View {
+    let target = RewindAppStep.adjacentSegmentIndex(in: screenshots, from: currentIndex, forward: forward)
+    return circleButton(
+      systemName: forward ? "chevron.right" : "chevron.left",
+      help: forward ? "Next app" : "Previous app",
+      enabled: target != nil
+    ) {
+      if let target { onSelect(target) }
+    }
+    .keyboardShortcut(forward ? .rightArrow : .leftArrow, modifiers: [.option])
+  }
+
   // MARK: Trailing: the zoom cluster
 
   private var controlCluster: some View {
-    HStack(spacing: 8) {
+    HStack(spacing: RewindStageControlBarLayout.pairSpacing) {
       circleButton(
         systemName: "minus.magnifyingglass",
         help: "Zoom the timeline out — or pinch in on the track",
@@ -409,6 +365,7 @@ struct RewindStageControlBar: View {
     }
   }
 
+  /// The row's one button shape: a glass circle, `controlHeight` across.
   private func circleButton(
     systemName: String,
     help: String,
@@ -429,8 +386,8 @@ struct RewindStageControlBar: View {
             .overlay(Circle().strokeBorder(Ink.hairline, lineWidth: 1)))
     }
     .buttonStyle(.plain)
-    // Dimmed rather than removed: unlike a step that does not exist, zoom is always a feature of the
-    // track — the dimming reports that it has run out of range, not that it is absent.
+    // Dimmed rather than removed. On the glass a missing circle leaves a hole in a pair, and the
+    // dimming reports that the step or the zoom has run out of range, not that it is absent.
     .opacity(enabled ? 1 : 0.45)
     .disabled(!enabled)
     .help(help)

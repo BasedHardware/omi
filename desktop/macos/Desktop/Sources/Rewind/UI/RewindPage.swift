@@ -1060,25 +1060,18 @@ struct RewindPage: View {
     }
     .padding(.horizontal, RewindStageFit.horizontalInset)
     .padding(.vertical, RewindStageFit.verticalInset)
-    .overlay {
-      RewindStageChrome(
-        screenshots: activeScreenshots,
-        currentIndex: currentIndex,
-        // The overlay lands on the *padded* stage, so the chrome re-derives the picture's rect in
-        // that space. It needs the frame's shape to do it.
-        imageSize: currentImage?.size,
-        onSelect: { seekToIndex($0) })
-    }
   }
 
-  /// The date pill and the zoom cluster, on the glass directly under the picture rather than on it.
+  /// Every control the picture owns — the date pill, the previous/next app circles and the zoom
+  /// cluster — on the glass directly under it. Nothing is overlaid on the picture itself.
   private var stageControls: some View {
     RewindStageControlBar(
       screenshots: activeScreenshots,
       currentIndex: currentIndex,
       window: trackWindow,
       showsDatePicker: $showDatePicker,
-      datePicker: AnyView(dayPicker))
+      datePicker: AnyView(dayPicker),
+      onSelect: { seekToIndex($0) })
   }
 
   private var frameShape: RoundedRectangle {
