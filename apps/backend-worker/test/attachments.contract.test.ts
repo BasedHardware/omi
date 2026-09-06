@@ -175,6 +175,35 @@ describe("attachment staging request validator", () => {
 });
 
 describe("signed upload config parser", () => {
+  test("staging upload signatures target the deployment account and bound bucket", async () => {
+    const config = Bun.JSON5.parse(
+      await Bun.file(new URL("../wrangler.jsonc", import.meta.url)).text()
+    ) as {
+      account_id: string;
+      vars: Record<string, string>;
+      r2_buckets: { binding: string; bucket_name: string }[];
+    };
+    const signing = parseSignedUploadConfig({
+      ...r2SigningConfig,
+      ...config.vars,
+    });
+    expect(signing).not.toBeNull();
+    const url = new URL(
+      await createPresignedR2Url({
+        ...signing!,
+        key: "validation/test.txt",
+        expiresIn: signing!.ttlSeconds,
+      })
+    );
+    expect(config.account_id).toMatch(/^[a-f0-9]{32}$/);
+    expect(url.hostname).toBe(`${config.account_id}.r2.cloudflarestorage.com`);
+    const bucket = config.r2_buckets.find(
+      (binding) => binding.binding === "ATTACHMENTS"
+    );
+    expect(bucket).toBeDefined();
+    expect(url.pathname).toBe(`/${bucket?.bucket_name}/validation/test.txt`);
+  });
+
   test("accepts a complete non-secret config plus secret bindings", () => {
     expect(parseSignedUploadConfig(r2SigningConfig)).not.toBeNull();
   });
