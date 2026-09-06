@@ -21,6 +21,7 @@ covers:
   - desktop/macos/Desktop/Sources/LocalInference/LocalSummaryDraft.swift
   - desktop/macos/Desktop/Sources/LocalInference/LocalProjectionStore.swift
   - desktop/macos/Desktop/Sources/LocalInference/ConversationChunkSummarizer.swift
+  - desktop/macos/Desktop/Sources/LocalInference/LocalSummaryBenchmark.swift
   - desktop/macos/Desktop/Sources/LocalInference/FreeTierLocalProcessingFlag.swift
   - desktop/macos/Desktop/Sources/LocalInference/LocalProjectionFinalization.swift
   - desktop/Desktop/Sources/AppState.swift
