@@ -87,6 +87,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
   );
   const nativeSnapshotRef = useRef<PlatformNativeSnapshot | null>(null);
   const captureRef = useRef<CaptureSession | null>(null);
+  const requestedDeviceRef = useRef<string | null>(null);
   const cancelledRef = useRef(false);
   const pendingBytesRef = useRef(0);
   const capturesRef = useRef(new Set<CaptureSession>());
@@ -384,6 +385,14 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
     setDeviceScanMessage(null);
     const retireSession = () => {
       active = false;
+      const deviceIds = new Set([
+        requestedDeviceRef.current,
+        nativeSnapshotRef.current?.connectedDeviceId,
+        ...(nativeSnapshotRef.current?.devices
+          .filter(device => device.connected)
+          .map(device => device.id) ?? []),
+      ]);
+      requestedDeviceRef.current = null;
       epochRef.current += 1;
       captureRef.current = null;
       for (const capture of capturesRef.current) {
@@ -397,6 +406,18 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       }
       cancelledRef.current = true;
       nativeSnapshotRef.current = null;
+      const native = omiNative;
+      if (enabled && native != null) {
+        const cleanup = (operation: () => Promise<void>) => {
+          try {
+            void operation().catch(() => undefined);
+          } catch {}
+        };
+        cleanup(() => native.stopScan());
+        for (const id of deviceIds) {
+          if (id) cleanup(() => native.disconnectDevice(id));
+        }
+      }
     };
     if (!enabled || omiNative === undefined || omiNative === null) {
       return retireSession;
@@ -514,8 +535,11 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
           if (!enabledRef.current || epoch !== epochRef.current) {
             return;
           }
+          if (requestedDeviceRef.current === id)
+            requestedDeviceRef.current = null;
           await finishSession();
         } else {
+          requestedDeviceRef.current = id;
           await omiNative.connectDevice(id);
           if (!enabledRef.current || epoch !== epochRef.current) {
             return;
