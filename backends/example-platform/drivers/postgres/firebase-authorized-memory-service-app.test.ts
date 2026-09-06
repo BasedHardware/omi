@@ -139,3 +139,12 @@ test("configured task reads and writes use the canonical shell and reject invali
   expect(write.status).toBe(401);
   expect(await write.text()).toBe('{"error":"unauthorized","refusal_outcome":"authentication"}');
 });
+
+test("deployed conversation collection shares Firebase admission and does not mount mutations", async () => {
+  const base=options();
+  const app=createPostgresFirebaseAuthorizedMemoryServiceApp({...base,conversations:{authorization:base.memory_read.authorization,codecRootSecret:new Uint8Array(32).fill(7),cursorSigningKeyset:{active_key_id:"test",keys:[{key_id:"test",secret:new Uint8Array(32).fill(8)}]}}});
+  const response=await app.request("/v1/conversations",{headers:{authorization:"Bearer invalid.token"}});
+  expect(response.status).toBe(401);
+  expect(await response.text()).toBe('{"error":"unauthorized"}');
+  expect((await app.request("/v1/conversations/recording/title",{method:"PATCH"})).status).toBe(404);
+});

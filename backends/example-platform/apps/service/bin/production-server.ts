@@ -41,6 +41,7 @@ export async function startProductionServer(env: Readonly<Record<string, string 
       now_epoch_seconds: () => Math.floor(Date.now() / 1000),
       mcp_handler: () => Response.json({ error: "unavailable" }, { status: 503, headers: { "cache-control": "no-store" } }),
       tasks: { authorization, codecRootSecret: config.codecKey, cursorSigningKeyset },
+      conversations: { authorization, codecRootSecret: config.codecKey, cursorSigningKeyset },
       device_sessions: authorization,
       transcription_source: createDeepgramTranscriptionSource({
         apiKey: config.transcriptionApiKey, model: config.transcriptionModel, timeoutMilliseconds: 120000,

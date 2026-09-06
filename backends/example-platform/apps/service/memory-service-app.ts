@@ -23,6 +23,7 @@ export const createMemoryServiceApp = (
   observability: ServiceAppObservability = {},
   tasks?: { readonly executeRequest: (request: Request) => Promise<Response> },
   deviceSessions?: { readonly fetch: (request: Request) => Promise<Response> },
+  conversations?: {readonly executeRequest: (request: Request) => Promise<Response>},
 ): Hono => {
   const app = createServiceApp(mcpHandler, observability);
   registerMemoryRoutes(app, memoryRoutes);
@@ -38,5 +39,6 @@ export const createMemoryServiceApp = (
     app.post("/v1/device-sessions/:id/transcribe", context => deviceSessions.fetch(context.req.raw));
     app.get("/v1/device-sessions/:id/transcript", context => deviceSessions.fetch(context.req.raw));
   }
+  if (conversations) app.get("/v1/conversations", context => conversations.executeRequest(context.req.raw));
   return app;
 };

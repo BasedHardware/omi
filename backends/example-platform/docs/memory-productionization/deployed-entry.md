@@ -1,7 +1,7 @@
 # Deployed entry increment
 
 Development setup on 2026-09-07 created the isolated `based-hardware-dev`
-PostgreSQL 18.4 instance and applied tested migrations 1–48. The application
+PostgreSQL 18.4 instance and applied tested migrations 1–49. The application
 login has only `omi_platform_application` membership, with neither superuser
 nor RLS bypass; private database URL, codec and cursor secret versions are all
 version 1. Credentials are outside source and OpenTofu state. The seven original runtime IAM grants and the transcription secret grant
@@ -142,3 +142,5 @@ must be exercised before claiming live memory functionality. The existing
 process drain closes admission first; the executable imposes an eight-second
 shutdown deadline. Exact Linux image/Node control qualification, content-safe
 operational trace delivery, and full product-route parity remain outstanding.
+
+Authenticated conversation projection and cursor rules are documented in [deployed conversation reads](conversations-deployed.md).

@@ -41,6 +41,8 @@ const MAX_LIMIT = 5_000;
 const DEFAULT_PAGE_LIMIT = 25;
 const MAX_PAGE_LIMIT = 100;
 
+export type ConversationReadRouteDependencies = Pick<ConversationRouteDependencies, "resolvePrincipal" | "counter" | "prepareRead"> & {readonly store: Pick<ConversationsStore, "listRecords">};
+
 export interface ConversationRouteDependencies {
   readonly resolvePrincipal: (token: string) => DevPrincipal | null;
   readonly store: ConversationsStore;
@@ -112,9 +114,9 @@ const readJsonLikePrototype = async (request: Request): Promise<unknown> => {
   return JSON.parse(body) as unknown;
 };
 
-export const registerConversationRoutes = (
+export const registerConversationReadRoutes = (
   app: Hono,
-  deps: ConversationRouteDependencies,
+  deps: ConversationReadRouteDependencies,
 ): void => {
   app.get(CONVERSATIONS_PATH, (context) => {
     const principal = authenticate(context.req.header("authorization"), deps.resolvePrincipal);
@@ -140,6 +142,10 @@ export const registerConversationRoutes = (
     return serveConversationsEnvelope(context.req.raw, principal, deps);
   });
 
+};
+
+export const registerConversationRoutes = (app: Hono, deps: ConversationRouteDependencies): void => {
+  registerConversationReadRoutes(app, deps);
   app.patch(`${CONVERSATIONS_PATH}/*`, async (context) => {
     const principal = authenticate(context.req.header("authorization"), deps.resolvePrincipal);
     if (principal === null) return errorResponse(401, "unauthorized");
@@ -265,7 +271,7 @@ const hasDuplicateQueryParameters = (rawUrl: string): boolean => {
 const serveConversationsEnvelope = (
   request: Request,
   principal: DevPrincipal,
-  deps: ConversationRouteDependencies,
+  deps: ConversationReadRouteDependencies,
 ): Response => {
   const declaredContractVersionHeader = request.headers.get(APP_CONTRACT_VERSION_HEADER) ?? undefined;
   deps.counter.recordDeclaredContractVersion({

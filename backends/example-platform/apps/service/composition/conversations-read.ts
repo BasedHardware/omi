@@ -57,7 +57,8 @@ export interface ConversationsReadAuthorization {
 }
 
 export interface ConversationsReadCompositionConfig {
-  readonly store: ConversationsStore;
+  readonly store: Pick<ConversationsStore, "listOrderedRecords" | "readStateRevision">;
+  readonly authorityBinding: {readonly kind: "local_qa"} | {readonly kind: "persisted"; readonly authorizationDigest: string; readonly grantDigest: string; readonly accountEpoch: number};
   readonly resolveAuthorization: () => ConversationsReadAuthorization;
   readonly codecRootSecret: Uint8Array;
   readonly cursorSigningKeyset: McpCursorSigningKeyset;
@@ -135,16 +136,17 @@ export const prepareConversationsRead = (
       owner_digest: digestOf("owner", authorization.owner_account_id),
       app_digest: digestOf("app", authorization.app_id),
       credential_key_digest: digestOf("credential", authorization.key_id),
-      authorization_generation_digest: digestOf("authorization-generation", {
+      authorization_generation_digest: config.authorityBinding.kind === "persisted" ? config.authorityBinding.authorizationDigest : digestOf("authorization-generation", {
         owner: authorization.owner_account_id,
         app: authorization.app_id,
         key: authorization.key_id,
       }),
-      grant_generation_digest: digestOf("grant-generation", { grant: "dev-local" }),
-      account_generation_digest: digestOf("account-generation", authorization.owner_account_id),
+      grant_generation_digest: config.authorityBinding.kind === "persisted" ? config.authorityBinding.grantDigest : digestOf("grant-generation", { grant: "dev-local" }),
+      account_generation_digest: digestOf("account-generation", config.authorityBinding.kind === "persisted" ? {owner: authorization.owner_account_id, epoch: config.authorityBinding.accountEpoch} : authorization.owner_account_id),
       graph_generation_digest: digestOf("graph-generation", authorization.owner_account_id),
       projection_generation_digest: digestOf("projection-generation", {
         applied_frontier: config.appliedFrontierState,
+        ...(config.authorityBinding.kind === "persisted" ? {revision: config.store.readStateRevision(authorization.owner_account_id)} : {}),
       }),
       projection_commit_digest: digestOf("projection-commit", {
         applied_frontier: config.appliedFrontierState,

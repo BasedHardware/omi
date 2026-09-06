@@ -60,11 +60,11 @@ const exactOptions = (
 /** @internal Shared fixed-query authorization construction for PG read/write runtimes. */
 export const createPostgresFirebaseAuthorizationRuntime = (
   optionsValue: PostgresFirebaseAuthorizationRuntimeOptions,
-  capability: "memories.read" | "memories.write" | "memories.export" | "tasks.read" | "tasks.write" | "listen.capture.write",
+  capability: "memories.read" | "memories.write" | "memories.export" | "tasks.read" | "tasks.write" | "listen.capture.write" | "conversations.read",
 ): PostgresFirebaseAuthorizationRuntimeBinding => {
   if (capability !== "memories.read" && capability !== "memories.write"
     && capability !== "memories.export" && capability !== "tasks.read"
-    && capability !== "tasks.write" && capability !== "listen.capture.write") {
+    && capability !== "tasks.write" && capability !== "listen.capture.write" && capability !== "conversations.read") {
     throw new TypeError("invalid PostgreSQL Firebase runtime capability");
   }
   const options = exactOptions(optionsValue);
