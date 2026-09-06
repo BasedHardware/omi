@@ -11,10 +11,7 @@ enum MemoryAtlasRenderPlanner {
     compact: Bool,
     selectedNodeID: String?,
     matchingNodeIDs: Set<String>?,
-    matchingEdges: [MemoryAtlasEdgePlacement]? = nil,
-    asOf: Date? = nil,
-    timeline: MemoryAtlasTimeline? = nil,
-    timeCursor: Double? = nil
+    matchingEdges: [MemoryAtlasEdgePlacement]? = nil
   ) -> MemoryAtlasRenderPlan {
     let fullyLabelledZoom = MemoryAtlasZoomPolicy.fullyLabelledZoom(
       nodeCount: snapshot.nodes.count
@@ -106,29 +103,18 @@ enum MemoryAtlasRenderPlanner {
       relatedNodeIDs.insert(selectedNodeID)
     }
 
-    // The time cursor is a visibility filter layered over the stable layout: a
-    // node keeps its position and simply has not been "born" yet. The anchor is
-    // always present — "you" are the constant the rest of the memory accretes
-    // around.
-    let timeFilteredNodes: [MemoryAtlasNodePlacement]
-    if let timeline, let timeCursor, timeCursor < 0.9995 {
-      timeFilteredNodes = snapshot.nodes.filter { placement in
-        placement.id == snapshot.anchorNodeID || timeline.isVisible(nodeID: placement.id, at: timeCursor)
-      }
-    } else if let asOf {
-      timeFilteredNodes = snapshot.nodes.filter { placement in
-        placement.id == snapshot.anchorNodeID || placement.node.createdAt <= asOf
-      }
-    } else {
-      timeFilteredNodes = snapshot.nodes
-    }
+    // Catalog records are memories that produced no entity or relationship.
+    // Drawn, they were unlabeled grey dots beside the account holder that
+    // nothing on the map explained. The map shows entities; the memories
+    // themselves are on the Memories page, one chip away.
+    let candidates = snapshot.nodes.filter { !$0.isCatalog }
 
     // Camera movement changes where a node is painted, not whether it belongs
     // to the rendered cohort. Canvas clipping handles off-screen content while
     // this stable source order guarantees that zoom never drops entities just
     // because a threshold or viewport candidate set changed.
     let visibleNodes = priorityOrderedPrefix(
-      timeFilteredNodes,
+      candidates,
       limit: maximumNodeLimit,
       anchorNodeID: snapshot.anchorNodeID,
       selectedNodeID: selectedNodeID,
@@ -155,16 +141,7 @@ enum MemoryAtlasRenderPlanner {
     let visibleEdges = Array(
       edgeCandidates.lazy
         .filter { edge in
-          let isWithinTimeline =
-            timeline.flatMap { timeline in
-              timeCursor.map { cursor in
-                cursor >= 0.9995 || timeline.fraction(for: edge.edge.createdAt) <= cursor
-              }
-            } ?? true
-          let isBeforeAsOf = asOf.map { edge.edge.createdAt <= $0 } ?? true
-          return isWithinTimeline
-            && isBeforeAsOf
-            && visibleNodeIDs.contains(edge.edge.sourceId) && visibleNodeIDs.contains(edge.edge.targetId)
+          visibleNodeIDs.contains(edge.edge.sourceId) && visibleNodeIDs.contains(edge.edge.targetId)
         }
         .prefix(selectedEdgeLimit)
     )
@@ -222,7 +199,7 @@ enum MemoryAtlasRenderPlanner {
     edgeLimit: Int = 24
   ) -> MemoryAtlasRenderPlan {
     let visibleNodes = priorityOrderedPrefix(
-      snapshot.nodes,
+      snapshot.nodes.filter { !$0.isCatalog },
       limit: nodeLimit,
       anchorNodeID: snapshot.anchorNodeID,
       selectedNodeID: nil,

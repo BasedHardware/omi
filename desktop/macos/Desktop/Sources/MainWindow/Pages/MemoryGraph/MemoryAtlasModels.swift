@@ -148,8 +148,6 @@ struct MemoryAtlasSnapshot {
   let detailEdges: [MemoryAtlasEdgePlacement]
   let edgesByNodeID: [String: [MemoryAtlasEdgePlacement]]
   let neighborIDsByNodeID: [String: Set<String>]
-  /// The time axis for this graph, or `nil` when timestamps carry no spread.
-  let timeline: MemoryAtlasTimeline?
 
   init(
     nodes: [MemoryAtlasNodePlacement],
@@ -164,7 +162,6 @@ struct MemoryAtlasSnapshot {
     self.neighbourhoods = neighbourhoods
     self.activeClusters = MemoryAtlasCluster.allCases.filter { clusterCenters[$0] != nil }
     self.clusterCenters = clusterCenters
-    self.timeline = MemoryAtlasTimeline.make(from: nodes.map(\.node))
     let indexedNodes = Dictionary(lastWriteWins: nodes.map { ($0.id, $0) })
     nodeByID = indexedNodes
 

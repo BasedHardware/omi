@@ -3546,26 +3546,22 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "memory_graph_rebuild",
       summary:
-        "Regenerate the server-side knowledge graph from the signed-in account's memories",
-      params: []
-    ) { _ in
-      // Mutating and not undoable: the backend deletes the stored graph before
-      // the background rebuild runs, so a caller that loses the race sees an
-      // empty graph. Exposed for cursor-free QA of the Brain Map's own rebuild
-      // control, which is otherwise only reachable by clicking.
-      do {
-        let response = try await APIClient.shared.rebuildKnowledgeGraph()
-        return [
-          "status": response.status,
-          "nodes_count": "\(response.nodesCount ?? 0)",
-          "edges_count": "\(response.edgesCount ?? 0)",
-        ]
-      } catch {
-        return [
-          "has_error": "true",
-          "error_message": error.localizedDescription,
-        ]
+        "Press the Brain Map's Rebuild control: the server rebuild, or this Mac's own rebuild from every conversation, memory, person and goal when the server refuses",
+      params: ["target"]
+    ) { params in
+      // Drives the same state the Rebuild button does, so an automated check
+      // exercises the real path (server first, desktop fallback) rather than
+      // a parallel API call that the button no longer makes. Mutating and not
+      // undoable; poll `memory_graph_snapshot` for the result.
+      let target = params["target"] == "inline" ? "inline" : "page"
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: .desktopAutomationMemoryAtlasRebuildRequested,
+          object: nil,
+          userInfo: ["target": target]
+        )
       }
+      return ["posted": "true", "target": target]
     }
 
     register(
@@ -3574,7 +3570,10 @@ final class DesktopAutomationActionRegistry {
       params: ["label"]
     ) { params in
       do {
-        let graph = try await APIClient.shared.getKnowledgeGraph()
+        // What the map shows: the server graph with this Mac's rebuild under it.
+        let graph = BrainMapLocalGraphMerge.merge(
+          server: try await APIClient.shared.getKnowledgeGraph(),
+          local: await BrainMapLocalRebuilder.storedGraph())
         let atlas = MemoryAtlasProjection(graph: graph.atlasResponse, userName: nil)
         var detail = [
           "node_count": "\(graph.nodes.count)",
@@ -3714,32 +3713,6 @@ final class DesktopAutomationActionRegistry {
       return [
         "posted": "true", "target": target,
         "caption": params["caption"] ?? "", "leave": params["leave"] ?? "false",
-      ]
-    }
-
-    register(
-      name: "memory_atlas_set_time",
-      summary: "Scrub or play the memory atlas time axis for deterministic non-production checks",
-      params: ["target", "fraction", "play", "reset_to_start", "reset"]
-    ) { params in
-      let target = params["target"] == "inline" ? "inline" : "page"
-      var userInfo: [String: Any] = ["target": target]
-      if let fraction = params["fraction"].flatMap(Double.init) { userInfo["fraction"] = fraction }
-      if let play = params["play"] { userInfo["play"] = play == "true" }
-      if let resetToStart = params["reset_to_start"] { userInfo["reset_to_start"] = resetToStart == "true" }
-      if let reset = params["reset"] { userInfo["reset"] = reset == "true" }
-      await MainActor.run {
-        NotificationCenter.default.post(
-          name: .desktopAutomationMemoryAtlasTimeRequested,
-          object: nil,
-          userInfo: userInfo
-        )
-      }
-      return [
-        "posted": "true",
-        "target": target,
-        "fraction": params["fraction"] ?? "unchanged",
-        "play": params["play"] ?? "unchanged",
       ]
     }
 

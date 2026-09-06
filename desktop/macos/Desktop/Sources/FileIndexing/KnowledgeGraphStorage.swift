@@ -92,6 +92,51 @@ actor KnowledgeGraphStorage {
     log("KnowledgeGraphStorage: Merged \(nodes.count) nodes, \(edges.count) edges")
   }
 
+  /// Replace the locally rebuilt Brain Map: every row whose id carries the
+  /// rebuild prefix goes, everything else in the tables stays, and the new
+  /// rows land in the same transaction so a reader never sees half a map.
+  func replaceRebuiltGraph(
+    nodes: [LocalKGNodeRecord],
+    edges: [LocalKGEdgeRecord],
+    authorization: LocalMutationAuthorization
+  ) async throws {
+    try authorization.require()
+    let db = try await ensureDB()
+    let prefix = BrainMapLocalGraphAssembly.nodeIDPrefix
+
+    try await authorization.withCommitLease {
+      try await db.write { database in
+        try authorization.require()
+        try database.execute(sql: "DELETE FROM local_kg_edges WHERE edgeId LIKE ?", arguments: [prefix + "%"])
+        try database.execute(sql: "DELETE FROM local_kg_nodes WHERE nodeId LIKE ?", arguments: [prefix + "%"])
+        for node in nodes {
+          try database.execute(
+            sql: """
+              INSERT OR REPLACE INTO local_kg_nodes (nodeId, label, nodeType, aliasesJson, sourceFileIds, createdAt, updatedAt)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+              """,
+            arguments: [
+              node.nodeId, node.label, node.nodeType, node.aliasesJson, node.sourceFileIds, node.createdAt,
+              node.updatedAt,
+            ]
+          )
+        }
+        for edge in edges {
+          try database.execute(
+            sql: """
+              INSERT OR REPLACE INTO local_kg_edges (edgeId, sourceNodeId, targetNodeId, label, createdAt)
+              VALUES (?, ?, ?, ?, ?)
+              """,
+            arguments: [edge.edgeId, edge.sourceNodeId, edge.targetNodeId, edge.label, edge.createdAt]
+          )
+        }
+        try authorization.require()
+      }
+    }
+
+    log("KnowledgeGraphStorage: Replaced rebuilt Brain Map with \(nodes.count) nodes, \(edges.count) edges")
+  }
+
   /// Delete all local knowledge graph data under an explicit owner lease.
   func clearAll(authorization: LocalMutationAuthorization) async throws {
     try authorization.require()

@@ -11,9 +11,9 @@ import SwiftUI
 /// work per frame becomes visible on production-scale graphs.
 ///
 /// The cache is intentionally narrow: it only reuses a plan while
-/// `isCameraMoving` is true and the graph has no active search or timeline
-/// filter. The surface hides SwiftUI labels and hit targets during that state;
-/// Canvas continues to project the cached entity cohort using the current
+/// `isCameraMoving` is true and the graph has no active search filter. The
+/// surface hides SwiftUI labels and hit targets during that state; Canvas
+/// continues to project the cached entity cohort using the current
 /// zoom/pan. When the gesture settles, the planner runs again so collision
 /// admitted labels and interactive targets exactly match the final viewport.
 /// This preserves continuous node fidelity while removing repeated sorting and
@@ -40,9 +40,8 @@ final class MemoryAtlasRenderPlanCache {
   }
 
   /// Returns the current plan, reusing only a camera-invariant plan while a
-  /// pan/zoom gesture is active. Search and time-travel plans intentionally
-  /// bypass reuse because those states change membership as the user types or
-  /// scrubs the timeline.
+  /// pan/zoom gesture is active. Search plans intentionally bypass reuse
+  /// because membership changes as the user types.
   func makePlan(
     viewportSize: CGSize,
     zoom: CGFloat,
@@ -51,19 +50,13 @@ final class MemoryAtlasRenderPlanCache {
     selectedNodeID: String?,
     matchingNodeIDs: Set<String>?,
     matchingEdges: [MemoryAtlasEdgePlacement]?,
-    asOf: Date?,
-    timeline: MemoryAtlasTimeline? = nil,
-    timeCursor: Double? = nil,
     isCameraMoving: Bool
   ) -> MemoryAtlasRenderPlan {
-    let isTimelineFiltered = timeline != nil && (timeCursor ?? 1) < 0.9995
     guard
       isCameraMoving,
       selectedNodeID == nil,
       matchingNodeIDs == nil,
-      matchingEdges == nil,
-      asOf == nil,
-      !isTimelineFiltered
+      matchingEdges == nil
     else {
       return makeFreshPlan(
         viewportSize: viewportSize,
@@ -72,10 +65,7 @@ final class MemoryAtlasRenderPlanCache {
         compact: compact,
         selectedNodeID: selectedNodeID,
         matchingNodeIDs: matchingNodeIDs,
-        matchingEdges: matchingEdges,
-        asOf: asOf,
-        timeline: timeline,
-        timeCursor: timeCursor
+        matchingEdges: matchingEdges
       )
     }
 
@@ -98,10 +88,7 @@ final class MemoryAtlasRenderPlanCache {
       compact: compact,
       selectedNodeID: selectedNodeID,
       matchingNodeIDs: nil,
-      matchingEdges: nil,
-      asOf: nil,
-      timeline: nil,
-      timeCursor: nil
+      matchingEdges: nil
     )
     transientPlans[key] = plan
     return plan
@@ -114,10 +101,7 @@ final class MemoryAtlasRenderPlanCache {
     compact: Bool,
     selectedNodeID: String?,
     matchingNodeIDs: Set<String>?,
-    matchingEdges: [MemoryAtlasEdgePlacement]?,
-    asOf: Date?,
-    timeline: MemoryAtlasTimeline?,
-    timeCursor: Double?
+    matchingEdges: [MemoryAtlasEdgePlacement]?
   ) -> MemoryAtlasRenderPlan {
     plannerInvocationCount += 1
     return MemoryAtlasRenderPlanner.makePlan(
@@ -128,10 +112,7 @@ final class MemoryAtlasRenderPlanCache {
       compact: compact,
       selectedNodeID: selectedNodeID,
       matchingNodeIDs: matchingNodeIDs,
-      matchingEdges: matchingEdges,
-      asOf: asOf,
-      timeline: timeline,
-      timeCursor: timeCursor
+      matchingEdges: matchingEdges
     )
   }
 
@@ -156,10 +137,9 @@ final class MemoryAtlasRenderPlanCache {
 /// The immutable, expensive part of one Brain Map revision.
 ///
 /// A graph response can be large enough that calculating a content digest,
-/// relaxing its layout, sorting its replay connections, and rebuilding the
-/// camera-plan cache is real work. A SwiftUI view initializer is not a safe
-/// owner for any of it: initializers run again whenever unrelated observed
-/// state publishes (for example, a memory sync while the Brain Map is open).
+/// relaxing its layout, and rebuilding the camera-plan cache is real work. A
+/// SwiftUI view initializer is not a safe owner for any of it: initializers
+/// run again whenever unrelated observed state publishes (for example, a memory sync while the Brain Map is open).
 ///
 /// This object is prepared once for a fetched graph revision and then passed
 /// unchanged through every render of that revision. It deliberately owns the
@@ -169,25 +149,11 @@ final class MemoryAtlasProjection: @unchecked Sendable {
   let graph: KnowledgeGraphResponse
   let snapshot: MemoryAtlasSnapshot
   let renderPlanCache: MemoryAtlasRenderPlanCache
-  let connectionBirthFractions: [Double]
 
   init(graph: KnowledgeGraphResponse, userName: String?) {
     self.graph = graph
     let snapshot = MemoryAtlasSnapshotCache.shared.snapshot(for: graph, userName: userName)
     self.snapshot = snapshot
     renderPlanCache = MemoryAtlasRenderPlanCache(snapshot: snapshot)
-
-    if let timeline = snapshot.timeline {
-      connectionBirthFractions = snapshot.edges.map { placement in
-        let endpointBirth =
-          [placement.edge.sourceId, placement.edge.targetId].map { nodeID in
-            nodeID == snapshot.anchorNodeID ? 0 : (timeline.playbackFractionByNodeID[nodeID] ?? 1)
-          }.max() ?? 1
-        return max(timeline.fraction(for: placement.edge.createdAt), endpointBirth)
-      }
-      .sorted()
-    } else {
-      connectionBirthFractions = []
-    }
   }
 }

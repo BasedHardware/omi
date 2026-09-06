@@ -16,12 +16,14 @@ extension Notification.Name {
   static let desktopAutomationMemoryAtlasViewportRequested = Notification.Name(
     "desktopAutomationMemoryAtlasViewportRequested"
   )
-  static let desktopAutomationMemoryAtlasTimeRequested = Notification.Name(
-    "desktopAutomationMemoryAtlasTimeRequested"
-  )
   /// Selecting an entity or a connection is otherwise only reachable by
   /// clicking the canvas, which puts the inspector out of reach of every
   /// cursor-free check.
+  /// Press Rebuild. The bridge posts this instead of calling the API itself
+  /// so QA goes through the same server-then-desktop path as the button.
+  static let desktopAutomationMemoryAtlasRebuildRequested = Notification.Name(
+    "desktopAutomationMemoryAtlasRebuildRequested"
+  )
   static let desktopAutomationMemoryAtlasSelectRequested = Notification.Name(
     "desktopAutomationMemoryAtlasSelectRequested"
   )
@@ -144,6 +146,7 @@ struct CanonicalMemoryAtlasPage: View {
           onOpenMemory: onOpenMemory,
           onRebuild: { Task { await viewModel.rebuildCanonicalAtlas() } },
           isRebuilding: viewModel.isRebuilding,
+          rebuildProgress: viewModel.rebuildProgress,
           onLeave: onBack
         )
       }
@@ -151,6 +154,11 @@ struct CanonicalMemoryAtlasPage: View {
     .background(Color.clear)
     .accessibilityIdentifier("canonical_memory_atlas_page")
     .task { await viewModel.prepareCanonicalAtlas() }
+    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasRebuildRequested)) {
+      notification in
+      guard (notification.userInfo?["target"] as? String ?? "page") == "page" else { return }
+      Task { await viewModel.rebuildCanonicalAtlas() }
+    }
     .onAppear {
       memoryAtlasLogger.info(
         "Atlas page opened nodes=\(viewModel.graphResponse.atlasNodes.count, privacy: .public) edges=\(viewModel.graphResponse.edges.count, privacy: .public)"
@@ -186,6 +194,7 @@ struct CanonicalMemoryAtlasTabView: View {
         onOpenMemory: onOpenMemory,
         onRebuild: { Task { await viewModel.rebuildCanonicalAtlas() } },
         isRebuilding: viewModel.isRebuilding,
+        rebuildProgress: viewModel.rebuildProgress,
         externalSearchText: $searchText,
         showsSearchField: showsSearchField,
         onLeave: onLeave
@@ -194,6 +203,11 @@ struct CanonicalMemoryAtlasTabView: View {
     .background(Color.clear)
     .accessibilityIdentifier("canonical_memory_atlas_tab")
     .task { await viewModel.prepareCanonicalAtlas() }
+    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasRebuildRequested)) {
+      notification in
+      guard (notification.userInfo?["target"] as? String ?? "page") == "page" else { return }
+      Task { await viewModel.rebuildCanonicalAtlas() }
+    }
     .onAppear {
       memoryAtlasLogger.info(
         "Atlas tab opened nodes=\(viewModel.graphResponse.atlasNodes.count, privacy: .public) edges=\(viewModel.graphResponse.edges.count, privacy: .public)"
@@ -225,6 +239,8 @@ private struct CanonicalMemoryAtlasSurface: View {
   /// view model to drive it (the inline preview, offscreen export renders).
   let onRebuild: (() -> Void)?
   let isRebuilding: Bool
+  /// What a running rebuild is doing, when it has something to say.
+  let rebuildProgress: String?
   var externalSearchText: Binding<String>? = nil
   var showsSearchField = true
   /// Where Escape goes once the map itself has nothing left to undo. Absent on
@@ -232,12 +248,6 @@ private struct CanonicalMemoryAtlasSurface: View {
   let onLeave: (() -> Void)?
   private let snapshot: MemoryAtlasSnapshot
   private let renderPlanCache: MemoryAtlasRenderPlanCache
-  /// The cursor at which each relationship can first be painted. Precomputing
-  /// this avoids walking every edge again on every 30 Hz replay frame.
-  private let connectionBirthFractions: [Double]
-  /// Deterministic offscreen renders (ViewExporter QA) pin the time cursor and
-  /// suppress auto-play so the timeline captures a stable frame.
-  private let previewTimeCursor: Double?
   private let previewEvidence: [MemoryAtlasEvidence]
 
   @State private var localSearchText = ""
@@ -275,17 +285,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   @State private var isCameraMoving = false
   @State private var matchingNodeIDs: Set<String>? = nil
   @State private var matchingEdges: [MemoryAtlasEdgePlacement]? = nil
-  /// Normalized as-of position on the time axis, 1 == now (show everything).
-  @State private var timeCursor: Double = 1
-  @State private var isTimePlaying = false
-  @State private var didAutoplay = false
-  @State private var playbackTask: Task<Void, Never>? = nil
   @FocusState private var searchIsFocused: Bool
-  /// Persisted: once the user pauses or scrubs the timeline, the atlas stops
-  /// auto-playing its growth animation on open. Playing all the way through is
-  /// the delightful default; interrupting it is an explicit opt-out.
-  @AppStorage("memory_atlas_timeline_autoplay") private var autoplayEnabled = true
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   init(
     graph: KnowledgeGraphResponse,
@@ -295,10 +295,10 @@ private struct CanonicalMemoryAtlasSurface: View {
     onOpenMemory: ((String) -> Void)? = nil,
     onRebuild: (() -> Void)? = nil,
     isRebuilding: Bool = false,
+    rebuildProgress: String? = nil,
     externalSearchText: Binding<String>? = nil,
     showsSearchField: Bool = true,
     onLeave: (() -> Void)? = nil,
-    previewTimeCursor: Double? = nil,
     /// Deterministic offscreen renders open the inspector, which is otherwise
     /// only reachable by tapping the canvas.
     previewSelectedNodeID: String? = nil,
@@ -317,12 +317,11 @@ private struct CanonicalMemoryAtlasSurface: View {
     self.onOpenMemory = onOpenMemory
     self.onRebuild = onRebuild
     self.isRebuilding = isRebuilding
+    self.rebuildProgress = rebuildProgress
     self.externalSearchText = externalSearchText
     self.showsSearchField = showsSearchField
     self.onLeave = onLeave
-    self.previewTimeCursor = previewTimeCursor
     self.previewEvidence = previewEvidence
-    _timeCursor = State(initialValue: previewTimeCursor ?? 1)
     _selectedNodeID = State(initialValue: previewSelectedNodeID)
     _selectedEdgeID = State(initialValue: previewSelectedEdgeID)
     _evidence = State(initialValue: previewEvidence)
@@ -341,20 +340,6 @@ private struct CanonicalMemoryAtlasSurface: View {
     }
     snapshot = atlasSnapshot
     renderPlanCache = projection?.renderPlanCache ?? MemoryAtlasRenderPlanCache(snapshot: atlasSnapshot)
-    if let projection {
-      connectionBirthFractions = projection.connectionBirthFractions
-    } else if let timeline = atlasSnapshot.timeline {
-      connectionBirthFractions = atlasSnapshot.edges.map { placement in
-        let endpointBirth =
-          [placement.edge.sourceId, placement.edge.targetId].map { nodeID in
-            nodeID == atlasSnapshot.anchorNodeID ? 0 : (timeline.playbackFractionByNodeID[nodeID] ?? 1)
-          }.max() ?? 1
-        return max(timeline.fraction(for: placement.edge.createdAt), endpointBirth)
-      }
-      .sorted()
-    } else {
-      connectionBirthFractions = []
-    }
   }
 
   private var selectedNode: MemoryAtlasNodePlacement? {
@@ -404,49 +389,6 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   private var unresolvedEvidenceCount: Int {
     evidenceIsLoading ? 0 : max(0, requestedEvidenceIDs.count - evidence.count)
-  }
-
-  private var recentConnectionCount: Int {
-    let threshold = Date().addingTimeInterval(-7 * 24 * 60 * 60)
-    return graph.edges.filter { $0.createdAt >= threshold }.count
-  }
-
-  private var timeline: MemoryAtlasTimeline? { snapshot.timeline }
-
-  /// The active as-of date, or `nil` when the cursor is parked at "now" (which
-  /// means: render the whole atlas, no time filtering).
-  private var asOfDate: Date? {
-    guard let timeline, timeCursor < 0.9995 else { return nil }
-    return timeline.date(atFraction: timeCursor)
-  }
-
-  private var visibleEntityCount: Int {
-    guard let timeline, timeCursor < 0.9995 else { return snapshot.nodes.count }
-    let anchorIsOutsideCursor = snapshot.anchorNodeID.map { !timeline.isVisible(nodeID: $0, at: timeCursor) } ?? false
-    return timeline.visibleNodeCount(at: timeCursor) + (anchorIsOutsideCursor ? 1 : 0)
-  }
-
-  private var visibleConnectionCount: Int {
-    guard timeline != nil, timeCursor < 0.9995 else { return snapshot.edges.count }
-    return firstConnectionBirthIndex(after: timeCursor)
-  }
-
-  private func firstConnectionBirthIndex(after fraction: Double) -> Int {
-    var lower = 0
-    var upper = connectionBirthFractions.count
-    while lower < upper {
-      let middle = lower + (upper - lower) / 2
-      if connectionBirthFractions[middle] > fraction {
-        upper = middle
-      } else {
-        lower = middle + 1
-      }
-    }
-    return lower
-  }
-
-  private var recentConnectionLabel: String {
-    recentConnectionCount > 99 ? "99+ new connections" : "\(recentConnectionCount) new connections"
   }
 
   private var searchBinding: Binding<String> {
@@ -525,9 +467,6 @@ private struct CanonicalMemoryAtlasSurface: View {
           selectedNodeID: selectedNodeID,
           matchingNodeIDs: matchingNodeIDs,
           matchingEdges: matchingEdges,
-          asOf: asOfDate,
-          timeline: timeline,
-          timeCursor: timeCursor,
           isCameraMoving: isCameraMoving
         )
 
@@ -537,7 +476,9 @@ private struct CanonicalMemoryAtlasSurface: View {
         let (regions, quietened) = territory(in: proxy.size, plan: plan)
 
         ZStack {
-          Color.black  // The mat. See `.glassMediaMat` on `.clipped()` below.
+          // Hosted content paints no ground: the map sits on the same glass as every other page,
+          // so the canvas below is drawn for a light surface. `Color.clear` only sizes the stack.
+          Color.clear
 
           atlasCanvas(size: proxy.size, plan: plan, regions: regions, quietened: quietened)
             // Camera gestures belong to the painted atlas only. Keeping them
@@ -613,27 +554,15 @@ private struct CanonicalMemoryAtlasSurface: View {
           guard let entered = enteredRegionID, !regions.contains(entered) else { return }
           leaveNeighbourhood()
         }
-        // The one dark surface a content page may draw: the map is emissive (light nodes, haloes
-        // and labels, like a star chart) and vanished on the panel's near-white ground. The mat
-        // also flips the environment so `Ink` resolves *up* for the chrome laid over it.
-        .clipped().glassMediaMat()
-      }
-
-      VStack(spacing: 0) {
-        if !compact, timeline != nil {
-          timelineBar
-        } else if !compact {
-          // No meaningful timestamp spread — keep the legacy legend so the
-          // level indicator and type key stay available.
-          atlasLegend
-        }
+        // No mat. The map used to be the one dark surface a content page drew, and was the one
+        // page in the app that did not look like the app. Ink resolves on the panel's own ground
+        // here, exactly as it does for the toolbar above.
+        .clipped()
       }
     }
     .background(Color.clear)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("canonical_memory_atlas")
-    .onAppear(perform: maybeAutoplayTimeline)
-    .onDisappear { stopPlayback(userInitiated: false) }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasViewportRequested)) {
       notification in
       let target = notification.userInfo?["target"] as? String ?? "page"
@@ -716,31 +645,6 @@ private struct CanonicalMemoryAtlasSurface: View {
         adoptSelection(nodeID)
       }
     }
-    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasTimeRequested)) {
-      notification in
-      let target = notification.userInfo?["target"] as? String ?? "page"
-      guard (target == "inline") == compact else { return }
-      if notification.userInfo?["reset"] as? Bool == true {
-        stopPlayback(userInitiated: true)
-        withAnimation(.easeOut(duration: 0.2)) { timeCursor = 1 }
-        return
-      }
-      if let fraction = notification.userInfo?["fraction"] as? Double {
-        stopPlayback(userInitiated: true)
-        timeCursor = min(max(fraction, 0), 1)
-        clearSelectionIfHiddenAtCurrentTime()
-      }
-      if let play = notification.userInfo?["play"] as? Bool {
-        if play {
-          startPlayback(resetToStart: notification.userInfo?["reset_to_start"] as? Bool ?? false)
-        } else {
-          stopPlayback(userInitiated: true)
-        }
-      }
-      memoryAtlasLogger.debug(
-        "Automation timeline target=\(target, privacy: .public) cursor=\(timeCursor, privacy: .public) playing=\(isTimePlaying, privacy: .public)"
-      )
-    }
   }
 
   private var atlasToolbar: some View {
@@ -780,40 +684,34 @@ private struct CanonicalMemoryAtlasSurface: View {
 
       Spacer()
 
-      if !compact {
-        typeKey
-      }
-
-      if recentConnectionCount > 0 {
-        HStack(spacing: 6) {
-          Circle()
-            .fill(snapshot.activeClusters.first?.color ?? Ink.secondary)
-            .frame(width: 6, height: 6)
-          Text(recentConnectionLabel)
-            .scaledFont(size: 11, weight: .medium)
-        }
-        .foregroundColor(Ink.secondary)
-      }
-
-      // The legacy Brain Map carried a rebuild control; without it a thin or
-      // stale server graph has no recovery path from inside the atlas.
+      // Rebuild is the one action the map has, so it is a button and not a
+      // menu: the server graph is rebuilt from everything the account knows
+      // (conversations, memories, people, goals), and a stale or thin map has
+      // no other recovery path from inside the atlas.
       if let onRebuild {
-        Menu {
-          Button(action: onRebuild) {
-            Label(
-              isRebuilding ? "Rebuilding Brain Map…" : "Rebuild Brain Map…",
-              systemImage: "arrow.clockwise")
+        Button(action: onRebuild) {
+          HStack(spacing: 6) {
+            if isRebuilding {
+              ProgressView()
+                .controlSize(.mini)
+                .tint(Ink.secondary)
+            } else {
+              Image(systemName: "arrow.clockwise")
+                .scaledFont(size: 11, weight: .semibold)
+            }
+            Text(isRebuilding ? (rebuildProgress ?? "Rebuilding…") : "Rebuild")
+              .scaledFont(size: 12, weight: .semibold)
           }
-          .disabled(isRebuilding)
-        } label: {
-          PageQueryActionLabel(icon: "ellipsis", title: "More")
+          .foregroundColor(Ink.secondary)
+          .padding(.horizontal, 12)
+          .frame(height: 30)
+          .glassChip()
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("More Brain Map actions")
-        .accessibilityLabel("More Brain Map actions")
-        .accessibilityIdentifier("memory_atlas_more_actions")
+        .buttonStyle(.plain)
+        .disabled(isRebuilding)
+        .help("Rebuild the Brain Map from all of your conversations and memories")
+        .accessibilityLabel(isRebuilding ? "Rebuilding Brain Map" : "Rebuild Brain Map")
+        .accessibilityIdentifier("memory_atlas_rebuild")
       }
     }
     .padding(.horizontal, compact ? 12 : 18)
@@ -832,16 +730,16 @@ private struct CanonicalMemoryAtlasSurface: View {
     VStack(spacing: OmiSpacing.sm) {
       Image(systemName: "magnifyingglass")
         .scaledFont(size: OmiType.heading)
-        .foregroundStyle(Ink.surface)
+        .foregroundStyle(Ink.secondary)
       Text(
         "No entities match \u{201c}\(searchText.trimmingCharacters(in: .whitespacesAndNewlines))\u{201d}"
       )
       .scaledFont(size: OmiType.body, weight: .semibold)
-      .foregroundStyle(Ink.surface)
+      .foregroundStyle(Ink.primary)
       .multilineTextAlignment(.center)
       Text("Try a different search or clear the search above.")
         .scaledFont(size: OmiType.caption)
-        .foregroundStyle(Ink.surface.opacity(0.78))
+        .foregroundStyle(Ink.secondary)
         .multilineTextAlignment(.center)
     }
     .padding(.horizontal, OmiSpacing.lg)
@@ -850,40 +748,6 @@ private struct CanonicalMemoryAtlasSurface: View {
       "No entities match \(searchText.trimmingCharacters(in: .whitespacesAndNewlines))"
     )
     .accessibilityHint("Try a different search or clear the search above.")
-  }
-
-  /// Which colour means which kind of entity.
-  ///
-  /// This used to be printed on the canvas at each type's centre. That made
-  /// sense when a type owned a region; now that entities are placed by what
-  /// they relate to, a type's mean position is often somewhere none of its
-  /// entities actually are — and on a real account the "Places" caption landed
-  /// on top of the Singapore node's own name. A key states the same thing
-  /// without claiming a location for it.
-  private var typeKey: some View {
-    HStack(spacing: 11) {
-      Text("Legend")
-        .scaledFont(size: 10, weight: .semibold)
-        .foregroundColor(Ink.primary)
-
-      ForEach(snapshot.activeClusters) { cluster in
-        HStack(spacing: 5) {
-          Circle().fill(cluster.color).frame(width: 5, height: 5)
-          Text(cluster.title)
-            .scaledFont(size: 10)
-            .foregroundColor(Ink.secondary)
-        }
-      }
-    }
-    // The key identifies the map's colors; it is intentionally not a filter. Naming that contract
-    // keeps the dots from presenting a false affordance to pointer-free users.
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel("Brain Map legend")
-    .accessibilityValue(
-      snapshot.activeClusters.map { "\($0.title), color coded" }.joined(separator: "; ")
-    )
-    .accessibilityHint("Legend only; these items are not interactive filters.")
-    .accessibilityIdentifier("memory_atlas_type_key")
   }
 
   private func atlasCanvas(
@@ -1036,11 +900,13 @@ private struct CanonicalMemoryAtlasSurface: View {
       let entered = region.regionID == enteredRegionID
       // Even-odd, so an enclave inside a territory is drawn as the hole it is
       // rather than being filled over.
+      // A wash and a hairline, on the panel's own ground: the same weights `Ink.rowFill` and
+      // `Ink.hairline` use for a row and a control edge, so a territory reads as part of the page.
       context.fill(
-        shape, with: .color(Ink.primary.opacity(entered ? 0.07 : 0.05)),
+        shape, with: .color(Ink.primary.opacity(entered ? 0.07 : 0.045)),
         style: FillStyle(eoFill: true))
       context.stroke(
-        shape, with: .color(Ink.primary.opacity(entered ? 0.5 : 0.34)), lineWidth: 1)
+        shape, with: .color(Ink.primary.opacity(entered ? 0.3 : 0.16)), lineWidth: 1)
     }
   }
 
@@ -1179,15 +1045,17 @@ private struct CanonicalMemoryAtlasSurface: View {
       // A connection crossing between two neighbourhoods is drawn fainter than
       // one inside a neighbourhood, so density falls off at a group's edge the
       // way the graph says it does.
+      // On a light ground a hue at 5% is gone, not faint; these weights were retuned by eye
+      // on the glass so the mesh reads as texture at overview without becoming a wall of lines.
       if !path.isEmpty {
         context.stroke(
           path,
-          with: .color(cluster.color.opacity(selectedNodeID == nil ? 0.055 : 0.74)),
-          lineWidth: selectedNodeID == nil ? 0.6 : 1.7
+          with: .color(Ink.primary.opacity(selectedNodeID == nil ? 0.14 : 0.6)),
+          lineWidth: selectedNodeID == nil ? 0.8 : 1.7
         )
       }
       if !within.isEmpty {
-        context.stroke(within, with: .color(cluster.color.opacity(0.14)), lineWidth: 0.7)
+        context.stroke(within, with: .color(Ink.primary.opacity(0.26)), lineWidth: 0.9)
       }
       // The account holder's own spokes, fainter again — and much fainter than
       // they were, because the budget that used to let only a few dozen lines
@@ -1199,8 +1067,8 @@ private struct CanonicalMemoryAtlasSurface: View {
       if !spokes.isEmpty {
         context.stroke(
           spokes,
-          with: .color(cluster.color.opacity(selectedNodeID == nil ? 0.028 : 0.16)),
-          lineWidth: 0.5
+          with: .color(Ink.primary.opacity(selectedNodeID == nil ? 0.06 : 0.2)),
+          lineWidth: 0.6
         )
       }
     }
@@ -1211,37 +1079,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     size: CGSize,
     plan: MemoryAtlasRenderPlan
   ) {
-    // While the time cursor is engaged, an entity that was just "born" blooms
-    // briefly as the playhead sweeps past its creation date, then settles into
-    // the constellation — the atlas visibly grows rather than snapping in.
-    let replayCursor = timeCursor < 0.9995 ? timeCursor : nil
     let paintBounds = canvasPaintBounds(for: size)
-
-    var catalogPrimaryPath = Path()
-    var catalogMutedPath = Path()
-    for placement in plan.visibleNodes where placement.isCatalog && placement.id != selectedNodeID {
-      let related = selectedNodeID == nil || plan.relatedNodeIDs.contains(placement.id)
-      let matches = matchingNodeIDs == nil || matchingNodeIDs?.contains(placement.id) == true
-      let radius = nodeRadius(for: placement)
-      let center = point(for: placement.normalizedPosition, in: size)
-      guard
-        paintBounds.intersects(
-          CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
-        )
-      else { continue }
-      let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
-      if related && matches {
-        catalogPrimaryPath.addEllipse(in: rect)
-      } else {
-        catalogMutedPath.addEllipse(in: rect)
-      }
-    }
-    if !catalogPrimaryPath.isEmpty {
-      context.fill(catalogPrimaryPath, with: .color(Ink.secondary.opacity(0.28)))
-    }
-    if !catalogMutedPath.isEmpty {
-      context.fill(catalogMutedPath, with: .color(Ink.secondary.opacity(0.055)))
-    }
 
     for cluster in snapshot.activeClusters {
       var primaryPath = Path()
@@ -1250,7 +1088,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         guard placement.id != selectedNodeID else { continue }
         let related = selectedNodeID == nil || plan.relatedNodeIDs.contains(placement.id)
         let matches = matchingNodeIDs == nil || matchingNodeIDs?.contains(placement.id) == true
-        var radius = nodeRadius(for: placement)
+        let radius = nodeRadius(for: placement)
         let center = point(for: placement.normalizedPosition, in: size)
 
         // Canvas otherwise builds paths for every deep-zoom entity, including
@@ -1267,22 +1105,6 @@ private struct CanonicalMemoryAtlasSurface: View {
             ))
         else { continue }
 
-        var pop = 0.0
-        if let replayCursor, let timeline {
-          pop = timeline.spawnProgress(nodeID: placement.id, at: replayCursor)
-        }
-        if pop > 0 {
-          radius *= CGFloat(1 + 0.9 * pop)
-          let bloom = radius * 2.6
-          context.fill(
-            Path(
-              ellipseIn: CGRect(
-                x: center.x - bloom / 2, y: center.y - bloom / 2, width: bloom, height: bloom
-              )),
-            with: .color(cluster.color.opacity(0.3 * pop))
-          )
-        }
-
         let rect = CGRect(
           x: center.x - radius,
           y: center.y - radius,
@@ -1295,11 +1117,17 @@ private struct CanonicalMemoryAtlasSurface: View {
           mutedPath.addEllipse(in: rect)
         }
       }
+      // Glass, not paint: the mark is the panel's own surface with a hairline
+      // rim, so a thousand of them read as texture on the glass rather than as
+      // confetti. Type is stated in the inspector, where a word can carry it;
+      // a hue per type was the one thing on this page that was not the app.
       if !primaryPath.isEmpty {
-        context.fill(primaryPath, with: .color(cluster.color.opacity(0.78)))
+        context.fill(primaryPath, with: .color(Ink.surface.opacity(0.9)))
+        context.stroke(primaryPath, with: .color(Ink.primary.opacity(0.55)), lineWidth: 1)
       }
       if !mutedPath.isEmpty {
-        context.fill(mutedPath, with: .color(cluster.color.opacity(0.1)))
+        context.fill(mutedPath, with: .color(Ink.surface.opacity(0.5)))
+        context.stroke(mutedPath, with: .color(Ink.primary.opacity(0.12)), lineWidth: 1)
       }
     }
 
@@ -1320,7 +1148,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       drawSpecialNode(
         selectedNode,
         radius: compact ? 7 : (isInspectMode ? 26 : (isFocusMode ? 18 : 9)),
-        color: selectedNode.cluster?.color ?? Ink.primary,
+        color: Ink.primary,
         opacity: 0.95,
         context: &context,
         size: size
@@ -1365,7 +1193,6 @@ private struct CanonicalMemoryAtlasSurface: View {
       let center = point(for: placement.normalizedPosition, in: size)
       guard visibleBounds.contains(center) else { continue }
 
-      let color = placement.cluster?.color ?? Ink.primary
       let rawLabel = placement.node.label.trimmingCharacters(in: .whitespacesAndNewlines)
       let displayLabel =
         rawLabel.count > 80
@@ -1392,12 +1219,6 @@ private struct CanonicalMemoryAtlasSurface: View {
         }
       context.draw(text, at: CGPoint(x: labelCenterX, y: center.y + labelOffset), anchor: .top)
 
-      // A small leading color marker keeps labels scannable while preserving
-      // the neutral text treatment used elsewhere in the Atlas.
-      context.fill(
-        Path(ellipseIn: CGRect(x: center.x - 3, y: center.y + labelOffset + 4, width: 3, height: 3)),
-        with: .color(color)
-      )
     }
   }
 
@@ -1445,7 +1266,6 @@ private struct CanonicalMemoryAtlasSurface: View {
     let selected = selectedNodeID == placement.id
     let related = selectedNodeID == nil || relatedNodeIDs.contains(placement.id)
     let matches = matchingNodeIDs == nil || matchingNodeIDs?.contains(placement.id) == true
-    let color = placement.cluster?.color ?? Ink.primary
     let diameter = nodeDiameter(placement, selected: selected)
 
     // Keeping the label out of the laid-out frame is what makes the ring land
@@ -1465,13 +1285,10 @@ private struct CanonicalMemoryAtlasSurface: View {
       ZStack {
         if selected {
           Circle()
-            .stroke(color.opacity(0.22), lineWidth: 7)
+            .stroke(Ink.primary.opacity(0.14), lineWidth: 7)
             .frame(width: diameter + 14, height: diameter + 14)
         }
-        Circle()
-          .fill(Ink.rowFill)
-          .overlay(Circle().stroke(color, lineWidth: selected ? 2.2 : 1.4))
-          .frame(width: diameter, height: diameter)
+        MemoryAtlasGlassMark(diameter: diameter, selected: selected)
         if placement.id == snapshot.anchorNodeID {
           Image(systemName: "person.fill")
             .scaledFont(size: max(9, diameter * 0.38))
@@ -1520,7 +1337,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         otherNodeID: otherID,
         otherLabel: other.node.label,
         relationship: MemoryAtlasLayoutEngine.combinedRelationshipDisplayName(edge.relationshipLabels),
-        accent: other.cluster?.color ?? Ink.secondary
+        accent: Ink.secondary
       )
     }
 
@@ -1530,7 +1347,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         typeName: placement.cluster?.title,
         connectionSummary: "\(placement.degree) connection\(placement.degree == 1 ? "" : "s")"
       ),
-      accent: placement.cluster?.color ?? Ink.primary,
+      accent: Ink.primary,
       related: relationships,
       evidence: evidence,
       evidenceIsLoading: evidenceIsLoading,
@@ -1559,7 +1376,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         otherNodeID: endpoint.id,
         otherLabel: endpoint.node.label,
         relationship: endpoint.cluster?.title ?? "Entity",
-        accent: endpoint.cluster?.color ?? Ink.secondary
+        accent: Ink.secondary
       )
     }
 
@@ -1569,7 +1386,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         targetLabel: target?.node.label ?? edge.edge.targetId,
         verb: MemoryAtlasLayoutEngine.combinedRelationshipDisplayName(edge.relationshipLabels)
       ),
-      accent: edge.cluster.color,
+      accent: Ink.primary,
       related: endpoints,
       evidence: evidence,
       evidenceIsLoading: evidenceIsLoading,
@@ -1633,8 +1450,8 @@ private struct CanonicalMemoryAtlasSurface: View {
 
     return HStack(spacing: 14) {
       Circle()
-        .fill((placement.cluster?.color ?? Ink.primary).opacity(0.14))
-        .overlay(Circle().stroke(placement.cluster?.color ?? Ink.primary, lineWidth: 1.5))
+        .fill(Ink.primary.opacity(0.08))
+        .overlay(Circle().stroke(Ink.primary.opacity(0.6), lineWidth: 1.5))
         .frame(width: 34, height: 34)
 
       VStack(alignment: .leading, spacing: 2) {
@@ -1691,268 +1508,6 @@ private struct CanonicalMemoryAtlasSurface: View {
     .overlay(alignment: .top) {
       Divider().overlay(Ink.separator.opacity(0.24))
     }
-  }
-
-  private var atlasLegend: some View {
-    HStack(spacing: 18) {
-      Text(atlasLevelLabel)
-        .scaledFont(size: 11, weight: .medium)
-        .foregroundColor(Ink.secondary)
-
-      Spacer()
-    }
-    .padding(.horizontal, 18)
-    .frame(height: 36)
-    .background(Ink.rowFill)
-  }
-
-  // MARK: - Time axis
-
-  /// Two tight rows: state on top, scrubber below. Everything here is
-  /// secondary to the atlas itself, so the bar stays a footer and never takes
-  /// canvas away from the graph.
-  private var timelineBar: some View {
-    VStack(spacing: 5) {
-      HStack(spacing: 8) {
-        Button(action: togglePlayback) {
-          ZStack {
-            Circle().fill(Ink.primary).frame(width: 22, height: 22)
-            Image(systemName: isTimePlaying ? "pause.fill" : "play.fill")
-              .scaledFont(size: 9, weight: .bold)
-              .foregroundColor(Ink.surface)
-              .offset(x: isTimePlaying ? 0 : 1)
-          }
-        }
-        .buttonStyle(.plain)
-        .help(isTimePlaying ? "Pause" : "Play your memory forward")
-        .accessibilityLabel(isTimePlaying ? "Pause memory timeline" : "Play memory timeline")
-        .accessibilityIdentifier("memory_atlas_timeline_play")
-
-        Text(asOfLabel)
-          .scaledFont(size: 11, weight: .semibold)
-          .foregroundColor(Ink.primary)
-          .lineLimit(1)
-
-        Text(
-          MemoryAtlasLayoutEngine.countLabel(
-            entities: visibleEntityCount, connections: visibleConnectionCount)
-        )
-        .scaledFont(size: 10)
-        .foregroundColor(Ink.secondary)
-        .monospacedDigit()
-        .lineLimit(1)
-
-        Spacer(minLength: 8)
-
-        Text(atlasLevelLabel)
-          .scaledFont(size: 10, weight: .medium)
-          .foregroundColor(Ink.secondary)
-          .lineLimit(1)
-
-        if timeCursor < 0.9995 {
-          Button(action: jumpToNow) {
-            Text("Now")
-              .scaledFont(size: 10, weight: .semibold)
-              .foregroundColor(Ink.secondary)
-              .padding(.horizontal, 8)
-              .frame(height: 18)
-              .glassChip()
-          }
-          .buttonStyle(.plain)
-          .accessibilityIdentifier("memory_atlas_timeline_now")
-        }
-      }
-
-      // The range endpoints flank the scrubber instead of taking a third row.
-      HStack(spacing: 8) {
-        Text(shortDate(timeline?.start))
-          .scaledFont(size: 9)
-          .foregroundColor(Ink.secondary)
-          .lineLimit(1)
-
-        timelineTrack
-
-        Text(timeline?.hasChronologicalRange == true ? "Now" : "Imported")
-          .scaledFont(size: 9)
-          .foregroundColor(Ink.secondary)
-          .lineLimit(1)
-      }
-    }
-    .padding(.horizontal, 18)
-    .padding(.vertical, 8)
-    .background(Ink.rowFill)
-    .overlay(alignment: .top) {
-      Divider().overlay(Ink.separator.opacity(0.24))
-    }
-    .accessibilityIdentifier("memory_atlas_timeline")
-  }
-
-  private var timelineTrack: some View {
-    GeometryReader { geo in
-      Canvas(opaque: false, colorMode: .linear) { context, size in
-        drawTimeline(context: &context, size: size)
-      }
-      .contentShape(Rectangle())
-      .gesture(
-        DragGesture(minimumDistance: 0)
-          .onChanged { value in scrub(to: value.location.x / max(geo.size.width, 1)) }
-      )
-    }
-    .frame(height: 20)
-    .accessibilityIdentifier("memory_atlas_timeline_track")
-    .accessibilityElement()
-    .accessibilityLabel("Memory timeline")
-    .accessibilityValue(asOfLabel)
-    .accessibilityHint("Adjust to replay the atlas over time")
-    .accessibilityAdjustableAction { direction in
-      let step = 0.05
-      switch direction {
-      case .increment:
-        scrub(to: min(timeCursor + step, 1))
-      case .decrement:
-        scrub(to: max(timeCursor - step, 0))
-      @unknown default:
-        break
-      }
-    }
-  }
-
-  private func drawTimeline(context: inout GraphicsContext, size: CGSize) {
-    guard let timeline else { return }
-    let buckets = timeline.buckets
-    let maxCount = CGFloat(max(buckets.max() ?? 1, 1))
-    let barWidth = size.width / CGFloat(max(buckets.count, 1))
-    let cursorX = CGFloat(timeCursor) * size.width
-    let baseY = size.height - 6
-
-    for (index, count) in buckets.enumerated() {
-      let barHeight = CGFloat(count) / maxCount * (size.height - 12)
-      let x = CGFloat(index) * barWidth
-      let born = (x + barWidth / 2) <= cursorX
-      let rect = CGRect(
-        x: x + 1, y: baseY - barHeight, width: max(barWidth - 2, 1), height: max(barHeight, 0.5)
-      )
-      context.fill(
-        Path(roundedRect: rect, cornerRadius: 1),
-        with: .color(Ink.primary.opacity(born ? 0.3 : 0.08))
-      )
-    }
-
-    var baseline = Path()
-    baseline.move(to: CGPoint(x: 0, y: baseY))
-    baseline.addLine(to: CGPoint(x: size.width, y: baseY))
-    context.stroke(baseline, with: .color(Ink.separator.opacity(0.5)), lineWidth: 1)
-
-    var filled = Path()
-    filled.move(to: CGPoint(x: 0, y: baseY))
-    filled.addLine(to: CGPoint(x: cursorX, y: baseY))
-    context.stroke(filled, with: .color(Ink.primary.opacity(0.85)), lineWidth: 1.5)
-
-    var playhead = Path()
-    playhead.move(to: CGPoint(x: cursorX, y: 0))
-    playhead.addLine(to: CGPoint(x: cursorX, y: size.height))
-    context.stroke(playhead, with: .color(Ink.primary.opacity(0.85)), lineWidth: 1.5)
-
-    context.fill(
-      Path(ellipseIn: CGRect(x: cursorX - 5, y: baseY - 5, width: 10, height: 10)),
-      with: .color(Ink.primary)
-    )
-  }
-
-  private var asOfLabel: String {
-    guard let asOf = asOfDate else { return "Now — the whole map" }
-    guard MemoryAtlasPlayback.isCredible(asOf) else { return "Import replay" }
-    let formatter = DateFormatter()
-    formatter.dateStyle = .medium
-    formatter.timeStyle = .none
-    if timeline?.hasChronologicalRange == false {
-      return "Import replay · \(formatter.string(from: asOf))"
-    }
-    return "Replay · \(formatter.string(from: asOf))"
-  }
-
-  private func shortDate(_ date: Date?) -> String {
-    guard let date, MemoryAtlasPlayback.isCredible(date) else { return "" }
-    let formatter = DateFormatter()
-    formatter.dateFormat = "MMM d, yyyy"
-    return formatter.string(from: date)
-  }
-
-  private func maybeAutoplayTimeline() {
-    guard previewTimeCursor == nil else { return }
-    guard !compact, timeline != nil, autoplayEnabled, !didAutoplay, !reduceMotion else { return }
-    didAutoplay = true
-    startPlayback(resetToStart: true)
-  }
-
-  private func togglePlayback() {
-    if isTimePlaying {
-      stopPlayback(userInitiated: true)
-    } else {
-      startPlayback(resetToStart: timeCursor >= 0.9995)
-    }
-  }
-
-  private func startPlayback(resetToStart: Bool) {
-    guard timeline != nil else { return }
-    playbackTask?.cancel()
-    if resetToStart || timeCursor >= 0.9995 {
-      timeCursor = 0
-      clearSelectionIfHiddenAtCurrentTime()
-    }
-    isTimePlaying = true
-    // Suppress the interactive overlay + floating titles for a clean, smooth
-    // growth animation; restored the moment playback ends.
-    isCameraMoving = true
-    playbackTask = Task { @MainActor in
-      var last = Date()
-      let totalSeconds = MemoryAtlasPlayback.duration(entityCount: snapshot.nodes.count)
-      while !Task.isCancelled {
-        try? await Task.sleep(nanoseconds: 33_000_000)
-        if Task.isCancelled { return }
-        let now = Date()
-        let delta = now.timeIntervalSince(last)
-        last = now
-        let next = timeCursor + delta / totalSeconds
-        if next >= 1 {
-          timeCursor = 1
-          finishPlaybackNaturally()
-          return
-        }
-        timeCursor = next
-      }
-    }
-  }
-
-  /// Playing to the end is not an opt-out — the delightful default survives.
-  private func finishPlaybackNaturally() {
-    playbackTask = nil
-    isTimePlaying = false
-    isCameraMoving = false
-  }
-
-  private func stopPlayback(userInitiated: Bool) {
-    playbackTask?.cancel()
-    playbackTask = nil
-    if isTimePlaying { isCameraMoving = false }
-    isTimePlaying = false
-    if userInitiated { autoplayEnabled = false }
-  }
-
-  private func scrub(to fraction: Double) {
-    if isTimePlaying || playbackTask != nil {
-      stopPlayback(userInitiated: true)
-    } else {
-      // Grabbing the timeline is an explicit opt-out of auto-play on open.
-      autoplayEnabled = false
-    }
-    timeCursor = min(max(fraction, 0), 1)
-    clearSelectionIfHiddenAtCurrentTime()
-  }
-
-  private func jumpToNow() {
-    stopPlayback(userInitiated: true)
-    withAnimation(.easeOut(duration: 0.25)) { timeCursor = 1 }
   }
 
   private var zoomControls: some View {
@@ -2066,15 +1621,6 @@ private struct CanonicalMemoryAtlasSurface: View {
     !compact && zoom >= MemoryAtlasZoomPolicy.inspectModeZoom
   }
 
-  private var atlasLevelLabel: String {
-    if isFullyLabelledMode { return "All labelled" }
-    if isInspectMode { return "Inspect" }
-    if isFocusMode { return "Focus" }
-    if zoom < MemoryAtlasZoomPolicy.neighborhoodZoom { return "Overview" }
-    if zoom < 1.9 { return "Neighborhood" }
-    return "Detail"
-  }
-
   private func point(for normalized: CGPoint, in size: CGSize) -> CGPoint {
     MemoryAtlasRenderPlanner.renderedPoint(
       for: normalized, viewportSize: size, zoom: zoom, pan: pan)
@@ -2105,22 +1651,6 @@ private struct CanonicalMemoryAtlasSurface: View {
       || node.aliases.contains { $0.localizedCaseInsensitiveContains(searchText) }
   }
 
-  /// The replay filters membership by its density-aware axis. Hit testing and
-  /// keyboard search use the same predicate so a future entity cannot be
-  /// selected while it is still absent from the canvas.
-  private func nodeIsVisibleAtCurrentTime(_ placement: MemoryAtlasNodePlacement) -> Bool {
-    guard let timeline, timeCursor < 0.9995 else { return true }
-    return placement.id == snapshot.anchorNodeID || timeline.isVisible(nodeID: placement.id, at: timeCursor)
-  }
-
-  private func clearSelectionIfHiddenAtCurrentTime() {
-    guard let selectedNodeID, let placement = snapshot.nodeByID[selectedNodeID], !nodeIsVisibleAtCurrentTime(placement)
-    else {
-      return
-    }
-    clearSelection()
-  }
-
   private func updateSearchMatches(_ query: String) {
     guard !query.isEmpty else {
       matchingNodeIDs = nil
@@ -2143,7 +1673,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     guard let matchingNodeIDs, !matchingNodeIDs.isEmpty else { return }
     guard
       let nodeID = snapshot.nodes.first(where: {
-        matchingNodeIDs.contains($0.id) && nodeIsVisibleAtCurrentTime($0)
+        matchingNodeIDs.contains($0.id)
       })?.id
     else { return }
     selectionTrail.removeAll()
@@ -2196,7 +1726,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     // nodes, but searching every node in the snapshot would let a tap on an
     // apparently blank area select an omitted node and open its inspector.
     let visibleIDs = visibleNodes.isEmpty ? nil : Set(visibleNodes.map { $0.id })
-    for placement in snapshot.nodes where nodeIsVisibleAtCurrentTime(placement) {
+    for placement in snapshot.nodes {
       if let visibleIDs, !visibleIDs.contains(placement.id) { continue }
       let rendered = point(for: placement.normalizedPosition, in: size)
       let distance = hypot(rendered.x - location.x, rendered.y - location.y)
@@ -2422,19 +1952,56 @@ private struct MemoryAtlasInputMonitor: NSViewRepresentable {
 
 // MARK: - Export / QA preview
 
+/// One entity, drawn as a piece of the glass it sits on.
+///
+/// A disc of the panel's own surface with a hairline rim and a faint top
+/// sheen, which is how every other pressable thing in this system is drawn.
+/// There is deliberately no hue: the map is monochrome and the inspector says
+/// what kind of thing an entity is.
+struct MemoryAtlasGlassMark: View {
+  let diameter: CGFloat
+  let selected: Bool
+
+  var body: some View {
+    Circle()
+      .fill(Ink.surface.opacity(selected ? 1 : 0.86))
+      .overlay(
+        // The sheen: light falling on the top of the disc.
+        Circle()
+          .fill(
+            LinearGradient(
+              colors: [Ink.glow.opacity(0.55), Ink.glow.opacity(0)],
+              startPoint: .top, endPoint: .center)
+          )
+          .padding(1)
+      )
+      .overlay(
+        Circle().stroke(Ink.primary.opacity(selected ? 0.75 : 0.32), lineWidth: selected ? 1.6 : 1)
+      )
+      .shadow(color: Ink.primary.opacity(0.10), radius: diameter * 0.12, y: diameter * 0.06)
+      .frame(width: diameter, height: diameter)
+  }
+}
+
 /// Deterministic, data-backed atlas for offscreen `ViewExporter` renders. The
 /// live atlas needs a signed-in account and a server graph, so QA has no way to
-/// visually regression-test the timeline without this fixed sample. Same file as
+/// visually regression-test the map without this fixed sample. Same file as
 /// the private surface so it can construct it directly.
 @MainActor
 enum MemoryAtlasExportPreview {
-  static func surface(timeCursor: Double = 0.55) -> AnyView {
-    AnyView(
+  /// The exporter paints a dark desktop behind a standalone view, which is the ground *behind*
+  /// the glass and not the one content sits on. Hosted content paints nothing itself, so the
+  /// preview supplies the panel's ground or the render is a picture of black on black.
+  private static func hosted<Content: View>(_ content: Content) -> AnyView {
+    AnyView(content.background(Ink.surface).glassContent())
+  }
+
+  static func surface() -> AnyView {
+    hosted(
       CanonicalMemoryAtlasSurface(
         graph: sampleGraph(),
         compact: false,
-        evidenceProvider: { _ in [] },
-        previewTimeCursor: timeCursor
+        evidenceProvider: { _ in [] }
       )
     )
   }
@@ -2503,14 +2070,13 @@ enum MemoryAtlasExportPreview {
   /// the case that regressed into a small knot in the upper middle of an
   /// otherwise empty canvas. Kept as its own export so that layout stays
   /// reviewable without an account that happens to have only one entity type.
-  static func singleTypeSurface(timeCursor: Double = 1) -> AnyView {
-    AnyView(
+  static func singleTypeSurface() -> AnyView {
+    hosted(
       CanonicalMemoryAtlasSurface(
         graph: singleTypeGraph(),
         compact: false,
         evidenceProvider: { _ in [] },
-        onRebuild: {},
-        previewTimeCursor: timeCursor
+        onRebuild: {}
       )
     )
   }
@@ -2519,12 +2085,11 @@ enum MemoryAtlasExportPreview {
   /// layout (connections, evidence, and the map narrowing beside it) is
   /// captured rather than described.
   static func inspectorSurface() -> AnyView {
-    AnyView(
+    hosted(
       CanonicalMemoryAtlasSurface(
         graph: singleTypeGraph(),
         compact: false,
         onRebuild: {},
-        previewTimeCursor: 1,
         previewSelectedNodeID: "concept-2",
         previewEvidence: Self.sampleEvidence.enumerated().map { index, content in
           MemoryAtlasEvidence(
@@ -2541,12 +2106,11 @@ enum MemoryAtlasExportPreview {
   /// are clickable, so the relationship inspector is a real destination and
   /// gets a real render.
   static func connectionInspectorSurface() -> AnyView {
-    AnyView(
+    hosted(
       CanonicalMemoryAtlasSurface(
         graph: singleTypeGraph(),
         compact: false,
         onRebuild: {},
-        previewTimeCursor: 1,
         previewSelectedNodeID: "david",
         previewSelectedEdgeID: "edge-concept-2",
         previewEvidence: Self.sampleEvidence.prefix(2).enumerated().map { index, content in

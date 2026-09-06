@@ -29,12 +29,22 @@ struct LocalKGNodeRecord: Codable, FetchableRecord, PersistableRecord, Identifia
     } else {
       aliases = []
     }
+    // A Brain Map rebuild stores what each entity cites here as a JSON array;
+    // file indexing left the column empty, which decodes to no citations.
+    let citations: [String]
+    if let json = sourceFileIds, let data = json.data(using: .utf8),
+      let parsed = try? JSONDecoder().decode([String].self, from: data)
+    {
+      citations = parsed
+    } else {
+      citations = []
+    }
     return KnowledgeGraphNode(
       id: nodeId,
       label: label,
       nodeType: KnowledgeGraphNodeType(rawValue: nodeType) ?? .concept,
       aliases: aliases,
-      memoryIds: [],
+      memoryIds: citations,
       createdAt: createdAt,
       updatedAt: updatedAt
     )

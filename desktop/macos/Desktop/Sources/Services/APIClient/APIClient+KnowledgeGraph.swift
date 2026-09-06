@@ -109,6 +109,41 @@ struct KnowledgeGraphEdge: Codable, Equatable, Identifiable, Sendable {
 /// Legacy `/v1/knowledge-graph` responses omit the pagination fields and are
 /// decoded as a single, complete page. The alias below gives page-oriented
 /// callers an explicit contract without duplicating the node/edge wire models.
+/// Where the server's last Brain Map rebuild stands. Carried on the first
+/// graph page so a client that asked for a rebuild can wait for *that* one
+/// rather than for "any non-empty graph", which the old graph already was.
+struct KnowledgeGraphRebuildStatus: Codable, Equatable, Sendable {
+  enum Phase: String, Codable, Sendable {
+    case running, complete, failed
+  }
+
+  let status: String
+  let startedAt: Date?
+  let finishedAt: Date?
+  let nodesCount: Int?
+  let edgesCount: Int?
+
+  enum CodingKeys: String, CodingKey {
+    case status
+    case startedAt = "started_at"
+    case finishedAt = "finished_at"
+    case nodesCount = "nodes_count"
+    case edgesCount = "edges_count"
+  }
+
+  var phase: Phase? { Phase(rawValue: status) }
+
+  /// True once a rebuild requested at `requestedAt` has run to the end.
+  /// A rebuild that failed also counts as finished: waiting longer would not
+  /// change the answer, and the map the user has is still the map they have.
+  func finished(since requestedAt: Date) -> Bool {
+    guard let finishedAt, phase != .running else { return false }
+    // A clock skew allowance: the request timestamp is the client's, the
+    // finish timestamp is the server's.
+    return finishedAt >= requestedAt.addingTimeInterval(-120)
+  }
+}
+
 struct KnowledgeGraphResponse: Codable, Equatable, Sendable {
   static let defaultPageSize = 200
   static let maximumPageSize = 500
@@ -123,9 +158,11 @@ struct KnowledgeGraphResponse: Codable, Equatable, Sendable {
   /// assertion-backed graph nodes, and are intentionally excluded from atlas
   /// layout and counts.
   let catalogNodes: [KnowledgeGraphNode]?
+  /// Present on the first page once the account has ever rebuilt.
+  let rebuild: KnowledgeGraphRebuildStatus?
 
   enum CodingKeys: String, CodingKey {
-    case nodes, edges
+    case nodes, edges, rebuild
     case hasMore = "has_more"
     case nextCursor = "next_cursor"
     case eligibleItemCount = "eligible_item_count"
@@ -140,7 +177,8 @@ struct KnowledgeGraphResponse: Codable, Equatable, Sendable {
     nextCursor: String? = nil,
     eligibleItemCount: Int? = nil,
     processedItemCount: Int? = nil,
-    catalogNodes: [KnowledgeGraphNode]? = nil
+    catalogNodes: [KnowledgeGraphNode]? = nil,
+    rebuild: KnowledgeGraphRebuildStatus? = nil
   ) {
     self.nodes = nodes
     self.edges = edges
@@ -149,6 +187,7 @@ struct KnowledgeGraphResponse: Codable, Equatable, Sendable {
     self.eligibleItemCount = eligibleItemCount
     self.processedItemCount = processedItemCount
     self.catalogNodes = catalogNodes
+    self.rebuild = rebuild
   }
 
   init(from decoder: Decoder) throws {
@@ -160,6 +199,8 @@ struct KnowledgeGraphResponse: Codable, Equatable, Sendable {
     eligibleItemCount = try container.decodeIfPresent(Int.self, forKey: .eligibleItemCount)
     processedItemCount = try container.decodeIfPresent(Int.self, forKey: .processedItemCount)
     catalogNodes = try container.decodeIfPresent([KnowledgeGraphNode].self, forKey: .catalogNodes)
+    // A malformed status must not take the whole graph down with it.
+    rebuild = try? container.decodeIfPresent(KnowledgeGraphRebuildStatus.self, forKey: .rebuild)
   }
 
   /// Nodes that are safe for the atlas to lay out. The canonical endpoint's
@@ -206,8 +247,10 @@ struct KnowledgeGraphAccumulator: Sendable {
   private var catalogNodesByID: [String: KnowledgeGraphNode]?
   private var eligibleItemCount: Int?
   private var processedItemCount: Int?
+  private var rebuild: KnowledgeGraphRebuildStatus?
 
   mutating func append(_ page: KnowledgeGraphResponse) {
+    if let status = page.rebuild { rebuild = status }
     for node in page.nodes {
       if let existing = nodesByID[node.id] {
         nodesByID[node.id] = Self.merge(existing, node)
@@ -268,7 +311,8 @@ struct KnowledgeGraphAccumulator: Sendable {
       edges: edges,
       eligibleItemCount: eligibleItemCount,
       processedItemCount: processedItemCount,
-      catalogNodes: catalogNodesByID?.values.sorted { $0.id < $1.id })
+      catalogNodes: catalogNodesByID?.values.sorted { $0.id < $1.id },
+      rebuild: rebuild)
   }
 
   private static func merge(_ lhs: KnowledgeGraphNode, _ rhs: KnowledgeGraphNode) -> KnowledgeGraphNode {

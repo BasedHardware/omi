@@ -38,7 +38,6 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasGeometry.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasOwnerIdentity.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasSnapshotCache.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasPlayback.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasZoomPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasSurfacePresentation.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
@@ -134,18 +133,6 @@ steps:
     expect:
       result.detail.opened: "true"
       result.detail.target: "page"
-
-  - id: S9
-    name: Scrub Atlas replay
-    bridge.action:
-      name: memory_atlas_set_time
-      params:
-        target: "page"
-        fraction: "0.45"
-    expect:
-      result.detail.posted: "true"
-      result.detail.target: "page"
-      result.detail.fraction: "0.45"
 
   - id: S10
     name: Zoom and pan Atlas

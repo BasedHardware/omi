@@ -288,7 +288,6 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
         selectedNodeID: nil,
         matchingNodeIDs: nil,
         matchingEdges: nil,
-        asOf: nil,
         isCameraMoving: true
       )
       if frame == 0 {
@@ -311,7 +310,6 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
       selectedNodeID: nil,
       matchingNodeIDs: nil,
       matchingEdges: nil,
-      asOf: nil,
       isCameraMoving: false
     )
     XCTAssertEqual(cache.plannerInvocationCount, 2)
@@ -324,8 +322,6 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
 
     XCTAssertEqual(projection.snapshot.nodes.count, productionScaleNodeCount)
     XCTAssertEqual(projection.snapshot.edges.count, productionScaleEdgeCount)
-    XCTAssertEqual(projection.connectionBirthFractions.count, productionScaleEdgeCount)
-    XCTAssertEqual(projection.connectionBirthFractions, projection.connectionBirthFractions.sorted())
 
     for frame in 0..<120 {
       _ = projection.renderPlanCache.makePlan(
@@ -336,7 +332,6 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
         selectedNodeID: nil,
         matchingNodeIDs: nil,
         matchingEdges: nil,
-        asOf: nil,
         isCameraMoving: true
       )
     }
