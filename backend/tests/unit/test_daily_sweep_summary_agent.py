@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from contextlib import nullcontext
+from uuid import UUID, uuid4
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -16,7 +17,16 @@ from langchain_core.messages import AIMessage
 
 from models.memory_contracts import MemoryExtractionError
 from utils.llm import memories as memories_module
+from utils.llm.gateway_client import GatewayContextChatOpenAI
 from utils.llm.memories import run_daily_sweep_summary_agent
+from utils.llm.usage_tracker import Features, track_usage
+from utils.prompts import daily_sweep_summary_agent_prompt
+from utils.memory.daily_memory_sweep import (
+    QA_SWEEP_JIT_CONTRACT_VERSION,
+    QA_SWEEP_MAX_INPUT_TOKENS,
+    QA_SWEEP_MAX_OUTPUT_TOKENS,
+    QA_SWEEP_MAX_SPEND_MICRO_USD,
+)
 
 
 class _ScriptedLlm:
@@ -216,6 +226,62 @@ def test_qa_budget_is_sent_to_gateway_and_accounting_stays_outside_model_schema(
     assert request["max_spend_micro_usd"] == 50_000
     assert request["usage_observed"] is True
     assert request["usage_tokens"] == {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120}
+
+
+def test_gateway_payload_has_server_owner_and_full_qa_budget_envelope():
+    uid = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    request_id = str(uuid4())
+    parser = memories_module.PydanticOutputParser(pydantic_object=memories_module.DailySweepAgentPassOutput)
+    prompt_value = daily_sweep_summary_agent_prompt.invoke(
+        {
+            "user_name": "Dave",
+            "current_date": "2026-09-05",
+            "memories_str": "(none)",
+            "summaries_block": "[conversation-1] Dave chose Tuesday for gym training",
+            "folder_task": "Folder task: none. folder_assignments must be empty.",
+            "max_candidates": 1,
+            "max_transcript_fetches": 0,
+            "max_memory_lookups": 0,
+            "format_instructions": parser.get_format_instructions(),
+        }
+    )
+    model = GatewayContextChatOpenAI(
+        model="omi:auto:memories",
+        api_key="test-only",
+        base_url="https://qa.invalid/v1",
+        max_retries=0,
+        omi_gateway_feature="memories",
+    )
+    headers = {
+        "x-omi-request-id": request_id,
+        "x-omi-jit-contract-version": QA_SWEEP_JIT_CONTRACT_VERSION,
+        "x-omi-jit-run-id": "qa-sweep-run-1",
+        "x-omi-jit-max-attempts": "1",
+        "x-omi-jit-max-output-tokens": str(QA_SWEEP_MAX_OUTPUT_TOKENS),
+        "x-omi-jit-max-input-tokens": str(QA_SWEEP_MAX_INPUT_TOKENS),
+        "x-omi-jit-max-spend-micro-usd": str(QA_SWEEP_MAX_SPEND_MICRO_USD),
+    }
+
+    with track_usage(uid, Features.MEMORIES):
+        payload = model._get_request_payload(prompt_value, max_completion_tokens=256, extra_headers=headers)
+
+    payload_headers = payload["extra_headers"]
+    assert payload_headers["X-Omi-User-Uid"] == uid
+    assert payload_headers["X-Omi-LLM-Feature"] == "memories"
+    assert str(UUID(payload_headers["x-omi-request-id"])) == request_id
+    assert payload_headers["x-omi-jit-contract-version"] == QA_SWEEP_JIT_CONTRACT_VERSION
+    assert payload_headers["x-omi-jit-run-id"] == "qa-sweep-run-1"
+    assert payload_headers["x-omi-jit-max-attempts"] == "1"
+    assert payload_headers["x-omi-jit-max-output-tokens"] == str(QA_SWEEP_MAX_OUTPUT_TOKENS)
+    assert payload_headers["x-omi-jit-max-input-tokens"] == str(QA_SWEEP_MAX_INPUT_TOKENS)
+    assert payload_headers["x-omi-jit-max-spend-micro-usd"] == str(QA_SWEEP_MAX_SPEND_MICRO_USD)
+    assert payload["max_completion_tokens"] == QA_SWEEP_MAX_OUTPUT_TOKENS
+    # extra_headers is consumed by the OpenAI client as HTTP headers; the
+    # gateway's input preflight counts the serialized JSON body itself.
+    request_body = {key: value for key, value in payload.items() if key != "extra_headers"}
+    serialized_request_body = json.dumps(request_body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    assert len(serialized_request_body) > len(prompt_value.to_string().encode("utf-8"))
+    assert 0 < len(serialized_request_body) <= QA_SWEEP_MAX_INPUT_TOKENS
 
 
 def test_memory_lookups_trigger_second_pass_with_results():

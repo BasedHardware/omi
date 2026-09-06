@@ -88,6 +88,7 @@ from utils.memory.knowledge_ledger import (
 from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.memory.memory_authority import validate_uid_for_memory_path
 from utils.memory.jit_trigger_contract import compile_trigger_condition
+from utils.llm.usage_tracker import Features, track_usage
 
 # These budgets are deliberately separate from the canonical write budget.  A
 # completed-day producer must prove that it read the whole bounded source
@@ -4208,25 +4209,31 @@ def _load_or_stage_daily_summary_candidates(
         summary_rows = tuple((row.conversation_id, row.summary_text) for row in conversation_rows)
         transcript_lookup = {row.conversation_id: row.transcript_text for row in conversation_rows}
         needs_folder_ids = tuple(row.conversation_id for row in conversation_rows if row.needs_folder)
-        output = agent_runner(
-            uid,
-            summary_rows,
-            transcript_lookup,
-            folder_options=tuple(folder_options) if needs_folder_ids else (),
-            needs_folder_ids=needs_folder_ids,
-            max_candidates=max_candidates,
-            max_transcript_fetches=max_transcript_fetches,
-            max_fetch_characters=max_fetch_characters,
-            memory_searcher=_daily_sweep_ledger_searcher(uid, db_client=db_client),
-            max_memory_lookups=max_memory_lookups,
-            cache_key=f"daily-sweep:{uid}",
-            max_provider_retries=max_provider_retries,
-            max_input_tokens=max_input_tokens,
-            max_output_tokens=max_output_tokens,
-            jit_run_id=jit_run_id,
-            jit_max_spend_micro_usd=jit_max_spend_micro_usd,
-            dispatch_evidence=dispatch_evidence,
-        )
+        # The server-owned UID must be in the context at the model boundary so
+        # GatewayContextChatOpenAI emits X-Omi-User-Uid and feature headers.
+        # Keep this around the actual runner call: QA and production adapters
+        # can supply different runners, and the context must not leak between
+        # scheduler users.
+        with track_usage(uid, Features.MEMORIES):
+            output = agent_runner(
+                uid,
+                summary_rows,
+                transcript_lookup,
+                folder_options=tuple(folder_options) if needs_folder_ids else (),
+                needs_folder_ids=needs_folder_ids,
+                max_candidates=max_candidates,
+                max_transcript_fetches=max_transcript_fetches,
+                max_fetch_characters=max_fetch_characters,
+                memory_searcher=_daily_sweep_ledger_searcher(uid, db_client=db_client),
+                max_memory_lookups=max_memory_lookups,
+                cache_key=f"daily-sweep:{uid}",
+                max_provider_retries=max_provider_retries,
+                max_input_tokens=max_input_tokens,
+                max_output_tokens=max_output_tokens,
+                jit_run_id=jit_run_id,
+                jit_max_spend_micro_usd=jit_max_spend_micro_usd,
+                dispatch_evidence=dispatch_evidence,
+            )
         candidates: List[DailySweepCandidate] = []
         for index, memory in enumerate(getattr(output, "memories", ()) or ()):
             content = str(getattr(memory, "content", "") or "").strip()[:MAX_CONTENT_CHARACTERS]

@@ -61,6 +61,7 @@ from utils.memory.daily_memory_sweep import (
     produce_completed_day_daily_summary_sources,
 )
 from models.product_memory import normalized_memory_content_key
+from utils.llm.usage_tracker import get_current_context
 
 
 def _candidate(**updates):
@@ -1464,6 +1465,7 @@ def test_qa_completed_day_uses_tight_real_input_and_provider_envelope(monkeypatc
 
     def agent(_uid, _rows, _lookup, **kwargs):
         seen.update(kwargs)
+        seen["usage_context"] = get_current_context()
         return _agent_output(
             memories=[SimpleNamespace(content="fact from QA pass", conversation_ids=["conversation-1"])]
         )
@@ -1488,6 +1490,9 @@ def test_qa_completed_day_uses_tight_real_input_and_provider_envelope(monkeypatc
     assert seen["max_transcript_fetches"] == QA_SWEEP_MAX_TRANSCRIPT_FETCHES
     assert seen["max_memory_lookups"] == QA_SWEEP_MAX_MEMORY_LOOKUPS
     assert seen["max_provider_retries"] == QA_SWEEP_MAX_SDK_RETRIES
+    assert seen["usage_context"].uid == "user-1"
+    assert seen["usage_context"].feature == "memories"
+    assert get_current_context() is None
     assert QA_SWEEP_MAX_CATCH_UP_DAYS == 1
     assert QA_SWEEP_MAX_SUMMARY_CONVERSATIONS == 1
     assert QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS == 2_000
