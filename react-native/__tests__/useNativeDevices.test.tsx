@@ -110,6 +110,15 @@ function sessionResponse(
   };
 }
 
+function audioCounters(request: {body?: string}) {
+  const chunkIndex = request.body
+    ? JSON.parse(request.body).chunkIndex
+    : undefined;
+  return typeof chunkIndex === 'number'
+    ? {chunkCount: chunkIndex + 1, byteCount: (chunkIndex + 1) * 3}
+    : {};
+}
+
 function emitNative(event: OmiNativeEvent) {
   mockListeners.forEach(listener => listener(event));
 }
@@ -171,15 +180,17 @@ beforeEach(() => {
   mockNative.connectDevice.mockResolvedValue(undefined);
   mockNative.disconnectDevice.mockResolvedValue(undefined);
   mockBackend.request.mockReset();
-  mockBackend.request.mockImplementation(async (request: {path: string}) => {
-    if (request.path.endsWith('/complete')) {
-      return sessionResponse(200, {state: 'complete', endedAt: 2});
-    }
-    if (request.path.endsWith('/audio')) {
-      return sessionResponse(200, {byteCount: 3, chunkCount: 1});
-    }
-    return sessionResponse(201);
-  });
+  mockBackend.request.mockImplementation(
+    async (request: {path: string; body?: string}) => {
+      if (request.path.endsWith('/complete')) {
+        return sessionResponse(200, {state: 'complete', endedAt: 2});
+      }
+      if (request.path.endsWith('/audio')) {
+        return sessionResponse(200, audioCounters(request));
+      }
+      return sessionResponse(201);
+    },
+  );
 });
 
 test('does not probe native devices when the host disables them', async () => {
@@ -388,24 +399,26 @@ test('keeps uploading after snapshot events and serializes overlapping appends',
       capture: 'recording',
     }),
   );
-  mockBackend.request.mockImplementation(async (request: {path: string}) => {
-    if (request.path === '/v1/device-sessions') {
-      await new Promise<void>(resolve => {
-        resolveOpen = resolve;
-      });
-      return sessionResponse(201);
-    }
-    if (request.path.endsWith('/audio')) {
-      inFlightAppends += 1;
-      maxInFlightAppends = Math.max(maxInFlightAppends, inFlightAppends);
-      await new Promise<void>(resolve => {
-        appendGates.push(resolve);
-      });
-      inFlightAppends -= 1;
-      return sessionResponse(200, {byteCount: 3, chunkCount: 1});
-    }
-    return sessionResponse(200, {state: 'complete', endedAt: 2});
-  });
+  mockBackend.request.mockImplementation(
+    async (request: {path: string; body?: string}) => {
+      if (request.path === '/v1/device-sessions') {
+        await new Promise<void>(resolve => {
+          resolveOpen = resolve;
+        });
+        return sessionResponse(201);
+      }
+      if (request.path.endsWith('/audio')) {
+        inFlightAppends += 1;
+        maxInFlightAppends = Math.max(maxInFlightAppends, inFlightAppends);
+        await new Promise<void>(resolve => {
+          appendGates.push(resolve);
+        });
+        inFlightAppends -= 1;
+        return sessionResponse(200, audioCounters(request));
+      }
+      return sessionResponse(200, {state: 'complete', endedAt: 2});
+    },
+  );
 
   const hook = await renderHook();
   expect(mockListeners).toHaveLength(1);
@@ -466,23 +479,25 @@ test('drains queued audio before completing a session', async () => {
   let resolveOpen: () => void = () => undefined;
   const appendGates: Array<() => void> = [];
   const order: string[] = [];
-  mockBackend.request.mockImplementation(async (request: {path: string}) => {
-    if (request.path === '/v1/device-sessions') {
-      await new Promise<void>(resolve => {
-        resolveOpen = resolve;
-      });
-      return sessionResponse(201);
-    }
-    if (request.path.endsWith('/audio')) {
-      order.push('audio');
-      await new Promise<void>(resolve => {
-        appendGates.push(resolve);
-      });
-      return sessionResponse(200, {byteCount: 3, chunkCount: 1});
-    }
-    order.push('complete');
-    return sessionResponse(200, {state: 'complete', endedAt: 2});
-  });
+  mockBackend.request.mockImplementation(
+    async (request: {path: string; body?: string}) => {
+      if (request.path === '/v1/device-sessions') {
+        await new Promise<void>(resolve => {
+          resolveOpen = resolve;
+        });
+        return sessionResponse(201);
+      }
+      if (request.path.endsWith('/audio')) {
+        order.push('audio');
+        await new Promise<void>(resolve => {
+          appendGates.push(resolve);
+        });
+        return sessionResponse(200, audioCounters(request));
+      }
+      order.push('complete');
+      return sessionResponse(200, {state: 'complete', endedAt: 2});
+    },
+  );
 
   const hook = await renderHook();
   await ReactTestRenderer.act(async () => {
@@ -528,18 +543,20 @@ test('drains queued audio before completing a session', async () => {
 
 test('completes a session that opens after disconnect', async () => {
   let resolveOpen: () => void = () => undefined;
-  mockBackend.request.mockImplementation(async (request: {path: string}) => {
-    if (request.path === '/v1/device-sessions') {
-      await new Promise<void>(resolve => {
-        resolveOpen = resolve;
-      });
-      return sessionResponse(201);
-    }
-    if (request.path.endsWith('/complete')) {
-      return sessionResponse(200, {state: 'complete', endedAt: 2});
-    }
-    return sessionResponse(200, {byteCount: 3, chunkCount: 1});
-  });
+  mockBackend.request.mockImplementation(
+    async (request: {path: string; body?: string}) => {
+      if (request.path === '/v1/device-sessions') {
+        await new Promise<void>(resolve => {
+          resolveOpen = resolve;
+        });
+        return sessionResponse(201);
+      }
+      if (request.path.endsWith('/complete')) {
+        return sessionResponse(200, {state: 'complete', endedAt: 2});
+      }
+      return sessionResponse(200, audioCounters(request));
+    },
+  );
 
   const hook = await renderHook();
   await ReactTestRenderer.act(async () => {
@@ -587,12 +604,14 @@ test('completes a session that opens after disconnect', async () => {
 
 test('an ambiguous audio failure stays visible and never completes or retries the recording', async () => {
   mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
-  mockBackend.request.mockImplementation(async (request: {path: string}) => {
-    if (request.path.endsWith('/audio')) {
-      throw new Error('Connection lost after upload');
-    }
-    return sessionResponse(201);
-  });
+  mockBackend.request.mockImplementation(
+    async (request: {path: string; body?: string}) => {
+      if (request.path.endsWith('/audio')) {
+        throw new Error('Connection lost after upload');
+      }
+      return sessionResponse(201);
+    },
+  );
   const hook = await renderHook();
   const audio = {
     type: 'audio' as const,
@@ -702,6 +721,7 @@ test.each(['open', 'audio', 'complete'] as const)(
         });
       }
       return sessionResponse(opening ? 201 : 200, {
+        ...audioCounters(request),
         id,
         state: action === 'complete' ? 'complete' : 'open',
         endedAt: action === 'complete' ? 2 : null,
@@ -779,6 +799,7 @@ test.each([false, true])(
       }
       return sessionResponse(
         request.path === '/v1/device-sessions' ? 201 : 200,
+        audioCounters(request),
       );
     });
     const hook = await renderHook();
@@ -793,15 +814,19 @@ test.each([false, true])(
     await ReactTestRenderer.act(async () => {
       emitNative({type: 'snapshot', snapshot: snapshot()});
     });
-    if (retired) await hook.setEnabled(false);
+    if (retired) {
+      await hook.setEnabled(false);
+    }
     await ReactTestRenderer.act(async () => {
       rejectComplete();
     });
-    if (retired) expect(hook.latest().deviceScanMessage).toBeNull();
-    else
+    if (retired) {
+      expect(hook.latest().deviceScanMessage).toBeNull();
+    } else {
       expect(hook.latest().deviceScanMessage).toContain(
         'saved status is unconfirmed',
       );
+    }
     expect(
       mockBackend.request.mock.calls.filter(([request]) =>
         request.path.endsWith('/complete'),
@@ -810,3 +835,246 @@ test.each([false, true])(
     await hook.unmount();
   },
 );
+
+test('retries the same indexed packet before sending the next or completing', async () => {
+  jest.useFakeTimers();
+  mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+  let appends = 0;
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path.endsWith('/audio') && ++appends === 1) {
+      return {
+        id: 'req',
+        status: 503,
+        body: JSON.stringify({error: {code: 'upload_unavailable'}}),
+      };
+    }
+    return sessionResponse(request.path === '/v1/device-sessions' ? 201 : 200, {
+      ...audioCounters(request),
+      state: request.path.endsWith('/complete') ? 'complete' : 'open',
+    });
+  });
+  const hook = await renderHook();
+  try {
+    await ReactTestRenderer.act(async () => {
+      emitNative({
+        type: 'audio',
+        deviceId: 'omi-1',
+        codec: 21,
+        payloadBase64: 'AQID',
+      });
+      emitNative({
+        type: 'audio',
+        deviceId: 'omi-1',
+        codec: 21,
+        payloadBase64: 'BAUG',
+      });
+    });
+    await ReactTestRenderer.act(async () => {
+      emitNative({type: 'snapshot', snapshot: snapshot()});
+    });
+    expect(appends).toBe(1);
+    expect(
+      mockBackend.request.mock.calls.some(([request]) =>
+        request.path.endsWith('/complete'),
+      ),
+    ).toBe(false);
+    await ReactTestRenderer.act(async () => {
+      await jest.advanceTimersByTimeAsync(500);
+    });
+    expect(
+      mockBackend.request.mock.calls
+        .filter(([request]) => request.path.endsWith('/audio'))
+        .map(([request]) => JSON.parse(request.body!)),
+    ).toEqual([
+      {chunkIndex: 0, bytesBase64: 'AQID'},
+      {chunkIndex: 0, bytesBase64: 'AQID'},
+      {chunkIndex: 1, bytesBase64: 'BAUG'},
+    ]);
+    expect(mockBackend.request.mock.calls.at(-1)?.[0].path).toMatch(
+      /\/complete$/,
+    );
+    expect(hook.latest().deviceScanMessage).toBeNull();
+  } finally {
+    await hook.unmount();
+    jest.useRealTimers();
+  }
+});
+
+test.each([401, 409, 413, 503])(
+  'upload status %s has bounded retry semantics',
+  async status => {
+    jest.useFakeTimers();
+    mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+    mockBackend.request.mockImplementation(async request =>
+      request.path.endsWith('/audio')
+        ? {id: 'req', status, body: '{}'}
+        : sessionResponse(201),
+    );
+    const hook = await renderHook();
+    try {
+      await ReactTestRenderer.act(async () => {
+        emitNative({
+          type: 'audio',
+          deviceId: 'omi-1',
+          codec: 21,
+          payloadBase64: 'AQID',
+        });
+      });
+      await ReactTestRenderer.act(async () => {
+        await jest.advanceTimersByTimeAsync(5000);
+      });
+      expect(
+        mockBackend.request.mock.calls.filter(([request]) =>
+          request.path.endsWith('/audio'),
+        ),
+      ).toHaveLength(status === 503 ? 4 : 1);
+      expect(hook.latest().deviceScanMessage).toContain(
+        'could not be saved completely',
+      );
+      expect(jest.getTimerCount()).toBe(0);
+      await ReactTestRenderer.act(async () => {
+        emitNative({type: 'snapshot', snapshot: snapshot()});
+      });
+      expect(
+        mockBackend.request.mock.calls.some(([request]) =>
+          request.path.endsWith('/complete'),
+        ),
+      ).toBe(false);
+    } finally {
+      await hook.unmount();
+      jest.useRealTimers();
+    }
+  },
+);
+
+test('auth retirement cancels delayed retries and starts the next account at index zero', async () => {
+  jest.useFakeTimers();
+  mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+  mockBackend.request.mockImplementationOnce(async () => sessionResponse(201));
+  mockBackend.request.mockImplementationOnce(async () => {
+    throw Object.assign(new Error('network'), {code: 'OMI_HTTP_TRANSPORT'});
+  });
+  const hook = await renderHook();
+  try {
+    await ReactTestRenderer.act(async () => {
+      emitNative({
+        type: 'audio',
+        deviceId: 'omi-1',
+        codec: 21,
+        payloadBase64: 'AQID',
+      });
+    });
+    await hook.setEnabled(false);
+    await ReactTestRenderer.act(async () => {
+      await jest.advanceTimersByTimeAsync(0);
+    });
+    expect(jest.getTimerCount()).toBe(0);
+    await hook.setEnabled(true);
+    await ReactTestRenderer.act(async () => {
+      emitNative({
+        type: 'audio',
+        deviceId: 'omi-1',
+        codec: 21,
+        payloadBase64: 'BAUG',
+      });
+      await jest.advanceTimersByTimeAsync(5000);
+    });
+    expect(
+      mockBackend.request.mock.calls
+        .filter(([request]) => request.path.endsWith('/audio'))
+        .map(([request]) => JSON.parse(request.body!)),
+    ).toEqual([
+      {chunkIndex: 0, bytesBase64: 'AQID'},
+      {chunkIndex: 0, bytesBase64: 'BAUG'},
+    ]);
+    expect(hook.latest().deviceScanMessage).toBeNull();
+  } finally {
+    await hook.unmount();
+    jest.useRealTimers();
+  }
+});
+
+test('does not retry ambiguous opens and bounds buffered audio while opening', async () => {
+  let release: () => void = () => undefined;
+  mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+  mockBackend.request.mockImplementationOnce(async () => {
+    await new Promise<void>(resolve => {
+      release = resolve;
+    });
+    return sessionResponse(201);
+  });
+  const hook = await renderHook();
+  const payloadBase64 = Buffer.alloc(1_048_576).toString('base64');
+  await ReactTestRenderer.act(async () => {
+    for (let count = 0; count < 9; count += 1) {
+      emitNative({type: 'audio', deviceId: 'omi-1', codec: 21, payloadBase64});
+    }
+  });
+  expect(hook.latest().deviceScanMessage).toContain('storage limit reached');
+  await ReactTestRenderer.act(async () => {
+    release();
+  });
+  expect(mockBackend.request).toHaveBeenCalledTimes(1);
+  await hook.unmount();
+});
+
+test('retries idempotent completion on a transient transport failure', async () => {
+  jest.useFakeTimers();
+  let completions = 0;
+  mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path.endsWith('/complete') && ++completions === 1) {
+      throw new TypeError('Failed to fetch');
+    }
+    return sessionResponse(request.path === '/v1/device-sessions' ? 201 : 200, {
+      ...audioCounters(request),
+      state: request.path.endsWith('/complete') ? 'complete' : 'open',
+    });
+  });
+  const hook = await renderHook();
+  try {
+    await ReactTestRenderer.act(async () => {
+      emitNative({
+        type: 'audio',
+        deviceId: 'omi-1',
+        codec: 21,
+        payloadBase64: 'AQID',
+      });
+    });
+    await ReactTestRenderer.act(async () => {
+      emitNative({type: 'snapshot', snapshot: snapshot()});
+    });
+    expect(completions).toBe(1);
+    await ReactTestRenderer.act(async () => {
+      await jest.advanceTimersByTimeAsync(500);
+    });
+    expect(completions).toBe(2);
+    expect(hook.latest().deviceScanMessage).toBeNull();
+  } finally {
+    await hook.unmount();
+    jest.useRealTimers();
+  }
+});
+
+test('an ambiguous session open is never automatically retried', async () => {
+  jest.useFakeTimers();
+  mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+  mockBackend.request.mockRejectedValue(new TypeError('Open response lost'));
+  const hook = await renderHook();
+  try {
+    await ReactTestRenderer.act(async () => {
+      emitNative({
+        type: 'audio',
+        deviceId: 'omi-1',
+        codec: 21,
+        payloadBase64: 'AQID',
+      });
+      await jest.advanceTimersByTimeAsync(5000);
+    });
+    expect(mockBackend.request).toHaveBeenCalledTimes(1);
+    expect(hook.latest().deviceScanMessage).toContain('could not start');
+  } finally {
+    await hook.unmount();
+    jest.useRealTimers();
+  }
+});

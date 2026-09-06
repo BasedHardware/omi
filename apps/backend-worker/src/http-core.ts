@@ -681,11 +681,14 @@ export async function handleDeviceSessionAudio(
     context.get("accountId"),
     context.req.param("id"),
     request.bytes,
+    request.chunkIndex,
     Date.now()
   );
   switch (outcome.kind) {
     case "ok":
       return json({ session: outcome.session });
+    case "unavailable":
+      return backendError("service_unavailable", "retry", 503, true);
     case "not_found":
       return backendError("not_found", "refresh_history", 404);
     case "conflict":

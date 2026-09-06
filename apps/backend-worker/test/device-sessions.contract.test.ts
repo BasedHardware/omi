@@ -8,6 +8,17 @@ import { createD1Mock } from "./d1-mock";
 
 let handler: typeof import("../src/index")["default"];
 
+test("audio requires a bounded stable chunk index", () => {
+  for (const chunkIndex of [undefined, null, -1, 0.5, 65_536, "0"]) {
+    expect(
+      parseDeviceSessionAudio({ bytesBase64: "AQID", chunkIndex })
+    ).toBeNull();
+  }
+  expect(
+    parseDeviceSessionAudio({ bytesBase64: "AQID", chunkIndex: 0 })?.chunkIndex
+  ).toBe(0);
+});
+
 beforeAll(async () => {
   void mock.module("cloudflare:workers", () => ({
     DurableObject: class {},
@@ -143,6 +154,7 @@ describe("device session request validators", () => {
     expect(parseDeviceSessionCreate({ ...openBody, codec: 256 })).toBeNull();
     expect(
       parseDeviceSessionAudio({
+        chunkIndex: 0,
         bytesBase64: btoa("\x01\x00\x00payload"),
         transcript: "no",
       })
@@ -180,6 +192,7 @@ describe("device session ingest", () => {
         method: "POST",
         headers: authenticatedHeaders,
         body: JSON.stringify({
+          chunkIndex: 0,
           bytesBase64: btoa(String.fromCharCode(...payload)),
         }),
       }
@@ -246,7 +259,7 @@ describe("device session ingest", () => {
           authorization: "Bearer test-token",
           "x-omi-client-id": "other-account",
         },
-        body: JSON.stringify({ bytesBase64: btoa("abc") }),
+        body: JSON.stringify({ chunkIndex: 0, bytesBase64: btoa("abc") }),
       }
     );
     expect(stolen.status).toBe(404);
@@ -301,22 +314,28 @@ describe("device session ingest", () => {
     const created = (await opened.json()) as { session: { id: string } };
     const first = new Uint8Array([1, 0, 0, 1]);
     const second = new Uint8Array([1, 0, 0, 2]);
-    const [left, right] = await Promise.all([
-      fetchWorker(`/v1/device-sessions/${created.session.id}/audio`, {
+    const left = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/audio`,
+      {
         method: "POST",
         headers: authenticatedHeaders,
         body: JSON.stringify({
+          chunkIndex: 0,
           bytesBase64: btoa(String.fromCharCode(...first)),
         }),
-      }),
-      fetchWorker(`/v1/device-sessions/${created.session.id}/audio`, {
+      }
+    );
+    const right = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/audio`,
+      {
         method: "POST",
         headers: authenticatedHeaders,
         body: JSON.stringify({
+          chunkIndex: 1,
           bytesBase64: btoa(String.fromCharCode(...second)),
         }),
-      }),
-    ]);
+      }
+    );
     expect(left.status).toBe(200);
     expect(right.status).toBe(200);
     expect(r2Mock.objects.size).toBe(2);
@@ -339,7 +358,7 @@ describe("device session ingest", () => {
       {
         method: "POST",
         headers: authenticatedHeaders,
-        body: JSON.stringify({ bytesBase64: btoa("late") }),
+        body: JSON.stringify({ chunkIndex: 0, bytesBase64: btoa("late") }),
       }
     );
     expect(late.status).toBe(409);
@@ -378,7 +397,7 @@ describe("device session ingest", () => {
       {
         method: "POST",
         headers: authenticatedHeaders,
-        body: JSON.stringify({ bytesBase64: btoa("audio") }),
+        body: JSON.stringify({ chunkIndex: 0, bytesBase64: btoa("audio") }),
       }
     );
     await started;
@@ -424,10 +443,10 @@ describe("device session ingest", () => {
       {
         method: "POST",
         headers: authenticatedHeaders,
-        body: JSON.stringify({ bytesBase64: btoa("audio") }),
+        body: JSON.stringify({ chunkIndex: 0, bytesBase64: btoa("audio") }),
       }
     );
-    expect(appended.status).toBe(500);
+    expect(appended.status).toBe(503);
     const completed = await fetchWorker(
       `/v1/device-sessions/${created.session.id}/complete`,
       { method: "POST", headers: authenticatedHeaders }
@@ -437,14 +456,14 @@ describe("device session ingest", () => {
       headers: authenticatedHeaders,
     });
     expect(await listed.json()).toMatchObject({
-      sessions: [{ state: "failed" }],
+      sessions: [{ state: "open" }],
     });
     const late = await fetchWorker(
       `/v1/device-sessions/${created.session.id}/audio`,
       {
         method: "POST",
         headers: authenticatedHeaders,
-        body: JSON.stringify({ bytesBase64: btoa("retry") }),
+        body: JSON.stringify({ chunkIndex: 0, bytesBase64: btoa("retry") }),
       }
     );
     expect(late.status).toBe(409);

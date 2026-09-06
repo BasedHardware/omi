@@ -1,7 +1,8 @@
 import type { DeviceSession, DeviceSessionState } from "@omi-core/contracts";
 
 export const DEVICE_SESSION_CAPABILITIES = {
-  maxSessionBytes: 26_214_400,
+  maxSessionBytes: 8_388_608,
+  maxChunks: 65_536,
   maxChunkBytes: 1_048_576,
   maxDeviceIdLength: 128,
   maxDeviceNameLength: 256,
@@ -30,6 +31,7 @@ export type DeviceSessionCreateRequest = {
 };
 
 export type DeviceSessionAudioRequest = {
+  chunkIndex: number;
   bytes: Uint8Array;
 };
 
@@ -95,7 +97,20 @@ export function parseDeviceSessionAudio(
   if (body === null || typeof body !== "object" || Array.isArray(body))
     return null;
   const item = body as Record<string, unknown>;
-  if (Object.keys(item).some((key) => key !== "bytesBase64")) return null;
+  if (
+    Object.keys(item).some(
+      (key) => !["bytesBase64", "chunkIndex"].includes(key)
+    )
+  )
+    return null;
+  const chunkIndex = item["chunkIndex"];
+  if (
+    typeof chunkIndex !== "number" ||
+    !Number.isSafeInteger(chunkIndex) ||
+    chunkIndex < 0 ||
+    chunkIndex >= DEVICE_SESSION_CAPABILITIES.maxChunks
+  )
+    return null;
   if (!isBoundedString(item["bytesBase64"], 1_572_864)) return null;
   if ("transcript" in item || "text" in item) return null;
   try {
@@ -106,7 +121,7 @@ export function parseDeviceSessionAudio(
     for (let index = 0; index < binary.length; index += 1) {
       bytes[index] = binary.charCodeAt(index);
     }
-    return { bytes };
+    return { bytes, chunkIndex };
   } catch {
     return null;
   }
@@ -162,7 +177,8 @@ export type AppendResult =
   | { kind: "ok"; session: DeviceSession }
   | { kind: "not_found" }
   | { kind: "conflict" }
-  | { kind: "too_large" };
+  | { kind: "too_large" }
+  | { kind: "unavailable" };
 
 export async function appendDeviceSessionAudio(
   db: D1Database,
@@ -170,64 +186,82 @@ export async function appendDeviceSessionAudio(
   accountId: string,
   sessionId: string,
   bytes: Uint8Array,
+  chunkIndex: number,
   now: number
 ): Promise<AppendResult> {
   if (!isSessionId(sessionId)) return { kind: "not_found" };
-  const claimed = await db
-    .prepare(
-      `UPDATE device_sessions
-       SET byte_count = byte_count + ?,
-           chunk_count = chunk_count + 1,
-           updated_at = ?
-       WHERE id = ? AND account_id = ? AND state = 'open'
-         AND byte_count + ? <= ?
-       RETURNING id, account_id, device_id, device_name, codec, state, r2_prefix,
-                 byte_count, chunk_count, started_at, ended_at, created_at, updated_at`
-    )
-    .bind(
-      bytes.byteLength,
-      now,
-      sessionId,
-      accountId,
-      bytes.byteLength,
-      DEVICE_SESSION_CAPABILITIES.maxSessionBytes
-    )
-    .first<StoredSession>();
-  if (claimed === null) {
-    const row = await loadSession(db, accountId, sessionId);
-    if (row === null) return { kind: "not_found" };
-    if (row.state !== "open") return { kind: "conflict" };
-    if (
-      row.byte_count + bytes.byteLength >
-      DEVICE_SESSION_CAPABILITIES.maxSessionBytes
-    ) {
-      return { kind: "too_large" };
-    }
-    return { kind: "conflict" };
-  }
-  const chunkIndex = claimed.chunk_count - 1;
-  const key = `${claimed.r2_prefix}/${String(chunkIndex).padStart(6, "0")}`;
-  try {
-    await r2.put(key, bytes, {
-      httpMetadata: { contentType: "application/octet-stream" },
-    });
-  } catch (error) {
-    await db
-      .prepare(
-        `UPDATE device_sessions SET state = 'failed', ended_at = ?, updated_at = ?
-         WHERE id = ? AND account_id = ?`
-      )
-      .bind(now, now, sessionId, accountId)
-      .run();
-    throw error;
-  }
+  if (
+    !Number.isSafeInteger(chunkIndex) ||
+    chunkIndex < 0 ||
+    chunkIndex >= DEVICE_SESSION_CAPABILITIES.maxChunks ||
+    bytes.byteLength === 0 ||
+    bytes.byteLength > DEVICE_SESSION_CAPABILITIES.maxChunkBytes
+  )
+    return { kind: "too_large" };
+  const session = await loadSession(db, accountId, sessionId);
+  if (session === null) return { kind: "not_found" };
+  if (session.state === "failed") return { kind: "conflict" };
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  const hash = Array.from(digest, (value) =>
+    value.toString(16).padStart(2, "0")
+  ).join("");
   await db
     .prepare(
-      `UPDATE device_sessions SET uploaded_chunk_count = uploaded_chunk_count + 1
-       WHERE id = ? AND account_id = ?`
+      "INSERT INTO device_audio_chunks (session_id, chunk_index, sha256, size_bytes) SELECT id, ?, ?, ? FROM device_sessions WHERE id = ? AND account_id = ? AND state = 'open' AND chunk_count = ? AND byte_count + ? <= ? ON CONFLICT(session_id, chunk_index) DO NOTHING"
     )
-    .bind(sessionId, accountId)
+    .bind(
+      chunkIndex,
+      hash,
+      bytes.byteLength,
+      sessionId,
+      accountId,
+      chunkIndex,
+      bytes.byteLength,
+      DEVICE_SESSION_CAPABILITIES.maxSessionBytes
+    )
     .run();
+  const chunk = await db
+    .prepare(
+      "SELECT c.sha256, c.size_bytes, c.uploaded FROM device_audio_chunks c JOIN device_sessions s ON s.id = c.session_id WHERE c.session_id = ? AND c.chunk_index = ? AND s.account_id = ?"
+    )
+    .bind(sessionId, chunkIndex, accountId)
+    .first<{ sha256: string; size_bytes: number; uploaded: number }>();
+  if (chunk === null) {
+    const row = await loadSession(db, accountId, sessionId);
+    if (row === null) return { kind: "not_found" };
+    if (
+      row.state === "open" &&
+      row.chunk_count === chunkIndex &&
+      row.byte_count + bytes.byteLength >
+        DEVICE_SESSION_CAPABILITIES.maxSessionBytes
+    )
+      return { kind: "too_large" };
+    return { kind: "conflict" };
+  }
+  if (chunk.sha256 !== hash || chunk.size_bytes !== bytes.byteLength)
+    return { kind: "conflict" };
+  if (chunk.uploaded === 0) {
+    const key = session.r2_prefix + "/" + String(chunkIndex).padStart(6, "0");
+    try {
+      await r2.put(key, bytes, {
+        httpMetadata: { contentType: "application/octet-stream" },
+      });
+    } catch {
+      return { kind: "unavailable" };
+    }
+    await db
+      .prepare(
+        "UPDATE device_audio_chunks SET uploaded = 1 WHERE session_id = ? AND chunk_index = ? AND sha256 = ? AND uploaded = 0"
+      )
+      .bind(sessionId, chunkIndex, hash)
+      .run();
+    await db
+      .prepare(
+        "UPDATE device_sessions SET updated_at = ? WHERE id = ? AND account_id = ? AND state = 'open'"
+      )
+      .bind(now, sessionId, accountId)
+      .run();
+  }
   const uploaded = await loadSession(db, accountId, sessionId);
   if (uploaded === null) return { kind: "not_found" };
   if (uploaded.state === "failed") return { kind: "conflict" };

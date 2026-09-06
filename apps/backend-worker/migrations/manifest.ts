@@ -49,5 +49,12 @@ export const D1_MIGRATIONS: readonly D1MigrationManifestEntry[] = Object.freeze(
       sha256:
         "1e64b3a13ff926fa1e50d959625a830a09320d8c40a66ecae9a250675b1060a0",
     }),
+    Object.freeze({
+      version: 7,
+      name: "0007_device_audio_chunks.sql",
+      fileName: "0007_device_audio_chunks.sql",
+      sha256:
+        "57bae0f17f4ee8bdfcbd92dbf4daa713c83ea6850280b06d5cb25cfa8426060c",
+    }),
   ]
 );

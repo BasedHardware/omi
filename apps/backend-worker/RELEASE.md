@@ -2,13 +2,15 @@
 
 This runbook applies the D1 Tasks, Chat, Attachments, and Recording migrations and verifies them through an operator-managed safe evidence endpoint before the Worker is deployed or declared ready.
 
-Shared staging bearer credentials cannot select `x-omi-client-id` values beginning with `firebase:`; that namespace requires a verified Firebase session. If storing a device audio chunk fails, the session becomes `failed` and subsequent append or completion requests return 409. Start a new recording session after resolving the storage failure; failed sessions must not be presented as complete recordings.
+Shared staging bearer credentials cannot select `x-omi-client-id` values beginning with `firebase:`; that namespace requires a verified Firebase session. Audio appends require a stable zero-based `chunkIndex`. A storage failure returns 503 and leaves that packet pending; retry the identical bytes and index. Different bytes at an existing index return 409. Completion returns 409 until every reserved packet is acknowledged.
 
 Migration `0005_device_session_uploads.sql` adds a persisted successful-upload counter. Completion returns 409 until every claimed chunk has been saved. Existing open sessions with audio are conservatively marked `failed` because older counters do not prove that R2 writes succeeded; their stored audio and metadata are retained. Previously complete or failed sessions retain their historical state, and idempotent completion of an already complete session does not retroactively verify its audio. Empty legacy sessions remain usable. Review the open-session status change before applying the migration remotely.
 
 Chat generation sends at most 40 earlier messages and 32 KiB of UTF-8 history to either configured provider, restricted to the current account, chat session, app, and message position. Cancelled assistant responses are excluded. The current message and its bounded text attachments follow that history.
 
 Account Durable Objects serialize D1 admissions across external database awaits so simultaneous retries return the same generation and parallel requests cannot exceed the chat limit.
+
+Migration `0007_device_audio_chunks.sql` adds the per-packet hash and acknowledgment ledger. Database triggers count each claim and successful upload once, including concurrent retries. Existing packets are not backfilled or overwritten. Ship the indexed client and Worker together; old requests without an index are rejected. The app retries transient upload and completion failures at 500, 1000 and 2000 ms, retains the head packet until acknowledgment, and cancels retries on sign-out/unmount. Its aggregate pending-memory ceiling is 8 MiB. Session opening is not retried because creation has no idempotency key. This is brief interruption recovery, not persistent offline storage.
 
 ## Recording processing and canonical services
 
@@ -48,7 +50,7 @@ The checked-in `account_id` and `R2_ACCOUNT_ID` must identify that same account.
 
    ```json
    {
-     "schema_version": "0006_device_transcriptions.sql",
+     "schema_version": "0007_device_audio_chunks.sql",
      "migrations": [
        {
          "name": "0001_tasks.sql",
@@ -73,6 +75,10 @@ The checked-in `account_id` and `R2_ACCOUNT_ID` must identify that same account.
        {
          "name": "0006_device_transcriptions.sql",
          "sha256": "1e64b3a13ff926fa1e50d959625a830a09320d8c40a66ecae9a250675b1060a0"
+       },
+       {
+         "name": "0007_device_audio_chunks.sql",
+         "sha256": "57bae0f17f4ee8bdfcbd92dbf4daa713c83ea6850280b06d5cb25cfa8426060c"
        }
      ],
      "evidence_id": "ops-20260818-1"
