@@ -20,6 +20,26 @@ import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 
+/// Clear device recordings, then re-read the device's storage snapshot.
+///
+/// The storage card renders the ring status this page read when it opened, so a
+/// clear performed while the page stayed open left the card showing the
+/// pre-clear numbers — the device still reported as full after its recordings
+/// were gone. The re-read has to follow the clear; taken first it would return
+/// exactly the stale numbers being corrected. It also runs when the clear throws,
+/// because a clear that failed part-way still deleted files and leaves the card
+/// just as wrong; the failure itself still propagates to the caller.
+Future<void> clearRecordingsThenRefreshStorage({
+  required Future<void> Function() clearRecordings,
+  required Future<void> Function() refreshDeviceStorage,
+}) async {
+  try {
+    await clearRecordings();
+  } finally {
+    await refreshDeviceStorage();
+  }
+}
+
 class AutoSyncPage extends StatefulWidget {
   const AutoSyncPage({super.key});
 
@@ -758,6 +778,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // ─────────────────────────────────────────
 
   void _showManageStorageSheet(BuildContext context, SyncProvider provider) {
+    // Captured before the sheet's async callbacks run, so the clear handlers do
+    // not reach through a BuildContext across an await.
+    final deviceProvider = context.read<DeviceProvider>();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -773,7 +796,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             confirmColor: Colors.red,
           );
           if (confirmed == true && context.mounted) {
-            await provider.deleteAllSyncedWals();
+            await clearRecordingsThenRefreshStorage(
+              clearRecordings: provider.deleteAllSyncedWals,
+              refreshDeviceStorage: deviceProvider.refreshRingStorageStatus,
+            );
             if (context.mounted) {
               ScaffoldMessenger.of(
                 context,
@@ -791,7 +817,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             confirmColor: Colors.red,
           );
           if (confirmed == true && context.mounted) {
-            await provider.deleteAllPendingWals();
+            await clearRecordingsThenRefreshStorage(
+              clearRecordings: provider.deleteAllPendingWals,
+              refreshDeviceStorage: deviceProvider.refreshRingStorageStatus,
+            );
             if (context.mounted) {
               ScaffoldMessenger.of(
                 context,
@@ -809,7 +838,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             confirmColor: Colors.red,
           );
           if (confirmed == true && context.mounted) {
-            await provider.deleteAllClearableWals();
+            await clearRecordingsThenRefreshStorage(
+              clearRecordings: provider.deleteAllClearableWals,
+              refreshDeviceStorage: deviceProvider.refreshRingStorageStatus,
+            );
             if (context.mounted) {
               ScaffoldMessenger.of(
                 context,
