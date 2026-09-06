@@ -36,6 +36,7 @@ export function DesktopSessionProbe() {
 }
 
 type Props = TaskMutationProps & {
+  deviceContent?: React.ReactNode;
   activeGenerationId: string | null;
   authError: string | null;
   outcomes: DesktopReadOutcomes | null;
@@ -63,6 +64,7 @@ type Props = TaskMutationProps & {
 export function DesktopApp({
   activeGenerationId,
   authError,
+  deviceContent,
   chatBusy,
   chatError,
   draft,
@@ -166,6 +168,7 @@ export function DesktopApp({
         ) : (
           <View style={styles.page}>
             <DesktopSettings
+              deviceContent={deviceContent}
               onSignIn={onSignIn}
               onSignOut={onSignOut}
               onWorkspaceReload={onWorkspaceReload}

@@ -1,0 +1,26 @@
+package com.rnruntime;
+
+final class OmiDeviceControls {
+  static Long features(byte[] bytes) {
+    if (bytes.length != 4) return null;
+    long value = 0;
+    for (int index = 0; index < 4; index++) value |= (long) (bytes[index] & 255) << (index * 8);
+    return value;
+  }
+  static int maximum(String setting) {
+    return "ledBrightness".equals(setting) ? 100 : "microphoneGain".equals(setting) ? 8 : -1;
+  }
+  static boolean supports(Long features, String setting) {
+    if (features == null) return false;
+    int bit = "ledBrightness".equals(setting) ? 7 : "microphoneGain".equals(setting) ? 8 : -1;
+    return bit >= 0 && (features & (1L << bit)) != 0;
+  }
+  static Integer value(String setting, byte[] bytes) {
+    if (bytes.length != 1) return null;
+    int value = bytes[0] & 255;
+    return value <= maximum(setting) ? value : null;
+  }
+  static boolean validWrite(Long features, String setting, double value) {
+    return supports(features, setting) && Double.isFinite(value) && value == Math.floor(value) && value >= 0 && value <= maximum(setting);
+  }
+}

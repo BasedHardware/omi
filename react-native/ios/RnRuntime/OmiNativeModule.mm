@@ -1,6 +1,8 @@
 #import "OmiNativeModule.h"
 #import "../../apple/OmiDeviceInformation.h"
 #import "../../apple/OmiBleSession.h"
+#import "../../apple/OmiDeviceControls.h"
+#import <math.h>
 
 #import <CoreBluetooth/CoreBluetooth.h>
 #import <TargetConditionals.h>
@@ -15,6 +17,12 @@ static NSString *const OmiCodecUUID = @"19b10002-e8f2-537e-4f6c-d104768a1214";
 static NSString *const OmiBatteryServiceUUID = @"180F";
 static NSString *const OmiBatteryLevelUUID = @"2A19";
 static NSString *const OmiInformationServiceUUID = @"180A";
+static NSString *const OmiFeaturesServiceUUID = @"19b10020-e8f2-537e-4f6c-d104768a1214";
+static NSString *const OmiFeaturesUUID = @"19b10021-e8f2-537e-4f6c-d104768a1214";
+static NSString *const OmiSettingsServiceUUID = @"19b10010-e8f2-537e-4f6c-d104768a1214";
+static NSString *const OmiLedUUID = @"19b10011-e8f2-537e-4f6c-d104768a1214";
+static NSString *const OmiGainUUID = @"19b10012-e8f2-537e-4f6c-d104768a1214";
+static NSString *const OmiChargingUUID = @"19b10013-e8f2-537e-4f6c-d104768a1214";
 
 @interface OmiNativeModule () <CBCentralManagerDelegate, CBPeripheralDelegate>
 @property(nonatomic, strong) CBCentralManager *central;
@@ -33,6 +41,14 @@ static NSString *const OmiInformationServiceUUID = @"180A";
 @property(nonatomic, copy) RCTPromiseRejectBlock connectReject;
 @property(nonatomic) NSInteger scanGeneration;
 @property(nonatomic) NSUInteger connectionGeneration;
+@property(nonatomic, strong) NSMutableDictionary<NSString *, CBCharacteristic *> *settingCharacteristics;
+@property(nonatomic, strong) CBCharacteristic *pendingSettingCharacteristic;
+@property(nonatomic, copy) NSString *pendingSetting;
+@property(nonatomic, strong) NSNumber *pendingSettingValue;
+@property(nonatomic, copy) RCTPromiseResolveBlock settingResolve;
+@property(nonatomic, copy) RCTPromiseRejectBlock settingReject;
+@property(nonatomic) BOOL settingWritten;
+@property(nonatomic) NSUInteger settingGeneration;
 @property(nonatomic, strong) NSMutableSet<CBPeripheral *> *retiringPeripherals;
 @end
 
@@ -59,6 +75,7 @@ RCT_EXPORT_MODULE(OmiNative)
 - (instancetype)init {
   self = [super init];
   if (self) {
+    _settingCharacteristics = [NSMutableDictionary dictionary];
     _retiringPeripherals = [NSMutableSet set];
     _peripherals = [NSMutableDictionary dictionary];
     _devices = [NSMutableDictionary dictionary];
@@ -192,6 +209,8 @@ RCT_REMAP_METHOD(connectDevice,
   }
   [self.central stopScan];
   self.scanning = NO;
+  [self finishSetting:nil error:@"Omi connection was replaced"];
+  [self.settingCharacteristics removeAllObjects];
   self.audioNotifying = NO;
   self.codec = nil;
   self.connectionState = @"connecting";
@@ -255,11 +274,13 @@ RCT_REMAP_METHOD(disconnectDevice,
     [central cancelPeripheralConnection:peripheral];
     return;
   }
-  [self.devices[peripheral.identifier.UUIDString] removeObjectForKey:@"information"];
+  for (NSString *field in @[ @"information", @"features", @"ledBrightness", @"microphoneGain", @"charging" ]) {
+    [self.devices[peripheral.identifier.UUIDString] removeObjectForKey:field];
+  }
   self.connectionState = @"connected";
   self.lastEvent = @"Connected to Omi";
   peripheral.delegate = self;
-  [peripheral discoverServices:@[ [CBUUID UUIDWithString:OmiServiceUUID], [CBUUID UUIDWithString:OmiBatteryServiceUUID], [CBUUID UUIDWithString:OmiInformationServiceUUID] ]];
+  [peripheral discoverServices:@[ [CBUUID UUIDWithString:OmiServiceUUID], [CBUUID UUIDWithString:OmiBatteryServiceUUID], [CBUUID UUIDWithString:OmiInformationServiceUUID], [CBUUID UUIDWithString:OmiFeaturesServiceUUID], [CBUUID UUIDWithString:OmiSettingsServiceUUID] ]];
   [self emitSnapshot];
 }
 
@@ -304,6 +325,10 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
     if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiServiceUUID]]) {
       [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiAudioUUID], [CBUUID UUIDWithString:OmiCodecUUID] ]
                                forService:service];
+    } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiFeaturesServiceUUID]]) {
+      [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiFeaturesUUID] ] forService:service];
+    } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiSettingsServiceUUID]]) {
+      [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiLedUUID], [CBUUID UUIDWithString:OmiGainUUID], [CBUUID UUIDWithString:OmiChargingUUID] ] forService:service];
     } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiInformationServiceUUID]]) {
       NSMutableArray<CBUUID *> *uuids = [NSMutableArray array];
       for (NSString *uuid in OmiInformationFields()) [uuids addObject:[CBUUID UUIDWithString:uuid]];
@@ -320,6 +345,8 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
     return;
   }
   for (CBCharacteristic *characteristic in service.characteristics) {
+    if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiSettingsServiceUUID]]) self.settingCharacteristics[characteristic.UUID.UUIDString.lowercaseString] = characteristic;
+    if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiFeaturesUUID]] && (characteristic.properties & CBCharacteristicPropertyRead) != 0) [peripheral readValueForCharacteristic:characteristic];
     if (OmiInformationFields()[characteristic.UUID.UUIDString] != nil &&
         (characteristic.properties & CBCharacteristicPropertyRead) != 0) {
       [peripheral readValueForCharacteristic:characteristic];
@@ -334,6 +361,7 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
       [peripheral setNotifyValue:YES forCharacteristic:characteristic];
     }
   }
+  if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiSettingsServiceUUID]]) [self readSupportedSettings];
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral
@@ -351,9 +379,35 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error {
   if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) return;
   if (error != nil || characteristic.value == nil) {
+    if (self.settingWritten && self.pendingSettingCharacteristic == characteristic) [self finishSetting:nil error:@"Device setting read-back failed"];
     return;
   }
   NSString *identifier = peripheral.identifier.UUIDString;
+  if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiFeaturesUUID]]) {
+    NSNumber *features = OmiDeviceFeatures(characteristic.value);
+    if (features != nil) { self.devices[identifier][@"features"] = features; [self readSupportedSettings]; [self emitSnapshot]; }
+    return;
+  }
+  NSString *setting = [characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiLedUUID]] ? @"ledBrightness" : [characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiGainUUID]] ? @"microphoneGain" : nil;
+  if (setting != nil) {
+    if (!OmiDeviceSettingSupported(self.devices[identifier][@"features"], setting)) return;
+    NSNumber *value = OmiDeviceSettingValue(setting, characteristic.value);
+    if (value != nil) self.devices[identifier][setting] = value;
+    else [self.devices[identifier] removeObjectForKey:setting];
+    if (self.settingWritten && self.pendingSettingCharacteristic == characteristic) {
+      BOOL confirmed = value != nil && [value isEqualToNumber:self.pendingSettingValue];
+      [self finishSetting:confirmed ? value : nil error:confirmed ? nil : @"Device did not confirm the requested setting"];
+    }
+    [self emitSnapshot];
+    return;
+  }
+  if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiChargingUUID]]) {
+    if (self.devices[identifier][@"features"] != nil && characteristic.value.length == 1) {
+      uint8_t value = ((const uint8_t *)characteristic.value.bytes)[0];
+      if (value <= 1) { self.devices[identifier][@"charging"] = @(value == 1); [self emitSnapshot]; }
+    }
+    return;
+  }
   NSString *field = OmiInformationFields()[characteristic.UUID.UUIDString];
   if (field != nil) {
     NSString *value = OmiDecodeDeviceInformation(characteristic.value);
@@ -463,6 +517,9 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     @"connected": @([self.connectionState isEqualToString:@"connected"] &&
                     [self.connectedPeripheral.identifier.UUIDString isEqualToString:identifier]),
   } mutableCopy];
+  for (NSString *field in @[ @"features", @"ledBrightness", @"microphoneGain", @"charging" ]) {
+    if (self.devices[identifier][field] != nil) device[field] = self.devices[identifier][field];
+  }
   NSDictionary *information = self.devices[identifier][@"information"];
   if (information != nil) device[@"information"] = information;
   NSNumber *battery = self.batteries[identifier];
@@ -470,6 +527,75 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     device[@"battery"] = battery;
   }
   return device;
+}
+
+- (void)readSupportedSettings {
+  CBPeripheral *peripheral = self.connectedPeripheral;
+  if (peripheral == nil) return;
+  NSNumber *features = self.devices[peripheral.identifier.UUIDString][@"features"];
+  if (features == nil) return;
+  NSDictionary *settings = @{ @"ledBrightness": OmiLedUUID, @"microphoneGain": OmiGainUUID };
+  for (NSString *setting in settings) {
+    CBCharacteristic *characteristic = self.settingCharacteristics[settings[setting]];
+    if (OmiDeviceSettingSupported(features, setting) && (characteristic.properties & CBCharacteristicPropertyRead) != 0) [peripheral readValueForCharacteristic:characteristic];
+  }
+  CBCharacteristic *charging = self.settingCharacteristics[OmiChargingUUID];
+  if ((charging.properties & CBCharacteristicPropertyRead) != 0) [peripheral readValueForCharacteristic:charging];
+  if ((charging.properties & CBCharacteristicPropertyNotify) != 0) [peripheral setNotifyValue:YES forCharacteristic:charging];
+}
+
+RCT_REMAP_METHOD(setDeviceSetting,
+                 setDeviceSettingWithId:(NSString *)identifier
+                 setting:(NSString *)setting
+                 value:(double)value
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  CBPeripheral *peripheral = self.connectedPeripheral;
+  NSDictionary *device = self.devices[identifier];
+  NSString *uuid = [setting isEqualToString:@"ledBrightness"] ? OmiLedUUID : [setting isEqualToString:@"microphoneGain"] ? OmiGainUUID : nil;
+  CBCharacteristic *characteristic = uuid == nil ? nil : self.settingCharacteristics[uuid];
+  if (peripheral == nil || ![peripheral.identifier.UUIDString isEqualToString:identifier] ||
+      ![self.connectionState isEqualToString:@"connected"] || self.settingResolve != nil ||
+      !OmiDeviceSettingSupported(device[@"features"], setting) || device[setting] == nil ||
+      !isfinite(value) || value != floor(value) || value < 0 || value > OmiDeviceSettingMaximum(setting) ||
+      characteristic == nil || (characteristic.properties & CBCharacteristicPropertyRead) == 0 ||
+      (characteristic.properties & CBCharacteristicPropertyWrite) == 0) {
+    reject(@"OMI_DEVICE_SETTING_FAILED", @"Device setting is unavailable", nil);
+    return;
+  }
+  self.pendingSetting = setting;
+  self.pendingSettingValue = @(value);
+  self.pendingSettingCharacteristic = characteristic;
+  self.settingWritten = NO;
+  self.settingResolve = resolve;
+  self.settingReject = reject;
+  NSUInteger generation = ++self.settingGeneration;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    if (self.settingResolve != nil && self.settingGeneration == generation) [self retireConnection:@"Device setting confirmation timed out"];
+  });
+  uint8_t byte = (uint8_t)value;
+  [peripheral writeValue:[NSData dataWithBytes:&byte length:1] forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
+}
+
+- (void)peripheral:(CBPeripheral *)peripheral didWriteValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error {
+  if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral) || self.pendingSettingCharacteristic != characteristic || self.settingResolve == nil) return;
+  if (error != nil) { [self finishSetting:nil error:@"Device setting write failed"]; return; }
+  self.settingWritten = YES;
+  [peripheral readValueForCharacteristic:characteristic];
+}
+
+- (void)finishSetting:(NSNumber *)value error:(NSString *)error {
+  RCTPromiseResolveBlock resolve = self.settingResolve;
+  RCTPromiseRejectBlock reject = self.settingReject;
+  self.settingGeneration += 1;
+  self.settingResolve = nil;
+  self.settingReject = nil;
+  self.pendingSetting = nil;
+  self.pendingSettingValue = nil;
+  self.pendingSettingCharacteristic = nil;
+  self.settingWritten = NO;
+  if (value != nil && resolve != nil) resolve(value);
+  else if (reject != nil) reject(@"OMI_DEVICE_SETTING_FAILED", error ?: @"Device setting failed", nil);
 }
 
 - (void)finishConnectionIfReady {
@@ -485,6 +611,8 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
 
 - (void)retireConnection:(NSString *)message {
   self.connectionGeneration += 1;
+  [self finishSetting:nil error:message];
+  [self.settingCharacteristics removeAllObjects];
   CBPeripheral *previous = self.connectedPeripheral;
   self.connectedPeripheral = nil;
   self.audioNotifying = NO;

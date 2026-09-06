@@ -13,9 +13,12 @@ javac --release 17 -d "$build_dir" \
   "$repo_root/react-native/android/app/src/main/java/com/rnruntime/OmiDeviceInformation.java" \
   "$repo_root/react-native/android/transport-tests/DeviceInformationTest.java" \
   "$repo_root/react-native/android/app/src/main/java/com/rnruntime/OmiBleLease.java" \
-  "$repo_root/react-native/android/transport-tests/BleLeaseTest.java"
+  "$repo_root/react-native/android/transport-tests/BleLeaseTest.java" \
+  "$repo_root/react-native/android/app/src/main/java/com/rnruntime/OmiDeviceControls.java" \
+  "$repo_root/react-native/android/transport-tests/DeviceControlsTest.java"
 java -ea --add-modules jdk.httpserver -cp "$build_dir" com.rnruntime.BackendTransportTest
 java -ea -cp "$build_dir" com.rnruntime.AuthPolicyTest
 java -ea --add-modules jdk.httpserver -cp "$build_dir" com.rnruntime.GenerationStreamTest
 java -ea -cp "$build_dir" com.rnruntime.DeviceInformationTest
 java -ea -cp "$build_dir" com.rnruntime.BleLeaseTest
+java -ea -cp "$build_dir" com.rnruntime.DeviceControlsTest

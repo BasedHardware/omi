@@ -1,5 +1,6 @@
 #import "OmiBackendModule.h"
 #import "OmiAuthModule.h"
+#import "../../apple/OmiRequestTimeout.h"
 
 #import <LocalAuthentication/LocalAuthentication.h>
 #import <Security/Security.h>
@@ -763,6 +764,7 @@ RCT_REMAP_METHOD(request,
   }
   NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
   request.HTTPMethod = method;
+  request.timeoutInterval = OmiRequestTimeout(method, url);
   NSSet<NSString *> *forbidden = [NSSet setWithArray:@[
     @"authorization", @"cookie", @"proxy-authorization", @"x-omi-contract-version", @"x-omi-client-id"
   ]];
