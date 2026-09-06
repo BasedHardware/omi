@@ -305,6 +305,7 @@ const browserAuth: OmiAuth = {
   async signIn() {
     return {signedIn: false};
   },
+  async cancelSignIn() {},
   async signOut() {
     return {signedOut: true};
   },

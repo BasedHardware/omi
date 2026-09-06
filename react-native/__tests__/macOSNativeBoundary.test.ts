@@ -549,7 +549,7 @@ test('accepts a state-bound OAuth denial without waiting for timeout', () => {
   );
 });
 
-test('fences overlapping native macOS sign-in attempts', () => {
+test('statically checks native sign-in cancellation fencing', () => {
   const auth = readNativeSource('OmiAuthModule.mm');
 
   expect(auth).toContain('@property(nonatomic) NSUInteger signInAttempt;');
@@ -557,7 +557,7 @@ test('fences overlapping native macOS sign-in attempts', () => {
     '@property(nonatomic, copy) RCTPromiseRejectBlock pendingSignInReject;',
   );
   expect(auth).toMatch(
-    /self\.signInAttempt \+= 1;[^]*\[self closeLoopback\];[^]*previousReject\(@"OMI_AUTH_UNAUTHORIZED"/,
+    /self\.signInAttempt \+= 1;[^]*\[self closeLoopback\];[^]*pendingReject\(@"OMI_AUTH_CANCELLED"/,
   );
   expect(auth).toMatch(/if \(attempt != self\.signInAttempt\) return;/);
 });

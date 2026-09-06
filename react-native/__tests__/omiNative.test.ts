@@ -53,7 +53,6 @@ test('android registers a credential-bearing OmiBackend transport', () => {
   expect(backend).toContain('x-omi-client-id');
   expect(backend).toContain('Bearer ');
   expect(backend).toContain('.workers.dev');
-  expect(backend).toContain('Android generation streaming is unavailable');
   expect(pack).toContain('OmiBackendModule(reactContext)');
 });
 

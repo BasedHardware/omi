@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
-import {TextInput} from 'react-native';
+import {Platform, TextInput} from 'react-native';
 
 const mockDevice = {id: 'omi-1', name: 'Test Omi', rssi: -50, connected: false};
 const mockNative = {
@@ -120,12 +120,27 @@ test('mobile device panel exposes the existing scan and connection controls', as
   expect(control(renderer, 'Scan for Omi devices')).toBeUndefined();
 });
 
-test('signed-out iOS waits for the real sign-in before showing the app', async () => {
-  mockAuth.hasCloudSession.mockResolvedValueOnce(false);
-  const renderer = await renderApp();
-  expect(control(renderer, 'First-run onboarding')).toBeDefined();
-  expect(control(renderer, 'Open Omi device')).toBeUndefined();
-  await act(async () => control(renderer, 'Sign in').props.onPress());
-  expect(mockAuth.signIn).toHaveBeenCalled();
-  expect(control(renderer, 'Open Omi device')).toBeDefined();
-});
+test.each(['ios', 'android'] as const)(
+  'signed-out %s waits for the real sign-in before showing the app',
+  async platform => {
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: platform,
+    });
+    try {
+      mockAuth.hasCloudSession.mockResolvedValueOnce(false);
+      const renderer = await renderApp();
+      expect(control(renderer, 'First-run onboarding')).toBeDefined();
+      expect(control(renderer, 'Open Omi device')).toBeUndefined();
+      await act(async () => control(renderer, 'Sign in').props.onPress());
+      expect(mockAuth.signIn).toHaveBeenCalled();
+      expect(control(renderer, 'Open Omi device')).toBeDefined();
+    } finally {
+      Object.defineProperty(Platform, 'OS', {
+        configurable: true,
+        value: originalPlatform,
+      });
+    }
+  },
+);
