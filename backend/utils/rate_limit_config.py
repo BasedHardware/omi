@@ -140,6 +140,12 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # reason as its parent policy.
     "action_items:list_hot_client": (ACTION_ITEMS_LIST_HOT_CLIENT_MAX, 60),
     "action_items:write": (120, 3600),
+    # Static map previews — Redis-cached image renders, so a hit costs one
+    # cache read, but a client loop with ever-changing pins would translate
+    # straight into billable provider calls. A home-feed hydration plus recap
+    # pages is tens of requests per session; this cap only exists to stop a
+    # hot loop.
+    "static_map:get": (240, 3600),
     # Memories — single LLM call each
     "memories:create": (60, 3600),
     # Memory batch writes — each request can create up to 100 memories, so the

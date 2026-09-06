@@ -30,6 +30,7 @@ install_firebase_auth_mutation_guard()
 from routers import (
     chat,
     firmware,
+    static_map,
     transcribe,
     omni_relay,
     auto_model,
@@ -181,6 +182,7 @@ app.add_middleware(
 )
 
 app.include_router(transcribe.router)
+app.include_router(static_map.router)
 app.include_router(omni_relay.router)
 app.include_router(auto_model.router)
 app.include_router(conversations.router)
