@@ -38,53 +38,31 @@ struct MemoryAtlasNeighbourhoodCaption: View {
   let size: CGSize
   let enter: () -> Void
 
-  @State private var isHovered = false
-
   var body: some View {
     Button(action: enter) {
-      HStack(spacing: 5) {
-        // Set in tracked upper case, the way an atlas sets a country against
-        // the towns inside it. Without that, a region's name is the same
-        // treatment as an entity's own, in a pill bigger than any node — so it
-        // reads as a very important entity rather than as the ground they
-        // stand on, and "Omi · pull request · GitHub" competes with the Omi
-        // and GitHub labels a few points away instead of describing them.
-        Text(caption.uppercased())
-          .scaledFont(size: 9, weight: .semibold)
-          .tracking(0.8)
-          .foregroundColor(isHovered ? Ink.primary : Ink.secondary)
-          .lineLimit(1)
-          .truncationMode(.tail)
-
-        Image(systemName: "scope")
-          .scaledFont(size: 8, weight: .semibold)
-          .foregroundColor(Ink.secondary)
-          .opacity(isHovered ? 1 : 0)
-          .frame(width: isHovered ? 9 : 0)
-      }
-      .padding(.horizontal, 9)
-      // Sized to the box the placement pass reserved. Left to size itself, a
-      // caption grows past the width its collision test assumed and starts
-      // covering the neighbouring regions it was measured against.
-      .frame(width: size.width, height: size.height)
-      // A scrim, because the caption sits over the map rather than beside it
-      // and the dots underneath would read through the letters.
-      .background(
-        Capsule()
-          .fill(Ink.surface.opacity(isHovered ? 0.92 : 0.66))
-          .overlay(
-            Capsule().stroke(Ink.separator.opacity(isHovered ? 0.4 : 0.14), lineWidth: 1))
-      )
-      .contentShape(Capsule())
+      // Set in tracked upper case, the way an atlas sets a country against
+      // the towns inside it. Without that, a region's name is the same
+      // treatment as an entity's own — so it reads as a very important
+      // entity rather than as the ground they stand on.
+      Text(caption.uppercased())
+        .scaledFont(size: 8, weight: .semibold)
+        .tracking(0.6)
+        .foregroundColor(Ink.secondary)
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .padding(.horizontal, 7)
+        // Sized to the box the placement pass reserved. Left to size itself, a
+        // caption grows past the width its collision test assumed and starts
+        // covering the neighbouring regions it was measured against.
+        .frame(width: size.width, height: size.height)
+        // A thin capsule rule and no fill: the name sits straight on the
+        // territory, bounded like a map label rather than raised like a chip.
+        // No hover state either; the caption is part of the map, not a control
+        // that announces itself.
+        .overlay(Capsule().strokeBorder(Ink.primary.opacity(0.22), lineWidth: 1))
+        .contentShape(Capsule())
     }
     .buttonStyle(.plain)
-    // Quiet enough at rest to be a map label rather than a control, which is
-    // what it should look like — so hover is where "this does something" gets
-    // said. The scope is the glyph the inspector's Focus control already uses
-    // for the same act.
-    .onHover { hovering in
-      withAnimation(OmiMotion.gated(.easeOut(duration: 0.12))) { isHovered = hovering }
-    }
   }
 }
 
@@ -316,7 +294,10 @@ enum MemoryAtlasNeighbourhoodLabels {
     guard reachable.width > 8, reachable.height > 8 else { return [] }
     let half = width / 2
     var candidates: [(point: CGPoint, distance: CGFloat)] = []
-    let steps = 6
+    // A finer grid than the six-step one this started with: captions now
+    // have to dodge every entity mark as well as every name, and a coarse
+    // grid found nothing on a busy island.
+    let steps = 10
     for row in 0...steps {
       for column in 0...steps {
         let point = CGPoint(
@@ -374,6 +355,12 @@ enum MemoryAtlasNeighbourhoodLabels {
     /// Boxes already spoken for — the entity names the map is still drawing. A
     /// caption laid over one of those replaces a fact with a summary.
     avoiding taken: [CGRect] = [],
+    /// Boxes a caption would rather not cover — the entity marks. Unlike
+    /// `avoiding` these are a preference, not a rule: a spot over none of them
+    /// wins, and failing that the spot over the fewest, because a territory
+    /// that loses its name loses its outline too, and a crowded island is
+    /// exactly the one the reader most needs named.
+    preferringClear marks: [CGRect] = [],
     limit: Int = limit,
     /// Whether every island passed in must come back named.
     ///
@@ -390,8 +377,8 @@ enum MemoryAtlasNeighbourhoodLabels {
 
     for island in islands where placed.count < limit {
       guard let caption = captions[island.regionID], !caption.isEmpty else { continue }
-      // Upper case at 9pt with tracking, plus room for the hover glyph.
-      let width = min(268, max(64, CGFloat(caption.count) * 6.6 + 30))
+      // Upper case at 8pt with tracking, plus room for the hover glyph.
+      let width = min(260, max(44, CGFloat(caption.count) * 6.2 + 20))
 
       // Clamped to the part of the island that is actually on screen, so an
       // island the camera has zoomed inside of — its true centre far off the
@@ -402,27 +389,37 @@ enum MemoryAtlasNeighbourhoodLabels {
         y: min(max(island.center.y, reachable.minY), reachable.maxY))
       let lift = min(island.bounds.height / 2 + 14, reachable.height / 2 + 14)
 
-      // On the island first, and as near its middle as there is room for.
+      // On the island, and as near its middle as there is room for.
       //
       // A name sitting on the ground it names needs nothing else to connect the
       // two. Floated above the coast it becomes one more label among the entity
       // labels — the reader has to work out which shape below it, if any, it
       // belongs to, and on a crowded map the honest answer was often the wrong
-      // island. Outside is kept only as the fallback for territories too narrow
-      // to hold their own name.
+      // island. So at overview a caption is on its island or the island is not
+      // drawn; only inside a place, where the island must be named, may the
+      // name float just off its coast.
       let inland = interior(of: island, within: reachable, width: width)
       let candidates =
-        inland + [
-          CGPoint(x: outside.x, y: outside.y - lift),
-          CGPoint(x: outside.x, y: outside.y + lift),
-        ]
+        inland
+        + (insisting
+          ? [
+            CGPoint(x: outside.x, y: outside.y - lift),
+            CGPoint(x: outside.x, y: outside.y + lift),
+          ] : [])
 
       let boxes = candidates.map {
-        CGRect(x: $0.x - width / 2, y: $0.y - 9, width: width, height: 18)
+        CGRect(x: $0.x - width / 2, y: $0.y - 8, width: width, height: 16)
       }
-      let fitted = boxes.first { candidate in
+      let allowed = boxes.filter { candidate in
         visible.contains(candidate)
           && !occupied.contains(where: { $0.intersects(candidate.insetBy(dx: -8, dy: -7)) })
+      }
+      let fitted = allowed.min { lhs, rhs in
+        // Fewest marks covered wins; ties keep the candidate order, which is
+        // nearest the island's middle first.
+        let lhsCovered = marks.count(where: { $0.intersects(lhs.insetBy(dx: -2, dy: -2)) })
+        let rhsCovered = marks.count(where: { $0.intersects(rhs.insetBy(dx: -2, dy: -2)) })
+        return lhsCovered < rhsCovered
       }
       // Last resort when the caller insists: the middle of whatever part of the
       // island is on screen, shoved inside the canvas. It may sit on an entity
@@ -432,8 +429,8 @@ enum MemoryAtlasNeighbourhoodLabels {
         insisting
         ? CGRect(
           x: min(max(outside.x - width / 2, 4), max(size.width - width - 4, 4)),
-          y: min(max(outside.y - 9, 4), max(size.height - 22, 4)),
-          width: width, height: 18)
+          y: min(max(outside.y - 8, 4), max(size.height - 20, 4)),
+          width: width, height: 16)
         : nil
       guard let rect = fitted ?? rescued else { continue }
 

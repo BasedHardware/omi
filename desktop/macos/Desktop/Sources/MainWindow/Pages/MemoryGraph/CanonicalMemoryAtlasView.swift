@@ -809,6 +809,15 @@ private struct CanonicalMemoryAtlasSurface: View {
         }
     }
 
+    // Every entity mark on the canvas, as boxes a caption prefers to stay out
+    // of. A caption is a name for the ground; laid across a circle it reads as
+    // the circle's name, so it goes where the ground is bare when it can.
+    let markBoxes: [CGRect] = plan.visibleNodes.map { placement in
+      let mark = point(for: placement.normalizedPosition, in: size)
+      let reach = nodeRadius(for: placement) + 4
+      return CGRect(x: mark.x - reach, y: mark.y - reach, width: reach * 2, height: reach * 2)
+    }
+
     /// Entities standing on ground the map has named. Inside a place, its own
     /// entities are the subject and they keep their names.
     ///
@@ -859,10 +868,11 @@ private struct CanonicalMemoryAtlasSurface: View {
     // then keeps its label, which is how "X (TWITTER)" ended up printed across
     // "Ho Chi Minh City".
     let candidates = MemoryAtlasNeighbourhoodLabels.place(
-      found, captions: captions, in: size, avoiding: nameBoxes(hiding: []), limit: budget)
+      found, captions: captions, in: size, avoiding: nameBoxes(hiding: []), preferringClear: markBoxes,
+      limit: budget)
     let placed = MemoryAtlasNeighbourhoodLabels.place(
       found, captions: captions, in: size,
-      avoiding: nameBoxes(hiding: standingOn(candidates)), limit: budget,
+      avoiding: nameBoxes(hiding: standingOn(candidates)), preferringClear: markBoxes, limit: budget,
       insisting: enteredRegionID != nil)
     return (placed, standingOn(placed))
   }
