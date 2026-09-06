@@ -32,7 +32,7 @@ export function DeviceControls({
   device: Device;
   busy: boolean;
 }) {
-  const [pending, setPending] = useState<Setting | null>(null);
+  const [pending, setPending] = useState<Setting | 'findDevice' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const active = useRef(true);
   const inFlight = useRef(false);
@@ -76,6 +76,38 @@ export function DeviceControls({
     }
   };
 
+  const find = async () => {
+    if (
+      inFlight.current ||
+      busy ||
+      !device.connected ||
+      !device.findDeviceSupported ||
+      !omiNative?.findDevice
+    ) {
+      return;
+    }
+    inFlight.current = true;
+    setPending('findDevice');
+    setMessage(null);
+    try {
+      await omiNative.findDevice(device.id);
+      if (active.current) {
+        setMessage('Find device commands acknowledged. Check for vibration.');
+      }
+    } catch {
+      if (active.current) {
+        setMessage(
+          'Could not send all find device commands. Check the connection and try again.',
+        );
+      }
+    } finally {
+      inFlight.current = false;
+      if (active.current) {
+        setPending(null);
+      }
+    }
+  };
+
   return (
     <View accessibilityLabel="Device controls" style={local.container}>
       <Text style={styles.deviceMeta}>
@@ -86,6 +118,20 @@ export function DeviceControls({
           ? 'Charging'
           : 'Not charging'}
       </Text>
+      {device.connected &&
+      device.findDeviceSupported &&
+      omiNative?.findDevice ? (
+        <FocusPressable
+          accessibilityLabel="Find device"
+          accessibilityRole="button"
+          disabled={busy || pending !== null}
+          onPress={find}
+          style={styles.scanButton}>
+          <Text style={styles.scanButtonText}>Find device</Text>
+        </FocusPressable>
+      ) : (
+        <Text style={styles.deviceMeta}>Find device unavailable</Text>
+      )}
       {controls.map(control => {
         const value = device[control.setting];
         const features = device.features;
@@ -148,7 +194,9 @@ export function DeviceControls({
       })}
       {pending !== null && (
         <Text accessibilityRole="alert" style={styles.deviceMeta}>
-          Confirming on device…
+          {pending === 'findDevice'
+            ? 'Sending find device commands…'
+            : 'Confirming on device…'}
         </Text>
       )}
       {message !== null && (

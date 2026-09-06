@@ -5,7 +5,9 @@ import type {Device} from '../omiNativeTypes';
 import {FocusPressable} from '../ui/Pressable';
 import {DeviceControls} from './DeviceControls';
 
-jest.mock('../omiNative', () => ({omiNative: {setDeviceSetting: jest.fn()}}));
+jest.mock('../omiNative', () => ({
+  omiNative: {setDeviceSetting: jest.fn(), findDevice: jest.fn()},
+}));
 const write = omiNative!.setDeviceSetting as jest.Mock;
 const device: Device = {
   id: 'device-a',
@@ -20,6 +22,7 @@ let renderer: ReactTestRenderer.ReactTestRenderer;
 afterEach(async () => {
   await act(async () => renderer?.unmount());
   write.mockReset();
+  (omiNative!.findDevice as jest.Mock).mockReset();
 });
 const button = (label: string) =>
   renderer.root
@@ -107,4 +110,48 @@ test('completion from a replaced device does not report success for the next dev
     'Confirmed on device',
   );
   expect(button('Increase led brightness').props.disabled).toBe(false);
+});
+
+test('find requires discovered support, serializes commands and reports only acknowledgement', async () => {
+  let resolve!: () => void;
+  const find = omiNative!.findDevice as jest.Mock;
+  find.mockReturnValue(
+    new Promise<void>(done => {
+      resolve = done;
+    }),
+  );
+  await render(device);
+  expect(button('Find device')).toBeUndefined();
+  await act(async () =>
+    renderer.update(
+      <DeviceControls
+        device={{...device, findDeviceSupported: true}}
+        busy={false}
+      />,
+    ),
+  );
+  await act(async () => {
+    button('Find device').props.onPress();
+    button('Find device').props.onPress();
+  });
+  expect(find).toHaveBeenCalledTimes(1);
+  expect(find).toHaveBeenCalledWith(device.id);
+  expect(button('Increase led brightness').props.disabled).toBe(true);
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    'commands acknowledged',
+  );
+  await act(async () => resolve());
+  expect(JSON.stringify(renderer.toJSON())).toContain('commands acknowledged');
+});
+
+test('find failure remains retryable without claiming physical vibration', async () => {
+  (omiNative!.findDevice as jest.Mock).mockRejectedValue(
+    new Error('disconnected'),
+  );
+  await render({...device, findDeviceSupported: true});
+  await act(async () => button('Find device').props.onPress());
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'Could not send all find device commands',
+  );
+  expect(button('Find device').props.disabled).toBe(false);
 });

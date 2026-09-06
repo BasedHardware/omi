@@ -59,6 +59,7 @@ export type Device = {
   features?: number;
   ledBrightness?: number;
   microphoneGain?: number;
+  findDeviceSupported?: boolean;
   charging?: boolean;
   information?: Partial<
     Record<
@@ -103,6 +104,7 @@ export type OmiNative = {
   stopScan(): Promise<void>;
   connectDevice(id: string): Promise<void>;
   disconnectDevice(id: string): Promise<void>;
+  findDevice?(id: string): Promise<void>;
   setDeviceSetting?(
     id: string,
     setting: 'ledBrightness' | 'microphoneGain',

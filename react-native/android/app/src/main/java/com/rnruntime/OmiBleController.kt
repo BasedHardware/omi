@@ -34,6 +34,8 @@ private const val OMI_AUDIO_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214"
 private const val OMI_CODEC_UUID = "19b10002-e8f2-537e-4f6c-d104768a1214"
 private const val BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb"
 private const val BATTERY_LEVEL_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
+private val HAPTIC_SERVICE_UUID = UUID.fromString("cab1ab95-2ea5-4f4d-bb56-874b72cfc984")
+private val HAPTIC_UUID = UUID.fromString("cab1ab96-2ea5-4f4d-bb56-874b72cfc984")
 private val FEATURES_SERVICE_UUID = UUID.fromString("19b10020-e8f2-537e-4f6c-d104768a1214")
 private val FEATURES_UUID = UUID.fromString("19b10021-e8f2-537e-4f6c-d104768a1214")
 private val SETTINGS_SERVICE_UUID = UUID.fromString("19b10010-e8f2-537e-4f6c-d104768a1214")
@@ -74,6 +76,8 @@ class OmiBleController(
   private var gattBusy = false
   private val lease = OmiBleLease()
   private var currentGeneration = 0L
+  private val findPattern = OmiDeviceControls.FindPattern()
+  private var findTicket = 0L
   private var pendingSetting: String? = null
   private var pendingSettingValue: Int? = null
   private var settingWritten = false
@@ -401,7 +405,23 @@ class OmiBleController(
 
       override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
         synchronized(this@OmiBleController) {
-          if (!lease.accepts(generation) || characteristic.uuid != settingUuid(pendingSetting)) return
+          if (!lease.acceptsGatt(generation, this@OmiBleController.gatt, gatt)) return
+          if (pendingSetting == "findDevice" && characteristic.uuid == HAPTIC_UUID) {
+            if (status != BluetoothGatt.GATT_SUCCESS) finishSetting(null, "Find device command failed")
+            else if (findPattern.acknowledge(findTicket)) {
+              if (findPattern.complete()) finishSetting(3, null)
+              else {
+                val ticket = findTicket
+                handler.postDelayed({ synchronized(this@OmiBleController) {
+                  if (lease.acceptsGatt(generation, this@OmiBleController.gatt, gatt) && findPattern.send(ticket))
+                    enqueueGatt(gatt, GattOp.Write(characteristic, OmiDeviceControls.FindPattern.LEVEL))
+                } }, OmiDeviceControls.FindPattern.DELAY_MS.toLong())
+              }
+            }
+            finishGattOp(gatt)
+            return
+          }
+          if (characteristic.uuid != settingUuid(pendingSetting)) return
           if (status != BluetoothGatt.GATT_SUCCESS) {
             finishSetting(null, "Device setting write failed")
           } else if (settingDone != null) {
@@ -660,7 +680,24 @@ class OmiBleController(
     enqueueGatt(current, GattOp.Write(characteristic, value.toInt()))
   }
 
+  @Synchronized
+  fun findDevice(id: String, done: (Int?, String?) -> Unit) {
+    val current = gatt
+    val characteristic = current?.getService(HAPTIC_SERVICE_UUID)?.getCharacteristic(HAPTIC_UUID)
+    if (id != connectedDeviceId || connectionState != "connected" || current == null ||
+        settingDone != null || characteristic == null ||
+        characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE == 0) {
+      done(null, "Find device is unavailable")
+      return
+    }
+    pendingSetting = "findDevice"
+    settingDone = done
+    findTicket = findPattern.begin()
+    if (findPattern.send(findTicket)) enqueueGatt(current, GattOp.Write(characteristic, OmiDeviceControls.FindPattern.LEVEL))
+  }
+
   private fun finishSetting(value: Int?, error: String?) {
+    findPattern.cancel()
     val done = settingDone
     settingDone = null
     pendingSetting = null
@@ -699,6 +736,8 @@ class OmiBleController(
     putString("name", device.name)
     putInt("rssi", device.rssi)
     putBoolean("connected", connectionState == "connected" && connectedDeviceId == device.id)
+    val haptic = if (connectionState == "connected" && connectedDeviceId == device.id) gatt?.getService(HAPTIC_SERVICE_UUID)?.getCharacteristic(HAPTIC_UUID) else null
+    putBoolean("findDeviceSupported", haptic != null && haptic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE != 0)
     device.battery?.let { putInt("battery", it) }
     device.features?.let { putDouble("features", it.toDouble()) }
     device.ledBrightness?.let { putInt("ledBrightness", it) }

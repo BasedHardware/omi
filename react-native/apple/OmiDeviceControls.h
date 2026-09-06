@@ -1,5 +1,25 @@
 #import <Foundation/Foundation.h>
 
+struct OmiFindPattern {
+  static constexpr int level = 3;
+  static constexpr int delayMs = 750;
+  NSUInteger generation = 0;
+  int sent = 0;
+  bool active = false;
+  bool awaiting = false;
+  void cancel() { generation++; active = false; awaiting = false; sent = 0; }
+  NSUInteger begin() { cancel(); active = true; return generation; }
+  bool send(NSUInteger ticket) {
+    if (ticket != generation || !active || awaiting || sent >= 3) return false;
+    sent++; awaiting = true; return true;
+  }
+  bool acknowledge(NSUInteger ticket) {
+    if (ticket != generation || !active || !awaiting) return false;
+    awaiting = false; return true;
+  }
+  bool complete() const { return active && sent == 3 && !awaiting; }
+};
+
 static NSNumber *OmiDeviceFeatures(NSData *data) {
   if (data.length != 4) return nil;
   const uint8_t *bytes = (const uint8_t *)data.bytes;
