@@ -36,6 +36,26 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
   // tap during that network round-trip could start two concurrent sessions.
   bool _isCheckingAvailability = false;
 
+  /// How long the finished recording (final words, card, full bar) stays on
+  /// screen after the profile is saved before switching to All done.
+  static const Duration allDoneHold = Duration(milliseconds: 1500);
+  bool _allDoneVisible = false;
+  Timer? _allDoneTimer;
+
+  void _syncAllDone(SpeechProfileProvider provider) {
+    if (provider.profileCompleted) {
+      if (_allDoneVisible || _allDoneTimer != null) return;
+      _allDoneTimer = Timer(allDoneHold, () {
+        _allDoneTimer = null;
+        if (mounted) setState(() => _allDoneVisible = true);
+      });
+    } else if (_allDoneVisible || _allDoneTimer != null) {
+      _allDoneTimer?.cancel();
+      _allDoneTimer = null;
+      _allDoneVisible = false;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -67,21 +87,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
   void dispose() {
     _speechProvider?.forceCompletionTimer?.cancel();
     _speechProvider?.forceCompletionTimer = null;
+    _allDoneTimer?.cancel();
 
     super.dispose();
-  }
-
-  String _getLoadingText(BuildContext context, SpeechProfileLoadingState state) {
-    switch (state) {
-      case SpeechProfileLoadingState.uploading:
-        return context.l10n.uploadingVoiceProfile;
-      case SpeechProfileLoadingState.memorizing:
-        return context.l10n.memorizingYourVoice;
-      case SpeechProfileLoadingState.personalizing:
-        return context.l10n.personalizingExperience;
-      case SpeechProfileLoadingState.allSet:
-        return context.l10n.youreAllSet;
-    }
   }
 
   /// The last three lines the user said while recording. The 2 s grace before
@@ -148,6 +156,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
       },
       child: Consumer2<SpeechProfileProvider, CaptureProvider>(
         builder: (context, provider, _, child) {
+          _syncAllDone(provider);
           return MessageListener<SpeechProfileProvider>(
             showInfo: (info) {
               if (info == 'SKIP_UNAVAILABLE') {
@@ -479,8 +488,8 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                                 textAlign: TextAlign.center,
                               ),
                             ),
-                        ] else if (provider.profileCompleted) ...[
-                          // All Done state
+                        ] else if (_allDoneVisible) ...[
+                          // All Done state (after the hold on the finished recording)
                           const SizedBox(height: 16),
                           SizedBox(
                             width: double.infinity,
@@ -503,29 +512,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                               ),
                             ),
                           ),
-                        ] else if (provider.uploadingProfile) ...[
-                          // Uploading state
-                          const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: Center(
-                                  child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Text(
-                                _getLoadingText(context, provider.loadingState),
-                                style: const TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Manrope'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
                         ] else ...[
                           // Recording state - transcript + question + progress
                           // Transcript styling matches the Settings speech-profile page
@@ -541,21 +527,22 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
 
                           const SizedBox(height: 12),
 
-                          OutlinedButton(
-                            onPressed: () {
-                              provider.close();
-                              widget.onSkip();
-                            },
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.white),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                          if (!provider.uploadingProfile && !provider.profileCompleted)
+                            OutlinedButton(
+                              onPressed: () {
+                                provider.close();
+                                widget.onSkip();
+                              },
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.white),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                              ),
+                              child: Text(
+                                context.l10n.skipForNow,
+                                style: const TextStyle(color: Colors.white, fontSize: 14, fontFamily: 'Manrope'),
+                              ),
                             ),
-                            child: Text(
-                              context.l10n.skipForNow,
-                              style: const TextStyle(color: Colors.white, fontSize: 14, fontFamily: 'Manrope'),
-                            ),
-                          ),
 
                           if (provider.device == null)
                             Padding(

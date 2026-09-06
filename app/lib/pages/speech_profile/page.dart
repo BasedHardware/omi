@@ -41,6 +41,29 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
   StreamSubscription<PlayerState>? _profilePlayerSub;
   bool _profilePlaying = false;
   bool _profileLoading = false;
+
+  /// How long the finished recording (final words, card, full bar) stays on
+  /// screen after the profile is saved before cross-fading to All done.
+  static const Duration allDoneHold = Duration(milliseconds: 1500);
+  bool _allDoneVisible = false;
+  Timer? _allDoneTimer;
+
+  /// Keeps the finished recording on screen for [allDoneHold] once the profile
+  /// is saved, then reveals All done; resets when a new recording starts.
+  void _syncAllDone(SpeechProfileProvider provider) {
+    if (provider.profileCompleted) {
+      if (_allDoneVisible || _allDoneTimer != null) return;
+      _allDoneTimer = Timer(allDoneHold, () {
+        _allDoneTimer = null;
+        if (mounted) setState(() => _allDoneVisible = true);
+      });
+    } else if (_allDoneVisible || _allDoneTimer != null) {
+      _allDoneTimer?.cancel();
+      _allDoneTimer = null;
+      _allDoneVisible = false;
+    }
+  }
+
   // Guards the pre-flight availability check itself, which runs before
   // provider.isInitialising ever becomes true — without this, a rapid double
   // tap on Redo/Get Started during that network round-trip could start two
@@ -189,6 +212,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
   void dispose() {
     _profilePlayerSub?.cancel();
     _profilePlayer.dispose();
+    _allDoneTimer?.cancel();
     super.dispose();
   }
 
@@ -311,6 +335,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
       },
       child: Consumer2<SpeechProfileProvider, CaptureProvider>(
         builder: (context, provider, _, child) {
+          _syncAllDone(provider);
           return MessageListener<SpeechProfileProvider>(
             showInfo: (info) {
               if (info == 'SKIP_UNAVAILABLE') {
@@ -578,14 +603,14 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                               // this section (recording/question/complete UI) doesn't
                               // apply yet.
                               ? const SizedBox.shrink()
-                              // Recording UI -> All done cross-fades: the transcript, card
-                              // and bar fade out and the button fades in. Nothing is shown
-                              // while the profile uploads.
+                              // The finished recording (final words, card, full bar) stays
+                              // on screen through the upload and a short hold, then
+                              // cross-fades into the All done button.
                               : AnimatedSwitcher(
                                   duration: const Duration(milliseconds: 450),
                                   switchInCurve: Curves.easeIn,
                                   switchOutCurve: Curves.easeOut,
-                                  child: provider.profileCompleted
+                                  child: _allDoneVisible
                                       ? Padding(
                                           key: const ValueKey('speech-profile-done'),
                                           padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -597,34 +622,32 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                                             },
                                           ),
                                         )
-                                      : provider.uploadingProfile
-                                          ? const SizedBox.shrink(key: ValueKey('speech-profile-uploading'))
-                                          : Column(
-                                              key: const ValueKey('speech-profile-recording'),
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                if (provider.text.isNotEmpty) _transcript(provider),
-                                                Padding(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                                                  child: Column(
-                                                    children: [
-                                                      const SpeechTopicsCard(),
-                                                      const SizedBox(height: 12),
-                                                      SpeechProgressBar(progress: provider.sentenceProgress),
-                                                    ],
-                                                  ),
-                                                ),
-                                                if (provider.device == null)
-                                                  Padding(
-                                                    padding: const EdgeInsets.only(top: 16),
-                                                    child: Text(
-                                                      context.l10n.noDeviceConnectedUseMic,
-                                                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                                                      textAlign: TextAlign.center,
-                                                    ),
-                                                  ),
-                                              ],
+                                      : Column(
+                                          key: const ValueKey('speech-profile-recording'),
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (provider.text.isNotEmpty) _transcript(provider),
+                                            Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                                              child: Column(
+                                                children: [
+                                                  const SpeechTopicsCard(),
+                                                  const SizedBox(height: 12),
+                                                  SpeechProgressBar(progress: provider.sentenceProgress),
+                                                ],
+                                              ),
                                             ),
+                                            if (provider.device == null)
+                                              Padding(
+                                                padding: const EdgeInsets.only(top: 16),
+                                                child: Text(
+                                                  context.l10n.noDeviceConnectedUseMic,
+                                                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
                                 ),
                     ),
                   ),
