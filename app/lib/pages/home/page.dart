@@ -876,9 +876,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 // two cannot drift: changing the row's height or
                                 // the inset it reserves moves this with it,
                                 // instead of silently closing the gap.
-                                bottom: kBottomNavBarHeight -
-                                    kBottomNavChatBarGap +
-                                    bottomNavBarReservedInset(context),
+                                bottom: kBottomNavBarHeight - kBottomNavChatBarGap + bottomNavBarReservedInset(context),
                                 child: Row(
                                   children: [
                                     Expanded(child: _buildChatBar(context)),
