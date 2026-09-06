@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { createPostgresTestState } from "./postgres-test-lifecycle";
 import {
   ensureOwnedVolume,
+  isLinuxAmd64Image,
   removeOwnedContainer,
   removeOwnedVolume,
   verifyOwnedContainerConfiguration,
@@ -88,4 +89,19 @@ describe("executable PostgreSQL resource lifecycle", () => {
     expect(() => removeOwnedContainer(mismatch, state)).toThrow("postgres_test_container_ownership_mismatch");
     expect(() => removeOwnedVolume(mismatch, state)).toThrow("postgres_test_volume_ownership_mismatch");
   });
+});
+
+
+test("runtime image validation shares classic and containerd platform inspection", () => {
+  for (const containerd of [false, true]) {
+    const calls: string[][] = [];
+    const run: PostgresTestCommandRunner = args => {
+      calls.push([...args]);
+      if (args[1] === "info") return {exitCode: 0, stdout: JSON.stringify(containerd ? [["driver-type", "io.containerd.snapshotter.v1"]] : []), stderr: ""};
+      return {exitCode: 0, stdout: "linux/amd64", stderr: ""};
+    };
+    expect(isLinuxAmd64Image(run, "runtime@sha256:exact")).toBe(true);
+    expect(calls[1]).toEqual(["docker", "image", "inspect", ...(containerd ? ["--platform", "linux/amd64"] : []), "--format", "{{.Os}}/{{.Architecture}}", "runtime@sha256:exact"]);
+    expect(isLinuxAmd64Image(args => args[1] === "image" ? {exitCode: 1, stdout: "linux/amd64", stderr: "failed"} : run(args), "runtime@sha256:exact")).toBe(false);
+  }
 });
