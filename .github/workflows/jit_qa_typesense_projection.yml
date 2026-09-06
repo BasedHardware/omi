@@ -1,0 +1,275 @@
+name: JIT QA Typesense lexical projection
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact current main SHA with a successful first-attempt Release Eligibility proof
+        required: true
+        type: string
+      typesense_base_image:
+        description: Reviewed docker.io/typesense/typesense image pinned by sha256 digest (27.1)
+        required: true
+        type: string
+      query:
+        description: A real lexical term present in an active QA ledger row; never use a fabricated response
+        required: true
+        type: string
+      run_id:
+        description: Lowercase namespaced projection run identifier
+        required: true
+        type: string
+
+env:
+  QA_PROJECT: based-hardware-dev
+  QA_REGION: us-central1
+  QA_AUTH_PROJECT: based-hardware
+  QA_FIRESTORE_DATABASE: jit-qa
+  QA_UID: vi7SA9ckQCe4ccobWNxlbdcNdC23
+  QA_TYPESENSE_SERVICE: typesense-jit-qa
+  QA_TYPESENSE_SECRET: jit-qa-typesense-api-key
+  QA_TYPESENSE_COLLECTION: jit_qa_canonical_memory_atoms
+  QA_RUNTIME_SERVICE_ACCOUNT: jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com
+  QA_TYPESENSE_IMAGE_NAME: typesense-jit-qa
+  QA_RUNNER_IMAGE_NAME: jit-qa-typesense-projection-runner
+
+concurrency:
+  group: jit-qa-typesense-projection
+  cancel-in-progress: false
+
+jobs:
+  admit:
+    name: Admit exact proven main source
+    permissions:
+      actions: read
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Require current main and Release Eligibility proof
+        id: source
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REF}" == "refs/heads/main" ]]
+          printf '%s\n' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          [[ "$RELEASE_SHA" == "$(git rev-parse --verify refs/remotes/origin/main)" ]]
+          proof_path="${RUNNER_TEMP}/release-eligibility-${RELEASE_SHA}.json"
+          gh api -H 'Accept: application/vnd.github+json' "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${RELEASE_SHA}&per_page=100" > "$proof_path"
+          python3 .github/scripts/verify_backend_release_admission.py --sha "$RELEASE_SHA" --repository "$GITHUB_REPOSITORY" --workflow-runs "$proof_path" --require-first-attempt
+          git checkout --detach "$RELEASE_SHA"
+          [[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]]
+          echo "source_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build immutable Typesense and projection runner images
+    needs: admit
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    outputs:
+      typesense_image: ${{ steps.images.outputs.typesense_image }}
+      runner_image: ${{ steps.images.outputs.runner_image }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.admit.outputs.source_sha }}
+          fetch-depth: 1
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Validate source, target, and upstream Typesense digest
+        env:
+          SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
+          TYPESENSE_BASE_IMAGE: ${{ inputs.typesense_base_image }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/jit_qa_cloud_run_contract.py typesense \
+            --project "$QA_PROJECT" --region "$QA_REGION" --auth-project "$QA_AUTH_PROJECT" \
+            --uid "$QA_UID" --database "$QA_FIRESTORE_DATABASE" \
+            --base-image "$TYPESENSE_BASE_IMAGE" --source-sha "$SOURCE_SHA"
+      - name: Build and publish immutable images
+        id: images
+        env:
+          SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
+          TYPESENSE_BASE_IMAGE: ${{ inputs.typesense_base_image }}
+        run: |
+          set -euo pipefail
+          gcloud auth configure-docker gcr.io --quiet
+          typesense_tag="gcr.io/${QA_PROJECT}/${QA_TYPESENSE_IMAGE_NAME}:${SOURCE_SHA}"
+          runner_tag="gcr.io/${QA_PROJECT}/${QA_RUNNER_IMAGE_NAME}:${SOURCE_SHA}"
+          docker build --file backend/Dockerfile.jit_qa_typesense --build-arg "TYPESENSE_BASE_IMAGE=${TYPESENSE_BASE_IMAGE}" --tag "$typesense_tag" .
+          docker build --file backend/Dockerfile --tag "$runner_tag" .
+          docker push "$typesense_tag" >/dev/null
+          docker push "$runner_tag" >/dev/null
+          typesense_digest="$(gcloud container images describe "$typesense_tag" --format='value(image_summary.digest)')"
+          runner_digest="$(gcloud container images describe "$runner_tag" --format='value(image_summary.digest)')"
+          [[ "$typesense_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          [[ "$runner_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "typesense_image=gcr.io/${QA_PROJECT}/${QA_TYPESENSE_IMAGE_NAME}@${typesense_digest}" >> "$GITHUB_OUTPUT"
+          echo "runner_image=gcr.io/${QA_PROJECT}/${QA_RUNNER_IMAGE_NAME}@${runner_digest}" >> "$GITHUB_OUTPUT"
+
+  provision:
+    name: Verify named QA Firestore and provision dedicated key metadata
+    needs: admit
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Verify the named QA database and runtime identity
+        run: |
+          set -euo pipefail
+          db_json="$RUNNER_TEMP/jit-qa-firestore.json"
+          gcloud firestore databases describe --database "$QA_FIRESTORE_DATABASE" --project "$QA_PROJECT" --format=json > "$db_json"
+          python3 - "$db_json" <<'PY'
+          import json, sys
+          database = json.load(open(sys.argv[1], encoding="utf-8"))
+          if not str(database.get("name", "")).endswith("/databases/jit-qa"):
+              raise SystemExit("Typesense projection requires the named jit-qa database")
+          if database.get("locationId") != "us-central1" or database.get("type") != "FIRESTORE_NATIVE":
+              raise SystemExit("Typesense projection requires native us-central1 jit-qa Firestore")
+          PY
+          gcloud iam service-accounts describe "$QA_RUNTIME_SERVICE_ACCOUNT" --project "$QA_PROJECT" >/dev/null
+      - name: Create or verify the dedicated QA Typesense key secret
+        run: |
+          set -euo pipefail
+          if ! gcloud secrets describe "$QA_TYPESENSE_SECRET" --project "$QA_PROJECT" >/dev/null 2>&1; then
+            gcloud secrets create "$QA_TYPESENSE_SECRET" --project "$QA_PROJECT" \
+              --replication-policy=user-managed --locations="$QA_REGION" \
+              --labels=managed-by=github-actions,jit-qa=true --quiet
+            openssl rand -hex 32 | gcloud secrets versions add "$QA_TYPESENSE_SECRET" \
+              --project "$QA_PROJECT" --data-file=- >/dev/null
+          else
+            metadata="$RUNNER_TEMP/typesense-secret.json"
+            gcloud secrets describe "$QA_TYPESENSE_SECRET" --project "$QA_PROJECT" --format=json > "$metadata"
+            python3 - "$metadata" <<'PY'
+          import json, sys
+          secret = json.load(open(sys.argv[1], encoding="utf-8"))
+          labels = secret.get("labels", {})
+          if labels.get("jit-qa") != "true" or labels.get("managed-by") != "github-actions":
+              raise SystemExit("existing Typesense key is not explicitly owned by the isolated QA plane")
+          PY
+            state="$(gcloud secrets versions describe latest --secret "$QA_TYPESENSE_SECRET" --project "$QA_PROJECT" --format='value(state)')"
+            [[ "$state" == "ENABLED" ]] || { echo "dedicated Typesense key has no enabled latest version" >&2; exit 1; }
+          fi
+          gcloud secrets add-iam-policy-binding "$QA_TYPESENSE_SECRET" --project "$QA_PROJECT" \
+            --member="serviceAccount:${QA_RUNTIME_SERVICE_ACCOUNT}" --role=roles/secretmanager.secretAccessor \
+            --condition=None --quiet >/dev/null
+
+  deploy:
+    name: Deploy one bounded ephemeral Typesense service
+    needs: [admit, build, provision]
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    outputs:
+      typesense_url: ${{ steps.url.outputs.typesense_url }}
+    steps:
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Deploy exactly one QA Typesense instance
+        env:
+          TYPESENSE_IMAGE: ${{ needs.build.outputs.typesense_image }}
+          SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          gcloud run deploy "$QA_TYPESENSE_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" \
+            --image "$TYPESENSE_IMAGE" --port 8080 --command /usr/local/bin/jit-qa-typesense-entrypoint \
+            --set-env-vars 'TYPESENSE_DATA_DIR=/tmp/typesense' \
+            --set-secrets "TYPESENSE_API_KEY=${QA_TYPESENSE_SECRET}:latest" \
+            --cpu 1 --memory 1Gi --min 1 --max 1 --concurrency 20 --timeout 300s \
+            --allow-unauthenticated --labels "managed-by=github-actions,jit-qa=true,source-sha=${SOURCE_SHA}" --quiet
+      - name: Resolve exact Typesense URL
+        id: url
+        run: |
+          set -euo pipefail
+          url="$(gcloud run services describe "$QA_TYPESENSE_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format='value(status.url)')"
+          [[ "$url" =~ ^https://typesense-jit-qa-[a-z0-9-]+\.run\.app$ ]]
+          echo "typesense_url=$url" >> "$GITHUB_OUTPUT"
+      - name: Validate the immutable one-instance service contract
+        env:
+          TYPESENSE_IMAGE: ${{ needs.build.outputs.typesense_image }}
+        run: |
+          set -euo pipefail
+          resource="$RUNNER_TEMP/typesense-service.json"
+          gcloud run services describe "$QA_TYPESENSE_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$resource"
+          python3 backend/scripts/jit_qa_cloud_run_contract.py typesense-resource \
+            --resource-json "$resource" --expected-image "$TYPESENSE_IMAGE"
+      - name: Verify Typesense health without the API key
+        env:
+          TYPESENSE_URL: ${{ steps.url.outputs.typesense_url }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error "$TYPESENSE_URL/health" | python3 -c 'import json,sys; payload=json.load(sys.stdin); assert payload.get("ok") is True'
+
+  rehydrate:
+    name: Rehydrate and prove real current-ledger keyword retrieval
+    needs: [admit, build, deploy]
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Run canonical rebuild and real search_knowledge proof
+        env:
+          SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
+          RUN_ID: ${{ inputs.run_id }}
+          TYPESENSE_URL: ${{ needs.deploy.outputs.typesense_url }}
+          RUNNER_IMAGE: ${{ needs.build.outputs.runner_image }}
+          QUERY: ${{ inputs.query }}
+        run: |
+          set -euo pipefail
+          adc="${GOOGLE_APPLICATION_CREDENTIALS:-}"
+          [[ -n "$adc" && -f "$adc" ]] || { echo "ADC file was not created by the approved workflow auth action" >&2; exit 1; }
+          adc_copy="$RUNNER_TEMP/jit-qa-typesense/adc.json"
+          install -m 0644 "$adc" "$adc_copy"
+          trap 'rm -f "$adc_copy"' EXIT
+          api_key="$(gcloud secrets versions access latest --secret "$QA_TYPESENSE_SECRET" --project "$QA_PROJECT")"
+          install -d -m 700 "$RUNNER_TEMP/jit-qa-typesense"
+          docker run --rm --entrypoint python3 \
+            -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/jit-qa-gcp.json \
+            -e GOOGLE_CLOUD_PROJECT="$QA_PROJECT" \
+            -e OMI_FIRESTORE_DATA_PLANE_PROJECT="$QA_PROJECT" \
+            -e FIRESTORE_DATABASE_ID="$QA_FIRESTORE_DATABASE" \
+            -e OMI_ENV_STAGE=dev -e OMI_JIT_QA_AUTH_ONLY=true -e OMI_JIT_QA_UID_ALLOWLIST="$QA_UID" \
+            -e TYPESENSE_API_KEY="$api_key" -e TYPESENSE_PROTOCOL=https -e TYPESENSE_HOST_PORT=443 \
+            -e MEMORY_TYPESENSE_COLLECTION="$QA_TYPESENSE_COLLECTION" \
+            -v "$adc_copy:/tmp/jit-qa-gcp.json:ro" \
+            -v "$RUNNER_TEMP/jit-qa-typesense:/receipt" \
+            "$RUNNER_IMAGE" scripts/jit_qa_typesense_projection.py \
+            --source-sha "$SOURCE_SHA" --run-id "$RUN_ID" --typesense-url "$TYPESENSE_URL" \
+            --typesense-image "${{ needs.build.outputs.typesense_image }}" \
+            --typesense-base-image "${{ inputs.typesense_base_image }}" --query "$QUERY" \
+            --output "/receipt/projection.json"
+          test -s "$RUNNER_TEMP/jit-qa-typesense/projection.json"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jit-qa-typesense-projection-${{ inputs.run_id }}
+          path: ${{ runner.temp }}/jit-qa-typesense/projection.json
+          if-no-files-found: error

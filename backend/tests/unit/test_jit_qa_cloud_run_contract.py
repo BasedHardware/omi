@@ -233,6 +233,87 @@ def test_gateway_resource_is_fenced_to_the_fixed_qa_uid():
     assert literals["OMI_JIT_QA_UID_ALLOWLIST"] == CONTRACT.QA_UID
 
 
+def _typesense_resource(image: str) -> dict:
+    return {
+        "metadata": {"name": CONTRACT.TYPESENSE_SERVICE},
+        "spec": {
+            "template": {
+                "serviceAccountName": CONTRACT.RUNTIME_SERVICE_ACCOUNT,
+                "scaling": {
+                    "minInstanceCount": CONTRACT.TYPESENSE_MIN_INSTANCES,
+                    "maxInstanceCount": CONTRACT.TYPESENSE_MAX_INSTANCES,
+                },
+                "containers": [
+                    {
+                        "image": image,
+                        "command": [CONTRACT.TYPESENSE_ENTRYPOINT],
+                        "args": [],
+                        "env": [
+                            {"name": "TYPESENSE_DATA_DIR", "value": "/tmp/typesense"},
+                            {
+                                "name": "TYPESENSE_API_KEY",
+                                "valueSource": {
+                                    "secretKeyRef": {
+                                        "secret": CONTRACT.TYPESENSE_API_SECRET,
+                                        "version": "latest",
+                                    }
+                                },
+                            },
+                        ],
+                        "resources": {
+                            "limits": {
+                                "cpu": CONTRACT.TYPESENSE_CPU,
+                                "memory": CONTRACT.TYPESENSE_MEMORY,
+                            }
+                        },
+                    }
+                ],
+            }
+        },
+    }
+
+
+def test_typesense_workflow_is_pinned_to_named_dev_firestore_and_immutable_base():
+    CONTRACT.validate_typesense_workflow_configuration(
+        project="based-hardware-dev",
+        region="us-central1",
+        auth_project="based-hardware",
+        uid=CONTRACT.QA_UID,
+        database="jit-qa",
+        base_image="docker.io/typesense/typesense@sha256:" + "a" * 64,
+        source_sha="b" * 40,
+    )
+    with pytest.raises(CONTRACT.JITQAContractError):
+        CONTRACT.validate_typesense_workflow_configuration(
+            project="based-hardware",
+            region="us-central1",
+            auth_project="based-hardware",
+            uid=CONTRACT.QA_UID,
+            database="jit-qa",
+            base_image="docker.io/typesense/typesense:27.1",
+            source_sha="b" * 40,
+        )
+
+
+def test_typesense_resource_requires_single_bounded_container_and_dedicated_key():
+    image = "gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "e" * 64
+    resource = _typesense_resource(image)
+    CONTRACT.validate_typesense_cloud_run_resource(resource, expected_image=image)
+    resource["spec"]["template"]["scaling"]["maxInstanceCount"] = 2
+    with pytest.raises(CONTRACT.JITQAContractError, match="bounded to one instance"):
+        CONTRACT.validate_typesense_cloud_run_resource(resource, expected_image=image)
+
+
+def test_typesense_resource_rejects_extra_environment():
+    image = "gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "f" * 64
+    resource = _typesense_resource(image)
+    resource["spec"]["template"]["containers"][0]["env"].append(
+        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"}
+    )
+    with pytest.raises(CONTRACT.JITQAContractError, match="unapproved environment"):
+        CONTRACT.validate_typesense_cloud_run_resource(resource, expected_image=image)
+
+
 @pytest.mark.parametrize("profile", ("backend", "desktop", "drain", "sweep"))
 def test_rollout_profiles_require_the_real_posthog_control_plane_secret(profile):
     _, secrets = CONTRACT.resource_environment(profile)
