@@ -6,6 +6,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
 import {
@@ -15,6 +16,7 @@ import {
   type DomainReadOutcome,
 } from '../desktopReadClient';
 import {FocusPressable} from '../ui/Pressable';
+import {RecordingTranscript} from '../ui/RecordingTranscript';
 import {ReadStatus} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 
@@ -104,6 +106,7 @@ export function ConversationsPage({
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
 }) {
+  const compact = useWindowDimensions().width < 720;
   const conversations = useMemo(
     () =>
       outcome?.status === 'success'
@@ -198,105 +201,132 @@ export function ConversationsPage({
         </FocusPressable>
       </View>
       <View style={styles.conversationContent}>
-        <ScrollView
-          contentContainerStyle={styles.conversationList}
-          style={styles.conversationListPane}>
-          {loading && outcome === null ? (
-            <View style={styles.projectionEmpty}>
-              <ActivityIndicator color="#888888" />
-              <Text style={styles.projectionEmptyCopy}>
-                Loading conversations…
-              </Text>
-            </View>
-          ) : error !== null ? (
-            <View style={styles.projectionEmpty}>
-              <Text style={styles.projectionEmptyTitle}>
-                Conversations unavailable
-              </Text>
-              <Text style={styles.projectionEmptyCopy}>
-                Conversations could not be loaded.
-              </Text>
-            </View>
-          ) : grouped.length === 0 ? (
-            <View style={styles.projectionEmpty}>
-              <Text style={styles.projectionEmptyTitle}>
-                {filtering
-                  ? 'No loaded conversations match.'
-                  : 'No conversations yet.'}
-              </Text>
-              {filtering && (
+        {(!compact || selected === null) && (
+          <ScrollView
+            contentContainerStyle={styles.conversationList}
+            style={styles.conversationListPane}>
+            {loading && outcome === null ? (
+              <View style={styles.projectionEmpty}>
+                <ActivityIndicator color="#888888" />
                 <Text style={styles.projectionEmptyCopy}>
-                  Search and filters cover conversations already loaded on this
-                  device.
+                  Loading conversations…
                 </Text>
-              )}
-            </View>
-          ) : (
-            grouped.map(group => (
-              <View key={group.label} style={styles.conversationGroup}>
-                <Text style={styles.conversationGroupTitle}>{group.label}</Text>
-                {group.items.map(item => (
-                  <ConversationRow
-                    item={item}
-                    key={item.id}
-                    onPress={() => setSelectedId(item.id)}
-                    selected={selectedId === item.id}
-                  />
-                ))}
               </View>
-            ))
-          )}
-          {outcome?.status === 'success' && (
-            <ReadStatus label="Conversations" page={outcome.value.page} />
-          )}
-        </ScrollView>
-        <View
-          accessibilityLabel="Selected conversation metadata"
-          style={styles.conversationDetail}>
-          {selected === null ? (
-            <View style={styles.conversationDetailEmpty}>
-              <Text style={styles.projectionEmptyTitle}>
-                Select a conversation
-              </Text>
-              <Text style={styles.projectionEmptyCopy}>
-                Choose a conversation to view its summary and details.
-              </Text>
-            </View>
-          ) : (
-            <>
-              <Text style={styles.conversationDetailTitle}>
-                {selected.title}
-              </Text>
-              <Text style={styles.conversationDetailSummary}>
-                {selected.summary}
-              </Text>
-              <View style={styles.conversationDetailFields}>
-                <Text style={styles.conversationDetailField}>
-                  Started · {formatConversationDate(selected.startedAt)}
+            ) : error !== null ? (
+              <View style={styles.projectionEmpty}>
+                <Text style={styles.projectionEmptyTitle}>
+                  Conversations unavailable
                 </Text>
-                <Text style={styles.conversationDetailField}>
-                  Finished · {formatConversationDate(selected.finishedAt)}
+                <Text style={styles.projectionEmptyCopy}>
+                  Conversations could not be loaded.
                 </Text>
-                <Text style={styles.conversationDetailField}>
-                  Duration ·{' '}
-                  {formatConversationDuration(
-                    selected.startedAt,
-                    selected.finishedAt,
+              </View>
+            ) : grouped.length === 0 ? (
+              <View style={styles.projectionEmpty}>
+                <Text style={styles.projectionEmptyTitle}>
+                  {filtering
+                    ? 'No loaded conversations match.'
+                    : 'No conversations yet.'}
+                </Text>
+                {filtering && (
+                  <Text style={styles.projectionEmptyCopy}>
+                    Search and filters cover conversations already loaded on
+                    this device.
+                  </Text>
+                )}
+              </View>
+            ) : (
+              grouped.map(group => (
+                <View key={group.label} style={styles.conversationGroup}>
+                  <Text style={styles.conversationGroupTitle}>
+                    {group.label}
+                  </Text>
+                  {group.items.map(item => (
+                    <ConversationRow
+                      item={item}
+                      key={item.id}
+                      onPress={() => setSelectedId(item.id)}
+                      selected={selectedId === item.id}
+                    />
+                  ))}
+                </View>
+              ))
+            )}
+            {outcome?.status === 'success' && (
+              <ReadStatus label="Conversations" page={outcome.value.page} />
+            )}
+          </ScrollView>
+        )}
+        {(!compact || selected !== null) && (
+          <ScrollView
+            accessibilityLabel="Selected conversation details"
+            contentContainerStyle={styles.conversationDetailContent}
+            style={styles.conversationDetail}>
+            {selected === null ? (
+              <View style={styles.conversationDetailEmpty}>
+                <Text style={styles.projectionEmptyTitle}>
+                  Select a conversation
+                </Text>
+                <Text style={styles.projectionEmptyCopy}>
+                  Choose a conversation to view its summary and details.
+                </Text>
+              </View>
+            ) : (
+              <>
+                {compact && (
+                  <FocusPressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Back to conversations"
+                    onPress={() => setSelectedId(null)}
+                    style={styles.conversationTranscriptAction}>
+                    <Text style={styles.conversationDetailField}>
+                      Back to conversations
+                    </Text>
+                  </FocusPressable>
+                )}
+                <Text style={styles.conversationDetailTitle}>
+                  {selected.title}
+                </Text>
+                <Text style={styles.conversationDetailSummary}>
+                  {selected.summary}
+                </Text>
+                <View style={styles.conversationDetailFields}>
+                  <Text style={styles.conversationDetailField}>
+                    Started · {formatConversationDate(selected.startedAt)}
+                  </Text>
+                  <Text style={styles.conversationDetailField}>
+                    Finished · {formatConversationDate(selected.finishedAt)}
+                  </Text>
+                  <Text style={styles.conversationDetailField}>
+                    Duration ·{' '}
+                    {formatConversationDuration(
+                      selected.startedAt,
+                      selected.finishedAt,
+                    )}
+                  </Text>
+                  <Text style={styles.conversationDetailField}>
+                    Status · {selected.status}
+                  </Text>
+                  <Text style={styles.conversationDetailField}>
+                    {selected.locked ? 'Locked record' : 'Unlocked record'}
+                  </Text>
+                  <Text style={styles.conversationDetailField}>
+                    {selected.discarded ? 'Discarded record' : 'Active record'}
+                  </Text>
+                </View>
+                {selected.source === 'omi' &&
+                  selected.id.startsWith('recording:') &&
+                  selected.id.length > 'recording:'.length && (
+                    <RecordingTranscript
+                      key={selected.id}
+                      sessionId={selected.id.slice('recording:'.length)}
+                      revision={selected.updatedAt}
+                    />
                   )}
-                </Text>
-                <Text style={styles.conversationDetailField}>
-                  Status · {selected.status}
-                </Text>
-                <Text style={styles.conversationDetailField}>
-                  {selected.locked ? 'Locked record' : 'Unlocked record'}
-                </Text>
-                <Text style={styles.conversationDetailField}>
-                  {selected.discarded ? 'Discarded record' : 'Active record'}
-                </Text>
-              </View>
-            </>
-          )}
-        </View>
+              </>
+            )}
+          </ScrollView>
+        )}
       </View>
     </View>
   );

@@ -1,0 +1,70 @@
+import React from 'react';
+import {ActivityIndicator, Text, View} from 'react-native';
+import {useRecordingTranscript} from '../recordingTranscript';
+import {FocusPressable} from './Pressable';
+import {styles} from './styles';
+
+export function RecordingTranscript({
+  sessionId,
+  revision,
+}: {
+  sessionId: string;
+  revision: string;
+}) {
+  const {result, reload} = useRecordingTranscript(sessionId, revision);
+  return (
+    <View style={styles.conversationDetailFields}>
+      <Text accessibilityRole="header" style={styles.resultTitle}>
+        Transcript
+      </Text>
+      {result.status === 'loading' || result.status === 'idle' ? (
+        <View accessibilityLiveRegion="polite">
+          <ActivityIndicator color="#aaaaaa" />
+          <Text style={styles.conversationDetailSummary}>
+            Loading transcript…
+          </Text>
+        </View>
+      ) : result.status === 'error' ? (
+        <Text
+          accessibilityRole="alert"
+          style={styles.conversationDetailSummary}>
+          Transcript could not be loaded.
+        </Text>
+      ) : result.value.state === 'completed' ? (
+        <>
+          {result.value.discardedLeadingPackets > 0 && (
+            <Text style={styles.conversationDetailSummary}>
+              Some audio at the beginning of this recording could not be
+              decoded.
+            </Text>
+          )}
+          <Text selectable style={styles.conversationTranscriptText}>
+            {result.value.text === ''
+              ? 'The transcript is empty.'
+              : result.value.text}
+          </Text>
+        </>
+      ) : (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={styles.conversationDetailSummary}>
+          {result.value.state === 'failed'
+            ? 'This recording could not be transcribed.'
+            : result.value.state === 'queued'
+            ? 'Transcription is queued.'
+            : 'Transcription is in progress.'}
+        </Text>
+      )}
+      {(result.status === 'error' ||
+        (result.status === 'loaded' && result.value.state !== 'completed')) && (
+        <FocusPressable
+          accessibilityRole="button"
+          accessibilityLabel="Reload recording transcript"
+          onPress={reload}
+          style={styles.conversationTranscriptAction}>
+          <Text style={styles.conversationDetailField}>Check again</Text>
+        </FocusPressable>
+      )}
+    </View>
+  );
+}
