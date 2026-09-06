@@ -1,4 +1,9 @@
-import {NativeEventEmitter, NativeModules} from 'react-native';
+import {
+  NativeEventEmitter,
+  NativeModules,
+  PermissionsAndroid,
+  Platform,
+} from 'react-native';
 
 import type {
   BluetoothState,
@@ -28,10 +33,30 @@ export type {
 
 export type PlatformNativeSnapshot = NativeSnapshot;
 
+export async function requestBluetoothScanPermission(): Promise<boolean> {
+  if (Platform.OS !== 'android') {
+    return true;
+  }
+  const permissions =
+    Number(Platform.Version) >= 31
+      ? [
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        ]
+      : [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
+  const results = await PermissionsAndroid.requestMultiple(permissions);
+  return permissions.every(
+    permission => results[permission] === PermissionsAndroid.RESULTS.GRANTED,
+  );
+}
+
 export function isBluetoothScanAvailable(
   state: BluetoothState | undefined,
 ): boolean {
-  return state === 'poweredOn';
+  return (
+    state === 'poweredOn' ||
+    (Platform.OS === 'android' && state === 'unauthorized')
+  );
 }
 
 export function browserScanErrorMessage(_error: unknown): string | null {

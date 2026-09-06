@@ -84,10 +84,15 @@ class OmiBleController(
     }
   }
 
-  fun bluetoothState(): String = when (adapter?.state) {
-    BluetoothAdapter.STATE_ON -> "poweredOn"
-    BluetoothAdapter.STATE_OFF -> "poweredOff"
-    else -> "unknown"
+  fun bluetoothState(): String {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !granted(Manifest.permission.BLUETOOTH_CONNECT)) {
+      return "unauthorized"
+    }
+    return when (adapter?.state) {
+      BluetoothAdapter.STATE_ON -> "poweredOn"
+      BluetoothAdapter.STATE_OFF -> "poweredOff"
+      else -> "unknown"
+    }
   }
 
   fun snapshot(): WritableMap = Arguments.createMap().apply {

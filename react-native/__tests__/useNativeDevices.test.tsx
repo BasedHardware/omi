@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
+import {PermissionsAndroid, Platform} from 'react-native';
 import type {
   Device,
   NativeSnapshot,
@@ -56,6 +57,8 @@ const mockBackend = {
 };
 
 jest.mock('../src/omiNative', () => ({
+  requestBluetoothScanPermission: () =>
+    jest.requireActual('../src/omiNative').requestBluetoothScanPermission(),
   browserScanErrorMessage: () => null,
   omiBackend: {
     request: (request: {path: string}) => mockBackend.request(request),
@@ -135,18 +138,27 @@ function Harness({
 
 async function renderHook(enabled?: boolean) {
   let latest: ReturnType<typeof useNativeDevices> | null = null;
+  let renderer: ReactTestRenderer.ReactTestRenderer;
+  const onState = (state: ReturnType<typeof useNativeDevices>) => {
+    latest = state;
+  };
   await ReactTestRenderer.act(async () => {
-    ReactTestRenderer.create(
-      <Harness
-        enabled={enabled}
-        onState={state => {
-          latest = state;
-        }}
-      />,
+    renderer = ReactTestRenderer.create(
+      <Harness enabled={enabled} onState={onState} />,
     );
   });
   return {
     latest: () => latest!,
+    setEnabled: async (value: boolean) => {
+      await ReactTestRenderer.act(async () => {
+        renderer.update(<Harness enabled={value} onState={onState} />);
+      });
+    },
+    unmount: async () => {
+      await ReactTestRenderer.act(async () => {
+        renderer.unmount();
+      });
+    },
   };
 }
 
@@ -176,6 +188,100 @@ test('does not probe native devices when the host disables them', async () => {
   expect(hook.latest().nativeSnapshot).toBeNull();
   expect(mockNative.getSnapshot).not.toHaveBeenCalled();
   expect(mockListeners).toHaveLength(0);
+});
+
+test.each(['disable', 'unmount'] as const)(
+  'retires deferred session opens on %s',
+  async retirement => {
+    let release: () => void = () => undefined;
+    mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+    mockBackend.request.mockImplementationOnce(async () => {
+      await new Promise<void>(resolve => {
+        release = resolve;
+      });
+      return sessionResponse(201);
+    });
+    const hook = await renderHook();
+    const audio = {
+      type: 'audio' as const,
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'AQID',
+    };
+    await ReactTestRenderer.act(async () => {
+      emitNative(audio);
+    });
+    if (retirement === 'disable') {
+      await hook.setEnabled(false);
+      expect(hook.latest().nativeSnapshot).toBeNull();
+      await hook.setEnabled(true);
+    } else {
+      await hook.unmount();
+    }
+    await ReactTestRenderer.act(async () => {
+      release();
+    });
+    expect(mockBackend.request).toHaveBeenCalledTimes(1);
+    if (retirement === 'disable') {
+      await ReactTestRenderer.act(async () => {
+        emitNative({...audio, payloadBase64: 'BAUG'});
+      });
+      expect(
+        mockBackend.request.mock.calls.map(([request]) => request.path),
+      ).toEqual([
+        '/v1/device-sessions',
+        '/v1/device-sessions',
+        '/v1/device-sessions/11111111-2222-3333-4444-555555555555/audio',
+      ]);
+      expect(mockBackend.request.mock.calls.at(-1)?.[0].body).toContain('BAUG');
+    }
+  },
+);
+
+test('retired upload failure cannot clear or complete the next session', async () => {
+  let rejectUpload: () => void = () => undefined;
+  mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+  mockBackend.request.mockImplementationOnce(async () => sessionResponse(201));
+  mockBackend.request.mockImplementationOnce(async () => {
+    await new Promise<void>((_resolve, reject) => {
+      rejectUpload = () => reject(new Error('retired upload failure'));
+    });
+    return sessionResponse(200);
+  });
+  const hook = await renderHook();
+  const audio = {
+    type: 'audio' as const,
+    deviceId: 'omi-1',
+    codec: 21,
+    payloadBase64: 'AQID',
+  };
+  await ReactTestRenderer.act(async () => {
+    emitNative(audio);
+    emitNative(audio);
+  });
+  await hook.setEnabled(false);
+  await hook.setEnabled(true);
+  await ReactTestRenderer.act(async () => {
+    emitNative({...audio, payloadBase64: 'BAUG'});
+  });
+  await ReactTestRenderer.act(async () => {
+    rejectUpload();
+  });
+  await ReactTestRenderer.act(async () => {
+    emitNative({...audio, payloadBase64: 'BwgJ'});
+  });
+  expect(hook.latest().deviceScanMessage).toBeNull();
+  const appends = mockBackend.request.mock.calls.filter(([request]) =>
+    request.path.endsWith('/audio'),
+  );
+  expect(
+    appends.map(([request]) => JSON.parse(request.body!).bytesBase64),
+  ).toEqual(['AQID', 'BAUG', 'BwgJ']);
+  expect(
+    mockBackend.request.mock.calls.some(([request]) =>
+      request.path.endsWith('/complete'),
+    ),
+  ).toBe(false);
 });
 
 test('waits for startScan to resolve before clearing the busy flag', async () => {
@@ -525,3 +631,49 @@ test('an ambiguous audio failure stays visible and never completes or retries th
     ),
   ).toHaveLength(2);
 });
+
+test.each([false, true])(
+  'Android scans only after Bluetooth permission is granted: %s',
+  async granted => {
+    const os = Object.getOwnPropertyDescriptor(Platform, 'OS')!;
+    const version = Object.getOwnPropertyDescriptor(Platform, 'Version')!;
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'android',
+    });
+    Object.defineProperty(Platform, 'Version', {configurable: true, value: 35});
+    const permissions = jest
+      .spyOn(PermissionsAndroid, 'requestMultiple')
+      .mockImplementation(
+        async requested =>
+          Object.fromEntries(
+            requested.map(permission => [
+              permission,
+              granted ? 'granted' : 'denied',
+            ]),
+          ) as Awaited<ReturnType<typeof PermissionsAndroid.requestMultiple>>,
+      );
+    mockNative.startScan.mockResolvedValue([]);
+    try {
+      const hook = await renderHook();
+      await ReactTestRenderer.act(async () => {
+        await hook.latest().scanForOmi();
+      });
+      expect(permissions).toHaveBeenCalledWith([
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+      ]);
+      expect(mockNative.startScan).toHaveBeenCalledTimes(granted ? 1 : 0);
+      expect(hook.latest().deviceBusy).toBe(false);
+      if (!granted) {
+        expect(hook.latest().deviceScanMessage).toContain(
+          'Bluetooth permission is required',
+        );
+      }
+    } finally {
+      permissions.mockRestore();
+      Object.defineProperty(Platform, 'OS', os);
+      Object.defineProperty(Platform, 'Version', version);
+    }
+  },
+);

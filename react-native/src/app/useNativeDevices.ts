@@ -8,6 +8,7 @@ import {
   browserScanErrorMessage,
   omiBackend,
   omiNative,
+  requestBluetoothScanPermission,
   subscribeOmiNativeEvents,
   type PlatformNativeSnapshot,
 } from '../omiNative';
@@ -66,62 +67,85 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
   const cancelledRef = useRef(false);
   const pendingAudioRef = useRef<Uint8Array[]>([]);
   const uploadFailedRef = useRef(false);
+  const epochRef = useRef(0);
+  const enabledRef = useRef(enabled);
+
+  enabledRef.current = enabled;
 
   nativeSnapshotRef.current = nativeSnapshot;
 
-  const flushPendingAudio = useCallback(async (sessionId: string) => {
-    if (uploadFailedRef.current) {
-      throw new Error('Device audio upload failed');
-    }
-    if (omiBackend === undefined || omiBackend === null) {
-      return;
-    }
-    if (flushPromiseRef.current !== null) {
-      await flushPromiseRef.current;
-      if (
-        pendingAudioRef.current.length > 0 &&
-        sessionRef.current === sessionId
-      ) {
-        await flushPendingAudio(sessionId);
+  const flushPendingAudio = useCallback(
+    async (sessionId: string, epoch: number) => {
+      if (!enabledRef.current || epoch !== epochRef.current) {
+        return;
       }
-      return;
-    }
-    const work = (async () => {
-      while (
-        pendingAudioRef.current.length > 0 &&
-        sessionRef.current === sessionId
-      ) {
-        const chunk = pendingAudioRef.current.shift();
-        if (chunk === undefined) {
-          break;
+      if (uploadFailedRef.current) {
+        throw new Error('Device audio upload failed');
+      }
+      if (omiBackend === undefined || omiBackend === null) {
+        return;
+      }
+      if (flushPromiseRef.current !== null) {
+        await flushPromiseRef.current;
+        if (
+          enabledRef.current &&
+          epoch === epochRef.current &&
+          pendingAudioRef.current.length > 0 &&
+          sessionRef.current === sessionId
+        ) {
+          await flushPendingAudio(sessionId, epoch);
         }
-        await appendDeviceSessionAudio(omiBackend, sessionId, chunk);
+        return;
       }
-    })();
-    flushPromiseRef.current = work;
-    try {
-      await work;
-    } catch (error) {
-      uploadFailedRef.current = true;
-      pendingAudioRef.current = [];
-      setDeviceScanMessage(
-        'Audio upload was interrupted. This recording could not be saved completely. Reconnect your Omi to start a new recording.',
-      );
-      throw error;
-    } finally {
-      if (flushPromiseRef.current === work) {
-        flushPromiseRef.current = null;
+      const work = (async () => {
+        while (
+          enabledRef.current &&
+          epoch === epochRef.current &&
+          pendingAudioRef.current.length > 0 &&
+          sessionRef.current === sessionId
+        ) {
+          const chunk = pendingAudioRef.current.shift();
+          if (chunk === undefined) {
+            break;
+          }
+          await appendDeviceSessionAudio(omiBackend, sessionId, chunk);
+        }
+      })();
+      flushPromiseRef.current = work;
+      try {
+        await work;
+      } catch (error) {
+        if (!enabledRef.current || epoch !== epochRef.current) {
+          return;
+        }
+        uploadFailedRef.current = true;
+        pendingAudioRef.current = [];
+        setDeviceScanMessage(
+          'Audio upload was interrupted. This recording could not be saved completely. Reconnect your Omi to start a new recording.',
+        );
+        throw error;
+      } finally {
+        if (flushPromiseRef.current === work) {
+          flushPromiseRef.current = null;
+        }
       }
-    }
-    if (
-      pendingAudioRef.current.length > 0 &&
-      sessionRef.current === sessionId
-    ) {
-      await flushPendingAudio(sessionId);
-    }
-  }, []);
+      if (
+        enabledRef.current &&
+        epoch === epochRef.current &&
+        pendingAudioRef.current.length > 0 &&
+        sessionRef.current === sessionId
+      ) {
+        await flushPendingAudio(sessionId, epoch);
+      }
+    },
+    [],
+  );
 
   const finishSession = useCallback(async () => {
+    const epoch = epochRef.current;
+    if (!enabledRef.current) {
+      return;
+    }
     if (omiBackend === undefined || omiBackend === null) {
       cancelledRef.current = true;
       sessionRef.current = null;
@@ -134,11 +158,15 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       return;
     }
     try {
-      await flushPendingAudio(sessionId);
+      await flushPendingAudio(sessionId, epoch);
     } catch {
       return;
     }
-    if (sessionRef.current !== sessionId) {
+    if (
+      !enabledRef.current ||
+      epoch !== epochRef.current ||
+      sessionRef.current !== sessionId
+    ) {
       return;
     }
     sessionRef.current = null;
@@ -153,7 +181,9 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
 
   const persistAudio = useCallback(
     async (event: Extract<OmiNativeEvent, {type: 'audio'}>) => {
+      const epoch = epochRef.current;
       if (
+        !enabledRef.current ||
         omiBackend === undefined ||
         omiBackend === null ||
         uploadFailedRef.current
@@ -181,8 +211,14 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
             deviceName: device?.name,
             codec: event.codec,
           });
+          if (!enabledRef.current || epoch !== epochRef.current) {
+            return;
+          }
           sessionRef.current = session.id;
         } catch {
+          if (!enabledRef.current || epoch !== epochRef.current) {
+            return;
+          }
           pendingAudioRef.current = [];
           openingRef.current = false;
           uploadFailedRef.current = true;
@@ -201,15 +237,30 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       if (sessionId === null) {
         return;
       }
-      await flushPendingAudio(sessionId);
+      await flushPendingAudio(sessionId, epoch);
     },
     [finishSession, flushPendingAudio],
   );
 
   useEffect(() => {
     let active = true;
+    cancelledRef.current = false;
+    setNativeSnapshot(null);
+    setDeviceBusy(false);
+    setDeviceScanMessage(null);
+    const retireSession = () => {
+      active = false;
+      epochRef.current += 1;
+      sessionRef.current = null;
+      openingRef.current = false;
+      flushPromiseRef.current = null;
+      cancelledRef.current = true;
+      pendingAudioRef.current = [];
+      uploadFailedRef.current = false;
+      nativeSnapshotRef.current = null;
+    };
     if (!enabled || omiNative === undefined || omiNative === null) {
-      return () => undefined;
+      return retireSession;
     }
     omiNative
       .getSnapshot()
@@ -255,7 +306,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       }
     });
     return () => {
-      active = false;
+      retireSession();
       unsubscribe();
     };
   }, [enabled, persistAudio]);
@@ -271,37 +322,74 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
   }, [finishSession, nativeSnapshot]);
 
   const scanForOmi = useCallback(async () => {
-    if (omiNative === undefined || omiNative === null) {
+    const epoch = epochRef.current;
+    if (!enabledRef.current || omiNative === undefined || omiNative === null) {
       return;
     }
     setDeviceBusy(true);
     setDeviceScanMessage(null);
     try {
+      const permitted = await requestBluetoothScanPermission();
+      if (!enabledRef.current || epoch !== epochRef.current) {
+        return;
+      }
+      if (!permitted) {
+        setDeviceScanMessage(
+          'Bluetooth permission is required to find your Omi. Allow it in app settings and try again.',
+        );
+        return;
+      }
       const devices = await omiNative.startScan(8);
+      if (!enabledRef.current || epoch !== epochRef.current) {
+        return;
+      }
       const snapshot = await omiNative.getSnapshot();
+      if (!enabledRef.current || epoch !== epochRef.current) {
+        return;
+      }
       setNativeSnapshot({...snapshot, devices});
     } catch (error) {
+      if (!enabledRef.current || epoch !== epochRef.current) {
+        return;
+      }
       const message = browserScanErrorMessage(error);
       if (message !== null) {
         setDeviceScanMessage(message);
+      } else {
+        setDeviceScanMessage(
+          'Could not scan for your Omi. Check Bluetooth and try again.',
+        );
       }
     } finally {
-      setDeviceBusy(false);
+      if (enabledRef.current && epoch === epochRef.current) {
+        setDeviceBusy(false);
+      }
     }
   }, []);
 
   const toggleDevice = useCallback(
     async (id: string, connected: boolean) => {
-      if (omiNative === undefined || omiNative === null) {
+      const epoch = epochRef.current;
+      if (
+        !enabledRef.current ||
+        omiNative === undefined ||
+        omiNative === null
+      ) {
         return;
       }
       setDeviceBusy(true);
       try {
         if (connected) {
           await omiNative.disconnectDevice(id);
+          if (!enabledRef.current || epoch !== epochRef.current) {
+            return;
+          }
           await finishSession();
         } else {
           await omiNative.connectDevice(id);
+          if (!enabledRef.current || epoch !== epochRef.current) {
+            return;
+          }
           if (uploadFailedRef.current) {
             uploadFailedRef.current = false;
             sessionRef.current = null;
@@ -309,11 +397,28 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
           }
           cancelledRef.current = false;
         }
-        setNativeSnapshot(await omiNative.getSnapshot());
+        if (!enabledRef.current || epoch !== epochRef.current) {
+          return;
+        }
+        const snapshot = await omiNative.getSnapshot();
+        if (!enabledRef.current || epoch !== epochRef.current) {
+          return;
+        }
+        setNativeSnapshot(snapshot);
       } catch {
+        if (!enabledRef.current || epoch !== epochRef.current) {
+          return;
+        }
+        setDeviceScanMessage(
+          connected
+            ? 'Could not disconnect your Omi. Try again.'
+            : 'Could not connect to your Omi. Keep it nearby and try again.',
+        );
         return;
       } finally {
-        setDeviceBusy(false);
+        if (enabledRef.current && epoch === epochRef.current) {
+          setDeviceBusy(false);
+        }
       }
     },
     [finishSession],
