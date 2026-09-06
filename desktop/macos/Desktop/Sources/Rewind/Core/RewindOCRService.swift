@@ -107,15 +107,92 @@ actor RewindOCRService {
 
   /// Recognition languages passed to `VNRecognizeTextRequest`.
   ///
-  /// Held as a process-lifetime constant so the bridged NSArray backing storage
-  /// can never be released while Vision's TextRecognition framework enumerates
-  /// it asynchronously on `com.apple.root.utility-qos.cooperative`. A Swift
-  /// array literal assigned to `recognitionLanguages` has its storage tied to
-  /// the call frame; once the request is dispatched to a background queue the
-  /// storage can be freed, leaving TextRecognition iterating an
+  /// Resolved once from the user's own preferred languages instead of a pinned
+  /// locale: a language absent from this list is not recognised poorly, it is
+  /// not recognised at all, so pinning `en-US` left every non-Latin script
+  /// silently unsearchable.
+  ///
+  /// Still held as a process-lifetime constant so the bridged NSArray backing
+  /// storage can never be released while Vision's TextRecognition framework
+  /// enumerates it asynchronously on `com.apple.root.utility-qos.cooperative`.
+  /// A Swift array literal assigned to `recognitionLanguages` has its storage
+  /// tied to the call frame; once the request is dispatched to a background
+  /// queue the storage can be freed, leaving TextRecognition iterating an
   /// `__EmptyArrayStorage` and tripping `_assertionFailure` (EXC_BREAKPOINT /
-  /// SIGTRAP). Pinning the array breaks that race. See #5891, #5151.
-  private static let recognitionLanguages: [String] = ["en-US"]
+  /// SIGTRAP). Resolving into a `static let` keeps exactly one pinned array for
+  /// the process lifetime, so that race stays closed. See #5891, #5151.
+  private static let recognitionLanguages: [String] = resolveRecognitionLanguages(
+    preferred: Locale.preferredLanguages,
+    supported: visionSupportedRecognitionLanguages()
+  )
+
+  /// Languages Vision can actually recognise at the level this service uses.
+  ///
+  /// Falls back to English when the query fails rather than propagating: an
+  /// unavailable capability list must not take OCR down with it.
+  static func visionSupportedRecognitionLanguages() -> [String] {
+    (try? VNRecognizeTextRequest.supportedRecognitionLanguages(
+      for: recognitionLevel(),
+      revision: VNRecognizeTextRequest.currentRevision)) ?? ["en-US"]
+  }
+
+  /// Picks the recognition languages for a user, in Vision's priority order.
+  ///
+  /// Pure and injectable so the ordering, filtering and fallback rules are
+  /// testable without invoking Vision or changing the host's locale.
+  ///
+  /// Preferred languages Vision does not support are dropped rather than passed
+  /// through: `perform` throws on an unsupported tag, which would fail the whole
+  /// request and turn a partial-recognition bug into total OCR loss.
+  static func resolveRecognitionLanguages(
+    preferred: [String],
+    supported: [String]
+  ) -> [String] {
+    guard !supported.isEmpty else { return ["en-US"] }
+
+    var resolved: [String] = []
+    var seen = Set<String>()
+
+    func append(_ tag: String) {
+      guard seen.insert(tag).inserted else { return }
+      resolved.append(tag)
+    }
+
+    // Vision treats the list as a priority order, so the user's own languages
+    // lead.
+    for tag in preferred {
+      if let match = bestSupportedMatch(for: tag, in: supported) {
+        append(match)
+      }
+    }
+
+    // English is retained even when it is not a preferred language. Screen text
+    // is routinely mixed — identifiers, URLs, product names — and dropping it
+    // would regress the Latin half of the very lines this is meant to fix.
+    for fallback in ["en-US", "en"] {
+      if let match = bestSupportedMatch(for: fallback, in: supported) {
+        append(match)
+        break
+      }
+    }
+
+    return resolved.isEmpty ? ["en-US"] : resolved
+  }
+
+  /// Matches a BCP-47 tag against Vision's supported tags: the exact tag first,
+  /// then the same language under any region, so a region-less preference such
+  /// as `ja` still selects a supported `ja-JP`.
+  private static func bestSupportedMatch(for tag: String, in supported: [String]) -> String? {
+    if let exact = supported.first(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
+      return exact
+    }
+    let language = Self.primaryLanguage(of: tag)
+    return supported.first { Self.primaryLanguage(of: $0).caseInsensitiveCompare(language) == .orderedSame }
+  }
+
+  private static func primaryLanguage(of tag: String) -> String {
+    tag.split(separator: "-").first.map(String.init) ?? tag
+  }
 
   private init() {}
 
