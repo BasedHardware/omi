@@ -19,35 +19,43 @@ The fixed data-plane tuple is:
 | QA UID | `vi7SA9ckQCe4ccobWNxlbdcNdC23` |
 | Cloud Run region | `us-central1` |
 | drain job | `knowledge-ledger-drain-qa-job` |
+| Required service API | `redis.googleapis.com` |
 
 The workflow authenticates with the development GitHub environment's
-`GCP_CREDENTIALS`. It never prints or exports that credential. Before a drain
-or rollback, it reads the named job and rejects a different project, job name,
-runtime service account, source label, image tag, customer credential selector,
-Firestore database, or UID allowlist. The image must be a `gcr.io` development
-image pinned by a SHA-256 digest and its `source-sha` label must equal the
-admitted deployed source SHA. Before any credentialed operation, the runner
+`GCP_CREDENTIALS`. The auth action's generated `GOOGLE_APPLICATION_CREDENTIALS`
+file is retained for Firestore ADC resolution; the workflow checks that it is
+the action output and never prints its contents. Before a drain or rollback, it
+reads the named job and rejects a different project, job name, runtime service
+account, source label, image tag, customer credential selector, Firestore
+database, or UID allowlist. The image must be a `gcr.io` development image
+pinned by a SHA-256 digest and its `source-sha` label must equal the admitted
+deployed source SHA. Before any credentialed operation, the runner
 installs the pinned `backend/pylock.runtime.toml` environment and runs both
 operator and seed `--help` import checks under the complete QA data-plane
 environment.
 
 Run the actions in this order for a fresh named database:
 
-1. `bootstrap` with confirmation `PREPARE_QA`. This is create-only and fails
+1. If deployment stopped at Redis API provisioning, run
+   `ensure-infrastructure-api` with confirmation `ENABLE_QA_API`. It checks
+   `redis.googleapis.com` in `based-hardware-dev` and enables it only when the
+   service is not already enabled. This operation does not require a `run_id`
+   and does not mutate a Redis instance or any Firestore data.
+2. `bootstrap` with confirmation `PREPARE_QA`. This is create-only and fails
    before writing when any collection already exists.
-2. `prepare` with the chosen lowercase synthetic `run_id` and confirmation
+3. `prepare` with the chosen lowercase synthetic `run_id` and confirmation
    `PREPARE_QA`. This creates only the 101 owned synthetic rows and evidence
    through `backend/scripts/jit_qa_seed_and_verify.py`.
-3. `inspect` to capture the content-free pre-drain state.
-4. `drain-verify` with `DRAIN_VERIFY_QA`. This executes the existing job three
+4. `inspect` to capture the content-free pre-drain state.
+5. `drain-verify` with `DRAIN_VERIFY_QA`. This executes the existing job three
    times using Cloud Run execution overrides, waits for each exact execution,
    parses its aggregate log line, and runs the seed operator's real durable
    100 + 1 + stable-retry verification. The persistent job gate is checked
    again after every execution and must remain `false`.
-5. `rollback` with `ROLLBACK_QA` only after a reviewed successful proof. This
+6. `rollback` with `ROLLBACK_QA` only after a reviewed successful proof. This
    calls the canonical writer-transition rollback helper and checks that all
    synthetic rows/evidence remain present with the same metadata digest.
-6. `rollforward` with `ROLLFORWARD_QA` after rollback. This executes one
+7. `rollforward` with `ROLLFORWARD_QA` after rollback. This executes one
    bounded retry, requires zero migrated rows and one cutover, then verifies
    the canonical ledger fences are restored.
 

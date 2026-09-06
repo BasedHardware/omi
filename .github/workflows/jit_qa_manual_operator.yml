@@ -9,6 +9,7 @@ on:
         type: choice
         options:
           - bootstrap
+          - ensure-infrastructure-api
           - prepare
           - inspect
           - drain-verify
@@ -23,7 +24,7 @@ on:
         required: false
         type: string
       confirmation:
-        description: Use PREPARE_QA, DRAIN_VERIFY_QA, ROLLFORWARD_QA, or ROLLBACK_QA for mutating operations
+        description: Use ENABLE_QA_API, PREPARE_QA, DRAIN_VERIFY_QA, ROLLFORWARD_QA, or ROLLBACK_QA for mutating operations
         required: false
         type: string
 
@@ -79,7 +80,7 @@ jobs:
             echo "ERROR: source_sha must not be the all-zero SHA." >&2
             exit 1
           fi
-          if [[ "$OPERATION" != bootstrap && ! "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,47}$ ]]; then
+          if [[ "$OPERATION" != bootstrap && "$OPERATION" != ensure-infrastructure-api && ! "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,47}$ ]]; then
             echo "ERROR: run_id is required and must match [a-z0-9][a-z0-9_-]{0,47}." >&2
             exit 1
           fi
@@ -88,7 +89,7 @@ jobs:
             exit 1
           fi
           case "$OPERATION:$CONFIRMATION" in
-            bootstrap:PREPARE_QA|prepare:PREPARE_QA|inspect:|drain-verify:DRAIN_VERIFY_QA|rollforward:ROLLFORWARD_QA|rollback:ROLLBACK_QA) ;;
+            bootstrap:PREPARE_QA|ensure-infrastructure-api:ENABLE_QA_API|prepare:PREPARE_QA|inspect:|drain-verify:DRAIN_VERIFY_QA|rollforward:ROLLFORWARD_QA|rollback:ROLLBACK_QA) ;;
             *)
               echo "ERROR: confirmation does not match the selected QA operation." >&2
               exit 1
@@ -167,12 +168,49 @@ jobs:
           PYTHONPATH=. .venv/bin/python scripts/jit_qa_seed_and_verify.py --help >/dev/null
 
       - name: Authenticate to the development project
+        id: auth
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
+
+      - name: Verify action-provided development ADC
+        env:
+          ACTION_CREDENTIALS_PATH: ${{ steps.auth.outputs.credentials_file_path }}
+        run: |
+          set -euo pipefail
+          [[ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]] || {
+            echo "ERROR: google-github-actions/auth did not provide GOOGLE_APPLICATION_CREDENTIALS." >&2
+            exit 1
+          }
+          [[ -n "$ACTION_CREDENTIALS_PATH" ]] || {
+            echo "ERROR: google-github-actions/auth did not expose credentials_file_path." >&2
+            exit 1
+          }
+          [[ "$GOOGLE_APPLICATION_CREDENTIALS" == "$ACTION_CREDENTIALS_PATH" ]] || {
+            echo "ERROR: ADC path does not match the credentials file produced by the auth action." >&2
+            exit 1
+          }
+          [[ -f "$GOOGLE_APPLICATION_CREDENTIALS" ]] || {
+            echo "ERROR: action-provided ADC file is missing." >&2
+            exit 1
+          }
+          "$QA_PYTHON" - <<'PY'
+          import google.auth
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["GOOGLE_APPLICATION_CREDENTIALS"])
+          credentials, project = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+          if credentials is None:
+              raise SystemExit("auth action did not resolve ADC credentials")
+          if project and project != os.environ["QA_PROJECT"]:
+              raise SystemExit(f"auth action resolved unexpected project: {project}")
+          if not path.is_file():
+              raise SystemExit("resolved ADC path is not a regular file")
+          PY
 
       - name: Verify active development project
         env:
@@ -189,6 +227,50 @@ jobs:
             exit 1
           }
           timeout --foreground --kill-after=5s 60s gcloud projects describe "$QA_PROJECT" --format='value(projectId)' | grep -Fx "$QA_PROJECT" >/dev/null
+
+      - name: Ensure named development Redis API is enabled
+        if: ${{ inputs.operation == 'ensure-infrastructure-api' }}
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          service="redis.googleapis.com"
+          state="$(timeout --foreground --kill-after=5s 60s gcloud services describe "$service" \
+            --project "$QA_PROJECT" --format='value(state)' 2>/dev/null || true)"
+          mutation="false"
+          if [[ "$state" != "ENABLED" ]]; then
+            timeout --foreground --kill-after=5s 60s gcloud services enable "$service" \
+              --project "$QA_PROJECT" --quiet
+            mutation="true"
+          fi
+          state="$(timeout --foreground --kill-after=5s 60s gcloud services describe "$service" \
+            --project "$QA_PROJECT" --format='value(state)')"
+          [[ "$state" == "ENABLED" ]] || {
+            echo "ERROR: $service is not enabled in $QA_PROJECT (state=$state)." >&2
+            exit 1
+          }
+          "$QA_PYTHON" - "$SOURCE_SHA" "$RUN_ID" "$state" "$mutation" \
+            "$RUNNER_TEMP/jit-qa-operator/source.json" \
+            > "$RUNNER_TEMP/jit-qa-operator/artifacts/operator-receipt.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          source = json.loads(Path(sys.argv[5]).read_text(encoding="utf-8"))
+          print(json.dumps({
+              "schema_version": "omi.jit.qa.infrastructure-api.v1",
+              "status": "PASS",
+              "operation": "ensure-infrastructure-api",
+              "source_sha": sys.argv[1],
+              "run_id": sys.argv[2],
+              "project": "based-hardware-dev",
+              "service": "redis.googleapis.com",
+              "state": sys.argv[3],
+              "api_mutation": sys.argv[4] == "true",
+              "source": source,
+          }, sort_keys=True))
+          PY
 
       - name: Verify the deployed immutable QA drain job
         if: ${{ inputs.operation == 'drain-verify' || inputs.operation == 'rollforward' || inputs.operation == 'rollback' }}
@@ -225,7 +307,7 @@ jobs:
           KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST: ${{ env.QA_UID }}
         run: |
           set -euo pipefail
-          unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON GOOGLE_APPLICATION_CREDENTIALS FIREBASE_AUTH_CREDENTIALS_PATH
+          unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH
           operator_dir="$RUNNER_TEMP/jit-qa-operator"
           case "$OPERATION" in
             bootstrap)
@@ -288,7 +370,7 @@ jobs:
           KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST: ${{ env.QA_UID }}
         run: |
           set -euo pipefail
-          unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON GOOGLE_APPLICATION_CREDENTIALS FIREBASE_AUTH_CREDENTIALS_PATH
+          unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH
           operator_dir="$RUNNER_TEMP/jit-qa-operator"
           gcloud_bounded() {
             timeout --foreground --kill-after=5s 60s gcloud "$@"

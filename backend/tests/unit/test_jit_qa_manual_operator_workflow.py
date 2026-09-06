@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 WORKFLOW = Path(__file__).resolve().parents[2] / ".." / ".github" / "workflows" / "jit_qa_manual_operator.yml"
+QA_CLOUD_WORKFLOW = Path(__file__).resolve().parents[2] / ".." / ".github" / "workflows" / "jit_qa_cloud_run.yml"
 
 
 def _workflow_steps():
@@ -17,6 +18,11 @@ def _workflow_steps():
 
 def _step(name: str):
     return next(step for step in _workflow_steps() if step.get("name") == name)
+
+
+def _qa_cloud_steps():
+    document = yaml.safe_load(QA_CLOUD_WORKFLOW.read_text(encoding="utf-8"))
+    return document["jobs"]["provision"]["steps"]
 
 
 def test_manual_operator_is_main_only_and_qa_fenced():
@@ -34,7 +40,15 @@ def test_manual_operator_is_main_only_and_qa_fenced():
 
 def test_manual_operator_uses_existing_seed_contract_without_deploying_resources():
     text = WORKFLOW.read_text(encoding="utf-8")
-    for operation in ("bootstrap", "prepare", "inspect", "drain-verify", "rollback", "rollforward"):
+    for operation in (
+        "bootstrap",
+        "ensure-infrastructure-api",
+        "prepare",
+        "inspect",
+        "drain-verify",
+        "rollback",
+        "rollforward",
+    ):
         assert operation in text
     assert "jit_qa_seed_and_verify.py bootstrap" in text
     assert "jit_qa_seed_and_verify.py" in text
@@ -43,6 +57,8 @@ def test_manual_operator_uses_existing_seed_contract_without_deploying_resources
     assert "jit_qa_manual_operator.py validate-job" in text
     assert "DRAIN_VERIFY_QA" in text
     assert "ROLLBACK_QA" in text
+    assert "ENABLE_QA_API" in text
+    assert "redis.googleapis.com" in text
     assert "gcloud run deploy" not in text
     assert "gcloud run jobs deploy" not in text
     assert "gcloud scheduler" not in text
@@ -123,7 +139,105 @@ def test_mutating_seed_step_executes_with_source_sha_and_sanitized_artifact_only
     step = _step("Run read-only or seed operator action")
     assert "SOURCE_SHA" in step["env"]
     assert '"$operator_dir/artifacts/operator-receipt.json"' in step["run"]
-    assert 'unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON GOOGLE_APPLICATION_CREDENTIALS' in step["run"]
+    assert "unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH" in step["run"]
+    assert "GOOGLE_APPLICATION_CREDENTIALS" not in step["run"].split("unset", 1)[1].split("\n", 1)[0]
+
+
+def test_action_adc_is_retained_and_resolves_a_harmless_local_fixture_without_network(monkeypatch, tmp_path):
+    auth_step = _step("Authenticate to the development project")
+    assert auth_step["id"] == "auth"
+    adc_step = _step("Verify action-provided development ADC")
+    assert adc_step["env"]["ACTION_CREDENTIALS_PATH"] == "${{ steps.auth.outputs.credentials_file_path }}"
+    drain_step = _step("Execute three bounded drain pages and verify durable proof")
+    assert "unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH" in drain_step["run"]
+    assert "GOOGLE_APPLICATION_CREDENTIALS" not in drain_step["run"].split("unset", 1)[1].split("\n", 1)[0]
+
+    credentials_path = tmp_path / "authorized-user.json"
+    credentials_path.write_text(
+        json.dumps(
+            {
+                "type": "authorized_user",
+                "client_id": "local-fixture.apps.googleusercontent.com",
+                "client_secret": "local-fixture-secret",
+                "refresh_token": "local-fixture-refresh-token",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(credentials_path))
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware-dev")
+    monkeypatch.delenv("SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.delenv("FIREBASE_AUTH_CREDENTIALS_PATH", raising=False)
+    from google.auth import default
+
+    credentials, project = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    assert credentials.__class__.__module__ == "google.oauth2.credentials"
+    assert project == "based-hardware-dev"
+
+
+def test_qa_provision_enables_only_the_fixed_development_redis_api_before_resource_creation():
+    steps = _qa_cloud_steps()
+    api_step = next(
+        step
+        for step in steps
+        if step.get("name") == "Ensure named development Redis API is enabled before provisioning"
+    )
+    api_command = api_step["run"]
+    redis_step = next(step for step in steps if step.get("name") == "Create or verify the 1 GiB Basic Redis dependency")
+    assert 'service="redis.googleapis.com"' in api_command
+    assert '--project "$QA_PROJECT"' in api_command
+    assert "timeout --foreground --kill-after=5s 60s gcloud services enable" in api_command
+    assert steps.index(api_step) < steps.index(redis_step)
+    redis_command = redis_step["run"]
+    assert "gcloud redis instances create" in redis_command
+
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        fake_bin = root / "bin"
+        fake_bin.mkdir()
+        state = root / "state"
+        state.write_text("DISABLED\n", encoding="utf-8")
+        calls = root / "calls"
+        (fake_bin / "gcloud").write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "printf '%s\\n' \"$*\" >> \"$CALLS\"\n"
+            "if [[ \"${1:-}\" == services && \"${2:-}\" == describe ]]; then cat \"$STATE\"; exit 0; fi\n"
+            "if [[ \"${1:-}\" == services && \"${2:-}\" == enable ]]; then printf 'ENABLED\\n' > \"$STATE\"; exit 0; fi\n"
+            "echo \"unexpected gcloud command: $*\" >&2\n"
+            "exit 2\n",
+            encoding="utf-8",
+        )
+        (fake_bin / "gcloud").chmod(0o755)
+        environment = {
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "QA_PROJECT": "based-hardware-dev",
+            "STATE": str(state),
+            "CALLS": str(calls),
+        }
+        result = subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", api_command],
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        assert state.read_text(encoding="utf-8").strip() == "ENABLED"
+        assert any(
+            "services enable redis.googleapis.com" in line for line in calls.read_text(encoding="utf-8").splitlines()
+        )
+
+        calls.write_text("", encoding="utf-8")
+        result = subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", api_command],
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        assert not any(
+            "services enable redis.googleapis.com" in line for line in calls.read_text(encoding="utf-8").splitlines()
+        )
 
 
 def test_seed_bash_step_runs_with_fake_cli_and_cannot_lose_source_sha():
