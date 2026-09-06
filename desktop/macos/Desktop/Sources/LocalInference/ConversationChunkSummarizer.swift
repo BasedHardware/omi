@@ -227,8 +227,8 @@ struct ConversationChunkSummarizer: Sendable {
 
   static func plainTranscript(_ segments: [TranscriptHash.Segment]) -> String {
     segments.map { segment in
-      let speaker = segment.speaker?.trimmingCharacters(in: .whitespacesAndNewlines)
-      let label = (speaker?.isEmpty == false) ? speaker! : TranscriptHash.defaultSpeaker
+      let trimmed = segment.speaker?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let label = trimmed.isEmpty ? TranscriptHash.defaultSpeaker : trimmed
       return "\(label): \(segment.text)"
     }.joined(separator: "\n")
   }
