@@ -140,6 +140,38 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
         ]
 
 
+def test_all_verified_owner_dependencies_reject_non_qa_uid_before_side_effects(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every Firebase/API-key owner boundary must honor the QA plane fence."""
+    monkeypatch.setenv("OMI_JIT_QA_AUTH_ONLY", "true")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware-dev")
+    monkeypatch.setenv("OMI_JIT_QA_UID_ALLOWLIST", "qa-user")
+    with _loaded_dependencies() as (dependencies, firebase_auth, mcp_api_key_db, dev_api_key_db):
+        firebase_auth.verify_id_token = lambda _token: {"uid": "other-user"}
+        mcp_api_key_db.get_api_key_auth_result = lambda _token: SimpleNamespace(
+            context={"user_id": "other-user", "scopes": [], "app_id": "mcp-app", "key_id": "mcp-key"},
+            repairs=frozenset(),
+        )
+        dev_api_key_db.get_api_key_auth_result = lambda _token: SimpleNamespace(
+            context={"user_id": "other-user", "scopes": [], "app_id": "dev-app", "key_id": "dev-key"},
+            repairs=frozenset(),
+        )
+        dependencies.enforce_account_deletion_http_access = lambda _uid: (_ for _ in ()).throw(
+            AssertionError("QA admission must run before account side effects")
+        )
+
+        awaitable_factories = (
+            lambda: dependencies.get_current_user_id(SimpleNamespace(credentials="firebase-token")),
+            lambda: dependencies.get_uid_from_mcp_api_key("Bearer omi_mcp_secret"),
+            lambda: dependencies.get_mcp_api_key_auth("Bearer omi_mcp_secret"),
+            lambda: dependencies.get_api_key_auth("Bearer omi_dev_secret"),
+        )
+        for make_awaitable in awaitable_factories:
+            with pytest.raises(HTTPException) as error:
+                asyncio.run(make_awaitable())
+            assert error.value.status_code == 403
+
+
 def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
     with _loaded_dependencies() as (dependencies, _firebase_auth, mcp_api_key_db, dev_api_key_db):
         calls: list[tuple[Any, Any, tuple[Any, ...], dict[str, Any]]] = []

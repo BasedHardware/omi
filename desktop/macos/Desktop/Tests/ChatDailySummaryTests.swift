@@ -137,6 +137,41 @@ final class ChatDailySummaryTests: XCTestCase {
       "Your day in review")
   }
 
+  // MARK: - Generation failures say what the server said
+
+  /// The three statuses the backend uses as *answers* each get their own line; the reader on
+  /// a quiet day was told "couldn't generate" and read it as a broken button.
+  func testServerDeclinesAreNotReportedAsFailures() {
+    let fallback = "Couldn't generate this recap."
+    func message(_ status: Int) -> String {
+      ChatDailySummaryPresentation.generationFailureMessage(
+        for: APIError.httpError(statusCode: status, detail: "Nothing to summarize for 2026-09-04"),
+        fallback: fallback)
+    }
+    XCTAssertTrue(message(400).contains("Nothing to summarize"))
+    XCTAssertTrue(message(409).contains("Already being generated"))
+    XCTAssertTrue(message(429).contains("wait a moment"))
+    for status in [400, 409, 429] {
+      XCTAssertNotEqual(message(status), fallback, "status \(status) is an answer, not a failure")
+    }
+  }
+
+  func testGenuineFailuresKeepTheCallersFallback() {
+    let fallback = "Couldn't regenerate this recap."
+    XCTAssertEqual(
+      ChatDailySummaryPresentation.generationFailureMessage(
+        for: APIError.httpError(statusCode: 500, detail: nil), fallback: fallback),
+      fallback)
+    XCTAssertEqual(
+      ChatDailySummaryPresentation.generationFailureMessage(
+        for: APIError.httpError(statusCode: 404, detail: "Daily summary not found"), fallback: fallback),
+      fallback)
+    XCTAssertEqual(
+      ChatDailySummaryPresentation.generationFailureMessage(
+        for: URLError(.notConnectedToInternet), fallback: fallback),
+      fallback)
+  }
+
   // MARK: - Sections render only what is there
 
   func testEmptySectionsAreDroppedRatherThanDrawnEmpty() {
@@ -362,9 +397,9 @@ final class ChatDailySummaryTests: XCTestCase {
 
   /// The recap lives in history now: a day-boundary row anchored above the
   /// first message on or after the recap's day. `ChatDailyRecapRowPlacement`
-  /// decides, without a view, where that boundary is and when a thread
-  /// deliberately shows none — a marker the transcript cannot back up would be
-  /// a lie about where the day began.
+  /// decides, without a view, where that boundary is, when it waits for older
+  /// history to load, and when it takes the live edge — a marker the transcript
+  /// cannot back up would be a lie about where the day began.
   func testRecapRowPlacement() throws {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
@@ -396,10 +431,21 @@ final class ChatDailySummaryTests: XCTestCase {
     XCTAssertNil(
       ChatDailyRecapRowPlacement.anchorMessageID(
         in: thread, recapDate: "2026-08-31", hasOlderMessagesAbove: true, calendar: calendar))
-    // A recap newer than everything loaded has no boundary in the window.
+    // A recap newer than everything loaded is the newest thing in the thread:
+    // it takes the live edge, below the last row.
+    XCTAssertEqual(
+      ChatDailyRecapRowPlacement.anchorMessageID(
+        in: thread, recapDate: "2026-09-03", hasOlderMessagesAbove: false, calendar: calendar),
+      thread[2].id)
+    XCTAssertEqual(
+      ChatDailyRecapRowPlacement.anchorMessageID(
+        in: thread, recapDate: "2026-09-03", hasOlderMessagesAbove: true, calendar: calendar),
+      thread[2].id,
+      "the live edge does not depend on how much older history is still hidden")
+    // An empty thread renders nothing rather than inventing a row.
     XCTAssertNil(
       ChatDailyRecapRowPlacement.anchorMessageID(
-        in: thread, recapDate: "2026-09-03", hasOlderMessagesAbove: false, calendar: calendar))
+        in: [], recapDate: "2026-09-03", hasOlderMessagesAbove: false, calendar: calendar))
     // A missing or malformed date renders nothing rather than anchoring somewhere.
     XCTAssertNil(
       ChatDailyRecapRowPlacement.anchorMessageID(

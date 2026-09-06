@@ -378,7 +378,12 @@ class ListenPusherSession:
                                 # queued. Keep the request so this live session can
                                 # reclaim it instead of stranding `processing`.
                                 pending['sent_at'] = self.deps.now() - PENDING_REQUEST_TIMEOUT - 1
-                            logger.error(f"Conversation processing failed: {self.uid} {self.session_id}")
+                            # The pusher released its durable lease back to queued
+                            # and the pending entry stays armed for bounded retry —
+                            # this is in-flight work with a live recovery path, not
+                            # a server fault. The terminal dead-lettering above is
+                            # the fault signal and stays at ERROR.
+                            logger.warning(f"Conversation processing failed: {self.uid} {self.session_id}")
                     elif result.get('fenced'):
                         self.pending_conversation_requests.pop(conversation_id, None)
                         logger.info(

@@ -291,7 +291,16 @@ async def finalize_persisted_conversation(
         # metric or log; never include the exception message or user identity.
         reason = classify_finalization_failure(error)
         record_finalization_failure(reason)
-        logger.error(
+        # WARNING, not ERROR: this fires on every failed attempt, including
+        # attempts of conversations that later succeed on retry. The
+        # authoritative terminality decision lives in the pusher-side handler
+        # (utils/pusher_finalization.py), which escalates to ERROR exactly
+        # when record_failure reports the attempt budget exhausted. Severity
+        # is the fault-origin signal (FC-request-input-rejection-escapes-as-
+        # server-fault); logging every retryable attempt at ERROR paged
+        # operators for self-healing traffic (2026-09-06: 5-7/30min bursts
+        # against ~210-255 healthy processing/30min).
+        logger.warning(
             'persisted conversation finalization failed failure=processing_failed reason=%s',
             reason.value,
         )

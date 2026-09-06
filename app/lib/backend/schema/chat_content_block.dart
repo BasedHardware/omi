@@ -134,6 +134,9 @@ sealed class ChatContentBlock {
         );
       case 'agentCompletion':
       case 'agent_completion':
+        // Older persisted agent completions omitted status. The desktop
+        // codec preserves their historical completed default; explicit
+        // terminal values (including timed_out/orphaned) still pass through.
         return AgentCompletionContentBlock(
           id: id,
           sessionId: _string(raw, 'sessionId', 'session_id'),

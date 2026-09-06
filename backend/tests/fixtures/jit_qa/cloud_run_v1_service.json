@@ -1,0 +1,49 @@
+{
+  "apiVersion": "run.googleapis.com/v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "backend-jit-qa"
+  },
+  "spec": {
+    "template": {
+      "spec": {
+        "serviceAccountName": "jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com",
+        "containers": [
+          {
+            "image": "gcr.io/based-hardware-dev/backend-jit-qa@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "env": [
+              {"name": "OMI_ENV_STAGE", "value": "dev"},
+              {"name": "OMI_JIT_PROACTIVITY_BUDGET_CONTRACT", "value": "jit-cloud-qa-v1"},
+              {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware-dev"},
+              {"name": "OMI_FIRESTORE_DATA_PLANE_PROJECT", "value": "based-hardware-dev"},
+              {"name": "FIRESTORE_DATABASE_ID", "value": "jit-qa"},
+              {"name": "FIREBASE_AUTH_PROJECT_ID", "value": "based-hardware"},
+              {"name": "MEMORY_ENABLED", "value": "on"},
+              {"name": "MEMORY_BELIEF_MODEL_ENABLED", "value": "true"},
+              {"name": "OMI_JIT_QA_AUTH_ONLY", "value": "true"},
+              {"name": "OMI_JIT_QA_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
+              {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
+              {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
+              {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "false"},
+              {"name": "OMI_LLM_GATEWAY_URL", "value": "https://llm-gateway-jit-qa.invalid"},
+              {"name": "REDIS_DB_HOST", "value": "10.0.0.10"},
+              {"name": "REDIS_DB_PORT", "value": "6379"},
+              {"name": "TYPESENSE_HOST", "value": "typesense-jit-qa-1031333818730.us-central1.run.app"},
+              {"name": "TYPESENSE_HOST_PORT", "value": "443"},
+              {"name": "TYPESENSE_PROTOCOL", "value": "https"},
+              {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "jit_qa_canonical_memory_atoms"},
+              {"name": "MEMORY_TYPESENSE_READINESS_REQUIRED", "value": "true"},
+              {"name": "MEMORY_TYPESENSE_READINESS_COLLECTION", "value": "jit_qa_typesense_readiness"},
+              {"name": "ENCRYPTION_SECRET", "valueSource": {"secretKeyRef": {"secret": "ENCRYPTION_SECRET", "version": "latest"}}},
+              {"name": "OPENAI_API_KEY", "valueSource": {"secretKeyRef": {"secret": "OPENAI_API_KEY", "version": "latest"}}},
+              {"name": "POSTHOG_PROJECT_API_KEY", "valueSource": {"secretKeyRef": {"secret": "POSTHOG_PROJECT_API_KEY", "version": "latest"}}},
+              {"name": "REDIS_DB_PASSWORD", "valueSource": {"secretKeyRef": {"secret": "jit-qa-redis-password", "version": "latest"}}},
+              {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueSource": {"secretKeyRef": {"secret": "jit-qa-gateway-token", "version": "latest"}}},
+              {"name": "TYPESENSE_API_KEY", "valueSource": {"secretKeyRef": {"secret": "jit-qa-typesense-api-key", "version": "latest"}}}
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

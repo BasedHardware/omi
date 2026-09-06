@@ -494,6 +494,17 @@ class ServerMessage {
     return body.isEmpty || _normalizeWhitespace(body) == _normalizeWhitespace(fallback);
   }
 
+  /// Returns the canonical body fallback for one raw wire block.
+  ///
+  /// A rich block can replace the ordinary message body on clients that know
+  /// how to render it. Unrecognised or display-only blocks still need their
+  /// synthesized line in that mode; otherwise a mixed turn silently loses
+  /// thinking, tool, citation, or future block content.
+  String? structuredFallbackTextForRawBlock(Map<String, dynamic> block) {
+    final fallback = _blockFallbackText(block).trim();
+    return fallback.isEmpty ? null : fallback;
+  }
+
   static String _normalizeWhitespace(String value) {
     return value.split(RegExp(r'\s+')).where((part) => part.isNotEmpty).join(' ');
   }
@@ -509,8 +520,11 @@ class ServerMessage {
   }
 
   static String _blockFallbackText(Map<String, dynamic> block) {
-    String value(String camel, [String? snake]) =>
-        ((block[camel] ?? (snake == null ? null : block[snake])) as String? ?? '').trim();
+    String value(String camel, [String? snake]) {
+      final candidate = block[camel] ?? (snake == null ? null : block[snake]);
+      return candidate is String ? candidate.trim() : '';
+    }
+
     String labelled(String label, Iterable<String> details) {
       final unique = details.where((detail) => detail.isNotEmpty).toSet().toList(growable: false);
       return unique.isEmpty ? label : '$label - ${unique.join(' - ')}';

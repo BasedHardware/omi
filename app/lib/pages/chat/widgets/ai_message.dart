@@ -288,25 +288,31 @@ Widget buildMessageWidget(
   bool showThinkingAfterText = false,
   Future<ServerConversation?> Function(String id)? fetchConversation,
 }) {
-  final contentBlocks = ChatContentBlockList.hasRenderableBlocks(message)
-      ? ChatContentBlockList(
-          message: message,
-          sendMessage: sendMessage,
-          fetchConversation: fetchConversation,
-        )
-      : null;
+  final hasRenderableBlocks = ChatContentBlockList.hasRenderableBlocks(message);
   // A message whose text is only the fallback synthesized from its blocks has
   // nothing to say that the components do not already show, so the components
-  // replace the body instead of repeating it.
-  final blocksReplaceBody = contentBlocks != null &&
+  // replace the body instead of repeating it. Keep this decision explicit for
+  // the block list: day summaries, memory citations, and the initial-options
+  // surface still render the normal body and must not render its text block a
+  // second time below it.
+  final blocksReplaceBody = hasRenderableBlocks &&
       message.memories.isEmpty &&
       message.type != MessageType.daySummary &&
       !displayOptions &&
       message.textIsStructuredFallback;
+  final contentBlocks = hasRenderableBlocks
+      ? ChatContentBlockList(
+          message: message,
+          sendMessage: sendMessage,
+          onAskOmi: onAskOmi,
+          renderStructuredFallbackText: blocksReplaceBody,
+          fetchConversation: fetchConversation,
+        )
+      : null;
 
   final Widget messageWidget;
   if (blocksReplaceBody) {
-    messageWidget = contentBlocks;
+    messageWidget = contentBlocks!;
   } else if (message.memories.isNotEmpty) {
     messageWidget = MemoriesMessageWidget(
       showTypingIndicator: showTypingIndicator,

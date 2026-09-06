@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/chat_content_block.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 import 'chat_block_chrome.dart';
 
@@ -20,7 +21,7 @@ class AgentSpawnBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return _AgentRunCard(
       icon: Icons.smart_toy_outlined,
-      label: 'Agent started',
+      label: context.l10n.processing,
       title: block.title,
       body: block.objective,
     );
@@ -32,18 +33,33 @@ class AgentCompletionBlock extends StatelessWidget {
 
   final AgentCompletionContentBlock block;
 
-  /// The runtime's status vocabulary is open, so anything that is not a known
-  /// terminal failure reads as a completed run rather than an invented state.
-  bool get _failed {
+  /// Only the explicit successful terminal states may present as completed.
+  /// New, timed-out, or orphaned states must remain visibly non-successful.
+  bool get _completed {
     final status = block.status.trim().toLowerCase();
-    return status == 'failed' || status == 'error' || status == 'cancelled';
+    return status == 'completed' || status == 'succeeded' || status == 'success';
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final status = block.status.trim().toLowerCase();
+    final completed = _completed;
+    final cancelled = status == 'cancelled' || status == 'canceled' || status == 'stopped';
+    final timedOut = status == 'timed_out' || status == 'timedout' || status == 'timeout';
     return _AgentRunCard(
-      icon: _failed ? Icons.error_outline : Icons.check_circle_outline,
-      label: _failed ? 'Agent stopped' : 'Agent completed',
+      icon: completed
+          ? Icons.check_circle_outline
+          : cancelled
+              ? Icons.cancel_outlined
+              : Icons.error_outline,
+      label: completed
+          ? l10n.statusCompleted
+          : cancelled
+              ? l10n.cancelled
+              : timedOut
+                  ? l10n.statusTimedOut
+                  : l10n.statusFailed,
       title: block.title,
       body: block.output,
     );

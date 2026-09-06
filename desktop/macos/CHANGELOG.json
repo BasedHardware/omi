@@ -2,6 +2,77 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.303",
+      "date": "2026-09-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.302",
+      "date": "2026-09-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.301",
+      "date": "2026-09-06",
+      "changes": [
+        "Named test bundles now inherit shortcuts and settings from your installed Omi app — production first, Omi Dev when production is absent — instead of always mirroring a stale Omi Dev; the launch log warns and names the effective hotkey default when the source app has none set, and auth seeding falls back to your production session when Omi Dev's has expired"
+      ]
+    },
+    {
+      "version": "0.12.300",
+      "date": "2026-09-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.299",
+      "date": "2026-09-06",
+      "changes": [
+        "The daily recap in Chat history is now its own card — day, emoji, title, overview, and the day's stats — and the once-a-day announcement no longer adds a generic bell notification on top of it",
+        "Ambient proactive notifications now let you mark a reminder Useful or Not relevant"
+      ]
+    },
+    {
+      "version": "0.12.298",
+      "date": "2026-09-05",
+      "changes": [
+        "Improved proactive knowledge tools and standing notification setup in Chat"
+      ]
+    },
+    {
+      "version": "0.12.297",
+      "date": "2026-09-05",
+      "changes": [
+        "Improved proactive notification timing when your device and profile use different time zones"
+      ]
+    },
+    {
+      "version": "0.12.296",
+      "date": "2026-09-05",
+      "changes": [
+        "Daily recap generation now explains itself: days the backend declines say \"Nothing to summarize yet\" instead of a generic failure, and recap scheduling reaches owners who only use Omi on the Mac"
+      ]
+    },
+    {
+      "version": "0.12.295",
+      "date": "2026-09-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.294",
+      "date": "2026-09-05",
+      "changes": [
+        "Omi can now use what you've been working on across your devices, so chat picks up your context instead of asking you to re-explain it. Screenshots and on-screen text never leave your Mac, and excluding an app removes what it already learned."
+      ]
+    },
+    {
       "version": "0.12.293",
       "date": "2026-09-05",
       "changes": [

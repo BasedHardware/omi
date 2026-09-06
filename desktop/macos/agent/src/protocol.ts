@@ -56,6 +56,46 @@ export interface QueryMessage extends ProtocolEnvelope {
    * which tools the model is offered, never authorization.
    */
   jitKnowledgeToolsEnabled?: boolean;
+  /** QA-only source-owned prompt projection; persisted beside the admitted
+   * snapshot and hashed by the runtime before the run is inserted. */
+  jitCostEvidenceProjection?: JitCostEvidenceProjection;
+  /** Qualification-only JIT budget; absent for all normal chat. */
+  jitBudget?: {
+    contractVersion: string;
+    executionID: string;
+    maxProviderAttempts: number;
+    maxOutputTokensPerAttempt: number;
+    maxNormalizedInputTokensPerAttempt: number;
+    maxEstimatedSpendMicroUSD: number;
+  };
+}
+
+export interface JitCostEvidenceProjection {
+  schema_version: string;
+  owner_id: string;
+  execution_id: string;
+  producer_lane: "planned" | "ambient";
+  matched_input: {
+    evaluation_time: string;
+    timezone: string;
+    context_id: string;
+    evidence_sha256?: string;
+  };
+  legacy: {
+    prompt: string;
+    uncached_prompt: string;
+    [key: string]: unknown;
+  };
+  nano: {
+    prompt: string;
+    [key: string]: unknown;
+  };
+  full: {
+    prompt: string;
+    [key: string]: unknown;
+  };
+  evidence_sha256?: string;
+  [key: string]: unknown;
 }
 
 export interface QueryAttachment {
@@ -812,6 +852,11 @@ export interface ResultMessage extends QueryScopedOutbound {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  /** Qualification-only gateway attribution; null is explicit unknown. */
+  jitCostStatus?: "estimated" | "unknown";
+  jitEstimatedCostUsd?: number | null;
+  jitProviderAttempts?: number;
+  jitReceiptAttemptIDs?: string[];
   /// Served model identities observed on this run's completions, deduplicated.
   modelsUsed?: string[];
   artifacts?: SerializedArtifact[];
@@ -898,6 +943,9 @@ export interface ErrorMessage extends QueryScopedOutbound {
   type: "error";
   message: string;
   failure?: RuntimeFailurePayload;
+  /** Qualification-only gateway attribution; failures are always unknown. */
+  jitCostStatus?: "unknown";
+  jitEstimatedCostUsd?: null;
 }
 
 /** Sent when ACP requires user authentication (OAuth) */

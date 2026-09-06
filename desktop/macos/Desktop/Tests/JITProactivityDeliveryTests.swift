@@ -62,6 +62,35 @@ final class JITProactivityDeliveryTests: XCTestCase {
     XCTAssertEqual(invoked.checkCount, 0)
   }
 
+  func testQAWithoutBudgetCannotSubmitAnAgentTurn() async throws {
+    let probe = AuthorizationProbe()
+    do {
+      _ = try await JITProactivityAgentAuthority.run(
+        request(),
+        runner: { request in
+          _ = probe.current(request.authorizationSnapshot)
+          return JITProactivityAgentResult(text: "{}", runID: "run", inputTokens: 1, outputTokens: 1)
+        },
+        requiresBoundedBudget: true,
+        authorizationCurrent: { _ in true })
+      XCTFail("QA must not silently use the ordinary unbounded route")
+    } catch {
+      XCTAssertEqual(error as? JITProactivityAgentAuthorityError, .qualificationBudgetRequired)
+    }
+    XCTAssertEqual(probe.checkCount, 0)
+    XCTAssertTrue(JITProactivityAgentAuthority.requiresQualificationBudget(bundleIdentifier: "com.omi.omi-jit-qa"))
+    XCTAssertFalse(JITProactivityAgentAuthority.requiresQualificationBudget(bundleIdentifier: "com.omi.computer"))
+  }
+
+  func testExistingNonQualificationRouteRemainsAvailableWithoutBudget() async throws {
+    let result = try await JITProactivityAgentAuthority.run(
+      request(),
+      runner: { _ in JITProactivityAgentResult(text: "existing", runID: "run", inputTokens: 1, outputTokens: 1) },
+      requiresBoundedBudget: false,
+      authorizationCurrent: { _ in true })
+    XCTAssertEqual(result.text, "existing")
+  }
+
   func testAgentAuthorityRejectsOwnerTransitionAcrossFullAwait() async throws {
     let probe = AuthorizationProbe()
     do {

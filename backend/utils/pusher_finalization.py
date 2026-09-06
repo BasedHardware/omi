@@ -227,7 +227,13 @@ async def process_conversation_task(
         await send_result({'conversation_id': conversation_id, 'success': True})
     except ConversationFinalizationError:
         terminal = await record_failure('processing_failed')
-        logger.error(
+        # Severity follows the fault origin, mirroring the session-side
+        # reclassification of the will-retry branch (listen_pusher_session,
+        # FC-request-input-rejection-escapes-as-server-fault): a non-terminal
+        # failure stays armed for bounded retry — healthy in-flight work —
+        # while terminal dead-lettering is the genuine fault signal at ERROR.
+        log = logger.error if terminal else logger.warning
+        log(
             'pusher finalization failed uid=%s conversation=%s failure=processing_failed terminal=%s',
             uid,
             conversation_id,
@@ -239,7 +245,8 @@ async def process_conversation_task(
             pass
     except Exception:
         terminal = await record_failure('worker_failed')
-        logger.error(
+        log = logger.error if terminal else logger.warning
+        log(
             'pusher finalization task failed uid=%s conversation=%s failure=worker_failed terminal=%s',
             uid,
             conversation_id,

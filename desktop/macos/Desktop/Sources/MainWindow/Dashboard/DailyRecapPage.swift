@@ -394,7 +394,9 @@ struct DailyRecapPage: View {
       store.upsert(updated, isOwnerStillCurrent: isOwnerStillCurrent)
       current = updated
     } catch {
-      regenerateError = "Couldn't regenerate this recap."
+      log("DailyRecapPage: regenerate failed for \(record.id): \(error)")
+      regenerateError = ChatDailySummaryPresentation.generationFailureMessage(
+        for: error, fallback: "Couldn't regenerate this recap.")
     }
   }
 

@@ -563,10 +563,17 @@ struct FloatingControlBarView: View {
 
   /// Picks the actionable "Couldn't reach Omi" card for reach errors, else the
   /// normal notification card.
+  private enum JITFeedbackPresentation {
+    case planned(JITTriggerFeedbackContext)
+    case ambient(JITAmbientFeedbackContext)
+  }
+
   @ViewBuilder
   private func barNotification(_ notification: FloatingBarNotification) -> some View {
     if let feedbackContext = notification.jitFeedbackContext {
-      jitFeedbackCard(notification, context: feedbackContext)
+      jitFeedbackCard(notification, presentation: .planned(feedbackContext))
+    } else if let ambientFeedbackContext = notification.jitAmbientFeedbackContext {
+      jitFeedbackCard(notification, presentation: .ambient(ambientFeedbackContext))
     } else if notification.assistantId == "reach_error" {
       reachErrorCard(notification)
     } else if notification.assistantId == NotchMoment.receiptAssistantId {
@@ -603,7 +610,7 @@ struct FloatingControlBarView: View {
   /// never calls this path.
   private func jitFeedbackCard(
     _ notification: FloatingBarNotification,
-    context: JITTriggerFeedbackContext
+    presentation: JITFeedbackPresentation
   ) -> some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Button {
@@ -642,21 +649,23 @@ struct FloatingControlBarView: View {
 
       HStack(spacing: OmiSpacing.xs) {
         jitFeedbackButton("Useful", systemImage: "hand.thumbsup.fill") {
-          submitJITFeedback(.useful, notification: notification, context: context)
+          submitJITFeedback(.useful, notification: notification, presentation: presentation)
         }
         jitFeedbackButton("Not relevant", systemImage: "hand.thumbsdown.fill") {
-          submitJITFeedback(.falsePositive, notification: notification, context: context)
+          submitJITFeedback(.falsePositive, notification: notification, presentation: presentation)
         }
-        jitFeedbackButton("Snooze", systemImage: "zzz") {
-          submitJITFeedback(
-            .snooze, notification: notification, context: context,
-            snoozedUntil: Date().addingTimeInterval(24 * 60 * 60))
-        }
-        jitFeedbackButton("Disable", systemImage: "bell.slash.fill") {
-          submitJITFeedback(.disable, notification: notification, context: context)
-        }
-        jitFeedbackButton("Missed", systemImage: "clock.badge.exclamationmark") {
-          submitJITFeedback(.missedOrLate, notification: notification, context: context)
+        if case .planned = presentation {
+          jitFeedbackButton("Snooze", systemImage: "zzz") {
+            submitJITFeedback(
+              .snooze, notification: notification, presentation: presentation,
+              snoozedUntil: Date().addingTimeInterval(24 * 60 * 60))
+          }
+          jitFeedbackButton("Disable", systemImage: "bell.slash.fill") {
+            submitJITFeedback(.disable, notification: notification, presentation: presentation)
+          }
+          jitFeedbackButton("Missed", systemImage: "clock.badge.exclamationmark") {
+            submitJITFeedback(.missedOrLate, notification: notification, presentation: presentation)
+          }
         }
       }
     }
@@ -700,25 +709,44 @@ struct FloatingControlBarView: View {
   private func submitJITFeedback(
     _ action: JITTriggerFeedbackAction,
     notification: FloatingBarNotification,
-    context: JITTriggerFeedbackContext,
+    presentation: JITFeedbackPresentation,
     snoozedUntil: Date? = nil
   ) {
+    let ownerID: String
+    switch presentation {
+    case .planned(let context): ownerID = context.ownerID
+    case .ambient(let context): ownerID = context.ownerID
+    }
     guard
       let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-        expectedOwnerID: context.ownerID
+        expectedOwnerID: ownerID
       )
     else { return }
-    let identity = notification.feedbackIdentity
+    let accountGeneration = AccountCutoverControlManager.shared.control.accountGeneration
+    let notificationID = notification.id
     Task {
-      await FloatingControlBarManager.shared.recordInterjectJITVerdictIfEnabled(
-        identity: identity,
-        verb: action.interjectVerb)
-      await JITTriggerFeedbackActionRouter.record(
-        action,
-        context: context,
-        snoozedUntil: snoozedUntil,
-        authorizationSnapshot: authorizationSnapshot)
+      switch presentation {
+      case .planned(let context):
+        await FloatingControlBarManager.shared.recordInterjectJITVerdictIfEnabled(
+          identity: notification.feedbackIdentity,
+          verb: action.interjectVerb)
+        await JITTriggerFeedbackActionRouter.record(
+          action,
+          context: context,
+          snoozedUntil: snoozedUntil,
+          authorizationSnapshot: authorizationSnapshot)
+      case .ambient(let context):
+        await JITAmbientFeedbackActionRouter.record(
+          action,
+          context: context,
+          authorizationSnapshot: authorizationSnapshot,
+          currentAccountGeneration: accountGeneration,
+          presentationCurrent: {
+            FloatingControlBarManager.shared.isCurrentNotification(notificationID)
+          })
+      }
       await MainActor.run {
+        guard FloatingControlBarManager.shared.isCurrentNotification(notificationID) else { return }
         FloatingControlBarManager.shared.dismissCurrentNotification()
       }
     }

@@ -44,6 +44,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectReplyWindow.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectSuggestionFeedbackStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectVoiceFeedbackRouting.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITAmbientFeedback.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift

@@ -1777,6 +1777,10 @@ def test_daily_summary(
 DesktopUsageSeconds = Annotated[int, Field(strict=True, ge=0, le=86400)]
 DesktopUsageCount = Annotated[int, Field(strict=True, ge=0, le=10000)]
 
+# How long the desktop-usage heartbeat may assume the user document's ``time_zone`` state is
+# unchanged before it checks again.
+_DESKTOP_TIME_ZONE_RECHECK_SECONDS = 6 * 60 * 60
+
 
 class DesktopDailyUsageRequest(BaseModel):
     date: str
@@ -1846,6 +1850,15 @@ def record_desktop_daily_usage(
             'ptt_turns': data.ptt_turns,
         },
     )
+    # The daily-summary cron selects owners by the user document's ``time_zone``, and the only
+    # other writer of that field is the mobile FCM registration — so a desktop-only owner was
+    # never scheduled, and their on-demand recap was bounded to the UTC day. This heartbeat already
+    # carries a validated IANA zone; fill the gap once. The Redis flag keeps a five-minute heartbeat
+    # from re-reading the user document all day; a zone mobile already wrote is left alone.
+    time_zone_known_key = f'desktop_usage_time_zone_known:{uid}'
+    if not get_generic_cache(time_zone_known_key):
+        notification_db.set_user_time_zone_if_missing(uid, data.timezone)
+        set_generic_cache(time_zone_known_key, {'time_zone': data.timezone}, ttl=_DESKTOP_TIME_ZONE_RECHECK_SECONDS)
     return {'ok': True}
 
 

@@ -3520,6 +3520,13 @@ class FloatingControlBarManager {
     window?.makeKeyAndOrderFront(nil)
   }
 
+  /// A feedback task may outlive the card that launched it. Callers use this
+  /// main-actor check before entering the asynchronous mutation and again before
+  /// dismissal; the feedback actor remains the owner and generation authority.
+  func isCurrentNotification(_ notificationID: UUID) -> Bool {
+    window?.state.currentNotification?.id == notificationID
+  }
+
   @discardableResult
   func showNotification(
     ownerID: String,
@@ -3533,6 +3540,7 @@ class FloatingControlBarManager {
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     jitFeedbackContext: JITTriggerFeedbackContext? = nil,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
@@ -3560,7 +3568,8 @@ class FloatingControlBarManager {
       context: context,
       action: action,
       jitFeedbackContext: jitFeedbackContext,
-      suggestionTelemetryIdentity: suggestionTelemetryIdentity,
+      jitAmbientFeedbackContext: jitAmbientFeedbackContext,
+      suggestionTelemetryIdentity: suggestionTelemetryIdentity ?? jitAmbientFeedbackContext?.suggestionIdentity,
       insightDeliveryID: insightDeliveryID,
       screenshotData: screenshotData,
       isPersistent: isPersistent
@@ -3869,7 +3878,7 @@ class FloatingControlBarManager {
     verb: InterjectFeedbackVerb
   ) async {
     guard InterjectFeature.isEnabled else { return }
-    await InterjectSuggestionFeedbackMutation.record(
+    _ = await InterjectSuggestionFeedbackMutation.record(
       evaluationID: identity.evaluationID,
       suggestionID: identity.suggestionID,
       verb: verb
@@ -3883,7 +3892,7 @@ class FloatingControlBarManager {
     guard let verb = parsed.verb,
       let identity = recentNotchCardFeedbackIdentity()
     else { return }
-    await InterjectSuggestionFeedbackMutation.record(
+    _ = await InterjectSuggestionFeedbackMutation.record(
       evaluationID: identity.evaluationID,
       suggestionID: identity.suggestionID,
       verb: verb
@@ -3951,8 +3960,10 @@ class FloatingControlBarManager {
           for: nextNotification, outcome: .suppressed, reason: .staleOwner)
         continue
       }
-      presentNotification(nextNotification, in: window)
-      return
+      if presentNotification(nextNotification, in: window) { return }
+      // The final presentation seam can reject a card after it has left the
+      // queue (for example, when its JIT account generation became stale).
+      // Keep draining so one rejected card cannot strand newer work.
     }
   }
   /// Detach the floating UI from any in-flight chat streaming.
@@ -4543,6 +4554,17 @@ class FloatingControlBarManager {
       Self.recordInsightDeliveryOutcome(for: notification, outcome: .suppressed, reason: .staleOwner)
       return false
     }
+    guard
+      NotificationService.jitFeedbackGenerationsMatch(
+        jitFeedbackContext: notification.jitFeedbackContext,
+        jitAmbientFeedbackContext: notification.jitAmbientFeedbackContext,
+        currentGeneration: AccountCutoverControlManager.shared.control.accountGeneration)
+    else {
+      notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onDropped()
+      notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
+      log("FloatingControlBarManager: refusing to present stale JIT generation")
+      return false
+    }
     persistNotificationMessageIfNeeded(notification)
     clearInterjectGrace()
 
@@ -4665,8 +4687,10 @@ class FloatingControlBarManager {
             for: nextNotification, outcome: .suppressed, reason: .staleOwner)
           continue
         }
-        presentNotification(nextNotification, in: window)
-        return
+        if presentNotification(nextNotification, in: window) { return }
+        // The final presentation seam can reject a card after it has left the
+        // queue (for example, when its JIT account generation became stale).
+        // Keep draining so one rejected card cannot strand newer work.
       }
     }
 

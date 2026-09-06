@@ -169,12 +169,13 @@ struct SpineDayRecapRow: View {
     do {
       let record = try await APIClient.shared.createDailySummary(date: dateKey)
       store.upsert(record, isOwnerStillCurrent: isOwnerStillCurrent)
-    } catch APIError.httpError(statusCode: 409, detail: _) {
-      // The scheduled run for this day is mid-flight. Saying "couldn't generate" would be a
-      // false negative at the one moment the recap is actually on its way.
-      errorMessage = "Already being generated — check back in a moment."
     } catch {
-      errorMessage = "Couldn't generate this recap."
+      // The transport logs only the request line, so without this the local log cannot tell a
+      // server decline from a dead network — which is exactly the question a "couldn't
+      // generate" report raises.
+      log("SpineDayRecapRow: generate failed for \(dateKey): \(error)")
+      errorMessage = ChatDailySummaryPresentation.generationFailureMessage(
+        for: error, fallback: "Couldn't generate this recap.")
     }
   }
 

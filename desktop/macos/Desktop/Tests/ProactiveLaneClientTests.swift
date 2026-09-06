@@ -35,12 +35,183 @@ final class ProactiveLaneClientTests: XCTestCase {
       "usage": ["cached_tokens": 900, "cache_write_tokens": 0],
       "cache_write": false,
       "fallback_class": "unknown",
-      "response": ["choices": [["message": ["content": "{\"decision\":\"silence\"}"]]]],
+      "response": [
+        "id": "response-123",
+        "choices": [["message": ["content": "{\"decision\":\"silence\"}"]]],
+        "usage": [
+          "prompt_tokens": 80, "completion_tokens": 7, "total_tokens": 87,
+          "cached_tokens": 12, "cache_write_tokens": 4,
+        ],
+      ],
     ])
-    let parsed = try ProactiveLaneClient.parseEnvelope(data)
+    let parsed = try ProactiveLaneClient.parseEnvelope(data, requestID: "request-123")
     XCTAssertEqual(parsed.usage.cachedTokens, 900)
     XCTAssertEqual(parsed.lane, "omi:auto:desktop-proactive-reasoning")
     XCTAssertEqual(parsed.content, "{\"decision\":\"silence\"}")
+    XCTAssertEqual(parsed.requestID, "request-123")
+    XCTAssertEqual(parsed.providerResponseID, "response-123")
+    XCTAssertEqual(parsed.usage.inputTokens, 80)
+    XCTAssertEqual(parsed.usage.outputTokens, 7)
+    XCTAssertEqual(parsed.usage.totalTokens, 87)
+    XCTAssertEqual(parsed.usage.reportedCachedTokens, 12)
+    XCTAssertEqual(parsed.usage.reportedCacheWriteTokens, 4)
+  }
+
+  func testEnvelopeParsingKeepsMalformedProviderUsageUnknown() throws {
+    let data = try JSONSerialization.data(withJSONObject: [
+      "operation": "proactive_extraction",
+      "lane": "omi:auto:desktop-proactive-extraction",
+      "provider_model": "gpt-5-nano",
+      "usage": ["cached_tokens": 9],
+      "cache_write": false,
+      "fallback_class": "unknown",
+      "response": [
+        "choices": [["message": ["content": "{\"approved\":true}"]]],
+        "usage": [
+          "prompt_tokens": true,
+          "completion_tokens": 1.5,
+          "total_tokens": NSNumber(value: UInt64.max),
+          "cached_tokens": false,
+        ],
+      ],
+    ])
+
+    let parsed = try ProactiveLaneClient.parseEnvelope(data)
+    XCTAssertNil(parsed.usage.inputTokens)
+    XCTAssertNil(parsed.usage.outputTokens)
+    XCTAssertNil(parsed.usage.totalTokens)
+    XCTAssertNil(parsed.usage.reportedCachedTokens)
+    XCTAssertNil(parsed.usage.reportedCacheWriteTokens)
+    // The provider cache field is malformed, but the gateway's legacy
+    // envelope accounting remains independently valid.
+    XCTAssertEqual(parsed.usage.cachedTokens, 9)
+  }
+
+  func testNanoBillingObservationUsesProviderUsageAndNeverInfersCost() throws {
+    let result = ProactiveLaneResult(
+      operation: ModelQoS.Proactivity.extractionOperation,
+      lane: "omi:auto:desktop-proactive-extraction",
+      providerModel: "gpt-5-nano",
+      usage: ProactiveLaneUsage(
+        cachedTokens: 12, cacheWriteTokens: 4, inputTokens: 80, outputTokens: 7, totalTokens: 87),
+      cacheWrite: true,
+      fallbackClass: "none",
+      content: "{\"approved\":true}",
+      requestID: "request-123",
+      provider: "openai",
+      providerResponseID: "response-123")
+    let transport = ProactiveLaneResponseObservation(
+      statusCode: 200,
+      requestID: "request-123",
+      operation: result.operation,
+      provider: result.provider,
+      providerModel: result.providerModel,
+      providerResponseID: result.providerResponseID,
+      usage: result.usage,
+      fallbackClass: result.fallbackClass,
+      failure: nil)
+    let observed = JITProactivityNanoBillingObservation.observed(
+      lane: .ambient,
+      ownerID: JITProactivitySourceProjection.qaOwnerID,
+      accountGeneration: 3,
+      snapshotRevision: "revision",
+      budgetDay: "2026-09-06",
+      contextID: "context-1",
+      candidateID: "candidate-1",
+      executionID: "execution-1",
+      triage: .approved,
+      transport: transport)
+    XCTAssertEqual(observed.dispatch, "observed")
+    XCTAssertEqual(observed.inputTokens, 80)
+    XCTAssertEqual(observed.outputTokens, 7)
+    XCTAssertEqual(observed.providerModel, "gpt-5-nano")
+    XCTAssertEqual(observed.providerResponseID, "response-123")
+    XCTAssertEqual(observed.requestID, "request-123")
+    XCTAssertEqual(observed.usageStatus, "reported")
+    XCTAssertEqual(observed.costStatus, "unknown")
+    XCTAssertNil(observed.estimatedCostMicroUSD)
+    XCTAssertNil(observed.providerAttempts)
+    let json = try JSONSerialization.data(withJSONObject: observed.wireDictionary)
+    let wire = try XCTUnwrap(JSONSerialization.jsonObject(with: json) as? [String: Any])
+    XCTAssertNil(wire["content"])
+    XCTAssertNil(wire["prompt"])
+    XCTAssertEqual(wire["cost_status"] as? String, "unknown")
+  }
+
+  func testNanoBillingObservationClassifiesMalformedAndNoDispatchWithoutZeroUsage() {
+    let malformed = JITProactivityNanoBillingObservation.observed(
+      lane: .planned,
+      ownerID: JITProactivitySourceProjection.qaOwnerID,
+      accountGeneration: 3,
+      snapshotRevision: "revision",
+      budgetDay: "2026-09-06",
+      contextID: "context-1",
+      candidateID: "candidate-1",
+      executionID: nil,
+      triage: .unknown,
+      transport: ProactiveLaneResponseObservation(
+        statusCode: 422,
+        requestID: "request-422",
+        failure: ProactiveLaneFailureClassification(
+          failure: "invalid_structured_output", status: 422, errorType: nil)))
+    XCTAssertEqual(malformed.outcome, "malformed")
+    XCTAssertEqual(malformed.dispatch, "observed")
+    XCTAssertEqual(malformed.usageStatus, "unknown")
+    XCTAssertNil(malformed.inputTokens)
+    XCTAssertNil(malformed.outputTokens)
+    XCTAssertEqual(malformed.costStatus, "unknown")
+
+    let noDispatch = JITProactivityNanoBillingObservation.notDispatched(
+      lane: .planned,
+      ownerID: JITProactivitySourceProjection.qaOwnerID,
+      accountGeneration: 3,
+      snapshotRevision: "revision",
+      budgetDay: "2026-09-06",
+      contextID: "planned:trigger",
+      candidateID: "candidate-1",
+      executionID: "candidate-1")
+    XCTAssertEqual(noDispatch.outcome, "not_dispatched")
+    XCTAssertEqual(noDispatch.providerAttempts, 0)
+    XCTAssertEqual(noDispatch.usageStatus, "not_applicable")
+    XCTAssertEqual(noDispatch.costStatus, "not_applicable")
+  }
+
+  func testCompleteObserverCapturesRequestIdentityAndMalformedOutcomeMetadata() async throws {
+    ProactiveLaneURLStub.reset()
+    let client = ProactiveLaneClient(
+      session: makeStubSession(), baseURL: { "https://proactive.test" }, authorization: { "Bearer test" })
+    let probe = ResponseObservationProbe()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try successEnvelope(operation: ModelQoS.Proactivity.extractionOperation),
+      headers: ["X-Omi-Request-ID": "request-observed"])
+    _ = try await client.complete(
+      operation: ModelQoS.Proactivity.extractionOperation,
+      prompt: "nano",
+      jsonSchema: ["type": "object"],
+      responseObserver: { observation in await probe.set(observation) })
+    let successValue = await probe.value
+    let success = try XCTUnwrap(successValue)
+    XCTAssertEqual(success.statusCode, 200)
+    XCTAssertEqual(success.requestID, "request-observed")
+    XCTAssertNil(success.failure)
+
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200, body: Data("malformed".utf8), headers: ["X-Omi-Request-ID": "request-malformed"])
+    do {
+      _ = try await client.complete(
+        operation: ModelQoS.Proactivity.extractionOperation,
+        prompt: "nano",
+        jsonSchema: ["type": "object"],
+        responseObserver: { observation in await probe.set(observation) })
+      XCTFail("expected malformed response")
+    } catch ProactiveLaneClientError.invalidResponse {
+      // The bounded observer still receives the route request identity.
+    }
+    let malformedValue = await probe.value
+    let malformed = try XCTUnwrap(malformedValue)
+    XCTAssertEqual(malformed.requestID, "request-malformed")
+    XCTAssertEqual(malformed.failure?.failure, "invalid_response")
   }
 
   func testTelemetryProviderModelIsBounded() {
@@ -459,6 +630,48 @@ final class ProactiveLaneClientTests: XCTestCase {
     XCTAssertEqual(attempts, 1, "the ledger mirror must still be attempted exactly once")
   }
 
+  func testTriggerSnapshotDecodesServerBudgetAuthority() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try triggerSnapshotBody(
+        ownerID: "owner", budgetDay: "2026-08-23", budgetTimezone: "America/Los_Angeles"))
+    let client = makeJITAuthorityClient()
+
+    let snapshot = try await client.fetchJITTriggerSnapshot(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertEqual(snapshot.budgetDay, "2026-08-23")
+    XCTAssertEqual(snapshot.budgetTimezone, "America/Los_Angeles")
+  }
+
+  func testTriggerSnapshotRefreshAdoptsTimezoneChangeWithUnchangedRevision() async throws {
+    ProactiveLaneURLStub.reset()
+    // A profile timezone update does not necessarily change the ledger head or
+    // snapshot revision. The mirror must still consume the new budget authority
+    // returned by the next refresh rather than treating the revision as a cache key.
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try triggerSnapshotBody(
+        ownerID: "owner", budgetDay: "2026-08-23", budgetTimezone: "America/Los_Angeles"))
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try triggerSnapshotBody(
+        ownerID: "owner", budgetDay: "2026-08-24", budgetTimezone: "America/New_York"))
+    let client = makeJITAuthorityClient()
+
+    let first = try await client.fetchJITTriggerSnapshot(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+    let second = try await client.fetchJITTriggerSnapshot(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertEqual(first.snapshotRevision, second.snapshotRevision)
+    XCTAssertEqual(first.budgetTimezone, "America/Los_Angeles")
+    XCTAssertEqual(second.budgetTimezone, "America/New_York")
+    XCTAssertEqual(first.budgetDay, "2026-08-23")
+    XCTAssertEqual(second.budgetDay, "2026-08-24")
+  }
+
   func testDisabledTriggerSnapshotReturnsContentFreeReceiptWithoutTouchingTheMirror() async throws {
     ProactiveLaneURLStub.reset()
     ProactiveLaneURLStub.enqueue(
@@ -627,9 +840,10 @@ final class ProactiveLaneClientTests: XCTestCase {
   }
 
   private func triggerSnapshotBody(
-    ownerID: String, complete: Bool = true, failureReason: String? = nil
+    ownerID: String, complete: Bool = true, failureReason: String? = nil,
+    budgetDay: String? = nil, budgetTimezone: String? = nil
   ) throws -> Data {
-    try JSONSerialization.data(withJSONObject: [
+    var object: [String: Any] = [
       "owner_id": ownerID,
       "snapshot_revision": "revision-4",
       "account_generation": 3,
@@ -639,7 +853,10 @@ final class ProactiveLaneClientTests: XCTestCase {
       "rows": [] as [[String: Any]],
       "policy": ratifiedPolicyWireJSON(),
       "failure_reason": (failureReason as Any?) ?? NSNull(),
-    ])
+    ]
+    if let budgetDay { object["budget_day"] = budgetDay }
+    if let budgetTimezone { object["budget_timezone"] = budgetTimezone }
+    return try JSONSerialization.data(withJSONObject: object)
   }
   private func ratifiedPolicyWireJSON() -> [String: Any] {
     [
@@ -783,6 +1000,15 @@ private actor MirrorSyncProbe {
     attempts += 1
   }
 }
+
+private actor ResponseObservationProbe {
+  private(set) var value: ProactiveLaneResponseObservation?
+
+  func set(_ value: ProactiveLaneResponseObservation) {
+    self.value = value
+  }
+}
+
 private final class ManualDateClock: @unchecked Sendable {
   private let lock = NSLock()
   private var date: Date

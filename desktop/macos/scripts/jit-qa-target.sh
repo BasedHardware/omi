@@ -10,6 +10,19 @@ OMI_JIT_QA_LOCAL_PYTHON_URL="http://127.0.0.1:18080"
 OMI_JIT_QA_LOCAL_DESKTOP_URL="http://127.0.0.1:18081"
 OMI_JIT_QA_DEV_PYTHON_URL="https://api.omiapi.com"
 OMI_JIT_QA_DEV_DESKTOP_URL="https://desktop-backend-dt5lrfkkoa-uc.a.run.app"
+# Cloud QA is an isolated pair of Cloud Run services. Their generated host
+# suffixes are deliberately supplied by the deployment receipt rather than
+# guessed here; accepting a service-shaped value without that receipt would
+# make an arbitrary endpoint look like the isolated data plane.
+OMI_JIT_QA_CLOUD_PROJECT="based-hardware-dev"
+OMI_JIT_QA_CLOUD_REGION="us-central1"
+OMI_JIT_QA_CLOUD_AUTH_PROJECT="based-hardware"
+OMI_JIT_QA_CLOUD_DATA_PLANE_PROJECT="based-hardware-dev"
+OMI_JIT_QA_CLOUD_FIRESTORE_DATABASE="jit-qa"
+OMI_JIT_QA_CLOUD_PYTHON_SERVICE="backend-jit-qa"
+OMI_JIT_QA_CLOUD_DESKTOP_SERVICE="desktop-backend-jit-qa"
+OMI_JIT_QA_CLOUD_GATEWAY_SERVICE="llm-gateway-jit-qa"
+OMI_JIT_QA_CLOUD_RECEIPT_ENV="OMI_JIT_QA_CLOUD_RECEIPT_PATH"
 # Firebase web API keys identify a client/project; they are not credentials.
 # The dev services intentionally validate the same production Firebase identity
 # described by run.sh's --yolo contract, so the reserved QA tuple must carry the
@@ -19,6 +32,157 @@ OMI_JIT_QA_FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
 omi_jit_qa_fail() {
     printf 'ERROR: JIT QA target: %s\n' "$1" >&2
     return 2
+}
+
+omi_jit_qa_validate_cloud_url() {
+    local value="$1"
+    local service="$2"
+    local pattern
+
+    case "$service" in
+        "$OMI_JIT_QA_CLOUD_PYTHON_SERVICE")
+            # Cloud Run currently exposes both the legacy hashed endpoint
+            # (…-uc.a.run.app) and the deterministic regional endpoint
+            # (…-PROJECT_NUMBER.us-central1.run.app). Accept only these
+            # forms for this fixed service and region.
+            pattern='^https://backend-jit-qa-([a-z0-9-]+-uc\.a\.run\.app|[0-9]+\.us-central1\.run\.app)$'
+            ;;
+        "$OMI_JIT_QA_CLOUD_DESKTOP_SERVICE")
+            pattern='^https://desktop-backend-jit-qa-([a-z0-9-]+-uc\.a\.run\.app|[0-9]+\.us-central1\.run\.app)$'
+            ;;
+        "$OMI_JIT_QA_CLOUD_GATEWAY_SERVICE")
+            pattern='^https://llm-gateway-jit-qa-([a-z0-9-]+-uc\.a\.run\.app|[0-9]+\.us-central1\.run\.app)$'
+            ;;
+        *)
+            omi_jit_qa_fail "unknown cloud QA service $service"
+            return $?
+            ;;
+    esac
+
+    if [[ ! "$value" =~ $pattern ]]; then
+        omi_jit_qa_fail "$service URL must be the HTTPS Cloud Run URL for the isolated QA service"
+        return $?
+    fi
+}
+
+# A deployment receipt is the authority for a cloud-QA launch. It is emitted
+# by the reviewed deployment workflow after both services are ready, and is
+# checked against the endpoint values before run.sh can stop or relaunch an
+# app. Keep this parser dependency-free: macOS's Python 3 is already required
+# by the desktop launcher.
+omi_jit_qa_validate_cloud_receipt() {
+    local receipt_path="${OMI_JIT_QA_CLOUD_RECEIPT_PATH:-}"
+    local python_url="${OMI_JIT_QA_CLOUD_PYTHON_URL:-}"
+    local desktop_url="${OMI_JIT_QA_CLOUD_DESKTOP_URL:-}"
+
+    if [ -z "$receipt_path" ]; then
+        omi_jit_qa_fail "$OMI_JIT_QA_CLOUD_RECEIPT_ENV is required for cloud-qa"
+        return $?
+    fi
+    if [ ! -f "$receipt_path" ] || [ -L "$receipt_path" ]; then
+        omi_jit_qa_fail "$OMI_JIT_QA_CLOUD_RECEIPT_ENV must name a regular deployment receipt file"
+        return $?
+    fi
+    omi_jit_qa_validate_cloud_url "$python_url" "$OMI_JIT_QA_CLOUD_PYTHON_SERVICE" || return $?
+    omi_jit_qa_validate_cloud_url "$desktop_url" "$OMI_JIT_QA_CLOUD_DESKTOP_SERVICE" || return $?
+
+    python3 - "$receipt_path" "$python_url" "$desktop_url" \
+        "$OMI_JIT_QA_CLOUD_PROJECT" "$OMI_JIT_QA_CLOUD_REGION" \
+        "$OMI_JIT_QA_CLOUD_AUTH_PROJECT" "$OMI_JIT_QA_CLOUD_DATA_PLANE_PROJECT" \
+        "$OMI_JIT_QA_CLOUD_FIRESTORE_DATABASE" "$OMI_JIT_QA_CLOUD_PYTHON_SERVICE" \
+        "$OMI_JIT_QA_CLOUD_DESKTOP_SERVICE" "$OMI_JIT_QA_CLOUD_GATEWAY_SERVICE" <<'PY'
+import json
+import pathlib
+import re
+import sys
+
+(
+    receipt_path,
+    python_url,
+    desktop_url,
+    project,
+    region,
+    auth_project,
+    data_plane_project,
+    firestore_database,
+    python_service,
+    desktop_service,
+    gateway_service,
+) = sys.argv[1:]
+
+try:
+    receipt = json.loads(pathlib.Path(receipt_path).read_text(encoding="utf-8"))
+except (OSError, ValueError) as exc:
+    print(f"ERROR: JIT QA target: invalid cloud deployment receipt: {exc}", file=sys.stderr)
+    raise SystemExit(2)
+if not isinstance(receipt, dict):
+    print("ERROR: JIT QA target: cloud deployment receipt must be a JSON object", file=sys.stderr)
+    raise SystemExit(2)
+
+required = {
+    "schema_version": "omi.jit.qa.cloud.v1",
+    "status": "ready",
+    "project": project,
+    "region": region,
+    "auth_project": auth_project,
+    "data_plane_project": data_plane_project,
+    "python_service": python_service,
+    "desktop_service": desktop_service,
+    "exact_python_url": python_url,
+    "exact_desktop_url": desktop_url,
+    "firestore_database_id": firestore_database,
+    "gateway_service": gateway_service,
+}
+for key, expected in required.items():
+    if receipt.get(key) != expected:
+        print(f"ERROR: JIT QA target: cloud receipt {key} does not match the reviewed QA tuple", file=sys.stderr)
+        raise SystemExit(2)
+if receipt.get("reviewed") is not True:
+    print("ERROR: JIT QA target: cloud deployment receipt is not marked reviewed", file=sys.stderr)
+    raise SystemExit(2)
+gateway_url = receipt.get("exact_gateway_url")
+if not isinstance(gateway_url, str):
+    print("ERROR: JIT QA target: cloud receipt exact_gateway_url is required", file=sys.stderr)
+    raise SystemExit(2)
+gateway_pattern = re.compile(
+    r"^https://" + re.escape(gateway_service) + r"-([a-z0-9-]+-uc\.a\.run\.app|[0-9]+\.us-central1\.run\.app)$"
+)
+if not gateway_pattern.fullmatch(gateway_url):
+    print("ERROR: JIT QA target: cloud receipt exact_gateway_url is not the isolated QA gateway URL", file=sys.stderr)
+    raise SystemExit(2)
+source_sha = receipt.get("full_source_sha")
+if not isinstance(source_sha, str) or not re.fullmatch(r"[0-9a-f]{40}", source_sha):
+    print("ERROR: JIT QA target: cloud receipt must pin a full lowercase source SHA", file=sys.stderr)
+    raise SystemExit(2)
+for key, service in (
+    ("python_revision", python_service),
+    ("desktop_revision", desktop_service),
+):
+    revision = receipt.get(key)
+    if not isinstance(revision, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", revision) \
+            or not revision.startswith(service + "-"):
+        print(f"ERROR: JIT QA target: cloud receipt {key} is not a revision of {service}", file=sys.stderr)
+        raise SystemExit(2)
+for key in ("python_image_digest", "desktop_image_digest"):
+    digest = receipt.get(key)
+    if not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+        print(f"ERROR: JIT QA target: cloud receipt {key} must be a sha256 image digest", file=sys.stderr)
+        raise SystemExit(2)
+dependency_vector = receipt.get("dependency_vector")
+expected_dependencies = {
+    "firestore": "based-hardware-dev",
+    "redis": "jit-qa-redis:basic-1GiB",
+    "gateway": "llm-gateway-jit-qa:service-token",
+    "typesense": "typesense-jit-qa:api-key",
+    "firebase_auth": "based-hardware:verify-only",
+    "storage": "none",
+    "pubsub": "none",
+    "scheduler": "none",
+}
+if dependency_vector != expected_dependencies:
+    print("ERROR: JIT QA target: cloud receipt dependencies do not match the isolated QA contract", file=sys.stderr)
+    raise SystemExit(2)
+PY
 }
 
 omi_jit_qa_set_exact_tuple() {
@@ -33,8 +197,14 @@ omi_jit_qa_set_exact_tuple() {
             export OMI_DESKTOP_API_URL="$OMI_JIT_QA_DEV_DESKTOP_URL"
             export OMI_AUTH_API_URL="$OMI_JIT_QA_DEV_PYTHON_URL"
             ;;
+        cloud-qa)
+            omi_jit_qa_validate_cloud_receipt || return $?
+            export OMI_PYTHON_API_URL="$OMI_JIT_QA_CLOUD_PYTHON_URL"
+            export OMI_DESKTOP_API_URL="$OMI_JIT_QA_CLOUD_DESKTOP_URL"
+            export OMI_AUTH_API_URL="$OMI_JIT_QA_CLOUD_PYTHON_URL"
+            ;;
         *)
-            omi_jit_qa_fail "OMI_JIT_QA_TARGET must be local-dev-gcp or deployed-dev"
+            omi_jit_qa_fail "OMI_JIT_QA_TARGET must be local-dev-gcp, deployed-dev, or cloud-qa"
             return $?
             ;;
     esac
@@ -95,12 +265,15 @@ omi_preflight_jit_qa_launch_request() {
         return $?
     fi
     case "$OMI_JIT_QA_TARGET" in
-        local-dev-gcp|deployed-dev) ;;
+        local-dev-gcp|deployed-dev|cloud-qa) ;;
         *)
-            omi_jit_qa_fail "OMI_JIT_QA_TARGET must be local-dev-gcp or deployed-dev"
+            omi_jit_qa_fail "OMI_JIT_QA_TARGET must be local-dev-gcp, deployed-dev, or cloud-qa"
             return $?
             ;;
     esac
+    if [ "$OMI_JIT_QA_TARGET" = "cloud-qa" ]; then
+        omi_jit_qa_validate_cloud_receipt || return $?
+    fi
     for variable_name in OMI_PYTHON_API_URL OMI_DESKTOP_API_URL OMI_AUTH_API_URL OMI_ENV_STAGE FIREBASE_API_KEY; do
         if [ -n "${!variable_name+x}" ]; then
             omi_jit_qa_fail "$variable_name cannot override the selected atomic tuple"

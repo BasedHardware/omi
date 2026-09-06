@@ -931,6 +931,9 @@ export class KernelCore {
           contextRendererFingerprint: contextSnapshot.rendererFingerprint,
           contextCapabilityVersion: contextSnapshot.capabilityVersion,
           admittedContextSnapshot: contextSnapshot,
+          ...(input.jitCostEvidenceProjection
+            ? { jitCostEvidenceProjection: input.jitCostEvidenceProjection }
+            : {}),
         }),
         modelProfile: session.modelProfile,
         requestedModelId: session.modelProfile,

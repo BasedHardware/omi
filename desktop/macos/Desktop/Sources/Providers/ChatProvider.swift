@@ -4483,6 +4483,7 @@ class ChatProvider: ObservableObject {
     questionInteraction: ChatQuestionCardSelection? = nil,
     questionContinuation: ChatQuestionCardContinuation? = nil,
     onAccepted: (@MainActor () -> Void)? = nil,
+    onAcceptedWithAttemptID: (@MainActor (_ attemptID: String) -> Void)? = nil,
     onJournalFinalized: (@MainActor (_ accepted: Bool) -> Void)? = nil
   ) async -> String? {
     let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -4988,7 +4989,11 @@ class ChatProvider: ObservableObject {
     // turn. Clearing composer state keeps it out of the next draft without
     // removing the pill from this message or a later journal replay.
     pendingComposerReferences.removeAll()
-    onAccepted?()
+    Self.notifyAccepted(
+      telemetryAttempt: telemetryAttempt,
+      onAccepted: onAccepted,
+      onAcceptedWithAttemptID: onAcceptedWithAttemptID
+    )
 
     // Track onboarding user-message shape without content.
     if isOnboarding {
@@ -6083,7 +6088,11 @@ class ChatProvider: ObservableObject {
   /// was accepted into the timeline. Preflight failures leave it untouched,
   /// and typing a new draft while acceptance is pending is never overwritten.
   @discardableResult
-  func sendMainDraft(_ text: String, onAccepted: (@MainActor () -> Void)? = nil) async -> String? {
+  func sendMainDraft(
+    _ text: String,
+    onAccepted: (@MainActor () -> Void)? = nil,
+    onAcceptedWithAttemptID: (@MainActor (_ attemptID: String) -> Void)? = nil
+  ) async -> String? {
     let submittedRevision = composerDraft.revision
     return await sendMessage(
       text,
@@ -6094,6 +6103,9 @@ class ChatProvider: ObservableObject {
           self.draftText == text
         else { return }
         self.draftText = ""
+      },
+      onAcceptedWithAttemptID: { attemptID in
+        onAcceptedWithAttemptID?(attemptID)
       })
   }
 
@@ -6118,6 +6130,18 @@ class ChatProvider: ObservableObject {
     stagedImageAttachmentPresent: Bool
   ) -> Bool {
     explicitImagePresent || stagedImageAttachmentPresent
+  }
+
+  /// Runs acceptance callbacks from the same attempt object that emits the
+  /// terminal `question_answered` event. Keeping the ID lookup here prevents
+  /// an acceptance caller from accidentally substituting a second turn ID.
+  static func notifyAccepted(
+    telemetryAttempt: ChatQueryTelemetryAttempt,
+    onAccepted: (@MainActor () -> Void)?,
+    onAcceptedWithAttemptID: (@MainActor (_ attemptID: String) -> Void)?
+  ) {
+    onAccepted?()
+    onAcceptedWithAttemptID?(telemetryAttempt.context.attemptId)
   }
 
   nonisolated static func messageIds(forAttemptId attemptId: String) -> (

@@ -280,6 +280,7 @@ export class RunToolCapabilityBroker {
       executionRole: persisted.profile.executionRole,
       screenContext: persisted.screenContext,
       jitKnowledgeToolsEnabled: persisted.jitKnowledgeToolsEnabled,
+      jitProactivity: persisted.jitProactivity,
       surfaceKind: persisted.surfaceKind,
       chatFirstUi: persisted.chatFirstUi,
       controlGeneration: persisted.chatFirstControlGeneration,
@@ -727,6 +728,7 @@ export class RunToolCapabilityBroker {
     chatMode: string | null;
     screenContext: boolean;
     jitKnowledgeToolsEnabled: boolean;
+    jitProactivity: boolean;
     chatFirstUi: boolean;
     chatFirstControlGeneration: number | null;
     /** Spawn-time child tool restriction; null = no policy, [] = no tools (fail closed). */
@@ -802,6 +804,7 @@ export class RunToolCapabilityBroker {
       chatMode: typeof metadata.chatMode === "string" ? metadata.chatMode : null,
       screenContext: admittedScreenContext(runInput),
       jitKnowledgeToolsEnabled: metadata.jitKnowledgeToolsEnabled === true,
+      jitProactivity: metadata.jitBudget !== undefined,
       chatFirstUi,
       chatFirstControlGeneration: chatFirstUi && Number.isSafeInteger(controlGeneration) && controlGeneration >= 0
         ? controlGeneration

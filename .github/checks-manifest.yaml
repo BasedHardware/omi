@@ -632,6 +632,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "the Swift-only fast bundle path bypassed Omi Dev preference seeding, while overlay semantics retained target hotkeys absent from the source; exact domain mirroring plus common prelaunch wiring must stay guarded"
+  - id: desktop-auth-seed-acl
+    command: ["bash", "desktop/macos/tests/test-omi-auth-seed-acl.sh"]
+    triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/omi-auth-dump.sh", "desktop/macos/scripts/omi-auth-seed.sh", "desktop/macos/tests/test-omi-auth-seed-acl.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "auth seeding now resolves a dumpable source with a production fallback and an env override; it must keep passing APP_PATH into the seed and never CLI-write Keychain tokens"
   - id: desktop-agent-runtime-payload
     command: ["bash", "desktop/macos/tests/test-fast-dev-bundle.sh"]
     triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/fast-dev-bundle.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-fast-dev-bundle.sh", ".github/checks-manifest.yaml"]

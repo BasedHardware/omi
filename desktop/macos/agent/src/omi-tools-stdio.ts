@@ -154,6 +154,7 @@ async function requestSwiftTool(
 const isOnboarding = process.env.OMI_ONBOARDING === "true";
 const hasScreenContext = process.env.OMI_SCREEN_CONTEXT === "true";
 const hasJitKnowledgeTools = process.env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED === "true";
+const hasJitProactivity = process.env.OMI_JIT_PROACTIVITY_MODE === "true";
 const executionRole = process.env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator";
 const chatFirstUi = process.env.OMI_CHAT_FIRST_UI === "true" && process.env.OMI_SURFACE_KIND === "main_chat";
 const controlGeneration = Number(process.env.OMI_CHAT_FIRST_CONTROL_GENERATION);
@@ -161,6 +162,7 @@ const projectionContext = {
   onboarding: isOnboarding,
   screenContext: hasScreenContext,
   jitKnowledgeToolsEnabled: hasJitKnowledgeTools,
+  jitProactivity: hasJitProactivity,
   executionRole,
   surfaceKind: process.env.OMI_SURFACE_KIND,
   chatFirstUi,

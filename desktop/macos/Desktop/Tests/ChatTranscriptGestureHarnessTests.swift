@@ -132,7 +132,10 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
 
   /// The jitter complaint, as a gate: while a stream is live and the reader is
   /// following, the pinner tracks the live edge every tick, so between-flush
-  /// drift stays within one flush's own growth (a line or two). The periodic
+  /// drift stays within one flush's own growth. At the default 14 pt chat body
+  /// the measured line height is 22.5 pt (17.5 pt glyph height + 5 pt leading),
+  /// so the bound allows one layout line while still catching the old multi-line
+  /// glide drift. The periodic
   /// glide this replaced drifted tens of points between follows — its worst
   /// was 48 pt here — which read as up-and-down stutter.
   func testStreamingPinsTheViewportToTheLiveEdgeEveryTick() throws {
@@ -148,8 +151,16 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       worstDrift = max(worstDrift, harness.maximumScrollTop - harness.scrollTop)
     }
 
+    let defaultChatFontSize: CGFloat = 14
+    let oneLineHeight =
+      defaultChatFontSize * 1.25
+      + OmiMarkdownContent.chatLineSpacing(fontSize: defaultChatFontSize)
     XCTAssertLessThan(
-      worstDrift, 20,
+      oneLineHeight + 1.5,
+      48,
+      "the one-line bound must still reject the measured pre-fix 48 pt multi-line glide")
+    XCTAssertLessThan(
+      worstDrift, oneLineHeight + 1.5,
       "a streaming transcript must pin the following viewport to the live edge per tick "
         + "(drifted \(worstDrift) pt of a \(harness.viewportHeight) pt viewport)")
   }
