@@ -1,3 +1,4 @@
+import { CaptureOwnershipChanged, createCaptureOwnershipCodec } from "../../apps/service/codecs/capture-ownership";
 import { createPostgresFirebaseAuthorizationRuntime, type PostgresFirebaseAuthorizationRuntimeOptions } from "./firebase-authorized-runtime-support";
 import { createPostgresDeviceSessionUploadRepository, createPostgresDeviceTranscriptionRepository } from "./listen-finalization-repository";
 import type { PrerecordedTranscriptionSource } from "../../apps/service/listen/prerecorded-transcription";
@@ -33,7 +34,8 @@ async function body(request: Request): Promise<unknown> {
     await reader.cancel().catch(() => undefined);
   }
 }
-export function createPostgresFirebaseDeviceSessionRuntime(options: PostgresFirebaseAuthorizationRuntimeOptions, source?: PrerecordedTranscriptionSource) {
+export function createPostgresFirebaseDeviceSessionRuntime(options: PostgresFirebaseAuthorizationRuntimeOptions, source?: PrerecordedTranscriptionSource, ownershipKey?: Uint8Array) {
+  const ownership = ownershipKey === undefined ? undefined : createCaptureOwnershipCodec(ownershipKey);
   if (source !== undefined && (source === null || typeof source !== "object" || isProxy(source)
     || typeof Object.getOwnPropertyDescriptor(source, "transcribe")?.value !== "function"
     || isProxy(Object.getOwnPropertyDescriptor(source, "transcribe")!.value))) throw new TypeError("invalid_transcription_source");
@@ -60,8 +62,9 @@ export function createPostgresFirebaseDeviceSessionRuntime(options: PostgresFire
     async fetch(request: Request): Promise<Response> {
       const path = new URL(request.url).pathname;
       const match = /^\/v1\/device-sessions\/([^/]+)(?:\/(audio|complete|transcribe|transcript))?$/.exec(path);
+      const readingOwnership = path === "/v1/device-sessions/ownership" && request.method === "GET";
       const opening = path === "/v1/device-sessions" && request.method === "POST";
-      if (!opening && (!match || !DEVICE_UPLOAD_SESSION_ID.test(match[1]!)
+      if (!readingOwnership && !opening && (!match || !DEVICE_UPLOAD_SESSION_ID.test(match[1]!)
         || (match[2] && match[2] !== "transcript" ? request.method !== "POST" : request.method !== "GET"))) return error(404, "not_found");
       try {
         request.signal.throwIfAborted();
@@ -70,6 +73,10 @@ export function createPostgresFirebaseDeviceSessionRuntime(options: PostgresFire
         if (!authorized.authorized) return error(authorized.outcome === "authentication" ? 401 : authorized.outcome === "unavailable" ? 503 : 403,
           authorized.outcome === "authentication" ? "unauthorized" : authorized.outcome === "unavailable" ? "unavailable" : "forbidden");
         request.signal.throwIfAborted();
+        if (ownership === undefined) return error(503, "capture_ownership_unavailable");
+        if (readingOwnership) return Response.json({ ownership: ownership.issue(authorized.context) }, { headers: { "cache-control": "no-store" } });
+        const receipt = request.headers.get("x-omi-capture-ownership");
+        ownership.verify(authorized.context, receipt);
         const pool = bindPool(request.signal);
         if (match?.[2] === "transcribe" || match?.[2] === "transcript") {
           if (match[2] === "transcribe" && source === undefined) return error(503, "unavailable");
@@ -80,6 +87,7 @@ export function createPostgresFirebaseDeviceSessionRuntime(options: PostgresFire
                 const current = await authorize(token, signal);
                 if (!current.authorized) throw error(current.outcome === "authentication" ? 401 : current.outcome === "unavailable" ? 503 : 403,
                   current.outcome === "authentication" ? "unauthorized" : current.outcome === "unavailable" ? "unavailable" : "forbidden");
+                ownership.verify(current.context, receipt);
                 return current.context;
               },
             });
@@ -104,8 +112,10 @@ export function createPostgresFirebaseDeviceSessionRuntime(options: PostgresFire
       } catch (cause) {
         if (request.signal.aborted) return error(503, "unavailable");
         if (cause instanceof Response) return cause;
+        if (cause instanceof CaptureOwnershipChanged) return error(409, "capture_ownership_changed");
         if (cause instanceof TypeError || cause instanceof SyntaxError) return error(400, "invalid_request");
         if (cause instanceof PostgresRepositoryError) {
+          if (cause.code === "capture_ownership_changed") return error(409, "capture_ownership_changed");
           if (cause.code === "idempotency_conflict" || cause.code === "transition_invalid") return error(409, "device_session_conflict");
           if (["authorization_state_denied", "expired_context", "stale_epoch", "destination_inactive", "lifecycle_inactive", "credential_inactive", "grant_inactive", "capability_denied"].includes(cause.code)) return error(403, "forbidden");
         }

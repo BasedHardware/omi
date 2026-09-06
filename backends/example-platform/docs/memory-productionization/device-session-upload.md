@@ -9,6 +9,36 @@ activated epoch, and released database generation in the sealed transaction.
 Upload context expiry is checked again against the database clock before commit,
 so a delayed write rolls back rather than committing after its authority expires.
 
+Before the first captured byte, native recording obtains `GET /v1/device-sessions/ownership`
+using its current authenticated backend transport. The response is
+`{ownership:{ownerKey,receipt}}`. The opaque owner key identifies the actual canonical
+account and authority epoch; it is not derived from the Firebase UID. Native stores
+this response with its capture UUID, configured backend origin and login generation,
+and supplies `X-Omi-Capture-Ownership` from that journal on every subsequent session
+request. JavaScript must not select or replace the owner or receipt.
+
+The receipt is a purpose-separated HMAC constraint under the configured codec key,
+not an authorization grant. Every request still verifies current Firebase identity,
+binding and exact capture grant. A valid receipt for another account or epoch returns
+409 `capture_ownership_changed`; malformed or missing receipts return 400. Receipts
+have no authorization lifetime and contain no credentials. Recovery first obtains
+fresh ownership and compares the stable owner key before refreshing the signature;
+signing-key rotation therefore does not require retagging a journal. An owner-key or
+backend-origin mismatch must quarantine the journal rather than replay it elsewhere.
+
+Migration 0051 binds new capture rows to their actual creation epoch. Even a fresh
+receipt cannot resume a capture created under an earlier epoch. Historical rows
+without a recorded creation epoch remain available to authorized read-only queries,
+but replay, uploads, completion and new transcription fail with the explicit ownership
+recovery error. No historical epoch is inferred or backfilled. Receipt refresh is not
+part of capture idempotency: a lost initial acknowledgement still replays the original
+capture UUID and immutable device fields exactly once within its original ownership.
+
+The Worker currently has no canonical account-epoch authority and returns 503
+`capture_ownership_unavailable` for this endpoint. Its existing D1/R2 routes and data
+remain available, but receipt-backed native journaling cannot silently fall back to
+them. A paired canonical capture and conversation migration is still required there.
+
 | Request | Result |
 | --- | --- |
 | `POST /v1/device-sessions` with `captureId`, `deviceId`, optional `deviceName`, and numeric `codec` | 201 `{session}`; UUID-v4 `captureId` is stable client retry identity, and the server chooses the session ID |
