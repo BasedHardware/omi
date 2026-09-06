@@ -959,7 +959,7 @@ class CaptureController extends ChangeNotifier
     _voiceCommandTimeoutTimer?.cancel();
     _voiceCommandTimeoutTimer = null;
     _voiceCommandSession = null;
-    _voiceSessionStartedByLegacyLongPress = false; // Reset flag
+
     // The started-during-onboarding exemption only holds while the tutorial is
     // still active: if onboarding exited (dispose/skip/complete), the session
     // should have been cancelled — never submit audio captured after leaving.
@@ -976,7 +976,7 @@ class CaptureController extends ChangeNotifier
     _voiceCommandTimeoutTimer?.cancel();
     _voiceCommandTimeoutTimer = null;
     _voiceCommandSession = null;
-    _voiceSessionStartedByLegacyLongPress = false;
+
     _voiceCommandStartedDuringOnboarding = false;
     _commandBytes = [];
   }
@@ -1112,11 +1112,11 @@ class CaptureController extends ChangeNotifier
         _voiceCommandSession = DateTime.now();
         _commandBytes = [];
         _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
-        _voiceSessionStartedByLegacyLongPress = false; // New toggle mode
+
         _startVoiceCommandTimeout(deviceId);
         _playSpeakerHaptic(deviceId, 1);
-      } else if (!_voiceSessionStartedByLegacyLongPress) {
-        // Only end on second tap if session was started by toggle mode (not legacy)
+      } else {
+        // End on second tap
         debugPrint("Ending voice question session (toggle mode)");
         _endVoiceCommandSession(deviceId);
       }
@@ -1129,15 +1129,14 @@ class CaptureController extends ChangeNotifier
       _voiceCommandSession = DateTime.now();
       _commandBytes = [];
       _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
-      _voiceSessionStartedByLegacyLongPress = true; // Legacy hold-to-talk mode
+
       _startVoiceCommandTimeout(deviceId);
       _playSpeakerHaptic(deviceId, 1);
     }
 
     // Legacy support: release (end voice command) - older firmware
-    // Only end on release if session was started by legacy long press (buttonState 3)
-    if (buttonState == 5 && _voiceCommandSession != null && _voiceSessionStartedByLegacyLongPress) {
-      debugPrint("Legacy: Release detected - ending voice command");
+    // End on release if a voice command session is active
+    if (buttonState == 5 && _voiceCommandSession != null) {
       _endVoiceCommandSession(deviceId);
     }
   }

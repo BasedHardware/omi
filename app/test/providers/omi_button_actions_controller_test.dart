@@ -1,13 +1,68 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
+import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+
+class _TestEnvFields implements EnvFields {
+  @override
+  String? get posthogApiKey => null;
+  @override
+  String? get apiBaseUrl => null;
+  @override
+  String? get googleMapsApiKey => null;
+  @override
+  String? get intercomAppId => null;
+  @override
+  String? get intercomIOSApiKey => null;
+  @override
+  String? get intercomAndroidApiKey => null;
+  @override
+  String? get googleClientId => null;
+  @override
+  String? get googleClientSecret => null;
+  @override
+  bool? get useWebAuth => false;
+  @override
+  bool? get useAuthCustomToken => false;
+}
+
+class _NoSocketCaptureProvider extends CaptureProvider {
+  _NoSocketCaptureProvider({
+    super.externalActions,
+    super.audioCodecLoader,
+    super.speakerHaptic,
+    super.inProgressConversationLoader,
+  });
+
+  @override
+  Future<TranscriptSegmentSocketService?> openConversationSocket({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    required String language,
+    required bool force,
+    String? source,
+    String? clientConversationId,
+    CustomSttConfig? customSttConfig,
+  }) async {
+    // Tests must never open a real transcription socket: connecting would hit
+    // buildHeaders → AuthService.isSignedIn → FirebaseAuth, none of which are
+    // testable without platform plugins.
+    return null;
+  }
+}
 
 class _RecordingCaptureExternalActions extends NoopCaptureExternalActions {
   int sendCount = 0;
@@ -26,16 +81,42 @@ class _RecordingCaptureExternalActions extends NoopCaptureExternalActions {
 BtDevice _device(DeviceType type) => BtDevice(name: 'test-device', id: 'test-id', type: type, rssi: -40);
 
 void main() {
-  setUp(() async {
+  setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    SharedPreferences.setMockInitialValues({});
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (call) async => Directory.systemTemp.path,
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('dev.fluttercommunity.plus/package_info'),
+      (call) async => {'appName': 'omi', 'packageName': 'com.omi.test', 'version': '0.0.0', 'buildNumber': '1'},
+    );
+    try {
+      Env.init(_TestEnvFields());
+    } catch (_) {
+      // Env._instance is late final — ignore if already initialized in this isolate.
+    }
+    try {
+      await ServiceManager.init();
+    } catch (_) {
+      // Already initialized by another test in this isolate.
+    }
+  });
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({'deviceIdHash': 'test-device-hash'});
     await SharedPreferencesUtil.init();
+    // buildHeaders reads PlatformManager.deviceIdHash, a late field set only
+    // by initializeServices() (needs real device plugins). The short-circuit
+    // in _getDeviceIdHash() lets us initialize that field from the stored
+    // value instead.
+    await PlatformManager.initializeServices();
   });
 
   test('disabled Omi actions still deliver tutorial button events', () {
     final onboarding = DeviceOnboardingProvider()..startOnboarding();
     onboarding.advanceStep();
-    final provider = CaptureProvider(speakerHaptic: (_, __) async => true);
+    final provider = _NoSocketCaptureProvider(speakerHaptic: (_, __) async => true);
     provider.deviceOnboardingProvider = onboarding;
     provider.updateRecordingDevice(_device(DeviceType.omi));
     SharedPreferencesUtil().omiButtonActionsEnabled = false;
@@ -58,7 +139,7 @@ void main() {
     onboarding.advanceStep();
     onboarding.advanceStep();
     onboarding.selectDoubleTapAction(1);
-    final provider = CaptureProvider();
+    final provider = _NoSocketCaptureProvider();
     provider.deviceOnboardingProvider = onboarding;
     provider.updateRecordingDevice(_device(DeviceType.omi));
     SharedPreferencesUtil().omiButtonActionsEnabled = false;
@@ -72,7 +153,10 @@ void main() {
 
   test('capability-normalized OpenGlass identity bypasses the Omi-only gate', () async {
     final actions = _RecordingCaptureExternalActions();
-    final provider = CaptureProvider(externalActions: actions, audioCodecLoader: (_) async => BleAudioCodec.opus);
+    final provider = _NoSocketCaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+    );
     // Glass units can advertise as DeviceType.omi under a name without any
     // "glass" hint. DeviceProvider normalizes them after getDeviceInfo() reads
     // hasImageStream and pushes the paired device, so the recording device the
@@ -90,7 +174,7 @@ void main() {
   });
 
   test('disabling actions cancels an active voice session', () {
-    final provider = CaptureProvider(speakerHaptic: (_, __) async => true);
+    final provider = _NoSocketCaptureProvider(speakerHaptic: (_, __) async => true);
     provider.updateRecordingDevice(_device(DeviceType.omi));
 
     provider.handleButtonEventForTesting('test-id', 1);
@@ -106,7 +190,7 @@ void main() {
     final codecRequested = Completer<void>();
     final codec = Completer<BleAudioCodec>();
     final actions = _RecordingCaptureExternalActions();
-    final provider = CaptureProvider(
+    final provider = _NoSocketCaptureProvider(
       externalActions: actions,
       audioCodecLoader: (_) {
         codecRequested.complete();
@@ -130,7 +214,7 @@ void main() {
 
   test('exiting onboarding cancels the tutorial voice session and timeout cannot submit', () async {
     final actions = _RecordingCaptureExternalActions();
-    final provider = CaptureProvider(
+    final provider = _NoSocketCaptureProvider(
       externalActions: actions,
       audioCodecLoader: (_) async => BleAudioCodec.opus,
       speakerHaptic: (_, __) async => true,
@@ -161,7 +245,7 @@ void main() {
 
   test('stale onboarding exemption cannot submit after onboarding exits', () async {
     final actions = _RecordingCaptureExternalActions();
-    final provider = CaptureProvider(
+    final provider = _NoSocketCaptureProvider(
       externalActions: actions,
       audioCodecLoader: (_) async => BleAudioCodec.opus,
       speakerHaptic: (_, __) async => true,
@@ -189,7 +273,7 @@ void main() {
   });
 
   test('streamDeviceRecording does not downgrade a normalized OpenGlass type', () async {
-    final provider = CaptureProvider(inProgressConversationLoader: () async {});
+    final provider = _NoSocketCaptureProvider(inProgressConversationLoader: () async {});
     final discovery = _device(DeviceType.omi);
     provider.updateRecordingDevice(discovery.copyWith(type: DeviceType.openglass));
 
@@ -201,7 +285,7 @@ void main() {
   });
 
   test('cancelTutorialOwnedVoiceSession no-ops when the session is not tutorial-owned', () {
-    final provider = CaptureProvider(speakerHaptic: (_, __) async => true);
+    final provider = _NoSocketCaptureProvider(speakerHaptic: (_, __) async => true);
     provider.updateRecordingDevice(_device(DeviceType.omi));
 
     provider.handleButtonEventForTesting('test-id', 1);
@@ -215,7 +299,7 @@ void main() {
   test('cancelTutorialOwnedVoiceSession cancels a tutorial-owned session', () {
     final onboarding = DeviceOnboardingProvider()..startOnboarding();
     onboarding.advanceStep();
-    final provider = CaptureProvider(speakerHaptic: (_, __) async => true);
+    final provider = _NoSocketCaptureProvider(speakerHaptic: (_, __) async => true);
     provider.deviceOnboardingProvider = onboarding;
     provider.updateRecordingDevice(_device(DeviceType.omi));
     SharedPreferencesUtil().omiButtonActionsEnabled = false;
