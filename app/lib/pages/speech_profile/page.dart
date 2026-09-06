@@ -187,25 +187,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
 
   @override
   void dispose() {
-    _scrollController.dispose();
     _profilePlayerSub?.cancel();
     _profilePlayer.dispose();
     super.dispose();
-  }
-
-  final ScrollController _scrollController = ScrollController();
-
-  void scrollDown() async {
-    await Future.delayed(const Duration(milliseconds: 250));
-
-    if (!mounted) return;
-    if (_scrollController.positions.isEmpty) return;
-
-    _scrollController.animateTo(
-      _scrollController.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
-    );
   }
 
   @override
@@ -329,9 +313,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
         builder: (context, provider, _, child) {
           return MessageListener<SpeechProfileProvider>(
             showInfo: (info) {
-              if (info == 'SCROLL_DOWN') {
-                scrollDown();
-              } else if (info == 'SKIP_UNAVAILABLE') {
+              if (info == 'SKIP_UNAVAILABLE') {
                 AppSnackbar.showSnackbarError(context.l10n.reconnecting);
               }
             },

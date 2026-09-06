@@ -31,7 +31,6 @@ import 'package:omi/utils/logger.dart';
 enum SpeechProfileLoadingState { uploading, memorizing, personalizing, allSet }
 
 /// Enum for progress message states in speech profile
-enum SpeechProfileProgressState { keepSpeaking, keepGoing, almostThere, soClose }
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
@@ -53,7 +52,6 @@ class SpeechProfileProvider extends ChangeNotifier
   TranscriptSegmentSocketService? _socket;
 
   bool startedRecording = false;
-  double percentageCompleted = 0;
 
   /// Sentences the user must speak before the profile is finalized. The UI
   /// shows a bar filling toward it; reaching it is what completes the
@@ -93,7 +91,6 @@ class SpeechProfileProvider extends ChangeNotifier
   bool isInitialised = false;
 
   String text = '';
-  SpeechProfileProgressState progressState = SpeechProfileProgressState.keepSpeaking;
 
   Function? _finalizedCallback;
   Function? _processConversationCallback;
@@ -122,8 +119,6 @@ class SpeechProfileProvider extends ChangeNotifier
   String currentQuestion = '';
   int currentQuestionIndex = 0;
   int totalQuestions = 0;
-
-  double get questionProgress => totalQuestions == 0 ? 0.0 : (currentQuestionIndex / totalQuestions).clamp(0.0, 1.0);
 
   /// Live mic input level in [0.0, 1.0], computed straight from the outgoing
   /// PCM16 audio so the recording UI can give the user visible confirmation
@@ -619,7 +614,6 @@ class SpeechProfileProvider extends ChangeNotifier
     segments.clear();
     streamStartedAtSecond = null;
     text = '';
-    percentageCompleted = 0;
     _sentenceTargetReached = false;
     profileCompleted = false;
     uploadingProfile = false;
@@ -631,21 +625,6 @@ class SpeechProfileProvider extends ChangeNotifier
     permissionEnabled = permission;
     if (permission != null) {
       SharedPreferencesUtil().permissionStoreRecordingsEnabled = permission;
-    }
-    notifyListeners();
-  }
-
-  void updateProgressMessage() {
-    // Only show user's speech, not Omi questions
-    text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
-    int wordsCount = text.split(' ').length;
-    progressState = SpeechProfileProgressState.keepSpeaking;
-    if (wordsCount > 10) {
-      progressState = SpeechProfileProgressState.keepGoing;
-    } else if (wordsCount > 25) {
-      progressState = SpeechProfileProgressState.almostThere;
-    } else if (wordsCount > 40) {
-      progressState = SpeechProfileProgressState.soClose;
     }
     notifyListeners();
   }
@@ -666,7 +645,6 @@ class SpeechProfileProvider extends ChangeNotifier
     currentQuestionIndex = 0;
     totalQuestions = 0;
     startedRecording = false;
-    percentageCompleted = 0;
     _sentenceTargetReached = false;
     uploadingProfile = false;
     profileCompleted = false;
@@ -849,7 +827,6 @@ class SpeechProfileProvider extends ChangeNotifier
     _validateSingleSpeaker();
 
     updateSpokenText();
-    notifyInfo('SCROLL_DOWN');
     notifyListeners();
   }
 
@@ -860,7 +837,6 @@ class SpeechProfileProvider extends ChangeNotifier
   @visibleForTesting
   void updateSpokenText() {
     text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
-    percentageCompleted = sentenceProgress;
     if (_completionFired || spokenSentenceCount < targetSentenceCount) return;
 
     if (!_sentenceTargetReached) {

@@ -68,22 +68,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
     _speechProvider?.forceCompletionTimer?.cancel();
     _speechProvider?.forceCompletionTimer = null;
 
-    _scrollController.dispose();
-
     super.dispose();
-  }
-
-  final ScrollController _scrollController = ScrollController();
-
-  void scrollDown() async {
-    if (!_scrollController.hasClients) return;
-    await Future.delayed(const Duration(milliseconds: 250));
-    if (!mounted || !_scrollController.hasClients) return;
-    _scrollController.animateTo(
-      _scrollController.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
-    );
   }
 
   String _getLoadingText(BuildContext context, SpeechProfileLoadingState state) {
@@ -165,9 +150,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
         builder: (context, provider, _, child) {
           return MessageListener<SpeechProfileProvider>(
             showInfo: (info) {
-              if (info == 'SCROLL_DOWN') {
-                scrollDown();
-              } else if (info == 'SKIP_UNAVAILABLE') {
+              if (info == 'SKIP_UNAVAILABLE') {
                 AppSnackbar.showSnackbarError(context.l10n.reconnecting);
               }
             },
