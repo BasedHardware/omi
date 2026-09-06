@@ -3,7 +3,11 @@ import { env } from "cloudflare:workers";
 import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { beforeEach, describe, expect, test } from "vitest";
 
-import { MAIN_CONVERSATION_ID } from "../src/conversations";
+import {
+  MAIN_CONVERSATION_ID,
+  readConversations,
+  paginateConversations,
+} from "../src/conversations";
 import handler from "../src/index";
 
 const chatSchema = [
@@ -430,6 +434,89 @@ describe("D1 chat projects an honest conversation list", () => {
         structured: expect.objectContaining({ title: "project me" }),
       }),
     ]);
+  });
+
+  test("chat session namespaces cannot collide with recordings or nested prefixes", async () => {
+    const accountId = "conversation-namespace-test";
+    const recordingId = crypto.randomUUID();
+    const sessionIds = [
+      `recording:${recordingId}`,
+      `chat:recording:${recordingId}`,
+      "chat-main",
+      "chat:chat-main",
+    ];
+    for (const [index, sessionId] of sessionIds.entries()) {
+      await env.DB.prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, position, payload) VALUES (?, ?, ?, 'human', 1, ?, ?)"
+      )
+        .bind(
+          `namespace-chat-${index}`,
+          accountId,
+          `Chat ${index}`,
+          index + 1,
+          JSON.stringify({ chatSessionId: sessionId })
+        )
+        .run();
+    }
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, position, payload) VALUES (?, 'foreign-account', 'foreign', 'human', 1, 1, ?)"
+    )
+      .bind(
+        "namespace-foreign",
+        JSON.stringify({ chatSessionId: `recording:${recordingId}` })
+      )
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO device_sessions (id, account_id, device_id, codec, state, r2_prefix, started_at, ended_at, created_at, updated_at) VALUES (?, ?, 'test-device', 21, 'complete', ?, 1, 1, 1, 1)"
+    )
+      .bind(recordingId, accountId, `namespace/${recordingId}`)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO device_transcriptions (session_id, account_id, state, available_at, text, updated_at) VALUES (?, ?, 'completed', 1, 'Recorded words', 1)"
+    )
+      .bind(recordingId, accountId)
+      .run();
+
+    const rows = await readConversations(env.DB, accountId);
+    expect(rows).toHaveLength(sessionIds.length + 1);
+    expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
+    expect(rows.find((row) => row.source === "omi")?.id).toBe(
+      `recording:${recordingId}`
+    );
+    expect(
+      rows
+        .filter((row) => row.source === "chat")
+        .map((row) => row.id)
+        .sort()
+    ).toEqual(sessionIds.map((sessionId) => `chat:${sessionId}`).sort());
+    expect(rows.find((row) => row.id === MAIN_CONVERSATION_ID)?.source).toBe(
+      "chat"
+    );
+    expect(await readConversations(env.DB, accountId)).toEqual(rows);
+
+    const walked: string[] = [];
+    let cursor: string | undefined;
+    for (let index = 0; index < rows.length; index++) {
+      const page = paginateConversations(
+        await readConversations(env.DB, accountId),
+        1,
+        cursor
+      );
+      if (page === "invalid_cursor") throw new Error("Stable cursor rejected");
+      expect(page.items).toHaveLength(1);
+      const id = page.items[0]!.id;
+      expect(walked).not.toContain(id);
+      walked.push(id);
+      if (index < rows.length - 1) {
+        expect(page.window.hasMore).toBe(true);
+        expect(page.window.nextCursor).toBe(id);
+        cursor = page.window.nextCursor ?? undefined;
+      } else {
+        expect(page.window.hasMore).toBe(false);
+        expect(page.window.nextCursor).toBeNull();
+      }
+    }
+    expect(walked).toEqual(rows.map((row) => row.id));
   });
 
   test("memories remain retryably unavailable because D1 has no memories store", async () => {
