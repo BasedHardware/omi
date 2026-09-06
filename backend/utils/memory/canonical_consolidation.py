@@ -2114,9 +2114,6 @@ def run_canonical_consolidation(
                 now=current_time,
                 db_client=client,
             )
-            # Cron stops the page and leaves the registry cursor on this UID.
-            # Continuing here scanned the rest of the 400-user hour after Flex
-            # budget was already exhausted (dest timeout-kill class).
             raise
         batches_run += 1
         pending_by_id = {item.memory_id: item for item in llm_pending_batch}
