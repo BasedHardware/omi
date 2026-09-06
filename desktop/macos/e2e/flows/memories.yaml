@@ -40,6 +40,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasSnapshotCache.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasZoomPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasSurfacePresentation.swift
+  # The desktop-side rebuild the Rebuild control falls back to when the server refuses (S8b).
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/BrainMapLocalRebuild.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift
@@ -132,6 +134,20 @@ steps:
       name: open_memory_atlas
     expect:
       result.detail.opened: "true"
+      result.detail.target: "page"
+
+  - id: S8b
+    name: Rebuild the Brain Map from the whole account
+    # Posts the same request the Rebuild button makes. The server rebuild is tried first; when it
+    # refuses (assertion-backed account, hourly limit, or no route) the desktop reads conversations,
+    # memories, people and goals itself and extracts them in batches. Poll `memory_graph_snapshot`
+    # afterwards — a full account takes a minute or two and the button narrates progress meanwhile.
+    bridge.action:
+      name: memory_graph_rebuild
+      params:
+        target: "page"
+    expect:
+      result.detail.posted: "true"
       result.detail.target: "page"
 
   - id: S10
