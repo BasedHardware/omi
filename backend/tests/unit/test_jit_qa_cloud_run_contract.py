@@ -184,6 +184,46 @@ def test_cloud_run_resource_rejects_inherited_cache_or_customer_binding():
         )
 
 
+def test_cloud_run_resource_accepts_rest_omitted_value_for_explicitly_empty_sweep_flag():
+    image = "gcr.io/based-hardware-dev/daily-memory-sweep-qa-job@sha256:" + "e" * 64
+    resource = _resource("sweep", "job", image)
+    resource["metadata"]["name"] = CONTRACT.DAILY_SWEEP_JOB
+    env = resource["spec"]["template"]["template"]["containers"][0]["env"]
+    env.remove(next(entry for entry in env if entry["name"] == "MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG"))
+    env.append({"name": "MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG"})
+
+    CONTRACT.validate_cloud_run_resource(
+        resource,
+        kind="job",
+        expected_image=image,
+        expected_environment=CONTRACT.resource_environment("sweep")[0],
+        expected_secret_bindings=CONTRACT.resource_environment("sweep")[1],
+        expected_name=CONTRACT.DAILY_SWEEP_JOB,
+    )
+
+
+def test_cloud_run_resource_rejects_null_for_explicitly_empty_sweep_flag():
+    image = "gcr.io/based-hardware-dev/daily-memory-sweep-qa-job@sha256:" + "f" * 64
+    resource = _resource("sweep", "job", image)
+    resource["metadata"]["name"] = CONTRACT.DAILY_SWEEP_JOB
+    cohort_flag = next(
+        entry
+        for entry in resource["spec"]["template"]["template"]["containers"][0]["env"]
+        if entry["name"] == "MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG"
+    )
+    cohort_flag["value"] = None
+
+    with pytest.raises(CONTRACT.JITQAContractError, match="unexpected value"):
+        CONTRACT.validate_cloud_run_resource(
+            resource,
+            kind="job",
+            expected_image=image,
+            expected_environment=CONTRACT.resource_environment("sweep")[0],
+            expected_secret_bindings=CONTRACT.resource_environment("sweep")[1],
+            expected_name=CONTRACT.DAILY_SWEEP_JOB,
+        )
+
+
 def test_cloud_run_v1_nested_job_fixture_is_supported():
     image = "gcr.io/based-hardware-dev/knowledge-ledger-drain-qa-job@sha256:" + "d" * 64
     fixture_path = BACKEND_ROOT / "tests" / "fixtures" / "jit_qa" / "cloud_run_v1_job.json"

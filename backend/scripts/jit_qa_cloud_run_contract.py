@@ -283,7 +283,14 @@ def validate_cloud_run_resource(
             if actual_binding != expected_secret_bindings[name]:
                 raise JITQAContractError(f"Cloud Run resource has an unexpected secret binding for {name}")
         elif name in expected_environment:
-            if set(entry) != {"name", "value"} or entry.get("value") != expected_environment[name]:
+            # Cloud Run's REST representation omits the protobuf scalar for
+            # an explicitly configured empty environment value. Accept that
+            # representation only for an expected empty literal; retain
+            # exact matching for every value and reject null values.
+            expected_value = expected_environment[name]
+            if expected_value == "" and set(entry) == {"name"}:
+                continue
+            if set(entry) != {"name", "value"} or entry["value"] != expected_value:
                 raise JITQAContractError(f"Cloud Run resource has an unexpected value for {name}")
         else:
             # A replacement env update is intentional: silently retaining a
