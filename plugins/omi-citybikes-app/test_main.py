@@ -10,6 +10,11 @@ import time
 import unittest
 from unittest.mock import AsyncMock, patch
 
+# Save original module entries to restore in tearDownModule
+_original_sys_modules = {
+    k: sys.modules[k] for k in ("models", "main") if k in sys.modules
+}
+
 # Ensure plugin directory is in sys.path and dynamically load modules
 _plugin_dir = os.path.dirname(os.path.abspath(__file__))
 if _plugin_dir not in sys.path:
@@ -426,6 +431,154 @@ class TestCityBikesApp(unittest.TestCase):
         blocked = self.client.post("/tools/search_bike_networks", json={"query": "Paris"})
         self.assertEqual(blocked.status_code, 429)
         self.assertIn("Rate limit exceeded", blocked.json()["error"])
+
+    def test_nearby_stations_single_coordinate_rejected(self):
+        """Supplying only latitude or only longitude triggers a 422 validation error."""
+        payload_lat_only = {
+            "network_id": "citi-bike-nyc",
+            "latitude": 40.7128,
+        }
+        resp = self.client.post("/tools/get_nearby_bike_stations", json=payload_lat_only)
+        self.assertEqual(resp.status_code, 422)
+        self.assertIn("Both latitude and longitude must be provided together", resp.json()["error"])
+
+        payload_lon_only = {
+            "network_id": "citi-bike-nyc",
+            "longitude": -74.0060,
+        }
+        resp = self.client.post("/tools/get_nearby_bike_stations", json=payload_lon_only)
+        self.assertEqual(resp.status_code, 422)
+        self.assertIn("Both latitude and longitude must be provided together", resp.json()["error"])
+
+    @patch("httpx.AsyncClient.get", new_callable=AsyncMock)
+    def test_station_status_mixed_case_network_id_normalized(self, mock_get):
+        """Mixed-case network IDs in StationStatusRequest are normalized to lowercase."""
+        mock_get.return_value = MockResponse(200, MOCK_NYC_DETAILS_RESPONSE)
+
+        payload = {
+            "network_id": "Citi-Bike-NYC",
+            "station_id_or_name": "station-broadway-1",
+        }
+        resp = self.client.post("/tools/check_bike_station_status", json=payload)
+        self.assertEqual(resp.status_code, 200)
+        # Verify the upstream network endpoint was called with lowercased id
+        mock_get.assert_called_once()
+        called_url = mock_get.call_args[0][0]
+        self.assertIn("/networks/citi-bike-nyc", called_url)
+
+    @patch("httpx.AsyncClient.get", new_callable=AsyncMock)
+    def test_rate_limiter_spoofed_forwarded_header_ignored(self, mock_get):
+        """X-Forwarded-For headers from untrusted direct peer IP are ignored for rate limiting."""
+        mock_get.return_value = MockResponse(200, MOCK_NETWORKS_RESPONSE)
+
+        # Exhaust 60 requests from untrusted peer (testclient is not in TRUSTED_PROXIES)
+        for i in range(60):
+            r = self.client.post("/tools/search_bike_networks", json={"query": "Paris"}, headers={"X-Forwarded-For": f"1.2.3.{i}"})
+            self.assertEqual(r.status_code, 200)
+
+        # 61st request should be blocked despite having a new spoofed X-Forwarded-For IP
+        blocked = self.client.post("/tools/search_bike_networks", json={"query": "Paris"}, headers={"X-Forwarded-For": "9.9.9.9"})
+        self.assertEqual(blocked.status_code, 429)
+
+    @patch("httpx.AsyncClient.get", new_callable=AsyncMock)
+    def test_rate_limiter_trusted_proxy_honors_forwarded_header(self, mock_get):
+        """When direct peer is in TRUSTED_PROXIES, X-Forwarded-For is trusted."""
+        mock_get.return_value = MockResponse(200, MOCK_NETWORKS_RESPONSE)
+
+        with patch.object(main_module, "TRUSTED_PROXIES", {"testclient"}):
+            # 60 requests from 60 different client IPs forwarded by trusted proxy should all succeed
+            for i in range(60):
+                r = self.client.post("/tools/search_bike_networks", json={"query": "Paris"}, headers={"X-Forwarded-For": f"10.0.0.{i}"})
+                self.assertEqual(r.status_code, 200)
+
+            # 61st request from a new client IP via trusted proxy also succeeds without being throttled
+            r_new = self.client.post("/tools/search_bike_networks", json={"query": "Paris"}, headers={"X-Forwarded-For": "10.0.0.99"})
+            self.assertEqual(r_new.status_code, 200)
+
+    @patch("httpx.AsyncClient.get", new_callable=AsyncMock)
+    def test_station_cache_lru_order_refreshed_on_hit(self, mock_get):
+        """Cache hits refresh access order in OrderedDict to ensure true LRU eviction."""
+        net1_resp = {"network": {"id": "net-1", "name": "Net 1", "stations": []}}
+        net2_resp = {"network": {"id": "net-2", "name": "Net 2", "stations": []}}
+        mock_get.side_effect = [
+            MockResponse(200, net1_resp),
+            MockResponse(200, net2_resp),
+        ]
+
+        # Fetch net-1 then net-2
+        self.client.post("/tools/get_nearby_bike_stations", json={"network_id": "net-1"})
+        self.client.post("/tools/get_nearby_bike_stations", json={"network_id": "net-2"})
+
+        # Access net-1 again (cache hit) -> should move net-1 to end (most recently used)
+        self.client.post("/tools/get_nearby_bike_stations", json={"network_id": "net-1"})
+
+        # Verify net-1 is now at the end of OrderedDict keys
+        cache_keys = list(main_module._stations_cache.keys())
+        self.assertEqual(cache_keys[-1], "net-1")
+
+    @patch("httpx.AsyncClient.get", new_callable=AsyncMock)
+    def test_station_list_mutation_prevented(self, mock_get):
+        """Sorting stations by GPS distance does not mutate the order of stations in cached data."""
+        mock_get.return_value = MockResponse(200, MOCK_NYC_DETAILS_RESPONSE)
+
+        # Distance query near Grand Central (station-grand-central is index 2 in original fixture)
+        payload = {
+            "network_id": "citi-bike-nyc",
+            "latitude": 40.7527,
+            "longitude": -73.9772,
+            "limit": 3,
+        }
+        resp = self.client.post("/tools/get_nearby_bike_stations", json=payload)
+        self.assertEqual(resp.status_code, 200)
+
+        # Verify underlying cached stations list retains its original pristine ordering
+        cached_network = main_module._stations_cache["citi-bike-nyc"][1]
+        first_cached_station = cached_network["stations"][0]["id"]
+        self.assertEqual(first_cached_station, "station-broadway-1")
+
+    @patch("httpx.AsyncClient.get", new_callable=AsyncMock)
+    def test_zero_coordinate_handled_properly(self, mock_get):
+        """Stations with latitude=0.0 or longitude=0.0 are valid and receive distance formatting."""
+        zero_station_response = {
+            "network": {
+                "id": "null-island-bike",
+                "name": "Null Island Bikes",
+                "location": {"city": "Gulf of Guinea", "country": "GH"},
+                "stations": [
+                    {
+                        "id": "station-zero",
+                        "name": "Null Island Buoy Station",
+                        "latitude": 0.0,
+                        "longitude": 0.0,
+                        "free_bikes": 5,
+                        "empty_slots": 5,
+                    }
+                ],
+            }
+        }
+        mock_get.return_value = MockResponse(200, zero_station_response)
+
+        payload = {
+            "network_id": "null-island-bike",
+            "latitude": 0.001,
+            "longitude": 0.001,
+        }
+        resp = self.client.post("/tools/get_nearby_bike_stations", json=payload)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIsNone(data["error"])
+        self.assertIn("Null Island Buoy Station", data["result"])
+        # Should contain distance string (e.g. 157m away)
+        self.assertIn("away", data["result"])
+
+
+def tearDownModule():
+    """Restore global sys.modules state to prevent cross-test pollution."""
+    for mod_name in ("models", "main"):
+        if mod_name in _original_sys_modules:
+            sys.modules[mod_name] = _original_sys_modules[mod_name]
+        elif mod_name in sys.modules:
+            del sys.modules[mod_name]
 
 
 if __name__ == "__main__":

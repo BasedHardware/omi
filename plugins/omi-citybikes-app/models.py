@@ -91,6 +91,14 @@ class NearbyStationsRequest(BaseModel):
         cleaned = v.strip()
         return cleaned if cleaned else None
 
+    @model_validator(mode="after")
+    def validate_coordinate_pair(self):
+        has_lat = self.latitude is not None
+        has_lon = self.longitude is not None
+        if has_lat != has_lon:
+            raise ValueError("Both latitude and longitude must be provided together for distance sorting.")
+        return self
+
 
 class StationStatusRequest(BaseModel):
     """Request model for checking detailed live status of a specific bike station."""
@@ -108,12 +116,20 @@ class StationStatusRequest(BaseModel):
         description="Station ID or station name to check.",
     )
 
-    @field_validator("network_id", "station_id_or_name")
+    @field_validator("network_id")
     @classmethod
-    def clean_strings(cls, v: str) -> str:
+    def clean_network_id(cls, v: str) -> str:
+        cleaned = v.strip().lower()
+        if not cleaned:
+            raise ValueError("Network ID cannot be empty.")
+        return cleaned
+
+    @field_validator("station_id_or_name")
+    @classmethod
+    def clean_station_id_or_name(cls, v: str) -> str:
         cleaned = v.strip()
         if not cleaned:
-            raise ValueError("Field cannot be empty.")
+            raise ValueError("Station ID or name cannot be empty.")
         return cleaned
 
 

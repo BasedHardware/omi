@@ -5,7 +5,9 @@ nearby stations, checking real-time available bikes and empty docks across 800+
 networks in 400+ cities worldwide using the CityBikes API (api.citybik.es).
 """
 
+from collections import OrderedDict
 import math
+import os
 import time
 from typing import Any, Dict, List, Optional, Tuple
 import httpx
@@ -40,28 +42,58 @@ STATIONS_CACHE_TTL = 60.0    # 1 minute for live station availability
 MAX_CACHE_ENTRIES = 500
 
 _networks_cache: Optional[Tuple[float, List[Dict[str, Any]]]] = None
-_stations_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_stations_cache: OrderedDict[str, Tuple[float, Dict[str, Any]]] = OrderedDict()
 
 # Rate Limiting Configuration
 RATE_LIMIT_WINDOW_SECONDS = 60.0
 RATE_LIMIT_MAX_REQUESTS = 60
+MAX_RATE_LIMIT_CLIENTS = 5000
 _rate_limit_records: Dict[str, List[float]] = {}
+_last_rate_limit_cleanup: float = 0.0
+
+# Trusted reverse proxies configured via environment (e.g. TRUSTED_PROXIES="10.0.0.1,172.16.0.1")
+TRUSTED_PROXIES = set(
+    ip.strip()
+    for ip in os.getenv("TRUSTED_PROXIES", "").split(",")
+    if ip.strip()
+)
+
+
+def _get_client_ip(request: Request) -> str:
+    """Resolve client IP safely, only honoring X-Forwarded-For if directly forwarded by a trusted proxy."""
+    direct_ip = request.client.host if request.client and request.client.host else "127.0.0.1"
+    if direct_ip in TRUSTED_PROXIES:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return direct_ip
 
 
 def check_rate_limit(request: Optional[Request]) -> bool:
-    """Sliding-window rate limiter per client IP."""
+    """Sliding-window rate limiter per client IP with bounded memory and proxy trust."""
+    global _last_rate_limit_cleanup
     if request is None:
         return True
 
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        client_ip = forwarded.split(",")[0].strip()
-    elif request.client and request.client.host:
-        client_ip = request.client.host
-    else:
-        client_ip = "127.0.0.1"
-
+    client_ip = _get_client_ip(request)
     now = time.time()
+
+    # Periodic cleanup of expired records to prevent unbounded memory growth
+    if len(_rate_limit_records) >= MAX_RATE_LIMIT_CLIENTS or (now - _last_rate_limit_cleanup > RATE_LIMIT_WINDOW_SECONDS):
+        expired = [
+            k for k, timestamps in _rate_limit_records.items()
+            if not timestamps or now - timestamps[-1] >= RATE_LIMIT_WINDOW_SECONDS
+        ]
+        for k in expired:
+            _rate_limit_records.pop(k, None)
+        _last_rate_limit_cleanup = now
+
+        # Bound table size under heavy multi-IP load
+        if len(_rate_limit_records) >= MAX_RATE_LIMIT_CLIENTS:
+            overflow = len(_rate_limit_records) - MAX_RATE_LIMIT_CLIENTS + 200
+            for k in list(_rate_limit_records.keys())[:overflow]:
+                _rate_limit_records.pop(k, None)
+
     timestamps = [t for t in _rate_limit_records.get(client_ip, []) if now - t < RATE_LIMIT_WINDOW_SECONDS]
     if len(timestamps) >= RATE_LIMIT_MAX_REQUESTS:
         _rate_limit_records[client_ip] = timestamps
@@ -81,7 +113,9 @@ def clear_cache() -> None:
 
 def clear_rate_limits() -> None:
     """Flush rate limit history (for test isolation)."""
+    global _last_rate_limit_cleanup
     _rate_limit_records.clear()
+    _last_rate_limit_cleanup = 0.0
 
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -123,11 +157,12 @@ async def fetch_all_networks(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
 
 
 async def fetch_network_details(client: httpx.AsyncClient, network_id: str) -> Dict[str, Any]:
-    """Fetch real-time station availability for a network with 60-second TTL caching."""
+    """Fetch real-time station availability for a network with 60-second TTL caching and true LRU eviction."""
     now = time.time()
     if network_id in _stations_cache:
         cached_at, network_data = _stations_cache[network_id]
         if now - cached_at < STATIONS_CACHE_TTL:
+            _stations_cache.move_to_end(network_id)
             return network_data
 
     resp = await client.get(
@@ -142,11 +177,10 @@ async def fetch_network_details(client: httpx.AsyncClient, network_id: str) -> D
     data = resp.json()
     network_data = data.get("network", {})
     if len(_stations_cache) >= MAX_CACHE_ENTRIES:
-        oldest_keys = sorted(_stations_cache.keys(), key=lambda k: _stations_cache[k][0])[:100]
-        for k in oldest_keys:
-            _stations_cache.pop(k, None)
+        _stations_cache.popitem(last=False)
 
     _stations_cache[network_id] = (now, network_data)
+    _stations_cache.move_to_end(network_id)
     return network_data
 
 
@@ -401,11 +435,12 @@ async def get_nearby_bike_stations(request: NearbyStationsRequest, raw_request: 
                 result=f"No stations found in network '{request.network_id}'."
             )
 
-        # Filter by name query if provided
-        filtered = stations
+        # Filter by name query if provided (copy list to avoid mutating cached station objects)
         if request.query:
             sq = request.query.lower()
             filtered = [s for s in stations if sq in s.get("name", "").lower()]
+        else:
+            filtered = list(stations)
 
         if not filtered:
             return ChatToolResponse(
@@ -425,7 +460,7 @@ async def get_nearby_bike_stations(request: NearbyStationsRequest, raw_request: 
                     return 99999.0
                 return haversine_distance(u_lat, u_lon, s_lat, s_lon)
 
-            filtered.sort(key=get_dist)
+            filtered = sorted(filtered, key=get_dist)
 
         limited = filtered[: request.limit]
         net_name = network_data.get("name", request.network_id)
@@ -439,7 +474,7 @@ async def get_nearby_bike_stations(request: NearbyStationsRequest, raw_request: 
             slots_str = f", {empty_slots} empty docks" if empty_slots is not None else ""
 
             dist_str = ""
-            if has_coords and s.get("latitude") and s.get("longitude"):
+            if has_coords and s.get("latitude") is not None and s.get("longitude") is not None:
                 dist_km = haversine_distance(request.latitude, request.longitude, s["latitude"], s["longitude"])
                 if dist_km < 1.0:
                     dist_str = f" &middot; {int(dist_km * 1000)}m away"

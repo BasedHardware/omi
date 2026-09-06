@@ -88,19 +88,23 @@ def run_smoke_tests():
     )
     assert resp.status_code == 200, f"Nearby stations failed: {resp.text}"
     data = resp.json()
-    assert data["result"] is not None and "available" in data["result"].lower(), f"Unexpected result: {data}"
+    assert data["result"] is not None and "Bike Stations:" in data["result"], f"Unexpected result: {data}"
     print("  PASS: Stations located with live counts:")
     print("  " + "\n  ".join(data["result"].split("\n")[:5]))
 
+    # Dynamically extract first station name for step 6 to prevent fragility against upstream changes
+    first_station_lines = [l.strip() for l in data["result"].split("\n") if l.strip().startswith("1. **")]
+    target_station = first_station_lines[0].split("**")[1] if first_station_lines else "Broadway"
+
     # 6. Station detailed status
-    print("\n[6/8] Testing POST /tools/check_bike_station_status (Broadway & E 14 St)...")
+    print(f"\n[6/8] Testing POST /tools/check_bike_station_status ('{target_station}')...")
     resp = client.post(
         "/tools/check_bike_station_status",
-        json={"network_id": "citi-bike-nyc", "station_id_or_name": "Broadway & E 14 St"},
+        json={"network_id": "citi-bike-nyc", "station_id_or_name": target_station},
     )
     assert resp.status_code == 200, f"Station status failed: {resp.text}"
     data = resp.json()
-    assert data["result"] is not None and "available bikes" in data["result"].lower(), f"Unexpected result: {data}"
+    assert data["result"] is not None and "Station Status:" in data["result"], f"Unexpected result: {data}"
     print("  PASS: Live station availability:")
     print("  " + "\n  ".join(data["result"].split("\n")[:4]))
 
@@ -109,17 +113,18 @@ def run_smoke_tests():
     resp = client.post("/tools/get_city_bike_overview", json={"city_or_network": "Barcelona"})
     assert resp.status_code == 200, f"City overview failed: {resp.text}"
     data = resp.json()
-    assert data["result"] is not None and "micro-mobility overview" in data["result"].lower(), f"Unexpected result: {data}"
+    assert data["result"] is not None and "Micro-Mobility Overview:" in data["result"] and "Active Stations" in data["result"], f"Unexpected result: {data}"
     print("  PASS: Citywide fleet statistics:")
     print("  " + "\n  ".join(data["result"].split("\n")[:5]))
 
-    # 8. In-memory caching speedup verification
+    # 8. In-memory caching speedup verification (must be faster than 0.5s network roundtrip)
     print("\n[8/8] Testing In-Memory Cache Performance...")
     t0 = time.time()
     resp_cached = client.post("/tools/search_bike_networks", json={"query": "Paris"})
     t_cached = time.time() - t0
     assert resp_cached.status_code == 200
-    print(f"  PASS: Cache hit resolved in {t_cached * 1000:.2f}ms")
+    assert t_cached < 0.5, f"Cache lookup took {t_cached:.4f}s, expected < 0.5s for in-memory hit"
+    print(f"  PASS: Cache hit resolved in {t_cached * 1000:.2f}ms (< 500ms bound)")
 
     print("\n" + "=" * 65)
     print("ALL 8 LIVE SMOKE TESTS COMPLETED SUCCESSFULLY!")

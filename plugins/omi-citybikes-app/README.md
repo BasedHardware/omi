@@ -126,13 +126,13 @@ Exposed via `/.well-known/omi-tools.json`:
 ### Using `uv` (Recommended)
 ```bash
 # Run tests
-uv run --with fastapi --with httpx --with pydantic python -m unittest test_main.py -v
+uv run --with-requirements requirements.txt python -m unittest test_main.py -v
 
 # Run live smoke test
-uv run --with fastapi --with httpx --with pydantic python smoke_test.py
+uv run --with-requirements requirements.txt python smoke_test.py
 
 # Start local server
-uv run --with fastapi --with httpx --with uvicorn --with pydantic uvicorn main:app --reload --port 8000
+uv run --with-requirements requirements.txt uvicorn main:app --reload --port 8000
 ```
 
 ### Using standard `pip`
