@@ -41,7 +41,12 @@ the projection. It writes a new marker only after the complete Firestore
 rebuild, projection count/digest, and producer keyword proof have succeeded,
 immediately before the consumer proof. If `search_knowledge` fails or receipt
 validation fails, the marker is deleted again. The application therefore
-remains fail-closed during rebuilds and after incomplete consumer verification.
+remains fail-closed during rebuilds and after handled incomplete consumer
+verification. A process crash or interruption after the marker write and
+before the consumer receipt can leave a rebuild-ready marker without a
+qualified receipt; run `prove` while the QA app is idle, require the final
+content-free receipt, and then verify an actual QA app query before treating
+the projection as qualified.
 
 ## Dispatch and restart proof
 
