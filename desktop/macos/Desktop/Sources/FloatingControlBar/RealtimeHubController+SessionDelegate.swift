@@ -1501,6 +1501,12 @@ extension RealtimeHubController {
           recoveryResult: .started)
         return
       }
+      if RealtimeHubUsageLimitPresentation.shouldPresent(
+        category: closeCategory, failoverStarted: false)
+      {
+        NotificationCenter.default.post(
+          name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "realtime"])
+      }
       teardownSession()
       recordCloseResolution(
         turnOutcome: turnOutcome,
