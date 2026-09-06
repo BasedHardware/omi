@@ -112,6 +112,14 @@ curl -X POST "http://localhost:8000/tools/compare-economies" \
      -d '{"country_a": "Japan", "country_b": "Germany"}'
 ```
 
+**Response:**
+```json
+{
+  "result": "⚖️ Economic Comparison: Japan vs Germany\nMetric                    | Japan           | Germany        \n--------------------------|-----------------|----------------\nIncome Level              | High income     | High income    \nRegion                    | East Asia & Pac | Europe & Centra\nGDP (Total)               | $4.21T          | $4.46T         \nGDP Per Capita            | $33.83K         | $52.75K        \nPopulation                | 124.52M         | 84.48M         \nInflation Rate            | +3.27%          | +5.95%         \nLife Expectancy           | 84.6 yrs        | 81.0 yrs       \n\n📌 Insight: Germany's economy is 1.1x the size of Japan's economy.",
+  "error": null
+}
+```
+
 ---
 
 ### 4. Search & Discovery

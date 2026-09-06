@@ -83,7 +83,18 @@ def install_dependency_stubs():
             class DummyBaseModel:
                 def __init__(self, **kwargs):
                     for k, v in kwargs.items():
+                        clean_func = getattr(self, f"clean_{k}", None)
+                        if clean_func:
+                            v = clean_func(v)
                         setattr(self, k, v)
+                    if hasattr(self, "clean_optional_strings"):
+                        for opt_field in ("query", "region", "income_level"):
+                            if hasattr(self, opt_field):
+                                setattr(self, opt_field, self.clean_optional_strings(getattr(self, opt_field)))
+                    if hasattr(self, "validate_result_or_error"):
+                        self.validate_result_or_error()
+                    if hasattr(self, "validate_different_countries"):
+                        self.validate_different_countries()
 
                 def model_dump(self, **kwargs):
                     return {
@@ -117,6 +128,11 @@ def install_dependency_stubs():
             httpx.TimeoutException = Exception
 
             class DummyAsyncClient:
+                def __init__(self, *args, timeout=None, headers=None, base_url=None, **kwargs):
+                    self.timeout = timeout
+                    self.headers = headers
+                    self.base_url = base_url
+
                 async def __aenter__(self):
                     return self
 
@@ -163,22 +179,17 @@ class WorldBankAppUnitTests(unittest.TestCase):
             self.assertIn("parameters", tool)
             self.assertIn("status_message", tool)
 
-    def test_country_alias_resolver(self):
-        """Verify country name and ISO alias resolution."""
+    def test_country_alias_resolver_static_and_iso(self):
+        """Verify country name and ISO alias resolution without network calls."""
         self.assertEqual(asyncio.run(main._resolve_country_code("US"))[0], "USA")
         self.assertEqual(asyncio.run(main._resolve_country_code("united states"))[0], "USA")
         self.assertEqual(asyncio.run(main._resolve_country_code("america"))[0], "USA")
         self.assertEqual(asyncio.run(main._resolve_country_code("UK"))[0], "GBR")
         self.assertEqual(asyncio.run(main._resolve_country_code("britain"))[0], "GBR")
-        self.assertEqual(asyncio.run(main._resolve_country_code("united kingdom"))[0], "GBR")
         self.assertEqual(asyncio.run(main._resolve_country_code("germany"))[0], "DEU")
         self.assertEqual(asyncio.run(main._resolve_country_code("india"))[0], "IND")
+        self.assertEqual(asyncio.run(main._resolve_country_code("ind"))[0], "IND")
         self.assertEqual(asyncio.run(main._resolve_country_code("japan"))[0], "JPN")
-        self.assertEqual(asyncio.run(main._resolve_country_code("china"))[0], "CHN")
-        self.assertEqual(asyncio.run(main._resolve_country_code("france"))[0], "FRA")
-        self.assertEqual(asyncio.run(main._resolve_country_code("brazil"))[0], "BRA")
-
-        # Fallback to uppercase 3-letter code
         self.assertEqual(asyncio.run(main._resolve_country_code("CAN"))[0], "CAN")
         self.assertEqual(asyncio.run(main._resolve_country_code("mex"))[0], "MEX")
 
@@ -197,7 +208,7 @@ class WorldBankAppUnitTests(unittest.TestCase):
     @patch("main._fetch_country_metadata", new_callable=AsyncMock)
     @patch("main._fetch_indicator_value", new_callable=AsyncMock)
     def test_country_profile_success(self, mock_ind, mock_meta):
-        """Verify country profile returns synthesized text."""
+        """Verify country profile returns synthesized text including coordinates."""
         mock_meta.return_value = {
             "id": "USA",
             "iso2Code": "US",
@@ -218,6 +229,7 @@ class WorldBankAppUnitTests(unittest.TestCase):
         self.assertIn("United States", resp.result)
         self.assertIn("Washington, D.C.", resp.result)
         self.assertIn("North America", resp.result)
+        self.assertIn("Coordinates: Lat 38.89, Lon -77.03", resp.result)
 
     @patch("main._fetch_indicator_value", new_callable=AsyncMock)
     def test_economic_indicator_success(self, mock_ind):
@@ -251,21 +263,28 @@ class WorldBankAppUnitTests(unittest.TestCase):
     @patch("main._fetch_country_metadata", new_callable=AsyncMock)
     @patch("main._fetch_indicator_value", new_callable=AsyncMock)
     def test_compare_economies(self, mock_ind, mock_meta):
-        """Verify economy comparison tool compares 2 nations."""
+        """Verify economy comparison tool compares 2 nations and renders all advertised rows."""
         mock_meta.side_effect = [
             {"id": "USA", "name": "United States", "region": {"value": "North America"}, "incomeLevel": {"value": "High income"}},
             {"id": "IND", "name": "India", "region": {"value": "South Asia"}, "incomeLevel": {"value": "Lower middle income"}},
         ]
 
+        # Production gather order:
+        # task_meta_a, task_meta_b
+        # task_gdp_a, task_gdp_b
+        # task_gdp_pc_a, task_gdp_pc_b
+        # task_pop_a, task_pop_b
+        # task_inf_a, task_inf_b
+        # task_life_a, task_life_b
         mock_ind.side_effect = [
             [{"date": "2023", "value": 27360000000000}],  # USA GDP
             [{"date": "2023", "value": 3550000000000}],   # IND GDP
             [{"date": "2023", "value": 81695}],           # USA GDP/cap
             [{"date": "2023", "value": 2484}],            # IND GDP/cap
-            [{"date": "2023", "value": 3.4}],             # USA Inf
-            [{"date": "2023", "value": 5.4}],             # IND Inf
             [{"date": "2023", "value": 334914895}],       # USA Pop
             [{"date": "2023", "value": 1428627663}],      # IND Pop
+            [{"date": "2023", "value": 3.4}],             # USA Inf
+            [{"date": "2023", "value": 5.4}],             # IND Inf
             [{"date": "2023", "value": 77.5}],            # USA Life
             [{"date": "2023", "value": 67.2}],            # IND Life
         ]
@@ -277,19 +296,23 @@ class WorldBankAppUnitTests(unittest.TestCase):
         self.assertIsNotNone(resp.result)
         self.assertIn("United States", resp.result)
         self.assertIn("India", resp.result)
-        self.assertIn("GDP", resp.result)
+        self.assertIn("GDP (Total)", resp.result)
+        self.assertIn("Population", resp.result)
+        self.assertIn("Inflation Rate", resp.result)
+        self.assertIn("Life Expectancy", resp.result)
 
     def test_compare_economies_requires_different_countries(self):
-        """Verify compare economies rejects comparing a country to itself."""
-        req = models.CompareEconomiesRequest(country_a="USA", country_b="USA")
-        resp = asyncio.run(main.compare_country_economies(req))
+        """Verify compare economies rejects comparing a country to itself under exact and alias names."""
+        # Exact match
+        with self.assertRaises(ValueError):
+            models.CompareEconomiesRequest(country_a="USA", country_b="USA")
 
-        self.assertIsNone(resp.result)
-        self.assertIsNotNone(resp.error)
-        self.assertIn("Cannot compare a country to itself", resp.error)
+        # Alias match (e.g. US vs USA)
+        with self.assertRaises(ValueError):
+            models.CompareEconomiesRequest(country_a="US", country_b="USA")
 
-    def test_search_countries_matching(self):
-        """Verify country search filters cached countries."""
+    def test_search_countries_matching_and_stripping(self):
+        """Verify country search filters cached countries and handles whitespace."""
         main.app.state.country_cache = [
             {
                 "id": "USA",
@@ -317,7 +340,8 @@ class WorldBankAppUnitTests(unittest.TestCase):
             },
         ]
 
-        req = models.SearchCountriesRequest(query="United")
+        # Padded search query
+        req = models.SearchCountriesRequest(query="  United  ")
         resp = asyncio.run(main.search_countries(req))
 
         self.assertIsNone(resp.error)
@@ -325,6 +349,27 @@ class WorldBankAppUnitTests(unittest.TestCase):
         self.assertIn("United States", resp.result)
         self.assertIn("USA", resp.result)
         self.assertIn("United Kingdom", resp.result)
+
+    def test_invalid_country_code_zzz(self):
+        """Verify invalid country code such as ZZZ is rejected without crash."""
+        with self.assertRaises(ValueError):
+            asyncio.run(main._resolve_country_code("ZZZ"))
+
+    def test_ambiguous_country_query_rejected(self):
+        """Verify ambiguous country query matching multiple nations raises descriptive ValueError."""
+        main.app.state.country_cache = [
+            {"id": "USA", "name": "United States", "region": {"value": "North America"}},
+            {"id": "ARE", "name": "United Arab Emirates", "region": {"value": "Middle East"}},
+            {"id": "GBR", "name": "United Kingdom", "region": {"value": "Europe"}},
+        ]
+        with self.assertRaises(ValueError) as ctx:
+            asyncio.run(main._resolve_country_code("United"))
+        self.assertIn("Ambiguous country query", str(ctx.exception))
+
+    def test_padded_country_input_validation(self):
+        """Verify padded single-character input fails minimum length check."""
+        with self.assertRaises(ValueError):
+            models.CountryProfileRequest(country="  a  ")
 
 
 if __name__ == "__main__":

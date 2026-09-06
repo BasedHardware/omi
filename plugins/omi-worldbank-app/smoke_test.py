@@ -1,7 +1,8 @@
 """Live end-to-end integration smoke test for Omi World Bank App.
 
 Queries live World Bank Open Data APIs to verify real-time data ingestion,
-number formatting, alias resolution, and ChatToolResponse contract compliance.
+number formatting, alias resolution, coordinates, comparison metrics,
+multi-year trajectory analysis, and ChatToolResponse contract compliance.
 """
 
 import asyncio
@@ -37,7 +38,7 @@ async def run_live_smoke_tests():
         print(f"❌ [FAIL] Tool Manifest: {e}")
         failed += 1
 
-    # 2. Test Country Profile (USA)
+    # 2. Test Country Profile (USA) with Coordinates
     try:
         req = models.CountryProfileRequest(country="United States")
         resp = await main.get_country_profile(req)
@@ -45,27 +46,30 @@ async def run_live_smoke_tests():
         assert resp.result is not None, "Expected result to be populated"
         assert "United States" in resp.result, "Missing country name in result"
         assert "GDP" in resp.result, "Missing GDP in result"
-        print("✅ [PASS] /tools/country-profile (USA): Successfully synthesized profile")
+        assert "Coordinates:" in resp.result, "Missing Coordinates in result"
+        print("✅ [PASS] /tools/country-profile (USA): Synthesized profile with coordinates")
         passed += 1
     except Exception as e:
         print(f"❌ [FAIL] /tools/country-profile: {e}")
         failed += 1
 
-    # 3. Test Economic Indicator with History (India GDP 3 years)
+    # 3. Test Economic Indicator with Multi-Year History (India GDP 3 years)
     try:
         req = models.EconomicIndicatorRequest(country="India", indicator="gdp", years=3)
         resp = await main.get_economic_indicator(req)
         assert resp.error is None, f"Expected error=None, got {resp.error}"
         assert resp.result is not None, "Expected result to be populated"
         assert "India" in resp.result, "Missing country name in result"
-        assert "Trillion" in resp.result or "Billion" in resp.result or "$" in resp.result, "Expected currency formatting"
-        print("✅ [PASS] /tools/economic-indicator (India GDP 3y): Successfully retrieved trend")
+        year_lines = [line for line in resp.result.splitlines() if line.strip().startswith("• 20")]
+        assert len(year_lines) >= 2, f"Expected at least 2 annual data points, got {len(year_lines)}"
+        assert "Recent Annual Change:" in resp.result, "Expected trajectory change analysis in multi-year output"
+        print("✅ [PASS] /tools/economic-indicator (India GDP 3y): Verified multi-year history and trajectory")
         passed += 1
     except Exception as e:
         print(f"❌ [FAIL] /tools/economic-indicator: {e}")
         failed += 1
 
-    # 4. Test Economy Comparison (Japan vs Germany)
+    # 4. Test Economy Comparison (Japan vs Germany) including Life Expectancy
     try:
         req = models.CompareEconomiesRequest(country_a="Japan", country_b="Germany")
         resp = await main.compare_country_economies(req)
@@ -73,7 +77,9 @@ async def run_live_smoke_tests():
         assert resp.result is not None, "Expected result to be populated"
         assert "Japan" in resp.result, "Missing Japan in result"
         assert "Germany" in resp.result, "Missing Germany in result"
-        print("✅ [PASS] /tools/compare-economies (Japan vs Germany): Side-by-side comparison generated")
+        assert "Life Expectancy" in resp.result, "Missing Life Expectancy row in comparison"
+        assert "Population" in resp.result, "Missing Population row in comparison"
+        print("✅ [PASS] /tools/compare-economies (Japan vs Germany): Side-by-side comparison including life expectancy")
         passed += 1
     except Exception as e:
         print(f"❌ [FAIL] /tools/compare-economies: {e}")
@@ -81,7 +87,7 @@ async def run_live_smoke_tests():
 
     # 5. Test Country Discovery / Search (Nordic search query)
     try:
-        req = models.SearchCountriesRequest(query="Norway", limit=5)
+        req = models.SearchCountriesRequest(query="  Norway  ", limit=5)
         resp = await main.search_countries(req)
         assert resp.error is None, f"Expected error=None, got {resp.error}"
         assert resp.result is not None, "Expected result to be populated"
@@ -92,7 +98,28 @@ async def run_live_smoke_tests():
         print(f"❌ [FAIL] /tools/search-countries: {e}")
         failed += 1
 
-    # 6. Test Error Handling (Unknown country)
+    # 6. Test Self-Comparison Rejection under Aliases (US vs USA)
+    try:
+        models.CompareEconomiesRequest(country_a="US", country_b="USA")
+        print("❌ [FAIL] Self-Comparison Guard: Expected ValueError for 'US' vs 'USA'")
+        failed += 1
+    except ValueError:
+        print("✅ [PASS] Self-Comparison Guard: Rejected 'US' vs 'USA' alias comparison")
+        passed += 1
+
+    # 7. Test Invalid Country Rejection (ZZZ)
+    try:
+        req = models.CountryProfileRequest(country="ZZZ")
+        resp = await main.get_country_profile(req)
+        assert resp.error is not None, f"Expected error for 'ZZZ', got result: {resp.result}"
+        assert resp.result is None, "Expected result to be None"
+        print("✅ [PASS] Invalid Code Guard: 'ZZZ' properly returned error")
+        passed += 1
+    except Exception as e:
+        print(f"❌ [FAIL] Invalid Code Guard: {e}")
+        failed += 1
+
+    # 8. Test Error Handling (Non-existent mythical country)
     try:
         req = models.CountryProfileRequest(country="AtlantisKingdomOfMermaids")
         resp = await main.get_country_profile(req)
@@ -104,7 +131,7 @@ async def run_live_smoke_tests():
         print(f"❌ [FAIL] Error Handling: {e}")
         failed += 1
 
-    # 7. Test Health Endpoint
+    # 9. Test Health Endpoint
     try:
         health = await main.health_check()
         assert health.get("status") == "healthy", f"Unexpected status: {health}"

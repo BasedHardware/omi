@@ -1,6 +1,6 @@
 """Pydantic models for Omi World Bank Global Economic Intelligence Integration App."""
 
-from typing import Optional
+from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -39,6 +39,111 @@ INDICATOR_MAP = {
     "carbon": "EN.ATM.CO2E.PC",
 }
 
+# Common country aliases for model-level canonicalization and self-comparison detection
+COMMON_COUNTRY_ALIASES: Dict[str, str] = {
+    "us": "USA",
+    "usa": "USA",
+    "united states": "USA",
+    "united states of america": "USA",
+    "america": "USA",
+    "uk": "GBR",
+    "gbr": "GBR",
+    "united kingdom": "GBR",
+    "great britain": "GBR",
+    "britain": "GBR",
+    "england": "GBR",
+    "germany": "DEU",
+    "deu": "DEU",
+    "de": "DEU",
+    "deutschland": "DEU",
+    "france": "FRA",
+    "fra": "FRA",
+    "fr": "FRA",
+    "india": "IND",
+    "ind": "IND",
+    "in": "IND",
+    "bharat": "IND",
+    "china": "CHN",
+    "chn": "CHN",
+    "cn": "CHN",
+    "prc": "CHN",
+    "japan": "JPN",
+    "jpn": "JPN",
+    "jp": "JPN",
+    "nippon": "JPN",
+    "south korea": "KOR",
+    "korea": "KOR",
+    "kor": "KOR",
+    "republic of korea": "KOR",
+    "north korea": "PRK",
+    "prk": "PRK",
+    "russia": "RUS",
+    "rus": "RUS",
+    "russian federation": "RUS",
+    "brazil": "BRA",
+    "bra": "BRA",
+    "br": "BRA",
+    "brasil": "BRA",
+    "canada": "CAN",
+    "can": "CAN",
+    "ca": "CAN",
+    "australia": "AUS",
+    "aus": "AUS",
+    "mexico": "MEX",
+    "mex": "MEX",
+    "italy": "ITA",
+    "ita": "ITA",
+    "spain": "ESP",
+    "esp": "ESP",
+    "indonesia": "IDN",
+    "idn": "IDN",
+    "saudi arabia": "SAU",
+    "sau": "SAU",
+    "turkey": "TUR",
+    "tur": "TUR",
+    "turkiye": "TUR",
+    "netherlands": "NLD",
+    "nld": "NLD",
+    "holland": "NLD",
+    "switzerland": "CHE",
+    "che": "CHE",
+    "singapore": "SGP",
+    "sgp": "SGP",
+    "uae": "ARE",
+    "are": "ARE",
+    "united arab emirates": "ARE",
+    "dubai": "ARE",
+    "south africa": "ZAF",
+    "zaf": "ZAF",
+    "argentina": "ARG",
+    "arg": "ARG",
+    "sweden": "SWE",
+    "swe": "SWE",
+    "poland": "POL",
+    "pol": "POL",
+    "belgium": "BEL",
+    "bel": "BEL",
+    "norway": "NOR",
+    "nor": "NOR",
+    "ireland": "IRL",
+    "irl": "IRL",
+    "israel": "ISR",
+    "isr": "ISR",
+    "world": "WLD",
+    "wld": "WLD",
+    "global": "WLD",
+}
+
+
+def _clean_and_validate_country(v: Any) -> str:
+    """Helper to strip whitespace and enforce minimum length after trimming."""
+    if not isinstance(v, str):
+        raise ValueError("Country identifier must be a string.")
+    cleaned = v.strip()
+    if len(cleaned) < 2:
+        raise ValueError("Country identifier must be at least 2 characters long after trimming.")
+    return cleaned
+
 
 class CountryProfileRequest(BaseModel):
     """Request model for fetching a comprehensive country economic profile."""
@@ -50,13 +155,10 @@ class CountryProfileRequest(BaseModel):
         description="Country name, common nickname, ISO-2, or ISO-3 code (e.g. 'United States', 'Germany', 'USA', 'DEU', 'IN', 'Japan').",
     )
 
-    @field_validator("country")
+    @field_validator("country", mode="before")
     @classmethod
-    def clean_country(cls, v: str) -> str:
-        cleaned = v.strip()
-        if not cleaned:
-            raise ValueError("Country identifier cannot be empty or whitespace.")
-        return cleaned
+    def clean_country(cls, v: Any) -> str:
+        return _clean_and_validate_country(v)
 
 
 class EconomicIndicatorRequest(BaseModel):
@@ -79,22 +181,18 @@ class EconomicIndicatorRequest(BaseModel):
         description="Number of recent annual data points to retrieve (1-10, default 1 for latest).",
     )
 
-    @field_validator("country")
+    @field_validator("country", mode="before")
     @classmethod
-    def clean_country(cls, v: str) -> str:
-        cleaned = v.strip()
-        if not cleaned:
-            raise ValueError("Country identifier cannot be empty or whitespace.")
-        return cleaned
+    def clean_country(cls, v: Any) -> str:
+        return _clean_and_validate_country(v)
 
-    @field_validator("indicator")
+    @field_validator("indicator", mode="before")
     @classmethod
-    def normalize_indicator(cls, v: str) -> str:
-        cleaned = v.strip().lower().replace(" ", "_").replace("-", "_")
-        if cleaned not in INDICATOR_MAP:
-            valid_keys = ", ".join(sorted(list(set(["gdp", "gdp_per_capita", "inflation", "population", "life_expectancy", "unemployment", "co2_emissions"]))))
-            raise ValueError(f"Unknown indicator '{v}'. Supported indicators are: {valid_keys}")
-        return cleaned
+    def normalize_indicator(cls, v: Any) -> str:
+        if isinstance(v, str):
+            cleaned = v.strip().lower().replace(" ", "_").replace("-", "_")
+            return cleaned or "gdp"
+        return "gdp"
 
 
 class CompareEconomiesRequest(BaseModel):
@@ -113,18 +211,23 @@ class CompareEconomiesRequest(BaseModel):
         description="Second country name or code (e.g. 'China', 'CHN').",
     )
 
-    @field_validator("country_a", "country_b")
+    @field_validator("country_a", "country_b", mode="before")
     @classmethod
-    def clean_country(cls, v: str) -> str:
-        cleaned = v.strip()
-        if not cleaned:
-            raise ValueError("Country identifiers cannot be empty or whitespace.")
-        return cleaned
+    def clean_country(cls, v: Any) -> str:
+        return _clean_and_validate_country(v)
 
     @model_validator(mode="after")
     def validate_different_countries(self):
-        if self.country_a.strip().lower() == self.country_b.strip().lower():
+        clean_a = self.country_a.strip().lower()
+        clean_b = self.country_b.strip().lower()
+        if clean_a == clean_b:
             raise ValueError("Cannot compare a country to itself. Please provide two distinct countries.")
+
+        canon_a = COMMON_COUNTRY_ALIASES.get(clean_a, clean_a.upper())
+        canon_b = COMMON_COUNTRY_ALIASES.get(clean_b, clean_b.upper())
+        if canon_a == canon_b:
+            raise ValueError(f"Cannot compare a country to itself ('{self.country_a}' and '{self.country_b}' refer to the same nation). Please provide two distinct countries.")
+
         return self
 
 
@@ -152,3 +255,13 @@ class SearchCountriesRequest(BaseModel):
         le=30,
         description="Maximum number of countries to return (1-30).",
     )
+
+    @field_validator("query", "region", "income_level", mode="before")
+    @classmethod
+    def clean_optional_strings(cls, v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            cleaned = v.strip()
+            return cleaned if cleaned else None
+        return v

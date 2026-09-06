@@ -99,6 +99,52 @@ STATIC_COUNTRY_ALIASES: Dict[str, str] = {
     "ukraine": "UKR",
     "world": "WLD",
     "global": "WLD",
+    # Standard ISO-2 and ISO-3 codes
+    "can": "CAN",
+    "mex": "MEX",
+    "ind": "IND",
+    "usa": "USA",
+    "gbr": "GBR",
+    "deu": "DEU",
+    "jpn": "JPN",
+    "fra": "FRA",
+    "bra": "BRA",
+    "chn": "CHN",
+    "aus": "AUS",
+    "ita": "ITA",
+    "esp": "ESP",
+    "idn": "IDN",
+    "sau": "SAU",
+    "tur": "TUR",
+    "twn": "TWN",
+    "nld": "NLD",
+    "che": "CHE",
+    "sgp": "SGP",
+    "are": "ARE",
+    "zaf": "ZAF",
+    "arg": "ARG",
+    "swe": "SWE",
+    "pol": "POL",
+    "bel": "BEL",
+    "nor": "NOR",
+    "irl": "IRL",
+    "isr": "ISR",
+    "aut": "AUT",
+    "nga": "NGA",
+    "egy": "EGY",
+    "vnm": "VNM",
+    "pak": "PAK",
+    "bgd": "BGD",
+    "phl": "PHL",
+    "mys": "MYS",
+    "tha": "THA",
+    "nzl": "NZL",
+    "chl": "CHL",
+    "col": "COL",
+    "prt": "PRT",
+    "grc": "GRC",
+    "ukr": "UKR",
+    "wld": "WLD",
 }
 
 
@@ -224,35 +270,52 @@ async def _resolve_country_code(query: str) -> Tuple[str, str]:
         name = ISO3_TO_NAME.get(iso3, iso3)
         return iso3, name
 
-    client = _get_http_client()
-
-    # Check cached country list from World Bank
+    # Check cached country list from World Bank if populated
     cached_countries: List[Dict[str, Any]] = getattr(getattr(app, "state", None), "country_cache", [])
     if cached_countries:
+        # Pass 1: exact matches on ID, ISO-2, or full country name
         for c in cached_countries:
-            c_id = c.get("id", "").strip()
+            c_id = c.get("id", "").strip().lower()
             c_iso2 = c.get("iso2Code", "").strip().lower()
             c_name = c.get("name", "").strip().lower()
-            if clean in (c_id.lower(), c_iso2, c_name):
-                return c_id.upper(), c.get("name", c_id)
-            if clean in c_name:
-                return c_id.upper(), c.get("name", c_id)
+            if clean in (c_id, c_iso2, c_name):
+                iso3 = c.get("id", "").strip().upper()
+                return iso3, c.get("name", iso3)
 
-    # Fallback to direct World Bank API query
+        # Pass 2: substring matches on non-aggregate countries
+        matches = [
+            c for c in cached_countries
+            if clean in c.get("name", "").strip().lower()
+            and c.get("region", {}).get("value") != "Aggregates"
+        ]
+        if len(matches) == 1:
+            iso3 = matches[0].get("id", "").strip().upper()
+            return iso3, matches[0].get("name", iso3)
+        elif len(matches) > 1:
+            match_names = ", ".join(m.get("name", "") for m in matches[:5])
+            raise ValueError(
+                f"Ambiguous country query '{query}'. Matches multiple countries: {match_names}. Please specify the full country name or ISO code."
+            )
+
+    # Fallback to direct World Bank API query for unmapped/uncached country codes
+    client = _get_http_client()
     try:
         resp = await client.get(f"{WORLD_BANK_BASE_URL}/country/{clean}?format=json")
         if resp.status_code == 200:
             data = resp.json()
             if len(data) > 1 and isinstance(data[1], list) and len(data[1]) > 0:
                 first = data[1][0]
-                return first.get("id", clean).upper(), first.get("name", clean)
+                resolved_id = first.get("id", "").strip().upper()
+                resolved_name = first.get("name", resolved_id)
+                if resolved_id:
+                    return resolved_id, resolved_name
     except Exception:
         pass
 
-    # If length is 2 or 3, assume it's already an ISO code
-    if len(clean) in (2, 3):
-        iso3 = clean.upper()
-        return iso3, ISO3_TO_NAME.get(iso3, iso3)
+    # Check known ISO-3 codes
+    clean_upper = clean.upper()
+    if clean_upper in ISO3_TO_NAME:
+        return clean_upper, ISO3_TO_NAME[clean_upper]
 
     raise ValueError(f"Could not resolve '{query}' to a recognized World Bank country or economic entity.")
 
@@ -454,6 +517,17 @@ async def get_country_profile(payload: CountryProfileRequest) -> ChatToolRespons
         region = meta.get("region", {}).get("value", "N/A").strip()
         income_level = meta.get("incomeLevel", {}).get("value", "N/A").strip()
 
+        # Extract coordinates
+        lat = str(meta.get("latitude") or "").strip()
+        lon = str(meta.get("longitude") or "").strip()
+        if lat and lon and lat.lower() != "n/a" and lon.lower() != "n/a":
+            try:
+                coords_str = f"Lat {float(lat):.2f}, Lon {float(lon):.2f}"
+            except (ValueError, TypeError):
+                coords_str = f"Lat {lat}, Lon {lon}"
+        else:
+            coords_str = "N/A"
+
         # Format indicator metrics
         gdp_str = f"{_format_compact(gdp_data[0]['value'])} ({gdp_data[0]['date']})" if gdp_data else "N/A"
         gdp_pc_str = f"{_format_compact(gdp_pc_data[0]['value'])} ({gdp_pc_data[0]['date']})" if gdp_pc_data else "N/A"
@@ -466,6 +540,7 @@ async def get_country_profile(payload: CountryProfileRequest) -> ChatToolRespons
             f"• Capital: {capital}",
             f"• Region: {region}",
             f"• Income Classification: {income_level}",
+            f"• Coordinates: {coords_str}",
             "",
             "📊 Core Macroeconomic Indicators:",
             f"• GDP: {gdp_str}",
@@ -556,6 +631,11 @@ async def compare_country_economies(payload: CompareEconomiesRequest) -> ChatToo
         iso_a, name_a = await _resolve_country_code(payload.country_a)
         iso_b, name_b = await _resolve_country_code(payload.country_b)
 
+        if iso_a == iso_b:
+            return ChatToolResponse(
+                error=f"Cannot compare a country to itself ('{payload.country_a}' and '{payload.country_b}' both resolve to {name_a} [{iso_a}]). Please provide two distinct countries."
+            )
+
         # Concurrently fetch metadata and indicators for both countries
         task_meta_a = _fetch_country_metadata(iso_a)
         task_meta_b = _fetch_country_metadata(iso_b)
@@ -572,6 +652,9 @@ async def compare_country_economies(payload: CompareEconomiesRequest) -> ChatToo
         task_inf_a = _fetch_indicator_value(iso_a, INDICATOR_MAP["inflation"], mrv=1)
         task_inf_b = _fetch_indicator_value(iso_b, INDICATOR_MAP["inflation"], mrv=1)
 
+        task_life_a = _fetch_indicator_value(iso_a, INDICATOR_MAP["life_expectancy"], mrv=1)
+        task_life_b = _fetch_indicator_value(iso_b, INDICATOR_MAP["life_expectancy"], mrv=1)
+
         (
             meta_a,
             meta_b,
@@ -583,6 +666,8 @@ async def compare_country_economies(payload: CompareEconomiesRequest) -> ChatToo
             pop_b,
             inf_a,
             inf_b,
+            life_a,
+            life_b,
         ) = await asyncio.gather(
             task_meta_a,
             task_meta_b,
@@ -594,6 +679,8 @@ async def compare_country_economies(payload: CompareEconomiesRequest) -> ChatToo
             task_pop_b,
             task_inf_a,
             task_inf_b,
+            task_life_a,
+            task_life_b,
         )
 
         display_a = meta_a.get("name", name_a)
@@ -611,6 +698,9 @@ async def compare_country_economies(payload: CompareEconomiesRequest) -> ChatToo
         inf_val_a = inf_a[0]["value"] if inf_a else None
         inf_val_b = inf_b[0]["value"] if inf_b else None
 
+        life_val_a = f"{life_a[0]['value']:.1f} yrs" if life_a else "N/A"
+        life_val_b = f"{life_b[0]['value']:.1f} yrs" if life_b else "N/A"
+
         lines = [
             f"⚖️ Economic Comparison: {display_a} vs {display_b}",
             f"{'Metric':<25} | {display_a[:15]:<15} | {display_b[:15]:<15}",
@@ -621,6 +711,7 @@ async def compare_country_economies(payload: CompareEconomiesRequest) -> ChatToo
             f"{'GDP Per Capita':<25} | {_format_compact(gdp_pc_val_a):<15} | {_format_compact(gdp_pc_val_b):<15}",
             f"{'Population':<25} | {_format_compact(pop_val_a, ''):<15} | {_format_compact(pop_val_b, ''):<15}",
             f"{'Inflation Rate':<25} | {_format_percent(inf_val_a):<15} | {_format_percent(inf_val_b):<15}",
+            f"{'Life Expectancy':<25} | {life_val_a:<15} | {life_val_b:<15}",
         ]
 
         if gdp_val_a and gdp_val_b and gdp_val_b > 0:
