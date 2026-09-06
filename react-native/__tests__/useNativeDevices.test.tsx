@@ -22,6 +22,7 @@ const snapshot = (overrides: Partial<NativeSnapshot> = {}): NativeSnapshot => ({
 });
 
 const mockNative = {
+  stopScan: jest.fn(async (): Promise<void> => undefined),
   connectDevice: jest.fn(async (_id: string): Promise<void> => undefined),
   disconnectDevice: jest.fn(async (_id: string): Promise<void> => undefined),
   getSnapshot: jest.fn(async () => snapshot()),
@@ -72,6 +73,7 @@ jest.mock('../src/omiNative', () => ({
       mockBackend.cancelGenerationEvents(generationId),
   },
   omiNative: {
+    stopScan: () => mockNative.stopScan(),
     connectDevice: (id: string) => mockNative.connectDevice(id),
     disconnectDevice: (id: string) => mockNative.disconnectDevice(id),
     getSnapshot: () => mockNative.getSnapshot(),
@@ -198,6 +200,7 @@ beforeEach(() => {
   mockListeners.length = 0;
   mockNative.getSnapshot.mockResolvedValue(snapshot());
   mockNative.startScan.mockReset();
+  mockNative.stopScan.mockClear();
   mockNative.connectDevice.mockReset();
   mockNative.disconnectDevice.mockReset();
   mockNative.connectDevice.mockResolvedValue(undefined);
@@ -1315,5 +1318,75 @@ test('rejects an invalid native recording identity before opening', async () => 
   expect(mockBackend.createRecordingId).toHaveBeenCalledTimes(1);
   expect(mockBackend.request).not.toHaveBeenCalled();
   expect(hook.latest().deviceScanMessage).toContain('could not start');
+  await hook.unmount();
+});
+
+test('disabling authenticated devices stops scanning and disconnects the current device', async () => {
+  mockNative.getSnapshot.mockResolvedValue(
+    snapshot({connectedDeviceId: 'omi-1'}),
+  );
+  const hook = await renderHook();
+  await hook.setEnabled(false);
+  expect(mockNative.stopScan).toHaveBeenCalledTimes(1);
+  expect(mockNative.disconnectDevice).toHaveBeenCalledWith('omi-1');
+  await hook.unmount();
+  expect(mockNative.stopScan).toHaveBeenCalledTimes(1);
+});
+
+test('disabling pending setup disconnects its requested device and late settlement cannot retire a new session', async () => {
+  let settle!: () => void;
+  mockNative.connectDevice.mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        settle = resolve;
+      }),
+  );
+  const hook = await renderHook();
+  let connecting!: Promise<void>;
+  await ReactTestRenderer.act(async () => {
+    connecting = hook.latest().toggleDevice('old-device', false);
+  });
+  await hook.setEnabled(false);
+  expect(mockNative.disconnectDevice).toHaveBeenCalledTimes(1);
+  expect(mockNative.disconnectDevice).toHaveBeenCalledWith('old-device');
+  await hook.setEnabled(true);
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().toggleDevice('new-device', false);
+  });
+  const probes = mockNative.getSnapshot.mock.calls.length;
+  await ReactTestRenderer.act(async () => {
+    settle();
+    await connecting;
+  });
+  expect(mockNative.disconnectDevice).toHaveBeenCalledTimes(1);
+  expect(mockNative.getSnapshot.mock.calls.length).toBe(probes);
+  await hook.unmount();
+  expect(mockNative.disconnectDevice).toHaveBeenLastCalledWith('new-device');
+});
+
+test('disabling an in-flight scan stops native discovery and ignores its late result', async () => {
+  let settle!: (devices: Device[]) => void;
+  mockNative.startScan.mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        settle = resolve;
+      }),
+  );
+  const hook = await renderHook();
+  let scanning!: Promise<void>;
+  await ReactTestRenderer.act(async () => {
+    scanning = hook.latest().scanForOmi();
+  });
+  expect(mockNative.startScan).toHaveBeenCalledTimes(1);
+  await hook.setEnabled(false);
+  expect(mockNative.stopScan).toHaveBeenCalledTimes(1);
+  const probes = mockNative.getSnapshot.mock.calls.length;
+  await ReactTestRenderer.act(async () => {
+    settle([]);
+    await scanning;
+  });
+  expect(mockNative.getSnapshot.mock.calls.length).toBe(probes);
+  expect(hook.latest().nativeSnapshot).toBeNull();
+  expect(hook.latest().deviceBusy).toBe(false);
   await hook.unmount();
 });
