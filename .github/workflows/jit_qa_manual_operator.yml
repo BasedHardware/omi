@@ -497,7 +497,8 @@ jobs:
               --execution-json "$launch_file" \
               > "$operator_dir/${phase}.execution-contract.json"
             local state=running
-            for _ in $(seq 1 130); do
+            # Match the deployment runner's startup + task timeout margin.
+            for _ in $(seq 1 150); do
               gcloud_bounded run jobs executions describe "$execution" \
                 --project "$QA_PROJECT" \
                 --region "$QA_REGION" \
@@ -515,11 +516,15 @@ jobs:
             }
             printf '%s\n' "$execution" > "$execution_file"
             filter="resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${QA_DRAIN_JOB}\" AND labels.\"run.googleapis.com/execution_name\"=\"${execution}\""
+            local log_freshness=1h
+            if [[ "$phase" == first && -n "$RESUME_EXECUTION" ]]; then
+              log_freshness=24h
+            fi
             local summary_ready=0
             for _ in $(seq 1 12); do
               if gcloud_bounded logging read "$filter" \
                 --project "$QA_PROJECT" \
-                --freshness=1h \
+                --freshness="$log_freshness" \
                 --limit=100 \
                 --format=json > "$logs_file"; then
                 if "$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py summary \
@@ -534,7 +539,7 @@ jobs:
               sleep 5
             done
             [[ "$summary_ready" == 1 ]] || {
-              echo "ERROR: content-free QA drain logs did not become visible or valid for $execution." >&2
+              echo "ERROR: no valid QA drain summary for $execution within $log_freshness; resume supports only executions from the past 24 hours." >&2
               exit 1
             }
             if [[ "$phase" == first && -n "$RESUME_EXECUTION" ]]; then

@@ -196,10 +196,14 @@ def validate_execution_payload(payload: Mapping[str, Any], *, source_sha: str, e
         raise OperatorError("QA drain execution is missing its persisted environment")
     values: dict[str, Any] = {}
     secret_names: dict[str, Any] = {}
+    seen_names: set[str] = set()
     for entry in env_entries:
         if not isinstance(entry, Mapping) or not isinstance(entry.get("name"), str):
             raise OperatorError("QA drain execution contains a malformed environment entry")
         name = entry["name"]
+        if name in seen_names or set(entry) not in ({"name", "value"}, {"name", "valueFrom"}):
+            raise OperatorError("QA drain execution contains duplicate or ambiguous environment entries")
+        seen_names.add(name)
         if "value" in entry:
             values[name] = entry["value"]
         elif isinstance(entry.get("valueFrom"), Mapping):
@@ -218,6 +222,13 @@ def validate_execution_payload(payload: Mapping[str, Any], *, source_sha: str, e
         "KNOWLEDGE_LEDGER_DRAIN_ENABLED": "true",
         "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST": UID,
     }
+    expected_secrets = {"ENCRYPTION_SECRET", "POSTHOG_PROJECT_API_KEY"}
+    if (
+        seen_names != set(expected_values) | expected_secrets
+        or set(values) != set(expected_values)
+        or set(secret_names) != expected_secrets
+    ):
+        raise OperatorError("QA drain execution environment differs from the exact admitted set")
     for name, expected in expected_values.items():
         if values.get(name) != expected:
             raise OperatorError(f"QA drain execution override {name} is missing or unexpected")

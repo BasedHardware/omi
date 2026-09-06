@@ -196,6 +196,24 @@ def test_execution_contract_rejects_foreign_or_non_drain_override(changes):
         OPERATOR.validate_execution_payload(_execution_payload(**changes), source_sha=SOURCE_SHA, expected_image=IMAGE)
 
 
+@pytest.mark.parametrize(
+    "entry",
+    [
+        {"name": "GOOGLE_APPLICATION_CREDENTIALS", "value": "/customer/key.json"},
+        {"name": "UNREVIEWED_RUNTIME_SETTING", "value": "true"},
+        {"name": "UNREVIEWED_RUNTIME_SETTING", "valueFrom": {}},
+        {"name": "MEMORY_ENABLED", "value": "on"},
+        {"name": "MEMORY_ENABLED", "value": "on", "valueFrom": {}},
+        {"name": "ENCRYPTION_SECRET", "value": "unapproved"},
+    ],
+)
+def test_execution_contract_rejects_unknown_duplicate_and_ambiguous_environment(entry):
+    payload = _execution_payload()
+    payload["spec"]["template"]["spec"]["containers"][0]["env"].append(entry)
+    with pytest.raises(OPERATOR.OperatorError, match="environment"):
+        OPERATOR.validate_execution_payload(payload, source_sha=SOURCE_SHA, expected_image=IMAGE)
+
+
 def test_execution_contract_rejects_stale_job_source_and_service_account():
     payload = _execution_payload()
     payload["metadata"]["labels"]["source-sha"] = "c" * 40

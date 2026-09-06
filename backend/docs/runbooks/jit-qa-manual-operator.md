@@ -69,7 +69,7 @@ Run the actions in this order for a fresh named database:
    again after every execution and must remain `false`.
    If the first launcher returned an execution after its client request timed
    out, pass that exact `knowledge-ledger-drain-qa-job-*` name as
-   `resume_execution`. The operator re-reads and validates the execution's
+   `resume_execution` within 24 hours of that execution. The operator re-reads and validates the execution's
    source label, immutable image, service account, QA identity/database, and
    enabled drain override, then requires the first-page counters and an
    owned 101-row fixture/control state before launching the second page.

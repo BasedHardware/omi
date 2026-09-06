@@ -550,7 +550,8 @@ jobs:
           print(name)
           PY
           execution="$(cat "$RUNNER_TEMP/jit-qa-execution/drain.name")"
-          for _ in $(seq 1 80); do
+          # Allow cold startup plus the full 1200-second task deadline.
+          for _ in $(seq 1 100); do
             gcloud run jobs executions describe "$execution" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$RUNNER_TEMP/jit-qa-execution/drain.state.json"
             state="$(python3 - "$RUNNER_TEMP/jit-qa-execution/drain.state.json" <<'PY'
           import json, sys
