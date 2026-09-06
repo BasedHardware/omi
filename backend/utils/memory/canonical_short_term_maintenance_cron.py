@@ -724,6 +724,7 @@ def run_universal_short_term_maintenance(
                 consolidation_result_guard=(
                     flex_run.assert_result_current if promotion_llm_invoke is not None else None
                 ),
+                job_budget_guard=flex_run.require_job_budget if flex_run.control.enabled else None,
             )
         except PromotionFlexDeferred as exc:
             summary.flex_deferred = True
