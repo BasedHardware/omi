@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+repo_root=$(git rev-parse --show-toplevel)
+build_dir=$(mktemp -d /tmp/omi-v5-apple-auth.XXXXXX)
+trap 'rm -rf "$build_dir"' EXIT
+xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
+  "$repo_root/react-native/macos/Tests/OmiAuthMobileCallbackTest.mm" \
+  -o "$build_dir/test"
+"$build_dir/test"
