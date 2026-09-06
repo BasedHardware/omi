@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(omi_native)
+project(appmodules)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(omi_native SHARED
-  jni_bridge.cpp
+  omi/jni_bridge.cpp
   ../../../../../../native-core/src/omi_native_boundary.cpp
 )
 
@@ -15,3 +15,5 @@ target_include_directories(omi_native PRIVATE
 
 find_library(log-lib log)
 target_link_libraries(omi_native ${log-lib})
+
+include(${REACT_ANDROID_DIR}/cmake-utils/ReactNative-application.cmake)
