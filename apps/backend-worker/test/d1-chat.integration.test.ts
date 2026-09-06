@@ -436,6 +436,211 @@ describe("D1 chat projects an honest conversation list", () => {
     ]);
   });
 
+  test("conversation metadata stays bounded and preserves projection semantics", async () => {
+    const accountId = "bounded-conversation-metadata";
+    const title = `\uFEFF\t${"😀".repeat(130)}${" ".repeat(1000)}tail\u00a0`;
+    const overview = `\n${"x".repeat(237)}${" ".repeat(1000)}tail\u3000`;
+    const insert = (
+      id: string,
+      text: string,
+      sender: string,
+      position: number,
+      createdAt: number,
+      payload: string | null,
+      account = accountId
+    ) =>
+      env.DB.prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      ).bind(
+        id,
+        account,
+        text,
+        sender,
+        createdAt,
+        sender === "ai" ? "completed" : null,
+        position,
+        payload
+      );
+    const payload = JSON.stringify({
+      chatSessionId: "large",
+      ignored: "p".repeat(30000),
+    });
+    await env.DB.batch([
+      insert("bounded-first", "Initial assistant", "ai", 1, 900, payload),
+      insert("bounded-title", title, "human", 2, 800, payload),
+      ...Array.from({ length: 75 }, (_, index) =>
+        insert(
+          `bounded-middle-${index}`,
+          "m".repeat(20000),
+          "human",
+          index + 3,
+          1000 + index,
+          payload
+        )
+      ),
+      insert("bounded-last", overview, "ai", 100, 500, payload),
+      insert("bounded-malformed", "\t\n", "human", 101, 400, "{broken"),
+      insert("bounded-null", "ignored", "ai", 102, 410, "null"),
+      insert("bounded-array", "ignored", "human", 103, 420, "[]"),
+      insert(
+        "bounded-empty",
+        "ignored",
+        "human",
+        104,
+        430,
+        '{"chatSessionId":""}'
+      ),
+      insert(
+        "bounded-type",
+        "\u00a0Fallback overview\uFEFF",
+        "human",
+        105,
+        440,
+        '{"chatSessionId":{"nested":"wrong"}}'
+      ),
+      insert(
+        "bounded-private",
+        "must remain private",
+        "human",
+        106,
+        9999,
+        payload,
+        "another-account"
+      ),
+    ]);
+    let returnedRows: unknown[] = [];
+    const database = new Proxy(env.DB, {
+      get(target, property) {
+        if (property !== "prepare") return Reflect.get(target, property);
+        return (sql: string) => {
+          const statement = target.prepare(sql);
+          if (!sql.includes("chat_messages")) return statement;
+          return {
+            bind: (...values: unknown[]) => ({
+              all: async () => {
+                const result = await statement.bind(...values).all();
+                returnedRows = result.results;
+                return result;
+              },
+            }),
+          };
+        };
+      },
+    });
+    const rows = await readConversations(database, accountId);
+    expect(returnedRows).toHaveLength(2);
+    expect(JSON.stringify(returnedRows).length).toBeLessThan(9000);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      id: "chat:large",
+      title: `${title.trim().slice(0, 237)}...`,
+      overview: `${overview.trim().slice(0, 237)}...`,
+      createdAt: 900,
+      updatedAt: 500,
+      startedAt: 900,
+      finishedAt: 500,
+      status: "completed",
+    });
+    expect(rows[1]).toMatchObject({
+      id: MAIN_CONVERSATION_ID,
+      title: "Chat",
+      overview: "Fallback overview",
+      createdAt: 400,
+      updatedAt: 440,
+      finishedAt: null,
+      status: "in_progress",
+    });
+  });
+
+  test("conversation projection preserves embedded NUL and duplicate JSON key semantics", async () => {
+    const accountId = "nul-conversations";
+    const fixtures = [
+      {
+        session: "\0",
+        text: "start\0end",
+        payload: JSON.stringify({ chatSessionId: "\0" }),
+      },
+      {
+        session: "a\0b",
+        text: `${"x".repeat(235)}\0${"😀".repeat(200)}`,
+        payload: JSON.stringify({ chatSessionId: "a\0b" }),
+      },
+      {
+        session: "last",
+        text: "\uFEFF Last wins \uFEFF",
+        payload: '{"chatSessionId":"first","chatSessionId":"last"}',
+      },
+      {
+        session: "chat-main",
+        text: "Non-string last value",
+        payload: '{"chatSessionId":"wrong","chatSessionId":null}',
+      },
+    ];
+    await env.DB.batch(
+      fixtures.map((fixture, index) =>
+        env.DB.prepare(
+          "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+        ).bind(
+          `nul-conversation-${index}`,
+          accountId,
+          fixture.text,
+          index,
+          index,
+          fixture.payload
+        )
+      )
+    );
+    const rows = await readConversations(env.DB, accountId);
+    expect(rows).toHaveLength(fixtures.length);
+    for (const fixture of fixtures) {
+      const text = fixture.text.trim();
+      const display = text.length > 240 ? `${text.slice(0, 237)}...` : text;
+      expect(
+        rows.find((row) => row.id === `chat:${fixture.session}`)
+      ).toMatchObject({ title: display, overview: display });
+    }
+  });
+
+  test("conversation IDs preserve JSON UTF-16 escapes through D1", async () => {
+    const accountId = "surrogate-conversations";
+    const fixtures = [
+      { session: "\ud800", payload: '{"chatSessionId":"\\ud800"}' },
+      { session: "\udfff", payload: '{"chatSessionId":"\\uDFFF"}' },
+      {
+        session: "a\ud800b\udfffc",
+        payload: JSON.stringify({ chatSessionId: "a\ud800b\udfffc" }),
+      },
+      { session: "😀", payload: '{"chatSessionId":"\\ud83d\\ude00"}' },
+      {
+        session: "literal😀",
+        payload: JSON.stringify({ chatSessionId: "literal😀" }),
+      },
+      {
+        session: "\ud800\ud800\uFEFF",
+        payload: JSON.stringify({ chatSessionId: "\ud800\ud800\uFEFF" }),
+      },
+    ];
+    await env.DB.batch(
+      fixtures.map((fixture, index) =>
+        env.DB.prepare(
+          "INSERT INTO chat_messages (id, account_id, text, sender, created_at, position, payload) VALUES (?, ?, 'surrogate', 'human', ?, ?, ?)"
+        ).bind(
+          `surrogate-id-${index}`,
+          accountId,
+          index,
+          index,
+          fixture.payload
+        )
+      )
+    );
+    const rows = await readConversations(env.DB, accountId);
+    const units = (text: string) =>
+      Array.from({ length: text.length }, (_, index) => text.charCodeAt(index));
+    expect(rows.map((row) => units(row.id))).toEqual(
+      [...fixtures].reverse().map((fixture) => units(`chat:${fixture.session}`))
+    );
+  });
+
   test("chat session namespaces cannot collide with recordings or nested prefixes", async () => {
     const accountId = "conversation-namespace-test";
     const recordingId = crypto.randomUUID();
