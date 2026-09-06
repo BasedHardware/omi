@@ -2331,7 +2331,7 @@ def _claim_receipt(
                 merge=True,
             )
             return "claimed"
-        payload = {
+        payload: dict[str, Any] = {
             "schema_version": RECEIPT_SCHEMA_VERSION,
             "uid": uid,
             "local_date": local_date.isoformat(),
