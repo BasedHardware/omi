@@ -337,9 +337,9 @@ extension SettingsContentView {
     guard !selectedKey.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       byokKeyStatuses = [:]
       byokActivationError = nil
-      if !chatGPTLLMOAuthConnected && !grokLLMOAuthConnected && (
-        hasAnyBYOKKey || !APIKeyService.enrolledFingerprints().isEmpty
-      ) {
+      if !chatGPTLLMOAuthConnected && !grokLLMOAuthConnected
+        && (hasAnyBYOKKey || !APIKeyService.enrolledFingerprints().isEmpty)
+      {
         try? await APIClient.shared.deactivateBYOK()
         APIKeyService.persistEnrolledFingerprints([:])
         await FloatingBarUsageLimiter.shared.fetchPlan()
