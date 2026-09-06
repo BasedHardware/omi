@@ -113,7 +113,7 @@ export function projectionTimestamp(
       ? item.timestamp === null
         ? null
         : item.timestamp * 1000
-      : item.createdAt * 1000;
+      : item.createdAt;
   return timestamp === null || !Number.isFinite(timestamp) ? null : timestamp;
 }
 

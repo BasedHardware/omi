@@ -1002,3 +1002,29 @@ test('rejects duplicate conversation IDs instead of merging an ambiguous page', 
     ),
   ).rejects.toThrow('Conversation IDs are duplicated');
 });
+
+test('groups canonical task millisecond timestamps without converting them twice', () => {
+  const now = new Date(2026, 8, 7, 12).getTime();
+  const item: DesktopReadProjection = {
+    kind: 'task',
+    id: 'task-time',
+    title: 'Task',
+    summary: '',
+    searchableText: 'Task',
+    completed: false,
+    completedAt: null,
+    dueAt: null,
+    owner: null,
+    source: 'manual',
+    provenance: [],
+    sortOrder: 0,
+    indentLevel: 0,
+    createdAt: now,
+    updatedAt: now,
+    revision: '1',
+  };
+  expect(projectionTimestamp(item)).toBe(now);
+  expect(timelineGroups([item], now)).toEqual([
+    {label: 'Today', items: [item]},
+  ]);
+});
