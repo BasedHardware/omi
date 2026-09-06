@@ -776,14 +776,21 @@ private struct CanonicalMemoryAtlasSurface: View {
   private func territory(
     in size: CGSize, plan: MemoryAtlasRenderPlan
   ) -> (islands: [MemoryAtlasNeighbourhoodLabels.Placed], quietened: Set<String>) {
-    // Territories are solved every frame, camera moving or not: a coastline
-    // that disappears while you pan is the map losing the very shape you
-    // were following.
+    // A coastline that disappears while you pan is the map losing the very
+    // shape you were following, so territories stay up through a gesture —
+    // but they are not re-solved for it. The layer solved when the camera
+    // last rested is carried along, one projection per caption.
     guard !compact, matchingNodeIDs == nil,
       MemoryAtlasNeighbourhoodLabels.areVisible(
         detailLevel: plan.detailLevel, hasSelection: selectedNodeID != nil,
         isInsideNeighbourhood: enteredRegionID != nil)
-    else { return ([], []) }
+    else {
+      renderPlanCache.settledTerritory = nil
+      return ([], [])
+    }
+    if isCameraMoving, let settled = renderPlanCache.settledTerritory {
+      return (settled.placed(in: size, project: { point(for: $0, in: size) }), settled.quietened)
+    }
 
     let found = MemoryAtlasNeighbourhoodLabels.islands(
       snapshot.neighbourhoods,
@@ -874,7 +881,20 @@ private struct CanonicalMemoryAtlasSurface: View {
       found, captions: captions, in: size,
       avoiding: nameBoxes(hiding: standingOn(candidates)), preferringClear: markBoxes, limit: budget,
       insisting: enteredRegionID != nil)
-    return (placed, standingOn(placed))
+    let quietened = standingOn(placed)
+    renderPlanCache.settledTerritory = MemoryAtlasNeighbourhoodLabels.Settled(
+      captions: placed.map { island in
+        MemoryAtlasNeighbourhoodLabels.Settled.Caption(
+          regionID: island.regionID,
+          index: island.index,
+          caption: island.caption,
+          center: MemoryAtlasRenderPlanner.normalizedPoint(
+            for: CGPoint(x: island.rect.midX, y: island.rect.midY), viewportSize: size, zoom: zoom, pan: pan),
+          size: island.rect.size,
+          ring: island.ring)
+      },
+      quietened: quietened)
+    return (placed, quietened)
   }
 
   /// The land each neighbourhood holds, drawn under everything.
@@ -1972,7 +1992,9 @@ struct MemoryAtlasGlassMark: View {
       .overlay(
         Circle().stroke(Ink.primary.opacity(selected ? 0.75 : 0.32), lineWidth: selected ? 1.6 : 1)
       )
-      .shadow(color: Ink.primary.opacity(0.10), radius: diameter * 0.12, y: diameter * 0.06)
+      // No shadow: a couple of hundred of these move together under a drag,
+      // and a blurred shadow on each was the second most expensive thing on
+      // the map for a depth cue nobody could see at this size.
       .frame(width: diameter, height: diameter)
   }
 }

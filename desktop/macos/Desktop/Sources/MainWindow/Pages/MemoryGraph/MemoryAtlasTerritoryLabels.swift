@@ -140,6 +140,44 @@ enum MemoryAtlasNeighbourhoodLabels {
     var id: String { "\(regionID)-\(index)" }
   }
 
+  /// The territory layer as last solved with the camera at rest, in map
+  /// coordinates, so a gesture can carry it along instead of re-solving it.
+  ///
+  /// Solving placement walks every caption candidate against every entity
+  /// name and mark; at 60 frames a second under a drag that was the single
+  /// most expensive thing on the map. During the gesture nothing about the
+  /// solution changes except where it is on screen, and that is one
+  /// projection per caption.
+  struct Settled: Equatable {
+    struct Caption: Equatable {
+      let regionID: Int
+      let index: Int
+      let caption: String
+      /// Where the caption's centre is on the map.
+      let center: CGPoint
+      let size: CGSize
+      let ring: [CGPoint]
+    }
+
+    let captions: [Caption]
+    let quietened: Set<String>
+
+    /// The solution carried to the current camera.
+    func placed(in size: CGSize, project: (CGPoint) -> CGPoint) -> [Placed] {
+      captions.map { caption in
+        let center = project(caption.center)
+        return Placed(
+          regionID: caption.regionID,
+          index: caption.index,
+          caption: caption.caption,
+          rect: CGRect(
+            x: center.x - caption.size.width / 2, y: center.y - caption.size.height / 2,
+            width: caption.size.width, height: caption.size.height),
+          ring: caption.ring)
+      }
+    }
+  }
+
   /// Past this the captions are the map. Eight territories is already more
   /// than anyone holds in their head at a glance.
   static let limit = 8

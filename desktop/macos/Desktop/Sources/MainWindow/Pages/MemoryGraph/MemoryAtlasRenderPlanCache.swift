@@ -29,6 +29,10 @@ final class MemoryAtlasRenderPlanCache {
 
   private let snapshot: MemoryAtlasSnapshot
   private var transientPlans: [CohortKey: MemoryAtlasRenderPlan] = [:]
+  /// The territory layer as last solved at rest; carried, not re-solved,
+  /// while the camera moves. Owned here because it is the same kind of thing
+  /// as the transient plans: camera-invariant work a gesture must not repeat.
+  var settledTerritory: MemoryAtlasNeighbourhoodLabels.Settled?
 
   /// Exposed for deterministic performance-harness assertions. These count
   /// planner calls rather than wall-clock time, so they are stable across Macs.

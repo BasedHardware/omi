@@ -232,6 +232,20 @@ enum MemoryAtlasRenderPlanner {
     )
   }
 
+  /// The inverse of `renderedPoint`: where on the map a point on screen is.
+  static func normalizedPoint(
+    for rendered: CGPoint,
+    viewportSize: CGSize,
+    zoom: CGFloat,
+    pan: CGSize
+  ) -> CGPoint {
+    let span = max(MemoryAtlasLayoutEngine.projectionSpan(of: viewportSize) * zoom, 0.0001)
+    return CGPoint(
+      x: (rendered.x - viewportSize.width / 2 - pan.width) / span + 0.5,
+      y: (rendered.y - viewportSize.height / 2 - pan.height) / span + 0.5
+    )
+  }
+
   static func renderedPoint(
     for normalized: CGPoint,
     viewportSize: CGSize,
