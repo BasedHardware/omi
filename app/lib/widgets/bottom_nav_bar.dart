@@ -28,12 +28,25 @@ class _BottomNavBarState extends State<BottomNavBar> {
     _navigation = Selector<HomeProvider, int>(
       selector: (_, home) => home.selectedIndex,
       builder: (context, selectedIndex, _) {
+        // The app targets SDK 36, so Android 15+ enforces edge-to-edge and this
+        // Stack extends under the system navigation bar. Reserve the bottom
+        // inset so the tab row stays above it; without this the row's tap
+        // targets sit behind the 3-button navigation bar. The sibling bars
+        // mounted in the same home Stack (MergeActionBar, TaskSelectionActionBar)
+        // already use SafeArea for the same reason.
+        //
+        // viewPadding, not padding: the home Scaffold sets
+        // resizeToAvoidBottomInset: false, and padding.bottom collapses to zero
+        // while a keyboard is open, which would drop the row back under the bar.
+        final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
         return Align(
           alignment: Alignment.bottomCenter,
           child: Container(
             width: double.infinity,
-            height: 100,
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            // The 80dp content box is unchanged; only the reserved inset grows,
+            // so a device reporting a zero inset lays out exactly as before.
+            height: 100 + bottomInset,
+            padding: EdgeInsets.fromLTRB(20, 20, 20, bottomInset),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,

@@ -872,7 +872,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               Positioned(
                                 left: 16,
                                 right: 16,
-                                bottom: 78,
+                                // Anchored against the bottom nav row, which
+                                // reserves the same inset. Keeping them in step
+                                // preserves the existing gap instead of letting
+                                // the chat bar collide with the lifted row.
+                                bottom: 78 + MediaQuery.viewPaddingOf(context).bottom,
                                 child: Row(
                                   children: [
                                     Expanded(child: _buildChatBar(context)),
