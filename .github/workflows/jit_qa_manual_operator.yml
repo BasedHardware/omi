@@ -302,7 +302,7 @@ jobs:
             --format=json > "$RUNNER_TEMP/jit-qa-operator/job.json"
           "$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py validate-job \
             --source-sha "$SOURCE_SHA" \
-            --expected-image "$QA_DRAIN_IMAGE" \
+            --expected-image "$resolved_image" \
             --resource-json "$RUNNER_TEMP/jit-qa-operator/job.json" \
             > "$RUNNER_TEMP/jit-qa-operator/job-contract.json"
 

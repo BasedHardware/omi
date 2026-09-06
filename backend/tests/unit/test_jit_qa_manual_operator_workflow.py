@@ -246,6 +246,68 @@ def test_qa_provision_enables_only_the_fixed_development_redis_api_before_resour
         )
 
 
+def test_deployed_job_validation_uses_same_step_resolved_digest_before_github_env_propagation():
+    step = _step("Verify the deployed immutable QA drain job")
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        fake_bin = root / "bin"
+        fake_bin.mkdir()
+        runner_temp = root / "runner-temp"
+        (runner_temp / "jit-qa-operator").mkdir(parents=True)
+        gcloud = fake_bin / "gcloud"
+        gcloud.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "if [[ \"${1:-}\" == container && \"${2:-}\" == images && \"${3:-}\" == describe ]]; then\n"
+            "  printf 'sha256:%064d\\n' 7\n"
+            "  exit 0\n"
+            "fi\n"
+            "if [[ \"${1:-}\" == run && \"${2:-}\" == jobs && \"${3:-}\" == describe ]]; then\n"
+            "  printf '{}\\n'\n"
+            "  exit 0\n"
+            "fi\n"
+            "echo \"unexpected gcloud command: $*\" >&2\n"
+            "exit 2\n",
+            encoding="utf-8",
+        )
+        gcloud.chmod(0o755)
+        fake_python = fake_bin / "python"
+        fake_python.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "if [[ \"${1:-}\" == backend/scripts/jit_qa_manual_operator.py ]]; then\n"
+            "  printf '%s\\n' \"$*\" > \"$PYTHON_CALL\"\n"
+            "  printf '{}\\n'\n"
+            "  exit 0\n"
+            "fi\n"
+            "echo \"unexpected python command: $*\" >&2\n"
+            "exit 2\n",
+            encoding="utf-8",
+        )
+        fake_python.chmod(0o755)
+        environment = {
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "RUNNER_TEMP": str(runner_temp),
+            "GITHUB_ENV": str(root / "github-env"),
+            "QA_PYTHON": str(fake_python),
+            "QA_PROJECT": "based-hardware-dev",
+            "QA_REGION": "us-central1",
+            "QA_DRAIN_JOB": "knowledge-ledger-drain-qa-job",
+            "SOURCE_SHA": "a" * 40,
+            "PYTHON_CALL": str(root / "python-call"),
+        }
+        result = subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", step["run"]],
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        expected = "gcr.io/based-hardware-dev/knowledge-ledger-drain-qa-job@sha256:" + "0" * 63 + "7"
+        assert f"QA_DRAIN_IMAGE={expected}" in (root / "github-env").read_text(encoding="utf-8")
+        assert f"--expected-image {expected}" in (root / "python-call").read_text(encoding="utf-8")
+
+
 def test_seed_bash_step_runs_with_fake_cli_and_cannot_lose_source_sha():
     step = _step("Run read-only or seed operator action")
     with TemporaryDirectory() as temporary:
