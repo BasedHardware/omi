@@ -31,6 +31,7 @@ LLM_GATEWAY_SERVICE = "llm-gateway-jit-qa"
 TYPESENSE_SERVICE = "typesense-jit-qa"
 TYPESENSE_API_SECRET = "jit-qa-typesense-api-key"
 TYPESENSE_COLLECTION = "jit_qa_canonical_memory_atoms"
+BACKEND_MEMORY = "4Gi"
 TYPESENSE_READINESS_COLLECTION = "jit_qa_typesense_readiness"
 TYPESENSE_ENTRYPOINT = "/usr/local/bin/jit-qa-typesense-entrypoint"
 TYPESENSE_CPU = "1"
@@ -320,6 +321,7 @@ def validate_cloud_run_resource(
     expected_secret_bindings: Mapping[str, str] | None = None,
     expected_name: str | None = None,
     expected_service_account: str = RUNTIME_SERVICE_ACCOUNT,
+    expected_memory: str | None = None,
     gateway_url: str | None = None,
     redis_host: str | None = None,
     typesense_host: str | None = None,
@@ -335,6 +337,14 @@ def validate_cloud_run_resource(
     container = _containers(resource, kind=kind)[0]
     if container.get("image") != expected_image:
         raise JITQAContractError("Cloud Run resource image does not match the admitted digest")
+    if expected_memory is not None:
+        resources = container.get("resources")
+        limits = resources.get("limits") if isinstance(resources, Mapping) else None
+        actual_memory = limits.get("memory") if isinstance(limits, Mapping) else None
+        if actual_memory != expected_memory:
+            raise JITQAContractError(
+                f"Cloud Run {kind} must declare memory limit {expected_memory!r}; got {actual_memory!r}"
+            )
     expected_secret_bindings = dict(expected_secret_bindings or {})
     expected_names = set(expected_environment) | set(expected_secret_bindings)
     seen_names: set[str] = set()
@@ -790,6 +800,7 @@ def main() -> int:
                 expected_environment=expected_environment,
                 expected_secret_bindings=expected_secret_bindings,
                 expected_name=args.expected_name,
+                expected_memory=BACKEND_MEMORY if args.profile == "backend" else None,
                 gateway_url=args.gateway_url if args.profile in {"backend", "desktop"} else None,
                 redis_host=args.redis_host if args.profile in {"backend", "desktop"} else None,
                 typesense_host=args.typesense_host if args.profile in {"backend", "desktop"} else None,

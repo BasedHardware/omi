@@ -40,9 +40,13 @@ def _resource(profile: str, kind: str, image: str) -> dict:
         for name, reference in secrets.items()
     )
     if kind == "service":
+        resources = {"limits": {"memory": CONTRACT.BACKEND_MEMORY}} if profile == "backend" else None
+        container = {"image": image, "env": env}
+        if resources is not None:
+            container["resources"] = resources
         template = {
             "spec": {
-                "containers": [{"image": image, "env": env}],
+                "containers": [container],
                 "serviceAccountName": CONTRACT.RUNTIME_SERVICE_ACCOUNT,
             }
         }
@@ -162,6 +166,7 @@ def test_cloud_run_resource_requires_exact_image_env_secrets_name_and_identity()
         expected_environment=CONTRACT.resource_environment("backend")[0],
         expected_secret_bindings=CONTRACT.resource_environment("backend")[1],
         expected_name=CONTRACT.BACKEND_SERVICE,
+        expected_memory=CONTRACT.BACKEND_MEMORY,
     )
     resource["spec"]["template"]["spec"]["containers"][0]["image"] = image.replace("@sha256:", ":")
     with pytest.raises(CONTRACT.JITQAContractError):
@@ -171,6 +176,29 @@ def test_cloud_run_resource_requires_exact_image_env_secrets_name_and_identity()
             expected_image=image,
             expected_environment=CONTRACT.resource_environment("backend")[0],
             expected_secret_bindings=CONTRACT.resource_environment("backend")[1],
+            expected_memory=CONTRACT.BACKEND_MEMORY,
+        )
+
+
+@pytest.mark.parametrize("memory", ["512Mi", None])
+def test_backend_resource_requires_explicit_four_gib_memory(memory):
+    image = "gcr.io/based-hardware-dev/backend-jit-qa@sha256:" + "a" * 64
+    resource = _resource("backend", "service", image)
+    resource["metadata"]["name"] = CONTRACT.BACKEND_SERVICE
+    limits = resource["spec"]["template"]["spec"]["containers"][0]["resources"]["limits"]
+    if memory is None:
+        resource["spec"]["template"]["spec"]["containers"][0].pop("resources")
+    else:
+        limits["memory"] = memory
+    with pytest.raises(CONTRACT.JITQAContractError, match="memory limit"):
+        CONTRACT.validate_cloud_run_resource(
+            resource,
+            kind="service",
+            expected_image=image,
+            expected_environment=CONTRACT.resource_environment("backend")[0],
+            expected_secret_bindings=CONTRACT.resource_environment("backend")[1],
+            expected_name=CONTRACT.BACKEND_SERVICE,
+            expected_memory=CONTRACT.BACKEND_MEMORY,
         )
 
 
@@ -257,6 +285,7 @@ def test_cloud_run_v1_nested_service_fixture_is_supported():
         expected_environment=literals,
         expected_secret_bindings=secrets,
         expected_name=CONTRACT.BACKEND_SERVICE,
+        expected_memory=CONTRACT.BACKEND_MEMORY,
         gateway_url=CONTRACT.DEFAULT_GATEWAY_URL,
         redis_host=CONTRACT.DEFAULT_REDIS_HOST,
     )
@@ -462,6 +491,8 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "based-hardware-dev" in text
     assert "backend-jit-qa" in text
     assert "desktop-backend-jit-qa" in text
+    assert 'if [[ "$service" == "$QA_SERVICE" ]]' in text
+    assert "resource_flags+=(--memory=4Gi)" in text
     assert "llm-gateway-jit-qa" in text
     assert "knowledge-ledger-drain-qa-job" in text
     assert "daily-memory-sweep-qa-job" in text
