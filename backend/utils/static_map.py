@@ -82,7 +82,7 @@ def parse_pins(pins: str) -> List[Tuple[float, float]]:
     De-duplication and sorting happen on the quantized values so the same place
     always maps to the same cache entry regardless of pin order or repeats.
     """
-    if not isinstance(pins, str) or not pins:
+    if not pins:
         raise MalformedPinsError('pins must be a non-empty pipe-separated list of lat,lng pairs')
     parsed = []
     seen = set()
