@@ -41,14 +41,20 @@ function parseSession(value: unknown): DeviceSessionRecord {
     typeof item.id !== 'string' ||
     typeof item.deviceId !== 'string' ||
     (item.deviceName !== null && typeof item.deviceName !== 'string') ||
-    typeof item.codec !== 'number' ||
+    !Number.isSafeInteger(item.codec) ||
+    (item.codec as number) < 0 ||
+    (item.codec as number) > 255 ||
     (item.state !== 'open' &&
       item.state !== 'complete' &&
       item.state !== 'failed') ||
-    typeof item.byteCount !== 'number' ||
-    typeof item.chunkCount !== 'number' ||
-    typeof item.startedAt !== 'number' ||
-    (item.endedAt !== null && typeof item.endedAt !== 'number')
+    !Number.isSafeInteger(item.byteCount) ||
+    (item.byteCount as number) < 0 ||
+    !Number.isSafeInteger(item.chunkCount) ||
+    (item.chunkCount as number) < 0 ||
+    !Number.isSafeInteger(item.startedAt) ||
+    (item.startedAt as number) < 0 ||
+    (item.endedAt !== null &&
+      (!Number.isSafeInteger(item.endedAt) || (item.endedAt as number) < 0))
   ) {
     throw new Error('Device session response is incomplete');
   }
@@ -56,12 +62,12 @@ function parseSession(value: unknown): DeviceSessionRecord {
     id: item.id,
     deviceId: item.deviceId,
     deviceName: item.deviceName,
-    codec: item.codec,
+    codec: item.codec as number,
     state: item.state,
-    byteCount: item.byteCount,
-    chunkCount: item.chunkCount,
-    startedAt: item.startedAt,
-    endedAt: item.endedAt,
+    byteCount: item.byteCount as number,
+    chunkCount: item.chunkCount as number,
+    startedAt: item.startedAt as number,
+    endedAt: item.endedAt as number | null,
   };
 }
 
@@ -117,15 +123,32 @@ export async function appendDeviceSessionAudio(
   backend: OmiBackend,
   sessionId: string,
   bytes: Uint8Array,
+  chunkIndex: number,
 ): Promise<DeviceSessionRecord> {
+  if (
+    !Number.isSafeInteger(chunkIndex) ||
+    chunkIndex < 0 ||
+    chunkIndex > 65535
+  ) {
+    throw new Error('Invalid audio chunk index');
+  }
   const response = await backend.request({
-    id: `device-session-audio-${sessionId}`,
+    id: `device-session-audio-${sessionId}-${chunkIndex}`,
     method: 'POST',
     path: `/v1/device-sessions/${sessionId}/audio`,
-    body: JSON.stringify({bytesBase64: bytesToBase64(bytes)}),
+    body: JSON.stringify({bytesBase64: bytesToBase64(bytes), chunkIndex}),
   });
   rejectIfUnusable(response);
-  return parseSession(parseObject(response.body).session);
+  const session = parseSession(parseObject(response.body).session);
+  if (
+    session.id !== sessionId ||
+    session.chunkCount <= chunkIndex ||
+    session.byteCount < bytes.length ||
+    session.state === 'failed'
+  ) {
+    throw new Error('Backend did not acknowledge the audio chunk');
+  }
+  return session;
 }
 
 export async function completeDeviceSession(
@@ -138,5 +161,22 @@ export async function completeDeviceSession(
     path: `/v1/device-sessions/${sessionId}/complete`,
   });
   rejectIfUnusable(response);
-  return parseSession(parseObject(response.body).session);
+  const session = parseSession(parseObject(response.body).session);
+  if (session.id !== sessionId || session.state !== 'complete') {
+    throw new Error('Backend did not acknowledge recording completion');
+  }
+  return session;
+}
+
+export function isTransientDeviceSessionError(error: unknown): boolean {
+  if (error instanceof DeviceSessionBackendError) {
+    return [0, 408, 429, 500, 502, 503, 504].includes(error.status);
+  }
+  return (
+    error instanceof TypeError ||
+    (error !== null &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'OMI_HTTP_TRANSPORT')
+  );
 }

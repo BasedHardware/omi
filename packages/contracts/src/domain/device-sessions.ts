@@ -23,5 +23,6 @@ export type DeviceSessionCreate = {
 };
 
 export type DeviceSessionAudioAppend = {
+  chunkIndex: number;
   bytesBase64: string;
 };

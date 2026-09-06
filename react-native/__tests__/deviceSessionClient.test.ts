@@ -92,6 +92,7 @@ test('appends audio bytes and completes without a fake transcript', async () => 
     client,
     '11111111-2222-3333-4444-555555555555',
     new Uint8Array([1, 2, 3]),
+    0,
   );
   const completed = await completeDeviceSession(
     client,
@@ -103,6 +104,7 @@ test('appends audio bytes and completes without a fake transcript', async () => 
   );
   expect(JSON.parse(captured[0]?.body ?? '{}')).toEqual({
     bytesBase64: 'AQID',
+    chunkIndex: 0,
   });
   expect(appended.byteCount).toBe(3);
   expect(completed.state).toBe('complete');
@@ -126,3 +128,38 @@ test('fail-closes when the worker is unavailable', async () => {
     ),
   ).rejects.toBeInstanceOf(DeviceSessionBackendError);
 });
+
+test.each([
+  {id: 'another-session', byteCount: 3, chunkCount: 1},
+  {byteCount: 3, chunkCount: 0},
+  {byteCount: 2, chunkCount: 1},
+  {byteCount: Number.NaN, chunkCount: 1},
+  {byteCount: 3, chunkCount: 1, state: 'failed'},
+])('refuses an invalid acknowledgement %j', async overrides => {
+  await expect(
+    appendDeviceSessionAudio(
+      backend(() => ({
+        status: 200,
+        body: JSON.stringify({session: session(overrides)}),
+      })),
+      '11111111-2222-3333-4444-555555555555',
+      new Uint8Array([1, 2, 3]),
+      0,
+    ),
+  ).rejects.toThrow();
+});
+
+test.each([{id: 'another-session', state: 'complete'}, {state: 'open'}])(
+  'refuses an invalid completion acknowledgement %j',
+  async overrides => {
+    await expect(
+      completeDeviceSession(
+        backend(() => ({
+          status: 200,
+          body: JSON.stringify({session: session(overrides)}),
+        })),
+        '11111111-2222-3333-4444-555555555555',
+      ),
+    ).rejects.toThrow();
+  },
+);
