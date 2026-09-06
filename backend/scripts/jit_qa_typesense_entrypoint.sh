@@ -12,8 +12,11 @@ else
     exit 78
 fi
 
+data_dir="${TYPESENSE_DATA_DIR:-/tmp/typesense}"
+mkdir -p "$data_dir"
+
 exec "$typesense_binary" \
-    --data-dir "${TYPESENSE_DATA_DIR:-/tmp/typesense}" \
+    --data-dir "$data_dir" \
     --api-address 0.0.0.0 \
     --api-port "${PORT:-8080}" \
     --api-key "$TYPESENSE_API_KEY"

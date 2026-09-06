@@ -27,6 +27,8 @@
               {"name": "OMI_LLM_GATEWAY_URL", "value": "https://llm-gateway-jit-qa.invalid"},
               {"name": "REDIS_DB_HOST", "value": "10.0.0.10"},
               {"name": "REDIS_DB_PORT", "value": "6379"},
+              {"name": "MEMORY_TYPESENSE_READINESS_REQUIRED", "value": "true"},
+              {"name": "MEMORY_TYPESENSE_READINESS_COLLECTION", "value": "jit_qa_typesense_readiness"},
               {"name": "ENCRYPTION_SECRET", "valueSource": {"secretKeyRef": {"secret": "ENCRYPTION_SECRET", "version": "latest"}}},
               {"name": "OPENAI_API_KEY", "valueSource": {"secretKeyRef": {"secret": "OPENAI_API_KEY", "version": "latest"}}},
               {"name": "POSTHOG_PROJECT_API_KEY", "valueSource": {"secretKeyRef": {"secret": "POSTHOG_PROJECT_API_KEY", "version": "latest"}}},

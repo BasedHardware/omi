@@ -30,11 +30,15 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from models.knowledge_ledger_search import validate_ledger_kinds  # noqa: E402
+from scripts.jit_qa_cloud_run_contract import TYPESENSE_BASE_IMAGE_27_1  # noqa: E402
 from utils.memory.atom_keyword_index import (  # noqa: E402
     ensure_ledger_keyword_schema,
     ensure_memories_collection,
     keyword_search_ledger_memory_ids,
     rebuild_atom_keyword_index,
+    TYPESENSE_PROJECTION_READINESS_COLLECTION,
+    TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID,
+    TYPESENSE_PROJECTION_READINESS_SCHEMA_VERSION,
 )
 from utils.retrieval.tools.knowledge_ledger_tools import search_knowledge  # noqa: E402
 
@@ -43,6 +47,7 @@ REGION = "us-central1"
 DATABASE_ID = "jit-qa"
 QA_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 COLLECTION = "jit_qa_canonical_memory_atoms"
+READINESS_COLLECTION = TYPESENSE_PROJECTION_READINESS_COLLECTION
 SCHEMA_VERSION = "omi.jit.qa.typesense.projection.v1"
 TYPESENSE_SERVICE = "typesense-jit-qa"
 TYPESENSE_CPU = "1"
@@ -52,7 +57,6 @@ TYPESENSE_MAX_INSTANCES = 1
 MAX_QUERY_CHARACTERS = 500
 MAX_SEARCH_LIMIT = 20
 MAX_PROJECTION_DOCUMENTS = 5_000
-DOCUMENT_PAGE_SIZE = 250
 _RUN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _DIGEST_IMAGE_RE = re.compile(r"^gcr\.io/based-hardware-dev/[a-z0-9-]+@sha256:[0-9a-f]{64}$")
@@ -63,6 +67,10 @@ _DIGEST_FIELDS = (
     "id",
     "memory_id",
     "userId",
+    # Content is held only in process while computing the digest. It is never
+    # copied into the receipt or logs; omitting it would make two different
+    # projections appear identical after a restart.
+    "content",
     "layer",
     "status",
     "schema_version",
@@ -93,6 +101,8 @@ def require_digest_image(value: str, *, label: str) -> None:
 def require_base_image(value: str, *, label: str = "typesense_base_image") -> None:
     if not _BASE_IMAGE_RE.fullmatch(value):
         raise ProjectionError(f"{label} must be docker.io/typesense/typesense pinned by sha256 digest")
+    if value != TYPESENSE_BASE_IMAGE_27_1:
+        raise ProjectionError(f"{label} must be the reviewed Typesense 27.1 digest")
 
 
 def validate_runtime_environment(environment: Mapping[str, str], *, collection: str = COLLECTION) -> None:
@@ -111,6 +121,8 @@ def validate_runtime_environment(environment: Mapping[str, str], *, collection: 
         "OMI_JIT_QA_AUTH_ONLY": "true",
         "OMI_JIT_QA_UID_ALLOWLIST": QA_UID,
         "MEMORY_TYPESENSE_COLLECTION": collection,
+        "MEMORY_TYPESENSE_READINESS_REQUIRED": "true",
+        "MEMORY_TYPESENSE_READINESS_COLLECTION": READINESS_COLLECTION,
         "TYPESENSE_PROTOCOL": "https",
         "TYPESENSE_HOST_PORT": "443",
     }
@@ -163,14 +175,32 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _typesense_request(base_url: str, path: str, *, query: Mapping[str, object] | None = None) -> Any:
+def _typesense_request(
+    base_url: str,
+    path: str,
+    *,
+    query: Mapping[str, object] | None = None,
+    method: str = "GET",
+    payload: Mapping[str, object] | None = None,
+) -> Any:
     api_key = os.environ.get("TYPESENSE_API_KEY", "").strip()
     if not api_key:
         raise ProjectionError("Typesense API key is unavailable")
     url = f"{base_url}{path}"
     if query:
         url = f"{url}?{urlencode({key: str(value) for key, value in query.items()})}"
-    request = Request(url, headers={"X-TYPESENSE-API-KEY": api_key, "Accept": "application/json"})
+    request = Request(
+        url,
+        data=(
+            json.dumps(dict(payload), separators=(",", ":"), ensure_ascii=False).encode("utf-8") if payload else None
+        ),
+        method=method,
+        headers={
+            "X-TYPESENSE-API-KEY": api_key,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+    )
     try:
         with urlopen(request, timeout=10) as response:  # noqa: S310 - URL is validated QA Cloud Run host
             if response.status >= 400:
@@ -205,23 +235,34 @@ def _schema_summary(base_url: str, collection: str) -> tuple[str, list[str]]:
 
 
 def _projection_documents(base_url: str, collection: str) -> list[dict[str, Any]]:
+    """Export the collection as JSONL; Typesense does not list documents as a JSON array."""
+
     fields = ",".join(_DIGEST_FIELDS)
     documents: list[dict[str, Any]] = []
-    page = 1
-    while True:
-        payload = _typesense_request(
-            base_url,
-            f"/collections/{collection}/documents",
-            query={"include_fields": fields, "per_page": DOCUMENT_PAGE_SIZE, "page": page},
-        )
-        if not isinstance(payload, list) or any(not isinstance(item, dict) for item in payload):
-            raise ProjectionError("Typesense document inventory is malformed")
-        documents.extend(payload)
-        if len(documents) > MAX_PROJECTION_DOCUMENTS:
-            raise ProjectionError("Typesense projection exceeds the bounded QA document limit")
-        if len(payload) < DOCUMENT_PAGE_SIZE:
-            break
-        page += 1
+    api_key = os.environ.get("TYPESENSE_API_KEY", "").strip()
+    if not api_key:
+        raise ProjectionError("Typesense API key is unavailable")
+    url = f"{base_url}/collections/{collection}/documents/export?{urlencode({'include_fields': fields})}"
+    request = Request(url, headers={"X-TYPESENSE-API-KEY": api_key, "Accept": "application/jsonl"})
+    try:
+        with urlopen(request, timeout=20) as response:  # noqa: S310 - URL is validated QA Cloud Run host
+            for line in response:
+                raw_line = line.decode("utf-8").strip()
+                if not raw_line:
+                    continue
+                try:
+                    item = json.loads(raw_line)
+                except json.JSONDecodeError as exc:
+                    raise ProjectionError("Typesense document export contains malformed JSONL") from exc
+                if not isinstance(item, dict):
+                    raise ProjectionError("Typesense document export contains a non-object row")
+                documents.append(item)
+                if len(documents) > MAX_PROJECTION_DOCUMENTS:
+                    raise ProjectionError("Typesense projection exceeds the bounded QA document limit")
+    except ProjectionError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - preserve a content-free failure boundary
+        raise ProjectionError(f"Typesense document export unavailable ({type(exc).__name__})") from exc
     seen_ids: set[str] = set()
     for document in documents:
         document_id = document.get("id")
@@ -240,6 +281,99 @@ def _projection_digest(documents: Sequence[Mapping[str, Any]]) -> str:
         rows.append(row)
     rows.sort(key=lambda row: (str(row.get("memory_id", "")), str(row.get("id", ""))))
     return _json_digest(rows)
+
+
+_READINESS_SCHEMA_FIELDS = (
+    {"name": "userId", "type": "string", "facet": True},
+    {"name": "readiness_schema_version", "type": "string", "facet": True},
+    {"name": "projection_epoch", "type": "string"},
+    {"name": "source_sha", "type": "string", "facet": True},
+    {"name": "projection_digest", "type": "string"},
+    {"name": "projection_count", "type": "int32"},
+    {"name": "run_id", "type": "string"},
+    {"name": "captured_at", "type": "string"},
+)
+
+
+def _ensure_readiness_collection(base_url: str) -> None:
+    """Create or validate the marker collection without accepting a weak schema."""
+
+    schema: Any
+    try:
+        schema = _typesense_request(base_url, f"/collections/{READINESS_COLLECTION}")
+    except ProjectionError:
+        try:
+            _typesense_request(
+                base_url,
+                "/collections",
+                method="POST",
+                payload={
+                    "name": READINESS_COLLECTION,
+                    "fields": list(_READINESS_SCHEMA_FIELDS),
+                },
+            )
+        except ProjectionError:
+            # A concurrent rehydration may have created it. The GET below is
+            # authoritative and will still fail closed if creation failed for
+            # another reason.
+            pass
+        schema = _typesense_request(base_url, f"/collections/{READINESS_COLLECTION}")
+    if not isinstance(schema, Mapping) or schema.get("name") != READINESS_COLLECTION:
+        raise ProjectionError("Typesense readiness collection identity does not match the QA collection")
+    fields = schema.get("fields")
+    if not isinstance(fields, list):
+        raise ProjectionError("Typesense readiness collection schema is malformed")
+    actual_names = {
+        str(field.get("name")) for field in fields if isinstance(field, Mapping) and isinstance(field.get("name"), str)
+    }
+    required_names = {field["name"] for field in _READINESS_SCHEMA_FIELDS}
+    if not required_names.issubset(actual_names):
+        raise ProjectionError("Typesense readiness collection schema is missing required fields")
+
+
+def _write_readiness_marker(
+    base_url: str,
+    *,
+    source_sha: str,
+    run_id: str,
+    projection_count: int,
+    projection_digest: str,
+    readiness_epoch: str,
+) -> None:
+    """Publish the marker only after the complete projection has been verified."""
+
+    _ensure_readiness_collection(base_url)
+    marker = {
+        "id": TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID,
+        "userId": QA_UID,
+        "readiness_schema_version": TYPESENSE_PROJECTION_READINESS_SCHEMA_VERSION,
+        "projection_epoch": readiness_epoch,
+        "source_sha": source_sha,
+        "projection_digest": projection_digest,
+        "projection_count": projection_count,
+        "run_id": run_id,
+        "captured_at": _utc_now(),
+    }
+    response = _typesense_request(
+        base_url,
+        f"/collections/{READINESS_COLLECTION}/documents",
+        query={"action": "upsert"},
+        method="POST",
+        payload=marker,
+    )
+    if not isinstance(response, Mapping):
+        raise ProjectionError("Typesense readiness marker upsert response is malformed")
+    persisted = _typesense_request(
+        base_url,
+        f"/collections/{READINESS_COLLECTION}/documents/{TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID}",
+    )
+    if not isinstance(persisted, Mapping):
+        raise ProjectionError("Typesense readiness marker could not be read back")
+    for key in ("id", "userId", "readiness_schema_version", "projection_epoch", "source_sha", "projection_digest"):
+        if persisted.get(key) != marker[key]:
+            raise ProjectionError("Typesense readiness marker read-back did not match the verified projection")
+    if persisted.get("projection_count") != projection_count:
+        raise ProjectionError("Typesense readiness marker count did not match the verified projection")
 
 
 def _id_digest(ids: Sequence[str]) -> str:
@@ -279,6 +413,7 @@ def build_projection_receipt(
     schema_fields: Sequence[str],
     provider_ids: Sequence[str],
     result_ids: Sequence[str],
+    readiness_epoch: str,
 ) -> dict[str, Any]:
     require_sha(source_sha, label="source_sha")
     require_digest_image(typesense_image, label="typesense_image")
@@ -293,6 +428,8 @@ def build_projection_receipt(
         raise ProjectionError("receipt counts do not agree with the verified rebuild")
     if projection_count <= 0 or not provider_ids or not result_ids:
         raise ProjectionError("readiness requires a nonempty real ledger keyword result")
+    if not readiness_epoch.strip():
+        raise ProjectionError("readiness requires a nonempty projection epoch")
     if not set(provider_ids).intersection(result_ids):
         raise ProjectionError("search_knowledge did not consume a keyword candidate")
     base_url, _ = parse_typesense_url(typesense_url)
@@ -308,6 +445,9 @@ def build_projection_receipt(
         "typesense_image": typesense_image,
         "typesense_base_image": typesense_base_image,
         "collection": COLLECTION,
+        "readiness_collection": READINESS_COLLECTION,
+        "readiness_document_id": TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID,
+        "readiness_epoch": readiness_epoch,
         "run_id": run_id,
         "rebuilt_indexed_count": indexed_count,
         "rebuilt_expected_count": expected_count,
@@ -364,6 +504,13 @@ def run_projection(
     parsed_kinds = _validate_query(query, kinds, limit)
     validate_runtime_environment(env)
     base_url = configure_runtime(typesense_url=typesense_url)
+    os.environ.update(
+        {
+            "MEMORY_TYPESENSE_READINESS_REQUIRED": "true",
+            "MEMORY_TYPESENSE_READINESS_COLLECTION": READINESS_COLLECTION,
+            "MEMORY_TYPESENSE_READINESS_SOURCE_SHA": source_sha,
+        }
+    )
     _health_check(base_url)
 
     # Explicit named-database construction is part of the proof boundary.  A
@@ -393,6 +540,15 @@ def run_projection(
     )
     if not provider_ids:
         raise ProjectionError("real ledger keyword query returned no candidates")
+    readiness_epoch = f"{source_sha}:{run_id}"
+    _write_readiness_marker(
+        base_url,
+        source_sha=source_sha,
+        run_id=run_id,
+        projection_count=len(documents),
+        projection_digest=projection_digest,
+        readiness_epoch=readiness_epoch,
+    )
     result = search_knowledge.invoke(
         {"query": query, "kinds": ",".join(sorted(parsed_kinds)), "limit": limit},
         config={"configurable": {"user_id": QA_UID}},
@@ -419,6 +575,7 @@ def run_projection(
         schema_fields=schema_fields,
         provider_ids=provider_ids,
         result_ids=result_ids,
+        readiness_epoch=readiness_epoch,
     )
 
 

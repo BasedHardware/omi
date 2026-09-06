@@ -42,6 +42,8 @@ def _environment() -> dict[str, str]:
         "OMI_JIT_QA_AUTH_ONLY": "true",
         "OMI_JIT_QA_UID_ALLOWLIST": PROJECTION.QA_UID,
         "MEMORY_TYPESENSE_COLLECTION": PROJECTION.COLLECTION,
+        "MEMORY_TYPESENSE_READINESS_REQUIRED": "true",
+        "MEMORY_TYPESENSE_READINESS_COLLECTION": PROJECTION.READINESS_COLLECTION,
         "TYPESENSE_PROTOCOL": "https",
         "TYPESENSE_HOST_PORT": "443",
         "TYPESENSE_API_KEY": "opaque-qa-key",
@@ -76,7 +78,7 @@ def test_runtime_environment_rejects_shared_data_plane_and_emulator():
         )
 
 
-def test_projection_digest_excludes_content_but_tracks_owner_and_ledger_metadata():
+def test_projection_digest_hashes_content_without_emitting_it():
     first = {
         "id": "atom:one",
         "memory_id": "one",
@@ -86,7 +88,7 @@ def test_projection_digest_excludes_content_but_tracks_owner_and_ledger_metadata
         "ledger_row_state": "open",
     }
     second = {**first, "content": "private body changed"}
-    assert PROJECTION._projection_digest([first]) == PROJECTION._projection_digest([second])
+    assert PROJECTION._projection_digest([first]) != PROJECTION._projection_digest([second])
     assert PROJECTION._projection_digest([first]) != PROJECTION._projection_digest(
         [{**first, "ledger_row_state": "closed"}]
     )
@@ -99,7 +101,7 @@ def test_build_receipt_requires_a_real_provider_and_consumed_result():
         run_id="projection-run-1",
         typesense_url="https://typesense-jit-qa-abc.run.app",
         typesense_image="gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "b" * 64,
-        typesense_base_image="docker.io/typesense/typesense@sha256:" + "e" * 64,
+        typesense_base_image=PROJECTION.TYPESENSE_BASE_IMAGE_27_1,
         query="travel plan",
         kinds=["fact"],
         rebuild_report=report,
@@ -109,6 +111,7 @@ def test_build_receipt_requires_a_real_provider_and_consumed_result():
         schema_fields=["content", "memory_id"],
         provider_ids=["one"],
         result_ids=["one"],
+        readiness_epoch="a" * 40 + ":projection-run-1",
     )
     assert receipt["status"] == "ready"
     assert receipt["resource_bounds"]["max_instances"] == 1
@@ -125,7 +128,7 @@ def test_build_receipt_requires_a_real_provider_and_consumed_result():
             run_id="projection-run-1",
             typesense_url="https://typesense-jit-qa-abc.run.app",
             typesense_image="gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "b" * 64,
-            typesense_base_image="docker.io/typesense/typesense@sha256:" + "e" * 64,
+            typesense_base_image=PROJECTION.TYPESENSE_BASE_IMAGE_27_1,
             query="travel plan",
             kinds=["fact"],
             rebuild_report=report,
@@ -135,6 +138,7 @@ def test_build_receipt_requires_a_real_provider_and_consumed_result():
             schema_fields=["content", "memory_id"],
             provider_ids=[],
             result_ids=[],
+            readiness_epoch="a" * 40 + ":projection-run-1",
         )
     with pytest.raises(PROJECTION.ProjectionError, match="counts do not agree"):
         PROJECTION.build_projection_receipt(
@@ -142,7 +146,7 @@ def test_build_receipt_requires_a_real_provider_and_consumed_result():
             run_id="projection-run-1",
             typesense_url="https://typesense-jit-qa-abc.run.app",
             typesense_image="gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "b" * 64,
-            typesense_base_image="docker.io/typesense/typesense@sha256:" + "e" * 64,
+            typesense_base_image=PROJECTION.TYPESENSE_BASE_IMAGE_27_1,
             query="travel plan",
             kinds=["fact"],
             rebuild_report=report,
@@ -152,28 +156,50 @@ def test_build_receipt_requires_a_real_provider_and_consumed_result():
             schema_fields=["content", "memory_id"],
             provider_ids=["one"],
             result_ids=["one"],
+            readiness_epoch="a" * 40 + ":projection-run-1",
         )
 
 
 def test_run_projection_rebuilds_then_proves_provider_and_search_consumer(monkeypatch: pytest.MonkeyPatch):
     calls: list[str] = []
+    persisted_marker: dict[str, object] = {}
 
-    def fake_typesense_request(_base_url, path, *, query=None):
+    def fake_typesense_request(_base_url, path, *, query=None, method="GET", payload=None):
         calls.append(path)
         if path == "/health":
             return {"ok": True}
         if path == f"/collections/{PROJECTION.COLLECTION}":
             return {"name": PROJECTION.COLLECTION, "fields": [{"name": "memory_id", "type": "string"}]}
-        if path.endswith("/documents"):
-            return [
-                {
-                    "id": "atom:one",
-                    "memory_id": "one",
-                    "userId": PROJECTION.QA_UID,
-                    "ledger_schema_version": "knowledge_ledger.v1",
-                }
-            ]
+        if path == f"/collections/{PROJECTION.READINESS_COLLECTION}":
+            return {
+                "name": PROJECTION.READINESS_COLLECTION,
+                "fields": list(PROJECTION._READINESS_SCHEMA_FIELDS),
+            }
+        if path == f"/collections/{PROJECTION.READINESS_COLLECTION}/documents":
+            assert method == "POST"
+            assert query == {"action": "upsert"}
+            assert isinstance(payload, dict)
+            persisted_marker.update(payload)
+            return {"success": True}
+        if (
+            path
+            == f"/collections/{PROJECTION.READINESS_COLLECTION}/documents/{PROJECTION.TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID}"
+        ):
+            return dict(persisted_marker)
         raise AssertionError(path)
+
+    monkeypatch.setattr(
+        PROJECTION,
+        "_projection_documents",
+        lambda *_args, **_kwargs: [
+            {
+                "id": "atom:one",
+                "memory_id": "one",
+                "userId": PROJECTION.QA_UID,
+                "ledger_schema_version": "knowledge_ledger.v1",
+            }
+        ],
+    )
 
     class FakeTool:
         def invoke(self, payload, *, config):
@@ -198,15 +224,42 @@ def test_run_projection_rebuilds_then_proves_provider_and_search_consumer(monkey
         run_id="projection-run-2",
         typesense_url="https://typesense-jit-qa-abc.run.app",
         typesense_image="gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "b" * 64,
-        typesense_base_image="docker.io/typesense/typesense@sha256:" + "e" * 64,
+        typesense_base_image=PROJECTION.TYPESENSE_BASE_IMAGE_27_1,
         query="travel plan",
         kinds="fact",
         limit=8,
         environment=_environment(),
     )
     assert receipt["status"] == "ready"
+    assert receipt["readiness_epoch"] == "a" * 40 + ":projection-run-2"
     assert "ensure" in calls and "ledger-schema" in calls
-    assert calls.index("/health") < calls.index(f"/collections/{PROJECTION.COLLECTION}/documents")
+    assert calls.index("/health") < calls.index(f"/collections/{PROJECTION.READINESS_COLLECTION}/documents")
+
+
+def test_projection_documents_uses_typesense_export_jsonl(monkeypatch: pytest.MonkeyPatch):
+    class ExportResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def __iter__(self):
+            return iter(
+                [
+                    b'{"id":"atom:one","memory_id":"one","userId":"'
+                    + PROJECTION.QA_UID.encode()
+                    + b'","ledger_schema_version":"knowledge_ledger.v1"}\n'
+                ]
+            )
+
+    requests = []
+    monkeypatch.setattr(PROJECTION, "urlopen", lambda request, timeout: (requests.append(request), ExportResponse())[1])
+    documents = PROJECTION._projection_documents("https://typesense-jit-qa-abc.run.app", PROJECTION.COLLECTION)
+    assert documents[0]["memory_id"] == "one"
+    assert requests[0].full_url.endswith("/documents/export?include_fields=" + "%2C".join(PROJECTION._DIGEST_FIELDS))
 
 
 def test_failed_receipt_is_content_free_and_private(tmp_path: Path):

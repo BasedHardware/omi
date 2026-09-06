@@ -3,8 +3,9 @@
 `.github/workflows/jit_qa_typesense_projection.yml` owns one development-only
 Typesense Cloud Run service named `typesense-jit-qa`. It is manually dispatched
 from an exact `main` SHA with a first-attempt Release Eligibility proof. The
-workflow accepts only a reviewed `docker.io/typesense/typesense@sha256:...`
-image (the repository's local harness currently pins version `27.1`), wraps it
+workflow accepts only the reviewed
+`docker.io/typesense/typesense@sha256:5c12af89130b8ee0be11541321ba8a3a7c7a538d7c6cd95e0409dc2d75ca6455`
+manifest-list image (Typesense `27.1` for the linux/amd64 Cloud Run service), wraps it
 with `backend/Dockerfile.jit_qa_typesense`, and publishes the resulting image
 to the development registry by digest.
 
@@ -19,9 +20,10 @@ the service.
 The rehydrate step runs the existing
 `utils.memory.atom_keyword_index.rebuild_atom_keyword_index` against the named
 `based-hardware-dev/jit-qa` Firestore database and fixed QA UID. It verifies the
-collection schema, inventories only non-content document metadata, hashes the
-projection, runs a real `keyword_search_ledger_memory_ids` producer query, and
-then invokes the real `search_knowledge` consumer path with the same query.
+collection schema, exports the bounded document set, hashes the projection
+including content in process (content is never persisted in the receipt), runs
+a real `keyword_search_ledger_memory_ids` producer query, and then invokes the
+real `search_knowledge` consumer path with the same query.
 The artifact contains counts, schema/projection digests, and query/result
 digests; it never contains query text, document bodies, or provider responses.
 A query with no active current ledger result fails the run. The receipt also
@@ -36,12 +38,14 @@ lexical retrieval only and records semantic/vector retrieval as unavailable.
 
 ## Dispatch and restart proof
 
-Resolve and review the digest for the pinned upstream `27.1` tag before
+Resolve and review the pinned upstream `27.1` manifest-list digest before
 dispatch. Pass an actual term from an active QA ledger row and a unique,
-lowercase run id. A service restart loses `/tmp/typesense`; rerun the workflow
-rehydration step with a new run id and compare the new content-free receipt's
-projection digest/count against the authoritative Firestore-backed result. Do
-not hand-inject a document or treat an empty search as readiness.
+lowercase run id. A service restart loses `/tmp/typesense`; the separate
+readiness marker is lost with it, and the QA backend fails closed for
+current-ledger search. Rerun the workflow rehydration step with a new run id
+and compare the new content-free receipt's projection digest/count against the
+authoritative Firestore-backed result. Do not hand-inject a document or treat
+an empty search as readiness.
 
 The workflow deliberately does not modify the existing
 `.github/workflows/jit_qa_cloud_run.yml`. After this service is ready, its
@@ -60,6 +64,9 @@ TYPESENSE_HOST="$typesense_host"
 TYPESENSE_HOST_PORT=443
 TYPESENSE_PROTOCOL=https
 MEMORY_TYPESENSE_COLLECTION=jit_qa_canonical_memory_atoms
+MEMORY_TYPESENSE_READINESS_REQUIRED=true
+MEMORY_TYPESENSE_READINESS_COLLECTION=jit_qa_typesense_readiness
+MEMORY_TYPESENSE_READINESS_SOURCE_SHA="$SOURCE_SHA"
 
 # Append this dedicated secret to the existing QA HTTP-service bindings.
 TYPESENSE_API_KEY=jit-qa-typesense-api-key:latest

@@ -280,7 +280,7 @@ def test_typesense_workflow_is_pinned_to_named_dev_firestore_and_immutable_base(
         auth_project="based-hardware",
         uid=CONTRACT.QA_UID,
         database="jit-qa",
-        base_image="docker.io/typesense/typesense@sha256:" + "a" * 64,
+        base_image=CONTRACT.TYPESENSE_BASE_IMAGE_27_1,
         source_sha="b" * 40,
     )
     with pytest.raises(CONTRACT.JITQAContractError):
@@ -290,7 +290,17 @@ def test_typesense_workflow_is_pinned_to_named_dev_firestore_and_immutable_base(
             auth_project="based-hardware",
             uid=CONTRACT.QA_UID,
             database="jit-qa",
-            base_image="docker.io/typesense/typesense:27.1",
+            base_image="docker.io/typesense/typesense@sha256:" + "a" * 64,
+            source_sha="b" * 40,
+        )
+    with pytest.raises(CONTRACT.JITQAContractError, match="reviewed Typesense 27.1 digest"):
+        CONTRACT.validate_typesense_workflow_configuration(
+            project="based-hardware-dev",
+            region="us-central1",
+            auth_project="based-hardware",
+            uid=CONTRACT.QA_UID,
+            database="jit-qa",
+            base_image="docker.io/typesense/typesense@sha256:" + "a" * 64,
             source_sha="b" * 40,
         )
 
@@ -312,6 +322,20 @@ def test_typesense_resource_rejects_extra_environment():
     )
     with pytest.raises(CONTRACT.JITQAContractError, match="unapproved environment"):
         CONTRACT.validate_typesense_cloud_run_resource(resource, expected_image=image)
+
+
+def test_typesense_resource_accepts_v1_autoscaling_annotations():
+    image = "gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "f" * 64
+    resource = _typesense_resource(image)
+    template = resource["spec"]["template"]
+    template["metadata"] = {
+        "annotations": {
+            "autoscaling.knative.dev/minScale": "1",
+            "autoscaling.knative.dev/maxScale": "1",
+        }
+    }
+    template.pop("scaling")
+    CONTRACT.validate_typesense_cloud_run_resource(resource, expected_image=image)
 
 
 @pytest.mark.parametrize("profile", ("backend", "desktop", "drain", "sweep"))

@@ -10,6 +10,7 @@ on:
       typesense_base_image:
         description: Reviewed docker.io/typesense/typesense image pinned by sha256 digest (27.1)
         required: true
+        default: docker.io/typesense/typesense@sha256:5c12af89130b8ee0be11541321ba8a3a7c7a538d7c6cd95e0409dc2d75ca6455
         type: string
       query:
         description: A real lexical term present in an active QA ledger row; never use a fabricated response
@@ -184,6 +185,10 @@ jobs:
     outputs:
       typesense_url: ${{ steps.url.outputs.typesense_url }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.admit.outputs.source_sha }}
+          fetch-depth: 1
       - uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
@@ -196,6 +201,7 @@ jobs:
           set -euo pipefail
           gcloud run deploy "$QA_TYPESENSE_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" \
             --image "$TYPESENSE_IMAGE" --port 8080 --command /usr/local/bin/jit-qa-typesense-entrypoint \
+            --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" \
             --set-env-vars 'TYPESENSE_DATA_DIR=/tmp/typesense' \
             --set-secrets "TYPESENSE_API_KEY=${QA_TYPESENSE_SECRET}:latest" \
             --cpu 1 --memory 1Gi --min 1 --max 1 --concurrency 20 --timeout 300s \
@@ -247,19 +253,22 @@ jobs:
           set -euo pipefail
           adc="${GOOGLE_APPLICATION_CREDENTIALS:-}"
           [[ -n "$adc" && -f "$adc" ]] || { echo "ADC file was not created by the approved workflow auth action" >&2; exit 1; }
+          install -d -m 700 "$RUNNER_TEMP/jit-qa-typesense"
           adc_copy="$RUNNER_TEMP/jit-qa-typesense/adc.json"
-          install -m 0644 "$adc" "$adc_copy"
+          install -m 0600 "$adc" "$adc_copy"
           trap 'rm -f "$adc_copy"' EXIT
           api_key="$(gcloud secrets versions access latest --secret "$QA_TYPESENSE_SECRET" --project "$QA_PROJECT")"
-          install -d -m 700 "$RUNNER_TEMP/jit-qa-typesense"
-          docker run --rm --entrypoint python3 \
+          encryption_secret="$(gcloud secrets versions access latest --secret ENCRYPTION_SECRET --project "$QA_PROJECT")"
+          docker run --rm --user "$(id -u):$(id -g)" --entrypoint python3 \
             -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/jit-qa-gcp.json \
             -e GOOGLE_CLOUD_PROJECT="$QA_PROJECT" \
             -e OMI_FIRESTORE_DATA_PLANE_PROJECT="$QA_PROJECT" \
             -e FIRESTORE_DATABASE_ID="$QA_FIRESTORE_DATABASE" \
             -e OMI_ENV_STAGE=dev -e OMI_JIT_QA_AUTH_ONLY=true -e OMI_JIT_QA_UID_ALLOWLIST="$QA_UID" \
+            -e ENCRYPTION_SECRET="$encryption_secret" \
             -e TYPESENSE_API_KEY="$api_key" -e TYPESENSE_PROTOCOL=https -e TYPESENSE_HOST_PORT=443 \
             -e MEMORY_TYPESENSE_COLLECTION="$QA_TYPESENSE_COLLECTION" \
+            -e MEMORY_TYPESENSE_READINESS_REQUIRED=true -e MEMORY_TYPESENSE_READINESS_COLLECTION=jit_qa_typesense_readiness \
             -v "$adc_copy:/tmp/jit-qa-gcp.json:ro" \
             -v "$RUNNER_TEMP/jit-qa-typesense:/receipt" \
             "$RUNNER_IMAGE" scripts/jit_qa_typesense_projection.py \

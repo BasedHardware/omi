@@ -173,6 +173,7 @@ expected_dependencies = {
     "firestore": "based-hardware-dev",
     "redis": "jit-qa-redis:basic-1GiB",
     "gateway": "llm-gateway-jit-qa:service-token",
+    "typesense": "typesense-jit-qa:api-key",
     "firebase_auth": "based-hardware:verify-only",
     "storage": "none",
     "pubsub": "none",

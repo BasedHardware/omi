@@ -200,7 +200,7 @@ export OMI_JIT_QA_CLOUD_PYTHON_URL="https://backend-jit-qa-rev123-uc.a.run.app"
 export OMI_JIT_QA_CLOUD_DESKTOP_URL="https://desktop-backend-jit-qa-rev456-uc.a.run.app"
 expect_failure omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
 export OMI_JIT_QA_CLOUD_DESKTOP_URL="https://desktop-backend-jit-qa-rev123-uc.a.run.app"
-for dependency in firestore redis gateway firebase_auth storage pubsub scheduler; do
+for dependency in firestore redis gateway typesense firebase_auth storage pubsub scheduler; do
     cp "$ROOT/tests/fixtures/jit-qa/cloud-receipt-v1.json" "$cloud_receipt"
     python3 - "$cloud_receipt" "$dependency" <<'PY'
 import json, pathlib, sys

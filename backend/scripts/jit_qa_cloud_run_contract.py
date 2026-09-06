@@ -31,6 +31,7 @@ LLM_GATEWAY_SERVICE = "llm-gateway-jit-qa"
 TYPESENSE_SERVICE = "typesense-jit-qa"
 TYPESENSE_API_SECRET = "jit-qa-typesense-api-key"
 TYPESENSE_COLLECTION = "jit_qa_canonical_memory_atoms"
+TYPESENSE_READINESS_COLLECTION = "jit_qa_typesense_readiness"
 TYPESENSE_ENTRYPOINT = "/usr/local/bin/jit-qa-typesense-entrypoint"
 TYPESENSE_API_PORT = 8080
 TYPESENSE_CPU = "1"
@@ -56,6 +57,11 @@ DEFAULT_REDIS_HOST = "10.0.0.10"
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _DIGEST_IMAGE_RE = re.compile(r"^gcr\.io/based-hardware-dev/[a-z0-9-]+@sha256:[0-9a-f]{64}$")
 _TYPESENSE_BASE_IMAGE_RE = re.compile(r"^docker\.io/typesense/typesense@sha256:[0-9a-f]{64}$")
+# Cloud Run's QA service is linux/amd64. This is the reviewed 27.1
+# manifest-list digest, so a dispatch cannot silently select another release.
+TYPESENSE_BASE_IMAGE_27_1 = (
+    "docker.io/typesense/typesense@sha256:5c12af89130b8ee0be11541321ba8a3a7c7a538d7c6cd95e0409dc2d75ca6455"
+)
 _FORBIDDEN_CREDENTIAL_ENV = frozenset(
     {
         "SERVICE_ACCOUNT_JSON",
@@ -111,6 +117,8 @@ def require_typesense_base_image(value: str, *, label: str = "Typesense base ima
 
     if not _TYPESENSE_BASE_IMAGE_RE.fullmatch(value):
         raise JITQAContractError(f"{label} must be docker.io/typesense/typesense pinned by sha256 digest")
+    if value != TYPESENSE_BASE_IMAGE_27_1:
+        raise JITQAContractError(f"{label} must be the reviewed Typesense 27.1 digest")
 
 
 def validate_typesense_workflow_configuration(
@@ -460,11 +468,28 @@ def validate_typesense_cloud_run_resource(
         raise JITQAContractError(f"Typesense is missing required environment entries: {sorted(missing)}")
 
     scaling = service_template.get("scaling", template.get("scaling"))
-    if not isinstance(scaling, Mapping):
-        raise JITQAContractError("Typesense service must declare explicit min/max instance bounds")
-    if scaling.get("minInstanceCount") != TYPESENSE_MIN_INSTANCES:
+    if isinstance(scaling, Mapping):
+        min_instances = scaling.get("minInstanceCount")
+        max_instances = scaling.get("maxInstanceCount")
+    else:
+        # Cloud Run's v1-compatible describe output exposes these service
+        # settings as Knative autoscaling annotations on template metadata.
+        template_metadata = template.get("metadata")
+        annotations = template_metadata.get("annotations") if isinstance(template_metadata, Mapping) else None
+        if not isinstance(annotations, Mapping):
+            raise JITQAContractError("Typesense service must declare explicit min/max instance bounds")
+        min_instances = annotations.get("autoscaling.knative.dev/minScale")
+        max_instances = annotations.get("autoscaling.knative.dev/maxScale")
+        try:
+            if min_instances is not None:
+                min_instances = int(min_instances)
+            if max_instances is not None:
+                max_instances = int(max_instances)
+        except (TypeError, ValueError) as exc:
+            raise JITQAContractError("Typesense service has invalid autoscaling bounds") from exc
+    if min_instances != TYPESENSE_MIN_INSTANCES:
         raise JITQAContractError("Typesense service must keep one warm instance for restart rehydration")
-    if scaling.get("maxInstanceCount") != TYPESENSE_MAX_INSTANCES:
+    if max_instances != TYPESENSE_MAX_INSTANCES:
         raise JITQAContractError("Typesense service must be bounded to one instance")
     resources = container.get("resources")
     limits = resources.get("limits") if isinstance(resources, Mapping) else None
@@ -509,6 +534,8 @@ def resource_environment(
                 "OMI_LLM_GATEWAY_URL": gateway_url,
                 "REDIS_DB_HOST": redis_host,
                 "REDIS_DB_PORT": "6379",
+                "MEMORY_TYPESENSE_READINESS_REQUIRED": "true",
+                "MEMORY_TYPESENSE_READINESS_COLLECTION": TYPESENSE_READINESS_COLLECTION,
             },
             dict(_ALLOWED_SECRET_BINDINGS),
         )

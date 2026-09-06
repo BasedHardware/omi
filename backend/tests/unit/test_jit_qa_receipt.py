@@ -81,6 +81,7 @@ def test_receipt_has_activation_shape_and_dependency_vector():
     assert receipt["status"] == "ready"
     assert receipt["reviewed"] is False
     assert receipt["dependency_vector"]["redis"] == "jit-qa-redis:basic-1GiB"
+    assert receipt["dependency_vector"]["typesense"] == "typesense-jit-qa:api-key"
     assert receipt["full_source_sha"] == "a" * 40
     assert receipt["exact_python_url"] == "https://backend-jit-qa.run.app"
     assert receipt["python_image_digest"] == "sha256:" + "a" * 64
