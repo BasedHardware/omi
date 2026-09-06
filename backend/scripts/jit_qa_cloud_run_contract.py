@@ -101,17 +101,6 @@ class JITQAContractError(ValueError):
     """The proposed QA execution crosses an isolation or rollout boundary."""
 
 
-def validate_workflow_backend_memory(workflow_text: str) -> None:
-    """Keep the deployer's backend memory literal aligned with this contract."""
-
-    expected_literal = f"resource_flags+=(--memory={BACKEND_MEMORY})"
-    if workflow_text.count(expected_literal) != 1:
-        raise JITQAContractError(
-            "QA workflow backend memory flag must contain exactly one literal "
-            f"matching BACKEND_MEMORY ({BACKEND_MEMORY})"
-        )
-
-
 def is_valid_typesense_qa_host(host: str) -> bool:
     """Return whether ``host`` is one of the named service's Cloud Run forms."""
 

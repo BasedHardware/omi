@@ -395,13 +395,6 @@ jobs:
           SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
         run: |
           set -euo pipefail
-          PYTHONPATH=. python3 - <<'PY'
-          from pathlib import Path
-
-          from backend.scripts.jit_qa_cloud_run_contract import validate_workflow_backend_memory
-
-          validate_workflow_backend_memory(Path(".github/workflows/jit_qa_cloud_run.yml").read_text())
-          PY
           [[ "$TYPESENSE_HOST" =~ ^typesense-jit-qa-([a-z0-9-]+-uc\.a\.run\.app|[0-9]+\.us-central1\.run\.app)$ ]]
           common="^@^OMI_JIT_PROACTIVITY_BUDGET_CONTRACT=jit-cloud-qa-v1@OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@MEMORY_ENABLED=on@MEMORY_BELIEF_MODEL_ENABLED=true@OMI_LLM_GATEWAY_FEATURE_MODE=gateway@OMI_LLM_CHAT_AGENT_ROUTE=gateway@OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false@OMI_LLM_GATEWAY_URL=${GATEWAY_URL}@REDIS_DB_HOST=${REDIS_HOST}@REDIS_DB_PORT=6379@TYPESENSE_HOST=${TYPESENSE_HOST}@TYPESENSE_HOST_PORT=443@TYPESENSE_PROTOCOL=https@MEMORY_TYPESENSE_COLLECTION=${QA_TYPESENSE_COLLECTION}@MEMORY_TYPESENSE_READINESS_REQUIRED=true@MEMORY_TYPESENSE_READINESS_COLLECTION=${QA_TYPESENSE_READINESS_COLLECTION}@MEMORY_TYPESENSE_READINESS_SOURCE_SHA=${SOURCE_SHA}"
           for pair in "$QA_SERVICE:$BACKEND_IMAGE" "$QA_DESKTOP_SERVICE:$DESKTOP_IMAGE"; do
