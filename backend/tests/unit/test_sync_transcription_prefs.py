@@ -135,6 +135,15 @@ def _build_fakes() -> dict:
     process_conversation.process_conversation = MagicMock()
     fakes['utils.conversations.process_conversation'] = process_conversation
 
+    # Identity passthrough, matching the real resolver on a geocode miss —
+    # never drops a caller-supplied geolocation.
+    async def _passthrough_resolve_geolocation(geolocation):
+        return geolocation
+
+    location = ModuleType('utils.conversations.location')
+    location.async_resolve_geolocation = _passthrough_resolve_geolocation
+    fakes['utils.conversations.location'] = location
+
     vad = ModuleType('utils.stt.vad')
     vad.vad_is_empty = MagicMock(return_value=False)
     fakes['utils.stt.vad'] = vad
