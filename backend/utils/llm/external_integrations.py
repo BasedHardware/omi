@@ -15,6 +15,7 @@ from models.daily_summary_payload import DailySummaryDayStatsPayload, DailySumma
 from models.structured import Structured
 from models.structured_extraction import StructuredExtraction
 from models.other import Person
+from utils.conversations.location import get_google_maps_location
 from utils.conversations.render import conversations_to_string
 from utils.llm.clients import get_llm, parser
 from utils.llm.usage_tracker import track_usage, Features
@@ -268,6 +269,21 @@ def generate_comprehensive_daily_summary(
     locations: List[Dict[str, Any]] = []
     for c in non_discarded:
         if c.geolocation:
+            address = c.geolocation.address
+            if not address:
+                # Read-time fill for conversations created before write-time
+                # enrichment existed (notably the sync path): look the address up
+                # through the shared ~100m-rounded geocode cache, so a day whose
+                # conversations were already enriched costs no extra upstream call.
+                # A geocode miss or error leaves the address empty — the pin stays
+                # and the app labels it "Unknown"; a pin is never dropped.
+                try:
+                    geocoded = get_google_maps_location(c.geolocation.latitude, c.geolocation.longitude)
+                except Exception as error:
+                    logger.warning('daily summary address geocode failed error_type=%s', type(error).__name__)
+                    geocoded = None
+                if geocoded is not None:
+                    address = geocoded.address
             # Convert UTC time to user's local timezone
             local_time = None
             if c.started_at:
@@ -279,7 +295,7 @@ def generate_comprehensive_daily_summary(
                 {
                     "latitude": c.geolocation.latitude,
                     "longitude": c.geolocation.longitude,
-                    "address": c.geolocation.address,
+                    "address": address,
                     "conversation_id": c.id,
                     "time": local_time,
                 }
