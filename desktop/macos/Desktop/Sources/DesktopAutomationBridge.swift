@@ -1349,6 +1349,74 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "local_summary_benchmark",
+      summary:
+        "S12: run the local summarizer over the last K GRDB sessions and write schema-validity + timings JSON",
+      params: ["limit", "engine", "output"],
+      category: "debug",
+      surfaces: ["app"],
+      safety: "local_debug",
+      sideEffects: ["writes a JSON report under Application Support; does not persist projections"],
+      examples: [
+        "./scripts/omi-ctl action local_summary_benchmark limit=5 engine=local-server"
+      ]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "local_summary_benchmark is disabled on production bundles"]
+      }
+      let limit = max(1, min(LocalSummaryBenchmark.maxSessions, intParam(params["limit"], default: 5)))
+      let engineRaw = (params["engine"] ?? "local-server").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard let engineID = LocalInferenceEngineID.parse(engineRaw) else {
+        throw DesktopAutomationActionError.invalidParams("engine must be local-server or afm")
+      }
+      guard let queue = await RewindDatabase.shared.getDatabaseQueue() else {
+        return ["error": "rewind database unavailable"]
+      }
+      let sessions: [LocalSummaryBenchmark.Session]
+      do {
+        sessions = try await queue.read { db in
+          try LocalSummaryBenchmark.loadRecentSessions(from: db, limit: limit)
+        }
+      } catch {
+        return ["error": "session_load_failed"]
+      }
+      guard !sessions.isEmpty else {
+        return ["error": "no_sessions", "limit": "\(limit)"]
+      }
+      let runtime = LocalInferenceRuntime.makeDefault(
+        killSwitches: LocalInferenceKillSwitches(isDisabled: false, forcedEngineRaw: engineID.rawValue)
+      )
+      let summarizer = ConversationChunkSummarizer(
+        runtime: runtime,
+        store: MemoryLocalProjectionStore()
+      )
+      let report = await LocalSummaryBenchmark.run(
+        sessions: sessions,
+        summarizer: summarizer,
+        engineID: engineID.rawValue
+      )
+      let output: URL
+      if let raw = params["output"]?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+        output = URL(fileURLWithPath: raw)
+      } else {
+        output = LocalSummaryBenchmark.defaultReportURL()
+      }
+      do {
+        try LocalSummaryBenchmark.write(report, to: output)
+      } catch {
+        return ["error": "report_write_failed"]
+      }
+      let valid = report.cases.filter(\.schemaValid).count
+      return [
+        "path": output.path,
+        "engine": engineID.rawValue,
+        "case_count": "\(report.cases.count)",
+        "schema_valid_count": "\(valid)",
+        "kind": report.kind,
+      ]
+    }
+
+    register(
       name: "conversation_list_snapshot",
       summary: "Return conversation list counts and recent titles for harness assertions",
       params: ["limit"]
