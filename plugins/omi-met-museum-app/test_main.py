@@ -393,14 +393,18 @@ def test_rate_limiter_blocks_via_api(client):
     assert "Rate limit exceeded" in resp.json()["detail"]
 
 
-def test_rate_limiter_trusted_proxy_forwarded_ip(client):
-    # testclient is in TRUSTED_PROXIES, so X-Forwarded-For is extracted
+def test_trusted_proxy_forwarded_ip_used(client, monkeypatch):
+    """Verify that when a request arrives from a trusted proxy, rate limiting is applied
+    to the client IP in X-Forwarded-For rather than the proxy host.
+    """
+    monkeypatch.setattr("main.TRUSTED_PROXIES", {"testclient", "127.0.0.1", "::1"})
+
     ip1 = "198.51.100.11"
     ip2 = "198.51.100.22"
 
-    # Exhaust rate limit for ip1
-    for _ in range(60):
-        rate_limiter.is_allowed(ip1)
+    # Exhaust rate limit specifically for ip1
+    now = time.time()
+    rate_limiter._records[ip1] = [now] * 60
 
     # Request with ip1 in X-Forwarded-For should receive 429
     resp_blocked = client.post(
@@ -409,6 +413,7 @@ def test_rate_limiter_trusted_proxy_forwarded_ip(client):
         headers={"X-Forwarded-For": ip1},
     )
     assert resp_blocked.status_code == 429
+    assert "Rate limit exceeded" in resp_blocked.json()["detail"]
 
     # Request with ip2 in X-Forwarded-For has its own quota and succeeds
     resp_allowed = client.post(
@@ -418,22 +423,46 @@ def test_rate_limiter_trusted_proxy_forwarded_ip(client):
     )
     assert resp_allowed.status_code == 200
 
+    # Direct request without X-Forwarded-For uses proxy host ("testclient") which has quota
+    resp_direct = client.post(
+        "/tools/list-departments",
+        json={},
+    )
+    assert resp_direct.status_code == 200
 
-def test_rate_limiter_untrusted_proxy_spoof_prevention(client, monkeypatch):
-    # Direct host is untrusted, so X-Forwarded-For is ignored and direct IP is used
+
+# Alias for backward compatibility
+test_rate_limiter_trusted_proxy_forwarded_ip = test_trusted_proxy_forwarded_ip_used
+
+
+def test_rate_limiter_spoof_prevention(client, monkeypatch):
+    """Verify that untrusted connections cannot bypass rate limits by spoofing X-Forwarded-For,
+    and spoofed headers do not pollute quotas of other client IPs.
+    """
+    # Direct host is untrusted
+    monkeypatch.setattr("main.TRUSTED_PROXIES", {"10.0.0.1"})
     monkeypatch.setattr("main.is_trusted_proxy", lambda ip: False)
+
     spoofed_ip = "198.51.100.99"
 
-    # Exhaust quota for direct connection host "testclient"
-    for _ in range(60):
-        rate_limiter.is_allowed("testclient")
+    # Exhaust quota for the direct connection host "testclient"
+    now = time.time()
+    rate_limiter._records["testclient"] = [now] * 60
 
-    # Even though X-Forwarded-For specifies spoofed_ip, the untrusted client is blocked
+    # Even though X-Forwarded-For specifies spoofed_ip, the untrusted client is blocked on direct IP
     resp = client.post(
         "/tools/list-departments",
         json={},
         headers={"X-Forwarded-For": spoofed_ip},
     )
     assert resp.status_code == 429
+    assert "Rate limit exceeded" in resp.json()["detail"]
+
+    # Ensure the spoofed IP was never tracked or exhausted
+    assert spoofed_ip not in rate_limiter._records
+
+
+# Alias for backward compatibility
+test_rate_limiter_untrusted_proxy_spoof_prevention = test_rate_limiter_spoof_prevention
 
 
