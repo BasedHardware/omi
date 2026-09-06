@@ -4,12 +4,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import House from 'lucide-react-native/icons/house';
 import ListFilter from 'lucide-react-native/icons/list-filter';
