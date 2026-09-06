@@ -12,6 +12,7 @@ os.environ.setdefault(
 )
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from models.memory_contracts import MemoryExtractionError
 from utils.llm import memories as memories_module
@@ -24,9 +25,11 @@ class _ScriptedLlm:
     def __init__(self, responses):
         self.responses = list(responses)
         self.prompts = []
+        self.invoke_kwargs = []
 
-    def invoke(self, prompt_value):
+    def invoke(self, prompt_value, **kwargs):
         self.prompts.append(str(prompt_value))
+        self.invoke_kwargs.append(kwargs)
         if not self.responses:
             raise AssertionError("unexpected extra model call")
         return self.responses.pop(0)
@@ -166,6 +169,53 @@ def test_empty_day_returns_empty_without_model_call():
     llm = _ScriptedLlm([])
     output = run_daily_sweep_summary_agent("uid-1", (), {}, llm=llm)
     assert output.memories == [] and llm.prompts == []
+
+
+def test_qa_budget_is_sent_to_gateway_and_accounting_stays_outside_model_schema():
+    llm = _ScriptedLlm(
+        [
+            AIMessage(
+                content=_response(
+                    memories=[{"content": "Dave lifts on Tuesdays", "conversation_ids": ["conversation-2"]}]
+                ),
+                usage_metadata={"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
+            )
+        ]
+    )
+    dispatch = {}
+    output = run_daily_sweep_summary_agent(
+        "uid-1",
+        _ROWS,
+        dict(_TRANSCRIPTS),
+        llm=llm,
+        max_provider_retries=0,
+        max_input_tokens=12_288,
+        max_output_tokens=256,
+        jit_run_id="qa-sweep-run-1",
+        jit_max_spend_micro_usd=50_000,
+        dispatch_evidence=dispatch,
+    )
+
+    assert [memory.content for memory in output.memories] == ["Dave lifts on Tuesdays"]
+    assert "dispatch_evidence" not in memories_module.DailySweepAgentPassOutput.model_fields
+    kwargs = llm.invoke_kwargs[0]
+    assert kwargs["max_completion_tokens"] == 256
+    headers = kwargs["extra_headers"]
+    assert headers["x-omi-jit-contract-version"] == "jit-cloud-qa-v1"
+    assert headers["x-omi-jit-run-id"] == "qa-sweep-run-1"
+    assert headers["x-omi-jit-max-attempts"] == "1"
+    assert headers["x-omi-jit-max-input-tokens"] == "12288"
+    assert headers["x-omi-jit-max-output-tokens"] == "256"
+    assert headers["x-omi-jit-max-spend-micro-usd"] == "50000"
+    assert len(dispatch["requests"]) == 1
+    request = dispatch["requests"][0]
+    assert request["request_id"] == headers["x-omi-request-id"]
+    assert 0 < request["input_bytes"] <= 12_288
+    assert request["max_input_tokens"] == 12_288
+    assert request["max_output_tokens"] == 256
+    assert request["max_spend_micro_usd"] == 50_000
+    assert request["usage_observed"] is True
+    assert request["usage_tokens"] == {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120}
 
 
 def test_memory_lookups_trigger_second_pass_with_results():

@@ -1,6 +1,7 @@
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, cast
+from uuid import uuid4
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, field_validator
@@ -649,9 +650,6 @@ class DailySweepAgentPassOutput(BaseModel):
     transcript_requests: List[DailySweepTranscriptRequest] = Field(default=[])
     memory_lookups: List[DailySweepMemoryLookup] = Field(default=[])
     folder_assignments: List[DailySweepFolderAssignment] = Field(default=[])
-    # Content-free dispatch/usage evidence used by the isolated QA seam.  A
-    # missing provider usage payload stays missing; zero is never fabricated.
-    dispatch_evidence: Dict[str, Any] = Field(default_factory=dict)
 
 
 _DAILY_SWEEP_FOLDER_TASK = (
@@ -726,6 +724,11 @@ def run_daily_sweep_summary_agent(
     cache_key: Optional[str] = None,
     llm: Optional[Any] = None,
     max_provider_retries: Optional[int] = None,
+    max_input_tokens: Optional[int] = None,
+    max_output_tokens: Optional[int] = None,
+    jit_run_id: Optional[str] = None,
+    jit_max_spend_micro_usd: Optional[int] = None,
+    dispatch_evidence: Optional[MutableMapping[str, Any]] = None,
 ) -> DailySweepAgentPassOutput:
     """Run the bounded two-phase daily agent; raises MemoryExtractionError on failure.
 
@@ -754,22 +757,58 @@ def run_daily_sweep_summary_agent(
         'format_instructions': parser.get_format_instructions(),
     }
 
-    dispatch_evidence: Dict[str, Any] = {
-        'provider_invocations': 0,
-        'provider_attempts_observed': 0,
-        'sdk_max_retries': max_provider_retries,
-        'usage_observed': False,
-    }
+    if dispatch_evidence is not None:
+        dispatch_evidence.clear()
+        dispatch_evidence.update(
+            {
+                'feature': 'memories',
+                'sdk_max_retries': max_provider_retries,
+                'jit_run_id': jit_run_id,
+                'requests': [],
+            }
+        )
 
     def invoke(prompt: Any, prompt_input: Dict[str, Any]) -> DailySweepAgentPassOutput:
         model = llm if llm is not None else get_llm('memories', cache_key=cache_key, max_retries=max_provider_retries)
-        dispatch_evidence['provider_invocations'] += 1
-        # max_retries=0 is the actual SDK setting for QA. This count is the
-        # request dispatch observed by this process; the gateway route's
-        # max_attempts is separately admitted in the QA receipt policy.
-        dispatch_evidence['provider_attempts_observed'] += 1
-        response = model.invoke(prompt.invoke(prompt_input))
+        prompt_value = prompt.invoke(prompt_input)
+        request_id = str(uuid4()) if dispatch_evidence is not None else None
+        prompt_text = prompt_value.to_string() if hasattr(prompt_value, 'to_string') else str(prompt_value)
+        if max_input_tokens is not None and len(prompt_text.encode('utf-8')) > max_input_tokens:
+            raise MemoryExtractionError('daily_sweep_summary_input_budget')
+        invoke_kwargs: Dict[str, Any] = {}
+        if max_output_tokens is not None:
+            if isinstance(max_output_tokens, bool) or max_output_tokens <= 0:
+                raise ValueError('daily sweep output token budget is invalid')
+            invoke_kwargs['max_completion_tokens'] = max_output_tokens
+        if jit_run_id is not None:
+            if (
+                request_id is None
+                or jit_max_spend_micro_usd is None
+                or max_input_tokens is None
+                or max_output_tokens is None
+            ):
+                raise ValueError('QA JIT budget requires request, input, output, and spend bounds')
+            invoke_kwargs['extra_headers'] = {
+                'x-omi-request-id': request_id,
+                'x-omi-jit-contract-version': 'jit-cloud-qa-v1',
+                'x-omi-jit-run-id': jit_run_id,
+                'x-omi-jit-max-attempts': '1',
+                'x-omi-jit-max-output-tokens': str(max_output_tokens),
+                'x-omi-jit-max-input-tokens': str(max_input_tokens),
+                'x-omi-jit-max-spend-micro-usd': str(jit_max_spend_micro_usd),
+            }
+        response = model.invoke(prompt_value, **invoke_kwargs)
         usage = getattr(response, 'usage_metadata', None)
+        request_evidence: Dict[str, Any] | None = None
+        if dispatch_evidence is not None:
+            request_evidence = {
+                'request_id': request_id,
+                'input_bytes': len(prompt_text.encode('utf-8')),
+                'max_input_tokens': max_input_tokens,
+                'max_output_tokens': max_output_tokens,
+                'max_spend_micro_usd': jit_max_spend_micro_usd,
+                'usage_observed': False,
+            }
         if isinstance(usage, Mapping):
             numeric = {
                 key: usage[key]
@@ -777,9 +816,18 @@ def run_daily_sweep_summary_agent(
                 if isinstance(usage.get(key), int) and not isinstance(usage.get(key), bool) and usage[key] >= 0
             }
             if numeric:
-                dispatch_evidence['usage_observed'] = True
-                dispatch_evidence['usage_tokens'] = numeric
-        return parser.invoke(response)
+                if request_evidence is not None:
+                    request_evidence['usage_observed'] = True
+                    request_evidence['usage_tokens'] = numeric
+        parsed = parser.invoke(response)
+        if request_evidence is not None:
+            if dispatch_evidence is None:
+                raise RuntimeError('daily sweep dispatch evidence was not initialized')
+            casted_requests = dispatch_evidence.setdefault('requests', [])
+            if not isinstance(casted_requests, list):
+                raise RuntimeError('daily sweep dispatch evidence requests is malformed')
+            casted_requests.append(request_evidence)
+        return parsed
 
     def lookup_results_block(lookups: Sequence[Any]) -> str:
         sections = []
@@ -821,7 +869,6 @@ def run_daily_sweep_summary_agent(
             lookups = list(first.memory_lookups)[: max(0, max_memory_lookups)] if callable(memory_searcher) else []
             if not requests and not lookups:
                 sanitized = _sanitized_daily_sweep_output(first, known_ids, max_candidates)
-                sanitized.dispatch_evidence = dict(dispatch_evidence)
                 return sanitized
             excerpts = "\n\n".join(
                 f"[{request.conversation_id}] "
@@ -852,7 +899,6 @@ def run_daily_sweep_summary_agent(
             folder_assignments=second.folder_assignments or first.folder_assignments,
         )
         sanitized = _sanitized_daily_sweep_output(merged, known_ids, max_candidates)
-        sanitized.dispatch_evidence = dict(dispatch_evidence)
         return sanitized
     except Exception as error:
         logger.error("Daily sweep summary agent failed: %s", type(error).__name__)
@@ -896,5 +942,4 @@ def _sanitized_daily_sweep_output(
         transcript_requests=[],
         memory_lookups=[],
         folder_assignments=assignments,
-        dispatch_evidence=dict(output.dispatch_evidence),
     )

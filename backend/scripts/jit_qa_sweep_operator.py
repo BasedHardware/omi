@@ -15,6 +15,7 @@ import json
 import os
 import re
 import sys
+import uuid
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -42,6 +43,14 @@ QA_SWEEP_MAX_MEMORY_LOOKUPS = 0
 QA_SWEEP_MAX_SDK_RETRIES = 0
 QA_SWEEP_MAX_GATEWAY_ATTEMPTS = 1
 QA_SWEEP_MAX_PROVIDER_CALLS = 1
+# Keep these equal to the deployed memories route's QA request contract.  The
+# checked-in gpt-5.6-luna card prices 12,288 input + 256 output tokens at under
+# the $0.05 cap; the gateway's durable attempt row is the usage/cost authority.
+QA_SWEEP_MAX_INPUT_TOKENS = 12_288
+QA_SWEEP_MAX_OUTPUT_TOKENS = 256
+QA_SWEEP_MAX_SPEND_MICRO_USD = 50_000
+QA_SWEEP_JIT_CONTRACT_VERSION = "jit-cloud-qa-v1"
+QA_SWEEP_ROUTE_ARTIFACT_ID = "route.memories.model_config.001"
 QA_SWEEP_RECEIPT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-run.v1"
 QA_SWEEP_OUTPUT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-output.v1"
 QA_SWEEP_RUN_COLLECTION = "jit_qa_sweep_runs"
@@ -77,6 +86,26 @@ CANONICAL_FIELDS = (
     "evidence",
     "ledger_schema_version",
     "updated_at",
+)
+GATEWAY_ATTEMPT_COLLECTION = "llm_gateway_attempts"
+GATEWAY_ATTEMPT_FIELDS = (
+    "request_id",
+    "attempt_id",
+    "user_uid",
+    "feature",
+    "provider",
+    "configured_model",
+    "route_artifact_id",
+    "retry_ordinal",
+    "outcome",
+    "usage_status",
+    "cost_status",
+    "estimated_cost_micro_usd",
+    "prompt_tokens",
+    "output_tokens",
+    "total_tokens",
+    "jit_run_id",
+    "jit_contract_version",
 )
 
 
@@ -207,6 +236,87 @@ def _read_output_rows(db_client: Any, run_id: str) -> list[dict[str, Any]]:
     if len(snapshots) > 8:
         raise JITQASweepOperatorError("QA sweep produced more than eight bounded output rows")
     return [_as_dict(snapshot) for snapshot in snapshots]
+
+
+def _read_gateway_attempt(db_client: Any, *, request_id: str, run_id: str) -> dict[str, Any]:
+    """Join the producer request to exactly one durable gateway attempt.
+
+    The sweep process can report how many requests it dispatched, but it cannot
+    observe provider retries. The gateway accounting row is the authority for
+    the actual attempt, route, usage, and cost; absence of that row is a proof
+    failure rather than a zero-attempt claim.
+    """
+
+    try:
+        uuid.UUID(request_id)
+    except (ValueError, AttributeError, TypeError) as exc:
+        raise JITQASweepOperatorError("QA sweep dispatch request id is malformed") from exc
+    collection = db_client.collection(GATEWAY_ATTEMPT_COLLECTION)
+    selector = getattr(collection, "select", None)
+    if not callable(selector):
+        raise JITQASweepOperatorError("QA sweep consumer requires gateway accounting projection")
+    query = selector(list(GATEWAY_ATTEMPT_FIELDS))
+    if query is None:
+        raise JITQASweepOperatorError("QA sweep consumer requires gateway accounting projection")
+    try:
+        query = query.where(filter=FieldFilter("request_id", "==", request_id))
+    except TypeError:
+        query = query.where("request_id", "==", request_id)
+    limiter = getattr(query, "limit", None)
+    streamer = getattr(query, "stream", None)
+    if not callable(limiter) or not callable(streamer):
+        raise JITQASweepOperatorError("QA sweep consumer cannot bound gateway accounting inventory")
+    snapshots = list(limiter(2).stream())
+    if len(snapshots) != 1:
+        raise JITQASweepOperatorError(
+            "QA sweep gateway accounting must contain exactly one attempt for each dispatched request"
+        )
+    attempt = _as_dict(snapshots[0])
+    if (
+        attempt.get("request_id") != request_id
+        or attempt.get("user_uid") != QA_SWEEP_UID
+        or attempt.get("jit_run_id") != run_id
+        or attempt.get("jit_contract_version") != QA_SWEEP_JIT_CONTRACT_VERSION
+        or attempt.get("provider") != "openai"
+        or attempt.get("configured_model") != QA_SWEEP_MODEL_NAME
+        or attempt.get("route_artifact_id") != QA_SWEEP_ROUTE_ARTIFACT_ID
+        or attempt.get("outcome") != "success"
+        or attempt.get("retry_ordinal") != 1
+        or attempt.get("usage_status") != "confirmed"
+    ):
+        raise JITQASweepOperatorError("QA sweep gateway accounting attempt failed the joined success contract")
+    for key, maximum in (("prompt_tokens", QA_SWEEP_MAX_INPUT_TOKENS), ("output_tokens", QA_SWEEP_MAX_OUTPUT_TOKENS)):
+        value = attempt.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0 or value > maximum:
+            raise JITQASweepOperatorError(f"QA sweep gateway {key} exceeded the admitted bound")
+    cost = attempt.get("estimated_cost_micro_usd")
+    if (
+        not isinstance(cost, int)
+        or isinstance(cost, bool)
+        or cost < 0
+        or cost > QA_SWEEP_MAX_SPEND_MICRO_USD
+        or attempt.get("cost_status") != "estimated"
+    ):
+        raise JITQASweepOperatorError("QA sweep gateway cost is missing or exceeds the admitted spend bound")
+    return {
+        key: attempt.get(key)
+        for key in (
+            "request_id",
+            "attempt_id",
+            "feature",
+            "provider",
+            "configured_model",
+            "route_artifact_id",
+            "retry_ordinal",
+            "outcome",
+            "usage_status",
+            "cost_status",
+            "estimated_cost_micro_usd",
+            "prompt_tokens",
+            "output_tokens",
+            "total_tokens",
+        )
+    }
 
 
 def _validate_live_input_evidence(db_client: Any, rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -380,6 +490,10 @@ def verify_qa_sweep_run(db_client: Any, *, run_id: str, minimum_output_rows: int
         "sdk_max_retries": QA_SWEEP_MAX_SDK_RETRIES,
         "gateway_max_attempts": QA_SWEEP_MAX_GATEWAY_ATTEMPTS,
         "provider_calls_allowed": QA_SWEEP_MAX_PROVIDER_CALLS,
+        "max_input_tokens": QA_SWEEP_MAX_INPUT_TOKENS,
+        "max_output_tokens": QA_SWEEP_MAX_OUTPUT_TOKENS,
+        "max_spend_micro_usd": QA_SWEEP_MAX_SPEND_MICRO_USD,
+        "jit_contract_version": QA_SWEEP_JIT_CONTRACT_VERSION,
     }:
         raise JITQASweepOperatorError("QA sweep model policy is outside the bounded proof contract")
     if output_payload.get("candidate_receipt_collection") != OUTPUT_COLLECTION:
@@ -387,28 +501,60 @@ def verify_qa_sweep_run(db_client: Any, *, run_id: str, minimum_output_rows: int
     if output_payload.get("candidate_receipt_join_field") != "qa_run_id":
         raise JITQASweepOperatorError("QA sweep output row has no run-id join field")
     dispatch_rows = run_payload.get("model_dispatch_evidence")
-    if not isinstance(dispatch_rows, list) or len(dispatch_rows) > QA_SWEEP_MAX_PROVIDER_CALLS:
-        raise JITQASweepOperatorError("QA sweep dispatch evidence is missing or exceeds the provider-call bound")
+    if not isinstance(dispatch_rows, list) or not dispatch_rows:
+        raise JITQASweepOperatorError("QA sweep dispatch evidence is missing")
+    gateway_attempts: list[dict[str, Any]] = []
+    dispatched_requests = 0
     for dispatch in dispatch_rows:
         if not isinstance(dispatch, Mapping):
             raise JITQASweepOperatorError("QA sweep dispatch evidence is malformed")
-        if dispatch.get("sdk_max_retries") != QA_SWEEP_MAX_SDK_RETRIES:
-            raise JITQASweepOperatorError("QA sweep dispatch SDK retry bound is outside the proof contract")
-        for key in ("provider_invocations", "provider_attempts_observed"):
-            value = dispatch.get(key)
-            if not isinstance(value, int) or isinstance(value, bool) or value < 0 or value > 1:
-                raise JITQASweepOperatorError("QA sweep dispatch attempt evidence is outside the proof contract")
-        usage_observed = dispatch.get("usage_observed")
-        if not isinstance(usage_observed, bool):
-            raise JITQASweepOperatorError("QA sweep dispatch usage evidence is malformed")
-        if usage_observed:
-            usage = dispatch.get("usage_tokens")
+        if (
+            dispatch.get("feature") != "memories"
+            or dispatch.get("jit_run_id") != run_id
+            or dispatch.get("sdk_max_retries") != QA_SWEEP_MAX_SDK_RETRIES
+        ):
+            raise JITQASweepOperatorError("QA sweep dispatch route or retry bound is outside the proof contract")
+        requests = dispatch.get("requests")
+        if not isinstance(requests, list):
+            raise JITQASweepOperatorError("QA sweep request evidence is missing")
+        dispatched_requests += len(requests)
+        if dispatched_requests > QA_SWEEP_MAX_PROVIDER_CALLS:
+            raise JITQASweepOperatorError("QA sweep request count exceeds the provider-call bound")
+        for request in requests:
+            if not isinstance(request, Mapping):
+                raise JITQASweepOperatorError("QA sweep request evidence is malformed")
+            request_id = request.get("request_id")
+            if not isinstance(request_id, str):
+                raise JITQASweepOperatorError("QA sweep dispatch request id is malformed")
+            try:
+                normalized_request_id = str(uuid.UUID(request_id))
+            except (ValueError, AttributeError, TypeError) as exc:
+                raise JITQASweepOperatorError("QA sweep dispatch request id is malformed") from exc
+            if normalized_request_id != request_id.lower():
+                raise JITQASweepOperatorError("QA sweep dispatch request id is malformed")
+            if (
+                request.get("max_input_tokens") != QA_SWEEP_MAX_INPUT_TOKENS
+                or request.get("max_output_tokens") != QA_SWEEP_MAX_OUTPUT_TOKENS
+                or request.get("max_spend_micro_usd") != QA_SWEEP_MAX_SPEND_MICRO_USD
+            ):
+                raise JITQASweepOperatorError("QA sweep request budget is outside the proof contract")
+            input_bytes = request.get("input_bytes")
+            if not isinstance(input_bytes, int) or isinstance(input_bytes, bool) or input_bytes <= 0:
+                raise JITQASweepOperatorError("QA sweep request input evidence is malformed")
+            if input_bytes > QA_SWEEP_MAX_INPUT_TOKENS:
+                raise JITQASweepOperatorError("QA sweep request input exceeded the admitted byte bound")
+            if request.get("usage_observed") is not True:
+                raise JITQASweepOperatorError("QA sweep request usage was not observed")
+            usage = request.get("usage_tokens")
             if (
                 not isinstance(usage, Mapping)
                 or not usage
                 or any(not isinstance(value, int) or isinstance(value, bool) or value < 0 for value in usage.values())
             ):
                 raise JITQASweepOperatorError("QA sweep observed usage evidence is malformed")
+            gateway_attempts.append(_read_gateway_attempt(db_client, request_id=request_id, run_id=run_id))
+    if dispatched_requests != QA_SWEEP_MAX_PROVIDER_CALLS:
+        raise JITQASweepOperatorError("QA sweep did not produce the admitted number of gateway requests")
     committed_candidates = output_payload.get("committed_candidates")
     if not isinstance(committed_candidates, int) or committed_candidates < minimum_output_rows:
         raise JITQASweepOperatorError("QA sweep produced fewer durable candidates than required")
@@ -446,6 +592,7 @@ def verify_qa_sweep_run(db_client: Any, *, run_id: str, minimum_output_rows: int
         "output_collection": OUTPUT_COLLECTION,
         "model_policy": dict(policy),
         "model_dispatch_evidence": [dict(item) for item in dispatch_rows],
+        "gateway_attempts": gateway_attempts,
     }
 
 

@@ -186,6 +186,15 @@ QA_SWEEP_MAX_MEMORY_LOOKUPS = 0
 QA_SWEEP_MAX_SDK_RETRIES = 0
 QA_SWEEP_MAX_GATEWAY_ATTEMPTS = 1
 QA_SWEEP_MAX_PROVIDER_CALLS = 1
+# The deployed memories route is gpt-5.6-luna at $0.20/M input and $1.20/M
+# output.  The parser instructions alone are about 9.6K UTF-8 bytes, so an
+# 8K input cap would reject every real QA request.  12K input + 256 output
+# reserves about $0.0028, below the $0.05 run envelope; the gateway enforces
+# these same headers against the provider request and settles actual usage.
+QA_SWEEP_MAX_INPUT_TOKENS = 12_288
+QA_SWEEP_MAX_OUTPUT_TOKENS = 256
+QA_SWEEP_MAX_SPEND_MICRO_USD = 50_000
+QA_SWEEP_JIT_CONTRACT_VERSION = "jit-cloud-qa-v1"
 QA_SWEEP_RECEIPT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-run.v1"
 QA_SWEEP_OUTPUT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-output.v1"
 QA_SWEEP_RUN_COLLECTION = "jit_qa_sweep_runs"
@@ -4071,6 +4080,10 @@ def _load_or_stage_daily_summary_candidates(
     max_memory_lookups: int = MAX_DAILY_MEMORY_LOOKUPS,
     max_provider_retries: Optional[int] = None,
     dispatch_evidence: Optional[Dict[str, Any]] = None,
+    max_input_tokens: Optional[int] = None,
+    max_output_tokens: Optional[int] = None,
+    jit_run_id: Optional[str] = None,
+    jit_max_spend_micro_usd: Optional[int] = None,
     sweep_generation: int = 1,
 ) -> Optional[Tuple[Tuple[DailySweepCandidate, ...], Tuple[Dict[str, str], ...]]]:
     """Stage the complete bounded daily-summary agent page before apply.
@@ -4208,9 +4221,12 @@ def _load_or_stage_daily_summary_candidates(
             max_memory_lookups=max_memory_lookups,
             cache_key=f"daily-sweep:{uid}",
             max_provider_retries=max_provider_retries,
+            max_input_tokens=max_input_tokens,
+            max_output_tokens=max_output_tokens,
+            jit_run_id=jit_run_id,
+            jit_max_spend_micro_usd=jit_max_spend_micro_usd,
+            dispatch_evidence=dispatch_evidence,
         )
-        if dispatch_evidence is not None and isinstance(getattr(output, "dispatch_evidence", None), Mapping):
-            dispatch_evidence.update(dict(output.dispatch_evidence))
         candidates: List[DailySweepCandidate] = []
         for index, memory in enumerate(getattr(output, "memories", ()) or ()):
             content = str(getattr(memory, "content", "") or "").strip()[:MAX_CONTENT_CHARACTERS]
@@ -4611,6 +4627,26 @@ def produce_completed_day_daily_summary_sources(
         )
         / 1000.0
     ) * MODEL_COST_PER_1K_INPUT_CHARACTERS_USD
+    if is_qa_run:
+        # The character heuristic above prices only the source spine.  The
+        # gateway reservation is the final authority, but the producer should
+        # also refuse a QA run whose configured worst-case input/output
+        # envelope would exceed its own model budget.  Read the checked-in
+        # gateway card instead of duplicating its rates here.
+        from llm_gateway.gateway.accounting import rate_card_for, rounded_micro_usd
+
+        rate_card = rate_card_for("openai", QA_SWEEP_MODEL_NAME)
+        if rate_card is None:
+            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+        rates = rate_card.effective_rates(QA_SWEEP_MAX_INPUT_TOKENS)
+        envelope_cost_usd = (
+            rounded_micro_usd(
+                QA_SWEEP_MAX_INPUT_TOKENS * rates.input_micro_usd_per_million
+                + QA_SWEEP_MAX_OUTPUT_TOKENS * rates.output_micro_usd_per_million
+            )
+            / 1_000_000
+        )
+        estimated_cost = max(estimated_cost, envelope_cost_usd)
     if estimated_cost > model.max_cost_usd:
         return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
     folder_options = (
@@ -4633,7 +4669,11 @@ def produce_completed_day_daily_summary_sources(
         max_fetch_characters=max_fetch_characters,
         max_memory_lookups=max_memory_lookups,
         max_provider_retries=QA_SWEEP_MAX_SDK_RETRIES if is_qa_run else None,
-        dispatch_evidence=dispatch_evidence,
+        dispatch_evidence=dispatch_evidence if is_qa_run else None,
+        max_input_tokens=QA_SWEEP_MAX_INPUT_TOKENS if is_qa_run else None,
+        max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS if is_qa_run else None,
+        jit_run_id=qa_run_id,
+        jit_max_spend_micro_usd=QA_SWEEP_MAX_SPEND_MICRO_USD if is_qa_run else None,
         sweep_generation=sweep_generation,
     )
     if staged is None:
@@ -5021,6 +5061,10 @@ def write_qa_sweep_run_receipt(
         "sdk_max_retries": QA_SWEEP_MAX_SDK_RETRIES,
         "gateway_max_attempts": QA_SWEEP_MAX_GATEWAY_ATTEMPTS,
         "provider_calls_allowed": QA_SWEEP_MAX_PROVIDER_CALLS,
+        "max_input_tokens": QA_SWEEP_MAX_INPUT_TOKENS,
+        "max_output_tokens": QA_SWEEP_MAX_OUTPUT_TOKENS,
+        "max_spend_micro_usd": QA_SWEEP_MAX_SPEND_MICRO_USD,
+        "jit_contract_version": QA_SWEEP_JIT_CONTRACT_VERSION,
     }
     output_path = f"users/{QA_SWEEP_UID}/daily_memory_sweep_receipts"
     output_payload = {
@@ -5389,6 +5433,10 @@ __all__ = [
     "QA_SWEEP_MAX_SDK_RETRIES",
     "QA_SWEEP_MAX_GATEWAY_ATTEMPTS",
     "QA_SWEEP_MAX_PROVIDER_CALLS",
+    "QA_SWEEP_MAX_INPUT_TOKENS",
+    "QA_SWEEP_MAX_OUTPUT_TOKENS",
+    "QA_SWEEP_MAX_SPEND_MICRO_USD",
+    "QA_SWEEP_JIT_CONTRACT_VERSION",
     "QA_SWEEP_RECEIPT_SCHEMA_VERSION",
     "QA_SWEEP_OUTPUT_SCHEMA_VERSION",
     "QA_SWEEP_RUN_COLLECTION",

@@ -1481,6 +1481,9 @@ def test_qa_completed_day_uses_tight_real_input_and_provider_envelope(monkeypatc
     )
     assert result.source_status == "complete"
     assert result.model_cost_usd <= QA_SWEEP_MAX_MODEL_COST_USD
+    # The QA receipt prices the checked-in Luna input/output envelope, rather
+    # than only the short source spine; this stays below the 5-cent cap.
+    assert result.model_cost_usd >= 0.0027
     assert seen["max_candidates"] == 1
     assert seen["max_transcript_fetches"] == QA_SWEEP_MAX_TRANSCRIPT_FETCHES
     assert seen["max_memory_lookups"] == QA_SWEEP_MAX_MEMORY_LOOKUPS

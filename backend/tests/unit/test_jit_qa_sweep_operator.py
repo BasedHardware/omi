@@ -24,6 +24,7 @@ OPERATOR = _load_operator()
 RUN_ID = "qa-sweep-run-1"
 SOURCE_SHA = "a" * 40
 IMAGE = "gcr.io/based-hardware-dev/daily-memory-sweep-qa-job@sha256:" + "b" * 64
+REQUEST_ID = "11111111-1111-4111-8111-111111111111"
 
 
 class _Snapshot:
@@ -80,16 +81,18 @@ class _Collection:
 
 
 class _Db:
-    def __init__(self, documents, rows, *, projectable=True):
+    def __init__(self, documents, rows, gateway_rows, *, projectable=True):
         self.documents = documents
         self.rows = rows
+        self.gateway_rows = gateway_rows
         self.projectable = projectable
 
     def document(self, path):
         return _Ref(self.documents.get(path), projectable=self.projectable)
 
-    def collection(self, _path):
-        return _Collection(self.rows, projectable=self.projectable)
+    def collection(self, path):
+        rows = self.gateway_rows if path == OPERATOR.GATEWAY_ATTEMPT_COLLECTION else self.rows
+        return _Collection(rows, projectable=self.projectable)
 
 
 def _source_row(**changes):
@@ -128,6 +131,10 @@ def _db(*rows):
         "sdk_max_retries": 0,
         "gateway_max_attempts": 1,
         "provider_calls_allowed": 1,
+        "max_input_tokens": OPERATOR.QA_SWEEP_MAX_INPUT_TOKENS,
+        "max_output_tokens": OPERATOR.QA_SWEEP_MAX_OUTPUT_TOKENS,
+        "max_spend_micro_usd": OPERATOR.QA_SWEEP_MAX_SPEND_MICRO_USD,
+        "jit_contract_version": OPERATOR.QA_SWEEP_JIT_CONTRACT_VERSION,
     }
     output = {
         "schema_version": OPERATOR.QA_SWEEP_OUTPUT_SCHEMA_VERSION,
@@ -151,10 +158,20 @@ def _db(*rows):
         "model_policy": policy,
         "model_dispatch_evidence": [
             {
-                "provider_invocations": 1,
-                "provider_attempts_observed": 1,
+                "feature": "memories",
+                "jit_run_id": RUN_ID,
                 "sdk_max_retries": 0,
-                "usage_observed": False,
+                "requests": [
+                    {
+                        "request_id": REQUEST_ID,
+                        "input_bytes": 512,
+                        "max_input_tokens": OPERATOR.QA_SWEEP_MAX_INPUT_TOKENS,
+                        "max_output_tokens": OPERATOR.QA_SWEEP_MAX_OUTPUT_TOKENS,
+                        "max_spend_micro_usd": OPERATOR.QA_SWEEP_MAX_SPEND_MICRO_USD,
+                        "usage_observed": True,
+                        "usage_tokens": {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
+                    }
+                ],
             }
         ],
     }
@@ -185,7 +202,30 @@ def _db(*rows):
                 }
             ],
         }
-    return _Db(documents, list(map(_Snapshot, rows)))
+    gateway_rows = [
+        _Snapshot(
+            {
+                "request_id": REQUEST_ID,
+                "attempt_id": "invocation:1",
+                "user_uid": OPERATOR.QA_SWEEP_UID,
+                "feature": "memories",
+                "provider": "openai",
+                "configured_model": OPERATOR.QA_SWEEP_MODEL_NAME,
+                "route_artifact_id": OPERATOR.QA_SWEEP_ROUTE_ARTIFACT_ID,
+                "retry_ordinal": 1,
+                "outcome": "success",
+                "usage_status": "confirmed",
+                "cost_status": "estimated",
+                "estimated_cost_micro_usd": 1000,
+                "prompt_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+                "jit_run_id": RUN_ID,
+                "jit_contract_version": OPERATOR.QA_SWEEP_JIT_CONTRACT_VERSION,
+            }
+        )
+    ]
+    return _Db(documents, list(map(_Snapshot, rows)), gateway_rows)
 
 
 def _job_resource(*, source_sha=SOURCE_SHA, image=IMAGE):
@@ -206,6 +246,19 @@ def test_consumer_requires_joined_current_chat_backed_output():
     }
     assert result["canonical_output"]["hydrated_memory_count"] == 1
     assert result["canonical_output"]["content_disclosed"] is False
+
+
+def test_qa_memories_route_is_single_attempt_without_fallback():
+    from llm_gateway.gateway.config_loader import load_gateway_config
+
+    config = load_gateway_config(prod_mode=True)
+    lane = config.lanes["omi:auto:memories"]
+    route = config.route_artifacts[lane.active_route]
+    assert route.primary.provider == "openai"
+    assert route.primary.model == OPERATOR.QA_SWEEP_MODEL_NAME
+    assert route.route_artifact_id == OPERATOR.QA_SWEEP_ROUTE_ARTIFACT_ID
+    assert route.retry.max_attempts == OPERATOR.QA_SWEEP_MAX_GATEWAY_ATTEMPTS
+    assert route.fallbacks == []
 
 
 def test_job_source_admission_ties_live_digest_to_reviewed_sha():
@@ -267,10 +320,22 @@ def test_consumer_requires_exact_ledger_schema_and_dispatch_bounds():
         OPERATOR.verify_qa_sweep_run(db, run_id=RUN_ID)
 
     db = _db(_source_row())
-    db.documents[f"{OPERATOR.QA_SWEEP_RUN_COLLECTION}/{RUN_ID}"]["model_dispatch_evidence"][0][
-        "provider_attempts_observed"
+    db.documents[f"{OPERATOR.QA_SWEEP_RUN_COLLECTION}/{RUN_ID}"]["model_dispatch_evidence"][0]["requests"][0][
+        "max_output_tokens"
     ] = 2
-    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="attempt evidence"):
+    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="request budget"):
+        OPERATOR.verify_qa_sweep_run(db, run_id=RUN_ID)
+
+    db = _db(_source_row())
+    db.gateway_rows[0]._payload["retry_ordinal"] = 2
+    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="joined success"):
+        OPERATOR.verify_qa_sweep_run(db, run_id=RUN_ID)
+
+    db = _db(_source_row())
+    db.documents[f"{OPERATOR.QA_SWEEP_RUN_COLLECTION}/{RUN_ID}"]["model_dispatch_evidence"][0]["requests"][0][
+        "request_id"
+    ] = "not-a-uuid"
+    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="request id is malformed"):
         OPERATOR.verify_qa_sweep_run(db, run_id=RUN_ID)
 
 

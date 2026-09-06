@@ -296,7 +296,7 @@ jobs:
           IMAGE: ${{ needs.build.outputs.gateway_image }}
         run: |
           set -euo pipefail
-          gateway_env="^@^OMI_JIT_PROACTIVITY_BUDGET_CONTRACT=jit-cloud-qa-v1@OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@OMI_LLM_GATEWAY_PROD=false@LLM_GATEWAY_ALLOWED_CALLERS=backend,desktop@OMI_LLM_GATEWAY_BUILD_IDENTITY=jit-qa"
+          gateway_env="^@^OMI_JIT_PROACTIVITY_BUDGET_CONTRACT=jit-cloud-qa-v1@OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@OMI_LLM_GATEWAY_PROD=false@LLM_GATEWAY_ALLOWED_CALLERS=backend,desktop@LLM_GATEWAY_ACCOUNTING_ENABLED=true@OMI_LLM_GATEWAY_BUILD_IDENTITY=jit-qa"
           gcloud run deploy "$QA_GATEWAY_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --image "$IMAGE" --command uvicorn --args 'llm_gateway.main:app,--host=0.0.0.0,--port=8080' --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --set-env-vars "$gateway_env" --set-secrets "OPENAI_API_KEY=OPENAI_API_KEY:latest,ANTHROPIC_API_KEY=${QA_ANTHROPIC_SECRET}:latest,PERPLEXITY_API_KEY=${QA_PERPLEXITY_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
       - name: Resolve exact gateway URL
         id: gateway

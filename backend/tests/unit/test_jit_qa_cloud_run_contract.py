@@ -301,6 +301,7 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "--set-env-vars \"$gateway_env\"" in text
     assert "--set-env-vars \"$drain_env\"" in text
     assert 'LLM_GATEWAY_ALLOWED_CALLERS=backend,desktop' in text
+    assert 'LLM_GATEWAY_ACCOUNTING_ENABLED=true' in text
     assert 'gcloud firestore databases describe --database "$QA_FIRESTORE_DATABASE"' in text
     assert 'gcloud redis instances describe "$QA_REDIS_INSTANCE"' in text
     assert "POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest" in text
