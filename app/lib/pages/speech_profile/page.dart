@@ -13,7 +13,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/speech_profile/speech_topics_card.dart';
-import 'package:omi/pages/speech_profile/word_progress_bar.dart';
+import 'package:omi/pages/speech_profile/speech_progress_bar.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
@@ -182,7 +182,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
     }
 
     Future<void> startRecording(SpeechProfileProvider provider) async {
-      if (_isCheckingAvailability) return;
+      if (_isCheckingAvailability || provider.isInitialising) return;
       setState(() => _isCheckingAvailability = true);
 
       // Pre-flight: don't enter the recording UI at all if the streaming
@@ -482,34 +482,35 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                                     ),
                                   ),
                                 const SizedBox(height: 20),
+                                // No spinner while the page loads or the pre-flight
+                                // runs: the buttons stay put and startRecording()
+                                // ignores taps until the check is done.
                                 if (SharedPreferencesUtil().hasSpeakerProfile)
-                                  (provider.isInitialising || _isCheckingAvailability)
-                                      ? const CircularProgressIndicator(color: Colors.white)
-                                      : Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                                          child: Row(
-                                            children: [
-                                              Expanded(
-                                                child: _capsuleButton(
-                                                  icon: _profilePlaying ? Icons.stop_rounded : Icons.play_arrow_rounded,
-                                                  text: _profilePlaying ? context.l10n.stop : context.l10n.play,
-                                                  onPressed: _toggleProfilePlayback,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 16),
-                                              Expanded(
-                                                child: _capsuleButton(
-                                                  icon: Icons.replay_rounded,
-                                                  text: context.l10n.redo,
-                                                  onPressed: () {
-                                                    _stopProfilePlayback();
-                                                    startRecording(provider);
-                                                  },
-                                                ),
-                                              ),
-                                            ],
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: _capsuleButton(
+                                            icon: _profilePlaying ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                                            text: _profilePlaying ? context.l10n.stop : context.l10n.play,
+                                            onPressed: _toggleProfilePlayback,
                                           ),
                                         ),
+                                        const SizedBox(width: 16),
+                                        Expanded(
+                                          child: _capsuleButton(
+                                            icon: Icons.replay_rounded,
+                                            text: context.l10n.redo,
+                                            onPressed: () {
+                                              _stopProfilePlayback();
+                                              startRecording(provider);
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                               ],
                             )
                           // While recording, the transcript is laid out above the
@@ -525,13 +526,10 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                           ? Column(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
-                                if (provider.isInitialising || _isCheckingAvailability)
-                                  const CircularProgressIndicator(color: Colors.white)
-                                else
-                                  _capsuleButton(
-                                    text: context.l10n.getStarted,
-                                    onPressed: () => startRecording(provider),
-                                  ),
+                                _capsuleButton(
+                                  text: context.l10n.getStarted,
+                                  onPressed: () => startRecording(provider),
+                                ),
                                 // Only relevant while actually creating a profile — an
                                 // existing profile's play/redo buttons live under the
                                 // title instead and don't need a mic-source disclaimer.
@@ -618,7 +616,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                                                 children: [
                                                   const SpeechTopicsCard(),
                                                   const SizedBox(height: 12),
-                                                  WordProgressBar(progress: provider.wordProgress),
+                                                  SpeechProgressBar(progress: provider.sentenceProgress),
                                                 ],
                                               ),
                                             ),

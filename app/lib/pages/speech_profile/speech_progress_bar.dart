@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// Thin bar that fills as the user speaks toward the speech profile's word
-/// target. Deliberately minimal: no label, no percentage.
-class WordProgressBar extends StatelessWidget {
+/// Thin bar that fills as the user speaks toward the speech profile's
+/// sentence target. Deliberately minimal: no label, no percentage.
+class SpeechProgressBar extends StatelessWidget {
   final double progress;
 
-  const WordProgressBar({super.key, required this.progress});
+  const SpeechProgressBar({super.key, required this.progress});
 
   @override
   Widget build(BuildContext context) {

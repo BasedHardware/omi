@@ -55,13 +55,17 @@ class SpeechProfileProvider extends ChangeNotifier
   bool startedRecording = false;
   double percentageCompleted = 0;
 
-  /// Words the user must speak before the profile is finalized. The UI shows
-  /// a bar filling toward it; reaching it is what completes the recording.
-  static const int targetWordCount = 40;
-  bool _wordTargetReached = false;
+  /// Sentences the user must speak before the profile is finalized. The UI
+  /// shows a bar filling toward it; reaching it is what completes the
+  /// recording. A sentence ends at ., ! or ? followed by a space or the end
+  /// of the text (so "3.5" is not a boundary); both server STT and the
+  /// on-device recognizers punctuate their output.
+  static const int targetSentenceCount = 3;
+  bool _sentenceTargetReached = false;
+  static final RegExp _sentenceEnd = RegExp(r'[.!?]+(?=\s|$)');
 
-  int get spokenWordCount => text.trim().isEmpty ? 0 : text.trim().split(RegExp(r'\s+')).length;
-  double get wordProgress => (spokenWordCount / targetWordCount).clamp(0.0, 1.0);
+  int get spokenSentenceCount => _sentenceEnd.allMatches(text).length;
+  double get sentenceProgress => (spokenSentenceCount / targetSentenceCount).clamp(0.0, 1.0);
   bool uploadingProfile = false;
   bool profileCompleted = false;
   Timer? forceCompletionTimer;
@@ -595,7 +599,7 @@ class SpeechProfileProvider extends ChangeNotifier
     audioStorage.clearAudioBytes();
     text = '';
     percentageCompleted = 0;
-    _wordTargetReached = false;
+    _sentenceTargetReached = false;
     notifyListeners();
   }
 
@@ -639,7 +643,7 @@ class SpeechProfileProvider extends ChangeNotifier
     totalQuestions = 0;
     startedRecording = false;
     percentageCompleted = 0;
-    _wordTargetReached = false;
+    _sentenceTargetReached = false;
     uploadingProfile = false;
     profileCompleted = false;
     usePhoneMic = false;
@@ -825,16 +829,16 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   /// Recomputes what the user has said (Omi's own question segments are
-  /// excluded), the word-target progress, and finalizes the recording once
-  /// the target is reached. Split from onSegmentReceived so it can be
+  /// excluded), the sentence-target progress, and finalizes the recording
+  /// once the target is reached. Split from onSegmentReceived so it can be
   /// exercised without the audio storage that method also touches.
   @visibleForTesting
   void updateSpokenText() {
     text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
-    percentageCompleted = wordProgress;
-    if (!_wordTargetReached && spokenWordCount >= targetWordCount) {
-      _wordTargetReached = true;
-      Logger.debug('Spoken word target reached ($spokenWordCount/$targetWordCount); finalizing');
+    percentageCompleted = sentenceProgress;
+    if (!_sentenceTargetReached && spokenSentenceCount >= targetSentenceCount) {
+      _sentenceTargetReached = true;
+      Logger.debug('Spoken sentence target reached ($spokenSentenceCount/$targetSentenceCount); finalizing');
       finalize();
     }
   }

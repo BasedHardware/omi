@@ -481,27 +481,27 @@ void main() {
     });
   });
 
-  // The recording completes once the user has spoken enough words (the UI
-  // shows a bar filling toward the target), not when the backend decides the
-  // "Talk About" topics were covered.
-  group('completes on the spoken word target', () {
-    String words(int n) => List.generate(n, (i) => 'w$i').join(' ');
-
-    test('fills the bar as words arrive and finalizes once at the target', () {
+  // The recording completes once the user has spoken enough sentences (the
+  // UI shows a bar filling toward the target), not when the backend decides
+  // the "Answer with your voice" topics were covered.
+  group('completes on the spoken sentence target', () {
+    test('fills the bar per sentence and finalizes once at the target', () {
       final provider = _FinalizeCountingProvider();
       provider.updateStartedRecording(true);
 
-      provider.segments.add(_userSegment('1', words(SpeechProfileProvider.targetWordCount ~/ 2)));
+      provider.segments.add(_userSegment('1', 'I live in Austin.'));
       provider.updateSpokenText();
-      expect(provider.wordProgress, closeTo(0.5, 0.01));
+      expect(provider.spokenSentenceCount, 1);
+      expect(provider.sentenceProgress, closeTo(1 / 3, 0.01));
       expect(provider.finalizeCalls, 0);
 
-      provider.segments.add(_userSegment('2', words(SpeechProfileProvider.targetWordCount)));
+      provider.segments.add(_userSegment('2', 'I work on hardware! My goal is 3.5 million users?'));
       provider.updateSpokenText();
-      expect(provider.wordProgress, 1.0, reason: 'progress is clamped at the target');
+      expect(provider.spokenSentenceCount, 3, reason: '"3.5" is not a sentence boundary');
+      expect(provider.sentenceProgress, 1.0);
       expect(provider.finalizeCalls, 1);
 
-      provider.segments.add(_userSegment('3', 'more words'));
+      provider.segments.add(_userSegment('3', 'And more.'));
       provider.updateSpokenText();
       expect(provider.finalizeCalls, 1, reason: 'later segments must not finalize again');
 
@@ -512,13 +512,14 @@ void main() {
       final provider = _FinalizeCountingProvider();
       provider.updateStartedRecording(true);
 
-      provider.segments.add(_userSegment('q', words(SpeechProfileProvider.targetWordCount), speakerId: omiSpeakerId));
+      provider.segments
+          .add(_userSegment('q', 'Where do you live? What do you do? Any goals?', speakerId: omiSpeakerId));
       provider.updateSpokenText();
-      expect(provider.spokenWordCount, 0);
+      expect(provider.spokenSentenceCount, 0);
       expect(provider.finalizeCalls, 0);
 
       provider.onMessageEventReceived(OnboardingCompleteEvent(conversationId: 'c1'));
-      expect(provider.finalizeCalls, 0, reason: 'only the word target completes the recording');
+      expect(provider.finalizeCalls, 0, reason: 'only the sentence target completes the recording');
 
       provider.dispose();
     });

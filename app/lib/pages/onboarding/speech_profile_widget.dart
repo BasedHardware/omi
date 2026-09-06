@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/speech_profile/speech_topics_card.dart';
-import 'package:omi/pages/speech_profile/word_progress_bar.dart';
+import 'package:omi/pages/speech_profile/speech_progress_bar.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
@@ -547,7 +547,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
 
                           const SizedBox(height: 12),
 
-                          WordProgressBar(progress: provider.wordProgress),
+                          SpeechProgressBar(progress: provider.sentenceProgress),
 
                           const SizedBox(height: 12),
 
