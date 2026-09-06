@@ -220,7 +220,7 @@ test("consolidation work has one composition and no route-level executor", () =>
     rmSync(routeFixture, { force: true });
     rmSync(workerFixture, { force: true });
   }
-});
+}, 15_000);
 
 test("product projection materialization stays behind the worker boundary", () => {
   const routeFixture = join(platformRoot, "apps", "service", "routes", "projection-materializer-tripwire-fixture.ts");

@@ -105,23 +105,31 @@ test("wedged child is killed and reported timedOut rather than hanging", async (
 
 test("SIGTERM-ignoring child is escalated to SIGKILL", async () => {
   // red-proof: escalateKill sends only SIGTERM and never SIGKILL after grace
-  const result = await superviseChild({
+  const port = freePort();
+  const child = ManagedProcess.start({
     command: [
       "bun",
       "-e",
       `
 process.on("SIGTERM", () => {});
+Bun.serve({ hostname: "127.0.0.1", port: Number(process.env.PORT), fetch: () => new Response("ready") });
 setInterval(() => {}, 1_000_000);
 `,
     ],
-    timeoutMs: 300,
+    env: { ...process.env, PORT: String(port) },
+    readyUrl: `http://127.0.0.1:${port}/`,
+    readyTimeoutMs: 10_000,
     killGraceMs: 200,
   });
-
-  expect(result.timedOut).toBe(true);
+  try {
+    await child.ready();
+  } finally {
+    await child.stop();
+  }
+  const result = await child.exited;
   expect(result.signal).toBe("SIGKILL");
   expect(result.exitCode).toBeNull();
-});
+}, 15_000);
 
 test("ManagedProcess surfaces ready and exited as separate awaits", async () => {
   // red-proof: make ready() resolve only after awaiting exited and require exitCode===0 inside ready()
