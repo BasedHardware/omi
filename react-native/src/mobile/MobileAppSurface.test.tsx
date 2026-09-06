@@ -21,7 +21,6 @@ jest.mock('react-native', () => {
     KeyboardAvoidingView: component('KeyboardAvoidingView'),
     Platform: {OS: 'ios'},
     Pressable: component('Pressable'),
-    SafeAreaView: component('SafeAreaView'),
     StyleSheet: {
       create: <T,>(styles: T) => styles,
       hairlineWidth: 1,
@@ -31,6 +30,11 @@ jest.mock('react-native', () => {
     View: component('View'),
   };
 });
+
+jest.mock('react-native-safe-area-context', () => ({
+  SafeAreaView: ({children, ...props}: {children?: React.ReactNode}) =>
+    require('react').createElement('SafeAreaContextView', props, children),
+}));
 
 import {MobileAppSurface, type MobileAppSurfaceProps} from './MobileAppSurface';
 
@@ -89,6 +93,13 @@ function renderedText(renderer: ReactTestRenderer.ReactTestRenderer): string {
 }
 
 describe('MobileAppSurface', () => {
+  test.each(['home', 'tasks', 'chat', 'apps'] as const)(
+    '%s uses the native safe-area boundary',
+    activeRoute => {
+      const renderer = render({activeRoute});
+      expect(renderer.toJSON()).toMatchObject({type: 'SafeAreaContextView'});
+    },
+  );
   test('renders the shipping mobile hierarchy from real projections', () => {
     const tree = JSON.stringify(render().toJSON());
     expect(tree).toContain('Listening');
