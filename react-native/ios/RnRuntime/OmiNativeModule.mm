@@ -11,6 +11,8 @@
 #import <UserNotifications/UserNotifications.h>
 #endif
 
+static NSString *const OmiHapticServiceUUID = @"cab1ab95-2ea5-4f4d-bb56-874b72cfc984";
+static NSString *const OmiHapticUUID = @"cab1ab96-2ea5-4f4d-bb56-874b72cfc984";
 static NSString *const OmiServiceUUID = @"19b10000-e8f2-537e-4f6c-d104768a1214";
 static NSString *const OmiAudioUUID = @"19b10001-e8f2-537e-4f6c-d104768a1214";
 static NSString *const OmiCodecUUID = @"19b10002-e8f2-537e-4f6c-d104768a1214";
@@ -51,6 +53,8 @@ static NSString *const OmiChargingUUID = @"19b10013-e8f2-537e-4f6c-d104768a1214"
 @property(nonatomic, copy) RCTPromiseRejectBlock settingReject;
 @property(nonatomic) BOOL settingWritten;
 @property(nonatomic) NSUInteger settingGeneration;
+@property(nonatomic) OmiFindPattern findPattern;
+@property(nonatomic) NSUInteger findTicket;
 @property(nonatomic, strong) NSMutableSet<CBPeripheral *> *retiringPeripherals;
 @end
 
@@ -297,7 +301,7 @@ RCT_REMAP_METHOD(disconnectDevice,
   self.connectionState = @"connected";
   self.lastEvent = @"Connected to Omi";
   peripheral.delegate = self;
-  [peripheral discoverServices:@[ [CBUUID UUIDWithString:OmiServiceUUID], [CBUUID UUIDWithString:OmiBatteryServiceUUID], [CBUUID UUIDWithString:OmiInformationServiceUUID], [CBUUID UUIDWithString:OmiFeaturesServiceUUID], [CBUUID UUIDWithString:OmiSettingsServiceUUID] ]];
+  [peripheral discoverServices:@[ [CBUUID UUIDWithString:OmiServiceUUID], [CBUUID UUIDWithString:OmiBatteryServiceUUID], [CBUUID UUIDWithString:OmiInformationServiceUUID], [CBUUID UUIDWithString:OmiFeaturesServiceUUID], [CBUUID UUIDWithString:OmiSettingsServiceUUID], [CBUUID UUIDWithString:OmiHapticServiceUUID] ]];
   [self emitSnapshot];
 }
 
@@ -333,6 +337,8 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
     if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiServiceUUID]]) {
       [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiAudioUUID], [CBUUID UUIDWithString:OmiCodecUUID] ]
                                forService:service];
+    } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiHapticServiceUUID]]) {
+      [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiHapticUUID] ] forService:service];
     } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiFeaturesServiceUUID]]) {
       [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiFeaturesUUID] ] forService:service];
     } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiSettingsServiceUUID]]) {
@@ -353,6 +359,10 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
     return;
   }
   for (CBCharacteristic *characteristic in service.characteristics) {
+    if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiHapticServiceUUID]] && [characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiHapticUUID]]) {
+      self.settingCharacteristics[OmiHapticUUID] = characteristic;
+      [self emitSnapshot];
+    }
     if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiSettingsServiceUUID]]) self.settingCharacteristics[characteristic.UUID.UUIDString.lowercaseString] = characteristic;
     if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiFeaturesUUID]] && (characteristic.properties & CBCharacteristicPropertyRead) != 0) [peripheral readValueForCharacteristic:characteristic];
     if (OmiInformationFields()[characteristic.UUID.UUIDString] != nil &&
@@ -512,6 +522,8 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     if (battery != nil) {
       device[@"battery"] = battery;
     }
+    CBCharacteristic *haptic = self.settingCharacteristics[OmiHapticUUID];
+    device[@"findDeviceSupported"] = @([device[@"connected"] boolValue] && haptic != nil && (haptic.properties & CBCharacteristicPropertyWrite) != 0);
     [devices addObject:[device copy]];
   }
   return devices;
@@ -552,6 +564,36 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
   if ((charging.properties & CBCharacteristicPropertyNotify) != 0) [peripheral setNotifyValue:YES forCharacteristic:charging];
 }
 
+RCT_REMAP_METHOD(findDevice,
+                 findDeviceWithId:(NSString *)identifier
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  CBPeripheral *peripheral = self.connectedPeripheral;
+  CBCharacteristic *characteristic = self.settingCharacteristics[OmiHapticUUID];
+  if (peripheral == nil || ![peripheral.identifier.UUIDString isEqualToString:identifier] ||
+      ![self.connectionState isEqualToString:@"connected"] || self.settingResolve != nil ||
+      characteristic == nil || (characteristic.properties & CBCharacteristicPropertyWrite) == 0) {
+    reject(@"OMI_FIND_DEVICE_FAILED", @"Find device is unavailable", nil);
+    return;
+  }
+  self.pendingSetting = @"findDevice";
+  self.pendingSettingCharacteristic = characteristic;
+  self.settingResolve = ^(id value) { resolve(nil); };
+  self.settingReject = reject;
+  self.findTicket = _findPattern.begin();
+  [self sendFindCommand:self.findTicket peripheral:peripheral];
+}
+
+- (void)sendFindCommand:(NSUInteger)ticket peripheral:(CBPeripheral *)peripheral {
+  if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral) || !_findPattern.send(ticket)) return;
+  NSUInteger generation = ++self.settingGeneration;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    if (self.settingResolve != nil && self.settingGeneration == generation) [self retireConnection:@"Find device command timed out"];
+  });
+  uint8_t byte = OmiFindPattern::level;
+  [peripheral writeValue:[NSData dataWithBytes:&byte length:1] forCharacteristic:self.pendingSettingCharacteristic type:CBCharacteristicWriteWithResponse];
+}
+
 RCT_REMAP_METHOD(setDeviceSetting,
                  setDeviceSettingWithId:(NSString *)identifier
                  setting:(NSString *)setting
@@ -588,11 +630,24 @@ RCT_REMAP_METHOD(setDeviceSetting,
 - (void)peripheral:(CBPeripheral *)peripheral didWriteValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error {
   if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral) || self.pendingSettingCharacteristic != characteristic || self.settingResolve == nil) return;
   if (error != nil) { [self finishSetting:nil error:@"Device setting write failed"]; return; }
+  if ([self.pendingSetting isEqualToString:@"findDevice"]) {
+    if (!_findPattern.acknowledge(self.findTicket)) return;
+    self.settingGeneration += 1;
+    if (_findPattern.complete()) [self finishSetting:@3 error:nil];
+    else {
+      NSUInteger ticket = self.findTicket;
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, OmiFindPattern::delayMs * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        [self sendFindCommand:ticket peripheral:peripheral];
+      });
+    }
+    return;
+  }
   self.settingWritten = YES;
   [peripheral readValueForCharacteristic:characteristic];
 }
 
 - (void)finishSetting:(NSNumber *)value error:(NSString *)error {
+  _findPattern.cancel();
   RCTPromiseResolveBlock resolve = self.settingResolve;
   RCTPromiseRejectBlock reject = self.settingReject;
   self.settingGeneration += 1;

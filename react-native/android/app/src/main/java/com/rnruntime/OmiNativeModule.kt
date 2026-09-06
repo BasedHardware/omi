@@ -69,6 +69,13 @@ class OmiNativeModule(private val context: ReactApplicationContext) : ReactConte
   }
 
   @ReactMethod
+  fun findDevice(id: String, promise: Promise) {
+    ble.findDevice(id) { confirmed, error ->
+      if (confirmed != null) promise.resolve(null) else promise.reject("OMI_FIND_DEVICE_FAILED", error ?: "Find device failed")
+    }
+  }
+
+  @ReactMethod
   fun setDeviceSetting(id: String, setting: String, value: Double, promise: Promise) {
     ble.setDeviceSetting(id, setting, value) { confirmed, error ->
       if (confirmed != null) promise.resolve(confirmed) else promise.reject("OMI_DEVICE_SETTING_FAILED", error ?: "Device setting failed")

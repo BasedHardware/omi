@@ -1,6 +1,25 @@
 package com.rnruntime;
 
 final class OmiDeviceControls {
+  static final class FindPattern {
+    static final int LEVEL = 3;
+    static final int DELAY_MS = 750;
+    private long generation;
+    private int sent;
+    private boolean active;
+    private boolean awaiting;
+    long begin() { cancel(); active = true; return generation; }
+    void cancel() { generation++; active = false; awaiting = false; sent = 0; }
+    boolean send(long ticket) {
+      if (ticket != generation || !active || awaiting || sent >= 3) return false;
+      sent++; awaiting = true; return true;
+    }
+    boolean acknowledge(long ticket) {
+      if (ticket != generation || !active || !awaiting) return false;
+      awaiting = false; return true;
+    }
+    boolean complete() { return active && sent == 3 && !awaiting; }
+  }
   static Long features(byte[] bytes) {
     if (bytes.length != 4) return null;
     long value = 0;

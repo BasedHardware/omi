@@ -2,6 +2,29 @@ package com.rnruntime;
 
 public final class DeviceControlsTest {
   public static void main(String[] args) {
+    OmiDeviceControls.FindPattern pattern = new OmiDeviceControls.FindPattern();
+    long ticket = pattern.begin();
+    assert OmiDeviceControls.FindPattern.LEVEL == 3 && OmiDeviceControls.FindPattern.DELAY_MS == 750;
+    for (int index = 0; index < 3; index++) {
+      assert pattern.send(ticket);
+      assert !pattern.send(ticket);
+      assert !pattern.complete();
+      assert pattern.acknowledge(ticket);
+      assert !pattern.acknowledge(ticket);
+      assert pattern.complete() == (index == 2);
+    }
+    assert !pattern.send(ticket);
+    ticket = pattern.begin();
+    assert pattern.send(ticket);
+    assert pattern.acknowledge(ticket);
+    pattern.cancel();
+    assert !pattern.send(ticket);
+    assert !pattern.acknowledge(ticket);
+    long replacement = pattern.begin();
+    assert !pattern.send(ticket);
+    assert pattern.send(replacement);
+    pattern.cancel();
+    assert !pattern.acknowledge(replacement);
     Long features = OmiDeviceControls.features(new byte[] {(byte) 128, 1, 0, 0});
     assert features != null && features == 384;
     assert OmiDeviceControls.features(new byte[3]) == null;
