@@ -644,7 +644,7 @@ def merge_shared_graph_records(
 
     shared_id_map: Dict[str, str] = {}
     for raw_node in sorted(
-        (cast(Dict[str, Any], node) for node in shared['nodes'] if isinstance(node, dict)),
+        shared['nodes'],
         key=lambda node: (str(node.get('id') or ''), str(node.get('label') or '')),
     ):
         node_id = raw_node.get('id')
@@ -676,7 +676,7 @@ def merge_shared_graph_records(
             continue
         edges_by_key[key] = _merge_edge(edges_by_key.get(key), dict(edge), canonical=True)
     for raw_edge in sorted(
-        (cast(Dict[str, Any], edge) for edge in shared['edges'] if isinstance(edge, dict)),
+        shared['edges'],
         key=lambda edge: (
             str(edge.get('source_id') or ''),
             str(edge.get('target_id') or ''),
