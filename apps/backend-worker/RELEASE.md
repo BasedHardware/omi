@@ -21,6 +21,8 @@ Account Durable Objects serialize D1 admissions across external database awaits 
 - `STAGING_OBSERVABILITY_SINK_MODE`: `cloudflare_only` or `better_stack`.
 - `STAGING_BETTER_STACK_EVIDENCE_ID`: an opaque operator evidence identifier required only for `better_stack`.
 
+The checked-in `account_id` and `R2_ACCOUNT_ID` must identify that same account. The attachment contract test checks the real configuration against the signed URL host and bound bucket. Account selection alone does not provision the R2 signing secrets.
+
 ## Steps
 
 1. Verify the local migration manifest. The `test/migrations.verify.test.ts` gate and the `verify:migrations` script both use `migrations/manifest.ts`, which pins the exact bytes of every migration file. Do not edit migration files after they have been applied to a D1 database.
