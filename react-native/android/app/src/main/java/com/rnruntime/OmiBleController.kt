@@ -12,6 +12,9 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -60,6 +63,40 @@ class OmiBleController(
   private var pendingConnect: ((Boolean, String) -> Unit)? = null
   private val gattQueue = ArrayDeque<GattOp>()
   private var gattBusy = false
+  private val lease = OmiBleLease()
+  private var currentGeneration = 0L
+
+  private val radioReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+      if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
+      synchronized(this@OmiBleController) {
+        if (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR) != BluetoothAdapter.STATE_ON) {
+          runCatching { stopScanInternal() }
+          retireConnection("Bluetooth is unavailable")
+          finishScan()
+        } else {
+          lastEvent = "Bluetooth is powered on"
+          emitSnapshot()
+        }
+      }
+    }
+  }
+
+  init {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      context.registerReceiver(radioReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED), Context.RECEIVER_EXPORTED)
+    } else {
+      context.registerReceiver(radioReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
+    }
+  }
+
+  @Synchronized
+  fun close() {
+    runCatching { context.unregisterReceiver(radioReceiver) }
+    runCatching { stopScanInternal() }
+    retireConnection("Omi Bluetooth session closed")
+    finishScan()
+  }
 
   private val scanCallback = object : ScanCallback() {
     override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -96,6 +133,7 @@ class OmiBleController(
     }
   }
 
+  @Synchronized
   fun snapshot(): WritableMap = Arguments.createMap().apply {
     putString("bluetooth", bluetoothState())
     putArray("devices", devices())
@@ -105,7 +143,7 @@ class OmiBleController(
       putNull("connectedDeviceId")
     }
     putString("phase", connectionState)
-    putString("capture", if (audioNotifying) "recording" else "idle")
+    putString("capture", if (OmiBleLease.recordingReady(connectionState == "connected", audioNotifying, codec != null)) "recording" else "idle")
     putString("captureMode", "stream")
     putString("microphone", permissionState(Manifest.permission.RECORD_AUDIO))
     putString("notifications", notificationPermissionState())
@@ -178,8 +216,9 @@ class OmiBleController(
   }
 
   @SuppressLint("MissingPermission")
+  @Synchronized
   fun connect(id: String, onDone: (Boolean, String) -> Unit) {
-    pendingConnect?.invoke(false, "Omi connection was replaced")
+    if (gatt != null || pendingConnect != null) retireConnection("Omi connection was replaced")
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !granted(Manifest.permission.BLUETOOTH_CONNECT)) {
       lastEvent = "Bluetooth connection permission is required"
       onDone(false, lastEvent)
@@ -200,37 +239,50 @@ class OmiBleController(
     connectionState = "connecting"
     connectedDeviceId = id
     pendingConnect = onDone
+    val generation = lease.begin()
+    currentGeneration = generation
+    handler.postDelayed({
+      synchronized(this) { if (lease.accepts(generation) && pendingConnect != null) retireConnection("Omi connection setup timed out") }
+    }, 20000)
     emitSnapshot()
     gatt = device.connectGatt(context, false, object : android.bluetooth.BluetoothGattCallback() {
       override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-        val connected = status == android.bluetooth.BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED
-        connectionState = if (connected) "connected" else "disconnected"
-        lastEvent = if (connected) "Connected to Omi" else "Omi connection failed: $status"
-        if (connected) {
-          gatt.discoverServices()
-          finishConnect(true, lastEvent)
-        } else {
-          audioNotifying = false
-          clearGattQueue()
-          gatt.close()
-          if (this@OmiBleController.gatt == gatt) this@OmiBleController.gatt = null
-          finishConnect(false, lastEvent)
+        synchronized(this@OmiBleController) {
+          if (!lease.accepts(generation)) return
+          val connected = status == android.bluetooth.BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED
+          connectionState = if (connected) "connected" else "disconnected"
+          lastEvent = if (connected) "Connected to Omi" else "Omi connection failed: $status"
+          if (connected) {
+            if (!gatt.discoverServices()) retireConnection("Omi service discovery failed")
+          } else {
+            retireConnection(lastEvent)
+          }
+          emitSnapshot()
         }
-        emitSnapshot()
       }
 
       override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-        if (status != android.bluetooth.BluetoothGatt.GATT_SUCCESS) return
-        val audio = gatt.getService(UUID.fromString(OMI_SERVICE_UUID))?.getCharacteristic(UUID.fromString(OMI_AUDIO_UUID))
-        val codecChar = gatt.getService(UUID.fromString(OMI_SERVICE_UUID))?.getCharacteristic(UUID.fromString(OMI_CODEC_UUID))
-        val battery = gatt.getService(UUID.fromString(BATTERY_SERVICE_UUID))?.getCharacteristic(UUID.fromString(BATTERY_LEVEL_UUID))
-        if (codecChar != null) enqueueGatt(gatt, GattOp.Read(codecChar))
-        if (battery != null) enqueueGatt(gatt, GattOp.Read(battery))
-        if (audio != null) enqueueGatt(gatt, GattOp.EnableNotify(audio))
-        val information = gatt.getService(UUID.fromString("0000180a-0000-1000-8000-00805f9b34fb"))
-        OmiDeviceInformation.fields.keys.forEach { uuid ->
-          information?.getCharacteristic(uuid)?.let { characteristic ->
-            if (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) enqueueGatt(gatt, GattOp.Read(characteristic))
+        synchronized(this@OmiBleController) {
+          if (!lease.accepts(generation)) return
+          if (status != android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
+            retireConnection("Omi service discovery failed: $status")
+            return
+          }
+          val audio = gatt.getService(UUID.fromString(OMI_SERVICE_UUID))?.getCharacteristic(UUID.fromString(OMI_AUDIO_UUID))
+          val codecChar = gatt.getService(UUID.fromString(OMI_SERVICE_UUID))?.getCharacteristic(UUID.fromString(OMI_CODEC_UUID))
+          val battery = gatt.getService(UUID.fromString(BATTERY_SERVICE_UUID))?.getCharacteristic(UUID.fromString(BATTERY_LEVEL_UUID))
+          if (audio == null || codecChar == null) {
+            retireConnection("Omi audio service is incomplete")
+            return
+          }
+          enqueueGatt(gatt, GattOp.Read(codecChar))
+          if (battery != null) enqueueGatt(gatt, GattOp.Read(battery))
+          if (audio != null) enqueueGatt(gatt, GattOp.EnableNotify(audio))
+          val information = gatt.getService(UUID.fromString("0000180a-0000-1000-8000-00805f9b34fb"))
+          OmiDeviceInformation.fields.keys.forEach { uuid ->
+            information?.getCharacteristic(uuid)?.let { characteristic ->
+              if (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) enqueueGatt(gatt, GattOp.Read(characteristic))
+            }
           }
         }
       }
@@ -241,10 +293,17 @@ class OmiBleController(
         value: ByteArray,
         status: Int,
       ) {
-        if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
-          handleValue(characteristic, value)
+        synchronized(this@OmiBleController) {
+          if (!lease.accepts(generation)) return
+          if (characteristic.uuid == UUID.fromString(OMI_CODEC_UUID) && status != android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
+            retireConnection("Omi codec read failed: $status")
+            return
+          }
+          if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
+            handleValue(characteristic, value)
+          }
+          finishGattOp(gatt)
         }
-        finishGattOp(gatt)
       }
 
       @Deprecated("Deprecated in API 33")
@@ -253,13 +312,20 @@ class OmiBleController(
         characteristic: BluetoothGattCharacteristic,
         status: Int,
       ) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-          return
+        synchronized(this@OmiBleController) {
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return
+          }
+          if (!lease.accepts(generation)) return
+          if (characteristic.uuid == UUID.fromString(OMI_CODEC_UUID) && status != android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
+            retireConnection("Omi codec read failed: $status")
+            return
+          }
+          if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
+            handleValue(characteristic)
+          }
+          finishGattOp(gatt)
         }
-        if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
-          handleValue(characteristic)
-        }
-        finishGattOp(gatt)
       }
 
       override fun onCharacteristicChanged(
@@ -267,15 +333,21 @@ class OmiBleController(
         characteristic: BluetoothGattCharacteristic,
         value: ByteArray,
       ) {
-        handleValue(characteristic, value)
+        synchronized(this@OmiBleController) {
+          if (!lease.accepts(generation)) return
+          handleValue(characteristic, value)
+        }
       }
 
       @Deprecated("Deprecated in API 33")
       override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-          return
+        synchronized(this@OmiBleController) {
+          if (!lease.accepts(generation)) return
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return
+          }
+          handleValue(characteristic)
         }
-        handleValue(characteristic)
       }
 
       override fun onDescriptorWrite(
@@ -283,26 +355,35 @@ class OmiBleController(
         descriptor: BluetoothGattDescriptor,
         status: Int,
       ) {
-        if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS &&
-          descriptor.characteristic.uuid == UUID.fromString(OMI_AUDIO_UUID)
-        ) {
-          audioNotifying = true
-          lastEvent = "Omi audio notify is live"
-          emitSnapshot()
+        synchronized(this@OmiBleController) {
+          if (!lease.accepts(generation)) return
+          if (status != android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
+            retireConnection("Omi notification subscription failed: $status")
+            return
+          }
+          if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS &&
+            descriptor.characteristic.uuid == UUID.fromString(OMI_AUDIO_UUID)
+          ) {
+            audioNotifying = true
+            lastEvent = "Omi audio notify is live"
+            finishConnect(true, lastEvent)
+            emitSnapshot()
+          }
+          finishGattOp(gatt)
         }
-        finishGattOp(gatt)
       }
     })
   }
 
   @SuppressLint("MissingPermission")
+  @Synchronized
   fun disconnect(id: String) {
     if (connectedDeviceId == id) {
-      gatt?.disconnect()
-      lastEvent = "Disconnecting from Omi"
+      retireConnection("Disconnected from Omi")
     }
   }
 
+  @Synchronized
   fun devices(): WritableArray = Arguments.createArray().apply {
     results.values.sortedBy { it.id }.forEach { device ->
       pushMap(deviceMap(device))
@@ -310,37 +391,45 @@ class OmiBleController(
   }
 
   private fun enqueueGatt(gatt: BluetoothGatt, op: GattOp) {
+    if (!lease.acceptsGatt(currentGeneration, this.gatt, gatt)) return
     gattQueue.addLast(op)
     pumpGatt(gatt)
   }
 
   private fun clearGattQueue() {
+    lease.operation()
     gattQueue.clear()
     gattBusy = false
   }
 
   @SuppressLint("MissingPermission")
   private fun pumpGatt(gatt: BluetoothGatt) {
+    if (!lease.acceptsGatt(currentGeneration, this.gatt, gatt)) return
     if (gattBusy) return
     val op = gattQueue.pollFirst() ?: return
     gattBusy = true
+    val generation = currentGeneration
+    val ticket = lease.operation()
+    handler.postDelayed({
+      synchronized(this) { if (lease.operationPending(generation, ticket)) retireConnection("Omi Bluetooth operation timed out") }
+    }, 8000)
     val started = when (op) {
       is GattOp.Read -> gatt.readCharacteristic(op.characteristic)
       is GattOp.EnableNotify -> writeNotifyDescriptor(gatt, op.characteristic)
     }
-    if (!started) {
-      finishGattOp(gatt)
-    }
+    if (!started) retireConnection("Omi Bluetooth operation failed to start")
   }
 
   private fun finishGattOp(gatt: BluetoothGatt) {
+    if (!lease.acceptsGatt(currentGeneration, this.gatt, gatt)) return
+    lease.operation()
     gattBusy = false
     pumpGatt(gatt)
   }
 
   @SuppressLint("MissingPermission")
   private fun writeNotifyDescriptor(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic): Boolean {
-    gatt.setCharacteristicNotification(characteristic, true)
+    if (!gatt.setCharacteristicNotification(characteristic, true)) return false
     val descriptor = characteristic.getDescriptor(CLIENT_CONFIG_UUID) ?: return false
     descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
     return gatt.writeDescriptor(descriptor)
@@ -362,7 +451,7 @@ class OmiBleController(
       UUID.fromString(OMI_CODEC_UUID) -> if (value.isNotEmpty()) {
         codec = value[0].toInt() and 0xff
         emitSnapshot()
-      }
+      } else retireConnection("Omi codec response was empty")
       UUID.fromString(BATTERY_LEVEL_UUID) -> if (value.isNotEmpty()) {
         val level = value[0].toInt() and 0xff
         results[id]?.let { results[id] = it.copy(battery = level) }
@@ -373,6 +462,7 @@ class OmiBleController(
         emitSnapshot()
       }
       UUID.fromString(OMI_AUDIO_UUID) -> codec?.let { codecId ->
+        if (!OmiBleLease.recordingReady(connectionState == "connected", audioNotifying, true)) return
         emit("audio", Arguments.createMap().apply {
           putString("deviceId", id)
           putInt("codec", codecId)
@@ -380,6 +470,24 @@ class OmiBleController(
         })
       }
     }
+  }
+
+  @SuppressLint("MissingPermission")
+  @Synchronized
+  private fun retireConnection(message: String) {
+    lease.retire()
+    val previous = gatt
+    gatt = null
+    clearGattQueue()
+    audioNotifying = false
+    codec = null
+    connectedDeviceId = null
+    connectionState = "disconnected"
+    lastEvent = message
+    runCatching { previous?.disconnect() }
+    runCatching { previous?.close() }
+    finishConnect(false, message)
+    emitSnapshot()
   }
 
   private fun emitSnapshot() {
