@@ -83,7 +83,10 @@ def install_dependency_stubs():
             class DummyBaseModel:
                 def __init__(self, **kwargs):
                     for k, v in kwargs.items():
-                        clean_func = getattr(self, f"clean_{k}", None)
+                        clean_func = (
+                            getattr(self, f"clean_{k}", None)
+                            or getattr(self, f"normalize_{k}", None)
+                        )
                         if clean_func:
                             v = clean_func(v)
                         setattr(self, k, v)
@@ -140,7 +143,11 @@ def install_dependency_stubs():
                     pass
 
                 async def get(self, *args, **kwargs):
-                    raise NotImplementedError
+                    class DummyHTTPResponse:
+                        status_code = 404
+                        def json(self):
+                            return []
+                    return DummyHTTPResponse()
 
             httpx.AsyncClient = DummyAsyncClient
             sys.modules["httpx"] = httpx
@@ -179,7 +186,7 @@ class WorldBankAppUnitTests(unittest.TestCase):
             self.assertIn("parameters", tool)
             self.assertIn("status_message", tool)
 
-    def test_country_alias_resolver_static_and_iso(self):
+    def test_country_alias_resolver_static(self):
         """Verify country name and ISO alias resolution without network calls."""
         self.assertEqual(asyncio.run(main._resolve_country_code("US"))[0], "USA")
         self.assertEqual(asyncio.run(main._resolve_country_code("united states"))[0], "USA")
@@ -190,8 +197,22 @@ class WorldBankAppUnitTests(unittest.TestCase):
         self.assertEqual(asyncio.run(main._resolve_country_code("india"))[0], "IND")
         self.assertEqual(asyncio.run(main._resolve_country_code("ind"))[0], "IND")
         self.assertEqual(asyncio.run(main._resolve_country_code("japan"))[0], "JPN")
-        self.assertEqual(asyncio.run(main._resolve_country_code("CAN"))[0], "CAN")
+        self.assertEqual(asyncio.run(main._resolve_country_code("canada"))[0], "CAN")
+        self.assertEqual(asyncio.run(main._resolve_country_code("can"))[0], "CAN")
+        self.assertEqual(asyncio.run(main._resolve_country_code("mexico"))[0], "MEX")
         self.assertEqual(asyncio.run(main._resolve_country_code("mex"))[0], "MEX")
+
+    @patch("main._get_http_client")
+    def test_country_resolution_network_fallback(self, mock_client):
+        """Verify fallback resolution via mocked World Bank API when country is not in static alias map."""
+        mock_resp = AsyncMock()
+        mock_resp.status_code = 200
+        mock_resp.json = lambda: [{}, [{"id": "ISL", "name": "Iceland"}]]
+        mock_client.return_value.get = AsyncMock(return_value=mock_resp)
+
+        iso3, name = asyncio.run(main._resolve_country_code("Iceland"))
+        self.assertEqual(iso3, "ISL")
+        self.assertEqual(name, "Iceland")
 
     def test_number_formatting(self):
         """Verify numerical formatting handles trillions, billions, millions, and percentages."""
@@ -221,7 +242,7 @@ class WorldBankAppUnitTests(unittest.TestCase):
         }
         mock_ind.return_value = [{"date": "2023", "value": 27360935000000}]
 
-        req = models.CountryProfileRequest(country="USA")
+        req = models.CountryProfileRequest(country="United States")
         resp = asyncio.run(main.get_country_profile(req))
 
         self.assertIsNone(resp.error)
@@ -240,7 +261,7 @@ class WorldBankAppUnitTests(unittest.TestCase):
             {"date": "2021", "value": 4.7},
         ]
 
-        req = models.EconomicIndicatorRequest(country="USA", indicator="inflation", years=3)
+        req = models.EconomicIndicatorRequest(country="United States", indicator="inflation", years=3)
         resp = asyncio.run(main.get_economic_indicator(req))
 
         self.assertIsNone(resp.error)
@@ -249,16 +270,11 @@ class WorldBankAppUnitTests(unittest.TestCase):
         self.assertIn("2023", resp.result)
         self.assertIn("3.40%", resp.result)
 
-    def test_unknown_indicator_returns_helpful_error(self):
-        """Verify unknown indicator returns available indicators list."""
-        req = models.EconomicIndicatorRequest(country="USA", indicator="crypto_yield")
-        resp = asyncio.run(main.get_economic_indicator(req))
-
-        self.assertIsNone(resp.result)
-        self.assertIsNotNone(resp.error)
-        self.assertIn("Unsupported indicator", resp.error)
-        self.assertIn("gdp", resp.error)
-        self.assertIn("inflation", resp.error)
+    def test_unknown_indicator_rejected_by_model(self):
+        """Verify unsupported indicator is rejected at request validation boundary."""
+        with self.assertRaises(ValueError) as ctx:
+            models.EconomicIndicatorRequest(country="United States", indicator="crypto_yield")
+        self.assertIn("Unknown indicator", str(ctx.exception))
 
     @patch("main._fetch_country_metadata", new_callable=AsyncMock)
     @patch("main._fetch_indicator_value", new_callable=AsyncMock)
@@ -289,7 +305,7 @@ class WorldBankAppUnitTests(unittest.TestCase):
             [{"date": "2023", "value": 67.2}],            # IND Life
         ]
 
-        req = models.CompareEconomiesRequest(country_a="USA", country_b="IND")
+        req = models.CompareEconomiesRequest(country_a="United States", country_b="India")
         resp = asyncio.run(main.compare_country_economies(req))
 
         self.assertIsNone(resp.error)
@@ -350,8 +366,14 @@ class WorldBankAppUnitTests(unittest.TestCase):
         self.assertIn("USA", resp.result)
         self.assertIn("United Kingdom", resp.result)
 
-    def test_invalid_country_code_zzz(self):
-        """Verify invalid country code such as ZZZ is rejected without crash."""
+    @patch("main._get_http_client")
+    def test_invalid_country_code_zzz(self, mock_client):
+        """Verify invalid country code such as ZZZ is rejected without crash or live API calls."""
+        mock_resp = AsyncMock()
+        mock_resp.status_code = 404
+        mock_resp.json = lambda: []
+        mock_client.return_value.get = AsyncMock(return_value=mock_resp)
+
         with self.assertRaises(ValueError):
             asyncio.run(main._resolve_country_code("ZZZ"))
 

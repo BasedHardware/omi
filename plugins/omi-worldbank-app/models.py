@@ -189,10 +189,15 @@ class EconomicIndicatorRequest(BaseModel):
     @field_validator("indicator", mode="before")
     @classmethod
     def normalize_indicator(cls, v: Any) -> str:
-        if isinstance(v, str):
-            cleaned = v.strip().lower().replace(" ", "_").replace("-", "_")
-            return cleaned or "gdp"
-        return "gdp"
+        if not isinstance(v, str):
+            return "gdp"
+        cleaned = v.strip().lower().replace(" ", "_").replace("-", "_")
+        if not cleaned:
+            return "gdp"
+        if cleaned not in INDICATOR_MAP:
+            valid_keys = ", ".join(sorted(list(set(["gdp", "gdp_per_capita", "inflation", "population", "life_expectancy", "unemployment", "co2_emissions"]))))
+            raise ValueError(f"Unknown indicator '{v}'. Supported indicators are: {valid_keys}")
+        return cleaned
 
 
 class CompareEconomiesRequest(BaseModel):

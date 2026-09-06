@@ -561,17 +561,8 @@ async def get_country_profile(payload: CountryProfileRequest) -> ChatToolRespons
 async def get_economic_indicator(payload: EconomicIndicatorRequest) -> ChatToolResponse:
     """Fetch single indicator with optional historical trajectory."""
     try:
-        indicator_key = payload.indicator.lower().strip().replace(" ", "_").replace("-", "_")
-        if indicator_key not in INDICATOR_MAP:
-            valid_keys = ", ".join(sorted(list(set([
-                "gdp", "gdp_per_capita", "inflation", "population", "life_expectancy", "unemployment", "co2_emissions"
-            ]))))
-            return ChatToolResponse(
-                error=f"Unsupported indicator '{payload.indicator}'. Supported indicators are: {valid_keys}."
-            )
-
         iso3, country_name = await _resolve_country_code(payload.country)
-        code = INDICATOR_MAP[indicator_key]
+        code = INDICATOR_MAP[payload.indicator]
         records = await _fetch_indicator_value(iso3, code, mrv=payload.years)
 
         if not records:
