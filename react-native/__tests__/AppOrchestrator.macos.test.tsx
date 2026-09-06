@@ -191,6 +191,17 @@ test('signed-out Mac sees only the Welcome until a real session lands', async ()
       .props.onPress();
   });
   expect(mockAuth.signIn).toHaveBeenCalledTimes(1);
+  expect(mockAuth.markOnboardingComplete).not.toHaveBeenCalled();
+  expect(textOf(renderer)).toContain('Before you start');
+  expect(mockBackend.request).not.toHaveBeenCalled();
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  await act(async () => {
+    renderer.root
+      .findAll(
+        node => node.props.accessibilityLabel === 'Agree and continue',
+      )[0]
+      .props.onPress();
+  });
   expect(mockAuth.markOnboardingComplete).toHaveBeenCalledTimes(1);
   labels = labelsOf(renderer);
   expect(labels).not.toContain('First-run onboarding');
@@ -431,7 +442,7 @@ test('a mid-run 401 leaves the product shell once the session is gone', async ()
 });
 
 test('the previous session transcript never survives a sign-out', async () => {
-  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
   mockAuth.hasCloudSession.mockResolvedValue(false);
   mockAuth.signIn.mockResolvedValue({signedIn: true});
   mockAuth.signOut.mockResolvedValue({signedOut: true});

@@ -3,6 +3,7 @@ import {
   BrowserScanError,
   type BrowserScanFailureReason,
   createWebNativeAdapter,
+  omiAuth,
   omiBackend,
   omiNative,
 } from "../../react-native/src/omiNative.web";
@@ -276,4 +277,33 @@ test("recording identities use the platform UUID authority", async () => {
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
   );
   expect(second).not.toBe(first);
+});
+
+test("browser setup ignores the old auth-only flag and persists explicit completion", async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "localStorage"
+  );
+  const values = new Map([["omi.onboarding.completed", "true"]]);
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        values.set(key, value);
+      },
+    },
+  });
+  try {
+    expect(await omiAuth.hasCompletedOnboarding()).toBe(false);
+    await omiAuth.markOnboardingComplete();
+    expect(await omiAuth.hasCompletedOnboarding()).toBe(true);
+    expect(await omiAuth.hasCloudSession()).toBe(false);
+    values.set("omi.onboarding.setupRevision", "0");
+    expect(await omiAuth.hasCompletedOnboarding()).toBe(false);
+  } finally {
+    if (descriptor)
+      Object.defineProperty(globalThis, "localStorage", descriptor);
+    else Reflect.deleteProperty(globalThis, "localStorage");
+  }
 });

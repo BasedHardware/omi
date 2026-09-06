@@ -74,14 +74,35 @@ test('macOS mounts DesktopApp only for a ready session', () => {
   );
 });
 
-test('treats onboarding as complete in the JavaScript-only adapter', async () => {
-  expect(await browserOmiAuth.hasCompletedOnboarding()).toBe(true);
-  await expect(
-    browserOmiAuth.markOnboardingComplete(),
-  ).resolves.toBeUndefined();
-  expect(await browserOmiAuth.hasCloudSession()).toBe(false);
-  await expect(browserOmiAuth.signOut()).resolves.toEqual({signedOut: true});
-  expect(await browserOmiAuth.hasCloudSession()).toBe(false);
+test('browser setup persists disclosure without establishing a cloud session', async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    'localStorage',
+  );
+  const values = new Map([['omi.onboarding.completed', 'true']]);
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        values.set(key, value);
+      },
+    },
+  });
+  try {
+    expect(await browserOmiAuth.hasCompletedOnboarding()).toBe(false);
+    await browserOmiAuth.markOnboardingComplete();
+    expect(await browserOmiAuth.hasCompletedOnboarding()).toBe(true);
+    expect(await browserOmiAuth.hasCloudSession()).toBe(false);
+    await expect(browserOmiAuth.signOut()).resolves.toEqual({signedOut: true});
+    expect(await browserOmiAuth.hasCloudSession()).toBe(false);
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(globalThis, 'localStorage', descriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, 'localStorage');
+    }
+  }
 });
 
 test('macOS sign-out ignores environment tokens so the session stays empty', () => {
