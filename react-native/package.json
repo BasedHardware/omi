@@ -7,7 +7,7 @@
     "ios": "react-native run-ios",
     "macos": "react-native run-macos",
     "lint": "eslint .",
-    "start": "react-native start",
+    "start": "bun ../scripts/start-metro.ts",
     "test": "jest",
     "typecheck": "tsc --noEmit",
     "windows": "react-native run-windows"

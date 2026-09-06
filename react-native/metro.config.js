@@ -19,10 +19,8 @@ const rnwPath = fs.realpathSync(
 const config = {
   watchFolders: [workspaceRoot],
   resolver: {
-    nodeModulesPaths: [
-      path.resolve(__dirname, 'node_modules'),
-      path.resolve(workspaceRoot, 'node_modules'),
-    ],
+    disableHierarchicalLookup: true,
+    nodeModulesPaths: [path.resolve(workspaceRoot, 'node_modules')],
     blockList: exclusionList([
       new RegExp(
         `${path.resolve(__dirname, 'windows').replace(/[/\\]/g, '/')}.*`,
