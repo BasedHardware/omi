@@ -17,6 +17,7 @@ export interface DeviceSession {
 }
 
 export type DeviceSessionCreate = {
+  captureId: string;
   deviceId: string;
   deviceName?: string;
   codec: DeviceSessionCodecId;

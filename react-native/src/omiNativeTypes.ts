@@ -23,6 +23,7 @@ export type NativeHttpResponse = {
 };
 
 export type OmiBackend = {
+  createRecordingId?(): Promise<string>;
   request(request: NativeHttpRequest): Promise<NativeHttpResponse>;
   generationEvents(
     generationId: string,

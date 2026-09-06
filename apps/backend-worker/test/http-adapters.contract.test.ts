@@ -68,6 +68,7 @@ const authenticatedHeaders = {
 };
 
 const openBody = {
+  captureId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   deviceId: "AA:BB:CC:DD:EE:FF",
   deviceName: "Omi",
   codec: 21,

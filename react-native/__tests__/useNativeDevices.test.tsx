@@ -29,6 +29,9 @@ const mockNative = {
 };
 
 const mockBackend = {
+  createRecordingId: jest.fn(
+    async () => '11111111-2222-4333-8444-555555555555',
+  ),
   request: jest.fn(async (_request: {path: string; body?: string}) => ({
     id: 'req',
     status: 201,
@@ -36,7 +39,7 @@ const mockBackend = {
       session: {
         id: '11111111-2222-3333-4444-555555555555',
         deviceId: 'omi-1',
-        deviceName: 'Omi',
+        deviceName: null,
         codec: 21,
         state: 'open',
         byteCount: 0,
@@ -61,6 +64,7 @@ jest.mock('../src/omiNative', () => ({
     jest.requireActual('../src/omiNative').requestBluetoothScanPermission(),
   browserScanErrorMessage: () => null,
   omiBackend: {
+    createRecordingId: () => mockBackend.createRecordingId(),
     request: (request: {path: string}) => mockBackend.request(request),
     generationEvents: (generationId: string, lastEventId: string | null) =>
       mockBackend.generationEvents(generationId, lastEventId),
@@ -97,7 +101,7 @@ function sessionResponse(
       session: {
         id: '11111111-2222-3333-4444-555555555555',
         deviceId: 'omi-1',
-        deviceName: 'Omi',
+        deviceName: null,
         codec: 21,
         state: 'open',
         byteCount: 0,
@@ -179,6 +183,10 @@ beforeEach(() => {
   mockNative.disconnectDevice.mockReset();
   mockNative.connectDevice.mockResolvedValue(undefined);
   mockNative.disconnectDevice.mockResolvedValue(undefined);
+  mockBackend.createRecordingId.mockReset();
+  mockBackend.createRecordingId.mockResolvedValue(
+    '11111111-2222-4333-8444-555555555555',
+  );
   mockBackend.request.mockReset();
   mockBackend.request.mockImplementation(
     async (request: {path: string; body?: string}) => {
@@ -405,7 +413,7 @@ test('keeps uploading after snapshot events and serializes overlapping appends',
         await new Promise<void>(resolve => {
           resolveOpen = resolve;
         });
-        return sessionResponse(201);
+        return sessionResponse(201, {deviceName: 'Pendant'});
       }
       if (request.path.endsWith('/audio')) {
         inFlightAppends += 1;
@@ -994,14 +1002,14 @@ test('auth retirement cancels delayed retries and starts the next account at ind
   }
 });
 
-test('does not retry ambiguous opens and bounds buffered audio while opening', async () => {
+test('bounds buffered audio while recording identity is being created', async () => {
   let release: () => void = () => undefined;
   mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
-  mockBackend.request.mockImplementationOnce(async () => {
+  mockBackend.createRecordingId.mockImplementationOnce(async () => {
     await new Promise<void>(resolve => {
       release = resolve;
     });
-    return sessionResponse(201);
+    return '11111111-2222-4333-8444-555555555555';
   });
   const hook = await renderHook();
   const payloadBase64 = Buffer.alloc(1_048_576).toString('base64');
@@ -1014,7 +1022,7 @@ test('does not retry ambiguous opens and bounds buffered audio while opening', a
   await ReactTestRenderer.act(async () => {
     release();
   });
-  expect(mockBackend.request).toHaveBeenCalledTimes(1);
+  expect(mockBackend.request).not.toHaveBeenCalled();
   await hook.unmount();
 });
 
@@ -1056,7 +1064,7 @@ test('retries idempotent completion on a transient transport failure', async () 
   }
 });
 
-test('an ambiguous session open is never automatically retried', async () => {
+test('bounds recording open retries and retains the original capture identity', async () => {
   jest.useFakeTimers();
   mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
   mockBackend.request.mockRejectedValue(new TypeError('Open response lost'));
@@ -1071,10 +1079,134 @@ test('an ambiguous session open is never automatically retried', async () => {
       });
       await jest.advanceTimersByTimeAsync(5000);
     });
-    expect(mockBackend.request).toHaveBeenCalledTimes(1);
+    expect(mockBackend.request).toHaveBeenCalledTimes(4);
+    expect(mockBackend.createRecordingId).toHaveBeenCalledTimes(1);
+    expect(
+      new Set(mockBackend.request.mock.calls.map(([request]) => request.body))
+        .size,
+    ).toBe(1);
+    expect(
+      JSON.parse(mockBackend.request.mock.calls[0]![0].body!).captureId,
+    ).toBe('11111111-2222-4333-8444-555555555555');
     expect(hook.latest().deviceScanMessage).toContain('could not start');
   } finally {
     await hook.unmount();
     jest.useRealTimers();
   }
+});
+
+test('recovers a lost open response before draining and completing the capture', async () => {
+  jest.useFakeTimers();
+  let opens = 0;
+  mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/device-sessions' && ++opens === 1) {
+      throw new TypeError('Open response lost');
+    }
+    return sessionResponse(200, {
+      ...audioCounters(request),
+      state: request.path.endsWith('/complete') ? 'complete' : 'open',
+    });
+  });
+  const hook = await renderHook();
+  try {
+    await ReactTestRenderer.act(async () => {
+      emitNative({
+        type: 'audio',
+        deviceId: 'omi-1',
+        codec: 21,
+        payloadBase64: 'AQID',
+      });
+    });
+    await ReactTestRenderer.act(async () => {
+      emitNative({type: 'snapshot', snapshot: snapshot()});
+    });
+    expect(mockBackend.request).toHaveBeenCalledTimes(1);
+    await ReactTestRenderer.act(async () => {
+      await jest.advanceTimersByTimeAsync(500);
+    });
+    const requests = mockBackend.request.mock.calls.map(([request]) => request);
+    expect(requests.map(request => request.path.split('/').pop())).toEqual([
+      'device-sessions',
+      'device-sessions',
+      'audio',
+      'complete',
+    ]);
+    expect(requests[1]?.body).toBe(requests[0]?.body);
+    expect(mockBackend.createRecordingId).toHaveBeenCalledTimes(1);
+    expect(hook.latest().deviceScanMessage).toBeNull();
+  } finally {
+    await hook.unmount();
+    jest.useRealTimers();
+  }
+});
+
+test('retires a recording identity request when authentication is disabled', async () => {
+  let release: (id: string) => void = () => undefined;
+  mockBackend.createRecordingId.mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        release = resolve;
+      }),
+  );
+  mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+  const hook = await renderHook();
+  await ReactTestRenderer.act(async () => {
+    emitNative({
+      type: 'audio',
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'AQID',
+    });
+  });
+  await hook.setEnabled(false);
+  await ReactTestRenderer.act(async () => {
+    release('11111111-2222-4333-8444-555555555555');
+  });
+  expect(mockBackend.request).not.toHaveBeenCalled();
+  await hook.unmount();
+});
+
+test('cancels open retry backoff after authentication is disabled', async () => {
+  jest.useFakeTimers();
+  mockBackend.request.mockRejectedValue(new TypeError('Open response lost'));
+  mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+  const hook = await renderHook();
+  try {
+    await ReactTestRenderer.act(async () => {
+      emitNative({
+        type: 'audio',
+        deviceId: 'omi-1',
+        codec: 21,
+        payloadBase64: 'AQID',
+      });
+    });
+    await hook.setEnabled(false);
+    await ReactTestRenderer.act(async () => {
+      await jest.advanceTimersByTimeAsync(5000);
+    });
+    expect(mockBackend.request).toHaveBeenCalledTimes(1);
+    expect(mockBackend.createRecordingId).toHaveBeenCalledTimes(1);
+  } finally {
+    await hook.unmount();
+    jest.useRealTimers();
+  }
+});
+
+test('rejects an invalid native recording identity before opening', async () => {
+  mockBackend.createRecordingId.mockResolvedValue('not-a-uuid');
+  mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+  const hook = await renderHook();
+  await ReactTestRenderer.act(async () => {
+    emitNative({
+      type: 'audio',
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'AQID',
+    });
+  });
+  expect(mockBackend.createRecordingId).toHaveBeenCalledTimes(1);
+  expect(mockBackend.request).not.toHaveBeenCalled();
+  expect(hook.latest().deviceScanMessage).toContain('could not start');
+  await hook.unmount();
 });

@@ -11,13 +11,87 @@ beforeEach(async () => {
 });
 
 const bytes = new Uint8Array([0, 0, 0, 128, 129]);
-const open = () =>
-  openDeviceSession(
+
+test("capture ID creates exactly one session concurrently and preserves immutable inputs and terminal state", async () => {
+  const request = {
+    captureId: crypto.randomUUID(),
+    deviceId: "pendant",
+    deviceName: "Omi",
+    codec: 1,
+  };
+  const [first, retry] = await Promise.all([
+    openDeviceSession(env.DB, "owner", request, 10),
+    openDeviceSession(env.DB, "owner", request, 11),
+  ]);
+  expect(first).not.toBeNull();
+  expect(retry).toEqual(first);
+  expect(first!.id).not.toBe(request.captureId);
+  for (const change of [
+    { deviceId: "other" },
+    { deviceName: null },
+    { codec: 21 },
+  ]) {
+    expect(
+      await openDeviceSession(env.DB, "owner", { ...request, ...change }, 12)
+    ).toBeNull();
+  }
+  const other = await openDeviceSession(env.DB, "other-owner", request, 13);
+  expect(other?.id).not.toBe(first!.id);
+  const completed = await completeDeviceSession(env.DB, "owner", first!.id, 14);
+  expect(completed.kind).toBe("ok");
+  expect(await openDeviceSession(env.DB, "owner", request, 15)).toMatchObject({
+    id: first!.id,
+    state: "complete",
+    endedAt: 14,
+  });
+  expect(
+    await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM device_sessions WHERE account_id = ?"
+    )
+      .bind("owner")
+      .first()
+  ).toEqual({ count: 1 });
+});
+
+test("legacy sessions without capture IDs remain untouched and cannot be adopted by a new capture", async () => {
+  const request = {
+    captureId: crypto.randomUUID(),
+    deviceId: "pendant",
+    deviceName: null,
+    codec: 1,
+  };
+  const legacy = await openDeviceSession(env.DB, "owner", request, 1);
+  expect(legacy).not.toBeNull();
+  await env.DB.prepare(
+    "UPDATE device_sessions SET capture_id = NULL WHERE id = ?"
+  )
+    .bind(legacy!.id)
+    .run();
+  const fresh = await openDeviceSession(env.DB, "owner", request, 2);
+  expect(fresh?.id).not.toBe(legacy!.id);
+  expect(
+    await env.DB.prepare(
+      "SELECT capture_id, state, started_at FROM device_sessions WHERE id = ?"
+    )
+      .bind(legacy!.id)
+      .first()
+  ).toEqual({ capture_id: null, state: "open", started_at: 1 });
+});
+const open = async () => {
+  const session = await openDeviceSession(
     env.DB,
     "owner",
-    { deviceId: "pendant", deviceName: null, codec: 1 },
+    {
+      captureId: crypto.randomUUID(),
+      deviceId: "pendant",
+      deviceName: null,
+      codec: 1,
+    },
     1
   );
+  if (session === null) throw new Error("Recording creation failed");
+  return session;
+};
 
 test("indexed upload replay changes counters once and rejects changed bytes, gaps and other accounts", async () => {
   const session = await open();

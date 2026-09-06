@@ -268,3 +268,12 @@ test("web generation streaming reports exhausted recovery without a fake termina
   expect(calls).toHaveLength(4);
   expect(calls.at(-1)?.headers.get("last-event-id")).toBe("partial");
 });
+
+test("recording identities use the platform UUID authority", async () => {
+  const first = await omiBackend.createRecordingId!();
+  const second = await omiBackend.createRecordingId!();
+  expect(first).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+  );
+  expect(second).not.toBe(first);
+});
