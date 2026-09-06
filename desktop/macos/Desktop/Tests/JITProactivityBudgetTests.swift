@@ -32,6 +32,32 @@ final class JITProactivityBudgetTests: XCTestCase {
     XCTAssertTrue(prompt.contains("Do not make a time-specific claim"))
   }
 
+  func testSharedFullTurnPromptRetainsAuthoritativeTemporalContext() {
+    let temporal = JITProactivityTemporalContext(
+      capturedAt: Date(timeIntervalSince1970: 1_775_000_000),
+      evaluatedAt: Date(timeIntervalSince1970: 1_775_000_012),
+      timezoneIdentifier: "America/New_York")
+    let prompt = JITProactivityPromptBuilder.fullTurnPrompt(
+      lane: .planned,
+      executionPrompt: "Review the deadline",
+      currentEvidence: "fact:deadline-1 The deadline is tomorrow.",
+      derivedIntent: JITDerivedIntentMatch(entries: []),
+      ambientEvidence: "",
+      temporalContext: temporal)
+    XCTAssertTrue(prompt.contains(temporal.promptSection()))
+    XCTAssertTrue(prompt.contains("fact:deadline-1"))
+    XCTAssertTrue(prompt.contains("write tools and external actions"))
+
+    let unavailable = JITProactivityPromptBuilder.fullTurnPrompt(
+      lane: .ambient,
+      executionPrompt: "Review the screen",
+      currentEvidence: "fact:screen-1 A draft is open.",
+      derivedIntent: JITDerivedIntentMatch(entries: []),
+      ambientEvidence: "")
+    XCTAssertTrue(unavailable.contains("Trusted temporal context: unavailable"))
+    XCTAssertFalse(unavailable.contains("America/New_York"))
+  }
+
   func testBudgetOnlyAttachesForAdvertisedQualificationContract() {
     let executionID = String(repeating: "a", count: 64)
     let budget = JITProactivityAgentBudget(
