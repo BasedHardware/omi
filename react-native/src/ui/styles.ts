@@ -486,6 +486,7 @@ export const styles = StyleSheet.create({
     position: 'absolute',
     top: 18,
   },
+  mobileBackButton: {position: 'relative', top: 0, marginBottom: 12},
   backButtonText: {color: '#b0b0b0', fontSize: 13, fontWeight: '600'},
   mark: {
     alignItems: 'center',

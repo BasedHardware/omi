@@ -465,6 +465,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           setMessages(current =>
             current.filter(message => message.id !== localMessage.id),
           );
+          setDraft(current => (current === '' ? text : current));
         }
         setChatError(
           admitted
@@ -797,7 +798,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     );
   }
 
-  if (!macDesktop && compact && onboardingRequired === false) {
+  if (
+    !macDesktop &&
+    compact &&
+    onboardingRequired === false &&
+    !homeChatOpen &&
+    (route === 'Home' || route === 'Conversations' || route === 'Tasks')
+  ) {
     const taskItems =
       readOutcomes?.tasks.status === 'success'
         ? readOutcomes.tasks.value.items.map(task => ({
@@ -808,7 +815,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         : [];
     const recapItems =
       readOutcomes?.conversations.status === 'success'
-        ? readOutcomes.conversations.value.items.slice(0, 8).map(item => ({
+        ? readOutcomes.conversations.value.items.map(item => ({
             dateLabel: new Date(
               item.startedAt ?? item.createdAt,
             ).toLocaleDateString(undefined, {weekday: 'long'}),
@@ -824,20 +831,17 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         ? 'offline'
         : 'ready';
     const activeMobileRoute: MobileRoute =
-      route === 'Tasks'
-        ? 'tasks'
-        : route === 'Connectors'
-        ? 'apps'
-        : homeChatOpen || route === 'Conversations'
-        ? 'chat'
-        : 'home';
+      route === 'Tasks' ? 'tasks' : route === 'Conversations' ? 'chat' : 'home';
     return (
       <MobileAppSurface
         activeRoute={activeMobileRoute}
         askValue={draft}
         capture={{active: false, transcript: ''}}
         device={{connected: connectedDevice !== null, label: homeStatus}}
-        mindMapStatus={projectionStatus}
+        deviceMessage={deviceScanMessage}
+        mindMapStatus={
+          readOutcomes?.memories.status === 'error' ? 'error' : projectionStatus
+        }
         onAskChange={setDraft}
         onAskSubmit={() => {
           setRoute('Home');
@@ -851,7 +855,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }}
         onOpenSettings={() => setRoute('Settings')}
         onRouteChange={destination => {
-          setHomeChatOpen(destination === 'chat');
+          setHomeChatOpen(false);
           setRoute(
             destination === 'tasks'
               ? 'Tasks'
@@ -862,13 +866,24 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               : 'Home',
           );
         }}
-        onTaskToggle={() => undefined}
         onViewRecaps={() => setRoute('Conversations')}
         onViewTasks={() => setRoute('Tasks')}
-        recapStatus={projectionStatus}
+        recapStatus={
+          readOutcomes?.conversations.status === 'success'
+            ? 'ready'
+            : readOutcomes?.conversations.status === 'error'
+            ? 'error'
+            : projectionStatus
+        }
         recaps={recapItems}
         tasks={taskItems}
-        taskStatus={projectionStatus}
+        taskStatus={
+          readOutcomes?.tasks.status === 'success'
+            ? 'ready'
+            : readOutcomes?.tasks.status === 'error'
+            ? 'error'
+            : projectionStatus
+        }
       />
     );
   }
@@ -929,6 +944,21 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                   compact && styles.stageCompact,
                   desktopWorkspace && styles.desktopStage,
                 ]}>
+                {compact &&
+                  route !== 'Home' &&
+                  onboardingRequired === false && (
+                    <FocusPressable
+                      accessibilityLabel="Back to Home"
+                      accessibilityRole="button"
+                      onPress={() => {
+                        setRoute('Home');
+                        setHomeChatOpen(false);
+                      }}
+                      style={[styles.backButton, styles.mobileBackButton]}>
+                      <ChevronLeft color="#b0b0b0" size={18} strokeWidth={2} />
+                      <Text style={styles.backButtonText}>Home</Text>
+                    </FocusPressable>
+                  )}
                 {onboardingRequired === true ? (
                   firstRunOnboarding
                 ) : onboardingRequired !== false ? (

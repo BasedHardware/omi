@@ -92,7 +92,7 @@ describe('MobileAppSurface', () => {
   test('renders the shipping mobile hierarchy from real projections', () => {
     const tree = JSON.stringify(render().toJSON());
     expect(tree).toContain('Listening');
-    expect(tree).toContain('Today');
+    expect(tree).toContain('Tasks');
     expect(tree).toContain('Prepare product demo');
     expect(tree).toContain('Daily Recaps');
     expect(tree).toContain('Omi gets simpler');
@@ -138,3 +138,35 @@ describe('MobileAppSurface', () => {
     expect(tree).not.toContain('Saved data unavailable');
   });
 });
+
+test('shows recording failures and keeps tasks read-only without a mutation handler', () => {
+  const renderer = render({
+    deviceMessage: 'Recording upload failed. Reconnect your device.',
+    onTaskToggle: undefined,
+  });
+  expect(renderedText(renderer)).toContain(
+    'Recording upload failed. Reconnect your device.',
+  );
+  const task = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Open Prepare product demo',
+  );
+  expect(task.props.disabled).toBe(true);
+  expect(task.props.accessibilityRole).toBe('text');
+});
+
+test.each(['loading', 'offline', 'error'] as const)(
+  'conversations shows %s instead of claiming an empty timeline',
+  status => {
+    const renderer = render({
+      activeRoute: 'chat',
+      recaps: [],
+      recapStatus: status,
+    });
+    expect(
+      renderer.root.find(
+        node => node.props.accessibilityLabel === `recaps ${status} state`,
+      ),
+    ).toBeDefined();
+    expect(renderedText(renderer)).not.toContain('Your timeline is empty');
+  },
+);

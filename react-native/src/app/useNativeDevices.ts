@@ -65,10 +65,14 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
   const flushPromiseRef = useRef<Promise<void> | null>(null);
   const cancelledRef = useRef(false);
   const pendingAudioRef = useRef<Uint8Array[]>([]);
+  const uploadFailedRef = useRef(false);
 
   nativeSnapshotRef.current = nativeSnapshot;
 
   const flushPendingAudio = useCallback(async (sessionId: string) => {
+    if (uploadFailedRef.current) {
+      throw new Error('Device audio upload failed');
+    }
     if (omiBackend === undefined || omiBackend === null) {
       return;
     }
@@ -97,8 +101,13 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
     flushPromiseRef.current = work;
     try {
       await work;
-    } catch {
-      return;
+    } catch (error) {
+      uploadFailedRef.current = true;
+      pendingAudioRef.current = [];
+      setDeviceScanMessage(
+        'Audio upload was interrupted. This recording could not be saved completely. Reconnect your Omi to start a new recording.',
+      );
+      throw error;
     } finally {
       if (flushPromiseRef.current === work) {
         flushPromiseRef.current = null;
@@ -144,7 +153,11 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
 
   const persistAudio = useCallback(
     async (event: Extract<OmiNativeEvent, {type: 'audio'}>) => {
-      if (omiBackend === undefined || omiBackend === null) {
+      if (
+        omiBackend === undefined ||
+        omiBackend === null ||
+        uploadFailedRef.current
+      ) {
         return;
       }
       if (
@@ -172,6 +185,10 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
         } catch {
           pendingAudioRef.current = [];
           openingRef.current = false;
+          uploadFailedRef.current = true;
+          setDeviceScanMessage(
+            'Audio upload could not start. Reconnect your Omi to start a new recording.',
+          );
           return;
         }
         openingRef.current = false;
@@ -285,6 +302,12 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
           await finishSession();
         } else {
           await omiNative.connectDevice(id);
+          if (uploadFailedRef.current) {
+            uploadFailedRef.current = false;
+            sessionRef.current = null;
+            pendingAudioRef.current = [];
+          }
+          cancelledRef.current = false;
         }
         setNativeSnapshot(await omiNative.getSnapshot());
       } catch {

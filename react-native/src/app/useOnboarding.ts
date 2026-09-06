@@ -17,6 +17,7 @@ export function useOnboarding(
 
   useEffect(() => {
     let active = true;
+    const operation = authOperationRef.current;
     const auth = omiAuth;
     if (!macDesktop) {
       setOnboardingRequired(false);
@@ -34,15 +35,18 @@ export function useOnboarding(
     }
     Promise.all([auth.hasCompletedOnboarding(), auth.hasCloudSession()])
       .then(async ([completed, hasSession]) => {
+        if (!active || operation !== authOperationRef.current) {
+          return;
+        }
         if (hasSession && !completed) {
           await auth.markOnboardingComplete();
         }
-        if (active) {
+        if (active && operation === authOperationRef.current) {
           setOnboardingRequired(!hasSession);
         }
       })
       .catch(() => {
-        if (active) {
+        if (active && operation === authOperationRef.current) {
           setOnboardingRequired(true);
         }
       });
@@ -97,6 +101,7 @@ export function useOnboarding(
       throw new Error('Sign out is not available in this app session.');
     }
     const operation = ++authOperationRef.current;
+    setSigningIn(false);
     const result = await auth.signOut();
     if (!result.signedOut) {
       throw new Error('Could not clear this app session.');
