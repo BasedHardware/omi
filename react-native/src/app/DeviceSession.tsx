@@ -17,6 +17,13 @@ export function homeConnectionStatus(snapshot: PlatformNativeSnapshot | null): {
   label: string;
   color: string;
 } {
+  if (snapshot?.phase === 'connecting') {
+    return {
+      connectedDevice: null,
+      label: 'Connecting to Omi…',
+      color: '#b4ad9f',
+    };
+  }
   const connectedDevice =
     snapshot?.devices.find(device => device.connected) ??
     snapshot?.devices.find(
@@ -72,7 +79,12 @@ export function DeviceSession({
 }): React.JSX.Element {
   const scanDisabled =
     deviceBusy || !isBluetoothScanAvailable(nativeSnapshot?.bluetooth);
-  const devices = nativeSnapshot?.devices ?? [];
+  const devices = (nativeSnapshot?.devices ?? []).map(device => ({
+    ...device,
+    connecting:
+      nativeSnapshot?.phase === 'connecting' &&
+      nativeSnapshot.connectedDeviceId === device.id,
+  }));
   const hint =
     deviceScanMessage ??
     (nativeSnapshot !== null && devices.length === 0
@@ -97,18 +109,29 @@ export function DeviceSession({
           {devices.map(device => (
             <FocusPressable
               accessibilityLabel={`${
-                device.connected ? 'Disconnect' : 'Connect'
+                device.connecting
+                  ? 'Cancel connection to'
+                  : device.connected
+                  ? 'Disconnect'
+                  : 'Connect'
               } ${device.name}`}
               accessibilityRole="button"
               disabled={deviceBusy}
               key={device.id}
-              onPress={() => onToggle(device.id, device.connected)}
+              onPress={() =>
+                onToggle(device.id, device.connected || device.connecting)
+              }
               style={({pressed}) => [
                 styles.macHomeDeviceChip,
                 pressed && styles.pressed,
               ]}>
               <Text style={styles.macHomeDeviceChipText}>
-                {device.name} · {device.connected ? 'Connected' : 'Connect'}
+                {device.name} ·{' '}
+                {device.connecting
+                  ? 'Connecting…'
+                  : device.connected
+                  ? 'Connected'
+                  : 'Connect'}
               </Text>
             </FocusPressable>
           ))}
@@ -187,13 +210,17 @@ export function DeviceSession({
 
   const rows = devices.map(device => (
     <FocusPressable
-      accessibilityLabel={`${device.connected ? 'Disconnect' : 'Connect'} ${
-        device.name
-      }`}
+      accessibilityLabel={`${
+        device.connecting
+          ? 'Cancel connection to'
+          : device.connected
+          ? 'Disconnect'
+          : 'Connect'
+      } ${device.name}`}
       accessibilityRole="button"
       disabled={deviceBusy}
       key={device.id}
-      onPress={() => onToggle(device.id, device.connected)}
+      onPress={() => onToggle(device.id, device.connected || device.connecting)}
       style={({pressed}) => [
         styles.deviceRow,
         variant === 'compact' && styles.homeDeviceRow,
@@ -210,7 +237,11 @@ export function DeviceSession({
           <View>
             <Text style={styles.deviceName}>{device.name}</Text>
             <Text style={styles.deviceMeta}>
-              {device.connected ? 'Connected' : `${device.rssi} dBm`}
+              {device.connecting
+                ? 'Connecting…'
+                : device.connected
+                ? 'Connected'
+                : `${device.rssi} dBm`}
             </Text>
           </View>
         </View>
@@ -218,7 +249,11 @@ export function DeviceSession({
         <View>
           <Text style={styles.deviceName}>{device.name}</Text>
           <Text style={styles.deviceMeta}>
-            {device.connected ? 'Connected' : `${device.rssi} dBm`}
+            {device.connecting
+              ? 'Connecting…'
+              : device.connected
+              ? 'Connected'
+              : `${device.rssi} dBm`}
           </Text>
         </View>
       )}
@@ -228,7 +263,9 @@ export function DeviceSession({
     </FocusPressable>
   ));
 
-  const connected = devices.find(device => device.connected);
+  const connected = devices.find(
+    device => device.connected && !device.connecting,
+  );
   const information = connected ? (
     <View accessibilityLabel="Device information">
       <DeviceControls key={connected.id} device={connected} busy={deviceBusy} />

@@ -63,6 +63,8 @@ class OmiBleController(
   private var connectionState = "disconnected"
   private var scanActive = false
   private var lastEvent = "Bluetooth adapter not checked"
+  private val reconnect = OmiBleLease.Reconnect()
+  private var reconnectDeviceId: String? = null
   private var audioNotifying = false
   private var codec: Int? = null
   private var scanGeneration = 0
@@ -82,6 +84,7 @@ class OmiBleController(
       if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
       synchronized(this@OmiBleController) {
         if (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR) != BluetoothAdapter.STATE_ON) {
+          cancelReconnect()
           runCatching { stopScanInternal() }
           retireConnection("Bluetooth is unavailable")
           finishScan()
@@ -103,6 +106,7 @@ class OmiBleController(
 
   @Synchronized
   fun close() {
+    cancelReconnect()
     runCatching { context.unregisterReceiver(radioReceiver) }
     runCatching { stopScanInternal() }
     retireConnection("Omi Bluetooth session closed")
@@ -243,15 +247,23 @@ class OmiBleController(
   @SuppressLint("MissingPermission")
   @Synchronized
   fun connect(id: String, onDone: (Boolean, String) -> Unit) {
+    cancelReconnect()
+    connectAttempt(id, onDone)
+  }
+
+  @SuppressLint("MissingPermission")
+  private fun connectAttempt(id: String, onDone: (Boolean, String) -> Unit) {
     if (gatt != null || pendingConnect != null) retireConnection("Omi connection was replaced")
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !granted(Manifest.permission.BLUETOOTH_CONNECT)) {
-      lastEvent = "Bluetooth connection permission is required"
+      cancelReconnect()
+      retireConnection("Bluetooth connection permission is required")
       onDone(false, lastEvent)
       return
     }
     val device = runCatching { adapter?.getRemoteDevice(id) }.getOrNull()
     if (device == null) {
-      lastEvent = "Omi device is unavailable"
+      cancelReconnect()
+      retireConnection("Omi device is unavailable")
       onDone(false, lastEvent)
       return
     }
@@ -270,7 +282,7 @@ class OmiBleController(
       synchronized(this) { if (lease.accepts(generation) && pendingConnect != null) retireConnection("Omi connection setup timed out") }
     }, 20000)
     emitSnapshot()
-    gatt = device.connectGatt(context, false, object : android.bluetooth.BluetoothGattCallback() {
+    gatt = runCatching { device.connectGatt(context, false, object : android.bluetooth.BluetoothGattCallback() {
       override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
         synchronized(this@OmiBleController) {
           if (!lease.accepts(generation)) return
@@ -278,7 +290,12 @@ class OmiBleController(
           connectionState = if (connected) "connected" else "disconnected"
           lastEvent = if (connected) "Connected to Omi" else "Omi connection failed: $status"
           if (connected) {
-            if (!gatt.discoverServices()) retireConnection("Omi service discovery failed")
+            val started = runCatching { gatt.discoverServices() }.getOrElse { error ->
+              if (error is SecurityException) cancelReconnect()
+              retireConnection("Omi service discovery failed")
+              return
+            }
+            if (!started) retireConnection("Omi service discovery failed")
           } else {
             retireConnection(lastEvent)
           }
@@ -412,19 +429,26 @@ class OmiBleController(
           ) {
             audioNotifying = true
             lastEvent = "Omi audio notify is live"
+            reconnectDeviceId = connectedDeviceId
+            reconnect.ready()
             finishConnect(true, lastEvent)
             emitSnapshot()
           }
           finishGattOp(gatt)
         }
       }
-    })
+    }) }.getOrElse { error ->
+      if (error is SecurityException) cancelReconnect()
+      retireConnection("Omi connection could not start")
+      null
+    }
   }
 
   @SuppressLint("MissingPermission")
   @Synchronized
   fun disconnect(id: String) {
-    if (connectedDeviceId == id) {
+    if (connectedDeviceId == id || reconnectDeviceId == id) {
+      cancelReconnect()
       retireConnection("Disconnected from Omi")
     }
   }
@@ -459,7 +483,7 @@ class OmiBleController(
     handler.postDelayed({
       synchronized(this) { if (lease.operationPending(generation, ticket)) retireConnection("Omi Bluetooth operation timed out") }
     }, 8000)
-    val started = when (op) {
+    val started = runCatching { when (op) {
       is GattOp.Write -> {
         op.characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         op.characteristic.value = byteArrayOf(op.value.toByte())
@@ -467,6 +491,10 @@ class OmiBleController(
       }
       is GattOp.Read -> gatt.readCharacteristic(op.characteristic)
       is GattOp.EnableNotify -> writeNotifyDescriptor(gatt, op.characteristic)
+    } }.getOrElse { error ->
+      if (error is SecurityException) cancelReconnect()
+      retireConnection("Omi Bluetooth operation could not start")
+      return
     }
     if (!started) {
       if (op is GattOp.EnableNotify && op.characteristic.uuid != UUID.fromString(OMI_AUDIO_UUID)) finishGattOp(gatt)
@@ -576,6 +604,33 @@ class OmiBleController(
     runCatching { previous?.close() }
     finishConnect(false, message)
     emitSnapshot()
+    val target = reconnectDeviceId
+    val delay = reconnect.nextDelayMillis()
+    if (target != null && delay >= 0) {
+      connectedDeviceId = target
+      connectionState = "connecting"
+      lastEvent = "Reconnecting to Omi (${reconnect.attempts()}/3)"
+      val token = reconnect.token()
+      emitSnapshot()
+      handler.postDelayed({
+        synchronized(this) {
+          if (reconnect.accepts(token) && reconnectDeviceId == target) {
+            connectAttempt(target) { _, _ -> }
+          }
+        }
+      }, delay)
+    } else {
+      reconnectDeviceId = null
+      if (target != null) {
+        lastEvent = "Omi reconnect failed. Connect your device to try again."
+        emitSnapshot()
+      }
+    }
+  }
+
+  private fun cancelReconnect() {
+    reconnect.cancel()
+    reconnectDeviceId = null
   }
 
   private fun settingUuid(setting: String?): UUID? = when (setting) {
