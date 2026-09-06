@@ -114,6 +114,14 @@ def build_static_map_url(pins: List[Tuple[float, float]], width: int, height: in
 
     One pin renders centered at street zoom; several pins use the provider's
     ``visible=`` auto-fit so every stop lands inside the frame.
+
+    Provider URL budget: the Maps Static API restricts URLs to 16,384
+    characters (https://developers.google.com/maps/documentation/maps-static/
+    start). The old 2,048 figure is the legacy v2 limit and now belongs to the
+    separate Maps URLs service — do not guard against it. Measured worst case
+    with the full style list is ~4KB at the 50-pin cap (the pin list appears
+    twice, in ``markers`` and ``visible``), comfortably inside the limit;
+    re-measure if the style list, pin cap, or provider changes.
     """
     size = f'size={min(width, _MAX_AXIS_PX)}x{min(height, _MAX_AXIS_PX)}'
     scale = 'scale=2'
