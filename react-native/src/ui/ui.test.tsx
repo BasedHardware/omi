@@ -259,6 +259,7 @@ describe('Onboarding chrome', () => {
   });
 
   test('Onboarding renders the Omi dots above Welcome to Omi', () => {
+    mockPlatformOS = 'ios';
     const renderer = render(
       <Onboarding onSignIn={() => undefined} signingIn={false} />,
     );
@@ -300,6 +301,7 @@ describe('Onboarding chrome', () => {
   });
 
   test('reduce-motion skips onboarding dots animation', () => {
+    mockPlatformOS = 'ios';
     mockReduceMotion = true;
     const renderer = render(
       <Onboarding onSignIn={() => undefined} signingIn={false} />,
@@ -328,6 +330,38 @@ describe('Onboarding chrome', () => {
     expect(
       renderer.root.findAll(node => String(node.type) === 'Image'),
     ).toHaveLength(0);
+  });
+
+  test('macOS onboarding renders dark ink on the light native window', () => {
+    mockPlatformOS = 'macos';
+    const renderer = render(
+      <Onboarding
+        onSignIn={() => undefined}
+        signingIn={false}
+        error="Try again"
+      />,
+    );
+    const title = renderer.root.find(
+      node => node.props.accessibilityRole === 'header',
+    );
+    expect(Object.assign({}, ...flattenStyle(title.props.style)).color).toBe(
+      'rgba(0, 0, 0, 0.92)',
+    );
+    const dots = findOmiDots(renderer);
+    expect(dots.props.inkColor).toBe('rgba(0, 0, 0, 0.92)');
+    const hosts = dots.findAll(node => String(node.type) === 'Animated.View');
+    expect(hosts).toHaveLength(8);
+    for (const host of hosts) {
+      expect(
+        Object.assign({}, ...flattenStyle(host.props.style)).backgroundColor,
+      ).toBe('rgba(0, 0, 0, 0.92)');
+    }
+    const error = renderer.root.find(
+      node => node.props.accessibilityLabel === 'Sign-in error',
+    );
+    expect(Object.assign({}, ...flattenStyle(error.props.style)).color).toBe(
+      'rgba(0, 0, 0, 0.64)',
+    );
   });
 
   test('first-run onboarding sits on the shared glass, not a nested card', () => {

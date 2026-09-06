@@ -715,6 +715,7 @@ RCT_EXPORT_MODULE(OmiAuth)
     @"returnSecureToken" : @YES,
   } options:0 error:nil];
   [self performRequest:firebase completion:^(NSDictionary *tokens, NSError *firebaseError) {
+    dispatch_async(dispatch_get_main_queue(), ^{
     if (![self isSignInAttemptCurrent:attempt]) return;
     NSString *firebaseIdToken = [tokens[@"idToken"] isKindOfClass:NSString.class] ? tokens[@"idToken"] : nil;
     NSString *refreshToken = [tokens[@"refreshToken"] isKindOfClass:NSString.class] ? tokens[@"refreshToken"] : nil;
@@ -728,6 +729,7 @@ RCT_EXPORT_MODULE(OmiAuth)
     }
     [self finishSignInAttempt:attempt value:@{@"signedIn" : @YES} code:nil message:nil error:nil
                       resolve:resolve reject:reject];
+    });
   }];
 }
 
@@ -859,20 +861,33 @@ RCT_REMAP_METHOD(markOnboardingComplete,
   resolve(nil);
 }
 
+- (void)cancelPendingSignIn {
+  RCTPromiseRejectBlock pendingReject = self.pendingSignInReject;
+  @synchronized (self) {
+    self.signInAttempt += 1;
+    self.pendingSignInReject = nil;
+    self.settled = YES;
+    self.signInCompleting = NO;
+  }
+  [self closeLoopback];
+  if (pendingReject != nil) pendingReject(@"OMI_AUTH_CANCELLED", @"Omi cloud sign in was cancelled", nil);
+}
+
+RCT_REMAP_METHOD(cancelSignIn,
+                 cancelSignInWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [self cancelPendingSignIn];
+    resolve(nil);
+  });
+}
+
 RCT_REMAP_METHOD(signIn,
                  signInWithResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
   dispatch_async(dispatch_get_main_queue(), ^{
-    RCTPromiseRejectBlock previousReject = self.pendingSignInReject;
-    self.signInAttempt += 1;
+    [self cancelPendingSignIn];
     NSUInteger attempt = self.signInAttempt;
-    self.pendingSignInReject = nil;
-    self.settled = YES;
-    self.signInCompleting = NO;
-    [self closeLoopback];
-    if (previousReject != nil) {
-      previousReject(@"OMI_AUTH_UNAUTHORIZED", @"Omi cloud sign in was cancelled", nil);
-    }
     NSString *state = OmiAuthRandomValue();
     NSString *verifier = OmiAuthRandomValue();
     uint16_t port = 0;
@@ -972,6 +987,8 @@ RCT_REMAP_METHOD(signIn,
 RCT_REMAP_METHOD(signOut,
                  signOutWithResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [self cancelPendingSignIn];
   OSStatus status = OmiAuthClearSession();
   if (status == errSecSuccess || status == errSecItemNotFound) {
     OmiAuthSetEnvironmentCloudTokensIgnored(YES);
@@ -982,6 +999,7 @@ RCT_REMAP_METHOD(signOut,
   reject(@"OMI_AUTH_KEYCHAIN",
          @"Could not clear the Omi cloud session",
          [NSError errorWithDomain:NSOSStatusErrorDomain code:status userInfo:nil]);
+  });
 }
 
 @end

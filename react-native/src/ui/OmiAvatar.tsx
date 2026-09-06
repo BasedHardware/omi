@@ -82,12 +82,14 @@ function OmiAvatar({
   reduceMotion = false,
   size = AVATAR_BASE,
   tone = 'identity',
+  inkColor = OMI_MARK_INK,
 }: {
   animate?: boolean;
   identity?: string;
   reduceMotion?: boolean;
   size?: number;
   tone?: 'identity' | 'ink';
+  inkColor?: string;
 }) {
   const smileProgress = useRef(new Animated.Value(0)).current;
   const cometPhase = useRef(new Animated.Value(0)).current;
@@ -147,7 +149,7 @@ function OmiAvatar({
             <Animated.View
               key={index}
               style={{
-                backgroundColor: OMI_MARK_INK,
+                backgroundColor: inkColor,
                 borderRadius: markDiameter / 2,
                 height: markDiameter,
                 left: center.x * markScale - markDiameter / 2,
