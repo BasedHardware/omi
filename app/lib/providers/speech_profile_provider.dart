@@ -235,6 +235,7 @@ class SpeechProfileProvider extends ChangeNotifier
   }) async {
     _finalizedCallback = finalizedCallback;
     _processConversationCallback = processConversationCallback;
+    resetTranscript();
     setInitialising(true);
     this.usePhoneMic = usePhoneMic;
     _isOnboardingFlow = isOnboardingFlow;
@@ -594,12 +595,22 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   void resetSegments() {
+    audioStorage.clearAudioBytes();
+    resetTranscript();
+  }
+
+  /// Forgets the previous recording's transcript and progress so a new
+  /// recording (Redo, or onboarding after a Settings redo) starts empty
+  /// instead of showing and counting what was said last time. Does not touch
+  /// audio storage, which initialise() recreates.
+  void resetTranscript() {
     segments.clear();
     streamStartedAtSecond = null;
-    audioStorage.clearAudioBytes();
     text = '';
     percentageCompleted = 0;
     _sentenceTargetReached = false;
+    profileCompleted = false;
+    uploadingProfile = false;
     notifyListeners();
   }
 

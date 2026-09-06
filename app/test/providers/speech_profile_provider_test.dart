@@ -524,4 +524,32 @@ void main() {
       provider.dispose();
     });
   });
+
+  // Redo showed the previous recording's words (and counted them toward the
+  // target) because nothing cleared the provider's transcript before a new
+  // session; initialise() now resets it first.
+  group('a new recording starts with an empty transcript', () {
+    test('resetTranscript forgets the previous words, progress and completion', () {
+      final provider = _FinalizeCountingProvider();
+      provider.updateStartedRecording(true);
+      provider.segments.add(_userSegment('1', 'I live in Austin. I build hardware. I want to ship!'));
+      provider.updateSpokenText();
+      expect(provider.finalizeCalls, 1);
+      provider.profileCompleted = true;
+
+      provider.resetTranscript();
+
+      expect(provider.text, isEmpty);
+      expect(provider.segments, isEmpty);
+      expect(provider.sentenceProgress, 0.0);
+      expect(provider.profileCompleted, isFalse);
+
+      // The fresh session counts from zero and can finalize again.
+      provider.segments.add(_userSegment('2', 'One. Two. Three.'));
+      provider.updateSpokenText();
+      expect(provider.finalizeCalls, 2);
+
+      provider.dispose();
+    });
+  });
 }
