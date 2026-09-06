@@ -163,6 +163,7 @@ class OmiBleController(
     handler.postDelayed({
       if (generation == scanGeneration) {
         stopScanInternal()
+        lastEvent = if (results.isEmpty()) "No Omi devices found" else "Found ${results.size} Omi device${if (results.size == 1) "" else "s"}"
         finishScan()
       }
     }, timeout * 1000L)
