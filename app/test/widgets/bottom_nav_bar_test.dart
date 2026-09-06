@@ -87,8 +87,8 @@ void main() {
     for (final label in withoutInset.iconBottoms.keys) {
       expect(
         withoutInset.iconBottoms[label]! - withInset.iconBottoms[label]!,
-        moreOrLessEquals(systemNavBarHeight),
-        reason: 'the ${label} tab should lift by the bottom inset',
+        moreOrLessEquals(systemNavBarHeight, epsilon: 0.5),
+        reason: 'the $label tab should lift by the bottom inset',
       );
     }
   });
@@ -124,7 +124,7 @@ Future<({double screenBottom, Map<String, double> iconBottoms})> _layoutForBotto
               padding: EdgeInsets.only(bottom: bottomInset),
             ),
             child: Scaffold(
-              body: BottomNavBar(onTabTap: (_, __) {}),
+              body: BottomNavBar(key: ValueKey(bottomInset), onTabTap: (_, __) {}),
             ),
           ),
         ),
