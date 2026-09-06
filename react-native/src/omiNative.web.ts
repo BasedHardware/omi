@@ -302,9 +302,13 @@ const browserAuth: OmiAuth = {
     return false;
   },
   async hasCompletedOnboarding() {
-    return true;
+    return (
+      globalThis.localStorage.getItem('omi.onboarding.setupRevision') === '1'
+    );
   },
-  async markOnboardingComplete() {},
+  async markOnboardingComplete() {
+    globalThis.localStorage.setItem('omi.onboarding.setupRevision', '1');
+  },
   async signIn() {
     return {signedIn: false};
   },

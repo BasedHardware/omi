@@ -61,6 +61,8 @@ jest.mock('react-native', () => {
     Text: component('Text'),
     TextInput: component('TextInput'),
     View: component('View'),
+    ScrollView: component('ScrollView'),
+    Linking: {openURL: jest.fn(async () => undefined)},
   };
 });
 
@@ -373,7 +375,9 @@ describe('Onboarding chrome', () => {
     );
     const surfaceStyle = Object.assign(
       {},
-      ...flattenStyle(surface.props.style),
+      ...flattenStyle(
+        surface.props.contentContainerStyle ?? surface.props.style,
+      ),
     );
     const content = renderer.root.find(node =>
       flattenStyle(node.props.style).some(
@@ -391,7 +395,7 @@ describe('Onboarding chrome', () => {
 
     expect(surfaceStyle).toMatchObject({
       alignSelf: 'stretch',
-      flex: 1,
+      flexGrow: 1,
       paddingHorizontal: tokens.space.xxl,
       paddingVertical: tokens.space.xl,
     });

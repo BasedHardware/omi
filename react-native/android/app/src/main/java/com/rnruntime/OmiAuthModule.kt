@@ -117,12 +117,12 @@ class OmiAuthModule(private val context: ReactApplicationContext) : ReactContext
   }
 
   @ReactMethod fun hasCompletedOnboarding(promise: Promise) {
-    promise.resolve(context.getSharedPreferences("omi-onboarding", 0).getBoolean("completed", false))
+    promise.resolve(context.getSharedPreferences("omi-onboarding", 0).getInt("setupRevision", 0) == 1)
   }
 
   @ReactMethod fun markOnboardingComplete(promise: Promise) {
     executor.execute {
-      if (context.getSharedPreferences("omi-onboarding", 0).edit().putBoolean("completed", true).commit()) promise.resolve(null)
+      if (context.getSharedPreferences("omi-onboarding", 0).edit().putInt("setupRevision", 1).commit()) promise.resolve(null)
       else promise.reject("OMI_AUTH_STORAGE", "Unable to save onboarding state")
     }
   }

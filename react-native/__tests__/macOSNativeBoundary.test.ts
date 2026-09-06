@@ -562,15 +562,15 @@ test('statically checks native sign-in cancellation fencing', () => {
   expect(auth).toMatch(/if \(attempt != self\.signInAttempt\) return;/);
 });
 
-test('persists completed macOS onboarding in this app NSUserDefaults', () => {
+test('static tripwire: macOS setup revision uses its own NSUserDefaults key', () => {
   const auth = readNativeSource('OmiAuthModule.mm');
 
   expect(auth).toContain('RCT_REMAP_METHOD(hasCompletedOnboarding');
   expect(auth).toContain('RCT_REMAP_METHOD(markOnboardingComplete');
   expect(auth).toContain('NSUserDefaults.standardUserDefaults');
-  expect(auth).toContain('@"omi.onboarding.completed"');
-  expect(auth).toContain('boolForKey');
-  expect(auth).toContain('setBool:YES');
+  expect(auth).toContain('@"omi.onboarding.setupRevision"');
+  expect(auth).toContain('integerForKey:OmiOnboardingCompletedKey] == 1');
+  expect(auth).toContain('setInteger:1 forKey:OmiOnboardingCompletedKey');
 });
 
 test('migrates signed sessions from data-protection and legacy keychains', () => {

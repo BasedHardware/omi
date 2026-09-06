@@ -4,7 +4,7 @@ import ReactTestRenderer from 'react-test-renderer';
 const mockAuth = {
   hasCloudSession: jest.fn(),
   hasCompletedOnboarding: jest.fn(),
-  markOnboardingComplete: jest.fn(async () => undefined),
+  markOnboardingComplete: jest.fn(async (): Promise<void> => undefined),
   signIn: jest.fn(),
   signOut: jest.fn(),
   cancelSignIn: jest.fn(async () => undefined),
@@ -107,14 +107,15 @@ test('completed onboarding without a cloud session still requires Sign in', asyn
   expect(mockAuth.markOnboardingComplete).not.toHaveBeenCalled();
 });
 
-test('a live cloud session leaves DesktopApp ready even before onboarding is marked', async () => {
+test('a live cloud session resumes unfinished setup without marking consent', async () => {
   mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
   mockAuth.hasCloudSession.mockResolvedValue(true);
 
   const hook = await renderOnboarding(true);
 
-  expect(hook.latest().onboardingRequired).toBe(false);
-  expect(mockAuth.markOnboardingComplete).toHaveBeenCalled();
+  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(hook.latest().setupRequired).toBe(true);
+  expect(mockAuth.markOnboardingComplete).not.toHaveBeenCalled();
 });
 
 test('session probe settles from auth alone when native devices are unavailable', async () => {
@@ -127,7 +128,7 @@ test('session probe settles from auth alone when native devices are unavailable'
   expect(hook.latest().onboardingRequired).not.toBeNull();
 });
 
-test('a real sign-in records onboarding completion and leaves Welcome', async () => {
+test('sign-in requires explicit setup completion before cloud reads', async () => {
   mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
   mockAuth.hasCloudSession.mockResolvedValue(false);
   mockAuth.signIn.mockResolvedValue({signedIn: true});
@@ -141,6 +142,14 @@ test('a real sign-in records onboarding completion and leaves Welcome', async ()
   });
 
   expect(mockAuth.signIn).toHaveBeenCalledTimes(1);
+  expect(hook.latest().setupRequired).toBe(true);
+  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(mockAuth.markOnboardingComplete).not.toHaveBeenCalled();
+  expect(refreshReads).not.toHaveBeenCalled();
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().completeSetup();
+  });
   expect(mockAuth.markOnboardingComplete).toHaveBeenCalledTimes(1);
   expect(hook.latest().onboardingRequired).toBe(false);
   expect(refreshReads).toHaveBeenCalledWith(false, {ignoreEnabled: true});
@@ -371,5 +380,69 @@ test('cancel retires a pending sign-in without clearing or accepting a session',
   expect(hook.latest().onboardingRequired).toBe(true);
   expect(mockAuth.markOnboardingComplete).not.toHaveBeenCalled();
   expect(mockAuth.signOut).not.toHaveBeenCalled();
+  expect(refresh).not.toHaveBeenCalled();
+});
+
+test('web setup requires disclosure but never invents native sign-in', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  const refresh = jest.fn(async () => undefined);
+  const hook = await renderOnboarding(false, refresh);
+  expect(hook.latest().setupRequired).toBe(true);
+  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(mockAuth.hasCloudSession).not.toHaveBeenCalled();
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().completeSetup();
+  });
+  expect(hook.latest().onboardingRequired).toBe(false);
+  expect(mockAuth.signIn).not.toHaveBeenCalled();
+  expect(refresh).toHaveBeenCalledTimes(1);
+});
+
+test('failed setup persistence stays on disclosure and can retry', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockAuth.markOnboardingComplete.mockRejectedValueOnce(new Error('storage'));
+  const refresh = jest.fn(async () => undefined);
+  const hook = await renderOnboarding(true, refresh);
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().completeSetup();
+  });
+  expect(hook.latest().setupRequired).toBe(true);
+  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(hook.latest().completingSetup).toBe(false);
+  expect(refresh).not.toHaveBeenCalled();
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().completeSetup();
+  });
+  expect(hook.latest().onboardingRequired).toBe(false);
+});
+
+test('sign-out retires delayed setup completion without refreshing', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockAuth.signOut.mockResolvedValue({signedOut: true});
+  let resolveSave!: () => void;
+  mockAuth.markOnboardingComplete.mockImplementation(
+    () =>
+      new Promise<void>(resolve => {
+        resolveSave = resolve;
+      }),
+  );
+  const refresh = jest.fn(async () => undefined);
+  const hook = await renderOnboarding(true, refresh);
+  let pending!: Promise<boolean>;
+  await ReactTestRenderer.act(async () => {
+    pending = hook.latest().completeSetup();
+  });
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().signOutAndRefresh();
+  });
+  await ReactTestRenderer.act(async () => {
+    resolveSave();
+    await pending;
+  });
+  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(hook.latest().setupRequired).toBe(false);
   expect(refresh).not.toHaveBeenCalled();
 });

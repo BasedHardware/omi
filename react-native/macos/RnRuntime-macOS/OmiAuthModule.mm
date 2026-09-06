@@ -19,7 +19,7 @@
 
 static NSString *const OmiAuthKeychainServiceBase = @"com.omi.rnruntime.firebase-rest-session";
 static NSString *const OmiAuthKeychainAccount = @"firebase-rest-tokens";
-static NSString *const OmiOnboardingCompletedKey = @"omi.onboarding.completed";
+static NSString *const OmiOnboardingCompletedKey = @"omi.onboarding.setupRevision";
 static NSString *const OmiAuthShippingSessionIgnoredKey = @"omi.auth.shippingSessionIgnored";
 // Public based-hardware Firebase Web API key. Same unrestricted key the Omi CLI
 // uses to mint a refreshable session from a custom token. Firebase API keys
@@ -851,13 +851,13 @@ RCT_REMAP_METHOD(hasCloudSession,
 RCT_REMAP_METHOD(hasCompletedOnboarding,
                  hasCompletedOnboardingWithResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
-  resolve(@([NSUserDefaults.standardUserDefaults boolForKey:OmiOnboardingCompletedKey]));
+  resolve(@([NSUserDefaults.standardUserDefaults integerForKey:OmiOnboardingCompletedKey] == 1));
 }
 
 RCT_REMAP_METHOD(markOnboardingComplete,
                  markOnboardingCompleteWithResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
-  [NSUserDefaults.standardUserDefaults setBool:YES forKey:OmiOnboardingCompletedKey];
+  [NSUserDefaults.standardUserDefaults setInteger:1 forKey:OmiOnboardingCompletedKey];
   resolve(nil);
 }
 

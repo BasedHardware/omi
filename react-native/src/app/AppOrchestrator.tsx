@@ -134,6 +134,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     authError,
     cancelSignIn,
     completeFirstRun,
+    completeSetup,
+    completingSetup,
+    setupRequired,
     onboardingRequired,
     revalidateSession,
     signInAndRefresh,
@@ -148,7 +151,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     resetReads,
     refreshReads,
   } = useDesktopReads({
-    enabled: !nativeSessionRequired || onboardingRequired === false,
+    enabled: onboardingRequired === false,
   });
   useEffect(() => {
     refreshReadsRef.current = refreshReads;
@@ -165,14 +168,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     scanForOmi,
     toggleDevice,
   } = useNativeDevices({
-    enabled:
-      !macDesktop && (!nativeSessionRequired || onboardingRequired === false),
+    enabled: !macDesktop && onboardingRequired === false,
   });
   const searchRef = useRef<TextInput>(null);
   useEffect(() => {
     let active = true;
     chatSessionEpochRef.current += 1;
-    if (nativeSessionRequired && onboardingRequired !== false) {
+    if (onboardingRequired !== false) {
       // Leaving a ready session drops the previous session's transcript,
       // cursors, and message bookkeeping so nothing leaks across accounts or
       // flashes on the next sign-in. Busy flags reset too: send() refuses to
@@ -221,7 +223,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           active &&
           chatSessionEpochRef.current === session &&
           mutation === chatMutationSeqRef.current &&
-          (!nativeSessionRequired || onboardingRequired === false)
+          onboardingRequired === false
         ) {
           setChatError(chatHistoryErrorCopy(error));
           // A 401/unconfigured history load can mean the cloud session died;
@@ -645,6 +647,26 @@ function App({initialRoute}: AppProps): React.JSX.Element {
 
   const firstRunOnboarding = (
     <Onboarding
+      setupRequired={setupRequired}
+      completingSetup={completingSetup}
+      onCompleteSetup={connectDevice => {
+        completeSetup()
+          .then(completed => {
+            if (completed && connectDevice) {
+              setRoute('Home');
+              setHomeChatOpen(false);
+              setDevicePanelOpen(true);
+            }
+          })
+          .catch(() => undefined);
+      }}
+      onSignOut={
+        nativeSessionRequired
+          ? () => {
+              signOutAndRefresh().catch(() => undefined);
+            }
+          : undefined
+      }
       onCancelSignIn={() => {
         cancelSignIn().catch(() => undefined);
       }}

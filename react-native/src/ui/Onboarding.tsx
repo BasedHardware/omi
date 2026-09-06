@@ -1,5 +1,14 @@
 import React, {useEffect, useRef} from 'react';
-import {Animated, Easing, Platform, StyleSheet, Text, View} from 'react-native';
+import {
+  Animated,
+  Easing,
+  Platform,
+  ScrollView,
+  Linking,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {desktopTokens} from '../desktop/tokens';
 import {Button} from './Button';
@@ -13,11 +22,19 @@ export function Onboarding({
   onSignIn,
   onCancelSignIn,
   signingIn,
+  setupRequired = false,
+  completingSetup = false,
+  onCompleteSetup,
+  onSignOut,
 }: {
   error?: string | null;
   onSignIn: () => void;
   onCancelSignIn?: () => void;
   signingIn: boolean;
+  setupRequired?: boolean;
+  completingSetup?: boolean;
+  onCompleteSetup?: (connectDevice: boolean) => void;
+  onSignOut?: () => void;
 }) {
   const reduceMotion = useReduceMotion();
   const desktop = Platform.OS === 'macos';
@@ -54,7 +71,9 @@ export function Onboarding({
   }, [opacity, reduceMotion, scale]);
 
   return (
-    <View accessibilityLabel="First-run onboarding" style={styles.surface}>
+    <ScrollView
+      accessibilityLabel="First-run onboarding"
+      contentContainerStyle={styles.surface}>
       <View style={styles.column}>
         <Animated.View
           accessibilityLabel="Omi"
@@ -71,39 +90,103 @@ export function Onboarding({
         <Text
           accessibilityRole="header"
           style={[styles.title, desktop && styles.desktopTitle]}>
-          Welcome to Omi
+          {setupRequired ? 'Before you start' : 'Welcome to Omi'}
         </Text>
         <Text style={[styles.copy, desktop && styles.desktopCopy]}>
-          Sign in to access your conversations and memories.
+          {setupRequired
+            ? 'Omi saves your conversations and recordings. Cloud AI services transcribe audio and use your messages to generate replies.'
+            : 'Sign in to access your conversations and memories.'}
         </Text>
         {error == null ? null : (
           <Text
-            accessibilityLabel="Sign-in error"
+            accessibilityLabel={setupRequired ? 'Setup error' : 'Sign-in error'}
             style={[styles.error, desktop && styles.desktopCopy]}>
             {error}
           </Text>
         )}
-        <Button
-          accessibilityLabel="Sign in"
-          accessibilityRole="button"
-          disabled={signingIn}
-          onPress={onSignIn}
-          size="large"
-          labelStyle={desktop && styles.desktopButtonLabel}
-          style={[styles.signIn, desktop && styles.desktopButton]}>
-          {signingIn ? 'Signing in…' : 'Sign in'}
-        </Button>
-        {signingIn && onCancelSignIn ? (
-          <Button
-            accessibilityLabel="Cancel sign in"
-            onPress={onCancelSignIn}
-            labelStyle={desktop && styles.desktopTitle}
-            variant="ghost">
-            Cancel
-          </Button>
-        ) : null}
+        {setupRequired ? (
+          <>
+            <Text style={[styles.copy, desktop && styles.desktopCopy]}>
+              Connect an Omi when you are ready to record, or continue with
+              chat. You can connect a device later from Home.
+            </Text>
+            <View style={styles.links}>
+              <Button
+                variant="ghost"
+                accessibilityRole="link"
+                onPress={() => {
+                  Linking.openURL('https://www.omi.me/pages/privacy').catch(
+                    () => undefined,
+                  );
+                }}>
+                Privacy policy
+              </Button>
+              <Button
+                variant="ghost"
+                accessibilityRole="link"
+                onPress={() => {
+                  Linking.openURL(
+                    'https://www.omi.me/pages/terms-of-service',
+                  ).catch(() => undefined);
+                }}>
+                Terms of service
+              </Button>
+            </View>
+            {!desktop && (
+              <Button
+                accessibilityLabel="Agree and connect Omi"
+                disabled={completingSetup}
+                onPress={() => onCompleteSetup?.(true)}
+                size="large">
+                {completingSetup ? 'Saving…' : 'Agree and connect Omi'}
+              </Button>
+            )}
+            <Button
+              accessibilityLabel={
+                desktop
+                  ? 'Agree and continue'
+                  : 'Agree and continue without a device'
+              }
+              disabled={completingSetup}
+              onPress={() => onCompleteSetup?.(false)}
+              variant={desktop ? 'primary' : 'ghost'}>
+              {completingSetup
+                ? 'Saving…'
+                : desktop
+                ? 'Agree and continue'
+                : 'Agree and continue without a device'}
+            </Button>
+            {onSignOut && (
+              <Button variant="ghost" onPress={onSignOut}>
+                Sign out
+              </Button>
+            )}
+          </>
+        ) : (
+          <>
+            <Button
+              accessibilityLabel="Sign in"
+              accessibilityRole="button"
+              disabled={signingIn}
+              onPress={onSignIn}
+              size="large"
+              labelStyle={desktop && styles.desktopButtonLabel}
+              style={[styles.signIn, desktop && styles.desktopButton]}>
+              {signingIn ? 'Signing in…' : 'Sign in'}
+            </Button>
+            {signingIn && onCancelSignIn ? (
+              <Button
+                accessibilityLabel="Cancel sign in"
+                onPress={onCancelSignIn}
+                labelStyle={desktop && styles.desktopTitle}
+                variant="ghost">
+                Cancel
+              </Button>
+            ) : null}
+          </>
+        )}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -111,11 +194,12 @@ const styles = StyleSheet.create({
   surface: {
     alignItems: 'center',
     alignSelf: 'stretch',
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: tokens.space.xxl,
     paddingVertical: tokens.space.xl,
   },
+  links: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center'},
   column: {
     alignItems: 'center',
     gap: tokens.space.sm,
