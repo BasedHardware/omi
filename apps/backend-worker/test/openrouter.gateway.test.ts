@@ -124,7 +124,11 @@ describe("openrouter gateway request shape", () => {
           secret: "test-secret",
         },
         "what is the weather",
-        "corr-shape-1"
+        "corr-shape-1",
+        [
+          { role: "user", content: "I am in Paris" },
+          { role: "assistant", content: "Hello from Paris" },
+        ]
       );
       expect(result.kind).toBe("ok");
       if (result.kind === "ok") expect(result.text).toBe("reply");
@@ -141,12 +145,13 @@ describe("openrouter gateway request shape", () => {
       expect(body["model"]).toBe("test-model");
       expect(body["max_tokens"]).toBe(768);
       const messages = body["messages"] as unknown[];
-      expect(messages).toHaveLength(2);
+      expect(messages).toHaveLength(4);
       expect((messages[0] as Record<string, unknown>)["role"]).toBe("system");
-      expect((messages[1] as Record<string, unknown>)["role"]).toBe("user");
-      expect((messages[1] as Record<string, unknown>)["content"]).toBe(
-        "what is the weather"
-      );
+      expect(messages.slice(1)).toEqual([
+        { role: "user", content: "I am in Paris" },
+        { role: "assistant", content: "Hello from Paris" },
+        { role: "user", content: "what is the weather" },
+      ]);
     } finally {
       fetchMock.restore();
     }
@@ -170,7 +175,8 @@ describe("openrouter gateway request shape", () => {
           secret: "test-secret",
         },
         "prompt",
-        "corr-trunc-1"
+        "corr-trunc-1",
+        []
       );
       expect(result.kind).toBe("ok");
       if (result.kind === "ok")
@@ -196,7 +202,8 @@ describe("openrouter gateway redaction", () => {
           secret: "leak-me-never",
         },
         "sensitive prompt content",
-        "corr-redact-1"
+        "corr-redact-1",
+        []
       );
       expect(result.kind).toBe("error");
       const combined = logs.entries.join("\n");
@@ -224,7 +231,8 @@ describe("openrouter gateway redaction", () => {
           secret: "leak-me-never",
         },
         "sensitive prompt content",
-        "corr-redact-2"
+        "corr-redact-2",
+        []
       );
       expect(result.kind).toBe("error");
       const combined = logs.entries.join("\n");
@@ -252,7 +260,8 @@ describe("openrouter gateway redaction", () => {
           secret: "leak-me-never",
         },
         "sensitive prompt content",
-        "corr-redact-3"
+        "corr-redact-3",
+        []
       );
       expect(result.kind).toBe("error");
       const combined = logs.entries.join("\n");
@@ -455,7 +464,8 @@ describe("openrouter gateway host pin and timeout", () => {
       const result = await openrouter.generateViaGateway(
         config,
         "official shape",
-        "corr-official-1"
+        "corr-official-1",
+        []
       );
       expect(result.kind).toBe("ok");
       if (result.kind === "ok") expect(result.text).toBe("luna-ok");
@@ -487,7 +497,8 @@ describe("openrouter gateway host pin and timeout", () => {
           secret: "leak-me-never",
         },
         "sensitive prompt content",
-        "corr-timeout-1"
+        "corr-timeout-1",
+        []
       );
       expect(result.kind).toBe("error");
       const request = hanging.calls[0];

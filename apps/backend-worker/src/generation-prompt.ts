@@ -2,9 +2,16 @@ import { listBoundAttachments } from "./attachments";
 import { CHAT_CAPABILITIES } from "./wire";
 
 export const GENERATION_ATTACHMENT_TEXT_BUDGET = 32 * 1024;
+export const GENERATION_HISTORY_TEXT_BUDGET = 32 * 1024;
+export const GENERATION_HISTORY_MESSAGE_LIMIT = 40;
+
+export type GenerationHistoryMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
 
 export type GenerationPromptResult =
-  | { kind: "ok"; prompt: string }
+  | { kind: "ok"; prompt: string; history: GenerationHistoryMessage[] }
   | { kind: "fail" };
 
 export function isGenerationTextMimeType(mimeType: string): boolean {
@@ -46,7 +53,44 @@ export async function composeGenerationPrompt(
   if (prompt.length === 0 && (textFiles === 0 || loadedTextFiles === 0)) {
     return { kind: "fail" };
   }
-  return { kind: "ok", prompt };
+  return {
+    kind: "ok",
+    prompt,
+    history: await readGenerationHistory(db, accountId, messageId),
+  };
+}
+
+async function readGenerationHistory(
+  db: D1Database,
+  accountId: string,
+  messageId: string
+): Promise<GenerationHistoryMessage[]> {
+  const result = await db
+    .prepare(
+      `SELECT prior.sender, prior.text
+       FROM chat_messages AS prior
+       JOIN chat_messages AS current ON current.id = ? AND current.account_id = ?
+       WHERE prior.account_id = current.account_id AND prior.position < current.position
+         AND json_extract(prior.payload, '$.chatSessionId') IS json_extract(current.payload, '$.chatSessionId')
+         AND json_extract(prior.payload, '$.appId') IS json_extract(current.payload, '$.appId')
+         AND (prior.sender = 'human' OR (prior.sender = 'ai' AND prior.generation_outcome = 'completed'))
+       ORDER BY prior.position DESC
+       LIMIT ?`
+    )
+    .bind(messageId, accountId, GENERATION_HISTORY_MESSAGE_LIMIT)
+    .all<{ sender: "human" | "ai"; text: string }>();
+  const history: GenerationHistoryMessage[] = [];
+  let remaining = GENERATION_HISTORY_TEXT_BUDGET;
+  for (const row of result.results) {
+    const size = utf8Bytes(row.text);
+    if (size > remaining) break;
+    remaining -= size;
+    history.push({
+      role: row.sender === "human" ? "user" : "assistant",
+      content: row.text,
+    });
+  }
+  return history.reverse();
 }
 
 async function readTextExcerpt(

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, test } from "bun:test";
 
@@ -12,6 +13,47 @@ import {
 } from "../scripts/verify-migrations";
 
 const directory = new URL("../migrations/", import.meta.url);
+
+test("upload migration quarantines open legacy audio and preserves terminal and empty sessions", () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(
+      readFileSync(new URL("0004_device_sessions.sql", directory), "utf8")
+    );
+    for (const [id, state, count] of [
+      ["legacy-complete", "complete", 1],
+      ["legacy-open", "open", 1],
+      ["legacy-failed", "failed", 1],
+      ["empty-open", "open", 0],
+      ["empty-complete", "complete", 0],
+    ] as const) {
+      db.prepare(
+        "INSERT INTO device_sessions (id, account_id, device_id, codec, state, r2_prefix, chunk_count, started_at, created_at, updated_at) VALUES (?, 'account', 'device', 21, ?, ?, ?, 1, 1, 2)"
+      ).run(id, state, id, count);
+    }
+    db.exec(
+      readFileSync(
+        new URL("0005_device_session_uploads.sql", directory),
+        "utf8"
+      )
+    );
+    expect(
+      db
+        .prepare(
+          "SELECT id, state, uploaded_chunk_count FROM device_sessions ORDER BY id"
+        )
+        .all()
+    ).toEqual([
+      { id: "empty-complete", state: "complete", uploaded_chunk_count: 0 },
+      { id: "empty-open", state: "open", uploaded_chunk_count: 0 },
+      { id: "legacy-complete", state: "complete", uploaded_chunk_count: 0 },
+      { id: "legacy-failed", state: "failed", uploaded_chunk_count: 0 },
+      { id: "legacy-open", state: "failed", uploaded_chunk_count: 0 },
+    ]);
+  } finally {
+    db.close();
+  }
+});
 
 const latestMigration = D1_MIGRATIONS.at(-1);
 if (latestMigration === undefined) {
@@ -314,6 +356,7 @@ describe("D1 migration manifest", () => {
       "0002_chat.sql",
       "0003_attachments.sql",
       "0004_device_sessions.sql",
+      "0005_device_session_uploads.sql",
     ];
     expect(D1_MIGRATIONS.map((migration) => migration.fileName)).toEqual(files);
 

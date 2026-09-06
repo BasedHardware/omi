@@ -383,7 +383,11 @@ export async function authorizeV1(
     // After Bearer auth, each validated x-omi-client-id is its own data
     // partition for chat, tasks, attachments, conversations, and device
     // sessions. Settings display name/email/plan stay staging labels.
-    if (clientId === undefined || !isClientId(clientId)) {
+    if (
+      clientId === undefined ||
+      !isClientId(clientId) ||
+      clientId.startsWith("firebase:")
+    ) {
       return backendError("bad_request", "edit_request", 400);
     }
     context.set("accountId", clientId);
@@ -699,6 +703,8 @@ export async function handleDeviceSessionComplete(
     context.req.param("id"),
     Date.now()
   );
+  if (outcome.kind === "conflict")
+    return backendError("conflict", "edit_request", 409);
   return outcome.kind === "not_found"
     ? backendError("not_found", "refresh_history", 404)
     : json({ session: outcome.session });

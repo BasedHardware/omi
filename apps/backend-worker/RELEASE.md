@@ -2,6 +2,12 @@
 
 This runbook applies the D1-authoritative Tasks, Chat, and Attachments migrations and verifies them through an operator-managed safe evidence endpoint before the Worker is deployed or declared ready.
 
+Shared staging bearer credentials cannot select `x-omi-client-id` values beginning with `firebase:`; that namespace requires a verified Firebase session. If storing a device audio chunk fails, the session becomes `failed` and subsequent append or completion requests return 409. Start a new recording session after resolving the storage failure; failed sessions must not be presented as complete recordings.
+
+Migration `0005_device_session_uploads.sql` adds a persisted successful-upload counter. Completion returns 409 until every claimed chunk has been saved. Existing open sessions with audio are conservatively marked `failed` because older counters do not prove that R2 writes succeeded; their stored audio and metadata are retained. Previously complete or failed sessions retain their historical state, and idempotent completion of an already complete session does not retroactively verify its audio. Empty legacy sessions remain usable. Review the open-session status change before applying the migration remotely.
+
+Chat generation sends at most 40 earlier messages and 32 KiB of UTF-8 history to either configured provider, restricted to the current account, chat session, app, and message position. Cancelled assistant responses are excluded. The current message and its bounded text attachments follow that history.
+
 ## Required operator inputs
 
 - `STAGING_D1_MIGRATION_EVIDENCE_URL`: an HTTPS URL that returns the current migration evidence envelope.
@@ -28,7 +34,7 @@ This runbook applies the D1-authoritative Tasks, Chat, and Attachments migration
 
    ```json
    {
-     "schema_version": "0003_attachments.sql",
+     "schema_version": "0005_device_session_uploads.sql",
      "migrations": [
        {
          "name": "0001_tasks.sql",
@@ -41,6 +47,14 @@ This runbook applies the D1-authoritative Tasks, Chat, and Attachments migration
        {
          "name": "0003_attachments.sql",
          "sha256": "ee4efd8d61929ba0155753de9b6c5784f657b6264b90964c1c6dd34d9fc98fa3"
+       },
+       {
+         "name": "0004_device_sessions.sql",
+         "sha256": "51989ee2f63cfc36614b56cf8ca6433a41441004109ab3aa38ead02f9a2e580e"
+       },
+       {
+         "name": "0005_device_session_uploads.sql",
+         "sha256": "2652bf96d0183899970167de5527c46300910782cdef3c139ac29e02d6ee78f1"
        }
      ],
      "evidence_id": "ops-20260818-1"

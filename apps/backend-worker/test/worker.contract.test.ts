@@ -514,6 +514,21 @@ describe("worker request contract", () => {
     expect((await response.json()) as unknown).toEqual(emptyConversationPage());
   });
 
+  test("a staging credential cannot select a Firebase account partition", async () => {
+    const response = await fetchWorker(
+      "/v1/chat-generations/generation-id/events",
+      {
+        headers: {
+          ...authenticatedHeaders,
+          "x-omi-client-id": "firebase:firebase-user",
+        },
+      }
+    );
+
+    expect(response.status).toBe(400);
+    expect(accountCalls).toEqual([]);
+  });
+
   test("a Firebase session is verified and partitioned by its uid", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = mock(

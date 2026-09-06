@@ -67,6 +67,64 @@ beforeEach(async () => {
 });
 
 describe("AccountBackend D1-backed coordination", () => {
+  test("Workers AI receives the previous turn before the current user message", async () => {
+    const first = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({
+        ...create("context-first"),
+        text: "My name is Ana",
+      }),
+    });
+    expect(first.status).toBe(201);
+    const stub = env.ACCOUNTS.getByName("test-account");
+    await runInDurableObject(stub, async (instance) => {
+      Object.defineProperty(instance, "env", {
+        configurable: true,
+        value: {
+          ...(instance as unknown as { env: Record<string, unknown> }).env,
+          AI: { run: async () => ({ response: "Hello Ana" }) },
+        },
+      });
+      await instance.alarm();
+    });
+    const second = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({
+        ...create("context-second"),
+        text: "What is my name?",
+      }),
+    });
+    expect(second.status).toBe(201);
+    const messages = await runInDurableObject(stub, async (instance) => {
+      let captured: unknown = null;
+      Object.defineProperty(instance, "env", {
+        configurable: true,
+        value: {
+          ...(instance as unknown as { env: Record<string, unknown> }).env,
+          AI: {
+            run: async (_model: unknown, input: { messages: unknown }) => {
+              captured = input.messages;
+              return { response: "Ana" };
+            },
+          },
+        },
+      });
+      await instance.alarm();
+      return captured;
+    });
+    expect(messages).toEqual([
+      {
+        role: "system",
+        content: "You are Omi, a concise and helpful personal assistant.",
+      },
+      { role: "user", content: "My name is Ana" },
+      { role: "assistant", content: "Hello Ana" },
+      { role: "user", content: "What is my name?" },
+    ]);
+  });
+
   test("settings reflects env config and D1 admission count without resetting usage", async () => {
     const before = await fetchWorker("/v1/settings", {
       headers: authenticatedHeaders,

@@ -207,14 +207,36 @@ export async function appendDeviceSessionAudio(
   }
   const chunkIndex = claimed.chunk_count - 1;
   const key = `${claimed.r2_prefix}/${String(chunkIndex).padStart(6, "0")}`;
-  await r2.put(key, bytes, {
-    httpMetadata: { contentType: "application/octet-stream" },
-  });
-  return { kind: "ok", session: toDeviceSession(claimed) };
+  try {
+    await r2.put(key, bytes, {
+      httpMetadata: { contentType: "application/octet-stream" },
+    });
+  } catch (error) {
+    await db
+      .prepare(
+        `UPDATE device_sessions SET state = 'failed', ended_at = ?, updated_at = ?
+         WHERE id = ? AND account_id = ?`
+      )
+      .bind(now, now, sessionId, accountId)
+      .run();
+    throw error;
+  }
+  await db
+    .prepare(
+      `UPDATE device_sessions SET uploaded_chunk_count = uploaded_chunk_count + 1
+       WHERE id = ? AND account_id = ?`
+    )
+    .bind(sessionId, accountId)
+    .run();
+  const uploaded = await loadSession(db, accountId, sessionId);
+  if (uploaded === null) return { kind: "not_found" };
+  if (uploaded.state === "failed") return { kind: "conflict" };
+  return { kind: "ok", session: toDeviceSession(uploaded) };
 }
 
 export type CompleteResult =
   | { kind: "ok"; session: DeviceSession }
+  | { kind: "conflict" }
   | { kind: "not_found" };
 
 export async function completeDeviceSession(
@@ -226,18 +248,21 @@ export async function completeDeviceSession(
   if (!isSessionId(sessionId)) return { kind: "not_found" };
   const row = await loadSession(db, accountId, sessionId);
   if (row === null) return { kind: "not_found" };
+  if (row.state === "failed") return { kind: "conflict" };
   if (row.state === "complete")
     return { kind: "ok", session: toDeviceSession(row) };
   await db
     .prepare(
       `UPDATE device_sessions
        SET state = 'complete', ended_at = ?, updated_at = ?
-       WHERE id = ? AND account_id = ?`
+       WHERE id = ? AND account_id = ? AND state = 'open'
+         AND uploaded_chunk_count = chunk_count`
     )
     .bind(now, now, sessionId, accountId)
     .run();
   const updated = await loadSession(db, accountId, sessionId);
   if (updated === null) return { kind: "not_found" };
+  if (updated.state !== "complete") return { kind: "conflict" };
   return { kind: "ok", session: toDeviceSession(updated) };
 }
 
