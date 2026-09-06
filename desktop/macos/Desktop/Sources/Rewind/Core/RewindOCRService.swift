@@ -176,22 +176,39 @@ actor RewindOCRService {
       }
     }
 
-    return resolved.isEmpty ? ["en-US"] : resolved
+    // Never hand back a tag Vision did not report: an unsupported language makes
+    // `perform` throw and takes the whole request down. When the capability list
+    // shares nothing with this user, fall back to the first language Vision does
+    // support. ["en-US"] is reserved for the empty-capability case above, where
+    // there is no reported list to choose from.
+    return resolved.isEmpty ? [supported[0]] : resolved
   }
 
   /// Matches a BCP-47 tag against Vision's supported tags: the exact tag first,
-  /// then the same language under any region, so a region-less preference such
-  /// as `ja` still selects a supported `ja-JP`.
+  /// then the same language *and script*.
+  ///
+  /// Script matters, and collapsing to the primary language gets it wrong: `zh`
+  /// alone would let a `zh-TW` reader be handed Vision's `zh-Hans` scope and
+  /// recognised with the Simplified model. Comparing maximised identifiers keeps
+  /// `zh-TW` on `zh-Hant`, while still letting `ja` reach `ja-JP` and `en-GB`
+  /// reach `en-US`, because those agree once likely subtags are filled in.
   private static func bestSupportedMatch(for tag: String, in supported: [String]) -> String? {
     if let exact = supported.first(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
       return exact
     }
-    let language = Self.primaryLanguage(of: tag)
-    return supported.first { Self.primaryLanguage(of: $0).caseInsensitiveCompare(language) == .orderedSame }
+    let requested = Self.languageAndScript(of: tag)
+    return supported.first { Self.languageAndScript(of: $0) == requested }
   }
 
-  private static func primaryLanguage(of tag: String) -> String {
-    tag.split(separator: "-").first.map(String.init) ?? tag
+  /// Language and script for a tag, with likely subtags filled in, so tags that
+  /// name the same written language compare equal regardless of how they spell
+  /// it (`zh-TW` and `zh-Hant`; `ja` and `ja-JP`).
+  static func languageAndScript(of tag: String) -> String {
+    let maximal = Locale.Language(identifier: tag).maximalIdentifier
+    let expanded = Locale.Language(identifier: maximal)
+    let language = expanded.languageCode?.identifier.lowercased() ?? tag.lowercased()
+    let script = expanded.script?.identifier.lowercased() ?? ""
+    return "\(language)-\(script)"
   }
 
   private init() {}

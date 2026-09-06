@@ -54,11 +54,44 @@ final class RewindOCRQualityTests: XCTestCase {
       ["en-US", "ja-JP"])
   }
 
+  func testAScopeSharingNothingWithTheUserStillComesFromVisionsOwnList() {
+    // Returning a tag Vision did not report makes `perform` throw and takes the
+    // whole request down, so the no-overlap branch must pick from `supported`
+    // rather than falling back to a literal.
+    let supported = ["fr-FR", "de-DE"]
+    let resolved = RewindOCRService.resolveRecognitionLanguages(
+      preferred: ["ja-JP"],
+      supported: supported)
+
+    XCTAssertEqual(resolved.count, 1)
+    XCTAssertTrue(
+      supported.contains(resolved[0]),
+      "resolved \(resolved) must be drawn from Vision's reported list \(supported)")
+  }
+
+  func testTraditionalChineseIsNotRecognisedWithTheSimplifiedScope() {
+    // Collapsing zh-TW to its primary language would match zh-Hans and read
+    // Traditional text with the Simplified model.
+    XCTAssertEqual(
+      RewindOCRService.resolveRecognitionLanguages(
+        preferred: ["zh-TW"],
+        supported: ["en-US", "zh-Hans", "zh-Hant"]),
+      ["zh-Hant", "en-US"])
+  }
+
+  func testSimplifiedChinesePicksItsOwnScope() {
+    XCTAssertEqual(
+      RewindOCRService.resolveRecognitionLanguages(
+        preferred: ["zh-CN"],
+        supported: ["en-US", "zh-Hans", "zh-Hant"]),
+      ["zh-Hans", "en-US"])
+  }
+
   func testAnUnavailableSupportedListStillYieldsAUsableLanguage() {
     XCTAssertEqual(
       RewindOCRService.resolveRecognitionLanguages(preferred: ["ja-JP"], supported: []),
       ["en-US"],
-      "a failed capability query must not leave the request with an empty language list")
+      "with no reported list there is nothing to choose from, so English is the only safe guess")
   }
 
   func testBatteryOptimizationLowersCaptureCadenceInsteadOfOCRQuality() {
