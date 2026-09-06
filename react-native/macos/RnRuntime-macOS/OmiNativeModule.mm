@@ -1,5 +1,6 @@
 #import "OmiNativeModule.h"
 #import "../../apple/OmiDeviceInformation.h"
+#import "../../apple/OmiBleSession.h"
 
 #import <CoreBluetooth/CoreBluetooth.h>
 #import <TargetConditionals.h>
@@ -31,6 +32,8 @@ static NSString *const OmiInformationServiceUUID = @"180A";
 @property(nonatomic, copy) RCTPromiseResolveBlock connectResolve;
 @property(nonatomic, copy) RCTPromiseRejectBlock connectReject;
 @property(nonatomic) NSInteger scanGeneration;
+@property(nonatomic) NSUInteger connectionGeneration;
+@property(nonatomic, strong) NSMutableSet<CBPeripheral *> *retiringPeripherals;
 @property(nonatomic) BOOL awaitingAdapterForScan;
 @property(nonatomic, strong) NSNumber *pendingScanTimeoutSeconds;
 @property(nonatomic, copy) NSArray<NSString *> *pendingScanServiceUuids;
@@ -59,6 +62,7 @@ RCT_EXPORT_MODULE(OmiNative)
 - (instancetype)init {
   self = [super init];
   if (self) {
+    _retiringPeripherals = [NSMutableSet set];
     _peripherals = [NSMutableDictionary dictionary];
     _devices = [NSMutableDictionary dictionary];
     _batteries = [NSMutableDictionary dictionary];
@@ -197,8 +201,12 @@ RCT_REMAP_METHOD(connectDevice,
                  rejecter:(RCTPromiseRejectBlock)reject) {
   [self ensureCentral];
   CBPeripheral *peripheral = self.peripherals[identifier];
-  if (peripheral == nil) {
+  if (peripheral == nil || self.central.state != CBManagerStatePoweredOn || [self.retiringPeripherals containsObject:peripheral]) {
     reject(@"OMI_DEVICE_UNAVAILABLE", @"Omi device is unavailable", nil);
+    return;
+  }
+  if (self.connectedPeripheral == peripheral) {
+    reject(@"OMI_DEVICE_BUSY", @"Omi connection is already active", nil);
     return;
   }
   if (self.connectResolve != nil) {
@@ -214,12 +222,19 @@ RCT_REMAP_METHOD(connectDevice,
   CBPeripheral *existing = self.connectedPeripheral;
   if (existing != nil && existing != peripheral) {
     existing.delegate = nil;
+    [self.retiringPeripherals addObject:existing];
     [self.central cancelPeripheralConnection:existing];
   }
   self.connectedPeripheral = peripheral;
   peripheral.delegate = self;
   self.connectResolve = resolve;
   self.connectReject = reject;
+  NSUInteger generation = ++self.connectionGeneration;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    if (OmiBleSetupExpired(self.connectionGeneration, generation, self.connectResolve != nil)) {
+      [self retireConnection:@"Omi connection setup timed out"];
+    }
+  });
   [self emitSnapshot];
   [self.central connectPeripheral:peripheral options:nil];
 }
@@ -229,12 +244,18 @@ RCT_REMAP_METHOD(disconnectDevice,
                  resolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
   if (self.central != nil && [self.connectedPeripheral.identifier.UUIDString isEqualToString:identifier]) {
-    [self.central cancelPeripheralConnection:self.connectedPeripheral];
+    [self retireConnection:@"Disconnected from Omi"];
   }
   resolve(nil);
 }
 
 - (void)centralManagerDidUpdateState:(CBCentralManager *)central {
+  if (central.state != CBManagerStatePoweredOn) {
+    [self retireConnection:@"Bluetooth is unavailable"];
+    self.scanning = NO;
+    self.scanGeneration += 1;
+    if (self.scanResolve != nil) { self.scanResolve([self deviceList]); self.scanResolve = nil; }
+  }
   self.lastEvent = [NSString stringWithFormat:@"Bluetooth is %@", [self bluetoothState]];
   [self emitSnapshot];
   if (!self.awaitingAdapterForScan || self.scanResolve == nil) {
@@ -270,7 +291,7 @@ RCT_REMAP_METHOD(disconnectDevice,
 }
 
 - (void)centralManager:(CBCentralManager *)central didConnectPeripheral:(CBPeripheral *)peripheral {
-  if (self.connectedPeripheral != nil && self.connectedPeripheral != peripheral) {
+  if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) {
     [central cancelPeripheralConnection:peripheral];
     return;
   }
@@ -279,19 +300,14 @@ RCT_REMAP_METHOD(disconnectDevice,
   self.lastEvent = @"Connected to Omi";
   peripheral.delegate = self;
   [peripheral discoverServices:@[ [CBUUID UUIDWithString:OmiServiceUUID], [CBUUID UUIDWithString:OmiBatteryServiceUUID], [CBUUID UUIDWithString:OmiInformationServiceUUID] ]];
-  if (self.connectResolve != nil) {
-    RCTPromiseResolveBlock resolve = self.connectResolve;
-    self.connectResolve = nil;
-    self.connectReject = nil;
-    resolve(nil);
-  }
   [self emitSnapshot];
 }
 
 - (void)centralManager:(CBCentralManager *)central
 didFailToConnectPeripheral:(CBPeripheral *)peripheral
                  error:(NSError *)error {
-  if (self.connectedPeripheral != nil && self.connectedPeripheral != peripheral) {
+  [self.retiringPeripherals removeObject:peripheral];
+  if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) {
     return;
   }
   self.connectionState = @"disconnected";
@@ -310,20 +326,18 @@ didFailToConnectPeripheral:(CBPeripheral *)peripheral
 - (void)centralManager:(CBCentralManager *)central
 didDisconnectPeripheral:(CBPeripheral *)peripheral
                  error:(NSError *)error {
-  if (self.connectedPeripheral != nil && self.connectedPeripheral != peripheral) {
+  [self.retiringPeripherals removeObject:peripheral];
+  if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) {
     return;
   }
-  self.connectionState = @"disconnected";
-  self.connectedPeripheral = nil;
-  self.audioNotifying = NO;
-  self.codec = nil;
-  self.lastEvent = error.localizedDescription ?: @"Disconnected from Omi";
-  [self emitSnapshot];
+  [self retireConnection:error.localizedDescription ?: @"Disconnected from Omi"];
+  [self.retiringPeripherals removeObject:peripheral];
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverServices:(NSError *)error {
+  if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) return;
   if (error != nil) {
-    self.lastEvent = error.localizedDescription;
+    [self retireConnection:@"Omi service discovery failed"];
     return;
   }
   for (CBService *service in peripheral.services) {
@@ -341,6 +355,7 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverCharacteristicsForService:(CBService *)service error:(NSError *)error {
+  if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) return;
   if (error != nil) {
     return;
   }
@@ -364,14 +379,17 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
 - (void)peripheral:(CBPeripheral *)peripheral
 didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
              error:(NSError *)error {
+  if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) return;
   if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiAudioUUID]]) {
     self.audioNotifying = error == nil && characteristic.isNotifying;
-    self.lastEvent = self.audioNotifying ? @"Omi audio notify is live" : @"Omi audio notify is idle";
+    if (!self.audioNotifying) { [self retireConnection:@"Omi audio notification subscription failed"]; return; }
+    [self finishConnectionIfReady];
     [self emitSnapshot];
   }
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error {
+  if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) return;
   if (error != nil || characteristic.value == nil) {
     return;
   }
@@ -391,6 +409,7 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
   if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiCodecUUID]] && characteristic.value.length > 0) {
     const unsigned char *bytes = (const unsigned char *)characteristic.value.bytes;
     self.codec = @(bytes[0]);
+    [self finishConnectionIfReady];
     [self emitSnapshot];
     return;
   }
@@ -406,7 +425,7 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     [self emitSnapshot];
     return;
   }
-  if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiAudioUUID]] && self.codec != nil) {
+  if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiAudioUUID]] && OmiBleRecordingReady([self.connectionState isEqualToString:@"connected"], self.audioNotifying, self.codec != nil)) {
     [self emit:@"audio"
           body:@{
             @"deviceId": identifier,
@@ -436,7 +455,7 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     @"devices": [self deviceList],
     @"connectedDeviceId": connectedId ?: [NSNull null],
     @"phase": self.connectionState,
-    @"capture": self.audioNotifying ? @"recording" : @"idle",
+    @"capture": OmiBleRecordingReady([self.connectionState isEqualToString:@"connected"], self.audioNotifying, self.codec != nil) ? @"recording" : @"idle",
     @"lastEvent": self.lastEvent,
     @"microphone": @"unknown",
     @"notifications": @"unknown",
@@ -491,6 +510,41 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     device[@"battery"] = battery;
   }
   return device;
+}
+
+- (void)finishConnectionIfReady {
+  if (!self.audioNotifying || self.codec == nil || self.connectedPeripheral == nil) return;
+  self.lastEvent = @"Omi audio notify is live";
+  if (self.connectResolve != nil) {
+    RCTPromiseResolveBlock resolve = self.connectResolve;
+    self.connectResolve = nil;
+    self.connectReject = nil;
+    resolve(nil);
+  }
+}
+
+- (void)retireConnection:(NSString *)message {
+  self.connectionGeneration += 1;
+  CBPeripheral *previous = self.connectedPeripheral;
+  self.connectedPeripheral = nil;
+  self.audioNotifying = NO;
+  self.codec = nil;
+  self.connectionState = @"disconnected";
+  self.lastEvent = message;
+  if (previous != nil) {
+    previous.delegate = nil;
+    [self.retiringPeripherals addObject:previous];
+    if (previous.state != CBPeripheralStateDisconnected) {
+      [self.central cancelPeripheralConnection:previous];
+    }
+  }
+  if (self.connectReject != nil) {
+    RCTPromiseRejectBlock reject = self.connectReject;
+    self.connectResolve = nil;
+    self.connectReject = nil;
+    reject(@"OMI_DEVICE_UNAVAILABLE", message, nil);
+  }
+  [self emitSnapshot];
 }
 
 - (NSString *)bluetoothState {
