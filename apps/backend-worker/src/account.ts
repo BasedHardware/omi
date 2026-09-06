@@ -175,7 +175,12 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
         this.notifyWaiters(generationId, event);
         return;
       }
-      const result = await generateViaGateway(config, prompt, generationId);
+      const result = await generateViaGateway(
+        config,
+        prompt,
+        generationId,
+        composed.history
+      );
       if (result.kind === "error") {
         const event = await failGeneration(
           this.env.DB,
@@ -204,6 +209,7 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
               role: "system",
               content: "You are Omi, a concise and helpful personal assistant.",
             },
+            ...composed.history,
             { role: "user", content: prompt },
           ],
           max_tokens: 768,

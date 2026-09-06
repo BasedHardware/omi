@@ -352,6 +352,105 @@ describe("device session ingest", () => {
     expect(r2Mock.objects.size).toBe(2);
   });
 
+  test("completion waits for every claimed audio chunk to reach storage", async () => {
+    const opened = await fetchWorker("/v1/device-sessions", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify(openBody),
+    });
+    const created = (await opened.json()) as { session: { id: string } };
+    let release: () => void = () => undefined;
+    let entered: () => void = () => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const put = r2Mock.put.bind(r2Mock);
+    r2Mock.put = (async (...args: Parameters<R2Bucket["put"]>) => {
+      entered();
+      await pending;
+      return put(...args);
+    }) as R2Bucket["put"];
+    const upload = fetchWorker(
+      `/v1/device-sessions/${created.session.id}/audio`,
+      {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: JSON.stringify({ bytesBase64: btoa("audio") }),
+      }
+    );
+    await started;
+    try {
+      const early = await fetchWorker(
+        `/v1/device-sessions/${created.session.id}/complete`,
+        {
+          method: "POST",
+          headers: authenticatedHeaders,
+        }
+      );
+      expect(early.status).toBe(409);
+    } finally {
+      release();
+    }
+    expect((await upload).status).toBe(200);
+    const completed = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/complete`,
+      {
+        method: "POST",
+        headers: authenticatedHeaders,
+      }
+    );
+    expect(completed.status).toBe(200);
+    expect(await completed.json()).toMatchObject({
+      session: { state: "complete", chunkCount: 1 },
+    });
+  });
+
+  test("failed audio storage cannot be finalized as a successful recording", async () => {
+    const opened = await fetchWorker("/v1/device-sessions", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify(openBody),
+    });
+    const created = (await opened.json()) as { session: { id: string } };
+    r2Mock.put = async () => {
+      throw new Error("storage unavailable");
+    };
+
+    const appended = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/audio`,
+      {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: JSON.stringify({ bytesBase64: btoa("audio") }),
+      }
+    );
+    expect(appended.status).toBe(500);
+    const completed = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/complete`,
+      { method: "POST", headers: authenticatedHeaders }
+    );
+    expect(completed.status).toBe(409);
+    const listed = await fetchWorker("/v1/device-sessions", {
+      headers: authenticatedHeaders,
+    });
+    expect(await listed.json()).toMatchObject({
+      sessions: [{ state: "failed" }],
+    });
+    const late = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/audio`,
+      {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: JSON.stringify({ bytesBase64: btoa("retry") }),
+      }
+    );
+    expect(late.status).toBe(409);
+    expect(r2Mock.objects.size).toBe(0);
+  });
+
   test("does not invent a 200 transcript when audio is absent", async () => {
     const opened = await fetchWorker("/v1/device-sessions", {
       method: "POST",

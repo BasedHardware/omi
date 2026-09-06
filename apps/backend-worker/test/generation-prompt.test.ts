@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import {
   composeGenerationPrompt,
   GENERATION_ATTACHMENT_TEXT_BUDGET,
+  GENERATION_HISTORY_TEXT_BUDGET,
+  GENERATION_HISTORY_MESSAGE_LIMIT,
   isGenerationTextMimeType,
 } from "../src/generation-prompt";
 import { CHAT_CAPABILITIES } from "../src/wire";
@@ -98,6 +100,173 @@ describe("generation text mime policy", () => {
 });
 
 describe("composeGenerationPrompt", () => {
+  test("uses only earlier messages from the same account, app, and chat session", async () => {
+    const rows = [
+      [
+        "human",
+        "acct-a",
+        "human",
+        "My name is Ana",
+        1,
+        "session-a",
+        null,
+        null,
+      ],
+      [
+        "assistant",
+        "acct-a",
+        "ai",
+        "Hello Ana",
+        2,
+        "session-a",
+        null,
+        "completed",
+      ],
+      [
+        "foreign",
+        "acct-b",
+        "human",
+        "foreign account",
+        3,
+        "session-a",
+        null,
+        null,
+      ],
+      [
+        "other-session",
+        "acct-a",
+        "human",
+        "other session",
+        4,
+        "session-b",
+        null,
+        null,
+      ],
+      [
+        "other-app",
+        "acct-a",
+        "human",
+        "other app",
+        5,
+        "session-a",
+        "app-b",
+        null,
+      ],
+      [
+        "cancelled",
+        "acct-a",
+        "ai",
+        "cancelled reply",
+        6,
+        "session-a",
+        null,
+        "cancelled",
+      ],
+      [
+        "current",
+        "acct-a",
+        "human",
+        "What is my name?",
+        7,
+        "session-a",
+        null,
+        null,
+      ],
+      [
+        "future",
+        "acct-a",
+        "human",
+        "future message",
+        8,
+        "session-a",
+        null,
+        null,
+      ],
+    ];
+    for (const [
+      id,
+      account,
+      sender,
+      text,
+      position,
+      chatSessionId,
+      appId,
+      outcome,
+    ] of rows) {
+      await db
+        .prepare(
+          "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, 1, ?, ?)"
+        )
+        .bind(
+          id,
+          account,
+          sender,
+          text,
+          position,
+          JSON.stringify({ chatSessionId, appId }),
+          outcome
+        )
+        .run();
+    }
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "current",
+      "What is my name?"
+    );
+    expect(result).toEqual({
+      kind: "ok",
+      prompt: "What is my name?",
+      history: [
+        { role: "user", content: "My name is Ana" },
+        { role: "assistant", content: "Hello Ana" },
+      ],
+    });
+  });
+
+  test("bounds default-session history by message count and UTF-8 bytes", async () => {
+    for (let position = 1; position <= 43; position += 1) {
+      await db
+        .prepare(
+          "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, ?, 1, NULL)"
+        )
+        .bind(`message-${position}`, String(position), position)
+        .run();
+    }
+    const counted = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "message-43",
+      "current"
+    );
+    if (counted.kind !== "ok") throw new Error("missing prompt");
+    expect(counted.history).toHaveLength(GENERATION_HISTORY_MESSAGE_LIMIT);
+    expect(counted.history[0]?.content).toBe("3");
+    await db
+      .prepare("UPDATE chat_messages SET text = ? WHERE position < 43")
+      .bind("界".repeat(1000))
+      .run();
+    const bounded = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "message-43",
+      "current"
+    );
+    if (bounded.kind !== "ok") throw new Error("missing prompt");
+    expect(bounded.history).toHaveLength(
+      Math.floor(GENERATION_HISTORY_TEXT_BUDGET / 3000)
+    );
+    expect(
+      bounded.history.reduce(
+        (sum, item) => sum + new TextEncoder().encode(item.content).byteLength,
+        0
+      )
+    ).toBeLessThanOrEqual(GENERATION_HISTORY_TEXT_BUDGET);
+  });
+
   test("appends a bound text/plain R2 object to the prompt", async () => {
     await insertBound(db, {
       id: "att-text",
