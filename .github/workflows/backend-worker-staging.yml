@@ -46,6 +46,13 @@ jobs:
         run: bun run --cwd apps/backend-worker test
       - name: Client contract regressions
         run: bun run --cwd react-native test -- --runInBand && bun run --cwd pwa test
+      - name: Install portable backend dependencies
+        run: bun install --cwd backends/example-platform --frozen-lockfile
+      - name: Portable backend contracts
+        run: bun run platform:check
+      - name: Portable PostgreSQL integration and runtime parity
+        timeout-minutes: 20
+        run: bun run --cwd backends/example-platform test:postgres
       - name: Dry run deploy
         run: bun run --cwd apps/backend-worker deploy:dry-run
 

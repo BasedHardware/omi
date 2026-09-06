@@ -33,6 +33,7 @@ export const createPostgresFirebaseMemoryRouteReadPort = (
     input.bearer_token,
     input.now_epoch_seconds,
     input.request,
+    ...(input.signal ? [input.signal] : []),
   ]);
   if (outcome.kind === "loaded") {
     return Object.freeze({ kind: "loaded", canonical_json: outcome.canonical_json });

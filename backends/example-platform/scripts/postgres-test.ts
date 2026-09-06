@@ -81,7 +81,6 @@ const saveState = (state: PostgresTestState): void => {
 };
 
 const newPersistentState = (): PostgresTestState => {
-  if (!existsSync("/Volumes/Ephemeral")) return closedError("ephemeral_volume_unavailable");
   const state = createPostgresTestState(PROJECT_ROOT);
   mkdirSync(state.runDirectory, { recursive: true, mode: 0o700 });
   writeFileSync(state.credentialsFile, [
@@ -393,7 +392,7 @@ const testPostgres = async (preserve: boolean): Promise<void> => {
   childEnvironment["OMI_TEST_POSTGRES_URL"] = postgresTestConnectionString(prepared.state, passwordFrom(prepared.state));
   childEnvironment["OMI_TEST_POSTGRES_IMAGE"] = prepared.state.image;
   try {
-    const result = command(["bun", "test", "drivers/postgres/postgresjs.real.test.ts", "drivers/postgres/derived-group-dream-work-input.real.test.ts", "drivers/postgres/derived-group-dream-success.real.test.ts", "drivers/postgres/derived-group-dream-one-shot-runtime.real.test.ts"], {
+    const result = command(["bun", "test", "drivers/postgres/postgresjs.real.test.ts", "drivers/postgres/derived-group-dream-work-input.real.test.ts", "drivers/postgres/derived-group-dream-success.real.test.ts", "drivers/postgres/derived-group-dream-one-shot-runtime.real.test.ts", "drivers/postgres/firebase-binding.real.test.ts"], {
       env: childEnvironment, inherit: true,
     });
     if (result.exitCode !== 0) process.exitCode = result.exitCode;

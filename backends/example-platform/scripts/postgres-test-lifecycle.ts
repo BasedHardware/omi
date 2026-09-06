@@ -1,12 +1,13 @@
 import { createHash, randomBytes } from "node:crypto";
 import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 
 export const POSTGRES_TEST_IMAGE = "postgres:18.4-bookworm@sha256:882236b897e39051d2368c5ccc6cda944904723506b2dfc97f2a8f5bc9afa382" as const;
 export const POSTGRES_TEST_PLATFORM = "linux/amd64" as const;
 export const POSTGRES_TEST_SERVER_VERSION_NUM = 180004 as const;
 export const POSTGRES_TEST_BUN_IMAGE = "oven/bun:1.3.14-slim@sha256:d56a2534ffd262e92c12fd3249d3924d296d97086da773f821d7d0477435ea04" as const;
 export const POSTGRES_TEST_NODE_IMAGE = "node:24.19.0-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03" as const;
-export const POSTGRES_TEST_ROOT = "/Volumes/Ephemeral/scratch/omi-postgres-tests" as const;
+export const POSTGRES_TEST_ROOT = resolve(tmpdir(), "omi-postgres-tests");
 export const POSTGRES_TEST_USER = "omi_test" as const;
 export const POSTGRES_TEST_DATABASE = "omi_test" as const;
 
