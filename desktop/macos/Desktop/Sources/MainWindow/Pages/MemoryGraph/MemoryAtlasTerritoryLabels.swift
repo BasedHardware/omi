@@ -187,7 +187,7 @@ enum MemoryAtlasNeighbourhoodLabels {
   /// one the map draws — which is the point. A speck of territory the size of
   /// a couple of dots says nothing that the dots do not already say, and eight
   /// of them around the edge of a region read as noise around it.
-  static let smallestNamed: CGFloat = 26
+  static let smallestNamed: CGFloat = 10
 
   /// Whether territories are the subject at this camera.
   ///
@@ -201,12 +201,16 @@ enum MemoryAtlasNeighbourhoodLabels {
   /// the frame everything else is being read in, so it outlasts zooming all
   /// the way in and picking an entity off it — both of which used to erase the
   /// only thing on screen saying where they were.
+  /// Territories are the ground and the ground stays. They used to give way
+  /// at inspect zoom and whenever an entity was selected, which is exactly
+  /// when a person is looking hardest at one place — and what they saw was
+  /// the place vanish under them. The parameters remain so the seam is
+  /// explicit: nothing about the camera or the selection hides a region.
   static func areVisible(
     detailLevel: MemoryAtlasDetailLevel, hasSelection: Bool, isInsideNeighbourhood: Bool
   ) -> Bool {
-    if isInsideNeighbourhood { return true }
-    guard !hasSelection else { return false }
-    return detailLevel != .inspect
+    _ = (detailLevel, hasSelection, isInsideNeighbourhood)
+    return true
   }
 
   /// The islands on screen, largest first, before anything is named.

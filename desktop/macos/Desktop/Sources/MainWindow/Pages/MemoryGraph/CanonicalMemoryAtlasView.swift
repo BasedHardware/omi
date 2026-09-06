@@ -802,7 +802,10 @@ private struct CanonicalMemoryAtlasSurface: View {
       focused: enteredRegionID)
 
     let captions = Dictionary(lastWriteWins: snapshot.neighbourhoods.map { ($0.id, $0.caption) })
-    let budget = enteredRegionID == nil ? MemoryAtlasNeighbourhoodLabels.limit : Int.max
+    // Every island on screen is drawn and, if at all possible, named. A
+    // budget of eight and a "no name, no island" rule made territories come
+    // and go with the camera, which read as the map changing its mind.
+    let budget = Int.max
 
     // The entity names on the canvas, as boxes to stay out of. They hang below
     // their mark, and their width tracks the same estimate the canvas labeller
@@ -880,10 +883,23 @@ private struct CanonicalMemoryAtlasSurface: View {
     let candidates = MemoryAtlasNeighbourhoodLabels.place(
       found, captions: captions, in: size, avoiding: nameBoxes(hiding: []), preferringClear: markBoxes,
       limit: budget)
-    let placed = MemoryAtlasNeighbourhoodLabels.place(
+    let named = MemoryAtlasNeighbourhoodLabels.place(
       found, captions: captions, in: size,
       avoiding: nameBoxes(hiding: standingOn(candidates)), preferringClear: markBoxes, limit: budget,
-      insisting: enteredRegionID != nil)
+      insisting: true)
+    // An island whose name still found no room keeps its ground, unnamed,
+    // rather than disappearing: the shape says "a group lives here" even
+    // before the name can say which.
+    let namedKeys = Set(named.map(\.id))
+    let placed =
+      named
+      + found
+      .filter { !namedKeys.contains("\($0.regionID)-\($0.index)") }
+      .map { island in
+        MemoryAtlasNeighbourhoodLabels.Placed(
+          regionID: island.regionID, index: island.index, caption: captions[island.regionID] ?? "",
+          rect: .zero, ring: island.ring)
+      }
     let quietened = standingOn(placed)
     renderPlanCache.settledTerritory = MemoryAtlasNeighbourhoodLabels.Settled(
       captions: placed.map { island in
@@ -952,7 +968,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   private func neighbourhoodCaptions(
     regions: [MemoryAtlasNeighbourhoodLabels.Placed]
   ) -> some View {
-    ForEach(regions) { region in
+    ForEach(regions.filter { !$0.rect.isEmpty }) { region in
       MemoryAtlasNeighbourhoodCaption(
         caption: region.caption,
         size: region.rect.size,

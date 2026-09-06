@@ -658,25 +658,20 @@ final class MemoryAtlasLayoutTests: XCTestCase {
       "Twenty-four entities in pairs have no neighbourhoods, and saying otherwise is noise")
   }
 
-  /// Territories survive zooming in, and give way only to a more specific
-  /// question.
+  /// Territories survive every zoom level and every selection.
   ///
-  /// They used to stop at neighbourhood zoom, on the theory that close up the
-  /// entities speak for themselves. What that actually did was delete the
-  /// island a person had just decided to look at, at the moment they looked at
-  /// it — and take its name with it, so there was no longer anything on screen
-  /// saying where they were. Only picking one entity, or reading every label at
-  /// inspect zoom, replaces the question territories answer.
-  func testRegionNamesGiveWayToWhateverTheUserIsActuallyLookingAt() {
+  /// They used to stop at neighbourhood zoom, then at inspect zoom and on
+  /// selection, each on the theory that something more specific had replaced
+  /// them. Each time what a person saw was the place they were looking at
+  /// vanish under them, and the map read as changing its mind with the camera.
+  /// The ground stays; the redesign asked for it explicitly.
+  func testRegionsStayThroughEveryZoomAndSelection() {
     let visible = MemoryAtlasNeighbourhoodLabels.areVisible
 
-    XCTAssertTrue(visible(.overview, false, false))
-    XCTAssertTrue(visible(.neighborhood, false, false))
-    XCTAssertTrue(visible(.detail, false, false), "Zooming into a place must not delete the place")
-    XCTAssertTrue(visible(.focus, false, false))
-    XCTAssertFalse(
-      visible(.inspect, false, false), "Every entity is named here; a region name is noise")
-    XCTAssertFalse(visible(.overview, true, false), "A selection is a more specific question")
+    for level in [MemoryAtlasDetailLevel.overview, .neighborhood, .detail, .focus, .inspect] {
+      XCTAssertTrue(visible(level, false, false), "\(level)")
+      XCTAssertTrue(visible(level, true, false), "\(level) with a selection")
+    }
   }
 
   /// The place you went into is still there once you start looking inside it.
