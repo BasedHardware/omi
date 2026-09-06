@@ -1,7 +1,7 @@
 # Deployed entry increment
 
 Development setup on 2026-09-07 created the isolated `based-hardware-dev`
-PostgreSQL 18.4 instance and applied tested migrations 1–49. The application
+PostgreSQL 18.4 instance and applied tested migrations 1–50. The application
 login has only `omi_platform_application` membership, with neither superuser
 nor RLS bypass; private database URL, codec and cursor secret versions are all
 version 1. Credentials are outside source and OpenTofu state. The seven original runtime IAM grants and the transcription secret grant
