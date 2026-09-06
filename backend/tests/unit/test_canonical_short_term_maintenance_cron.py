@@ -285,6 +285,9 @@ def test_enabled_flex_uid_routes_promotion_and_l2_with_long_leases_and_guards(mo
         def llm_for_uid(self, uid, **_kwargs):
             return object() if uid == "uid-flex" else None
 
+        def job_budget_fits(self) -> bool:
+            return True
+
         assert_result_current = staticmethod(result_guard)
 
     def maintenance(uid, **kwargs):
@@ -373,6 +376,48 @@ def test_flex_deferral_stops_the_page_without_advancing_past_the_uid(monkeypatch
     assert db.docs[cron.CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH]["last_uid"] == "uid-a"
 
 
+def test_job_budget_stop_skips_later_uids_without_flex_invoke(monkeypatch):
+    _enable(monkeypatch)
+    calls = []
+
+    class _FlexRouter:
+        def __init__(self, *, db_client, force_enabled=False):
+            self.control = type("Control", (), {"enabled": True})()
+            self._checks = 0
+
+        def llm_invoke_for_uid(self, _uid):
+            return None
+
+        def llm_for_uid(self, _uid, **_kwargs):
+            return None
+
+        def job_budget_fits(self) -> bool:
+            self._checks += 1
+            return self._checks == 1
+
+    def maintenance(uid, **_kwargs):
+        calls.append(uid)
+        return cron.CanonicalShortTermMaintenanceReport(uid=uid)
+
+    monkeypatch.setattr(cron, "PromotionFlexRunRouter", _FlexRouter)
+    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
+    monkeypatch.setattr(cron, "count_active_short_term", lambda uid, db_client, cap=11: 3)
+    monkeypatch.setattr(cron, "recently_dreamed", lambda uid, db_client, now: False)
+
+    db = _Db(
+        [
+            _Snapshot("canonical_memory_maintenance_registry/uid-a"),
+            _Snapshot("canonical_memory_maintenance_registry/uid-b"),
+            _Snapshot("canonical_memory_maintenance_registry/uid-c"),
+        ]
+    )
+    summary = cron.run_universal_short_term_maintenance(db_client=db, now=NOW, inventory_limit=3)
+
+    assert calls == ["uid-a"]
+    assert summary.flex_deferred is True
+    assert db.docs[cron.CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH]["last_uid"] == "uid-a"
+
+
 def test_registry_cursor_persists_after_empty_short_term_skip(monkeypatch):
     _enable(monkeypatch)
     calls = []
@@ -413,6 +458,9 @@ def test_maintenance_flex_env_forces_the_router(monkeypatch):
         def llm_for_uid(self, _uid, **_kwargs):
             return None
 
+        def job_budget_fits(self) -> bool:
+            return True
+
     monkeypatch.setattr(cron, "PromotionFlexRunRouter", _FlexRouter)
     monkeypatch.setattr(
         cron,
@@ -441,6 +489,9 @@ def test_overflow_queue_bypasses_recent_dream_cooldown(monkeypatch):
 
         def llm_for_uid(self, _uid, **_kwargs):
             return object()
+
+        def job_budget_fits(self) -> bool:
+            return True
 
         assert_result_current = staticmethod(lambda: None)
 

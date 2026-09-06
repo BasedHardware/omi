@@ -678,6 +678,13 @@ def run_universal_short_term_maintenance(
     )
     completed_uids: set[str] = set()
     for uid in uids:
+        if promotion_flex.control.enabled and not promotion_flex.job_budget_fits():
+            summary.flex_deferred = True
+            logger.info(
+                "canonical_short_term_maintenance_cron: uid=%s flex_deferred=job_budget",
+                uid,
+            )
+            break
         stm_count = count_active_short_term(uid, db_client=client)
         if stm_count == 0:
             summary.skipped_no_short_term += 1
