@@ -94,3 +94,12 @@ Canonical task timestamps use milliseconds: `backends/example-platform/apps/serv
 Native iOS Simulator, Android Debug and macOS Debug compiles passed after the secure write identity and routing changes (`/tmp/v5-task-ios-build.log`, `/tmp/v5-task-android-build.log`, `/tmp/v5-task-macos-build.log`). Native authenticated task interaction remains unverified. No remote migration or deployment was performed.
 
 Task parity final gate: `bun run check` passed all 682 JS/TS tests plus native checks (`/tmp/v5-task-completion-commit-check.log`). A separate agent reviewed operation identity, account fences and read refresh handling; its stale-epoch refresh finding was fixed and regression-tested.
+
+
+## Mobile navigation and conversation detail verification
+
+Mobile Conversations now uses the shared searchable list and selectable detail view, including recording transcripts. Settings is a fifth bottom destination alongside Home, Conversations, Tasks and Apps; the shared Settings and Connectors pages stay inside that navigation. Browser settings reads use the real service settings endpoint and show a retryable, readable failure when the selected backend lacks it. No profile, billing identity or successful save is fabricated.
+
+The local PWA at port 5197 was exercised at mobile width: conversation selection opened full details, bottom navigation remained available, Settings selected correctly, and Privacy remained reachable. The canonical local service currently refuses settings, and the UI displayed the expected friendly retry message. Root `bun run check` passed with 310 React Native tests and the existing Worker, contract, PWA and native checks, plus 14 deployed-platform tests (`/tmp/v5-mobile-production-entry-check.log`). This is UI and local verification, not deployed feature parity.
+
+The design reference retains Mind Map collapsed on Home. Its keep/fix/drop annotations are explicitly an architect first-pass; they do not establish a completed graph feature or authorize removing it.

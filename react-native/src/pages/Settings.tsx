@@ -1,8 +1,17 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {ActivityIndicator, ScrollView, Text, View} from 'react-native';
+import {
+  ActivityIndicator,
+  Linking,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {
   cloudSessionUnavailableCopy,
   loadAccountSettings,
+  loadServiceSettings,
   optInTrainingData,
   setPrivateCloudSync,
   setStoreRecordingPermission,
@@ -48,6 +57,7 @@ function SettingRow({
           onPress={action}
           style={({pressed}) => [
             styles.cloudAction,
+            settingsStyles.touchAction,
             pressed && styles.pressed,
           ]}>
           <Text style={styles.cloudActionText}>
@@ -68,6 +78,11 @@ export function SettingsPage({
   onSignOut?: () => Promise<void>;
   signingIn?: boolean;
 }) {
+  const browser = Platform.OS === 'web';
+  const [serviceSettings, setServiceSettings] = useState<{
+    chatUsed: number;
+    chatLimit: number | null;
+  } | null>(null);
   const [section, setSection] = useState<SettingsSection>('Account');
   const [phase, setPhase] = useState<
     'loading' | 'signed-out' | 'ready' | 'error'
@@ -87,6 +102,19 @@ export function SettingsPage({
       setSnapshot(null);
       setError(cloudSessionUnavailableCopy(backend));
       setPhase('error');
+      return;
+    }
+    if (browser) {
+      setPhase('loading');
+      try {
+        setServiceSettings(await loadServiceSettings(backend));
+        setError(null);
+        setPhase('ready');
+      } catch {
+        setServiceSettings(null);
+        setError('Settings could not be loaded. Try again.');
+        setPhase('error');
+      }
       return;
     }
     if (auth !== undefined && auth !== null) {
@@ -118,7 +146,7 @@ export function SettingsPage({
       setError(desktopReadErrorCopy(reason));
       setPhase('error');
     }
-  }, []);
+  }, [browser]);
 
   useEffect(() => {
     reload().catch(() => undefined);
@@ -360,27 +388,29 @@ export function SettingsPage({
   return (
     <ScrollView contentContainerStyle={styles.destinationPage}>
       <View accessibilityRole="tablist" style={styles.destinationTabs}>
-        {sections.map(label => (
-          <FocusPressable
-            accessibilityLabel={`${label} settings`}
-            accessibilityRole="tab"
-            accessibilityState={{selected: section === label}}
-            key={label}
-            onPress={() => setSection(label)}
-            style={({pressed}) => [
-              styles.destinationTab,
-              section === label && styles.destinationTabActive,
-              pressed && styles.pressed,
-            ]}>
-            <Text
-              style={[
-                styles.destinationTabText,
-                section === label && styles.destinationTabTextActive,
+        {sections
+          .filter(label => !browser || label !== 'Developer')
+          .map(label => (
+            <FocusPressable
+              accessibilityLabel={`${label} settings`}
+              accessibilityRole="tab"
+              accessibilityState={{selected: section === label}}
+              key={label}
+              onPress={() => setSection(label)}
+              style={({pressed}) => [
+                styles.destinationTab,
+                section === label && styles.destinationTabActive,
+                pressed && styles.pressed,
               ]}>
-              {label}
-            </Text>
-          </FocusPressable>
-        ))}
+              <Text
+                style={[
+                  styles.destinationTabText,
+                  section === label && styles.destinationTabTextActive,
+                ]}>
+                {label}
+              </Text>
+            </FocusPressable>
+          ))}
       </View>
       <View style={styles.destinationSection}>
         <Text style={styles.destinationSectionTitle}>{section}</Text>
@@ -404,6 +434,7 @@ export function SettingsPage({
                 }}
                 style={({pressed}) => [
                   styles.cloudAction,
+                  settingsStyles.touchAction,
                   pressed && styles.pressed,
                 ]}>
                 <Text style={styles.cloudActionText}>
@@ -420,12 +451,28 @@ export function SettingsPage({
                 }}
                 style={({pressed}) => [
                   styles.cloudAction,
+                  settingsStyles.touchAction,
                   pressed && styles.pressed,
                 ]}>
                 <Text style={styles.cloudActionText}>Retry</Text>
               </FocusPressable>
             )}
           </>
+        ) : browser ? (
+          section === 'Account' && serviceSettings ? (
+            <SettingRow
+              title="Chat usage"
+              copy={
+                serviceSettings.chatLimit === null
+                  ? `${serviceSettings.chatUsed} requests used`
+                  : `${serviceSettings.chatUsed} of ${serviceSettings.chatLimit} requests used`
+              }
+            />
+          ) : (
+            <Text style={styles.projectionEmptyCopy}>
+              Privacy preferences are unavailable for this connection.
+            </Text>
+          )
         ) : section === 'Account' ? (
           account
         ) : section === 'Privacy' ? (
@@ -437,6 +484,42 @@ export function SettingsPage({
           <Text style={styles.cloudActionError}>{actionError}</Text>
         )}
       </View>
+      <View style={styles.destinationSection}>
+        {!browser && (
+          <SettingRow
+            title="App permissions"
+            copy="Review permissions for Omi in your device settings."
+            actionLabel="Open app permissions"
+            action={() => {
+              Linking.openSettings().catch(() =>
+                setActionError('Device settings could not be opened.'),
+              );
+            }}
+          />
+        )}
+        <SettingRow
+          title="Privacy policy"
+          copy="How Omi handles your information."
+          actionLabel="Read privacy policy"
+          action={() => {
+            Linking.openURL('https://www.omi.me/pages/privacy').catch(() =>
+              setActionError('The privacy policy could not be opened.'),
+            );
+          }}
+        />
+        <SettingRow
+          title="Terms of service"
+          copy="Terms for using Omi."
+          actionLabel="Read terms of service"
+          action={() => {
+            Linking.openURL('https://www.omi.me/pages/terms-of-service').catch(
+              () => setActionError('The terms of service could not be opened.'),
+            );
+          }}
+        />
+      </View>
     </ScrollView>
   );
 }
+
+const settingsStyles = StyleSheet.create({touchAction: {minHeight: 44}});

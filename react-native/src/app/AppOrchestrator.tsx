@@ -856,7 +856,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     compact &&
     onboardingRequired === false &&
     !homeChatOpen &&
-    (route === 'Home' || route === 'Conversations' || route === 'Tasks')
+    (route === 'Home' ||
+      route === 'Conversations' ||
+      route === 'Tasks' ||
+      route === 'Settings' ||
+      route === 'Connectors')
   ) {
     const taskItems =
       readOutcomes?.tasks.status === 'success'
@@ -884,11 +888,38 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         ? 'offline'
         : 'ready';
     const activeMobileRoute: MobileRoute =
-      route === 'Tasks' ? 'tasks' : route === 'Conversations' ? 'chat' : 'home';
+      route === 'Tasks'
+        ? 'tasks'
+        : route === 'Conversations'
+        ? 'chat'
+        : route === 'Settings'
+        ? 'settings'
+        : route === 'Connectors'
+        ? 'apps'
+        : 'home';
     return (
       <MobileAppSurface
         {...taskMutations}
         activeRoute={activeMobileRoute}
+        conversationContent={
+          <ConversationsPage
+            outcome={readOutcomes?.conversations ?? null}
+            loading={
+              readsPhase === 'initial-loading' || readsPhase === 'refreshing'
+            }
+            embedded
+          />
+        }
+        settingsContent={
+          <SettingsPage
+            onSignIn={signInAndRefresh}
+            onSignOut={nativeSessionRequired ? signOutAndRefresh : undefined}
+            signingIn={signingIn}
+          />
+        }
+        appsContent={
+          <ConnectorsPage onSignIn={signInAndRefresh} signingIn={signingIn} />
+        }
         askValue={draft}
         capture={{
           active: nativeSnapshot?.capture === 'recording',
@@ -925,7 +956,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         onRouteChange={destination => {
           setHomeChatOpen(false);
           setRoute(
-            destination === 'tasks'
+            destination === 'settings'
+              ? 'Settings'
+              : destination === 'tasks'
               ? 'Tasks'
               : destination === 'apps'
               ? 'Connectors'
