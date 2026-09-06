@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 
 import { AccountBackend } from "./account";
+import { processDeviceTranscriptions } from "./device-transcriptions";
 import {
   consumeAttachmentIngest,
   type AttachmentIngestMessage,
@@ -28,6 +29,7 @@ type WorkerEnv = Omit<
   GatewaySecretEnv &
   ObservabilityEnv & {
     API_TOKEN: string;
+    CANONICAL_SERVICE?: CoreEnv["CANONICAL_SERVICE"];
     FIREBASE_API_KEY?: string;
     DB?: D1Database;
     ATTACHMENTS?: R2Bucket;
@@ -90,6 +92,15 @@ app.onError((error, context) => {
 
 const handler = {
   fetch: app.fetch,
+  scheduled: async (_controller, env) => {
+    if (
+      env.DB !== undefined &&
+      env.ATTACHMENTS !== undefined &&
+      env.AI !== undefined
+    ) {
+      await processDeviceTranscriptions(env.DB, env.ATTACHMENTS, env.AI);
+    }
+  },
   queue: async (batch, env) => {
     const db = env.DB;
     const r2 = env.ATTACHMENTS;
