@@ -265,6 +265,56 @@ test('a late revalidation cannot eject a newer signed-in session', async () => {
   expect(hook.latest().onboardingRequired).toBe(false);
 });
 
+test('a late startup probe cannot eject a newer signed-in session', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  let resolveProbe: ((hasSession: boolean) => void) | undefined;
+  mockAuth.hasCloudSession.mockImplementationOnce(
+    () =>
+      new Promise<boolean>(resolve => {
+        resolveProbe = resolve;
+      }),
+  );
+  mockAuth.signIn.mockResolvedValue({signedIn: true});
+  const hook = await renderOnboarding(true);
+
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().signInAndRefresh();
+  });
+  expect(hook.latest().onboardingRequired).toBe(false);
+
+  await ReactTestRenderer.act(async () => {
+    resolveProbe!(false);
+  });
+  expect(hook.latest().onboardingRequired).toBe(false);
+});
+
+test('sign-out retires a pending sign-in without leaving Welcome busy', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  mockAuth.signOut.mockResolvedValue({signedOut: true});
+  let resolveSignIn: ((result: {signedIn: boolean}) => void) | undefined;
+  mockAuth.signIn.mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        resolveSignIn = resolve;
+      }),
+  );
+  const hook = await renderOnboarding(true);
+  let pending: Promise<void>;
+  await ReactTestRenderer.act(async () => {
+    pending = hook.latest().signInAndRefresh();
+  });
+  expect(hook.latest().signingIn).toBe(true);
+
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().signOutAndRefresh();
+    resolveSignIn!({signedIn: false});
+    await pending;
+  });
+  expect(hook.latest().signingIn).toBe(false);
+  expect(hook.latest().onboardingRequired).toBe(true);
+});
+
 test('a Mac without the native auth module stays on Welcome instead of faking ready', async () => {
   jest.resetModules();
   jest.doMock('../src/omiNative', () => ({

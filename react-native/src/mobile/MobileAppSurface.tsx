@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import House from 'lucide-react-native/icons/house';
 import ListFilter from 'lucide-react-native/icons/list-filter';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
@@ -59,6 +60,7 @@ export type MobileAppSurfaceProps = {
   activeRoute: MobileRoute;
   capture: MobileCaptureState;
   device: MobileDeviceState;
+  deviceMessage?: string | null;
   tasks: readonly MobileTask[];
   taskStatus: MobileProjectionStatus;
   recaps: readonly MobileRecap[];
@@ -71,7 +73,7 @@ export type MobileAppSurfaceProps = {
   onOpenDevice: () => void;
   onOpenCalls: () => void;
   onRouteChange: (route: MobileRoute) => void;
-  onTaskToggle: (id: string, completed: boolean) => void;
+  onTaskToggle?: (id: string, completed: boolean) => void;
   onViewTasks: () => void;
   onViewRecaps: () => void;
   onExpandMindMap: () => void;
@@ -110,19 +112,29 @@ const TaskRow = memo(function TaskRow({
   onToggle,
 }: {
   task: MobileTask;
-  onToggle: (id: string, completed: boolean) => void;
+  onToggle?: (id: string, completed: boolean) => void;
 }) {
   const handlePress = useCallback(
-    () => onToggle(task.id, !task.completed),
+    () => onToggle?.(task.id, !task.completed),
     [onToggle, task.completed, task.id],
   );
   return (
     <Pressable
-      accessibilityLabel={`${task.completed ? 'Reopen' : 'Complete'} ${
-        task.title
-      }`}
-      accessibilityRole="checkbox"
-      accessibilityState={{checked: task.completed}}
+      accessibilityLabel={`${
+        onToggle === undefined
+          ? task.completed
+            ? 'Completed'
+            : 'Open'
+          : task.completed
+          ? 'Reopen'
+          : 'Complete'
+      } ${task.title}`}
+      accessibilityRole={onToggle === undefined ? 'text' : 'checkbox'}
+      accessibilityState={{
+        checked: task.completed,
+        disabled: onToggle === undefined,
+      }}
+      disabled={onToggle === undefined}
       onPress={handlePress}
       style={styles.taskRow}>
       <View style={[styles.checkbox, task.completed && styles.checkboxDone]} />
@@ -207,6 +219,7 @@ export function MobileAppSurface({
   askValue,
   capture,
   device,
+  deviceMessage,
   mindMapStatus,
   onAskChange,
   onAskSubmit,
@@ -267,7 +280,7 @@ export function MobileAppSurface({
             <SectionHeader
               action={onViewTasks}
               actionLabel="View All"
-              title="Today"
+              title="Tasks"
             />
             {taskStatus === 'ready' ? (
               tasks.length === 0 ? (
@@ -388,7 +401,11 @@ export function MobileAppSurface({
               </View>
             )
           ) : activeRoute === 'chat' ? (
-            recaps.length > 0 ? (
+            recapStatus !== 'ready' ? (
+              <View style={styles.secondaryList}>
+                <StatePanel noun="recaps" status={recapStatus} />
+              </View>
+            ) : recaps.length > 0 ? (
               <FlatList
                 contentContainerStyle={styles.secondaryList}
                 data={recaps}
@@ -435,7 +452,9 @@ export function MobileAppSurface({
                   !device.connected && styles.connectionDotOffline,
                 ]}
               />
-              <Text style={styles.deviceLabel}>{device.label}</Text>
+              <Text numberOfLines={1} style={styles.deviceLabel}>
+                {device.label}
+              </Text>
             </Pressable>
             <Pressable
               accessibilityLabel="Open calls"
@@ -453,6 +472,11 @@ export function MobileAppSurface({
             <Settings color={mobileColor.text} size={20} />
           </Pressable>
         </View>
+        {deviceMessage && (
+          <Text accessibilityRole="alert" style={styles.deviceMessage}>
+            {deviceMessage}
+          </Text>
+        )}
         <FlatList
           contentContainerStyle={styles.content}
           data={rows}
@@ -476,7 +500,7 @@ export function MobileAppSurface({
             accessibilityRole="button"
             onPress={onAskSubmit}
             style={styles.askButton}>
-            <Mic color={mobileColor.background} size={18} />
+            <ArrowUp color={mobileColor.background} size={18} />
           </Pressable>
         </View>
         <MobileTabBar activeRoute={activeRoute} onRouteChange={onRouteChange} />
@@ -492,6 +516,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: mobileSpace.sm,
     paddingHorizontal: mobileSpace.md,
     paddingTop: mobileSpace.sm,
   },
@@ -534,8 +559,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: mobileSpace.md,
   },
-  topBarActions: {flexDirection: 'row', gap: mobileSpace.sm},
+  topBarActions: {flexDirection: 'row', flexShrink: 1, gap: mobileSpace.sm},
   deviceButton: {
+    flexShrink: 1,
     alignItems: 'center',
     backgroundColor: mobileColor.surface,
     borderRadius: mobileRadius.round,
@@ -559,8 +585,19 @@ const styles = StyleSheet.create({
     width: 10,
   },
   connectionDotOffline: {backgroundColor: mobileColor.textSubtle},
-  deviceLabel: {...mobileType.body, color: mobileColor.text, fontWeight: '600'},
+  deviceLabel: {
+    ...mobileType.body,
+    flexShrink: 1,
+    color: mobileColor.text,
+    fontWeight: '600',
+  },
+  deviceMessage: {
+    ...mobileType.body,
+    color: mobileColor.text,
+    padding: mobileSpace.md,
+  },
   roundButton: {
+    flexShrink: 0,
     alignItems: 'center',
     backgroundColor: mobileColor.surface,
     borderRadius: mobileRadius.round,
