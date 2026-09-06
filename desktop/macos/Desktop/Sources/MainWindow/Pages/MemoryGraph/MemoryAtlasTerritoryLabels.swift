@@ -45,21 +45,20 @@ struct MemoryAtlasNeighbourhoodCaption: View {
       // treatment as an entity's own — so it reads as a very important
       // entity rather than as the ground they stand on.
       Text(caption.uppercased())
-        .scaledFont(size: 8, weight: .semibold)
-        .tracking(0.6)
+        .scaledFont(size: 7, weight: .semibold)
+        .tracking(0.5)
         .foregroundColor(Ink.secondary)
         .lineLimit(1)
         .truncationMode(.tail)
-        .padding(.horizontal, 7)
+        .padding(.horizontal, 4)
         // Sized to the box the placement pass reserved. Left to size itself, a
         // caption grows past the width its collision test assumed and starts
         // covering the neighbouring regions it was measured against.
         .frame(width: size.width, height: size.height)
-        // A thin capsule rule and no fill: the name sits straight on the
-        // territory, bounded like a map label rather than raised like a chip.
-        // No hover state either; the caption is part of the map, not a control
-        // that announces itself.
-        .overlay(Capsule().strokeBorder(Ink.primary.opacity(0.22), lineWidth: 1))
+        // Bare type, no rule and no fill: the name sits straight on the
+        // territory the way a region's name sits on a map. No hover state
+        // either; the caption is part of the map, not a control that
+        // announces itself.
         .contentShape(Capsule())
     }
     .buttonStyle(.plain)
@@ -415,8 +414,8 @@ enum MemoryAtlasNeighbourhoodLabels {
 
     for island in islands where placed.count < limit {
       guard let caption = captions[island.regionID], !caption.isEmpty else { continue }
-      // Upper case at 8pt with tracking, plus room for the hover glyph.
-      let width = min(260, max(44, CGFloat(caption.count) * 6.2 + 20))
+      // Upper case at 7pt with tracking.
+      let width = min(240, max(36, CGFloat(caption.count) * 5.5 + 12))
 
       // Clamped to the part of the island that is actually on screen, so an
       // island the camera has zoomed inside of — its true centre far off the
@@ -446,7 +445,7 @@ enum MemoryAtlasNeighbourhoodLabels {
           ] : [])
 
       let boxes = candidates.map {
-        CGRect(x: $0.x - width / 2, y: $0.y - 8, width: width, height: 16)
+        CGRect(x: $0.x - width / 2, y: $0.y - 7, width: width, height: 14)
       }
       let allowed = boxes.filter { candidate in
         visible.contains(candidate)
@@ -467,8 +466,8 @@ enum MemoryAtlasNeighbourhoodLabels {
         insisting
         ? CGRect(
           x: min(max(outside.x - width / 2, 4), max(size.width - width - 4, 4)),
-          y: min(max(outside.y - 8, 4), max(size.height - 20, 4)),
-          width: width, height: 16)
+          y: min(max(outside.y - 7, 4), max(size.height - 18, 4)),
+          width: width, height: 14)
         : nil
       guard let rect = fitted ?? rescued else { continue }
 
