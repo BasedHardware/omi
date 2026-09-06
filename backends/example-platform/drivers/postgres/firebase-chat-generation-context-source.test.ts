@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { normalizeChatGenerationContext, type ChatGenerationContextSourceInput } from "../../apps/service/chat/generation-context";
 
 import { createPostgresFirebaseChatGenerationContextSource } from
   "./firebase-chat-generation-context-source";
@@ -31,14 +32,23 @@ const PAGE = JSON.stringify({
   absence: null,
 });
 
-const input = () => ({
+const input = (): ChatGenerationContextSourceInput & { generationId: string; nowEpochMilliseconds: number } => ({
   accountId: "account:alice",
+  generationId: "generation:chat",
+  nowEpochMilliseconds: 1_800_000_000_000,
+  history: [],
   bearerToken: "header.payload.signature",
-  admitted: { message: {}, generationId: "generation:chat" },
-}) as never;
+  admitted: { message: {
+    id: "human:chat", text: "What do I prefer?", sender: "human", type: "text",
+    createdAt: 1_800_000_000_000, updatedAt: 1_800_000_000_000,
+    chatSessionId: null, appId: null, journalRevision: 1,
+    payloadHash: `sha256:${"c".repeat(64)}`, messageSource: "chat", rating: null,
+    reported: false, revision: "revision:chat", attachments: [],
+  }, generationId: "generation:chat" },
+});
 
 describe("PostgreSQL Firebase Chat memory context source", () => {
-  test("binds the expected account and preserves the exact canonical page", async () => {
+  test("binds the expected account and produces a trusted current supervisor context packet", async () => {
     const calls: unknown[][] = [];
     const source = createPostgresFirebaseChatGenerationContextSource({
       memory: Object.freeze({
@@ -49,11 +59,11 @@ describe("PostgreSQL Firebase Chat memory context source", () => {
       }),
       now_epoch_seconds: () => 1_800_000_000,
     });
-    await expect(source.load(input())).resolves.toEqual({
-      version: "chat-generation-memory-context-v1",
-      state: "loaded",
-      canonical_page_json: PAGE,
-    });
+    const request = input();
+    const packet = normalizeChatGenerationContext(await source.load(request), request);
+    expect(packet.items).toHaveLength(1);
+    expect(packet.items[0]).toMatchObject({ ownerAccountId: request.accountId, redactedPreview: "The owner likely prefers tea.", policyDecision: "degraded" });
+    expect(() => normalizeChatGenerationContext(packet, { ...request, accountId: "account:bob" })).toThrow("owner or generation mismatch");
     expect(calls).toEqual([[
       "header.payload.signature",
       1_800_000_000,
@@ -63,10 +73,9 @@ describe("PostgreSQL Firebase Chat memory context source", () => {
     expect(JSON.stringify(await source.load(input()))).not.toContain("header.payload.signature");
   });
 
-  test("collapses denied, malformed, throwing, and noncanonical reads", async () => {
+  test("collapses denied, malformed, and throwing read outcomes without claiming absence", async () => {
     for (const readForAccount of [
       async () => Object.freeze({ kind: "denied" as const, outcome: "authorization" as const }),
-      async () => Object.freeze({ kind: "loaded" as const, canonical_json: "{}" }),
       async () => Object.freeze({ kind: "loaded" as const, canonical_json: PAGE, extra: true }),
       async () => { throw new Error("raw provider account secret"); },
     ]) {
@@ -75,12 +84,17 @@ describe("PostgreSQL Firebase Chat memory context source", () => {
         now_epoch_seconds: () => 1_800_000_000,
       });
       const outcome = await source.load(input());
-      expect(outcome).toEqual({
-        version: "chat-generation-memory-context-v1",
-        state: "unavailable",
-      });
-      expect(JSON.stringify(outcome)).not.toMatch(/provider|secret|account:alice/i);
+      expect(normalizeChatGenerationContext(outcome, input()).items).toEqual([]);
+      expect(JSON.stringify(outcome)).not.toMatch(/provider|secret|absence/i);
     }
+  });
+
+  test("rejects a noncanonical page through the current packet builder", async () => {
+    const source = createPostgresFirebaseChatGenerationContextSource({
+      memory: { readForAccount: async () => ({ kind: "loaded", canonical_json: "{}" }) },
+      now_epoch_seconds: () => 1_800_000_000,
+    });
+    await expect(source.load(input())).rejects.toThrow("invalid canonical page");
   });
 
   test("rejects hostile options and never invokes hostile input accessors", async () => {
@@ -101,10 +115,7 @@ describe("PostgreSQL Firebase Chat memory context source", () => {
       enumerable: true,
       get() { getterCalls += 1; return "header.payload.signature"; },
     });
-    await expect(source.load(hostile as never)).resolves.toEqual({
-      version: "chat-generation-memory-context-v1",
-      state: "unavailable",
-    });
+    await expect(source.load(hostile as never)).resolves.toEqual([]);
     expect(getterCalls).toBe(0);
     expect(reads).toBe(0);
   });
