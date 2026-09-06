@@ -153,6 +153,90 @@ def execution_name(payload: Mapping[str, Any]) -> str:
     return name
 
 
+def validate_execution_payload(payload: Mapping[str, Any], *, source_sha: str, expected_image: str) -> dict[str, str]:
+    """Validate a returned execution before accepting a resumed first page.
+
+    Cloud Run execution overrides are persisted in the execution template.  A
+    name-only check could accidentally resume another QA execution, a stale
+    source, or a run whose drain gate was never enabled.
+    """
+
+    execution = execution_name(payload)
+    require_source_sha(source_sha)
+    labels = payload.get("metadata", {}).get("labels") if isinstance(payload.get("metadata"), Mapping) else None
+    if not isinstance(labels, Mapping):
+        raise OperatorError("QA drain execution is missing immutable ownership labels")
+    if labels.get("jit-qa") != "true" or labels.get("source-sha") != source_sha:
+        raise OperatorError("QA drain execution source admission label is missing or stale")
+    if labels.get("run.googleapis.com/job") != JOB:
+        raise OperatorError("QA drain execution belongs to an unexpected Cloud Run job")
+    owners = payload.get("metadata", {}).get("ownerReferences")
+    if not isinstance(owners, list) or not any(
+        isinstance(owner, Mapping)
+        and owner.get("controller") is True
+        and owner.get("kind") == "Job"
+        and owner.get("name") == JOB
+        for owner in owners
+    ):
+        raise OperatorError("QA drain execution has no exact owning job")
+
+    spec = payload.get("spec")
+    template = spec.get("template") if isinstance(spec, Mapping) else None
+    template_spec = template.get("spec") if isinstance(template, Mapping) else None
+    containers = template_spec.get("containers") if isinstance(template_spec, Mapping) else None
+    if not isinstance(template_spec, Mapping) or not isinstance(containers, list) or len(containers) != 1:
+        raise OperatorError("QA drain execution has an unexpected container template")
+    container = containers[0]
+    if not isinstance(container, Mapping) or container.get("image") != expected_image:
+        raise OperatorError("QA drain execution image does not match the admitted immutable digest")
+    if template_spec.get("serviceAccountName") != RUNTIME_SERVICE_ACCOUNT:
+        raise OperatorError("QA drain execution uses an unexpected service account")
+    env_entries = container.get("env")
+    if not isinstance(env_entries, list):
+        raise OperatorError("QA drain execution is missing its persisted environment")
+    values: dict[str, Any] = {}
+    secret_names: dict[str, Any] = {}
+    for entry in env_entries:
+        if not isinstance(entry, Mapping) or not isinstance(entry.get("name"), str):
+            raise OperatorError("QA drain execution contains a malformed environment entry")
+        name = entry["name"]
+        if "value" in entry:
+            values[name] = entry["value"]
+        elif isinstance(entry.get("valueFrom"), Mapping):
+            reference = entry["valueFrom"].get("secretKeyRef")
+            if isinstance(reference, Mapping):
+                secret_names[name] = reference
+    expected_values = {
+        "OMI_ENV_STAGE": "dev",
+        "GOOGLE_CLOUD_PROJECT": PROJECT,
+        "OMI_FIRESTORE_DATA_PLANE_PROJECT": PROJECT,
+        "FIRESTORE_DATABASE_ID": DATABASE,
+        "FIREBASE_AUTH_PROJECT_ID": "based-hardware",
+        "OMI_JIT_QA_AUTH_ONLY": "true",
+        "OMI_JIT_QA_UID_ALLOWLIST": UID,
+        "MEMORY_ENABLED": "on",
+        "KNOWLEDGE_LEDGER_DRAIN_ENABLED": "true",
+        "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST": UID,
+    }
+    for name, expected in expected_values.items():
+        if values.get(name) != expected:
+            raise OperatorError(f"QA drain execution override {name} is missing or unexpected")
+    for name in ("ENCRYPTION_SECRET", "POSTHOG_PROJECT_API_KEY"):
+        reference = secret_names.get(name)
+        if not isinstance(reference, Mapping) or reference.get("name") != name or reference.get("key") != "latest":
+            raise OperatorError(f"QA drain execution secret binding {name} is missing or unexpected")
+    return {
+        "execution": execution,
+        "job": JOB,
+        "image": expected_image,
+        "source_sha": source_sha,
+        "database": DATABASE,
+        "uid": UID,
+        "service_account": RUNTIME_SERVICE_ACCOUNT,
+        "drain_enabled": "true",
+    }
+
+
 def execution_state(payload: Mapping[str, Any]) -> str:
     status = payload.get("status")
     conditions = status.get("conditions") if isinstance(status, Mapping) else None
@@ -343,6 +427,10 @@ def main(argv: list[str] | None = None) -> int:
     job.add_argument("--resource-json", type=Path, required=True)
     name = sub.add_parser("execution-name")
     name.add_argument("--execution-json", type=Path, required=True)
+    execution = sub.add_parser("validate-execution")
+    execution.add_argument("--source-sha", required=True)
+    execution.add_argument("--expected-image", required=True)
+    execution.add_argument("--execution-json", type=Path, required=True)
     state = sub.add_parser("execution-state")
     state.add_argument("--execution-json", type=Path, required=True)
     logs = sub.add_parser("summary")
@@ -369,6 +457,17 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "execution-name":
             print(execution_name(_load_mapping(args.execution_json)))
+        elif args.command == "validate-execution":
+            print(
+                json.dumps(
+                    validate_execution_payload(
+                        _load_mapping(args.execution_json),
+                        source_sha=args.source_sha,
+                        expected_image=args.expected_image,
+                    ),
+                    sort_keys=True,
+                )
+            )
         elif args.command == "execution-state":
             print(execution_state(_load_mapping(args.execution_json)))
         elif args.command == "summary":

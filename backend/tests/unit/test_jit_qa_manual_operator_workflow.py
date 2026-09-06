@@ -70,6 +70,10 @@ def test_manual_operator_uses_existing_seed_contract_without_deploying_resources
     assert "gcloud scheduler" not in text
     assert "docker build" not in text
     assert "api.omi.me" not in text
+    assert "resume_execution" in text
+    assert "--async" in text
+    assert "validate-execution" in text
+    assert "resumed first-page fixture/control check failed" in text
 
 
 def test_every_workflow_shell_block_is_valid_bash():

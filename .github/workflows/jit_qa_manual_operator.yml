@@ -29,6 +29,11 @@ on:
         description: Use ENABLE_QA_API, APPLY_JIT_QA_INDEXES, PREPARE_QA, DRAIN_VERIFY_QA, ROLLFORWARD_QA, or ROLLBACK_QA for mutating operations
         required: false
         type: string
+      resume_execution:
+        description: Existing first drain execution to resume after a bounded launcher timeout
+        required: false
+        default: ''
+        type: string
 
 env:
   QA_PROJECT: based-hardware-dev
@@ -67,6 +72,7 @@ jobs:
           RUN_ID: ${{ inputs.run_id }}
           OPERATION: ${{ inputs.operation }}
           CONFIRMATION: ${{ inputs.confirmation }}
+          RESUME_EXECUTION: ${{ inputs.resume_execution }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -88,6 +94,14 @@ jobs:
           fi
           if [[ "$OPERATION" == bootstrap && -n "$RUN_ID" && ! "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,47}$ ]]; then
             echo "ERROR: an optional bootstrap run_id must match [a-z0-9][a-z0-9_-]{0,47}." >&2
+            exit 1
+          fi
+          if [[ -n "$RESUME_EXECUTION" && "$OPERATION" != drain-verify ]]; then
+            echo "ERROR: resume_execution is only valid for drain-verify." >&2
+            exit 1
+          fi
+          if [[ -n "$RESUME_EXECUTION" && ! "$RESUME_EXECUTION" =~ ^knowledge-ledger-drain-qa-job-[a-z0-9-]+$ ]]; then
+            echo "ERROR: resume_execution must name an isolated QA drain execution." >&2
             exit 1
           fi
           case "$OPERATION:$CONFIRMATION" in
@@ -426,6 +440,7 @@ jobs:
           OPERATION: ${{ inputs.operation }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           RUN_ID: ${{ inputs.run_id }}
+          RESUME_EXECUTION: ${{ inputs.resume_execution }}
           GOOGLE_CLOUD_PROJECT: ${{ env.QA_PROJECT }}
           GCLOUD_PROJECT: ${{ env.QA_PROJECT }}
           OMI_ENV_STAGE: dev
@@ -459,14 +474,28 @@ jobs:
             local state_file="$operator_dir/${phase}.state.json"
             local logs_file="$operator_dir/${phase}.logs.json"
             local summary_file="$operator_dir/${phase}.summary.json"
-            gcloud_bounded run jobs execute "$QA_DRAIN_JOB" \
-              --project "$QA_PROJECT" \
-              --region "$QA_REGION" \
-              --update-env-vars "KNOWLEDGE_LEDGER_DRAIN_ENABLED=true,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST=${QA_UID}" \
-              --format=json > "$launch_file"
             local execution
-            execution="$("$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py execution-name \
-              --execution-json "$launch_file")"
+            if [[ "$phase" == first && -n "$RESUME_EXECUTION" ]]; then
+              execution="$RESUME_EXECUTION"
+              gcloud_bounded run jobs executions describe "$execution" \
+                --project "$QA_PROJECT" \
+                --region "$QA_REGION" \
+                --format=json > "$launch_file"
+            else
+              gcloud_bounded run jobs execute "$QA_DRAIN_JOB" \
+                --project "$QA_PROJECT" \
+                --region "$QA_REGION" \
+                --update-env-vars "KNOWLEDGE_LEDGER_DRAIN_ENABLED=true,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST=${QA_UID}" \
+                --async \
+                --format=json > "$launch_file"
+              execution="$("$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py execution-name \
+                --execution-json "$launch_file")"
+            fi
+            "$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py validate-execution \
+              --source-sha "$SOURCE_SHA" \
+              --expected-image "$QA_DRAIN_IMAGE" \
+              --execution-json "$launch_file" \
+              > "$operator_dir/${phase}.execution-contract.json"
             local state=running
             for _ in $(seq 1 130); do
               gcloud_bounded run jobs executions describe "$execution" \
@@ -508,6 +537,31 @@ jobs:
               echo "ERROR: content-free QA drain logs did not become visible or valid for $execution." >&2
               exit 1
             }
+            if [[ "$phase" == first && -n "$RESUME_EXECUTION" ]]; then
+              PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_seed_and_verify.py \
+                --run-id "$RUN_ID" inspect > "$operator_dir/resumed-fixture.json"
+              "$QA_PYTHON" - "$RUN_ID" "$operator_dir/resumed-fixture.json" <<'PY'
+          import json
+          import sys
+
+          run_id, path = sys.argv[1:]
+          payload = json.load(open(path, encoding="utf-8"))
+          expected = {
+              "run_id": run_id,
+              "retained_rows": 101,
+              "retained_evidence": 101,
+              "legacy_rows": 1,
+              "ledger_rows": 100,
+              "missing_rows": [],
+              "writer_mode": "compatibility",
+              "completion_present": False,
+              "cursor_present": False,
+          }
+          for field, value in expected.items():
+              if payload.get(field) != value:
+                  raise SystemExit(f"resumed first-page fixture/control check failed for {field}")
+          PY
+            fi
             rm -f "$launch_file" "$state_file" "$logs_file"
             # A run override must not leave the persistent job gate open.
             gcloud_bounded run jobs describe "$QA_DRAIN_JOB" \

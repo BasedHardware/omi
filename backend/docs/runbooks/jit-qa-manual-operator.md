@@ -45,12 +45,13 @@ Run the actions in this order for a fresh named database:
    `redis.googleapis.com` in `based-hardware-dev` and enables it only when the
    service is not already enabled. This operation does not require a `run_id`
    and does not mutate a Redis instance or any Firestore data.
-2. `indexes-plan` to inspect the two required named-database composites. If
-   either is `MISSING`, run `indexes-apply` with confirmation
+2. `indexes-plan` to inspect the four required named-database composites. If
+   any is `MISSING`, run `indexes-apply` with confirmation
    `APPLY_JIT_QA_INDEXES`; this is restricted to the canonical
-   `memory_items.updated_at + __name__` history query and the
+   `memory_items.updated_at + __name__` history query, the
    `conversations.discarded + status + created_at + __name__` entity-timeline
-   query.
+   query, and the two historical `memories` keyset queries:
+   `updated_at DESC + __name__ ASC` and `created_at DESC + __name__ ASC`.
 3. `bootstrap` with confirmation `PREPARE_QA`. This is create-only and fails
    before writing when any collection already exists.
 4. `prepare` with the chosen lowercase synthetic `run_id` and confirmation
@@ -58,10 +59,17 @@ Run the actions in this order for a fresh named database:
    through `backend/scripts/jit_qa_seed_and_verify.py`.
 5. `inspect` to capture the content-free pre-drain state.
 6. `drain-verify` with `DRAIN_VERIFY_QA`. This executes the existing job three
-   times using Cloud Run execution overrides, waits for each exact execution,
+   times using Cloud Run execution overrides (`--async` avoids the launcher
+   request deadline), waits for each exact execution,
    parses its aggregate log line, and runs the seed operator's real durable
    100 + 1 + stable-retry verification. The persistent job gate is checked
    again after every execution and must remain `false`.
+   If the first launcher returned an execution after its client request timed
+   out, pass that exact `knowledge-ledger-drain-qa-job-*` name as
+   `resume_execution`. The operator re-reads and validates the execution's
+   source label, immutable image, service account, QA identity/database, and
+   enabled drain override, then requires the first-page counters and an
+   owned 101-row fixture/control state before launching the second page.
 7. `rollback` with `ROLLBACK_QA` only after a reviewed successful proof. This
    calls the canonical writer-transition rollback helper and checks that all
    synthetic rows/evidence remain present with the same metadata digest.

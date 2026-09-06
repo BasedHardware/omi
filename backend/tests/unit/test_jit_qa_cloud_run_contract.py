@@ -408,6 +408,12 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "workflow_dispatch:" in text
     assert '"refs/heads/main"' in text
     assert '[[ "${GITHUB_REF}"' in text
+    assert 'main_sha="$(git rev-parse --verify refs/remotes/origin/main)"' in text
+    assert 'git cat-file -e "${RELEASE_SHA}^{commit}"' in text
+    assert 'git merge-base --is-ancestor "$RELEASE_SHA" "$main_sha"' in text
+    assert "verify_backend_release_admission.py" in text
+    assert "--require-first-attempt" in text
+    assert '[[ "$RELEASE_SHA" == "$(git rev-parse --verify refs/remotes/origin/main)" ]]' not in text
     assert "based-hardware-dev" in text
     assert "backend-jit-qa" in text
     assert "desktop-backend-jit-qa" in text

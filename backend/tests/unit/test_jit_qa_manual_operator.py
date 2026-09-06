@@ -68,6 +68,48 @@ def _firestore_document(**fields):
     return {"fields": {key: typed(value) for key, value in fields.items()}}
 
 
+def _execution_payload(**changes):
+    values = {
+        "OMI_ENV_STAGE": "dev",
+        "GOOGLE_CLOUD_PROJECT": OPERATOR.PROJECT,
+        "OMI_FIRESTORE_DATA_PLANE_PROJECT": OPERATOR.PROJECT,
+        "FIRESTORE_DATABASE_ID": OPERATOR.DATABASE,
+        "FIREBASE_AUTH_PROJECT_ID": "based-hardware",
+        "OMI_JIT_QA_AUTH_ONLY": "true",
+        "OMI_JIT_QA_UID_ALLOWLIST": OPERATOR.UID,
+        "MEMORY_ENABLED": "on",
+        "KNOWLEDGE_LEDGER_DRAIN_ENABLED": "true",
+        "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST": OPERATOR.UID,
+    }
+    values.update(changes)
+    env = [{"name": name, "value": value} for name, value in values.items()]
+    env.extend(
+        {"name": name, "valueFrom": {"secretKeyRef": {"name": name, "key": "latest"}}}
+        for name in ("ENCRYPTION_SECRET", "POSTHOG_PROJECT_API_KEY")
+    )
+    return {
+        "apiVersion": "run.googleapis.com/v1",
+        "kind": "Execution",
+        "metadata": {
+            "name": OPERATOR.JOB + "-abc123",
+            "labels": {
+                "jit-qa": "true",
+                "source-sha": SOURCE_SHA,
+                "run.googleapis.com/job": OPERATOR.JOB,
+            },
+            "ownerReferences": [{"controller": True, "kind": "Job", "name": OPERATOR.JOB}],
+        },
+        "spec": {
+            "template": {
+                "spec": {
+                    "serviceAccountName": OPERATOR.RUNTIME_SERVICE_ACCOUNT,
+                    "containers": [{"image": IMAGE, "env": env}],
+                }
+            }
+        },
+    }
+
+
 def test_job_contract_requires_immutable_source_admitted_qa_resource():
     result = OPERATOR.validate_job_resource(_resource(), source_sha=SOURCE_SHA, expected_image=IMAGE)
     assert result == {
@@ -126,6 +168,49 @@ def test_execution_name_and_state_are_fail_closed():
         OPERATOR.execution_state({"status": {"conditions": [{"type": "Completed", "status": "True"}]}}) == "succeeded"
     )
     assert OPERATOR.execution_state({"status": {"conditions": [{"type": "Completed", "status": "False"}]}}) == "failed"
+
+
+def test_execution_contract_proves_source_image_identity_and_drain_override():
+    result = OPERATOR.validate_execution_payload(_execution_payload(), source_sha=SOURCE_SHA, expected_image=IMAGE)
+    assert result == {
+        "execution": OPERATOR.JOB + "-abc123",
+        "job": OPERATOR.JOB,
+        "image": IMAGE,
+        "source_sha": SOURCE_SHA,
+        "database": OPERATOR.DATABASE,
+        "uid": OPERATOR.UID,
+        "service_account": OPERATOR.RUNTIME_SERVICE_ACCOUNT,
+        "drain_enabled": "true",
+    }
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"KNOWLEDGE_LEDGER_DRAIN_ENABLED": "false"},
+        {"KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST": "other-uid"},
+    ],
+)
+def test_execution_contract_rejects_foreign_or_non_drain_override(changes):
+    with pytest.raises(OPERATOR.OperatorError, match="override"):
+        OPERATOR.validate_execution_payload(_execution_payload(**changes), source_sha=SOURCE_SHA, expected_image=IMAGE)
+
+
+def test_execution_contract_rejects_stale_job_source_and_service_account():
+    payload = _execution_payload()
+    payload["metadata"]["labels"]["source-sha"] = "c" * 40
+    with pytest.raises(OPERATOR.OperatorError, match="source admission"):
+        OPERATOR.validate_execution_payload(payload, source_sha=SOURCE_SHA, expected_image=IMAGE)
+
+    payload = _execution_payload()
+    payload["metadata"]["labels"]["run.googleapis.com/job"] = "other-job"
+    with pytest.raises(OPERATOR.OperatorError, match="unexpected Cloud Run job"):
+        OPERATOR.validate_execution_payload(payload, source_sha=SOURCE_SHA, expected_image=IMAGE)
+
+    payload = _execution_payload()
+    payload["spec"]["template"]["spec"]["serviceAccountName"] = "customer@based-hardware.iam.gserviceaccount.com"
+    with pytest.raises(OPERATOR.OperatorError, match="service account"):
+        OPERATOR.validate_execution_payload(payload, source_sha=SOURCE_SHA, expected_image=IMAGE)
 
 
 def test_summary_parser_maps_content_free_cloud_log_line():

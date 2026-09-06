@@ -5,10 +5,10 @@ import pytest
 from scripts import jit_qa_firestore_index_operator as operator
 
 
-def test_selected_manifest_is_canonical_and_contains_only_two_required_queries():
+def test_selected_manifest_is_canonical_and_contains_only_four_required_queries():
     manifest, signatures = operator.selected_manifest()
 
-    assert len(manifest["indexes"]) == 2
+    assert len(manifest["indexes"]) == 4
     assert signatures == {requirement.signature for requirement in operator.TARGET_REQUIREMENTS}
     assert {
         (
@@ -20,7 +20,7 @@ def test_selected_manifest_is_canonical_and_contains_only_two_required_queries()
     } == signatures
 
 
-def test_plan_reads_only_fixed_named_database_and_reports_both_indexes(monkeypatch):
+def test_plan_reads_only_fixed_named_database_and_reports_all_required_indexes(monkeypatch):
     calls = []
 
     def list_live_indexes(**kwargs):
@@ -34,12 +34,14 @@ def test_plan_reads_only_fixed_named_database_and_reports_both_indexes(monkeypat
         {"project": "based-hardware-dev", "database": "jit-qa", "runner": operator.reconciler.subprocess.run}
     ]
     assert result["manifest_validated"] is True
-    assert result["selected_index_count"] == 2
-    assert result["missing_count"] == 2
+    assert result["selected_index_count"] == 4
+    assert result["missing_count"] == 4
     assert {entry["state"] for entry in result["indexes"]} == {"MISSING"}
     assert {entry["identifier"] for entry in result["indexes"]} == {
         "memory_items_universal_list_scan",
         "conversations_entity_timeline_completed",
+        "memories_universal_list_scan_updated_at",
+        "memories_universal_list_scan_created_at",
     }
 
 
@@ -82,12 +84,12 @@ def test_apply_requires_confirmation_and_delegates_only_selected_signatures(monk
         poll_interval_seconds=1,
     )
     assert result["schema_version"] == "omi.jit.qa.firestore-index-apply.v1"
-    assert result["created_index_count"] == 2
+    assert result["created_index_count"] == 4
     assert calls[0][0] == "provision"
     assert calls[1][0] == "wait"
     assert calls[0][1]["project"] == operator.PROJECT
     assert calls[0][1]["database"] == operator.DATABASE
-    assert len(calls[0][1]["expected"]) == 2
+    assert len(calls[0][1]["expected"]) == 4
     assert calls[1][1]["expected"] == calls[0][1]["expected"]
 
 
@@ -120,5 +122,5 @@ def test_apply_cli_keeps_reconciler_progress_out_of_json_receipt(monkeypatch, ca
     captured = capsys.readouterr()
     receipt = json.loads(captured.out)
     assert receipt["missing_count"] == 0
-    assert receipt["created_index_count"] == 2
+    assert receipt["created_index_count"] == 4
     assert "READY" in captured.err
