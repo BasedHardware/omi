@@ -104,10 +104,18 @@ export function ConversationsPage({
   outcome,
   loading,
   embedded = false,
+  onRefresh,
+  onLoadMore,
+  loadingMore = false,
+  notice = null,
 }: {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
   embedded?: boolean;
+  onRefresh?: () => void;
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
+  notice?: string | null;
 }) {
   const compact = useWindowDimensions().width < 720;
   const conversations = useMemo(
@@ -221,6 +229,25 @@ export function ConversationsPage({
           <ScrollView
             contentContainerStyle={styles.conversationList}
             style={styles.conversationListPane}>
+            {onRefresh && (
+              <FocusPressable
+                accessibilityRole="button"
+                accessibilityLabel="Refresh conversations"
+                disabled={loading || loadingMore}
+                onPress={onRefresh}
+                style={mobileStyles.pageAction}>
+                <Text style={styles.projectionEmptyCopy}>
+                  {loading ? 'Refreshing…' : 'Refresh'}
+                </Text>
+              </FocusPressable>
+            )}
+            {notice && (
+              <Text
+                accessibilityRole="alert"
+                style={styles.projectionEmptyCopy}>
+                {notice}
+              </Text>
+            )}
             {loading && outcome === null ? (
               <View style={styles.projectionEmpty}>
                 <ActivityIndicator color="#888888" />
@@ -268,6 +295,20 @@ export function ConversationsPage({
                 </View>
               ))
             )}
+            {outcome?.status === 'success' &&
+              outcome.value.page.hasMore &&
+              onLoadMore && (
+                <FocusPressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Load more conversations"
+                  disabled={loading || loadingMore}
+                  onPress={onLoadMore}
+                  style={mobileStyles.pageAction}>
+                  <Text style={styles.projectionEmptyCopy}>
+                    {loadingMore ? 'Loading…' : 'Load more'}
+                  </Text>
+                </FocusPressable>
+              )}
             {outcome?.status === 'success' && (
               <ReadStatus label="Conversations" page={outcome.value.page} />
             )}
@@ -349,6 +390,7 @@ export function ConversationsPage({
 }
 
 const mobileStyles = StyleSheet.create({
+  pageAction: {minHeight: 44, justifyContent: 'center'},
   page: {paddingHorizontal: 20, paddingVertical: 16},
   embedded: {paddingTop: 0, paddingBottom: 0},
   discovery: {marginTop: 0},
