@@ -12,7 +12,7 @@
   "execution_contract": {
     "same_evidence_required": true,
     "same_available_context_required": false,
-    "available_context_note": "The shared bundle retains facts, stable context, tail, frame metadata, tasks, local time zone, and recent deliveries. Legacy director receives frame/task/timestamp material through directorVolatilePrompt. JIT nano receives only boundedEvidence; JIT full receives validated facts, derived intent, and ambient recent delivery/workstream sections from JITProactivityDelivery. The current JIT path omits current-frame app/window and capture timestamp/time zone, so this fixture records the omission rather than fabricating parity. The DST case is therefore not comparable for a quality verdict until a validated time projection is added.",
+    "available_context_note": "The shared bundle retains facts, stable context, tail, frame metadata, tasks, local time zone, and recent deliveries. Legacy director receives frame/task/timestamp material through directorVolatilePrompt. JIT nano receives boundedEvidence plus the retained temporalContext, and JIT full receives validated facts, derived intent, ambient recent delivery/workstream sections, and the same temporal context through the source builders. This frozen fixture predates that temporal wiring and its synthetic JIT prompt bytes intentionally omit the temporal section; the DST case is therefore not comparable as a current quality verdict. Current replay must use the source-owned projection.",
     "hard_caps": {
       "notifications_per_day": 3,
       "nano_triage_per_day": 8,
@@ -41,7 +41,7 @@
       "required_changes_before_paid_calls": [
         "Add a JIT-specific full-agent completion bound; the current AgentClient path passes no JIT max_completion_tokens and only inherits the backend global 16384 ceiling.",
         "Propagate an authoritative per-provider-completion cost receipt through the managed chat-agent path, including tool/retry rounds, with run_id, served model, rate_card_id, usage, and cost.",
-        "Add current validated local timestamp/time zone to the JIT evidence projection before adjudicating the DST case."
+        "Use the source-owned projection, including its retained temporal tuple, for any DST adjudication; do not use this historical fixture's synthetic JIT bytes as a current parity claim."
       ],
       "run_order_after_gates": [
         "Run this zero-call prompt replay and verify every evidence/prompt hash.",
@@ -177,7 +177,7 @@
       "separator": "\n",
       "source_prompt_prefix_sha256": "e06717a30435c48bc6788c2e0d273d64735e628b095d7dc7830ba6f230e252e9"
     },
-    "context_projection_finding": "Legacy volatile prompt includes captured local time; JIT nano/full currently omit currentFrame capture time and time zone. Do not adjudicate the DST case as an architecture comparison until that omission is fixed."
+    "context_projection_finding": "Legacy volatile prompt and current JIT nano/full prompts carry temporal inputs through their respective source builders. This frozen proxy predates the JIT temporalContext wiring, so its DST case is historical/non-comparable; current adjudication must use the source-owned projection."
   },
   "cases": [
     {
@@ -817,7 +817,7 @@
         "expected_grounded_fact_ids": [
           "fact:tax-deadline"
         ],
-        "reason": "The evidence explicitly uses the user local time on the DST boundary.",
+        "reason": "The evidence explicitly uses the user local time on the DST boundary, but this historical proxy's synthetic JIT prompt bytes predate current temporalContext wiring.",
         "oracle_is_not_sent_to_provider": true
       },
       "prompts": {
@@ -878,7 +878,7 @@
   "revision_notes": [
     "Corrected every nano prompt to include the production newline after QUOTED CURRENT EVIDENCE: and regenerated nano hashes.",
     "Recorded the live JIT full route as managed chat-agent (omi-sonnet alias to omi:auto:chat-agent), not proactive_reasoning with an 800-token cap.",
-    "Marked context parity false because current JIT projections omit frame capture time/time zone; the DST case is blocked pending a validated time projection.",
+    "Marked this historical proxy's context parity false because its synthetic JIT bytes predate temporalContext wiring; current replays must use the source-owned projection.",
     "Resolved configured provider/model/rate-card identities from source and runtime config while keeping paid execution blocked because per-call cost receipts and a JIT full-turn bound are missing."
   ]
 }

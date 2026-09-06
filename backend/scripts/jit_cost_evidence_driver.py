@@ -1368,6 +1368,10 @@ def _producer_run_materialization(
     for row in tool_rows:
         _required_identifier(row.get("invocation_id"), "tool invocation_id")
     actual_prompt_sha256 = _sha256(prompt)
+    # This is the Node runtime's canonical JSON hash of the admitted snapshot
+    # object. It covers that persisted Node snapshot only; it is not a digest
+    # of the Swift context bucket or its complete payload. The Swift source
+    # projection carries prompt bytes and the temporal/context tuple separately.
     actual_evidence_sha256 = _canonical_json_hash(snapshot)
     source_identity = {}
     for key, value in {
@@ -1465,7 +1469,9 @@ def _producer_case(
     source_projection = materialization.get("source_projection")
     if isinstance(source_projection, Mapping):
         # The source projection is evaluated beside the JIT prompt, so it is
-        # authoritative for the baseline's clock/context tuple.  Recheck the
+        # authoritative for the baseline's clock/context tuple. Its context ID
+        # is a Swift source identifier, not a bucket-content digest; the
+        # evidence hash above remains the Node snapshot hash. Recheck the
         # evidence hash and identity here as a second fence at the plan seam.
         projected_input = source_projection["matched_input"]
         if projected_input["evidence_sha256"] != materialization["evidence_sha256"]:

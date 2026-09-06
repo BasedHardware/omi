@@ -10,6 +10,16 @@ FIXTURE = (
     Path(__file__).parents[2] / "testing" / "jit_processing" / "fixtures" / "jit_architecture_quality_cost_v1.json"
 )
 V2_FIXTURE = FIXTURE.with_name("jit_architecture_quality_cost_v2.json")
+NANO_PROMPT_BUILDER_SOURCE = (
+    Path(__file__).parents[3]
+    / "desktop"
+    / "macos"
+    / "Desktop"
+    / "Sources"
+    / "ProactiveAssistants"
+    / "Core"
+    / "JITProactivityDelivery.swift"
+)
 NANO_RUNTIME_SOURCE = (
     Path(__file__).parents[3]
     / "desktop"
@@ -30,16 +40,26 @@ def _production_nano_prompt_prefix() -> str:
     production prompt in a Python constant.
     """
 
-    source = NANO_RUNTIME_SOURCE.read_text(encoding="utf-8")
-    operation = source.index("operation: ModelQoS.Proactivity.extractionOperation")
-    start = source.index('prompt: """', operation) + len('prompt: """')
-    end = source.index('""",', start)
+    builder_source = (
+        NANO_PROMPT_BUILDER_SOURCE.read_text(encoding="utf-8") if NANO_PROMPT_BUILDER_SOURCE.exists() else ""
+    )
+    if "static func nanoTriagePrompt" in builder_source:
+        source = builder_source
+        operation = source.index("static func nanoTriagePrompt")
+        start = source.index('"""', operation) + len('"""')
+        end = source.index('"""', start)
+    else:
+        source = NANO_RUNTIME_SOURCE.read_text(encoding="utf-8")
+        operation = source.index("operation: ModelQoS.Proactivity.extractionOperation")
+        start = source.index('prompt: """', operation) + len('prompt: """')
+        end = source.index('""",', start)
     lines = source[start:end].splitlines()
     # The first line is the newline after the opening delimiter.  Stop at the
     # evidence interpolation so later source-owned temporal sections do not
     # change this fixture's deliberately prefix-only contract.
     evidence_line = next(index for index, line in enumerate(lines) if "\\(context.boundedEvidence)" in line)
-    return "\n".join(line[12:] for line in lines[1:evidence_line]) + "\n"
+    indentation = len(lines[1]) - len(lines[1].lstrip())
+    return "\n".join(line[indentation:] for line in lines[1:evidence_line]) + "\n"
 
 
 def test_frozen_corpus_has_identical_evidence_and_stable_prompt_hashes() -> None:

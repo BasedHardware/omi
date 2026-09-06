@@ -87,6 +87,14 @@ as the JIT sidecar's `gateway_run_id` and never substitute it for a comparison
 ID. The source projection contract below is the only accepted bridge to the
 legacy/nano replays. Do not substitute the static fixture hashes.
 
+`evidence_sha256` is produced by the Node agent runtime as the canonical JSON
+hash of its persisted `admittedContextSnapshot` object. It is not a digest of
+the Swift context bucket or its complete payload. The Swift
+`JITProactivitySourceProjection` supplies exact prompt bytes and the
+evaluation-time/timezone/context-ID tuple; Node binds that projection to its
+own admitted snapshot and adds this hash. Keep the snapshot hash and Swift
+bucket/context identifiers as separate provenance fields.
+
 The serving desktop source must emit
 `metadata.jitCostEvidenceProjection` beside the same admitted snapshot and
 `metadata.jitBudget` for each qualified turn. The projection is
@@ -132,6 +140,13 @@ exact files from each lane for the endpoint request and capture the response's
    recorded by the producer-derived pair plan. Do not launch another full turn
    solely for this comparison. The shipped `AgentClient`/Pi path records the
    actual provider attempt IDs and durable gateway accounting.
+
+The matched qualification currently consists of one separately replayed nano
+request plus one already-observed JIT full turn. The nano receipt measures that
+replayed admission call; it is not the original full turn's nano attempt and
+must not be labeled total JIT spend. A total JIT architecture cost requires the
+trusted nano receipt and the observed full-turn gateway receipt, with both
+attempt sets retained and joined to their respective run IDs.
 
 The endpoint response for steps 1 and 2 is insufficient for billing. The
 released `ProactiveLaneClient` envelope contains `operation`, `lane`,
