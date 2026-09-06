@@ -58,6 +58,18 @@ struct LocalInferenceRuntime: Sendable {
     }
   }
 
+  /// Window the chunker should honor. `nil` when no engine will run (kill
+  /// switch, missing adapter) — the summarizer then makes one fail-closed call.
+  func selectedContextWindowTokens() -> Int? {
+    if killSwitches.isDisabled { return nil }
+    switch selectEngine() {
+    case .success(let engine):
+      return engine.capabilities.contextWindowTokens
+    case .failure:
+      return nil
+    }
+  }
+
   func runToolLoopFailClosed(
     prompt: String,
     tools: [LocalInferenceToolSpec],

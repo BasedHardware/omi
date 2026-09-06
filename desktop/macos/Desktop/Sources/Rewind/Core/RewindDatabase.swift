@@ -2642,6 +2642,7 @@ actor RewindDatabase {
     Self.registerFabricatedActionItemTombstoneRepair(on: &migrator)
     JITTriggerMirrorSchema.registerMigration(on: &migrator)
     KnowledgeLedgerMirrorStagingSchema.registerMigration(on: &migrator)
+    Self.registerClientProcessingProjectionMigration(on: &migrator)
     try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,
@@ -2690,6 +2691,27 @@ actor RewindDatabase {
   /// arrives as canonical status `cancelled` or `superseded`. A row carrying
   /// neither was retired by nothing but the stamp, so only those are cleared —
   /// a real deletion, local or remote, is left exactly as it is.
+  /// Durable `client_processing` blob for S10. Retry serialization (S11) sends
+  /// this stored JSON; it is never regenerated from the transcript.
+  static func registerClientProcessingProjectionMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addClientProcessingProjection") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "clientProcessingJson", type: .text)
+    }
+  }
+
+  static func addTranscriptionSessionColumnIfMissing(
+    _ db: Database,
+    name: String,
+    type: Database.ColumnType
+  ) throws {
+    guard try db.columns(in: "transcription_sessions").contains(where: { $0.name == name }) == false else {
+      return
+    }
+    try db.alter(table: "transcription_sessions") { t in
+      t.add(column: name, type)
+    }
+  }
+
   static func registerFabricatedActionItemTombstoneRepair(on migrator: inout DatabaseMigrator) {
     migrator.registerMigration("clearFabricatedActionItemTombstones") { db in
       let repaired =

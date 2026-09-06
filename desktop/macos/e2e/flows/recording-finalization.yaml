@@ -16,6 +16,13 @@ covers:
   - desktop/macos/Desktop/Sources/LocalInference/LocalInferenceKillSwitches.swift
   - desktop/macos/Desktop/Sources/LocalInference/LocalServerInferenceAdapter.swift
   - desktop/macos/Desktop/Sources/LocalInference/DeterministicConversationMinimum.swift
+  # S10 summarizer + stored projection. Not consulted by this flow until S11
+  # wires ConversationFinalizationService; XCTest is the behavioral proof.
+  - desktop/macos/Desktop/Sources/LocalInference/TranscriptHash.swift
+  - desktop/macos/Desktop/Sources/LocalInference/ClientProcessingContract.swift
+  - desktop/macos/Desktop/Sources/LocalInference/LocalSummaryDraft.swift
+  - desktop/macos/Desktop/Sources/LocalInference/LocalProjectionStore.swift
+  - desktop/macos/Desktop/Sources/LocalInference/ConversationChunkSummarizer.swift
   - desktop/Desktop/Sources/AppState.swift
   - desktop/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
   - desktop/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
