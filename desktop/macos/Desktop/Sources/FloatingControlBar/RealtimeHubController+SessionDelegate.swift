@@ -53,8 +53,6 @@ extension RealtimeHubController {
       return
     }
     toolEffectIdentityByTransportKey.removeValue(forKey: key)
-    DesktopDiagnosticsManager.shared.finishVoiceToolLatency(
-      key: key, toolName: name, provider: providerTag, resultBytes: output.utf8.count)
     let turnID = VoiceTurnID(identity.generation)
     let deferredScreenProtocol =
       name == HubTool.screenshot.rawValue
@@ -79,12 +77,14 @@ extension RealtimeHubController {
       provider: effectiveProvider,
       name: name,
       output: output)
-    if providerResult.wasOversized {
+    DesktopDiagnosticsManager.shared.finishVoiceToolLatency(
+      key: key, toolName: name, provider: providerTag, resultBytes: providerResult.originalByteCount)
+    if providerResult.wasTruncated {
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "realtime_hub",
         from: "tool_result_full",
-        to: "tool_result_error",
-        reason: "capability_mismatch",
+        to: "tool_result_bounded_projection",
+        reason: "provider_budget",
         outcome: .degraded,
         extra: [
           "tool": name,
@@ -92,6 +92,13 @@ extension RealtimeHubController {
           "provider_bytes": providerResult.output.utf8.count,
           "user_visible": true,
         ])
+    }
+    if providerResult.wasOversized && !providerResult.hasCanonicalEnvelope {
+      log(
+        "RealtimeHub[\(providerTag)]: INVARIANT VIOLATION unprojected tool result \(name) "
+          + "original_bytes=\(providerResult.originalByteCount) provider_bytes=\(providerResult.output.utf8.count) "
+          + "limit=\(RealtimeProviderToolResultPolicy.maximumByteCount)"
+      )
     }
     log(
       "RealtimeHub[\(providerTag)]: tool result \(name) raw_bytes=\(providerResult.originalByteCount) "
@@ -556,20 +563,29 @@ extension RealtimeHubController {
     case .thinkDeeper:
       let query = (command.input["query"] as? String) ?? turnTranscript
       let toolContext = (command.input["context"] as? String) ?? ""
+      let thinkingLevel = RealtimeHubTools.EscalationThinkingLevel.fromToolInput(command.input["thinking"])
       return await escalateToHigherModel(
         query,
         toolContext: toolContext,
+        thinkingLevel: thinkingLevel,
+        invocationTurnID: invocation.turnID,
         invocationID: command.invocationID,
         ownerID: command.ownerID)
 
     case .webSearch:
-      let query = (command.input["query"] as? String) ?? turnTranscript
+      let scope = RealtimePublicWebSearchScope(toolValue: command.input["scope"])
+      let query = RealtimeHubTools.authorizedPublicWebQuery(
+        proposedQuery: (command.input["query"] as? String) ?? turnTranscript,
+        turnTranscript: turnTranscript,
+        scope: scope)
       let toolContext = (command.input["context"] as? String) ?? ""
       return await searchPublicWeb(
         query,
+        scope: scope,
         toolContext: toolContext,
         invocationID: command.invocationID,
-        ownerID: command.ownerID)
+        ownerID: command.ownerID,
+        turnID: invocation.turnID)
 
     case .screenshot:
       // Preserve the original descriptor before suspension. The timeout branch must never read
@@ -650,6 +666,7 @@ extension RealtimeHubController {
     guard isCurrentSession(source) else { return }
     AgentCompletionVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
     NotchCardVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
+    InterjectClassificationDelivery.shared.voiceSessionDidOpenInputWindow()
   }
 
   func hubDidConnect(source: RealtimeHubSession) {
@@ -658,6 +675,7 @@ extension RealtimeHubController {
     hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
     AgentCompletionVoiceDelivery.shared.voiceSessionDidConnect()
     NotchCardVoiceDelivery.shared.voiceSessionDidConnect()
+    InterjectClassificationDelivery.shared.voiceSessionDidConnect()
     let replayedReconnectTurn = reconnectAudioBuffer != nil
     let replayedReplacementTurn = replacementAudioBuffer != nil
     if replayedReplacementTurn {
@@ -823,7 +841,8 @@ extension RealtimeHubController {
       }
     }
     if isFinal {
-      let reply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+      let reply = InterjectVoiceFeedbackRouting.spokenText(from: assistantText)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
       // Fallback only: if the model produced text but no native audio this turn,
       // speak it through the selected app voice. Normally both providers stream
       // spoken audio (played by StreamingPCMPlayer) so this stays unused.
@@ -915,6 +934,14 @@ extension RealtimeHubController {
         expectedTurnEpoch: toolTurnEpoch)
       return
     }
+    if name == HubTool.recordInterjectFeedback.rawValue {
+      handleInterjectFeedbackReport(
+        source: source,
+        callId: callId,
+        arguments: arguments,
+        expectedTurnEpoch: toolTurnEpoch)
+      return
+    }
     invokeExternallyAuthorizedTool(
       source: source,
       turnID: turnID,
@@ -979,8 +1006,12 @@ extension RealtimeHubController {
       case .emptyAnswer: reason = "empty_answer"
       case .accepted: reason = "evidence_state_changed"
       }
-      if case .awaitingReport = screenGroundingState {
-        rejectScreenEvidence(screenEvidence?.descriptor, reason: reason)
+      if case .awaitingReport(let receipt) = screenGroundingState {
+        // The receipt's frozen descriptor — not the controller's turn-scoped `screenEvidence`,
+        // which a follow-up locked-session turn may have already cleared — is what proves an
+        // image was captured. Passing nil here would misroute a stale or contradictory report
+        // (a failure about evidence that WAS captured) into the recoverable exit.
+        rejectScreenEvidence(receipt.descriptor, reason: reason)
       } else {
         // A report that races ahead of the screenshot result is rejected to the provider but
         // never cached or redeemed. The original screenshot call may still complete normally.
@@ -990,6 +1021,7 @@ extension RealtimeHubController {
     }
     screenGroundingState = .accepted(receipt)
     logScreenEvidence(stage: "report_accepted", evidence: receipt.descriptor, callID: callID)
+    if !turnIdempotencyKey.isEmpty { screenContextByContinuityKey[turnIdempotencyKey] = observation }
     return acceptScreenEvidenceReport(
       receipt.protocolToken,
       reportCallID: VoiceToolCallID(callID),
@@ -1090,6 +1122,17 @@ extension RealtimeHubController {
       let candidates = AssistantSettings.shared.voiceBaseLanguages
       let fullTask = fullLIDTask
       let provider = providerTag
+      // The optimistic `.success` seal is scheduled now, so its revision marker
+      // is registered synchronously now: the persist closure below first
+      // awaits transcript resolution (bounded by the 20s LID deadline), and a
+      // playback failure or barge-in terminalizing in that window must find
+      // the marker, or the `.completed` seal becomes permanent (#12743).
+      registerSealedCompletedVoiceJournalRow(
+        ownerID: completedTurnOwnerID,
+        assistantText: reply,
+        terminal: .success,
+        acceptedSpawnOwnerID: acceptedSpawnOwnerID,
+        idempotencyKey: completedTurnIdempotencyKey)
       enqueueTurnPersistence(
         idempotencyKey: completedTurnIdempotencyKey,
         retainingReceipt: true
@@ -1111,6 +1154,10 @@ extension RealtimeHubController {
             terminal: .success,
             idempotencyKey: completedTurnIdempotencyKey,
             acceptedSpawnOwnerID: acceptedSpawnOwnerID) ?? false
+        if accepted, !resolution.userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          let repliedToCard = FloatingControlBarManager.shared.recentNotchCardVoiceContext() != nil
+          DesktopUsageDailyReporter.shared.recordCompletedPTTTurn(repliedToCard: repliedToCard)
+        }
         self?.lastTurnDiagnostics = [
           "provider": provider,
           "provider_transcript": heard,
@@ -1454,6 +1501,12 @@ extension RealtimeHubController {
           recoveryResult: .started)
         return
       }
+      if RealtimeHubUsageLimitPresentation.shouldPresent(
+        category: closeCategory, failoverStarted: false)
+      {
+        NotificationCenter.default.post(
+          name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "realtime"])
+      }
       teardownSession()
       recordCloseResolution(
         turnOutcome: turnOutcome,
@@ -1522,5 +1575,4 @@ extension RealtimeHubController {
   func clearResponseGlowIfRealtimeAudioIdle() {
     responseGlowGate.scheduleIdleClear()
   }
-
 }

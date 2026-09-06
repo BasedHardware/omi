@@ -9882,12 +9882,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get accountCutoverOpenStore => 'Открыть магазин';
 
   @override
-  String get chatScopeToday => 'Сегодня';
-
-  @override
-  String get chatScopeThisWeek => 'На этой неделе';
-
-  @override
   String chatScopeAbout(String title) {
     return 'О: $title';
   }
@@ -9950,4 +9944,51 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Память Pendant заполнена, и он всё ещё в режиме записи, поэтому сохранённое аудио нельзя передать. Нажмите кнопку Pendant, чтобы остановить запись, затем синхронизируйте снова.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Не записано ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'Транскрипция не получает аудио';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Задача';
+
+  @override
+  String get chatBlockGoal => 'Цель';
+
+  @override
+  String get chatBlockConversation => 'Разговор';
+
+  @override
+  String get chatBlockMemory => 'Воспоминание';
+
+  @override
+  String get chatBlockQuestion => 'Вопрос';
+
+  @override
+  String get chatBlockOpenInGoals => 'Открыть в «Целях»';
+
+  @override
+  String get chatBlockOpenConversation => 'Открыть разговор';
+
+  @override
+  String get chatBlockOpenInMemories => 'Открыть в «Воспоминаниях»';
+
+  @override
+  String get chatBlockUnavailable => 'Больше недоступно';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Рекомендуемые следующие шаги';
+
+  @override
+  String get couldNotLoadMemories => 'Не удалось загрузить воспоминания';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Не удалось загрузить граф знаний';
 }

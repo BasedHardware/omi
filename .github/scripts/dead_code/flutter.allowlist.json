@@ -1,0 +1,12 @@
+{
+  "entries": [
+    {
+      "path": "app/lib/pigeon_interfaces.dart",
+      "reason": "codegen contract inputs, unimported by design"
+    },
+    {
+      "path": "app/lib/phone_mic_interface.dart",
+      "reason": "codegen contract inputs, unimported by design"
+    }
+  ]
+}

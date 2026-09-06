@@ -116,12 +116,12 @@ tests/unit/test_backend_runtime_env_validator.py::test_repo_prod_cloud_run_workf
 tests/unit/test_backend_runtime_env_validator.py::test_repo_prod_gke_values_match_manifest
 tests/unit/test_backend_runtime_env_validator.py::test_repo_rendered_cloud_run_matches_manifest
 tests/unit/test_verify_llm_gateway_serving.py::test_gateway_promotion_intent_tracks_runtime_and_helm_listener_surfaces
-tests/unit/test_byok_security.py::TestBYOKActivationValidation::test_valid_activation_persists_fingerprints
+tests/unit/test_byok_security_enrollment.py::TestBYOKActivationValidation::test_valid_activation_persists_fingerprints
 tests/unit/test_verify_pusher_config_references.py::test_dev_pusher_contract_requires_typesense_host_secret_clear
 tests/unit/test_verify_pusher_config_references.py::test_rendered_dev_pusher_direct_bindings_match_source_contract
-tests/unit/test_byok_security.py::TestCacheKeyHashing::test_hash_key_returns_sha256
-tests/unit/test_byok_security.py::TestChatQuotaBYOKBypass::test_enforce_chat_quota_bypasses_for_byok_with_openai_key
-tests/unit/test_byok_security.py::TestContextVarSafety::test_default_is_none
+tests/unit/test_byok_security_credentials.py::TestCacheKeyHashing::test_hash_key_returns_sha256
+tests/unit/test_byok_security_quota.py::TestChatQuotaBYOKBypass::test_enforce_chat_quota_bypasses_for_byok_with_openai_key
+tests/unit/test_byok_security_context.py::TestContextVarSafety::test_default_is_none
 tests/unit/test_byok_llm_logging.py::test_classify_byok_llm_error_authentication
 tests/unit/test_canonical_short_term_maintenance_cron.py::test_cohort_runner_noops_when_cron_disabled
 tests/unit/test_canonical_short_term_maintenance_cron.py::test_cohort_runner_uses_real_maintenance_with_fake_firestore
@@ -254,6 +254,12 @@ tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_zero_segments_a
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_404_expired_job
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_403_wrong_owner
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_completed_includes_result
+# Full-file isolation amortizes sync router/pipeline imports and Firestore fakes into these calls.
+tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_failed_includes_error
+tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_fresh_soft_caps_use_the_current_subscription_plan[unlimited]
+tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_retry_hydration_excludes_durably_fenced_conversation_from_audio_finalization
+tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_inline_renew_errors_cancel_before_capacity_admission_without_releasing_retry_material
+tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_content_completion_failure_cannot_publish_completed_job
 tests/unit/test_tools_rest_memory_runtime_adapter.py::test_tools_rest_get_memories_text_requests_legacy_safe_memory_decision
 tests/unit/test_tools_router.py::TestRouterEnvelope::test_ok_normal
 tests/unit/test_transcript_segment.py::test_forward_merge_on_short_incomplete_last_sentence
@@ -292,7 +298,7 @@ tests/unit/test_inv_mem_1_guard.py::TestInvMemSourceRatchet::test_no_non_canonic
 tests/unit/test_inv_mem_1_guard.py::TestInvMemSourceRatchet::test_default_read_paths_do_not_include_archive_without_explicit_mode
 tests/unit/test_task_intelligence_contract_freeze.py
 tests/unit/test_lock_bypass_fixes.py
-tests/unit/test_byok_security.py::TestCacheRouting::test_cached_openai_chat_no_raw_key_in_cache
+tests/unit/test_byok_security_enrollment.py::TestCacheRouting::test_cached_openai_chat_no_raw_key_in_cache
 # Behavior test drives the real process_segment target-attach fallback (#10033/#10119 review ask);
 # it is the sole heavy test in its file, so it amortizes the sync pipeline import into its call phase.
 tests/unit/test_sync_merge_target_selection.py::test_sync_target_attach_fallback_to_closest
@@ -320,5 +326,12 @@ tests/unit/test_desktop_proxy.py::test_proxy_reports_upstream_unavailable_as_ret
 tests/unit/test_chat_file_upload_unsupported.py::test_heic_photo_is_rejected_as_bad_request[/v2/files]
 tests/unit/test_chat_file_upload_unsupported.py::test_heic_photo_is_rejected_as_bad_request[/v1/files]
 tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
+tests/unit/test_llm_gateway_coverage_guardrails.py::test_resolver_feature_literals_are_configured_and_dynamic_sites_are_reviewed
 tests/unit/test_llm_gateway_embeddings_route.py::test_embeddings_success_returns_openai_shape_and_records_accounting
 tests/unit/test_llm_gateway_vertex_provider.py::test_gateway_registry_uses_native_vertex_for_gemini
+# File-level: red-proof AST walks of production sources exceed 0.30s CPU per
+# test under saturated pre-push once this file is in the changed set.
+tests/unit/test_client_processing_trust_boundary.py
+# First route test in its file: amortizes the routers.users FastAPI/pydantic import into its call
+# phase. Structural (the file-isolation runner model), not a per-test regression.
+tests/unit/test_daily_summary_generation.py::test_create_route_happy_path

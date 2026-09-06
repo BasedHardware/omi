@@ -254,7 +254,124 @@ final class OnboardingGlassChromeTests: XCTestCase {
     }
   }
 
+  /// **The permission escape is a link, not a second capsule.**
+  ///
+  /// Two full-width pills stacked — "Allow Screen Recording" over "Skip for now" — is the shape of a
+  /// choice between equals, and on a permission card it is not one: the skip is the exit, not the
+  /// alternative. This asserts the rank rather than the pixels, by reading `permStepWidget`'s own body:
+  /// every branch's way-past must be the shared `skipLink`, and no branch may spend a capsule on it.
+  ///
+  /// Scoped to that one function on purpose. `InkButtonStyle(kind: .secondary)` is correct elsewhere in
+  /// this file (a retry, a re-check, the screen-demo skip, which is not a permission), so a file-wide
+  /// ban would be a rule about the wrong thing.
+  func testStaticCheckerPermissionEscapesAreLinksRatherThanASecondCapsule() throws {
+    let body = try code(Self.liveOnboardingSource)
+    let widget = try XCTUnwrap(
+      permStepWidgetBody(in: body),
+      "permStepWidget no longer parses; this checker is reading the wrong function")
+
+    XCTAssertTrue(
+      widget.contains("skipLink(\"Skip for now\", action: onContinue)"),
+      "the way past a permission must be the shared skip link")
+    XCTAssertTrue(
+      widget.contains("skipLink(\"Later —"),
+      "the reopen branch's escape must be that same object, not a bespoke run of caption type")
+    // The ask branch's own control is `InkButtonStyle(kind: action == .recheck ? .secondary : .primary)`
+    // — a different string, and a legitimate one. It is the *unconditional* secondary capsule that
+    // could only be the escape.
+    XCTAssertFalse(
+      widget.contains("InkButtonStyle(kind: .secondary)"),
+      """
+      permStepWidget spends a secondary capsule on something. The only thing on this card that is not \
+      the Allow action is the escape, and a capsule under the Allow pill reads as the equal-ranked \
+      other half of a choice rather than as the side door it is.
+      """)
+    XCTAssertEqual(
+      widget.components(separatedBy: "skipLink(").count - 1, 2,
+      "exactly two escapes — the reopen branch's and the ask branch's; a new one must join skipLink")
+  }
+
+  /// The de-emphasis is visual only. A 12 pt run of type is a 12 pt hit target unless something says
+  /// otherwise, and an escape people cannot land on is worse than a loud one.
+  ///
+  /// Sliced to `SBSkipLink`'s own body, not the file. Scanned file-wide these tokens are all satisfied
+  /// by unrelated call sites — `.underline()` by the GitHub link in `promiseWidget`, `.contentShape`
+  /// by two disclosure rows — so a file-wide scan would stay green through exactly the regression it
+  /// names. That is the bug this test had on its first draft.
+  func testStaticCheckerTheSkipLinkStaysAComfortableTarget() throws {
+    let source = try code(Self.liveOnboardingSource)
+    let link = try XCTUnwrap(
+      declarationBody("private struct SBSkipLink", in: source),
+      "SBSkipLink no longer parses; this checker is reading the wrong declaration")
+
+    XCTAssertTrue(
+      link.contains("skipLinkMinHeight: CGFloat = 28"),
+      "the skip link must reserve a real target height, not just set small type")
+    XCTAssertTrue(
+      link.contains(".frame(minHeight: Self.skipLinkMinHeight)")
+        && link.contains(".contentShape(Rectangle())"),
+      "the reserved height must be hit-tested; a .plain button hit-tests only what it renders")
+    XCTAssertTrue(
+      link.contains(".underline()"),
+      "without the underline the link is a caption, which is the failure the capsule was fixing")
+    XCTAssertTrue(
+      link.contains("NSCursor.pointingHand.push()"),
+      "the pointer must change over the skip link so it still reads as pressable")
+  }
+
+  /// **Every `NSCursor` push owes exactly one pop.**
+  ///
+  /// `push`/`pop` is a stack, and SwiftUI delivers no `onHover(false)` to a view leaving the
+  /// hierarchy — which is what pressing this link does. An unbalanced push leaves the pointing-hand
+  /// riding over the next step's controls. The guard is the `didPushCursor` flag plus both exit
+  /// paths, so this asserts all three rather than the presence of a `pop` somewhere.
+  func testStaticCheckerTheSkipLinkBalancesItsCursorPushes() throws {
+    let source = try code(Self.liveOnboardingSource)
+    let link = try XCTUnwrap(declarationBody("private struct SBSkipLink", in: source))
+
+    XCTAssertTrue(
+      link.contains("@State private var didPushCursor = false"),
+      "the link must track whether it holds a pushed cursor; an unguarded push double-pushes on rehover")
+    XCTAssertTrue(
+      link.contains("if hovering, !didPushCursor") && link.contains("else if !hovering, didPushCursor"),
+      "push and pop must both be gated on the flag, which is what makes them balanced")
+    XCTAssertTrue(
+      link.contains(".onDisappear { setHovered(false) }"),
+      "unmounting while hovered is the path that strands the cursor; onDisappear is the only hook for it")
+    XCTAssertTrue(
+      link.contains("setHovered(false)\n        action()"),
+      "the tap must pop before it advances the step, since advancing unmounts this view")
+  }
+
   // MARK: - Helpers
+
+  /// `permStepWidget`'s body. See `declarationBody`.
+  private func permStepWidgetBody(in source: String) -> String? {
+    declarationBody("private func permStepWidget(", in: source)
+  }
+
+  /// The brace-matched body of the declaration introduced by `signature`.
+  ///
+  /// **Slicing is the point.** A checker for one control that scans the whole file asserts only that
+  /// the tokens exist *somewhere*, and in a 1,000-line view they always do — so it passes through the
+  /// regression it was written to catch. Both checkers above slice first for that reason.
+  private func declarationBody(_ signature: String, in source: String) -> String? {
+    guard let start = source.range(of: signature),
+      let open = source.range(of: "{", range: start.upperBound..<source.endIndex)
+    else { return nil }
+    var depth = 0
+    var index = open.lowerBound
+    while index < source.endIndex {
+      let character = source[index]
+      if character == "{" { depth += 1 }
+      if character == "}" {
+        depth -= 1
+        if depth == 0 { return String(source[open.upperBound..<index]) }
+      }
+      index = source.index(after: index)
+    }
+    return nil
+  }
 
   /// Source with `//` comments stripped.
   ///

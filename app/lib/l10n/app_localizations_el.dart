@@ -9914,12 +9914,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Άνοιγμα καταστήματος';
 
   @override
-  String get chatScopeToday => 'Σήμερα';
-
-  @override
-  String get chatScopeThisWeek => 'Αυτή την εβδομάδα';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Σχετικά με: $title';
   }
@@ -9983,4 +9977,51 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Ο αποθηκευτικός χώρος του Pendant είναι πλήρης και βρίσκεται ακόμα σε λειτουργία εγγραφής, οπότε ο αποθηκευμένος ήχος δεν μπορεί να μεταφερθεί. Πατήστε το κουμπί του Pendant για να σταματήσετε την εγγραφή και μετά συγχρονίστε ξανά.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Δεν καταγράφηκε ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'Η μεταγραφή δεν λαμβάνει ήχο';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Εργασία';
+
+  @override
+  String get chatBlockGoal => 'Στόχος';
+
+  @override
+  String get chatBlockConversation => 'Συνομιλία';
+
+  @override
+  String get chatBlockMemory => 'Ανάμνηση';
+
+  @override
+  String get chatBlockQuestion => 'Ερώτηση';
+
+  @override
+  String get chatBlockOpenInGoals => 'Άνοιγμα στους Στόχους';
+
+  @override
+  String get chatBlockOpenConversation => 'Άνοιγμα συνομιλίας';
+
+  @override
+  String get chatBlockOpenInMemories => 'Άνοιγμα στις Αναμνήσεις';
+
+  @override
+  String get chatBlockUnavailable => 'Δεν είναι πλέον διαθέσιμο';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Προτεινόμενα επόμενα βήματα';
+
+  @override
+  String get couldNotLoadMemories => 'Δεν ήταν δυνατή η φόρτωση των αναμνήσεων';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Δεν ήταν δυνατή η φόρτωση του γραφήματος γνώσης';
 }

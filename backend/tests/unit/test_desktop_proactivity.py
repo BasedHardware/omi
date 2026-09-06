@@ -337,8 +337,11 @@ async def test_cancellation_before_reservation_response_leaves_server_lease_to_e
 
 @pytest.mark.asyncio
 async def test_completion_success_attaches_quota_headers(monkeypatch):
+    observed_headers = {}
+
     class GatewayClient:
         async def post(self, url, *, headers, json):
+            observed_headers.update(headers)
             return httpx.Response(
                 200,
                 request=httpx.Request("POST", url),
@@ -365,6 +368,7 @@ async def test_completion_success_attaches_quota_headers(monkeypatch):
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
     monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
+    monkeypatch.setattr(desktop_proactivity, "uuid4", lambda: "request-for-accounting-join")
 
     response = Response()
     result = await desktop_proactivity.proactive_completion(request(), response, uid="user-1")
@@ -372,6 +376,8 @@ async def test_completion_success_attaches_quota_headers(monkeypatch):
     assert response.headers["X-Proactive-Quota-Limit"] == "200"
     assert response.headers["X-Proactive-Quota-Remaining"] == "12"
     assert response.headers["X-Proactive-Quota-Reset"] == "3600"
+    assert response.headers["X-Omi-Request-ID"] == "request-for-accounting-join"
+    assert observed_headers["X-Omi-Request-ID"] == response.headers["X-Omi-Request-ID"]
 
 
 @pytest.mark.asyncio
@@ -932,11 +938,20 @@ async def test_gateway_failure_releases_reserved_quota(monkeypatch):
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
     monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
+    monkeypatch.setattr(desktop_proactivity, "uuid4", lambda: "request-id-upstream-502")
 
+    response = Response()
     with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
-        await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
+        await desktop_proactivity.proactive_completion(request(), response, uid="user-1")
 
     assert unavailable.value.status_code == 502
+    assert unavailable.value.detail == "Proactive model unavailable"
+    assert unavailable.value.headers == {
+        "X-Omi-Request-ID": "request-id-upstream-502",
+        "X-Proactive-Quota-Limit": "150",
+        "X-Proactive-Quota-Remaining": "149",
+        "X-Proactive-Quota-Reset": "86400",
+    }
     assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
 
 
@@ -1303,13 +1318,19 @@ async def test_direct_extraction_length_retry_releases_quota_once_after_final_fa
     monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
+    monkeypatch.setattr(desktop_proactivity, "uuid4", lambda: f"request-id-retry-{final_failure}")
 
+    response = Response()
     with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
-        await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
+        await desktop_proactivity.proactive_completion(request(), response, uid="user-1")
 
     assert unavailable.value.status_code == (
         502 if final_failure == "provider" else desktop_proactivity._INVALID_STRUCTURED_OUTPUT_STATUS
     )
+    assert unavailable.value.headers["X-Omi-Request-ID"] == f"request-id-retry-{final_failure}"
+    assert unavailable.value.headers["X-Proactive-Quota-Limit"] == "150"
+    assert unavailable.value.headers["X-Proactive-Quota-Remaining"] == "149"
+    assert unavailable.value.headers["X-Proactive-Quota-Reset"] == "86400"
     assert [payload["max_completion_tokens"] for payload in calls] == [1024, 2400]
     assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
     assert len(fallbacks) == 1
@@ -1357,11 +1378,20 @@ async def test_direct_provider_invalid_output_does_not_emit_recovered_fallback(m
     monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: _ImmediateSemaphore())
+    monkeypatch.setattr(desktop_proactivity, "uuid4", lambda: "request-id-invalid-422")
 
+    response = Response()
     with pytest.raises(desktop_proactivity.HTTPException) as invalid:
-        await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
+        await desktop_proactivity.proactive_completion(request(), response, uid="user-1")
 
     assert invalid.value.status_code == desktop_proactivity._INVALID_STRUCTURED_OUTPUT_STATUS
+    assert invalid.value.detail == desktop_proactivity._INVALID_STRUCTURED_OUTPUT_DETAIL
+    assert invalid.value.headers == {
+        "X-Omi-Request-ID": "request-id-invalid-422",
+        "X-Proactive-Quota-Limit": "150",
+        "X-Proactive-Quota-Remaining": "149",
+        "X-Proactive-Quota-Reset": "86400",
+    }
     assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
     assert fallbacks == []
     assert direct_surfaces == []

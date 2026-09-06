@@ -9841,12 +9841,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get accountCutoverOpenStore => 'Mở cửa hàng';
 
   @override
-  String get chatScopeToday => 'Hôm nay';
-
-  @override
-  String get chatScopeThisWeek => 'Tuần này';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Về: $title';
   }
@@ -9908,4 +9902,51 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Bộ nhớ của Pendant đã đầy và nó vẫn đang ở chế độ ghi âm, nên không thể chuyển âm thanh đã lưu. Nhấn nút của Pendant để dừng ghi âm, sau đó đồng bộ lại.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Không được ghi âm ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'Bản ghi âm không nhận được âm thanh';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Nhiệm vụ';
+
+  @override
+  String get chatBlockGoal => 'Mục tiêu';
+
+  @override
+  String get chatBlockConversation => 'Cuộc trò chuyện';
+
+  @override
+  String get chatBlockMemory => 'Ký ức';
+
+  @override
+  String get chatBlockQuestion => 'Câu hỏi';
+
+  @override
+  String get chatBlockOpenInGoals => 'Mở trong Mục tiêu';
+
+  @override
+  String get chatBlockOpenConversation => 'Mở cuộc trò chuyện';
+
+  @override
+  String get chatBlockOpenInMemories => 'Mở trong Ký ức';
+
+  @override
+  String get chatBlockUnavailable => 'Không còn khả dụng';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Các bước tiếp theo được đề xuất';
+
+  @override
+  String get couldNotLoadMemories => 'Không thể tải ký ức';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Không thể tải đồ thị tri thức';
 }

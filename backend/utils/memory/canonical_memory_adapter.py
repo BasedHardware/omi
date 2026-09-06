@@ -27,6 +27,14 @@ from utils.memory.canonical_lineage import (
     collapse_canonical_lineages,
 )
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
+from utils.memory.belief_model import (
+    SUBJECT_SCOPE_ALIASES,
+    belief_model_enabled,
+    horizon_from_extraction,
+    public_belief_overlay,
+    public_belief_overlay_json,
+    subject_scope_from_extraction,
+)
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import (
     CanonicalApplyWrite,
@@ -42,7 +50,11 @@ from database.memory_apply_store import (
     tombstone_memory_items_firestore,
     privacy_deletion_receipt_id,
 )
-from database.legal_holds import current_destructive_operation_token, destructive_operation_gate
+from database.legal_holds import (
+    LegalHoldAuthorityUnavailable,
+    current_destructive_operation_token,
+    destructive_operation_gate,
+)
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from database.memory_vector_metadata import canonical_memory_provider_id
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
@@ -61,6 +73,7 @@ from models.memory_evidence import (
 )
 from models.memories import Evidence, MemoryDB, MemoryCategory, SubjectAttribution, decide_initial_memory_tier
 from models.memory_apply import (
+    ApplyResult,
     ApplyStatus,
     MemoryControlState,
     MemoryWriterClass,
@@ -116,10 +129,30 @@ UserMutationPatchBuilder = Callable[[MemoryItem, datetime], Tuple[Payload, Paylo
 _LEDGER_WRITE_AUTHORITY = object()
 _DIRECT_USER_LEDGER_WRITE_AUTHORITY = object()
 _DIRECT_USER_LEDGER_EVIDENCE_TYPES = {
+    "explicit_user_statement",
     "explicit_user_correction",
     "explicit_user_reopen",
     "explicit_user_revert",
 }
+
+
+def mint_direct_user_write_authority() -> object:
+    """Mint the in-process capability held by authenticated user routes.
+
+    The returned object carries no user data and is intentionally checked by
+    identity.  Internal integration and extraction callers cannot opt into
+    the direct-user ledger seam by setting a payload field.
+    """
+
+    return _DIRECT_USER_LEDGER_WRITE_AUTHORITY
+
+
+def is_direct_user_write_authority(value: object | None) -> bool:
+    """Return whether ``value`` is the route-minted direct-user capability."""
+
+    return value is _DIRECT_USER_LEDGER_WRITE_AUTHORITY
+
+
 # ``knowledge_ledger`` imports this adapter, so the wire discriminator cannot
 # be imported back without a cycle. Keep this private copy contract-tested.
 _LEDGER_SCHEMA_VERSION = "knowledge_ledger.v1"
@@ -374,6 +407,7 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         arguments=_bounded_memory_arguments(item.arguments),
         intent_backed=item.intent_backed,
         write_reason=item.write_reason,
+        **public_belief_overlay(item, now=datetime.now(timezone.utc)),
     )
 
 
@@ -918,6 +952,7 @@ def search_canonical_memories(
                 "date": memory.updated_at.isoformat(),
                 "visibility": memory.visibility,
                 "is_locked": memory.is_locked,
+                **public_belief_overlay_json(memory, now=datetime.now(timezone.utc)),
             }
             for memory in memories[:capped_limit]
         ]
@@ -926,11 +961,13 @@ def search_canonical_memories(
         keyword_search_ledger_memory_ids,
         keyword_search_memory_ids,
         merge_memory_search_ids,
+        require_typesense_projection_ready,
     )
 
     if ledger_kinds is None:
         keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit, db_client=client)
     else:
+        require_typesense_projection_ready(uid)
         keyword_ids = keyword_search_ledger_memory_ids(
             uid,
             normalized_query,
@@ -1033,6 +1070,7 @@ def search_canonical_memories(
                 "curation_weight": item.curation_weight,
                 "intent_backed": item.intent_backed,
                 "write_reason": item.write_reason.value if item.write_reason else None,
+                **public_belief_overlay_json(item, now=datetime.now(timezone.utc)),
             }
         )
     return results
@@ -1155,6 +1193,20 @@ def _user_asserted_from_payload(data: Dict[str, Any]) -> bool:
     if "manually_added" in data:
         return bool(data.get("manually_added"))
     return bool(data.get("user_asserted"))
+
+
+def _conversation_extracted_claim(data: Dict[str, Any]) -> bool:
+    """True only for conversation capture. Manual/API/integration writes skip the classifier."""
+    if _user_asserted_from_payload(data):
+        return False
+    if data.get("conversation_id"):
+        return True
+    for raw in data.get("evidence") or []:
+        if isinstance(raw, dict) and (raw.get("source_type") or "") == "conversation":
+            return True
+        if getattr(raw, "source_type", None) == "conversation":
+            return True
+    return False
 
 
 def _product_metadata_from_payload(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1332,6 +1384,8 @@ def _canonical_extraction_apply_write(
         "ledger_schema_version",
         "kind",
         "subject_scope",
+        "half_life_days",
+        "belief_class",
         "slot",
         "body",
         "valid_from",
@@ -1343,6 +1397,34 @@ def _canonical_extraction_apply_write(
     ):
         if ledger_key in data and data[ledger_key] is not None:
             patch_payload[ledger_key] = data[ledger_key]
+    raw_scope = patch_payload.get("subject_scope")
+    if isinstance(raw_scope, str) and raw_scope in SUBJECT_SCOPE_ALIASES:
+        patch_payload["subject_scope"] = SUBJECT_SCOPE_ALIASES[raw_scope]
+    if belief_model_enabled():
+        if "valid_to" not in patch_payload and data.get("invalid_at") is not None:
+            patch_payload["valid_to"] = data["invalid_at"]
+        if "subject_scope" not in patch_payload:
+            if _conversation_extracted_claim(data):
+                attribution = data.get("subject_attribution")
+                attribution_value = getattr(attribution, "value", attribution)
+                user_name = data.get("user_name")
+                patch_payload["subject_scope"] = subject_scope_from_extraction(
+                    extracted_scope=data.get("subject_scope"),
+                    attribution=str(attribution_value or ""),
+                    about=data.get("about"),
+                    user_name=user_name if isinstance(user_name, str) else None,
+                )
+            else:
+                patch_payload["subject_scope"] = "primary_user"
+        if "belief_class" not in patch_payload:
+            resolved_class, resolved_half_life = horizon_from_extraction(
+                belief_class=data.get("belief_class"),
+                half_life_days_override=data.get("half_life_days"),
+                user_asserted=_user_asserted_from_payload(data),
+            )
+            patch_payload["belief_class"] = resolved_class
+            if resolved_half_life is not None:
+                patch_payload["half_life_days"] = resolved_half_life
     supersedes = [str(value).strip() for value in (data.get("supersedes") or []) if str(value).strip()]
     if supersedes:
         patch_payload["supersedes"] = sorted(set(supersedes))
@@ -1397,6 +1479,47 @@ def _canonical_extraction_apply_write(
     )
 
 
+_DUPLICATE_ADD_ROW_REASON = "add patch new_memory_id already exists"
+
+
+def _existing_identical_add_row(
+    uid: str,
+    *,
+    result: ApplyResult,
+    memory_id: str,
+    data: Dict[str, Any],
+    db_client: Any,
+) -> Optional[MemoryItem]:
+    """Resolve an add collision against an already-committed identical row.
+
+    Operation identity folds the observed head commit into the operation id, so
+    a duplicate submission is only replay-idempotent while the account head has
+    not moved. Re-sending the same memory after any other ledger write proposes
+    a fresh operation whose add then collides with the deterministically derived
+    row id. The requested row already exists with the same content, so the write
+    is complete rather than failed. A collision with different content — a
+    client-supplied id reused for new text — is still an error, and a row that
+    is no longer active keeps failing so a resurrected id can never masquerade
+    as a fresh create.
+    """
+    if result.status != ApplyStatus.invalid_patch or result.reason != _DUPLICATE_ADD_ROW_REASON:
+        return None
+    snapshot = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
+    if not getattr(snapshot, "exists", False):
+        return None
+    item = MemoryItem(**_snapshot_payload(snapshot))
+    if item.status != MemoryItemStatus.active:
+        return None
+    if (item.promotion or {}).get("user_review") is False:
+        # A rejected row remains active for audit/history, but it is not a
+        # successful retry target.  Reusing it would silently resurrect a
+        # user-rejected statement under the old content-derived identity.
+        return None
+    if (item.content or "").strip() != (data.get("content") or "").strip():
+        return None
+    return item
+
+
 def write_canonical_extraction_memory(
     uid: str,
     data: Dict[str, Any],
@@ -1408,6 +1531,7 @@ def write_canonical_extraction_memory(
     required_source_item: Optional[MemoryItem] = None,
     ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
     review_resolution: Optional[CanonicalReviewResolution] = None,
+    admit_neighbors: bool = True,
 ) -> str:
     """Persist one memory to memory_items + ledger (extraction or external/manual writes)."""
     if data.get("ledger_schema_version") is not None and _ledger_authority is not _LEDGER_WRITE_AUTHORITY:
@@ -1451,7 +1575,26 @@ def write_canonical_extraction_memory(
             break
     assert result is not None
     if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
-        raise RuntimeError(f"canonical write failed: {result.status} ({result.reason})")
+        duplicate_row = _existing_identical_add_row(
+            uid,
+            result=result,
+            memory_id=memory_id,
+            data=data,
+            db_client=client,
+        )
+        if duplicate_row is None:
+            raise RuntimeError(f"canonical write failed: {result.status} ({result.reason})")
+        logger.info(
+            "canonical duplicate add resolved to existing row uid=%s memory_id=%s",
+            uid,
+            duplicate_row.memory_id,
+        )
+        assert_legal_state(
+            DomainMemoryLayer(duplicate_row.tier.value),
+            physical_status_to_record_status(duplicate_row.status.value),
+            MemoryProcessingState(duplicate_row.processing_state.value),
+        )
+        return duplicate_row.memory_id
 
     committed_id = memory_id
     if result.memory_items:
@@ -1471,6 +1614,20 @@ def write_canonical_extraction_memory(
             physical_status_to_record_status(item.status.value),
             MemoryProcessingState(item.processing_state.value),
         )
+
+    if admit_neighbors and belief_model_enabled() and item is not None:
+        from utils.memory.belief_evidence import admit_claim_against_neighbors
+
+        try:
+            admit_claim_against_neighbors(
+                uid,
+                committed_id,
+                item.content or data.get("content") or "",
+                db_client=client,
+                new_user_asserted=bool(item.user_asserted),
+            )
+        except Exception:
+            logger.warning("belief evidence admission skipped memory_id=%s", committed_id, exc_info=False)
 
     return committed_id
 
@@ -1530,7 +1687,11 @@ def write_canonical_external_memory(
     db_client: Any = None,
     review_resolution: Optional[CanonicalReviewResolution] = None,
 ) -> str:
-    """Persist a manual/API/integration memory via the canonical apply path."""
+    """Persist a manual/API/integration memory via the canonical apply path.
+
+    After writer-mode cutover these creates stay admitted as user writes so
+    POST /v3/memories and desktop create_memory do not 503 in ledger mode.
+    """
     if data.get("ledger_schema_version") is not None:
         raise ValueError("knowledge ledger writes require the dedicated ledger authority")
     client = db_client if db_client is not None else default_db_client
@@ -1568,13 +1729,26 @@ def write_canonical_external_memory(
                     },
                 )[:32]
             )
-    return write_canonical_extraction_memory(
+    memory_id = write_canonical_extraction_memory(
         uid,
         payload,
         db_client=client,
         evidence_items=reissued_evidence,
         review_resolution=review_resolution,
+        _direct_user_authority=_DIRECT_USER_LEDGER_WRITE_AUTHORITY,
+        admit_neighbors=False,
     )
+    if belief_model_enabled():
+        from utils.memory.belief_evidence import schedule_belief_admission
+
+        schedule_belief_admission(
+            uid,
+            memory_id,
+            str(payload.get("content") or ""),
+            db_client=client,
+            new_user_asserted=bool(payload.get("manually_added") or payload.get("user_asserted")),
+        )
+    return memory_id
 
 
 def write_canonical_knowledge_ledger_memory(
@@ -1617,17 +1791,29 @@ def write_canonical_direct_user_knowledge_ledger_memory(
     required_source_item: Optional[MemoryItem] = None,
     ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
 ) -> str:
-    """Dedicated append boundary for an explicit user correction, reopen, or revert."""
+    """Dedicated boundary for an explicit user fact or correction append."""
 
     evidence = _evidence_items_from_payload(data)
-    if (
-        data.get("ledger_schema_version") != _LEDGER_SCHEMA_VERSION
-        or data.get("write_reason") != LedgerWriteReason.direct_user_statement.value
-        or data.get("user_asserted") is not True
-        or (not data.get("supersedes") and ledger_reopen_receipt is None)
-        or not any(item.source_type in _DIRECT_USER_LEDGER_EVIDENCE_TYPES for item in evidence)
-    ):
-        raise ValueError("direct user ledger writes require an explicit correction, reopen, or revert append")
+    is_initial_user_fact = (
+        data.get("ledger_schema_version") == _LEDGER_SCHEMA_VERSION
+        and data.get("write_reason") == LedgerWriteReason.direct_user_statement.value
+        and data.get("user_asserted") is True
+        and not data.get("supersedes")
+        and ledger_reopen_receipt is None
+        and any(item.source_type == "explicit_user_statement" for item in evidence)
+    )
+    is_user_amendment = (
+        data.get("ledger_schema_version") == _LEDGER_SCHEMA_VERSION
+        and data.get("write_reason") == LedgerWriteReason.direct_user_statement.value
+        and data.get("user_asserted") is True
+        and (bool(data.get("supersedes")) or ledger_reopen_receipt is not None)
+        and any(
+            item.source_type in {"explicit_user_correction", "explicit_user_reopen", "explicit_user_revert"}
+            for item in evidence
+        )
+    )
+    if not (is_initial_user_fact or is_user_amendment):
+        raise ValueError("direct user ledger writes require an explicit user fact or append authority")
     client = db_client if db_client is not None else default_db_client
     evidence_items = (
         evidence if ledger_reopen_receipt is not None else _reissued_external_evidence(uid, evidence, db_client=client)
@@ -1912,6 +2098,7 @@ def replace_conversation_sourced_memories(
     *,
     db_client: Any = None,
     conflict_backoff_seconds: Sequence[float] = _REPLACEMENT_CONFLICT_BACKOFF_SECONDS,
+    empty_set_intent: str = "retraction",
 ) -> Dict[str, Any]:
     """Atomically replace one conversation's complete canonical memory set.
 
@@ -1919,7 +2106,19 @@ def replace_conversation_sourced_memories(
     a conflicted round must re-plan against the control the peer left behind.
     ``conflict_backoff_seconds`` bounds those rounds: one entry per retry, and
     the number of attempts is ``len(...) + 1``.
+
+    ``empty_set_intent`` states what an empty ``items`` means for this caller
+    (FC-destructive-gate-keyed-on-proxy-for-intent: emptiness alone cannot
+    carry intent). ``"retraction"`` — the default, and the only meaning before
+    this parameter existed — treats it as "remove this conversation's rows",
+    which demands ``explicit_memory_deletion`` authority whenever rows exist.
+    ``"extraction"`` declares the empty set an extraction outcome: when the
+    conversation already has rows and no deletion gate is held, the existing
+    rows are kept and the call resolves as a no-op instead of failing —
+    extraction variance is not permission to destroy knowledge.
     """
+    if empty_set_intent not in {"retraction", "extraction"}:
+        raise ValueError(f"unknown empty_set_intent: {empty_set_intent!r}")
     client = db_client if db_client is not None else default_db_client
     replacement_digest = _conversation_replacement_digest(uid, conversation_id, items)
     replacement_id = f"replace_{replacement_digest[:32]}"
@@ -1950,6 +2149,71 @@ def replace_conversation_sourced_memories(
             )
             if item.source_state == SourceState.active and not _item_sourced_from_conversation(item, conversation_id)
         ]
+        if not items and not expected_source_items:
+            # Nothing extracted, and nothing of this conversation's already in
+            # the ledger. Falling through sends an empty write set into
+            # ``replace_conversation_source_firestore``, whose empty-replacement
+            # branch demands an ``explicit_memory_deletion`` token -- a
+            # deliberate rule, because emptying a conversation normally
+            # *retracts* its rows.
+            #
+            # Emptiness alone cannot tell the two callers apart. An explicit
+            # retraction that happens to remove nothing must still be recorded,
+            # advancing the source generation (WS-J delete-privacy contract).
+            # Conversation finalization that simply extracted nothing is an
+            # ordinary outcome owing no record, and holds no gate -- so it died
+            # here with LegalHoldAuthorityUnavailable.
+            #
+            # The gate itself is what distinguishes them, so ask it without
+            # letting the answer be fatal. Holding it means a deliberate
+            # deletion: fall through and record. Not holding it means there is
+            # provably nothing to do and no authority is required.
+            #
+            # This never relaxes the rule: an empty replacement that would
+            # genuinely retract rows has a non-empty ``expected_source_items``,
+            # never reaches here, and is still refused without authority.
+            # ``expected_reactivation_items`` derives from
+            # ``terminal_source_ids``, itself derived from
+            # ``expected_source_items``, so it is necessarily empty here too.
+            try:
+                current_destructive_operation_token(uid, kind="explicit_memory_deletion")
+            except LegalHoldAuthorityUnavailable:
+                return {
+                    "retracted_memory_ids": [],
+                    "committed_memory_ids": [],
+                    "reactivated_memory_ids": [],
+                    "vector_delete_ids": [],
+                    "tombstoned_evidence_ids": [],
+                    "source_generation": observed_control.source_generation,
+                }
+        if not items and expected_source_items and empty_set_intent == "extraction":
+            # An extraction that produced nothing over a conversation that
+            # already has canonical rows. Falling through would retract those
+            # rows, and the retraction branch rightly demands an
+            # ``explicit_memory_deletion`` token the extraction path never
+            # holds — the residual LegalHoldAuthorityUnavailable 500s on
+            # conversation reprocess after #12410. Extraction emptiness is
+            # model variance, not deletion intent: keep the rows and resolve
+            # as a no-op. A caller that genuinely holds the deletion gate is
+            # performing a deliberate deletion and still falls through so the
+            # retraction is recorded.
+            try:
+                current_destructive_operation_token(uid, kind="explicit_memory_deletion")
+            except LegalHoldAuthorityUnavailable:
+                logger.info(
+                    "conversation extraction was empty; keeping %d existing canonical rows uid=%s conversation_id=%s",
+                    len(expected_source_items),
+                    uid,
+                    conversation_id,
+                )
+                return {
+                    "retracted_memory_ids": [],
+                    "committed_memory_ids": [],
+                    "reactivated_memory_ids": [],
+                    "vector_delete_ids": [],
+                    "tombstoned_evidence_ids": [],
+                    "source_generation": observed_control.source_generation,
+                }
         confirmed_control = _read_replacement_control(uid, db_client=client)
         if (
             observed_control.head_commit_id != confirmed_control.head_commit_id
@@ -2048,6 +2312,10 @@ def replace_conversation_sourced_memories(
         reason="conversation_reprocess_retract",
         preserve_source_replacement_receipts=True,
     )
+    if belief_model_enabled() and result.committed_memory_ids:
+        from utils.memory.belief_evidence import admit_committed_claims
+
+        admit_committed_claims(uid, result.committed_memory_ids, items, db_client=client)
     return {
         "retracted_memory_ids": result.retracted_memory_ids,
         "committed_memory_ids": result.committed_memory_ids,
@@ -2165,6 +2433,9 @@ def _apply_canonical_user_mutation(
             continue
         raise RuntimeError(f"canonical user mutation failed: {result.status} ({result.reason})")
     raise RuntimeError("canonical user mutation conflicted repeatedly")
+
+
+apply_canonical_user_mutation = _apply_canonical_user_mutation
 
 
 @dataclass(frozen=True)
@@ -2403,6 +2674,14 @@ def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, d
                 "promotion_audit": promotion,
                 "expires_at": default_short_term_expiry(now),
                 "kg_extracted": False,
+                **(
+                    {
+                        "last_corroborated_at": now,
+                        "corroboration_count": int(item.corroboration_count or 0) + 1,
+                    }
+                    if belief_model_enabled()
+                    else {}
+                ),
             },
         )
 
@@ -2522,7 +2801,7 @@ def update_canonical_memory_visibility(
 def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_client: Any = None) -> MemoryItem:
     client = db_client if db_client is not None else default_db_client
 
-    def build_patch(item: MemoryItem, _now: datetime) -> Tuple[Payload, Payload]:
+    def build_patch(item: MemoryItem, now: datetime) -> Tuple[Payload, Payload]:
         promotion = dict(item.promotion or {})
         promotion["reviewed"] = True
         promotion["user_review"] = value
@@ -2534,7 +2813,22 @@ def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_
         patch_updates: Payload = {"promotion_audit": promotion}
         if not value:
             patch_updates["kg_extracted"] = False
-        return {}, patch_updates
+        logical_updates: Payload = {}
+        if belief_model_enabled():
+            from utils.memory.belief_evidence import EvidenceEventJudgment, EvidenceEventKind, patch_for_evidence_event
+
+            event = EvidenceEventKind.restated if value else EvidenceEventKind.contradicted
+            patch = patch_for_evidence_event(
+                item,
+                EvidenceEventJudgment(event=event, target_memory_id=memory_id, rationale="explicit user review"),
+                pointer="user_review",
+                now=now,
+                new_is_as_authoritative=False if not value else True,
+            )
+            if patch is not None:
+                logical_updates, event_extra = patch
+                patch_updates.update(event_extra)
+        return logical_updates, patch_updates
 
     previous, updated = _apply_canonical_user_mutation(
         uid,

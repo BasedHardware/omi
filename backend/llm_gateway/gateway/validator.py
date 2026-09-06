@@ -42,6 +42,7 @@ FORWARDED_CHAT_COMPLETION_PARAMS = frozenset(
         'presence_penalty',
         'prompt_cache_options',
         'prompt_cache_key',
+        'reasoning_effort',
         'seed',
         'service_tier',
         'stop',
@@ -52,6 +53,11 @@ FORWARDED_CHAT_COMPLETION_PARAMS = frozenset(
         'user',
     }
 )
+
+# Per-request reasoning effort the gateway forwards verbatim. Values follow the
+# OpenAI Chat Completions `reasoning_effort` enum; per-model support (e.g.
+# gpt-5.6 function tools require `none`) stays with the provider/lane policy.
+REASONING_EFFORT_VALUES = frozenset({'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'})
 
 # The OpenAI SDK's `extra_body` convention flattens provider-specific options
 # into top-level JSON fields, so the `google` key is the pass-through carrier
@@ -268,12 +274,28 @@ def _validate_forwarded_params(request: Mapping[str, Any], lane: LaneConfig) -> 
     _validate_output_limit_aliases(forwarded)
     if 'prompt_cache_options' in forwarded:
         _validate_prompt_cache_options(forwarded['prompt_cache_options'])
+    if 'reasoning_effort' in forwarded:
+        _validate_reasoning_effort(forwarded['reasoning_effort'])
     if 'service_tier' in forwarded:
         _validate_service_tier(forwarded['service_tier'], lane)
     for key in ('tools', 'tool_choice', 'stream'):
         if key in request:
             forwarded[key] = request[key]
     return forwarded
+
+
+def _validate_reasoning_effort(value: object) -> None:
+    """A forwarded effort must be a known enum value, typed 400 otherwise.
+
+    The forwarded value intentionally overrides the lane's configured
+    `provider_options.reasoning_effort` in the executor, so the enum check is
+    the bound on what a caller can switch per request.
+    """
+    if not isinstance(value, str) or value not in REASONING_EFFORT_VALUES:
+        raise GatewayInvalidRequestError(
+            f'reasoning_effort must be one of {sorted(REASONING_EFFORT_VALUES)}',
+            param='reasoning_effort',
+        )
 
 
 def _validate_service_tier(value: object, lane: LaneConfig) -> None:

@@ -4,7 +4,7 @@
 name: daily-summary
 description: Settings → Daily Summary — view and configure daily summary preferences, view summary detail
 covers:
-  - app/lib/pages/settings/daily_summary_settings_page.dart
+  - app/lib/pages/settings/notifications_settings_page.dart
   - app/lib/pages/settings/daily_summary_detail_page.dart
 prerequisites:
   - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.

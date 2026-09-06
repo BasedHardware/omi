@@ -13,12 +13,36 @@ type SourceIdentity = { id: string; displayId: string }
 let cached: SourceIdentity[] | null = null
 let inflight: Promise<SourceIdentity[]> | null = null
 
+// The most recent fetch failure, if any — cleared on a successful fetch. On
+// Linux this is almost always a Wayland desktop-portal gap (no
+// org.freedesktop.portal.ScreenCast implementation registered for the running
+// compositor — confirmed live: niri + no xdg-desktop-portal-wlr produced
+// "Failed to get sources." here with no further detail reaching JS; the real
+// GDBus error only appears in Chromium's native stderr log, not this
+// exception). getRewindCaptureDiagnostics() surfaces this to the UI instead of
+// the previous behavior: an uncaught rejection out of the
+// 'rewind:captureSourceId' IPC handler and a silently-never-starting capture.
+let lastFetchError: Error | null = null
+
+export function getSourceFetchError(): string | null {
+  return lastFetchError?.message ?? null
+}
+
 async function fetchSourceIdentities(): Promise<SourceIdentity[]> {
-  const sources = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize: { width: 0, height: 0 } // ids only - no screen bitmap
-  })
-  return sources.map((source) => ({ id: source.id, displayId: source.display_id }))
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 0, height: 0 } // ids only - no screen bitmap
+    })
+    lastFetchError = null
+    return sources.map((source) => ({ id: source.id, displayId: source.display_id }))
+  } catch (e) {
+    // Cache the empty result like any other outcome (see the module header) —
+    // a portal gap is a launch-time environment fact, not a transient blip;
+    // retrying every call would just re-hit the same missing D-Bus interface.
+    lastFetchError = e as Error
+    return []
+  }
 }
 
 async function getSourceIdentities(): Promise<SourceIdentity[]> {
@@ -105,4 +129,31 @@ export function prewarmPrimarySourceId(): void {
     invalidatorBound = true
   }
   void getPrimarySourceId()
+}
+
+export type RewindCaptureDiagnostics = {
+  /** Whether at least one screen source resolved. */
+  available: boolean
+  /** The underlying fetch error's message, present only when unavailable. */
+  reason: string | null
+  /** Linux desktopCapturer.getSources() has one dominant failure mode: no
+   *  org.freedesktop.portal.ScreenCast implementation registered for the
+   *  running Wayland compositor (confirmed live on niri without
+   *  xdg-desktop-portal-wlr installed/preferred). The JS-catchable error
+   *  message is a generic "Failed to get sources." either way — Chromium logs
+   *  the real GDBus detail only to its own stderr, never into the exception —
+   *  so this is a platform heuristic, not a message-content match. */
+  likelyMissingLinuxPortal: boolean
+}
+
+/** Ensure a fetch attempt has happened, then report whether it succeeded — for
+ *  the UI to show a real error instead of Rewind silently never starting. */
+export async function getRewindCaptureDiagnostics(): Promise<RewindCaptureDiagnostics> {
+  await getPrimarySourceId()
+  const reason = getSourceFetchError()
+  return {
+    available: !reason,
+    reason,
+    likelyMissingLinuxPortal: !!reason && process.platform === 'linux'
+  }
 }

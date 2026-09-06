@@ -37,12 +37,21 @@ actor JITProactivityCoordinator {
       })
     switch decision {
     case .legacyContextBucketFallback(let reason):
+      await MainActor.run {
+        JITProactivityLaneState.update(ownerID: authorizationSnapshot.ownerID, active: false)
+      }
       await ContextProactivityTelemetry.recordJITAdmission(outcome: "legacy_fallback", reason: reason)
       return false
     case .suppressed(let reason):
+      await MainActor.run {
+        JITProactivityLaneState.update(ownerID: authorizationSnapshot.ownerID, active: true)
+      }
       await ContextProactivityTelemetry.recordJITAdmission(outcome: "suppressed", reason: reason)
       return true
     case .deliver(_, _, let continuityKey):
+      await MainActor.run {
+        JITProactivityLaneState.update(ownerID: authorizationSnapshot.ownerID, active: true)
+      }
       guard
         let execution = await JITProactivityRuntime.shared.takeExecution(continuityKey: continuityKey)
       else {

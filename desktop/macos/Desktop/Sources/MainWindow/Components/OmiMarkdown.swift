@@ -13,14 +13,22 @@ import OmiTheme
 /// - Thematic breaks render as a quiet, branded section divider rather than
 ///   leaking their Markdown source (`---`) into a response.
 ///
-/// Live chat Markdown deliberately disables native SwiftUI text selection. Even
-/// settled messages still participate in transcript loading, scrolling, window
-/// resizing, and parent-state updates. AppKit-backed selection overlays can turn
-/// those updates into a non-converging font/intrinsic-size/layout loop.
+/// Live chat Markdown deliberately disables native SwiftUI text selection, and
+/// **there is no opt-in** — not per host, not for settled rows. PR #10834 tried
+/// exactly that and reopened FC-selection-overlay-layout-loop in Omi Beta
+/// 0.12.146: every sampled main-thread stack sat in `SelectionOverlay`,
+/// `setFont`, intrinsic-size invalidation and AttributeGraph while memory grew
+/// without bound. Settled rows are not safe either — they still participate in
+/// transcript loading, scrolling, window resizing and parent-state updates.
+/// `.github/scripts/check_chat_selection_boundary.py` enforces this.
 ///
-/// Chat bubbles retain whole-message copy actions, while code blocks and tables
-/// keep their focused copy controls. A future selectable reading surface must be
-/// isolated from the live transcript instead of adding an escape hatch here.
+/// A reader who needs to drag a date out of an answer no longer opens a popover
+/// beside the row: `appKitProseSelection` draws that prose through
+/// `ChatSelectableProse` instead, where one `NSTextView` owns one selection and
+/// installs no overlay for a rebuild to thrash. That is not an opt-in to the
+/// paragraph above — it is the other half of it, and the boundary check guards
+/// both files. Chat bubbles keep their whole-message copy action, and code
+/// blocks and tables keep their own focused copy controls.
 struct OmiMarkdown: View {
   enum Style: Equatable {
     case assistant
@@ -32,30 +40,46 @@ struct OmiMarkdown: View {
   let style: Style
   let citations: [ChatCitationReference]
   let onOpenCitation: ((ChatCitationReference) -> Void)?
+  /// Draw prose through `ChatSelectableProse` (one `NSTextView`) instead of
+  /// SwiftUI `Text`, so the reader can drag across it. This is **not** the
+  /// banned SwiftUI selection: no `SelectionOverlay` is installed anywhere on
+  /// this path, which is the whole distinction the boundary is drawing.
+  let appKitProseSelection: Bool
   @Environment(\.fontScale) private var fontScale
 
   init(
     text: String,
     sender: ChatSender,
     citations: [ChatCitationReference] = [],
-    onOpenCitation: ((ChatCitationReference) -> Void)? = nil
+    onOpenCitation: ((ChatCitationReference) -> Void)? = nil,
+    appKitProseSelection: Bool = false
   ) {
-    self.text = text
-    self.style = sender == .user ? .user : .assistant
+    let style: Style = sender == .user ? .user : .assistant
+    self.text = Self.renderableText(text, style: style)
+    self.style = style
     self.citations = citations
     self.onOpenCitation = onOpenCitation
+    self.appKitProseSelection = appKitProseSelection
   }
 
   init(text: String, style: Style) {
-    self.text = text
+    self.text = Self.renderableText(text, style: style)
     self.style = style
     self.citations = []
     self.onOpenCitation = nil
+    self.appKitProseSelection = false
+  }
+
+  /// Assistant text may open with an Interject classification token; it is
+  /// machine-facing and must never render on any chat surface.
+  private static func renderableText(_ text: String, style: Style) -> String {
+    guard style == .assistant else { return text }
+    return InterjectVoiceFeedbackRouting.displayText(from: text)
   }
 
   var body: some View {
     Group {
-      if citations.isEmpty {
+      if citations.isEmpty && !appKitProseSelection {
         OmiMarkdownContent(text: text, style: style, fontScale: fontScale)
           .equatable()
       } else {
@@ -64,7 +88,8 @@ struct OmiMarkdown: View {
           style: style,
           fontScale: fontScale,
           citations: citations,
-          onOpenCitation: onOpenCitation)
+          onOpenCitation: onOpenCitation,
+          appKitProseSelection: appKitProseSelection)
       }
     }
     .textSelection(.disabled)
@@ -89,13 +114,15 @@ struct OmiMarkdownContent: View, Equatable {
   let document: OmiMarkdownDocument
   let citations: [ChatCitationReference]
   let onOpenCitation: ((ChatCitationReference) -> Void)?
+  let appKitProseSelection: Bool
 
   init(
     text: String,
     style: OmiMarkdown.Style,
     fontScale: CGFloat,
     citations: [ChatCitationReference] = [],
-    onOpenCitation: ((ChatCitationReference) -> Void)? = nil
+    onOpenCitation: ((ChatCitationReference) -> Void)? = nil,
+    appKitProseSelection: Bool = false
   ) {
     self.text = text
     self.style = style
@@ -103,11 +130,12 @@ struct OmiMarkdownContent: View, Equatable {
     self.document = OmiMarkdownDocument(markdown: text)
     self.citations = citations
     self.onOpenCitation = onOpenCitation
+    self.appKitProseSelection = appKitProseSelection
   }
 
   nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
     lhs.text == rhs.text && lhs.style == rhs.style && lhs.fontScale == rhs.fontScale
-      && lhs.citations == rhs.citations
+      && lhs.citations == rhs.citations && lhs.appKitProseSelection == rhs.appKitProseSelection
   }
 
   var body: some View {
@@ -161,7 +189,16 @@ struct OmiMarkdownContent: View, Equatable {
     )
 
     Group {
-      if !citations.isEmpty {
+      if appKitProseSelection {
+        // One text view per prose block: selection spans the whole block, and
+        // the block is the whole message for all but tables and fenced code.
+        ChatSelectableProseBlock(
+          text: content,
+          style: style,
+          fontScale: fontScale,
+          citations: citations,
+          onOpenCitation: onOpenCitation)
+      } else if !citations.isEmpty {
         OmiMarkdownCitationContent(
           text: content,
           style: style,
@@ -313,7 +350,7 @@ struct OmiMarkdownContent: View, Equatable {
 
   /// Converts block-level elements (headers, asterisk lists) into inline-compatible
   /// form for `AttributedString(markdown:)` with `.inlineOnlyPreservingWhitespace`.
-  static func preprocessText(_ text: String) -> String {
+  nonisolated static func preprocessText(_ text: String) -> String {
     text.components(separatedBy: "\n").map { line in
       var processed = line
 
@@ -1228,7 +1265,7 @@ private struct ChatCitationToken: View {
   }
 }
 
-private struct ChatCitationPreview: View {
+struct ChatCitationPreview: View {
   let reference: ChatCitationReference
   let fontScale: CGFloat
   let onOpen: () -> Void
@@ -1476,7 +1513,8 @@ private struct OmiMarkdownTableView: View {
     )
     .fixedSize(horizontal: false, vertical: true)
     // Tables do not create one AppKit SelectionOverlay per cell inside the
-    // live transcript. Copy remains available only on fenced code blocks.
+    // live transcript. Copy remains available only on fenced code blocks, and
+    // "Select Text" opens the whole answer on a non-live surface.
     .textSelection(.disabled)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("omi-markdown-table")

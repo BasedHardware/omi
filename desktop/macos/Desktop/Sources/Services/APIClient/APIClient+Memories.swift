@@ -1054,9 +1054,24 @@ extension APIClient {
       authorizationSnapshot: authorizationSnapshot)
   }
 
-  /// Deletes a memory by ID
+  /// Deletes a memory by ID.
+  ///
+  /// A 404 completes normally. The caller asked for this memory to be gone, and the
+  /// backend reporting it absent already satisfies that — delete is idempotent in
+  /// intent, so "it is not here" is the requested end state, not a failure.
+  ///
+  /// This is load-bearing rather than defensive. The desktop cache routinely outlives
+  /// the backend row: nothing prunes a local row whose memory was deleted on another
+  /// device, because `reconcileCacheIfNeeded` deliberately fails closed while the list
+  /// endpoint cannot prove scope completeness. Every one of those orphans answers 404
+  /// on delete, and treating that as an error made the caller restore the row it had
+  /// just removed — so the memory could never be cleared from this device at all.
   func deleteMemory(id: String) async throws {
-    try await delete("v3/memories/\(id)")
+    do {
+      try await delete("v3/memories/\(id)")
+    } catch APIError.httpError(statusCode: 404, _) {
+      return
+    }
   }
 
   /// Edits a memory's content

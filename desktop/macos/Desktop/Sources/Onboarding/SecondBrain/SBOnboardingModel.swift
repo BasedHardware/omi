@@ -54,7 +54,7 @@ final class SBOnboardingModel: ObservableObject {
 
   enum Step: Int, CaseIterable {
     case promise, name, howHeard, language, role
-    case mic, systemAudio, screen, files, accessibility, automation
+    case mic, systemAudio, screen, files, accessibility, automation, notifications
     case shortcutOpen, shortcutTalk, screenDemo, agents, context, capture, referral
   }
 
@@ -110,9 +110,15 @@ final class SBOnboardingModel: ObservableObject {
   @Published var fdaState: PermState = .ask  // full disk access (files)
   @Published var accState: PermState = .ask  // accessibility
   @Published var autoState: PermState = .ask  // automation / Apple Events
+  @Published var notifState: PermState = .ask  // notifications
   @Published var localFileProfileState: LocalFileProfileState = .idle
 
-  var launchAtLogin: Bool = LaunchAtLoginManager.shared.isEnabled
+  /// Fresh installs default to launching at login: every proactive path needs
+  /// the process alive, and `SMAppService` reports "not registered" for every
+  /// new install, so seeding from the live status meant every new user finished
+  /// onboarding with auto-start off. The user's Settings toggle stays
+  /// authoritative afterwards (`LaunchAtLoginPreference`).
+  var launchAtLogin: Bool = LaunchAtLoginPreference.defaultForOnboarding()
 
   /// One-shot guard: fire a single throwaway ScreenCaptureKit capture to surface
   /// the "bypass the private window picker" consent in-context once Screen
@@ -163,9 +169,17 @@ final class SBOnboardingModel: ObservableObject {
   /// that state, leave PTT unarmed and offer an explicit retry or skip instead
   /// of presenting a shortcut which cannot answer.
   @Published var screenDemoPTTUnavailable = false
+  /// The three-doors demo page was opened for the current visit to the screen-demo step.
+  @Published var threeDoorsOpened = false
+  var openDoorsObserver: NSObjectProtocol?
+  var doorsCompletedObserver: NSObjectProtocol?
   var voiceCancellable: AnyCancellable?
   var voiceTimeout: Task<Void, Never>?
   var screenDemoSetupTask: Task<Void, Never>?
+  /// Dwell-time origin for the current step's `Onboarding Step Completed` event.
+  var stepStartedAt = Date()
+  /// Guards double-fire when `skip()`/`complete()` run after `advance` already recorded.
+  var stepExitRecorded = false
 
   // Connectors — keyed by a stable id ("openclaw", "calendar", …) → state string
   // ("idle" | "connecting" | "on" | "unavailable" | "needsSignIn").
@@ -314,6 +328,9 @@ final class SBOnboardingModel: ObservableObject {
       return "Turn on Accessibility, so I can use your shortcut and click and type for you."
     case .automation:
       return "Turn on Automation, so I can help with tasks in the apps you choose."
+    case .notifications:
+      return
+        "Turn on Notifications, so I can tell you the moment I notice something — a mistake before you hit send, a meeting about to start, a follow-up you're about to miss."
     // Both steps used to invite "press any key", and `acceptsRecordedChord` then refused a bare key
     // in silence — correct (a global bare `L` is unrecoverable) but unexplained. Name the rule.
     case .shortcutOpen:
@@ -386,6 +403,31 @@ final class SBOnboardingModel: ObservableObject {
   /// mandatory lacked this flag, so `begin()` clamps them back through the steps.
   static let shortcutsCompletedKey = "sbOnboardingShortcutsCompleted"
 
+  /// Layout version of the persisted `resumeStepKey` value.
+  ///
+  /// `Step`'s raw values are written to disk, so inserting a case renumbers
+  /// every later step and silently reinterprets any resume state written by an
+  /// older build. Version 2 added `.notifications` between `.automation` and
+  /// `.shortcutOpen`; absent (0) means the version-1 layout that predates it.
+  static let resumeStepSchemaKey = "sbOnboardingResumeStepSchema"
+  static let resumeStepSchemaVersion = 2
+
+  /// Raw value `.notifications` took in version 2, frozen as a literal.
+  ///
+  /// Deliberately **not** `Step.notifications.rawValue`: this describes a
+  /// historical layout boundary, so it must not move if the enum is edited
+  /// again. A future insertion adds a version 3 rule beside this one.
+  private static let notificationsStepRawInV2 = 11
+
+  /// Translate a persisted resume step into the current layout.
+  ///
+  /// Pure so the renumbering is testable without `UserDefaults`. Anything at or
+  /// after the inserted case shifts up by one; earlier steps are unaffected.
+  static func migratedResumeStepRaw(savedRaw: Int, storedSchema: Int) -> Int {
+    guard storedSchema < 2 else { return savedRaw }
+    return savedRaw >= notificationsStepRawInV2 ? savedRaw + 1 : savedRaw
+  }
+
   func begin() {
     guard thread.isEmpty && streamingText == nil else { return }
     // Re-hydrate the editable drafts from what was already saved, so stepping
@@ -396,7 +438,31 @@ final class SBOnboardingModel: ObservableObject {
     // were already saved to the backend/settings, so we just re-enter at the saved
     // step; each permission step re-checks its grant on appear, so a permission
     // granted before the quit shows ✓ rather than prompting again.
-    let savedRaw = UserDefaults.standard.integer(forKey: Self.resumeStepKey)
+    // Renumber a resume state written before `.notifications` existed before
+    // anything reads it, and stamp the layout so this runs exactly once.
+    let persistedRaw = UserDefaults.standard.integer(forKey: Self.resumeStepKey)
+    let storedSchema = UserDefaults.standard.integer(forKey: Self.resumeStepSchemaKey)
+    let savedRaw = Self.migratedResumeStepRaw(savedRaw: persistedRaw, storedSchema: storedSchema)
+    if storedSchema < Self.resumeStepSchemaVersion {
+      // Stamp the schema BEFORE rewriting the value. Two `UserDefaults` writes
+      // are not one atomic transaction, and the two orderings fail differently
+      // if the process dies between them:
+      //
+      //   value first — the stamp is lost, the next launch shifts the *already*
+      //     shifted value again, and a resume at `.referral` (17 -> 18 -> 19)
+      //     lands outside `Step`, so `begin()` silently restarts onboarding
+      //     from `.promise` and the user loses their answers.
+      //   stamp first — the shift is lost, so the value keeps its version-1
+      //     meaning under version-2 numbering: at worst one step off (old
+      //     `.shortcutOpen` reads as `.notifications`), always in range, never
+      //     a restart.
+      //
+      // Neither is atomic; only one of them can throw away progress.
+      UserDefaults.standard.set(Self.resumeStepSchemaVersion, forKey: Self.resumeStepSchemaKey)
+      if savedRaw != persistedRaw {
+        UserDefaults.standard.set(savedRaw, forKey: Self.resumeStepKey)
+      }
+    }
     recordSetupStateDisagreementAtRead(savedRaw: savedRaw)
     if savedRaw > Step.promise.rawValue, let resumed = Step(rawValue: savedRaw) {
       // A legacy resume state persisted before shortcuts were mandatory bypasses the new
@@ -469,6 +535,8 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   func streamMessage(for step: Step) {
+    stepStartedAt = OnboardingStepTelemetry.now()
+    stepExitRecorded = false
     streamTask?.cancel()
     showWidget = false
     typing = true
@@ -510,6 +578,7 @@ final class SBOnboardingModel: ObservableObject {
     case .files: precheckPerm("full_disk_access")
     case .accessibility: precheckPerm("accessibility")
     case .automation: precheckPerm("automation")
+    case .notifications: precheckPerm("notifications")
     case .shortcutOpen, .shortcutTalk: armShortcutSummon()
     case .screenDemo: startScreenDemo()
     case .agents: refreshAgentStates()
@@ -522,10 +591,12 @@ final class SBOnboardingModel: ObservableObject {
     if let userAnswer, !userAnswer.isEmpty {
       thread.append(Msg(isOmi: false, text: userAnswer))
     }
+    recordStepExit()
     teardownStep(step)
     // Don't ask for a permission the user has already granted — skip straight to
     // the first step that still needs an answer.
     let target = firstUnaskedStep(from: next)
+    recordJumpedPermissionSteps(from: next, to: target)
     step = target
     UserDefaults.standard.set(target.rawValue, forKey: Self.resumeStepKey)
     streamMessage(for: target)
@@ -758,11 +829,13 @@ final class SBOnboardingModel: ObservableObject {
       complete()
       return
     }
+    recordStepExit(skipped: true)
     finishOnboardingHandoff(clearOnboardingChatFlag: false)
   }
 
   /// Replicates the essential real side-effects of the legacy handleOnboardingComplete().
   private func complete() {
+    recordStepExit(skipped: false)
     // Do NOT mark file indexing complete here. Onboarding never actually scans, so
     // setting this flag "faked" the Files connector as connected while indexing
     // nothing — and, worse, permanently suppressed the Home view's automatic
@@ -781,14 +854,28 @@ final class SBOnboardingModel: ObservableObject {
     if AppBuild.usesLazyDevPermissions {
       AssistantSettings.shared.screenAnalysisEnabled = false
     } else {
-      AssistantSettings.shared.screenAnalysisEnabled = true
-      if !ProactiveAssistantsPlugin.shared.isMonitoring {
+      // Skipping Screen Recording is a durable off for the automatic path: never
+      // force the intent on for a user who just declined it (the sidebar and the
+      // restore path then stop treating "onboarded but not granted" as denied).
+      appState.checkScreenRecordingPermission()
+      let screenGranted = appState.hasScreenRecordingPermission
+      AssistantSettings.shared.screenAnalysisEnabled =
+        Self.screenAnalysisIntentAtCompletion(screenRecordingGranted: screenGranted)
+      if screenGranted, !ProactiveAssistantsPlugin.shared.isMonitoring {
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
       }
     }
     Task { [appState] in
-      appState.startTranscription()
+      // Automatic start: with the mic granted this behaves exactly as before; with
+      // it skipped (audioRecordingMode == .off, or still undetermined) it must not
+      // raise the TCC sheet — the user asked to skip, not to be asked again.
+      appState.startTranscription(userInitiated: false)
       await appState.reconcileCapture()
+      // Ambient transcription opens the shared input device on its way in and
+      // releases any parked push-to-talk capture to avoid two IOProcs on one
+      // device. Re-arm behind it: the first ⌥ hold after onboarding is the one
+      // that used to be lost to capture-start latency.
+      PushToTalkManager.shared.prewarmMicCapture(trigger: .onboardingCompleted)
     }
     // NOTE: previously this created a "Run omi for two days…" welcome task. That
     // seeded onboarding scaffolding into the user's real Tasks surface (there is no
@@ -811,6 +898,14 @@ final class SBOnboardingModel: ObservableObject {
     if setEnabled(enabled) {
       report(enabled)
     }
+  }
+
+  /// The durable screen-analysis intent onboarding leaves behind. A granted Screen
+  /// Recording keeps the capture intent on; a skipped or denied one turns it off —
+  /// "not forced on" is not enough, because every automatic restore path and the
+  /// sidebar's denied pulse read this flag as the user's standing intent.
+  static func screenAnalysisIntentAtCompletion(screenRecordingGranted: Bool) -> Bool {
+    screenRecordingGranted
   }
 
   /// Cancel every live task/monitor this model owns. Safe to call repeatedly.

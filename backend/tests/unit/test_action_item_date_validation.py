@@ -119,6 +119,7 @@ _SYS_MODULE_NAMES = [
     "utils.llm.conversation_folder",
     "utils.llm.conversation_prompt_prefix",
     "utils.llm.conversation_processing",
+    "utils.llm.model_config",
     "utils.retrieval",
     "utils.retrieval.tools",
     "utils.retrieval.tools.action_item_tools",
@@ -339,6 +340,11 @@ _load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm"
 # empty __path__ above, which leaves conversation_processing's absolute import of it
 # unresolvable.
 _load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" / "prompt_cache.py")
+
+# model_config pulls in gateway_client; stub the one constant conversation_processing
+# imports so the isolated load does not need the real module tree.
+model_config_stub = _stub_module("utils.llm.model_config")
+model_config_stub.FOREGROUND_REQUEST_TIMEOUT_SECONDS = 60.0
 
 prompt_prefix_stub = _stub_module("utils.llm.conversation_prompt_prefix")
 prompt_prefix_stub.ConversationPromptPrefix = MagicMock

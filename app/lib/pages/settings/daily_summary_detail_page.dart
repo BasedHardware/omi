@@ -18,6 +18,8 @@ import 'package:omi/utils/daily_summary_journey.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/share_links.dart';
+import 'package:omi/utils/share_sheet.dart';
+import 'package:omi/widgets/components/memory_review_card.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
@@ -111,7 +113,9 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       }
       PlatformManager.instance.analytics.dailySummaryShared(summaryId: widget.summaryId, date: summary.date);
       final url = recapShareUrl(widget.summaryId);
-      await SharePlus.instance.share(ShareParams(uri: Uri.parse(url), subject: summary.headline));
+      await SharePlus.instance.share(
+        ShareParams(uri: Uri.parse(url), subject: summary.headline, sharePositionOrigin: shareSheetOrigin()),
+      );
     } finally {
       if (mounted) setState(() => _isSharing = false);
     }
@@ -351,6 +355,10 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                   const SizedBox(height: 32),
                   _buildDecisionsMadeSection(summary),
                 ],
+                if (summary.memoriesLearned.isNotEmpty) ...[
+                  const SizedBox(height: 32),
+                  _buildMemoriesLearnedSection(summary),
+                ],
                 if (summary.knowledgeNuggets.isNotEmpty) ...[
                   const SizedBox(height: 32),
                   _buildKnowledgeNuggetsSection(summary),
@@ -482,33 +490,44 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   }
 
   Widget _buildStatsRow(DailySummary summary) {
-    return Row(
-      children: [
-        _buildStatItem(FontAwesomeIcons.message, '${summary.stats.totalConversations}'),
-        const SizedBox(width: 8),
-        _buildStatItem(FontAwesomeIcons.clock, summary.stats.formattedDuration),
-        const SizedBox(width: 8),
-        _buildStatItem(FontAwesomeIcons.circleCheck, '${summary.stats.actionItemsCount}'),
-      ],
+    final items = <Widget>[
+      _buildStatItem(FontAwesomeIcons.message, '${summary.stats.totalConversations}'),
+      _buildStatItem(FontAwesomeIcons.clock, summary.stats.formattedDuration),
+      _buildStatItem(FontAwesomeIcons.circleCheck, '${summary.stats.actionItemsCount}'),
+    ];
+    if ((summary.stats.watchingMinutes ?? 0) > 0) {
+      items.add(_buildStatItem(FontAwesomeIcons.eye, summary.stats.formattedWatchingDuration!));
+    }
+    if ((summary.stats.proactiveMoments ?? 0) > 0) {
+      items.add(_buildStatItem(FontAwesomeIcons.bell, '${summary.stats.proactiveMoments}'));
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = items.length > 3 ? 3 : items.length;
+        final itemWidth = (constraints.maxWidth - (columns - 1) * 8) / columns;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [for (final item in items) SizedBox(width: itemWidth, child: item)],
+        );
+      },
     );
   }
 
   Widget _buildStatItem(FaIconData icon, String value) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-        decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            FaIcon(icon, color: Colors.grey.shade400, size: 14),
-            const SizedBox(width: 8),
-            Text(
-              value,
-              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FaIcon(icon, color: Colors.grey.shade400, size: 14),
+          const SizedBox(width: 8),
+          Text(
+            value,
+            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+          ),
+        ],
       ),
     );
   }
@@ -782,6 +801,17 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           );
         }),
       ],
+    );
+  }
+
+  /// The same review rows the day-summary chat card shows, so a verdict cast
+  /// in either place lands on the same memory. Placed before the LLM-prose
+  /// learnings, which stay exactly as they were.
+  Widget _buildMemoriesLearnedSection(DailySummary summary) {
+    return MemoryReviewCard(
+      items: summary.memoriesLearned,
+      source: MemoryReviewSource.dailySummaryDetail,
+      impressionKey: summary.id.isNotEmpty ? summary.id : widget.summaryId,
     );
   }
 

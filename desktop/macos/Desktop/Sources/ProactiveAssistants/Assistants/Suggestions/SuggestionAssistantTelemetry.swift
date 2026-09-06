@@ -112,7 +112,7 @@ enum SuggestionAssistantTelemetry {
           return .decodeFailed
         case .apiError(let message, _):
           return classifyAPIMessage(message)
-        case .missingAPIKey:
+        case .missingAPIKey, .planGated:
           return .other
         }
       }
@@ -185,10 +185,14 @@ enum SuggestionAssistantTelemetry {
     let evaluationID: UUID
     let suggestionID: UUID
 
+    init(evaluationID: UUID, suggestionID: UUID) {
+      self.evaluationID = evaluationID
+      self.suggestionID = suggestionID
+    }
+
     init?(_ identity: Identity?) {
       guard let identity, let suggestionID = identity.suggestionID else { return nil }
-      evaluationID = identity.evaluationID
-      self.suggestionID = suggestionID
+      self.init(evaluationID: identity.evaluationID, suggestionID: suggestionID)
     }
   }
 

@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any, Callable, Optional
 
 from models.product_memory import MemoryAccessPolicy, MemoryConsumer
+from utils.memory.belief_model import belief_model_enabled
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
     read_default_read_rollout,
@@ -81,13 +82,11 @@ def search_memory_default_chat_memories_text(
 
     lines = _chat_memory_header(f"Found {len(items)} memory default memories matching '{query}':")
     for item in items:
-        updated_at = parse_optional_default_read_datetime(item.get('date'))
-        date_str = updated_at.strftime('%Y-%m-%d') if updated_at else 'Unknown'
         lines.append(
             _format_chat_memory_evidence_line(
                 item,
                 source_marker='memory_default_memory',
-                suffix=f"tier: {item.get('tier')}, date: {date_str}",
+                suffix=_chat_memory_time_suffix(item),
             )
         )
     lines.append('')
@@ -118,12 +117,10 @@ def list_default_chat_memories_decision_text(
         )
 
     def _list_line(item: dict[str, Any], _policy: MemoryAccessPolicy) -> str:
-        updated_at = parse_optional_default_read_datetime(item.get('date') or item.get('updated_at'))
-        date_str = updated_at.strftime('%Y-%m-%d') if updated_at else 'Unknown'
         return _format_chat_memory_evidence_line(
             item,
             source_marker='memory_default_memory',
-            suffix=f"tier: {item.get('tier')}, date: {date_str}",
+            suffix=_chat_memory_time_suffix(item, date_keys=('date', 'updated_at')),
         )
 
     result = fetch_default_read_list(
@@ -215,14 +212,16 @@ def search_memory_default_chat_memories_vector_decision_text(
         return _item
 
     def _attach_vector_line(memory: dict[str, Any], item: dict[str, Any], scores: dict[str, float]) -> str:
-        updated_at = parse_optional_default_read_datetime(item.get('updated_at') or item.get('date'))
-        date_str = updated_at.strftime('%Y-%m-%d') if updated_at else 'Unknown'
         memory_id = item.get('memory_id')
         score = scores.get(memory_id, 0.0) if isinstance(memory_id, str) else 0.0
         return _format_chat_memory_evidence_line(
             item,
             source_marker='vector_memory',
-            suffix=f"relevance: {score:.2f}, tier: {item.get('tier')}, date: {date_str}",
+            suffix=_chat_memory_time_suffix(
+                item,
+                date_keys=('updated_at', 'date'),
+                extra=f"relevance: {score:.2f}",
+            ),
         )
 
     result = fetch_default_read_vector(
@@ -264,6 +263,35 @@ def search_memory_default_chat_memories_vector_decision_text(
 
 def _chat_memory_header(title: str) -> list[str]:
     return [title, CHAT_MEMORY_BOUNDARY_NOTICE, CHAT_MEMORY_POLICY_MARKER, '']
+
+
+def _chat_memory_time_suffix(
+    item: dict[str, Any],
+    *,
+    date_keys: tuple[str, ...] = ('date',),
+    extra: str = '',
+) -> str:
+    stamp = None
+    if belief_model_enabled():
+        stamp = parse_optional_default_read_datetime(item.get('as_of'))
+    if stamp is None:
+        for key in date_keys:
+            stamp = parse_optional_default_read_datetime(item.get(key))
+            if stamp is not None:
+                break
+    date_str = stamp.strftime('%Y-%m-%d') if stamp else 'Unknown'
+    parts: list[str] = []
+    if extra:
+        parts.append(extra)
+    parts.append(f"tier: {item.get('tier')}")
+    if belief_model_enabled():
+        band = item.get('currency_band')
+        if band:
+            parts.append(f"band: {band}")
+        parts.append(f"as_of: {date_str}")
+    else:
+        parts.append(f"date: {date_str}")
+    return ", ".join(parts)
 
 
 def _format_chat_memory_evidence_line(item: dict[str, Any], *, source_marker: str, suffix: str) -> str:

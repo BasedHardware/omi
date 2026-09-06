@@ -27,9 +27,14 @@ from database.vector_db import (
     delete_transcript_chunk_vectors_batch,
 )
 from utils import stripe as stripe_utils
-from utils.cloud_tasks import enqueue_account_deletion_wipe, is_account_deletion_dispatch_enabled
+from utils.cloud_tasks import (
+    assert_inline_account_deletion_permitted,
+    enqueue_account_deletion_wipe,
+    is_account_deletion_dispatch_enabled,
+)
 from utils.executors import cleanup_executor, submit_with_context
 from utils.log_sanitizer import sanitize
+from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
 from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_data
 from utils.memory.memory_service import MemoryService
@@ -71,7 +76,7 @@ def _historical_memory_ids(uid: str) -> list[str]:
 def _delete_memory_maintenance_registry(uid: str) -> None:
     """Remove the content-free global inventory marker during account wipe."""
 
-    delete_canonical_memory_maintenance_registry_entry(uid, db_client=database_client.db)
+    delete_canonical_memory_maintenance_registry_entry(uid, db_client=database_client.get_data_plane_firestore_client())
 
 
 def delete_account_credentials(uid: str) -> None:
@@ -208,7 +213,9 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         logger.error(f'delete_account purge frame request pixels failed for {uid}: {sanitize(str(e))}')
 
     try:
-        canonical_result = purge_canonical_derived_user_data(uid)
+        canonical_result = purge_canonical_derived_user_data(
+            uid, db_client=database_client.get_data_plane_firestore_client()
+        )
         vector_ids = canonical_result.get('vector_ids', [])
         if isinstance(vector_ids, list):
             result['vectors_deleted'] += len(cast(list[object], vector_ids))
@@ -299,7 +306,6 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
             uid,
             kind='account_deletion',
             token=deletion_gate_token,
-            firestore_client=database_client.db,
         )
         deletion_gate_acquired = True
         # Transition to ``running`` so the reconciler can distinguish a
@@ -351,7 +357,6 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
                     kind='account_deletion',
                     token=deletion_gate_token,
                     outcome='failed',
-                    firestore_client=database_client.db,
                 )
             except Exception as gate_err:
                 # An uncertain running gate intentionally remains fail-closed;
@@ -392,7 +397,6 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
                 kind='account_deletion',
                 token=deletion_gate_token,
                 outcome='completed',
-                firestore_client=database_client.db,
             )
         except Exception as e:
             logger.error(f'delete_account legal-hold gate completion failed for {uid}: {sanitize(str(e))}')
@@ -420,7 +424,8 @@ def enqueue_deletion_wipe(uid: str, wipe_job_id: str):
         enqueue_account_deletion_wipe(wipe_job_id)
         return
     # Inline dispatch is retained solely for deterministic local/dev/test
-    # execution. Production startup rejects this mode before serving traffic.
+    # execution, and may never reach production data whatever the stage says.
+    assert_inline_account_deletion_permitted()
     submit_with_context(cleanup_executor, background_wipe_user_data, uid)
 
 
@@ -525,7 +530,14 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
         enqueue_deletion_wipe(uid, wipe_job_id)
     except Exception as e:
         _mark_wipe_failed_after_enqueue_error(uid, e)
-        logger.warning('delete_account queue acceleration failed; durable reconciliation will retry')
+        record_fallback(
+            component='other',
+            from_mode='cloud_tasks',
+            to_mode='durable_reconciliation',
+            reason='enqueue_failed',
+            outcome='degraded',
+            log=logger,
+        )
         # The actionable marker is committed. Queue dispatch is only an
         # acceleration path; reconciliation owns eventual completion.
         return {'status': 'ok', 'message': 'Account deletion started'}
@@ -606,7 +618,11 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
             skipped += 1
             continue
         try:
-            enqueue_deletion_wipe(uid, wipe_job_id)
+            # Reconciliation re-dispatches; it never executes. Calling the
+            # mode-aware helper here made any inline process - a local run
+            # against prod data - the wipe executor for every account it could
+            # claim, which is how wipes ran outside the OIDC handler entirely.
+            enqueue_account_deletion_wipe(wipe_job_id)
         except Exception as e:
             logger.error(f'delete_account reconciliation enqueue failed for {uid}: {sanitize(str(e))}')
             _mark_wipe_failed_after_enqueue_error(uid, e)

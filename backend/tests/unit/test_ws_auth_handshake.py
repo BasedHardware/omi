@@ -15,6 +15,7 @@ leaks to later test files. See ``backend/docs/test_isolation.md`` and DECISIONS 
 
 import asyncio
 import importlib
+import os
 import sys
 import types
 import unittest
@@ -231,6 +232,29 @@ class TestWebSocketAuthListen(WebSocketAuthTestCase):
             data = ws.receive_json()
             self.assertEqual(data["uid"], "test-uid-123")
         mock_verify.assert_called_once_with("valid_token")
+
+    @patch.dict(
+        os.environ,
+        {
+            'OMI_JIT_QA_AUTH_ONLY': 'true',
+            'OMI_ENV_STAGE': 'dev',
+            'GOOGLE_CLOUD_PROJECT': 'based-hardware-dev',
+            'OMI_JIT_QA_UID_ALLOWLIST': 'qa-user',
+        },
+        clear=False,
+    )
+    @patch('utils.other.endpoints.verify_token', return_value='other-user')
+    def test_first_message_auth_rejects_non_qa_uid_before_account_work(self, mock_verify):
+        """Accept-first WebSocket auth must still enforce the isolated QA UID fence."""
+        endpoints = sys.modules['utils.other.endpoints']
+        with self.assertRaises(WebSocketException) as ctx:
+            asyncio.run(
+                endpoints.get_current_user_uid_from_ws_message(
+                    {'type': 'websocket.receive', 'text': '{"type":"auth","token":"valid_token"}'},
+                )
+            )
+        self.assertEqual(ctx.exception.code, 1008)
+        mock_verify.assert_called_once_with('valid_token')
 
     def test_empty_bearer_token_sends_close_1008(self):
         """Authorization: 'Bearer ' (empty token) -> close with 1008."""

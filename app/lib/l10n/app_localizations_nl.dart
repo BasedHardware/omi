@@ -9872,12 +9872,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Store openen';
 
   @override
-  String get chatScopeToday => 'Vandaag';
-
-  @override
-  String get chatScopeThisWeek => 'Deze week';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Over: $title';
   }
@@ -9940,4 +9934,51 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'De opslag van je Pendant is vol en hij staat nog in de opnamemodus, dus de opgeslagen audio kan niet worden overgedragen. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer daarna opnieuw.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Niet opgenomen ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'Transcriptie ontvangt geen audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Taak';
+
+  @override
+  String get chatBlockGoal => 'Doel';
+
+  @override
+  String get chatBlockConversation => 'Gesprek';
+
+  @override
+  String get chatBlockMemory => 'Herinnering';
+
+  @override
+  String get chatBlockQuestion => 'Vraag';
+
+  @override
+  String get chatBlockOpenInGoals => 'Openen in Doelen';
+
+  @override
+  String get chatBlockOpenConversation => 'Gesprek openen';
+
+  @override
+  String get chatBlockOpenInMemories => 'Openen in Herinneringen';
+
+  @override
+  String get chatBlockUnavailable => 'Niet langer beschikbaar';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Aanbevolen volgende stappen';
+
+  @override
+  String get couldNotLoadMemories => 'Herinneringen konden niet worden geladen';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Kennisgrafiek kon niet worden geladen';
 }

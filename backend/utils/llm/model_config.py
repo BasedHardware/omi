@@ -73,6 +73,7 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'chat_responses': ('gpt-5.6-luna', 'openai'),
     'file_chat_vision': ('gpt-5.6-luna', 'openai'),
     'file_chat_documents': ('gpt-5.6-luna', 'openai'),
+    'chat_agent': ('gpt-5.6-luna', 'openai'),
     'chat_extraction': ('gpt-5.6-luna', 'openai'),
     'chat_graph': ('gpt-5.6-luna', 'openai'),
     'goals': ('gpt-5.6-luna', 'openai'),
@@ -102,7 +103,6 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'trends': ('gemini-2.5-flash-lite', 'gemini'),
     'translation': ('gemini-2.5-flash-lite', 'gemini'),
     'screen_frame_judge': ('gemini-2.5-flash-lite', 'gemini'),
-    'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
     'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
     'web_search': ('sonar-pro', 'perplexity'),
 }
@@ -129,7 +129,8 @@ _byok_profile_name = 'byok'
 _byok_profile = MODEL_QOS_PROFILES[_byok_profile_name]
 
 # Features that can't go through get_llm() (non-ChatOpenAI providers).
-_ANTHROPIC_ONLY_FEATURES = {'chat_agent'}
+# chat_agent is OpenAI/Luna via get_llm(); the Anthropic Messages path is not a chat lane.
+_ANTHROPIC_ONLY_FEATURES: set[str] = set()
 _PERPLEXITY_ONLY_FEATURES = {'web_search'}
 
 
@@ -169,8 +170,27 @@ _STRUCTURED_OUTPUT_FEATURES = {
 }
 STRUCTURED_OUTPUT_FEATURES = _STRUCTURED_OUTPUT_FEATURES
 
-_DEFAULT_CONFIG: Tuple[str, str] = ('gpt-5.6-luna', 'openai')
-DEFAULT_CONFIG = _DEFAULT_CONFIG
+# Features whose prompt summarizes a whole conversation (or a whole day) inside a request a
+# user is waiting on. They cannot answer inside the shared gateway transport deadline (15s to
+# first response byte, DEFAULT_GATEWAY_FIRST_BYTE_TIMEOUT_SECONDS), which is sized for
+# background feature calls, and a first-byte timeout there loses the user's summary outright.
+#
+# The deadline is declared per feature rather than per call site because the call-site version
+# of this rule failed three times: `daily_summary` on POST /test-prompt and `conv_structure` on
+# conversation finalization both died at ~15.2-15.8s in prod on 2026-08-19, and `conv_app_result`
+# — the app/template summary — was still on the background deadline on 2026-09-04, failing 128 of
+# 412 app-selected POST /v1/conversations/{id}/reprocess calls (31%) with
+# `httpcore.ReadTimeout` -> `Error executing app: Request timed out.` A new call site for one of
+# these features now inherits the deadline instead of having to remember it.
+FOREGROUND_REQUEST_TIMEOUT_SECONDS = 60.0
+_FOREGROUND_TIMEOUT_FEATURES = frozenset(
+    {
+        'conv_structure',
+        'conv_app_result',
+        'daily_summary',
+    }
+)
+
 
 # Future migration point for features that should call the gateway via an auto
 # lane. Keep empty until a ticket explicitly wires and verifies shadow/live
@@ -178,20 +198,31 @@ DEFAULT_CONFIG = _DEFAULT_CONFIG
 _AUTO_LANE_FEATURES: Dict[str, str] = {}
 
 
+class UnknownLLMFeature(KeyError):
+    """A feature has no explicit map entry. Fail closed; never fall through to luna."""
+
+    def __init__(self, feature: str) -> None:
+        self.feature = feature
+        super().__init__(f"Unknown LLM feature {feature!r}; explicit entries are required")
+
+
 def _get_model_config(feature: str) -> Tuple[str, str]:
     """Get the (model, provider) tuple for a feature. Internal — used by get_llm/get_model/get_provider.
 
-    Resolution order: pinned > active profile > fallback.
+    Resolution order: pinned > active profile. Unknown features raise UnknownLLMFeature.
     """
     if feature in _PINNED_FEATURES:
         return _PINNED_FEATURES[feature]
-    return _active_profile.get(feature, _DEFAULT_CONFIG)
+    try:
+        return _active_profile[feature]
+    except KeyError as exc:
+        raise UnknownLLMFeature(feature) from exc
 
 
 def get_model_config(feature: str) -> Tuple[str, str]:
     """Get the (model, provider) tuple for a feature.
 
-    Resolution order: pinned > active profile > fallback.
+    Resolution order: pinned > active profile. Unknown features raise UnknownLLMFeature.
     """
     return _get_model_config(feature)
 
@@ -199,7 +230,7 @@ def get_model_config(feature: str) -> Tuple[str, str]:
 def get_model(feature: str) -> str:
     """Get the model name for a feature from the active Model QoS profile.
 
-    Resolution order: pinned > active profile > fallback.
+    Resolution order: pinned > active profile. Unknown features raise UnknownLLMFeature.
 
     Args:
         feature: Feature name (e.g. 'conv_action_items', 'chat_agent').
@@ -236,13 +267,29 @@ def get_route_options(feature: str, model: str, provider: str) -> Dict[str, obje
     return options
 
 
+def feature_request_timeout(feature: str) -> float | None:
+    """Return the request deadline a feature needs, or None to use the client default.
+
+    Only features whose generation cannot finish inside the background gateway transport
+    deadline declare one (see _FOREGROUND_TIMEOUT_FEATURES). Callers may still pass an
+    explicit request_timeout to get_llm; this is the default when they do not.
+    """
+    if feature in _FOREGROUND_TIMEOUT_FEATURES:
+        return FOREGROUND_REQUEST_TIMEOUT_SECONDS
+    return None
+
+
 def get_route_ref(feature: str) -> RouteRef:
     """Return the typed route reference for a feature without changing legacy routing.
 
     Existing features resolve to explicit provider/model refs by default. Auto-lane
     refs are opt-in through _AUTO_LANE_FEATURES and are not used by get_model(),
-    get_provider(), or get_llm().
+    get_provider(), or get_llm(). Unknown features raise before the auto-lane map
+    is consulted, so an unmapped name cannot fail open onto a lane.
     """
+
+    if feature not in get_all_configured_features():
+        raise UnknownLLMFeature(feature)
 
     lane_id = _AUTO_LANE_FEATURES.get(feature)
     if lane_id is not None:
@@ -294,10 +341,6 @@ def get_active_profile() -> Dict[str, Tuple[str, str]]:
 
 def get_all_configured_features() -> set[str]:
     return set(_active_profile.keys()) | set(_PINNED_FEATURES.keys())
-
-
-def get_default_config() -> Tuple[str, str]:
-    return _DEFAULT_CONFIG
 
 
 def get_byok_profile() -> Dict[str, Tuple[str, str]]:

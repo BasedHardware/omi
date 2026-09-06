@@ -415,7 +415,7 @@ final class SuggestionGroundingTests: XCTestCase {
 
   func testOnlyPopulatedSectionsAppear() {
     var grounding = SuggestionGrounding()
-    grounding.openCommitments = ["Send Sarah the deck"]
+    grounding.commitmentRecords = [SuggestionCommitment(id: "t1", text: "Send Sarah the deck")]
 
     let rendered = grounding.promptSections()
     XCTAssertTrue(rendered.contains("OPEN COMMITMENTS"))
@@ -428,7 +428,7 @@ final class SuggestionGroundingTests: XCTestCase {
   func testAllSectionsRenderWhenPopulated() {
     var grounding = SuggestionGrounding()
     grounding.memories = ["Sarah leads the platform team"]
-    grounding.openCommitments = ["Send Sarah the deck"]
+    grounding.commitmentRecords = [SuggestionCommitment(id: "t1", text: "Send Sarah the deck")]
     grounding.relatedScreens = ["Jul 24 09:12 · Slack — Sarah Chen: deck?"]
 
     let rendered = grounding.promptSections()
@@ -451,7 +451,7 @@ final class SuggestionPromptContractTests: XCTestCase {
     // The nudge is keyed to the exact section name promptSections() emits.
     XCTAssertTrue(prompt.contains("OPEN COMMITMENTS"))
     var grounding = SuggestionGrounding()
-    grounding.openCommitments = ["Send that email to Bob"]
+    grounding.commitmentRecords = [SuggestionCommitment(id: "t1", text: "Send that email to Bob")]
     XCTAssertTrue(grounding.promptSections().contains("OPEN COMMITMENTS"))
   }
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from contextlib import nullcontext
+from uuid import UUID, uuid4
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -12,10 +13,20 @@ os.environ.setdefault(
 )
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from models.memory_contracts import MemoryExtractionError
 from utils.llm import memories as memories_module
+from utils.llm.gateway_client import GatewayContextChatOpenAI
 from utils.llm.memories import run_daily_sweep_summary_agent
+from utils.llm.usage_tracker import Features, track_usage
+from utils.prompts import daily_sweep_summary_agent_prompt
+from utils.memory.daily_memory_sweep import (
+    QA_SWEEP_JIT_CONTRACT_VERSION,
+    QA_SWEEP_MAX_INPUT_TOKENS,
+    QA_SWEEP_MAX_OUTPUT_TOKENS,
+    QA_SWEEP_MAX_SPEND_MICRO_USD,
+)
 
 
 class _ScriptedLlm:
@@ -24,12 +35,29 @@ class _ScriptedLlm:
     def __init__(self, responses):
         self.responses = list(responses)
         self.prompts = []
+        self.invoke_kwargs = []
 
-    def invoke(self, prompt_value):
+    def _get_request_payload(self, prompt_value, **kwargs):
+        prompt_text = prompt_value.to_string() if hasattr(prompt_value, "to_string") else str(prompt_value)
+        return {"messages": [{"role": "user", "content": prompt_text}], **kwargs}
+
+    def invoke(self, prompt_value, **kwargs):
         self.prompts.append(str(prompt_value))
+        self.invoke_kwargs.append(kwargs)
         if not self.responses:
             raise AssertionError("unexpected extra model call")
         return self.responses.pop(0)
+
+
+class _NoPayloadBuilderLlm(_ScriptedLlm):
+    _get_request_payload = None
+
+
+class _ProviderFailureLlm(_ScriptedLlm):
+    def invoke(self, prompt_value, **kwargs):
+        self.prompts.append(str(prompt_value))
+        self.invoke_kwargs.append(kwargs)
+        raise RuntimeError("provider unavailable")
 
 
 def _response(memories=(), transcript_requests=(), folder_assignments=()):
@@ -57,6 +85,37 @@ _TRANSCRIPTS = {
     "conversation-1": "SPEAKER 0: so let's lock it at forty two dollars a seat",
     "conversation-2": "SPEAKER 0: tuesdays work best for the gym",
 }
+
+
+@pytest.fixture(scope="module")
+def _qa_prompt_value():
+    """Build the real prompt during fixture setup, outside call-phase timing."""
+
+    parser = memories_module.PydanticOutputParser(pydantic_object=memories_module.DailySweepAgentPassOutput)
+    return daily_sweep_summary_agent_prompt.invoke(
+        {
+            "user_name": "Dave",
+            "current_date": "2026-09-05",
+            "memories_str": "(none)",
+            "summaries_block": "[conversation-1] Dave chose Tuesday for gym training",
+            "folder_task": "Folder task: none. folder_assignments must be empty.",
+            "max_candidates": 1,
+            "max_transcript_fetches": 0,
+            "max_memory_lookups": 0,
+            "format_instructions": parser.get_format_instructions(),
+        }
+    )
+
+
+@pytest.fixture(scope="module")
+def _qa_gateway_model():
+    return GatewayContextChatOpenAI(
+        model="omi:auto:memories",
+        api_key="test-only",
+        base_url="https://qa.invalid/v1",
+        max_retries=0,
+        omi_gateway_feature="memories",
+    )
 
 
 def test_single_pass_when_no_transcript_requested():
@@ -162,10 +221,160 @@ def test_unparseable_model_output_raises_strict_error():
         run_daily_sweep_summary_agent("uid-1", _ROWS, dict(_TRANSCRIPTS), llm=llm)
 
 
+def test_qa_dispatch_evidence_is_recorded_before_parser_failure():
+    llm = _ScriptedLlm(
+        [
+            AIMessage(
+                content="not json",
+                usage_metadata={"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
+            )
+        ]
+    )
+    dispatch = {}
+    with pytest.raises(MemoryExtractionError):
+        run_daily_sweep_summary_agent(
+            "uid-1",
+            _ROWS,
+            dict(_TRANSCRIPTS),
+            llm=llm,
+            max_provider_retries=0,
+            max_input_tokens=QA_SWEEP_MAX_INPUT_TOKENS,
+            max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS,
+            jit_run_id="qa-sweep-run-1",
+            jit_max_spend_micro_usd=QA_SWEEP_MAX_SPEND_MICRO_USD,
+            dispatch_evidence=dispatch,
+        )
+    assert len(dispatch["requests"]) == 1
+    assert dispatch["requests"][0]["usage_observed"] is True
+
+
+def test_qa_dispatch_evidence_is_recorded_before_provider_failure():
+    dispatch = {}
+    with pytest.raises(MemoryExtractionError):
+        run_daily_sweep_summary_agent(
+            "uid-1",
+            _ROWS,
+            dict(_TRANSCRIPTS),
+            llm=_ProviderFailureLlm([]),
+            max_provider_retries=0,
+            max_input_tokens=QA_SWEEP_MAX_INPUT_TOKENS,
+            max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS,
+            jit_run_id="qa-sweep-run-1",
+            jit_max_spend_micro_usd=QA_SWEEP_MAX_SPEND_MICRO_USD,
+            dispatch_evidence=dispatch,
+        )
+    assert len(dispatch["requests"]) == 1
+    assert dispatch["requests"][0]["request_id"]
+    assert dispatch["requests"][0]["usage_observed"] is False
+
+
+def test_qa_dispatch_fails_closed_without_serialized_request_builder():
+    dispatch = {}
+    with pytest.raises(MemoryExtractionError):
+        run_daily_sweep_summary_agent(
+            "uid-1",
+            _ROWS,
+            dict(_TRANSCRIPTS),
+            llm=_NoPayloadBuilderLlm([_response()]),
+            max_provider_retries=0,
+            max_input_tokens=QA_SWEEP_MAX_INPUT_TOKENS,
+            max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS,
+            jit_run_id="qa-sweep-run-1",
+            jit_max_spend_micro_usd=QA_SWEEP_MAX_SPEND_MICRO_USD,
+            dispatch_evidence=dispatch,
+        )
+    assert dispatch["requests"] == []
+
+
 def test_empty_day_returns_empty_without_model_call():
     llm = _ScriptedLlm([])
     output = run_daily_sweep_summary_agent("uid-1", (), {}, llm=llm)
     assert output.memories == [] and llm.prompts == []
+
+
+def test_qa_budget_is_sent_to_gateway_and_accounting_stays_outside_model_schema():
+    llm = _ScriptedLlm(
+        [
+            AIMessage(
+                content=_response(
+                    memories=[{"content": "Dave lifts on Tuesdays", "conversation_ids": ["conversation-2"]}]
+                ),
+                usage_metadata={"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
+            )
+        ]
+    )
+    dispatch = {}
+    output = run_daily_sweep_summary_agent(
+        "uid-1",
+        _ROWS,
+        dict(_TRANSCRIPTS),
+        llm=llm,
+        max_provider_retries=0,
+        max_input_tokens=12_288,
+        max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS,
+        jit_run_id="qa-sweep-run-1",
+        jit_max_spend_micro_usd=50_000,
+        dispatch_evidence=dispatch,
+    )
+
+    assert [memory.content for memory in output.memories] == ["Dave lifts on Tuesdays"]
+    assert "dispatch_evidence" not in memories_module.DailySweepAgentPassOutput.model_fields
+    kwargs = llm.invoke_kwargs[0]
+    assert kwargs["max_completion_tokens"] == QA_SWEEP_MAX_OUTPUT_TOKENS
+    headers = kwargs["extra_headers"]
+    assert headers["x-omi-jit-contract-version"] == "jit-cloud-qa-v1"
+    assert headers["x-omi-jit-run-id"] == "qa-sweep-run-1"
+    assert headers["x-omi-jit-max-attempts"] == "1"
+    assert headers["x-omi-jit-max-input-tokens"] == "12288"
+    assert headers["x-omi-jit-max-output-tokens"] == "256"
+    assert headers["x-omi-jit-max-spend-micro-usd"] == "50000"
+    assert len(dispatch["requests"]) == 1
+    request = dispatch["requests"][0]
+    assert request["request_id"] == headers["x-omi-request-id"]
+    assert 0 < request["input_bytes"] <= 12_288
+    assert request["input_bytes"] > len(llm.prompts[0].encode("utf-8"))
+    assert request["max_input_tokens"] == 12_288
+    assert request["max_output_tokens"] == 256
+    assert request["max_spend_micro_usd"] == 50_000
+    assert request["usage_observed"] is True
+    assert request["usage_tokens"] == {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120}
+
+
+def test_gateway_payload_has_server_owner_and_full_qa_budget_envelope(_qa_prompt_value, _qa_gateway_model):
+    uid = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    request_id = str(uuid4())
+    headers = {
+        "x-omi-request-id": request_id,
+        "x-omi-jit-contract-version": QA_SWEEP_JIT_CONTRACT_VERSION,
+        "x-omi-jit-run-id": "qa-sweep-run-1",
+        "x-omi-jit-max-attempts": "1",
+        "x-omi-jit-max-output-tokens": str(QA_SWEEP_MAX_OUTPUT_TOKENS),
+        "x-omi-jit-max-input-tokens": str(QA_SWEEP_MAX_INPUT_TOKENS),
+        "x-omi-jit-max-spend-micro-usd": str(QA_SWEEP_MAX_SPEND_MICRO_USD),
+    }
+
+    with track_usage(uid, Features.MEMORIES):
+        payload = _qa_gateway_model._get_request_payload(
+            _qa_prompt_value, max_completion_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS, extra_headers=headers
+        )
+
+    payload_headers = payload["extra_headers"]
+    assert payload_headers["X-Omi-User-Uid"] == uid
+    assert payload_headers["X-Omi-LLM-Feature"] == "memories"
+    assert str(UUID(payload_headers["x-omi-request-id"])) == request_id
+    assert payload_headers["x-omi-jit-contract-version"] == QA_SWEEP_JIT_CONTRACT_VERSION
+    assert payload_headers["x-omi-jit-run-id"] == "qa-sweep-run-1"
+    assert payload_headers["x-omi-jit-max-attempts"] == "1"
+    assert payload_headers["x-omi-jit-max-output-tokens"] == str(QA_SWEEP_MAX_OUTPUT_TOKENS)
+    assert payload_headers["x-omi-jit-max-input-tokens"] == str(QA_SWEEP_MAX_INPUT_TOKENS)
+    assert payload_headers["x-omi-jit-max-spend-micro-usd"] == str(QA_SWEEP_MAX_SPEND_MICRO_USD)
+    assert payload["max_completion_tokens"] == QA_SWEEP_MAX_OUTPUT_TOKENS
+    # extra_headers is consumed by the OpenAI client as HTTP headers; the
+    # gateway's input preflight counts the serialized JSON body itself.
+    request_body = {key: value for key, value in payload.items() if key != "extra_headers"}
+    serialized_request_body = json.dumps(request_body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    assert len(serialized_request_body) > len(_qa_prompt_value.to_string().encode("utf-8"))
+    assert 0 < len(serialized_request_body) <= QA_SWEEP_MAX_INPUT_TOKENS
 
 
 def test_memory_lookups_trigger_second_pass_with_results():

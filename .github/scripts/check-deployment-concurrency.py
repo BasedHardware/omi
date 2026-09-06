@@ -47,6 +47,11 @@ class LockContract:
 # shared target must keep resolving to the same value. Keep this explicit so a
 # new deploy writer cannot silently bypass the audited lock graph.
 LOCK_CONTRACTS = {
+    "jit_qa_cloud_run.yml": LockContract("jit-isolated-qa-cloud-run-development"),
+    # The projection rebuild mutates the same named QA Typesense service that
+    # the application-plane workflow deploys and verifies. Keep both writers
+    # in one workflow-level lock so a rebuild cannot race service rollout.
+    "jit_qa_typesense_projection.yml": LockContract("jit-isolated-qa-cloud-run-development"),
     "desktop_backend_auto_dev.yml": LockContract("desktop-backend-auto-dev"),
     "desktop_backend_prod.yml": LockContract("desktop-backend-prod"),
     "desktop_backend_recover_prod.yml": LockContract("desktop-backend-prod"),
@@ -91,6 +96,12 @@ LOCK_CONTRACTS = {
     ),
     "gcp_daily_memory_sweep_job_auto_dev.yml": LockContract(
         "deploy-cloud-run-daily-memory-sweep-job-development"
+    ),
+    "gcp_day3_reengagement_email_job.yml": LockContract(
+        "deploy-cloud-run-day3-reengagement-email-job-${{ github.event.inputs.environment }}"
+    ),
+    "gcp_day3_reengagement_email_job_auto_dev.yml": LockContract(
+        "deploy-cloud-run-day3-reengagement-email-job-development"
     ),
     "gcp_models.yml": LockContract("deploy-gke-vad-${{ github.event.inputs.environment }}"),
     "gcp_nllb_translation.yml": LockContract("deploy-gke-nllb-translation-${{ github.event.inputs.environment }}"),
@@ -677,6 +688,7 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         ("gcp_llm_gateway.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_memory_maintenance_job.yml", "gcp_memory_maintenance_job_auto_dev.yml"),
         ("gcp_daily_memory_sweep_job.yml", "gcp_daily_memory_sweep_job_auto_dev.yml"),
+        ("gcp_day3_reengagement_email_job.yml", "gcp_day3_reengagement_email_job_auto_dev.yml"),
         ("gcp_backend_pusher.yml", "gcp_backend_pusher_auto_deploy.yml"),
     )
     for manual, automatic in family_pairs:
@@ -695,6 +707,7 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         "gcp_llm_gateway.yml",
         "gcp_memory_maintenance_job.yml",
         "gcp_daily_memory_sweep_job.yml",
+        "gcp_day3_reengagement_email_job.yml",
         "gcp_models.yml",
         "gcp_nllb_translation.yml",
         "gcp_notifications_job.yml",

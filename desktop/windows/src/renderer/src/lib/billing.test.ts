@@ -370,6 +370,15 @@ describe('plan catalog helpers', () => {
       'd'
     ])
   })
+  it('keeps the Neo (unlimited) fallback subtitle and description question counts in sync', () => {
+    // Regression: subtitle said 200 questions/month while description said 100 for the
+    // same plan id, so a user could see either number depending which card region they read.
+    const p: SubscriptionPlan = { id: 'unlimited', title: 'Neo' }
+    const subtitleCount = planSubtitle(p).match(/\d+/)?.[0]
+    const descriptionCount = planDescription(p).match(/\d+/)?.[0]
+    expect(descriptionCount).toBe(subtitleCount)
+    expect(descriptionCount).toBe('200')
+  })
   it('sorts prices month-first and reads the starting price', () => {
     expect(sortedPrices(CATALOG[1]).map((p) => p.title)).toEqual(['Monthly', 'Annual'])
     expect(planStartingPrice(CATALOG[1])).toBe('$49/mo')

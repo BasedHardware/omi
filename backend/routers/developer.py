@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from enum import Enum
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -21,6 +21,7 @@ from models.goal import GoalHistoryEntryResponse, GoalMetric
 from utils.client_device import resolve_client_device_from_request
 from utils.goals_response import normalize_goal_history_entry
 from models.memories import MemoryCategory, Memory, MemoryDB
+from models.client_processing import ClientProcessing
 from models.conversation import (
     Conversation as OmiConversation,
     CreateConversation,
@@ -57,6 +58,17 @@ from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
+from utils.conversations.projection_payload import (
+    client_processing_mutation,
+    omit_null_processing_state,
+    sanitize_untrusted_provenance_field,
+    strip_client_processing,
+)
+from utils.conversations.transcript_hash import (
+    stored_transcript_segment,
+    transcript_sha256,
+    transcript_sha256_for_binding,
+)
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.location import resolve_geolocation
 from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
@@ -1130,6 +1142,14 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     transcript_segments: List[DevTranscriptSegment] = Field(
         description="List of transcript segments with speaker and timing info", min_length=1, max_length=500
     )
+    client_processing: Optional[Any] = Field(
+        default=None,
+        description=(
+            "Untrusted client-authored display projection. Accepted as a raw payload "
+            "and validated in the handler: a malformed projection is dropped and the "
+            "conversation still lands. Display only — never an input to intelligence."
+        ),
+    )
     client_session_id: Optional[str] = Field(
         default=None,
         validation_alias=AliasChoices('client_session_id', 'client_conversation_id', 'session_id', 'client_id'),
@@ -1601,6 +1621,152 @@ def _conversation_response_from_data(conversation: dict) -> ConversationResponse
     )
 
 
+def _projection_provenance_for_log(raw: Any) -> tuple[str, str, str]:
+    """Pull and sanitize provenance for logs. Never raises; never returns body text.
+
+    Rejected-payload provenance is untrusted input. Control characters (including
+    newlines), non-strings, and oversize values are bounded or replaced so the
+    warning stays one line and cannot inject a forged log entry.
+    """
+    empty = (
+        sanitize_untrusted_provenance_field(None),
+        sanitize_untrusted_provenance_field(None),
+        sanitize_untrusted_provenance_field(None),
+    )
+    try:
+        if raw is None or isinstance(raw, (str, bytes, list, tuple, int, float, bool)):
+            return empty
+        if isinstance(raw, dict):
+            provenance = raw.get('provenance')
+        else:
+            provenance = getattr(raw, 'provenance', None)
+        if provenance is None or isinstance(provenance, (str, bytes, list, tuple, int, float, bool)):
+            return empty
+        if isinstance(provenance, dict):
+            return (
+                sanitize_untrusted_provenance_field(provenance.get('model_id')),
+                sanitize_untrusted_provenance_field(provenance.get('runtime')),
+                sanitize_untrusted_provenance_field(provenance.get('device_class')),
+            )
+        return (
+            sanitize_untrusted_provenance_field(getattr(provenance, 'model_id', None)),
+            sanitize_untrusted_provenance_field(getattr(provenance, 'runtime', None)),
+            sanitize_untrusted_provenance_field(getattr(provenance, 'device_class', None)),
+        )
+    except Exception:
+        return empty
+
+
+def _log_client_projection_rejected(reason: str, raw: Any) -> None:
+    """Content-free reject log. Provenance is sanitized; never transcript or body."""
+    try:
+        model_id, runtime, device_class = _projection_provenance_for_log(raw)
+        logger.warning(
+            'client_processing rejected reason=%s model_id=%s runtime=%s device_class=%s',
+            reason,
+            model_id,
+            runtime,
+            device_class,
+        )
+    except Exception:
+        logger.warning('client_processing rejected reason=%s', reason)
+
+
+def _parse_client_projection(raw: Any) -> Optional[ClientProcessing]:
+    """Validate an untrusted projection payload. Invalid means drop, never 422."""
+    if raw is None:
+        return None
+    try:
+        return ClientProcessing.model_validate(raw)
+    except (TypeError, ValidationError, ValueError):
+        _log_client_projection_rejected('schema_invalid', raw)
+        return None
+
+
+def _bind_projection_to_segments(
+    projection: ClientProcessing,
+    segments: Any,
+    raw: Any,
+    *,
+    stored: bool,
+) -> Optional[ClientProcessing]:
+    """Bind a projection to a transcript, or drop it.
+
+    ``stored`` says whether these segments came off a persisted row. A stored
+    row must bind through ``transcript_sha256_for_binding``, which refuses a
+    legacy row whose identity was written before canonicalization: there, a
+    matching digest would not imply matching rendered attribution. Request
+    segments are not stored yet -- they are canonicalized on write -- so they
+    bind with the plain client-reproducible digest.
+    """
+    if stored:
+        expected = transcript_sha256_for_binding(segments or [])
+        if expected is None:
+            _log_client_projection_rejected('stored_transcript_not_canonical', raw)
+            return None
+    else:
+        expected = transcript_sha256(segments or [])
+    if expected != projection.transcript_sha256:
+        _log_client_projection_rejected('hash_mismatch', raw)
+        return None
+    return projection
+
+
+def _accepted_client_projection(
+    request: CreateConversationFromTranscriptRequest,
+    segments: List[TranscriptSegment],
+) -> Optional[ClientProcessing]:
+    """Bind a client projection to the stored transcript, or drop it.
+
+    Schema failure and hash mismatch are not request errors: the conversation
+    still lands, with the projection discarded and the coordinator storing the
+    deterministic minimum. The warning is content-free (reason plus provenance
+    only — never transcript or body). Provenance itself may be missing.
+    The digest is over ``segments`` — the canonical rows ingest persists —
+    so a client hashing the same canonicalization as ``canonical_segment``
+    matches what is stored and later rendered.
+    """
+    raw = getattr(request, 'client_processing', None)
+    projection = _parse_client_projection(raw)
+    if projection is None:
+        return None
+    return _bind_projection_to_segments(projection, segments, raw, stored=False)
+
+
+def _bind_late_client_projection(
+    uid: str,
+    existing_conversation: dict,
+    request: CreateConversationFromTranscriptRequest,
+) -> dict:
+    """Idempotency hit: bind a late projection to the stored transcript.
+
+    Updates only ``client_processing``. Never touches ``structured``, never
+    re-runs processing, never re-enters the coordinator. Invalid, mismatched,
+    or missing projection: return the existing document unchanged.
+    The write re-checks the digest against the transactional snapshot so a
+    T2 segment update cannot resurrect a T1 projection.
+    """
+    raw = getattr(request, 'client_processing', None)
+    if raw is None:
+        return existing_conversation
+    projection = _parse_client_projection(raw)
+    if projection is None:
+        return existing_conversation
+    stored_segments = existing_conversation.get('transcript_segments') or []
+    bound = _bind_projection_to_segments(projection, stored_segments, raw, stored=True)
+    if bound is None:
+        return existing_conversation
+    payload = client_processing_mutation(bound)
+    # Route-level hash is a fast drop. The write re-checks the stored
+    # transcript inside the same transaction so a T2 segment update that
+    # landed after this snapshot cannot resurrect a T1 projection.
+    if not conversations_db.bind_client_processing(uid, existing_conversation['id'], payload):
+        return existing_conversation
+    updated = dict(existing_conversation)
+    updated.update(payload)
+    return updated
+
+
 def _create_conversation_from_segments(
     uid: str,
     request: CreateConversationFromTranscriptRequest,
@@ -1626,20 +1792,15 @@ def _create_conversation_from_segments(
         if not segment.text or len(segment.text.strip()) == 0:
             raise HTTPException(status_code=422, detail=f"Segment {idx}: text cannot be empty")
 
-    # Convert DevTranscriptSegment to TranscriptSegment
+    # Persist the canonical identity the digest binds. Hashing, storage, and
+    # rendering must see one value: a padded person_id is stored stripped, not
+    # hashed stripped and stored raw.
     transcript_segments = []
-    for seg in request.transcript_segments:
-        transcript_segments.append(
-            TranscriptSegment(
-                text=seg.text.strip(),
-                speaker=seg.speaker or 'SPEAKER_00',
-                speaker_id=seg.speaker_id,
-                is_user=seg.is_user,
-                person_id=seg.person_id,
-                start=seg.start,
-                end=seg.end,
-            )
-        )
+    for idx, seg in enumerate(request.transcript_segments):
+        stored = stored_transcript_segment(seg)
+        if stored is None:
+            raise HTTPException(status_code=422, detail=f"Segment {idx}: text cannot be empty")
+        transcript_segments.append(stored)
 
     # Calculate started_at and finished_at
     # started_at defaults to now
@@ -1692,6 +1853,7 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
+                existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
                 receipt = record_and_persist_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
@@ -1701,6 +1863,11 @@ def _create_conversation_from_segments(
 
     resolved_client_device_id = client_device_id or request.client_device_id
     resolved_client_platform = client_platform or request.client_platform
+
+    # Bind before any persist so the ingest-owner mutation can stamp the
+    # projection onto the processing row. The coordinator's generic persists
+    # never write this field.
+    client_projection = _accepted_client_projection(request, transcript_segments)
 
     # Create conversation object with transcript segments
     if conversation_id:
@@ -1728,9 +1895,12 @@ def _create_conversation_from_segments(
             },
             status=ConversationStatus.processing,
         )
-        if not lifecycle_service.create_processing_conversation(
-            uid, create_conversation_obj.model_dump(), idempotent=True
-        ):
+        # A null modeled field must not become an explicit Firestore key
+        # (persist is merge=True); the generic-payload helper drops it.
+        create_payload = omit_null_processing_state(strip_client_processing(create_conversation_obj.model_dump()))
+        if client_projection is not None:
+            create_payload.update(client_processing_mutation(client_projection))
+        if not lifecycle_service.create_processing_conversation(uid, create_payload, idempotent=True):
             existing_conversation = conversations_db.get_conversation(uid, conversation_id)
             if existing_conversation:
                 logger.info(
@@ -1739,6 +1909,7 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
+                existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
                 receipt = record_and_persist_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
@@ -1770,16 +1941,28 @@ def _create_conversation_from_segments(
     # processing row; the admission guard's lease heartbeat keeps it fresh so the
     # crash-orphan sweep can never terminalize active work. rollback_on_failure is
     # False because this path owns its own recovery (delete on exception below).
+    # Only pass client_projection when accepted: mocks and other callers that
+    # still use a 3-positional signature stay compatible, and omitting it is
+    # the same as None on the coordinator.
+    process_kwargs: dict = {}
+    if client_projection is not None:
+        process_kwargs['client_projection'] = client_projection
     try:
         if conversation_id:
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
-                conversation = process_conversation(uid, language_code, create_conversation_obj)
+                conversation = process_conversation(uid, language_code, create_conversation_obj, **process_kwargs)
         else:
-            conversation = process_conversation(uid, language_code, create_conversation_obj)
+            conversation = process_conversation(uid, language_code, create_conversation_obj, **process_kwargs)
     except Exception:
         if request.client_session_id and conversation_id:
             conversations_db.delete_conversation(uid, conversation_id)
         raise
+    # Non-idempotent ingest: the coordinator's generic persist stripped the
+    # field (paid / flag-off deferred). Stamp it now. The session-id path
+    # already wrote at create_processing and must not write again after a
+    # concurrent late-bind.
+    if client_projection is not None and not request.client_session_id:
+        conversations_db.bind_client_processing(uid, conversation.id, client_processing_mutation(client_projection))
     if request.client_session_id:
         logger.info(
             "from-segments idempotency persisted returned conversation uid=%s client_session_id=%s conversation_id=%s",
@@ -1787,7 +1970,9 @@ def _create_conversation_from_segments(
             request.client_session_id,
             conversation.id,
         )
-        lifecycle_service.persist_processed_conversation(uid, conversation.model_dump())
+        lifecycle_service.persist_processed_conversation(
+            uid, omit_null_processing_state(strip_client_processing(conversation.model_dump()))
+        )
 
     conversation.external_data = {
         **(conversation.external_data or {}),

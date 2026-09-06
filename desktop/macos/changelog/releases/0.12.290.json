@@ -1,0 +1,7 @@
+{
+  "version": "0.12.290",
+  "date": "2026-09-04",
+  "changes": [
+    "Chat now warns above the composer at 90% and 100% of your monthly limit, with a usage meter, the count and the reset date, so running out is never a surprise; plans that bill overage keep working past the limit instead of being blocked"
+  ]
+}

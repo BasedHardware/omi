@@ -621,6 +621,23 @@ def _load_cloud_tasks():
     )
 
 
+def _valid_sync_task_payload(**overrides):
+    payload = {key: None for key in _load_cloud_tasks().SYNC_JOB_TASK_PAYLOAD_KEYS}
+    payload.update(
+        {
+            'schema_version': 1,
+            'job_id': 'job-1',
+            'uid': 'uid-1',
+            'raw_blob_paths': ['gs://bucket/job-1.opus'],
+            'source': 'omi',
+            'should_lock': False,
+            'lane': 'fresh',
+        }
+    )
+    payload.update(overrides)
+    return payload
+
+
 def _request_with(headers: dict):
     request = MagicMock()
     request.headers = headers
@@ -692,7 +709,7 @@ class TestVerifyCloudTasksOidc:
             for var in ('SYNC_TASKS_PROJECT', 'SYNC_TASKS_LOCATION', 'SYNC_TASKS_QUEUE'):
                 os.environ.pop(var, None)
             with pytest.raises(RuntimeError):
-                cloud_tasks.enqueue_sync_job({'job_id': 'j'})
+                cloud_tasks.enqueue_sync_job(_valid_sync_task_payload(job_id='j'))
 
     def test_backfill_lane_still_uses_the_main_queue(self):
         # Flag-off is the #10400 contract: every offline upload classifies as
@@ -707,18 +724,20 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
             'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
+        payload = _valid_sync_task_payload(lane='backfill')
         with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
-            cloud_tasks.enqueue_sync_job({'job_id': 'job-1', 'lane': 'backfill'})
+            cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
             'sync-jobs',
             'https://backend-sync.example.com/v2/sync-jobs/run',
             'job-1',
-            {'job_id': 'job-1', 'lane': 'backfill'},
+            payload,
         )
 
     def test_backfill_lane_uses_backfill_queue_when_routing_enabled(self):
         cloud_tasks = _load_cloud_tasks()
+        payload = _valid_sync_task_payload(lane='backfill')
         env = {
             'SYNC_BACKFILL_ROUTING_ENABLED': 'true',
             'SYNC_TASKS_QUEUE': 'sync-jobs',
@@ -728,18 +747,19 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
         with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
-            cloud_tasks.enqueue_sync_job({'job_id': 'job-1', 'lane': 'backfill'})
+            cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
             'sync-backfill',
             'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
             'job-1',
-            {'job_id': 'job-1', 'lane': 'backfill'},
+            payload,
             audience='https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         )
 
     def test_fresh_lane_uses_main_queue_when_backfill_routing_enabled(self):
         cloud_tasks = _load_cloud_tasks()
+        payload = _valid_sync_task_payload(lane='fresh')
         env = {
             'SYNC_BACKFILL_ROUTING_ENABLED': 'true',
             'SYNC_TASKS_QUEUE': 'sync-jobs',
@@ -749,17 +769,18 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
         with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
-            cloud_tasks.enqueue_sync_job({'job_id': 'job-1', 'lane': 'fresh'})
+            cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
             'sync-jobs',
             'https://backend-sync.example.com/v2/sync-jobs/run',
             'job-1',
-            {'job_id': 'job-1', 'lane': 'fresh'},
+            payload,
         )
 
     def test_backfill_routing_falls_back_to_main_queue_when_env_missing(self):
         cloud_tasks = _load_cloud_tasks()
+        payload = _valid_sync_task_payload(lane='backfill')
         env = {
             'SYNC_BACKFILL_ROUTING_ENABLED': 'true',
             'SYNC_TASKS_QUEUE': 'sync-jobs',
@@ -768,14 +789,22 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_HANDLER_URL': '',
         }
         with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
-            cloud_tasks.enqueue_sync_job({'job_id': 'job-1', 'lane': 'backfill'})
+            cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
             'sync-jobs',
             'https://backend-sync.example.com/v2/sync-jobs/run',
             'job-1',
-            {'job_id': 'job-1', 'lane': 'backfill'},
+            payload,
         )
+
+    def test_enqueue_rejects_payload_schema_drift_before_cloud_tasks(self):
+        cloud_tasks = _load_cloud_tasks()
+        payload = _valid_sync_task_payload(unexpected_field='must-not-be-admitted')
+        with patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+            with pytest.raises(ValueError, match='durable worker schema'):
+                cloud_tasks.enqueue_sync_job(payload)
+        enqueue.assert_not_called()
 
     def test_enqueue_account_deletion_task_is_named_by_job_id(self):
         cloud_tasks = _load_cloud_tasks()
@@ -813,30 +842,9 @@ class TestVerifyCloudTasksOidc:
         ) as verify:
             assert cloud_tasks.verify_account_deletion_cloud_tasks_oidc(
                 _request_with({'authorization': 'Bearer t'})
-            ) == cloud_tasks.AccountDeletionTaskAuthentication(retry_count=0, audience='account_deletion')
+            ) == cloud_tasks.AccountDeletionTaskAuthentication(retry_count=0)
 
         assert verify.call_args.kwargs['audience'] == env['ACCOUNT_DELETION_HANDLER_URL']
-
-    def test_account_deletion_oidc_verification_accepts_only_the_legacy_sync_audience_as_compatibility(self):
-        cloud_tasks = _load_cloud_tasks()
-        env = {
-            'SYNC_TASKS_INVOKER_SA': 'invoker@project.iam.gserviceaccount.com',
-            'SYNC_TASKS_OIDC_AUDIENCE': 'https://backend-sync.example.com/v2/sync-jobs/run',
-            'ACCOUNT_DELETION_HANDLER_URL': 'https://backend-sync.example.com/v1/users/account-deletion-wipes/run',
-        }
-        claims = {'email': env['SYNC_TASKS_INVOKER_SA'], 'email_verified': True}
-
-        with patch.dict(os.environ, env), patch.object(
-            cloud_tasks.id_token, 'verify_oauth2_token', side_effect=[ValueError('wrong audience'), claims]
-        ) as verify:
-            assert cloud_tasks.verify_account_deletion_cloud_tasks_oidc(
-                _request_with({'authorization': 'Bearer t'})
-            ) == cloud_tasks.AccountDeletionTaskAuthentication(retry_count=0, audience='legacy_sync')
-
-        assert [call.kwargs['audience'] for call in verify.call_args_list] == [
-            env['ACCOUNT_DELETION_HANDLER_URL'],
-            env['SYNC_TASKS_OIDC_AUDIENCE'],
-        ]
 
     def test_account_deletion_dispatch_flag_default_inline(self):
         cloud_tasks = _load_cloud_tasks()
@@ -860,7 +868,8 @@ class TestVerifyCloudTasksOidc:
         }
 
         with patch.dict(os.environ, complete_prod_env, clear=True):
-            cloud_tasks.validate_account_deletion_dispatch_configuration()
+            with patch.object(cloud_tasks, 'assert_account_deletion_queue_exists'):
+                cloud_tasks.validate_account_deletion_dispatch_configuration()
 
         with patch.dict(os.environ, {**complete_prod_env, 'ACCOUNT_DELETION_DISPATCH_MODE': 'inline'}, clear=True):
             with pytest.raises(RuntimeError, match='ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks'):
@@ -959,6 +968,7 @@ def _load_sync_router_for_fast_path():
     import importlib.util
     from io import BytesIO
     from fastapi.routing import APIRoute
+    from models.geolocation import geolocation_from_private_header as actual_geolocation_from_private_header
     from pydantic import BaseModel
     from database.sync_jobs import SyncLedgerFenceMode
     from utils.stt import outcomes as actual_outcomes
@@ -987,6 +997,7 @@ def _load_sync_router_for_fast_path():
         'models.conversation',
         'models.conversation_enums',
         'models.sync_contract',
+        'models.geolocation',
         'models.sync_audio',
         'models.transcript_segment',
         'utils',
@@ -1163,6 +1174,7 @@ def _load_sync_router_for_fast_path():
 
     sys.modules['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
     sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
+    sys.modules['models.geolocation'].geolocation_from_private_header = actual_geolocation_from_private_header
 
     sys.modules.pop('routers.sync', None)
     sys.modules.pop('utils.sync.pipeline', None)
@@ -2384,6 +2396,52 @@ async def test_sync_dispatch_carries_device_provenance_into_cloud_task(monkeypat
         payload = module.enqueue_sync_job.call_args.args[0]
         assert payload['client_device_id'] == 'ios_a1b2c3d4'
         assert payload['client_platform'] == 'ios'
+    finally:
+        sys.modules.pop('routers.sync', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_carries_private_recording_location_into_cloud_task():
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.start_background_task = MagicMock()
+    header = json.dumps(
+        {
+            'latitude': 40.7128,
+            'longitude': -74.006,
+            'captured_at': '2026-08-01T12:30:00Z',
+            'capture_source': 'current_position',
+            'accuracy': 8.5,
+        }
+    )
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(
+            files=[upload],
+            uid='test-uid',
+            x_omi_conversation_geolocation=header,
+        )
+
+        assert response.status_code == 202
+        payload = module.enqueue_sync_job.call_args.args[0]
+        assert payload['geolocation'] == {
+            'latitude': 40.7128,
+            'longitude': -74.006,
+            'google_place_id': None,
+            'address': None,
+            'location_type': None,
+            'captured_at': '2026-08-01T12:30:00Z',
+            'capture_source': 'current_position',
+            'accuracy': 8.5,
+            'altitude': None,
+        }
     finally:
         sys.modules.pop('routers.sync', None)
         for mod_name, orig in saved_modules.items():

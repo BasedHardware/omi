@@ -55,7 +55,9 @@ struct WorkstreamBrief: Equatable, Sendable {
       "facts": facts,
     ]
     if let lastVisitAt {
-      object["last_visit"] = ISO8601DateFormatter().string(from: lastVisitAt)
+      let formatter = ISO8601DateFormatter()
+      formatter.timeZone = TimeZone.current
+      object["last_visit"] = formatter.string(from: lastVisitAt)
     }
     return object
   }

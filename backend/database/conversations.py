@@ -13,15 +13,21 @@ from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
 from models.audio_file import AudioFile
+from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
+from utils.conversations.transcript_hash import (
+    canonicalize_transcript_segments_for_storage,
+    transcript_sha256_for_binding,
+)
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
-from .firestore_index_registry import STALE_IN_PROGRESS_CONVERSATIONS_QUERY
+from .firestore_index_registry import MCP_CONVERSATION_CARD_QUERY_SPECS, STALE_IN_PROGRESS_CONVERSATIONS_QUERY
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
+from utils.other.storage import list_audio_chunks
 from .first_open_obligations import (
     FIRST_OPEN_EFFECTS,
     claim_authorized_first_open_work,
@@ -45,6 +51,25 @@ _PUBLIC_TRANSCRIPT_MAX_STORED_BYTES = 256 * 1024
 _PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES = 512 * 1024
 _PUBLIC_TRANSCRIPT_MAX_SEGMENTS = 4096
 _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS = 24_000
+_MCP_CONVERSATION_CARD_FIELD_PATHS = (
+    'id',
+    'discarded',
+    'created_at',
+    'started_at',
+    'finished_at',
+    'language',
+    'is_locked',
+    'data_protection_level',
+    'user_title',
+    'structured.title',
+    'structured.overview',
+    'structured.category',
+    'structured.emoji',
+)
+_MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS = _MCP_CONVERSATION_CARD_FIELD_PATHS + (
+    'transcript_segments',
+    'transcript_segments_compressed',
+)
 
 
 def get_conversation_ids(uid: str) -> List[str]:
@@ -138,6 +163,7 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
 def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     data = copy.deepcopy(data)
     if 'transcript_segments' in data and isinstance(data['transcript_segments'], list):
+        data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
         segments_json = json.dumps(data['transcript_segments'])
         compressed_segments_bytes = zlib.compress(segments_json.encode('utf-8'))
         data['transcript_segments_compressed'] = True
@@ -162,21 +188,31 @@ def encode_conversation_for_write(
     return _prepare_conversation_for_write(conversation_data, uid, level)
 
 
+def _require_segment_list(parsed: Any) -> List[Any]:
+    if not isinstance(parsed, list):
+        raise ValueError(f'undecodable transcript_segments: parsed {type(parsed).__name__}')
+    return parsed
+
+
 def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
     """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
 
     The read path swallows decode failures into an empty list, which is safe for
-    rendering but unsafe for a caller deciding whether a conversation is empty.
+    rendering but unsafe for a caller deciding whether a conversation is empty
+    or whether a client projection may bind to it. Binding is authorization,
+    not display: an unreadable blob must not become ``[]``.
     """
     if isinstance(raw_segments, list):
         return raw_segments
     if isinstance(raw_segments, str):
         payload = encryption.decrypt(raw_segments, uid)
         if compressed:
-            return json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
-        return json.loads(payload)
+            parsed = json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
+        else:
+            parsed = json.loads(payload)
+        return _require_segment_list(parsed)
     if isinstance(raw_segments, bytes) and compressed:
-        return json.loads(zlib.decompress(raw_segments).decode('utf-8'))
+        return _require_segment_list(json.loads(zlib.decompress(raw_segments).decode('utf-8')))
     raise ValueError(f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}')
 
 
@@ -359,6 +395,22 @@ def get_conversation_photos(uid: str, conversation_id: str):
     photos_ref = conversation_ref.collection('photos')
     photos = [doc.to_dict() for doc in photos_ref.stream()]
     return photos
+
+
+def iter_all_conversation_photos(uid: str):
+    start_key = db.document(f'users/{uid}/conversations/ /photos/ ')
+    end_key = db.document(f'users/{uid}/conversations//photos/')
+    query = (
+        db.collection_group('photos')
+        .where(filter=FieldFilter('__name__', '>=', start_key))
+        .where(filter=FieldFilter('__name__', '<=', end_key))
+    )
+    for doc in query.stream():
+        # Path format: users/{uid}/conversations/{conversation_id}/photos/{photo_id}
+        parts = doc.reference.path.split('/')
+        if len(parts) >= 6 and parts[-2] == 'photos' and parts[-4] == 'conversations':
+            conversation_id = parts[-3]
+            yield conversation_id, doc.to_dict()
 
 
 # *****************************
@@ -760,6 +812,81 @@ def get_conversations_without_photos(
     return conversations
 
 
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+def get_mcp_conversation_cards(
+    uid: str,
+    limit: int,
+    offset: int,
+    *,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    categories: Optional[List[str]] = None,
+    firestore_client: Any = None,
+) -> List[Dict[str, Any]]:
+    """Return the transcript-free Firestore projection used by hosted MCP lists."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    collection = client.collection('users').document(uid).collection(conversations_collection)
+    query_spec = MCP_CONVERSATION_CARD_QUERY_SPECS[(bool(categories), start_date is not None, end_date is not None)]
+    query = query_spec.build(
+        collection,
+        {
+            'discarded': False,
+            'status': 'completed',
+            'categories': categories,
+            'start_date': start_date,
+            'end_date': end_date,
+        },
+        field_filter_factory=FieldFilter,
+    )
+    query = (
+        query.order_by('created_at', direction=firestore.Query.DESCENDING)
+        .select(list(_MCP_CONVERSATION_CARD_FIELD_PATHS))
+        .limit(limit)
+        .offset(offset)
+    )
+    conversations: List[Dict[str, Any]] = []
+    for doc in query.stream():
+        conversation = _document_data_with_revision(doc)
+        if conversation is None:
+            continue
+        conversation.setdefault('id', doc.id)
+        conversations.append(conversation)
+    return conversations
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+def get_mcp_conversations_by_id(
+    uid: str,
+    conversation_ids: List[str],
+    *,
+    include_transcript: bool,
+    include_discarded: bool = False,
+    firestore_client: Any = None,
+) -> List[Dict[str, Any]]:
+    """Return MCP card fields, optionally with transcript blobs, without photos or other result payloads."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    conversations_ref = client.collection('users').document(uid).collection(conversations_collection)
+    doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
+    field_paths = _MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS if include_transcript else _MCP_CONVERSATION_CARD_FIELD_PATHS
+    docs = client.get_all(doc_refs, field_paths=list(field_paths))
+    conversations_by_id: Dict[str, Dict[str, Any]] = {}
+    for doc in docs:
+        if not doc.exists:
+            continue
+        data = _document_data_with_revision(doc)
+        if data is None:
+            continue
+        if data.get('discarded') and not include_discarded:
+            continue
+        data.setdefault('id', doc.id)
+        conversations_by_id[str(data['id'])] = data
+    return [
+        conversations_by_id[str(conversation_id)]
+        for conversation_id in conversation_ids
+        if str(conversation_id) in conversations_by_id
+    ]
+
+
 def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: bool = True):
     """Yield all conversations for a user, decrypted, in batches. Used for streaming data export."""
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
@@ -803,7 +930,15 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
-    doc_ref.update(prepared_data)
+    try:
+        doc_ref.update(prepared_data)
+    except NotFound:
+        # The conversation was deleted between the existence read above and
+        # this commit. The contract of this function is to report a gone owner
+        # as False — not to raise — so callers like the pusher's private-cloud
+        # audio sync take their designed gone-owner path (stop syncing, release
+        # the audio budget) instead of logging an ERROR and retrying forever.
+        return False
     return True
 
 
@@ -988,7 +1123,9 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
     (e.g. the same conversation open in two tabs) can't lose-update each other.
     Without it, two edits that both read the pre-edit transcript_segments array
     and each rewrite the whole array clobber one another — the later write wins
-    and silently drops the earlier edit.
+    and silently drops the earlier edit. The same write DELETE_FIELDs
+    ``client_processing``: a projection bound to the old transcript must not
+    outlive it. Missing projection: DELETE_FIELD is a no-op.
 
     Returns:
         'ok' on success, 'not_found' if conversation missing, 'locked' if conversation is locked,
@@ -1024,6 +1161,7 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
 
         doc_level = conversation_data.get('data_protection_level', 'standard')
         prepared_payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, doc_level)
+        _invalidate_client_processing(prepared_payload)
         transaction.update(doc_ref, prepared_payload)
         return 'ok'
 
@@ -1347,7 +1485,14 @@ def claim_conversation_status(
     claimed_status: ConversationStatus,
     extra_updates: Optional[Dict[str, Any]] = None,
 ) -> bool:
-    """Atomically transition a conversation status when the current status matches."""
+    """Atomically transition a conversation status when the current status matches.
+
+    Projection fields in ``extra_updates`` bind to the transactional snapshot's
+    stored transcript. A T1-validated candidate is dropped on T2 without
+    failing the status claim — the conversation still finalizes.
+    ``extra_updates_with_bound_client_processing`` reports whether a submitted
+    projection survived (attribute and optional attached bind report).
+    """
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     transaction = db.transaction()
@@ -1362,7 +1507,9 @@ def claim_conversation_status(
             return False
         updates = {'status': claimed_status.value}
         if extra_updates:
-            updates.update(extra_updates)
+            # Digest check against THIS snapshot, not a route-level read.
+            # A T1-validated projection must not land on a T2 transcript.
+            updates.update(extra_updates_with_bound_client_processing(uid, current, extra_updates))
         transaction.update(conversation_ref, updates)
         return True
 
@@ -1516,6 +1663,187 @@ def update_conversation_finished_at(uid: str, conversation_id: str, finished_at:
     conversation_ref.update({'finished_at': finished_at})
 
 
+def _invalidate_client_processing(payload: Dict[str, Any]) -> None:
+    """Stamp an explicit projection clear onto an already-prepared write.
+
+    Distinct from omitting the key (generic persist: leave a stored projection)
+    and from writing ``None`` (stripped so a merge cannot clobber a newer write).
+    A transcript-text or attribution mutation is the genuine-clear path: the
+    stored projection described a transcript that no longer exists. Applied
+    after ``_prepare_conversation_for_write`` so the Firestore sentinel is not
+    copied through that helper. ``DELETE_FIELD`` on an absent key is a no-op.
+    """
+    for field in PROJECTION_FAMILY_FIELDS:
+        payload[field] = firestore.DELETE_FIELD
+
+
+def _projection_digest(candidate: Any) -> Any:
+    if isinstance(candidate, Mapping):
+        return candidate.get('transcript_sha256')
+    return getattr(candidate, 'transcript_sha256', None)
+
+
+def _log_unbound_projection(reason: str, candidate: Any) -> None:
+    """Content-free reject. Provenance is never logged here; the route already
+    warned on the pre-check. A lost race (T1 verified, T2 stored) is not a
+    request error — the conversation still finalizes without the projection.
+    """
+    del candidate
+    logger.warning('client_processing rejected reason=%s', reason)
+
+
+# Out-parameter the transactional bind fills. Survives a shallow ``dict()``
+# copy of extra_updates (lifecycle.admit_processing) and is never persisted:
+# extra_updates_with_bound_client_processing pops it before returning the
+# write payload. The string is duplicated in routers/conversations.py because
+# that module loads under a stubbed database.conversations in isolation tests.
+CLIENT_PROCESSING_BIND_REPORT_KEY = '_client_processing_bind_report'
+
+
+class BoundExtraUpdates(dict):
+    """Write payload plus whether a submitted projection survived this bind.
+
+    Callers that treat the return as a plain dict keep working. ``submitted_projection_bound``
+    is an attribute, not a Firestore key.
+    """
+
+    submitted_projection_bound: bool
+
+    def __init__(self, mapping: Mapping[str, Any], *, submitted_projection_bound: bool) -> None:
+        super().__init__(mapping)
+        self.submitted_projection_bound = submitted_projection_bound
+
+
+def _is_unbound_projection_field_path(key: str) -> bool:
+    """True when ``key`` writes under a projection root by any spelling but its plain name.
+
+    Firestore parses an update key as a field path, so a projection is not
+    only reachable as the exact name ``client_processing``. ``a.b`` is a
+    nested write, and a backtick-quoted segment is the same field spelled
+    differently: a quoted projection root, alone or followed by .structure.title,
+    resolves to the protected root while looking nothing like it to a string
+    comparison.
+    Parse with Firestore's own parser and accept only the plain exact name,
+    which is what the digest bind operates on.
+
+    A key Firestore itself cannot parse is left alone: it is not a path to
+    anything, and the write rejects it.
+    """
+    # Imported here, not at module scope: several suites stub google.cloud.firestore_v1
+    # with a plain module, which makes a top-level submodule import fail at collection.
+    from google.cloud.firestore_v1.field_path import FieldPath
+
+    try:
+        parts = FieldPath.from_string(key).parts
+    except (ValueError, TypeError, KeyError):
+        return False
+    if not parts or parts[0] not in PROJECTION_FAMILY_FIELDS:
+        return False
+    return len(parts) > 1 or key != parts[0]
+
+
+def _stamp_bind_report(report: Any, bound: bool) -> None:
+    if isinstance(report, dict):
+        report['submitted_projection_bound'] = bound
+
+
+def extra_updates_with_bound_client_processing(
+    uid: str,
+    current: Mapping[str, Any],
+    extra_updates: Mapping[str, Any] | None,
+) -> BoundExtraUpdates:
+    """Copy ``extra_updates``, dropping any projection that does not bind to ``current``.
+
+    The digest is over the stored transcript as this transaction sees it.
+    Decode is strict: the permissive read decoder maps an undecryptable blob
+    to ``[]``, whose digest is a public constant any client can send. Binding
+    is not a read path — if the snapshot cannot be decoded, the projection is
+    dropped and every other field is left for the caller to commit. A
+    successfully decoded empty list still binds to the empty-transcript
+    digest. Non-canonical stored identity (``transcript_sha256_for_binding``
+    is None) and digest mismatch also drop the projection. A drop is never a
+    request error; the conversation still finalizes.
+
+    Returns a dict whose ``submitted_projection_bound`` attribute is True only
+    when a submitted projection field survived. If ``extra_updates`` carries
+    ``CLIENT_PROCESSING_BIND_REPORT_KEY``, that nested report is filled with
+    the same answer and the key is omitted from the write payload.
+    """
+    updates = dict(extra_updates or {})
+    report = updates.pop(CLIENT_PROCESSING_BIND_REPORT_KEY, None)
+    # Every write under a projection root goes through the digest bind or not
+    # at all. See ``_is_unbound_projection_field_path``.
+    for key in [key for key in updates if _is_unbound_projection_field_path(key)]:
+        _log_unbound_projection('projection_field_path', updates.pop(key))
+    if not any(field in updates for field in PROJECTION_FAMILY_FIELDS):
+        _stamp_bind_report(report, False)
+        return BoundExtraUpdates(updates, submitted_projection_bound=False)
+    try:
+        segments = _decode_transcript_segments_strict(
+            uid,
+            current.get('transcript_segments'),
+            bool(current.get('transcript_segments_compressed')),
+        )
+    except (json.JSONDecodeError, TypeError, zlib.error, ValueError, RecursionError):
+        for field in PROJECTION_FAMILY_FIELDS:
+            if field not in updates:
+                continue
+            _log_unbound_projection('transcript_undecodable', updates[field])
+            updates.pop(field, None)
+        _stamp_bind_report(report, False)
+        return BoundExtraUpdates(updates, submitted_projection_bound=False)
+    expected = transcript_sha256_for_binding(segments)
+    for field in PROJECTION_FAMILY_FIELDS:
+        if field not in updates:
+            continue
+        candidate = updates[field]
+        if expected is None:
+            _log_unbound_projection('stored_transcript_not_canonical', candidate)
+            updates.pop(field, None)
+            continue
+        digest = _projection_digest(candidate)
+        if not isinstance(digest, str) or digest != expected:
+            _log_unbound_projection('hash_mismatch', candidate)
+            updates.pop(field, None)
+    bound = any(field in updates for field in PROJECTION_FAMILY_FIELDS)
+    _stamp_bind_report(report, bound)
+    return BoundExtraUpdates(updates, submitted_projection_bound=bound)
+
+
+def bind_client_processing(
+    uid: str,
+    conversation_id: str,
+    mutation: Mapping[str, Any],
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    """Write a projection iff it binds to the stored transcript in this transaction.
+
+    ``mutation`` is the ingress payload from ``client_processing_mutation``.
+    The digest comparison uses the transactional snapshot, not a route-level
+    read. Mismatch, non-canonical stored identity, or a missing row: return
+    False without writing. Never raises for a lost race.
+    """
+    client = firestore_client if firestore_client is not None else db
+    doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+
+    @firestore.transactional
+    def _bind(transaction) -> bool:
+        snapshot = doc_ref.get(transaction=transaction)
+        if not getattr(snapshot, 'exists', False):
+            return False
+        current = snapshot.to_dict() or {}
+        bound_updates = extra_updates_with_bound_client_processing(uid, current, mutation)
+        if not any(field in bound_updates for field in PROJECTION_FAMILY_FIELDS):
+            return False
+        transaction.update(doc_ref, bound_updates)
+        return True
+
+    if firestore_client is not None:
+        return run_transactional(client, _bind)
+    return _bind(client.transaction())
+
+
 def update_conversation_segments(
     uid: str,
     conversation_id: str,
@@ -1525,7 +1853,22 @@ def update_conversation_segments(
     *,
     started_at: datetime = None,
     firestore_client: Any = None,
+    invalidate_client_processing: bool = True,
 ):
+    """Replace a conversation's transcript segments.
+
+    ``invalidate_client_processing`` defaults to TRUE, and that default is the
+    point. This function's whole job is replacing the transcript, and a stored
+    client projection is bound by digest to the transcript it described — so a
+    caller that changes the segments and keeps the projection is displaying a
+    summary of text that no longer exists. Opt-in invalidation would leave
+    every existing and future call site carrying that bug silently; three
+    separate leaks in this shard came from exactly that shape of default.
+    Pass ``False`` to skip the *unconditional* ``DELETE_FIELD`` sentinel (the
+    live-capture write loop). The transaction still clears a projection that
+    is actually present on the document, so a finalize overlapping capture cannot
+    leave a hash-bound summary of text that then changed.
+    """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
 
@@ -1547,6 +1890,13 @@ def update_conversation_segments(
         if started_at:
             update_payload['started_at'] = started_at
         prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
+        if invalidate_client_processing:
+            _invalidate_client_processing(prepared_payload)
+        elif any(current.get(field) is not None for field in PROJECTION_FAMILY_FIELDS):
+            # Opt-out skips the sentinel so the ~0.6s live loop stays cheap when
+            # no projection exists. A projection that is really there (overlap
+            # with finalize) must still be cleared in this same write.
+            _invalidate_client_processing(prepared_payload)
         transaction.update(doc_ref, prepared_payload)
         return True
 

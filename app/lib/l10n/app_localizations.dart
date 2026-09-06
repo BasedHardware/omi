@@ -18339,18 +18339,6 @@ abstract class AppLocalizations {
   /// **'Open store'**
   String get accountCutoverOpenStore;
 
-  /// Chat timeframe scope chip for today
-  ///
-  /// In en, this message translates to:
-  /// **'Today'**
-  String get chatScopeToday;
-
-  /// Chat timeframe scope chip for this week
-  ///
-  /// In en, this message translates to:
-  /// **'This week'**
-  String get chatScopeThisWeek;
-
   /// Chat scope chip when asking about a specific conversation
   ///
   /// In en, this message translates to:
@@ -18458,6 +18446,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
   String get pendantFullSyncBlocked;
+
+  /// Header for the calendar capture-gap group in the conversations list
+  ///
+  /// In en, this message translates to:
+  /// **'Not captured ({count})'**
+  String conversationsNotCapturedCount(int count);
+
+  /// Status when an active call transcription socket receives no audio frames
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription not receiving audio'**
+  String get transcriptionNoAudio;
+
+  /// Empty-home hint pointing at the + record button
+  ///
+  /// In en, this message translates to:
+  /// **'Tap + to start recording'**
+  String get tapPlusToStartRecording;
+
+  /// Eyebrow label on a chat task card block
+  ///
+  /// In en, this message translates to:
+  /// **'Task'**
+  String get chatBlockTask;
+
+  /// Eyebrow label on a chat goal link block
+  ///
+  /// In en, this message translates to:
+  /// **'Goal'**
+  String get chatBlockGoal;
+
+  /// Eyebrow label on a chat conversation/capture link block
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation'**
+  String get chatBlockConversation;
+
+  /// Eyebrow label on a chat memory link block
+  ///
+  /// In en, this message translates to:
+  /// **'Memory'**
+  String get chatBlockMemory;
+
+  /// Eyebrow label on a chat question card block
+  ///
+  /// In en, this message translates to:
+  /// **'Question'**
+  String get chatBlockQuestion;
+
+  /// Action on a chat goal link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Goals'**
+  String get chatBlockOpenInGoals;
+
+  /// Action on a chat conversation link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open conversation'**
+  String get chatBlockOpenConversation;
+
+  /// Action on a chat memory link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Memories'**
+  String get chatBlockOpenInMemories;
+
+  /// Status shown when a chat block's entity no longer exists
+  ///
+  /// In en, this message translates to:
+  /// **'No longer available'**
+  String get chatBlockUnavailable;
+
+  /// Header above recommended action items on a chat conversation link block
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended next steps'**
+  String get chatBlockRecommendedNextSteps;
+
+  /// Retryable error when fetching memories failed instead of returning an empty list
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load memories'**
+  String get couldNotLoadMemories;
+
+  /// Short user-facing error when the knowledge graph request is non-200; must not include the response body
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load knowledge graph'**
+  String get couldNotLoadKnowledgeGraph;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

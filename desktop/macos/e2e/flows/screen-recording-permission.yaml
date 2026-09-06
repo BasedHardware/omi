@@ -12,6 +12,8 @@ covers:
   - desktop/macos/Desktop/Sources/ScreenRecordingPermissionPolicy.swift
   - desktop/macos/Desktop/Sources/Onboarding/PermissionDragGuidance.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PermissionsPage.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingPermissionIntentPolicy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/AnimatedGIFView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PermissionsPageChrome.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+SystemActions.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Permissions.swift
@@ -21,6 +23,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveCaptureSystemProbe.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+SuggestionProbe.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAdmissionGate.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistantTelemetry.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryExtractionModels.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ScreenCaptureTargetPolicy.swift
@@ -28,6 +31,9 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveAssistantOrchestrationPolicy.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveExternalCaptureYield.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/MonitoringSessionTracker.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/MonitoringSessionStore.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/MonitoringTelemetry.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/MediaPlaybackIdleExemption.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+CaptureStatus.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveCaptureStatusSnapshot.swift
@@ -38,6 +44,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistant.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistantSettings.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionModels.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionTaskNudgeLedger.swift
   - desktop/macos/Desktop/Sources/ModelQoS.swift
   - desktop/macos/Desktop/Sources/Automation/AccessibilityProcessBoundary.swift
   - desktop/macos/Desktop/Sources/Diagnostics/PermissionsSnapshot.swift

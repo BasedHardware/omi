@@ -82,7 +82,7 @@ packages:
     source: hosted
     version: "2.7.0"
   async:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: async
       sha256: "758e6d74e971c3e5aceb4110bfd6698efc7f501675bcfe0c775459a8140750eb"
@@ -121,22 +121,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.9.3"
-  barcode:
-    dependency: transitive
-    description:
-      name: barcode
-      sha256: "7b6729c37e3b7f34233e2318d866e8c48ddb46c1f7ad01ff7bb2a8de1da2b9f4"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.2.9"
-  bidi:
-    dependency: transitive
-    description:
-      name: bidi
-      sha256: "77f475165e94b261745cf1032c751e2032b8ed92ccb2bf5716036db79320637d"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.13"
   boolean_selector:
     dependency: transitive
     description:
@@ -385,14 +369,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.12"
-  dotted_border:
-    dependency: "direct main"
-    description:
-      name: dotted_border
-      sha256: "108837e11848ca776c53b30bc870086f84b62ed6e01c503ed976e8f8c7df9c04"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.1.0"
   envied:
     dependency: "direct main"
     description:
@@ -417,14 +393,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.8"
-  expandable_text:
-    dependency: "direct main"
-    description:
-      name: expandable_text
-      sha256: "7d03ea48af6987b20ece232678b744862aa3250d4a71e2aaf1e4af90015d76b1"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.3.0"
   fake_async:
     dependency: "direct dev"
     description:
@@ -991,14 +959,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.12.4+4"
-  googleapis_auth:
-    dependency: "direct main"
-    description:
-      name: googleapis_auth
-      sha256: b81fe352cc4a330b3710d2b7ad258d9bcef6f909bb759b306bf42973a7d046db
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.0"
   gradient_borders:
     dependency: "direct main"
     description:
@@ -1151,22 +1111,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.1"
-  in_app_review:
-    dependency: "direct main"
-    description:
-      name: in_app_review
-      sha256: ab26ac54dbd802896af78c670b265eaeab7ecddd6af4d0751e9604b60574817f
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.11"
-  in_app_review_platform_interface:
-    dependency: transitive
-    description:
-      name: in_app_review_platform_interface
-      sha256: fed2c755f2125caa9ae10495a3c163aa7fab5af3585a9c62ef4a6920c5b45f10
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.5"
   inject_js:
     dependency: transitive
     description:
@@ -1318,7 +1262,7 @@ packages:
     source: hosted
     version: "3.0.2"
   lints:
-    dependency: "direct dev"
+    dependency: transitive
     description:
       name: lints
       sha256: "976c774dd944a42e83e2467f4cc670daef7eed6295b10b36ae8c85bcbf828235"
@@ -1349,14 +1293,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.3.0"
-  lottie:
-    dependency: "direct main"
-    description:
-      name: lottie
-      sha256: "8ae0be46dbd9e19641791dc12ee480d34e1fd3f84c749adc05f3ad9342b71b95"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.3.2"
   map_launcher:
     dependency: "direct main"
     description:
@@ -1560,14 +1496,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.2.1"
-  pasteboard:
-    dependency: "direct main"
-    description:
-      name: pasteboard
-      sha256: fedbe8da188d2f713aa8b01260737342e6e1087534a3ab26e1a719f8d3e8f32f
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.5.0"
   path:
     dependency: "direct main"
     description:
@@ -1576,14 +1504,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.9.1"
-  path_drawing:
-    dependency: transitive
-    description:
-      name: path_drawing
-      sha256: bbb1934c0cbb03091af082a6389ca2080345291ef07a5fa6d6e078ba8682f977
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.1"
   path_parsing:
     dependency: transitive
     description:
@@ -1640,14 +1560,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.0"
-  pdf:
-    dependency: "direct main"
-    description:
-      name: pdf
-      sha256: "28eacad99bffcce2e05bba24e50153890ad0255294f4dd78a17075a2ba5c8416"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.11.3"
   permission_handler:
     dependency: "direct main"
     description:
@@ -1832,14 +1744,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.10.2"
-  qr:
-    dependency: transitive
-    description:
-      name: qr
-      sha256: "5a1d2586170e172b8a8c8470bbbffd5eb0cd38a66c0d77155ea138d3af3a4445"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.0.2"
   quick_actions:
     dependency: "direct main"
     description:
@@ -2102,7 +2006,7 @@ packages:
     source: hosted
     version: "1.12.1"
   stream_channel:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: stream_channel
       sha256: "969e04c80b8bcdf826f8f16579c7b14d780458bd97f56d107d3950fdbeef059d"
@@ -2421,14 +2325,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.2.0"
-  wav:
-    dependency: "direct main"
-    description:
-      name: wav
-      sha256: "2c932c74a531befedcb1d44bb24dd95fea8c801590d560c73fa94f35c5ef6551"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.5.0"
   web:
     dependency: transitive
     description:

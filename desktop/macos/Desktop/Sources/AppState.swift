@@ -329,6 +329,15 @@ class AppState: ObservableObject {
   /// Used to prevent asynchronous work from mutating a newer recording decision.
   var recordingGeneration: UInt64 = 0
   @Published var isSavingConversation = false
+  /// True from the moment a capture stops until its conversation has been
+  /// loaded into the list. Keeps the Live card's slot occupied so the meeting
+  /// visibly lands as a row instead of vanishing and reappearing.
+  @Published var isFinalizingCapture = false
+  /// Follows visible processing rows to a terminal state (see the type).
+  lazy var processingWatcher = ProcessingConversationWatcher.live(
+    fetch: ProcessingConversationWatcher.fetchDetail,
+    onResolved: { [weak self] refreshed in self?.conversationRepository.replace(refreshed) }
+  )
   // currentTranscript is internal-only (not observed by views), so no @Published needed
   var currentTranscript: String = ""
   @Published var hasMicrophonePermission = false
@@ -678,6 +687,7 @@ class AppState: ObservableObject {
     conversationRepository.onSnapshot = { [weak self] snapshot in
       guard let self else { return }
       self.conversations = snapshot.conversations
+      self.processingWatcher.sync(with: snapshot.conversations)
       self.isLoadingConversations = snapshot.isLoading
       self.conversationsError = snapshot.error
       if self.hasActiveConversationFilters {
@@ -888,7 +898,8 @@ class AppState: ObservableObject {
           // Brief delay to let audio subsystem settle after wake
           try? await Task.sleep(for: .seconds(2))
           if !self.isTranscribing {
-            self.startTranscription(conversationRole: self.conversationRoleBeforeSleep)
+            self.startTranscription(
+              conversationRole: self.conversationRoleBeforeSleep, userInitiated: false)
           }
         }
         self.wasTranscribingBeforeSleep = false
@@ -945,7 +956,7 @@ class AppState: ObservableObject {
           if self.isTranscribing {
             await self.reconcileCapture()
           } else {
-            self.startTranscription()
+            self.startTranscription(userInitiated: false)
           }
         }
       }
@@ -979,6 +990,11 @@ extension Notification.Name {
   /// never reach UserDefaults or the UI on all macOS versions).
   static let onboardingStepNavigationRequested = Notification.Name(
     "onboardingStepNavigationRequested")
+  /// Automation bridge → onboarding screen-demo step: open the three-doors page (same code path as
+  /// the step's "Open the doors" button), so agents can exercise the demo without the cursor.
+  static let onboardingOpenDoorsRequested = Notification.Name("onboardingOpenDoorsRequested")
+  /// The three-doors page finished and handed the user back to Omi via the app URL scheme.
+  static let onboardingDoorsCompleted = Notification.Name("onboardingDoorsCompleted")
   /// Posted when the system wakes from sleep
   static let systemDidWake = Notification.Name("systemDidWake")
   /// Posted when the screen is locked
@@ -991,6 +1007,10 @@ extension Notification.Name {
   static let screenCaptureKitBroken = Notification.Name("screenCaptureKitBroken")
   /// Posted to show the "Try asking" popup centered over the full window
   static let showTryAskingPopup = Notification.Name("showTryAskingPopup")
+  /// Posted (automation bridge) to select a case in the first-use popup. userInfo["id"] = FirstUseCase id.
+  static let firstUsePopupSelect = Notification.Name("firstUsePopupSelect")
+  /// Posted (automation bridge) to press "Try it now" in the first-use popup.
+  static let firstUsePopupTry = Notification.Name("firstUsePopupTry")
   /// Posted (automation bridge) to open the inline chat on the redesigned Home
   static let homeStageOpenChat = Notification.Name("homeStageOpenChat")
   /// Posted (automation bridge) to toggle the Connect tray on the redesigned Home
@@ -1019,6 +1039,7 @@ extension Notification.Name {
   static let navigateToFloatingBarSettings = Notification.Name("navigateToFloatingBarSettings")
   /// Posted to navigate to AI Chat settings
   static let navigateToAIChatSettings = Notification.Name("navigateToAIChatSettings")
+  static let navigateToPlanSettings = Notification.Name("navigateToPlanSettings")
   /// Posted when a new Rewind frame is captured (for live frame count updates)
   static let rewindFrameCaptured = Notification.Name("rewindFrameCaptured")
   /// Posted when Rewind page finishes loading initial data

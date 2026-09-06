@@ -1,0 +1,7 @@
+{
+  "version": "0.12.252",
+  "date": "2026-08-31",
+  "changes": [
+    "Fixed Interject reply cards shrinking into an unreadable notch island, and follow-up PTT no longer drops to a fallback voice that then fails"
+  ]
+}

@@ -28,6 +28,9 @@ extension AppState {
   }
 
   func captureCurrentFinishedRecordingForLifecycle() {
+    // A finished recording is on its way to the list. Hold the Live card's
+    // slot with the Saving card until the next conversations load lands.
+    isFinalizingCapture = currentSessionId != nil
     captureFinishedRecordingForLifecycle(
       sessionId: currentSessionId,
       clientConversationId: currentClientConversationId

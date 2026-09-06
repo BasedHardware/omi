@@ -8,7 +8,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from models.audio_file import AudioFile
 from models.calendar_context import CalendarMeetingContext
 from models.chat import Message
+from models.client_processing import ClientProcessing
 from models.conversation_enums import (
+    CategoryEnum,
+    ConversationProcessingState,
     ConversationSource,
     ConversationStatus,
     ConversationVisibility,
@@ -42,9 +45,18 @@ __all__ = [
     'PluginResult',
     'SearchRequest',
     'TranscriptMatchSnippet',
+    'SharedActionItem',
+    'SharedAppResult',
     'SharedConversationChatHistoryMessage',
     'SharedConversationChatRequest',
     'SharedConversationChatResponse',
+    'SharedConversationResponse',
+    'SharedEvent',
+    'SharedPerson',
+    'SharedPluginResult',
+    'SharedStructured',
+    'SharedTranscriptSegment',
+    'project_shared_conversation',
     'SetConversationActionItemsStateRequest',
     'SetConversationEventsStateRequest',
     'TestPromptRequest',
@@ -95,6 +107,106 @@ class SharedConversationChatResponse(BaseModel):
     model_config = {'extra': 'forbid'}
 
     message: str = Field(min_length=1, strict=True)
+
+
+class SharedActionItem(BaseModel):
+    """Public share projection of an action item."""
+
+    model_config = {'extra': 'ignore'}
+
+    description: str
+    completed: bool = False
+
+
+class SharedEvent(BaseModel):
+    """Public share projection of a structured event."""
+
+    model_config = {'extra': 'ignore'}
+
+    title: str
+    description: str = ''
+    start: datetime
+    duration: int = 30
+    created: bool = False
+
+
+class SharedStructured(BaseModel):
+    """Public share projection of conversation structure."""
+
+    model_config = {'extra': 'ignore'}
+
+    title: str = ''
+    overview: str = ''
+    emoji: str = '🧠'
+    category: CategoryEnum = CategoryEnum.other
+    action_items: List[SharedActionItem] = Field(default_factory=list)
+    events: List[SharedEvent] = Field(default_factory=list)
+
+
+class SharedTranscriptSegment(BaseModel):
+    """Public share projection of a transcript turn."""
+
+    model_config = {'extra': 'ignore'}
+
+    id: Optional[str] = None
+    text: str
+    speaker: Optional[str] = 'SPEAKER_00'
+    speaker_id: Optional[int] = None
+    is_user: bool
+    person_id: Optional[str] = None
+    start: float
+    end: float
+
+
+class SharedAppResult(BaseModel):
+    model_config = {'extra': 'ignore'}
+
+    app_id: Optional[str]
+    content: str
+
+
+class SharedPluginResult(BaseModel):
+    model_config = {'extra': 'ignore'}
+
+    plugin_id: Optional[str]
+    content: str
+
+
+class SharedPerson(BaseModel):
+    """Speaker-label projection for a shared conversation."""
+
+    model_config = {'extra': 'ignore'}
+
+    id: str
+    name: str
+
+
+# Explicit allowlist: do not inherit Conversation and do not extra='allow'.
+# New Conversation fields and stored-document extras must not appear here.
+class SharedConversationResponse(BaseModel):
+    """Public unauthenticated shared-conversation payload. Only declared fields are returned."""
+
+    model_config = {'extra': 'ignore'}
+
+    id: str
+    created_at: datetime
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+    language: Optional[str] = None
+    source: Optional[ConversationSource] = ConversationSource.omi
+    status: Optional[ConversationStatus] = ConversationStatus.completed
+    visibility: ConversationVisibility = ConversationVisibility.private
+    structured: SharedStructured
+    transcript_segments: List[SharedTranscriptSegment] = Field(default_factory=list)
+    apps_results: List[SharedAppResult] = Field(default_factory=list)
+    plugins_results: List[SharedPluginResult] = Field(default_factory=list)
+    people: List[SharedPerson] = Field(default_factory=list)
+
+
+def project_shared_conversation(conversation: 'Conversation', people: List[Person]) -> SharedConversationResponse:
+    payload = conversation.model_dump()
+    payload['people'] = [{'id': person.id, 'name': person.name} for person in people]
+    return SharedConversationResponse.model_validate(payload)
 
 
 # TODO: remove this class when the app is updated to use apps_results
@@ -183,13 +295,20 @@ class Conversation(BaseModel):
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
     # True when this conversation was transcribed on a third-party (custom STT)
-    # provider, so no Omi transcription credits were consumed. The durable marker
-    # lets post-processing decide whether Omi-paid LLM work (structure, summaries,
-    # memories, action items) should run at all: a custom-STT user without their
-    # own LLM BYOK key must not rack up unbounded Omi LLM cost.
+    # provider, so no Omi transcription credits were consumed. Provenance only:
+    # post-processing does not gate on it — custom-STT conversations get the same
+    # Omi-paid enrichment as any other. The marker keeps custom-STT spend
+    # queryable, and feeds the isolated fair-use lane (#7690).
     uses_custom_stt: bool = False
 
     structured: Structured
+    # Untrusted client-authored display projection. Sibling of structured, never
+    # inside it or external_data. Display only — never an input to intelligence.
+    client_processing: Optional[ClientProcessing] = None
+    # Why `structured` holds the §1.7 deterministic minimum instead of an
+    # enriched summary. Server-authored; absent on every enriched conversation.
+    # Clients read `client_processing` first — see the enum's docstring.
+    processing_state: Optional[ConversationProcessingState] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
@@ -392,6 +511,8 @@ class ConversationFinalizationStatusResponse(BaseModel):
     attempt_count: int
     task_retry_count: int
     meeting_treatment_eligible: bool = False
+    terminal_outcome: Literal['success', 'failure', 'stale', 'unknown'] = 'unknown'
+    fanout_status: Literal['pending', 'leased', 'completed', 'fenced', 'unknown'] = 'unknown'
 
 
 # MIGRATE: For backward compatibility with the old memories routes and app

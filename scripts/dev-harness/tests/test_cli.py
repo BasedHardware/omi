@@ -99,6 +99,49 @@ def test_missing_java_runtime_is_reported_as_a_prerequisite(
     assert any("java runtime" in item for item in missing)
 
 
+def test_minimum_node_major_reads_the_pinned_firebase_tools_engines_range() -> None:
+    assert cli._minimum_node_major_for_firebase_tools(REPO_ROOT) == 20
+
+
+def test_node_major_version_parses_the_node_version_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        cli.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0, stdout="v18.19.0\n"),
+    )
+
+    assert cli._node_major_version() == 18
+
+
+def test_old_node_on_path_is_reported_as_a_prerequisite(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A contributor with Node 16/18 on PATH passes the bare `_which("node")` check today,
+
+    then only hits an opaque failure once the Firestore emulator tries to start under
+    npx-launched firebase-tools, which requires Node >= 20.
+    """
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "_which", lambda _name: "/usr/bin/node")
+    monkeypatch.setattr(cli, "_node_major_version", lambda: 18)
+    cfg = config.load_config(REPO_ROOT)
+
+    missing, _warnings = cli.prerequisite_report(cfg)
+
+    assert any("node >= 20" in item and "v18" in item for item in missing)
+
+
+def test_current_node_on_path_is_not_reported_as_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "_which", lambda _name: "/usr/bin/node")
+    monkeypatch.setattr(cli, "_node_major_version", lambda: 22)
+    cfg = config.load_config(REPO_ROOT)
+
+    missing, _warnings = cli.prerequisite_report(cfg)
+
+    assert not any(item.startswith("node >=") for item in missing)
+
+
 def test_npx_firebase_tools_does_not_wait_on_an_install_prompt(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -108,12 +151,21 @@ def test_npx_firebase_tools_does_not_wait_on_an_install_prompt(
     blocks forever and the failure presents as a health-check timeout instead.
     """
     monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
-    monkeypatch.setattr(cli, "_which", lambda name: None if name == "firebase" else f"/usr/bin/{name}")
     cfg = config.load_config(REPO_ROOT, create_layout=True)
 
     command = cli._firebase_command(cfg)
 
-    assert command[:3] == ["npx", "--yes", "firebase-tools"]
+    assert command[:5] == ["npx", "--prefix", str(REPO_ROOT), "--yes", "firebase-tools@15.22.0"]
+
+
+def test_firebase_command_ignores_global_cli_and_uses_repo_pin(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "_which", lambda name: "/opt/homebrew/bin/firebase" if name == "firebase" else None)
+    cfg = config.load_config(REPO_ROOT, create_layout=True)
+
+    command = cli._firebase_command(cfg)
+
+    assert command[:5] == ["npx", "--prefix", str(REPO_ROOT), "--yes", "firebase-tools@15.22.0"]
 
 
 def test_firebase_command_writes_the_configured_emulator_ports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

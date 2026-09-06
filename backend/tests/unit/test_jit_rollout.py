@@ -802,6 +802,8 @@ def test_trigger_snapshot_is_owner_authenticated_default_off_and_never_reads_mem
         'rows': [],
         'policy': DEFAULT_TRIGGER_RUNTIME_POLICY.model_dump(mode='json'),
         'failure_reason': 'rollout_not_enabled',
+        'budget_day': None,
+        'budget_timezone': None,
     }
 
 
@@ -836,6 +838,8 @@ def test_trigger_snapshot_serializes_exhaustive_action_receipt(monkeypatch):
                 snoozed_until=datetime(2026, 8, 25, tzinfo=timezone.utc),
             ),
         ),
+        budget_day='2026-08-24',
+        budget_timezone='America/New_York',
     )
 
     async def immediate(_executor, function, uid):
@@ -858,6 +862,8 @@ def test_trigger_snapshot_serializes_exhaustive_action_receipt(monkeypatch):
         'prompt': 'Give the next release step.',
     }
     assert payload['rows'][0]['snoozed_until'] == '2026-08-25T00:00:00Z'
+    assert payload['budget_day'] == '2026-08-24'
+    assert payload['budget_timezone'] == 'America/New_York'
     assert payload['policy'] == DEFAULT_TRIGGER_RUNTIME_POLICY.model_dump(mode='json')
     assert '"action"' in payload['rows'][0]['trigger_condition_json']
     assert observed == [False, True]
@@ -910,6 +916,8 @@ def test_trigger_snapshot_final_authority_fence_discards_scan_after_disable(monk
         'rows': [],
         'policy': DEFAULT_TRIGGER_RUNTIME_POLICY.model_dump(mode='json'),
         'failure_reason': 'rollout_not_enabled',
+        'budget_day': None,
+        'budget_timezone': None,
     }
 
 

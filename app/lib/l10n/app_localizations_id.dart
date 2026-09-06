@@ -9855,12 +9855,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get accountCutoverOpenStore => 'Buka toko';
 
   @override
-  String get chatScopeToday => 'Hari ini';
-
-  @override
-  String get chatScopeThisWeek => 'Minggu ini';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Tentang: $title';
   }
@@ -9924,4 +9918,51 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Penyimpanan Pendant penuh dan masih dalam mode perekaman, sehingga audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Tidak direkam ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripsi tidak menerima audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Tugas';
+
+  @override
+  String get chatBlockGoal => 'Tujuan';
+
+  @override
+  String get chatBlockConversation => 'Percakapan';
+
+  @override
+  String get chatBlockMemory => 'Memori';
+
+  @override
+  String get chatBlockQuestion => 'Pertanyaan';
+
+  @override
+  String get chatBlockOpenInGoals => 'Buka di Tujuan';
+
+  @override
+  String get chatBlockOpenConversation => 'Buka percakapan';
+
+  @override
+  String get chatBlockOpenInMemories => 'Buka di Memori';
+
+  @override
+  String get chatBlockUnavailable => 'Tidak lagi tersedia';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Langkah berikutnya yang disarankan';
+
+  @override
+  String get couldNotLoadMemories => 'Tidak dapat memuat kenangan';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Tidak dapat memuat graf pengetahuan';
 }

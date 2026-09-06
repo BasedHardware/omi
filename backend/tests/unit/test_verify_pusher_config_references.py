@@ -181,13 +181,15 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert literals == {
         "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
+        "MEMORY_BELIEF_MODEL_ENABLED": "true",
+        "MEMORY_ENABLED": "on",
         "OMI_ENV_STAGE": "dev",
         "OMI_LLM_CHAT_AGENT_ROUTE": "gateway",
         "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION": "false",
         "OMI_LLM_GATEWAY_FEATURE_MODE": "gateway",
         "OMI_LLM_GATEWAY_URL": "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080",
         "STT_PRERECORDED_MODEL": "parakeet,modulate-velma-2",
-        "STT_SERVICE_MODELS": "dg-nova-3,modulate-velma-2,parakeet",
+        "STT_SERVICE_MODELS": "modulate-velma-2,soniox,dg-nova-3,parakeet",
     }
     assert clear_historical_secret == {"REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"}
     assert preflight.validate_dev_pusher_binding_contract(deployment) == []
@@ -201,7 +203,7 @@ def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(prefligh
     assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
     assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "true"
     assert literals["DEEPGRAM_SELF_HOSTED_URL"] == "https://dg.omi.me"
-    assert literals["STT_SERVICE_MODELS"] == "dg-nova-3,modulate-velma-2,parakeet"
+    assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,soniox,dg-nova-3,parakeet"
 
 
 def test_dev_pusher_literal_policy_rejects_stale_deepgram_model(preflight: SimpleNamespace):
@@ -212,7 +214,7 @@ def test_dev_pusher_literal_policy_rejects_stale_deepgram_model(preflight: Simpl
 
     assert preflight.validate_dev_pusher_binding_contract(deployment) == [
         "dev pusher literal contract mismatch for STT_SERVICE_MODELS: "
-        "expected 'dg-nova-3,modulate-velma-2,parakeet', got 'modulate-velma-2'"
+        "expected 'modulate-velma-2,soniox,dg-nova-3,parakeet', got 'modulate-velma-2'"
     ]
 
 

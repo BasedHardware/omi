@@ -17,7 +17,7 @@ import SwiftUI
 // - **The accent picker**, removed earlier, reached `.tint()` on the Settings window and nothing
 //   else — every structural accent reads `Ink.accent` — while its default resolved to
 //   `NSColor.controlAccentColor`, painting the window purple on a Mac set to Purple, which is
-//   exactly what `INV-UI-1` (`docs/product/invariants/brand-ui.md`) forbids.
+//   exactly what `INV-UI-1` (`product/invariants/brand-ui.md`) forbids.
 // - **The timeline control toggles**, four switches that hid the timeline's own buttons. See
 //   `Rewind/RewindView.swift`.
 //

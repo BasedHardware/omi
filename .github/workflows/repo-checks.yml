@@ -52,6 +52,9 @@ jobs:
           enable-cache: true
           cache-dependency-glob: backend/openapi-requirements.txt
 
+      - name: Install runtime environment validator dependency
+        run: uv pip install --system pyyaml==6.0.1
+
       - name: Set up Java for manifest-selected Firestore checks
         uses: actions/setup-java@v5
         with:
@@ -123,6 +126,9 @@ jobs:
           version: "0.11.13"
           enable-cache: true
           cache-dependency-glob: backend/openapi-requirements.txt
+
+      - name: Install runtime environment validator dependency
+        run: uv pip install --system pyyaml==6.0.1
 
       - name: Set up Java for manifest-selected Firestore checks
         uses: actions/setup-java@v5
@@ -214,6 +220,13 @@ jobs:
           scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
+      - name: Set up uv for Python formatting
+        if: needs.changes.outputs.has_python == 'true'
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          version: "0.11.13"
+          enable-cache: true
+
       - name: Setup Flutter
         if: needs.changes.outputs.has_dart == 'true'
         uses: subosito/flutter-action@v2
@@ -239,12 +252,9 @@ jobs:
       - name: Check Python formatting
         if: needs.changes.outputs.has_python == 'true'
         run: |
-          # Pinned: an unpinned black drifts from local/pre-commit formatting on
-          # every black release, making this check fail on untouched files.
-          pip install -q black==26.5.1
           FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
+            echo "$FILES" | xargs scripts/backend-python-format --check
           fi
 
       - name: Check ARB formatting

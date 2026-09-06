@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from models.conversation_enums import ConversationStatus
+from models.geolocation import Geolocation
 from routers import conversations as conversations_router
 from utils.conversations import lifecycle as lifecycle_service
 
@@ -88,6 +89,32 @@ def test_rollback_error_does_not_mask_the_original_processing_exception(monkeypa
 
     with pytest.raises(RuntimeError, match='processor crashed'):
         conversations_router.process_in_progress_conversation(request=None, uid='uid1')
+
+
+def test_recording_snapshot_wins_over_redis_location_fallback(monkeypatch, conversation_state):
+    snapshot = Geolocation(latitude=40.7128, longitude=-74.006, capture_source='current_position')
+    conversation = _in_progress_conversation()
+    conversation.geolocation = snapshot
+
+    monkeypatch.setattr(conversations_router, 'retrieve_in_progress_conversation', lambda uid: {'id': conversation.id})
+    monkeypatch.setattr(conversations_router, 'deserialize_conversation', lambda data: conversation)
+    redis_read = MagicMock(side_effect=AssertionError('Redis fallback must not be read for a recording snapshot'))
+    monkeypatch.setattr(conversations_router.redis_db, 'get_cached_user_geolocation', redis_read)
+    monkeypatch.setattr(conversations_router.redis_db, 'get_in_progress_conversation_id', lambda uid: None)
+    monkeypatch.setattr(conversations_router.redis_db, 'remove_in_progress_conversation_id', lambda uid: None)
+    resolve = MagicMock(return_value=snapshot)
+    monkeypatch.setattr(conversations_router, 'resolve_geolocation', resolve)
+
+    def raise_processing(*args, **kwargs):
+        raise RuntimeError('processor crashed')
+
+    monkeypatch.setattr(conversations_router, 'process_conversation', raise_processing)
+
+    with pytest.raises(RuntimeError, match='processor crashed'):
+        conversations_router.process_in_progress_conversation(request=None, uid='uid1')
+
+    resolve.assert_called_once_with(snapshot)
+    redis_read.assert_not_called()
 
 
 def test_deferred_enrichment_renews_processing_lease_during_live_processing(monkeypatch):
@@ -182,3 +209,41 @@ def test_deferred_enrichment_skips_when_reacquisition_fails(monkeypatch):
 
     time.sleep(0.2)  # Give any background task time to (not) run
     process_called.assert_not_called()
+
+
+def test_deferred_enrichment_failure_rearms_retry_through_lifecycle_owner(monkeypatch):
+    """A failed lazy enrichment must atomically become a retryable terminal.
+
+    The router must not split this lifecycle mutation across a raw database
+    write and a second status transition: that can strand a deferred row in
+    processing forever when either write fails.
+    """
+    import threading
+
+    recovered = threading.Event()
+    recovery = MagicMock(side_effect=lambda *_args: recovered.set() or True)
+    raw_update = MagicMock()
+
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
+    monkeypatch.setattr(lifecycle_service, 'recover_deferred_processing_failure', recovery, raising=False)
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'renew_processing_lease', lambda *_args: True)
+    monkeypatch.setattr(conversations_router.conversations_db, 'update_conversation', raw_update)
+    monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+    monkeypatch.setattr(
+        conversations_router,
+        'deserialize_conversation',
+        lambda _data: SimpleNamespace(id='deferred-conv-1', language='en', deferred=False),
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        'process_conversation',
+        MagicMock(side_effect=RuntimeError('enrichment unavailable')),
+    )
+
+    conversations_router._enrich_deferred_conversation(
+        'uid1', {'id': 'deferred-conv-1', 'status': 'processing', 'deferred': True, 'language': 'en'}
+    )
+
+    assert recovered.wait(timeout=10.0), 'deferred failure recovery did not run'
+    recovery.assert_called_once_with('uid1', 'deferred-conv-1')
+    raw_update.assert_not_called()

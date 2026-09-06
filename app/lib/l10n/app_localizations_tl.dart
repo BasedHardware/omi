@@ -9935,12 +9935,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Buka toko';
 
   @override
-  String get chatScopeToday => 'Ngayon';
-
-  @override
-  String get chatScopeThisWeek => 'Ngayong linggo';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Tungkol sa: $title';
   }
@@ -10004,4 +9998,51 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Puno na ang storage ng Pendant at nasa recording mode pa rin ito, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Hindi na-record ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'Hindi tumatanggap ng audio ang transkripsyon';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Gawain';
+
+  @override
+  String get chatBlockGoal => 'Layunin';
+
+  @override
+  String get chatBlockConversation => 'Pag-uusap';
+
+  @override
+  String get chatBlockMemory => 'Alaala';
+
+  @override
+  String get chatBlockQuestion => 'Tanong';
+
+  @override
+  String get chatBlockOpenInGoals => 'Buksan sa Mga Layunin';
+
+  @override
+  String get chatBlockOpenConversation => 'Buksan ang pag-uusap';
+
+  @override
+  String get chatBlockOpenInMemories => 'Buksan sa Mga Alaala';
+
+  @override
+  String get chatBlockUnavailable => 'Hindi na available';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Mga inirerekomendang susunod na hakbang';
+
+  @override
+  String get couldNotLoadMemories => 'Hindi ma-load ang mga alaala';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Hindi ma-load ang knowledge graph';
 }

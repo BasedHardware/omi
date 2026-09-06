@@ -35,6 +35,9 @@ overlay:
           category: rollout
         MEMORY_ENABLED:
           value: 'on'
+        MEMORY_BELIEF_MODEL_ENABLED:
+          value: 'true'
+          category: rollout
         CONVERSATION_NOTES_V2_ENABLED:
           value: 'true'
           category: rollout
@@ -44,7 +47,13 @@ overlay:
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'true'
           category: rollout
+        GOOGLE_CALENDAR_AUTO_LINK_ENABLED:
+          value: 'true'
+          category: rollout
     pusher:
+      capabilities:
+      - conversation.finalize.persisted
+      - memory.canonical.mutate
       values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
       env:
         OMI_LLM_GATEWAY_URL:
@@ -66,6 +75,11 @@ overlay:
           secret:
             name: dev-omi-backend-secrets
             key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+        MEMORY_ENABLED:
+          value: 'on'
+        MEMORY_BELIEF_MODEL_ENABLED:
+          value: 'true'
+          category: rollout
         GITHUB_TOKEN:
           secret:
             name: dev-omi-backend-secrets
@@ -115,7 +129,7 @@ overlay:
           value: parakeet,modulate-velma-2
           category: stt_policy
         STT_SERVICE_MODELS:
-          value: dg-nova-3,modulate-velma-2,parakeet
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
           category: stt_policy
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
@@ -193,7 +207,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: dg-nova-3,modulate-velma-2,parakeet
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -216,6 +230,8 @@ overlay:
     - .github/workflows/gcp_frame_request_retention_job.yml
     - .github/workflows/gcp_daily_memory_sweep_job.yml
     - .github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml
+    - .github/workflows/gcp_day3_reengagement_email_job.yml
+    - .github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml
     network:
       flags:
         --network: omi-dev-vpc-1
@@ -274,6 +290,9 @@ overlay:
             category: rollout
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
           # `/v3/memories` and the canonical graph use signed cursors even for
           # the initial page, so cursor reads fail closed until this versioned
           # binding is present.
@@ -331,6 +350,9 @@ overlay:
             category: rollout
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -381,6 +403,9 @@ overlay:
             category: rollout
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -431,6 +456,9 @@ overlay:
             category: rollout
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -463,6 +491,9 @@ overlay:
             value: based-hardware
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
             value: 'true'
           MEMORY_CANONICAL_MAINTENANCE_FLEX:
@@ -490,6 +521,9 @@ overlay:
             value: based-hardware
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
           MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
             value: 'true'
           MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH:
@@ -515,4 +549,24 @@ overlay:
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS:
             value: '3'
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
+            value: 'true'
+      knowledge-ledger-drain-job:
+        env:
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware
+          MEMORY_ENABLED:
+            value: 'on'
+          KNOWLEDGE_LEDGER_DRAIN_ENABLED:
+            value: 'false'
+          KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
+            value: 9OqYLlKJv4hmeYpIhwJcHBR975i2
+      day3-reengagement-email-job:
+        flags:
+          --task-timeout: 900s
+        env:
+          BASE_API_URL:
+            value: https://api.omiapi.com
+          DAY3_REENGAGEMENT_EMAIL_ENABLED:
+            value: 'false'
+          DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
             value: 'false'

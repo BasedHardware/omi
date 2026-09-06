@@ -265,6 +265,16 @@
             "description": "Client platform (ios/android/macos)",
             "title": "Client Platform"
           },
+          "client_processing": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler: a malformed projection is dropped and the conversation still lands. Display only — never an input to intelligence.",
+            "title": "Client Processing"
+          },
           "client_session_id": {
             "anyOf": [
               {
@@ -1804,6 +1814,18 @@
       },
       "Geolocation": {
         "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
           "address": {
             "anyOf": [
               {
@@ -1814,6 +1836,46 @@
               }
             ],
             "title": "Address"
+          },
+          "altitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude"
+          },
+          "capture_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "current_position",
+                  "last_known_position",
+                  "manual",
+                  "integration"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Source"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           },
           "google_place_id": {
             "anyOf": [
@@ -1860,6 +1922,18 @@
       "GeolocationInput": {
         "description": "Released wire contract for coordinates accepted at legacy API boundaries.\n\nBounds are enforced before any value is cached, geocoded, or persisted. Keeping\nthis transport shape broad preserves clients released before the bound contract\nexisted, while ``Geolocation`` remains the only usable server-side value.",
         "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
           "address": {
             "anyOf": [
               {
@@ -1870,6 +1944,46 @@
               }
             ],
             "title": "Address"
+          },
+          "altitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude"
+          },
+          "capture_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "current_position",
+                  "last_known_position",
+                  "manual",
+                  "integration"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Source"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           },
           "google_place_id": {
             "anyOf": [

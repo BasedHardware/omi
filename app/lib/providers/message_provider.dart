@@ -362,7 +362,7 @@ class MessageProvider extends ChangeNotifier {
     }
     messages = await getMessagesFromServer(dropdownSelected: dropdownSelected);
     if (messages.isEmpty) {
-      messages = ServerMessage.visibleOnMobile(SharedPreferencesUtil().cachedMessages);
+      messages = List<ServerMessage>.from(SharedPreferencesUtil().cachedMessages);
     } else {
       SharedPreferencesUtil().cachedMessages = messages;
       setHasCachedMessages(true);
@@ -375,7 +375,7 @@ class MessageProvider extends ChangeNotifier {
   void setMessagesFromCache() {
     if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
       setHasCachedMessages(true);
-      messages = ServerMessage.visibleOnMobile(SharedPreferencesUtil().cachedMessages);
+      messages = List<ServerMessage>.from(SharedPreferencesUtil().cachedMessages);
       messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     }
     notifyListeners();
@@ -393,7 +393,7 @@ class MessageProvider extends ChangeNotifier {
       firstTimeLoadingText = l10n?.msgLearningMemories ?? 'Learning from your memories...';
       notifyListeners();
     }
-    messages = ServerMessage.visibleOnMobile(mes);
+    messages = List<ServerMessage>.from(mes);
     messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     setLoadingMessages(false);
     notifyListeners();
@@ -411,7 +411,7 @@ class MessageProvider extends ChangeNotifier {
   Future clearChat() async {
     setClearingChat(true);
     var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
-    messages = ServerMessage.visibleOnMobile(mes);
+    messages = List<ServerMessage>.from(mes);
     messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     setClearingChat(false);
     notifyListeners();
@@ -450,7 +450,6 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void addMessage(ServerMessage message) {
-    if (message.hideFromMobileChat) return;
     if (messages.firstWhereOrNull((m) => m.id == message.id) != null) {
       return;
     }

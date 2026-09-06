@@ -9680,12 +9680,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get accountCutoverOpenStore => '스토어 열기';
 
   @override
-  String get chatScopeToday => '오늘';
-
-  @override
-  String get chatScopeThisWeek => '이번 주';
-
-  @override
   String chatScopeAbout(String title) {
     return '$title에 대해';
   }
@@ -9747,4 +9741,51 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendant의 저장 공간이 가득 찼고 아직 녹음 모드이므로 저장된 오디오를 전송할 수 없습니다. Pendant의 버튼을 눌러 녹음을 중지한 다음 다시 동기화하세요.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return '기록되지 않음 ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => '전사가 오디오를 받지 못하고 있습니다';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => '작업';
+
+  @override
+  String get chatBlockGoal => '목표';
+
+  @override
+  String get chatBlockConversation => '대화';
+
+  @override
+  String get chatBlockMemory => '메모리';
+
+  @override
+  String get chatBlockQuestion => '질문';
+
+  @override
+  String get chatBlockOpenInGoals => '목표에서 열기';
+
+  @override
+  String get chatBlockOpenConversation => '대화 열기';
+
+  @override
+  String get chatBlockOpenInMemories => '메모리에서 열기';
+
+  @override
+  String get chatBlockUnavailable => '더 이상 사용할 수 없음';
+
+  @override
+  String get chatBlockRecommendedNextSteps => '권장 다음 단계';
+
+  @override
+  String get couldNotLoadMemories => '추억을 불러올 수 없습니다';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => '지식 그래프를 불러올 수 없습니다';
 }

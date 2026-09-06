@@ -203,6 +203,61 @@ final class ChatScrollLiveEdgeTests: XCTestCase {
   }
 }
 
+/// Whether viewport movement observed during a press is the reader's doing.
+final class ChatPressPromotionPolicyTests: XCTestCase {
+  private let epsilon: CGFloat = 1
+
+  func testMovementNobodyClaimedBelongsToTheReader() {
+    XCTAssertEqual(
+      ChatPressPromotionPolicy.classify(
+        movement: 40, epsilon: epsilon, now: 100, lastProgrammaticScrollAt: nil),
+      .promotesPress,
+      "with no follow-scroll to account for it, a moved viewport is the reader's doing")
+  }
+
+  func testTheTranscriptsOwnFollowScrollDoesNotClaimTheViewportForTheReader() {
+    XCTAssertEqual(
+      ChatPressPromotionPolicy.classify(
+        movement: 40, epsilon: epsilon, now: 100.05, lastProgrammaticScrollAt: 100),
+      .rebaselines,
+      "a streamed answer re-reaching the live edge under an open press is not a drag")
+  }
+
+  func testMovementLongAfterTheLastFollowScrollIsStillTheReaders() {
+    XCTAssertEqual(
+      ChatPressPromotionPolicy.classify(
+        movement: 40,
+        epsilon: epsilon,
+        now: 100 + ChatPressPromotionPolicy.programmaticScrollGrace + 0.01,
+        lastProgrammaticScrollAt: 100),
+      .promotesPress,
+      "the grace window covers one runloop hop, not the rest of the press")
+  }
+
+  func testAStationaryViewportMeansNothingEitherWay() {
+    XCTAssertEqual(
+      ChatPressPromotionPolicy.classify(
+        movement: 0.4, epsilon: epsilon, now: 100, lastProgrammaticScrollAt: nil),
+      .ignores,
+      "a click that moved nothing is still just a click")
+  }
+
+  func testABackwardsClockCannotDiscountReaderMovementForever() {
+    XCTAssertEqual(
+      ChatPressPromotionPolicy.classify(
+        movement: 40, epsilon: epsilon, now: 99, lastProgrammaticScrollAt: 100),
+      .promotesPress,
+      "a clock that went backwards must not leave the reader unable to take the viewport")
+  }
+
+  func testTheSignalStartsWithNothingToAccountFor() {
+    let signal = ChatProgrammaticScrollSignal()
+    XCTAssertNil(signal.lastScrollAt)
+    signal.markProgrammaticScroll(at: 42)
+    XCTAssertEqual(signal.lastScrollAt, 42)
+  }
+}
+
 /// AppKit-backed failure harness for chat scroll ownership. Unlike the
 /// coordinate-only live-edge cases above, these tests drive the same native
 /// live-scroll lifecycle emitted by a rapid trackpad/wheel gesture.
@@ -249,9 +304,11 @@ final class UserScrollDetectorTests: XCTestCase {
   func testRapidLiveScrollHandsOwnershipToReaderAndDoesNotRearmAwayFromBottom() {
     let (scrollView, hostView) = makeScrollViewAtBottom()
     var userScrollStarts = 0
+    var userScrollEnds = 0
     var settledAtBottom = 0
     let coordinator = UserScrollDetector.Coordinator(
       onUserScroll: { userScrollStarts += 1 },
+      onUserScrollEnded: { userScrollEnds += 1 },
       onScrollSettledAtBottom: { settledAtBottom += 1 }
     )
     coordinator.install(for: hostView)
@@ -264,6 +321,7 @@ final class UserScrollDetectorTests: XCTestCase {
     for scrollTop in [620.0, 400.0, 160.0] {
       scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: scrollTop))
     }
+    XCTAssertEqual(userScrollEnds, 0, "reader ownership must remain active until AppKit ends live scroll")
     NotificationCenter.default.post(
       name: NSScrollView.didEndLiveScrollNotification,
       object: scrollView
@@ -271,6 +329,7 @@ final class UserScrollDetectorTests: XCTestCase {
     drainMainQueue()
 
     XCTAssertEqual(userScrollStarts, 1, "native live scroll must immediately give the reader ownership")
+    XCTAssertEqual(userScrollEnds, 1, "native live-scroll completion must release reader ownership")
     XCTAssertEqual(
       settledAtBottom,
       0,

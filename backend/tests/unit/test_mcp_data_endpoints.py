@@ -7,6 +7,7 @@ stubbing pattern in test_mcp_search_memories.py.
 """
 
 from datetime import datetime, timezone
+import asyncio
 import json
 from unittest.mock import patch, MagicMock
 import os
@@ -14,6 +15,7 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -380,8 +382,182 @@ def test_sse_initialize_teaches_every_agent_to_retrieve_full_omi_context_safely(
     ):
         assert f'`{tool}`' in instructions
     assert 'Use only tools exposed by `tools/list`' in instructions
+    assert instructions.index('`get_conversations(start_date, end_date)`') < instructions.index('`get_memories`')
+    assert 'Prefer one POST' in instructions
+    assert 'never fire parallel POSTs' in instructions
     assert 'confirm important claims' in instructions
     assert 'user clearly asked' in instructions
+
+
+def test_get_memories_advertises_and_executes_default_limit_20():
+    tool = next(tool for tool in sse.MCP_TOOLS if tool['name'] == 'get_memories')
+    assert tool['inputSchema']['properties']['limit']['default'] == 20
+
+    service = MagicMock()
+    service.read.return_value = []
+    with (
+        patch.object(sse, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()),
+        patch.object(sse, 'MemoryService', return_value=service),
+    ):
+        result = sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
+
+    assert result['limit'] == 20
+    assert result['scanned_count'] == 0
+
+
+def test_get_memories_created_desc_scan_is_capped_for_hosted_mcp():
+    service = MagicMock()
+
+    def _read(_uid, *, limit, offset):
+        return [
+            SimpleNamespace(
+                model_dump=lambda mode, memory_id=offset + index: {
+                    'id': f'memory-{memory_id}',
+                    'content': 'Durable fact',
+                }
+            )
+            for index in range(limit)
+        ]
+
+    service.read.side_effect = _read
+    with (
+        patch.object(sse, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()),
+        patch.object(sse, 'MemoryService', return_value=service),
+    ):
+        result = sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
+
+    assert result['scanned_count'] == 200
+    assert result['scan_truncated'] is True
+    assert service.read.call_count == 2
+
+
+def _fat_conversation():
+    return {
+        'id': 'conv-1',
+        'created_at': NOW,
+        'started_at': NOW,
+        'finished_at': NOW,
+        'language': 'en',
+        'structured': {
+            'title': 'Bar job discussion',
+            'overview': 'Discussed a job at a neighborhood bar.',
+            'category': 'work',
+            'emoji': '🍸',
+            'action_items': [{'description': 'Apply'}],
+            'events': [{'title': 'Interview'}],
+        },
+        'transcript_segments': [
+            {
+                'id': 'seg-1',
+                'text': 'bar jobs ' + ('details ' * 80),
+                'speaker_id': 1,
+                'start': 1.0,
+                'end': 3.0,
+                'evidence': ['large-private-evidence'],
+            },
+            {'id': 'seg-2', 'text': 'second segment', 'speaker_id': 2},
+        ],
+        'photos': [{'base64': 'large-private-photo'}],
+        'apps_results': [{'content': 'large-app-result'}],
+    }
+
+
+def test_conversation_list_and_search_return_cards_without_heavy_fields():
+    with patch.object(sse.conversations_db, 'get_mcp_conversation_cards', return_value=[_fat_conversation()]):
+        listed = sse.execute_tool(UID, 'get_conversations', {})['conversations'][0]
+
+    with (
+        patch.object(sse, 'resolve_mcp_conversation_search_ids', return_value=['conv-1']),
+        patch.object(sse.conversations_db, 'get_mcp_conversations_by_id', return_value=[_fat_conversation()]),
+    ):
+        searched = sse.execute_tool(
+            UID,
+            'search_conversations',
+            {'query': 'bar jobs', 'start_date': '2026-06-11', 'end_date': '2026-06-11'},
+        )['conversations'][0]
+
+    for item in (listed, searched):
+        assert set(item['structured']) == {'title', 'overview', 'category', 'emoji'}
+        assert 'transcript_segments' not in item
+        assert 'photos' not in item
+        assert 'action_items' not in item
+        assert 'action_items' not in item['structured']
+        assert 'events' not in item['structured']
+    assert searched['match_snippets']
+    assert len(searched['match_snippets'][0]['text']) <= 240
+
+
+def test_conversation_fetch_is_text_only_and_reports_truncation():
+    with patch.object(sse.conversations_db, 'get_mcp_conversations_by_id', return_value=[_fat_conversation()]):
+        result = sse.execute_tool(
+            UID,
+            'get_conversation_by_id',
+            {'conversation_id': 'conv-1', 'max_segments': 1, 'max_chars': 24},
+        )
+
+    conversation = result['conversation']
+    assert result['truncated'] is True
+    assert len(conversation['transcript_segments']) == 1
+    assert len(conversation['transcript_segments'][0]['text']) <= 24
+    assert set(conversation['structured']) == {'title', 'overview', 'category', 'emoji'}
+    assert 'evidence' not in conversation['transcript_segments'][0]
+    assert 'photos' not in conversation
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('tool_name', 'arguments'),
+    [
+        ('get_conversations', {'start_date': '2026-06-11', 'end_date': '2026-06-11'}),
+        ('search_conversations', {'query': 'bar jobs', 'start_date': '2026-06-11', 'end_date': '2026-06-11'}),
+    ],
+)
+async def test_conversation_index_failure_is_json_rpc_http_200(tool_name, arguments):
+    from google.api_core.exceptions import FailedPrecondition
+
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['conversations.read'])
+    request = _JsonRequest(
+        {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': tool_name, 'arguments': arguments}}
+    )
+    failure = FailedPrecondition('query requires an index')
+    with (
+        patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
+        patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
+        patch.object(sse.conversations_db, 'get_mcp_conversation_cards', side_effect=failure),
+        patch.object(sse, 'resolve_mcp_conversation_search_ids', side_effect=failure),
+    ):
+        response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
+
+    payload = json.loads(response.body)
+    assert response.status_code == 200
+    assert payload['error']['code'] == -32009
+    assert 'index' in payload['error']['message'].lower()
+
+
+@pytest.mark.asyncio
+async def test_unexpected_tool_exception_is_json_rpc_http_200_without_private_detail():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['conversations.read'])
+    request = _JsonRequest(
+        {
+            'jsonrpc': '2.0',
+            'id': 1,
+            'method': 'tools/call',
+            'params': {'name': 'get_conversations', 'arguments': {}},
+        }
+    )
+    with (
+        patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
+        patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
+        patch.object(sse, 'execute_tool', side_effect=RuntimeError('private failure detail')),
+        patch.object(sse.logger, 'exception') as log_exception,
+    ):
+        response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
+
+    payload = json.loads(response.body)
+    assert response.status_code == 200
+    assert payload['error'] == {'code': -32009, 'message': 'Tool temporarily unavailable. Retry shortly.'}
+    assert 'private failure detail' not in response.body.decode()
+    log_exception.assert_called_once_with('hosted MCP tool call failed tool=%s', 'get_conversations')
 
 
 @pytest.mark.asyncio
@@ -497,6 +673,37 @@ def test_authorize_request_rejects_legacy_omi_client_id():
                 'a' * 64,
                 'S256',
             )
+
+
+def test_mcp_oauth_authorize_rejects_non_qa_uid_before_grant_write(monkeypatch):
+    monkeypatch.setenv('OMI_JIT_QA_AUTH_ONLY', 'true')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev')
+    monkeypatch.setenv('OMI_JIT_QA_UID_ALLOWLIST', 'qa-user')
+
+    async def inline_run_blocking(_executor, function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    with (
+        patch.object(sse, '_validate_authorize_request', return_value=({}, ['memories.read'])),
+        patch.object(sse.firebase_admin.auth, 'verify_id_token', return_value={'uid': 'other-user'}),
+        patch.object(sse, 'run_blocking', inline_run_blocking),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(
+                sse.mcp_authorize_consent(
+                    response_type='code',
+                    client_id='omi-chatgpt-prod',
+                    redirect_uri='https://chatgpt.com/connector_platform_oauth_redirect',
+                    resource=sse.MCP_RESOURCE_URL,
+                    firebase_id_token='token',
+                    state='state',
+                    scope='memories.read',
+                    code_challenge='a' * 64,
+                    code_challenge_method='S256',
+                )
+            )
+        assert exc.value.status_code == 403
 
 
 def test_legacy_api_key_helper_rejects_oauth_tokens():

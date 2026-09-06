@@ -123,6 +123,29 @@ final class ChatDiscoverabilityTests: XCTestCase {
     }
   }
 
+  func testEveryBoldToolNameInDesktopPromptIsACapability() throws {
+    let prompt = ChatPrompts.desktopChat
+    let capabilities = Set(GeneratedToolCapabilities.capabilities(for: .desktopChat).map(\.toolName))
+    let pattern = try NSRegularExpression(pattern: #"\*\*([a-z][a-z0-9_]*)\*\*"#)
+    let ns = prompt as NSString
+    let matches = pattern.matches(in: prompt, range: NSRange(location: 0, length: ns.length))
+    XCTAssertFalse(matches.isEmpty)
+    for match in matches {
+      let name = ns.substring(with: match.range(at: 1))
+      XCTAssertTrue(
+        capabilities.contains(name),
+        "Prompt names \(name) which is not a desktop capability")
+    }
+    XCTAssertTrue(capabilities.contains("web_search"))
+    XCTAssertTrue(prompt.contains("use web_search"))
+  }
+
+  func testInitiativeTellsModelToCompleteTasksInTheSameTurn() {
+    XCTAssertTrue(ChatPrompts.desktopChat.contains("create/complete/delete a task, save a memory"))
+    XCTAssertTrue(DesktopCapabilityRegistry.desktopToolNames.contains("complete_task"))
+    XCTAssertTrue(DesktopCapabilityRegistry.desktopToolNames.contains("update_action_item"))
+  }
+
   func testMainChatKeepsDirectPermissionTools() {
     let names = Set(DesktopCapabilityRegistry.desktopToolNames)
     XCTAssertTrue(names.contains("check_permission_status"))
@@ -198,7 +221,10 @@ final class ChatDiscoverabilityTests: XCTestCase {
         declaredTools.insert(name)
       }
     }
-    let localApiOnlyTools: Set<String> = ["get_local_status", "get_screenshot"]
+    // `look_at_frame` is `get_screenshot`'s alias on the local agent API, and
+    // inherits its reach: the local API is the only adapter either is
+    // advertised to, so neither can appear in a chat adapter's declarations.
+    let localApiOnlyTools: Set<String> = ["get_local_status", "get_screenshot", "look_at_frame"]
 
     for toolName in DesktopCapabilityRegistry.desktopToolNames where !localApiOnlyTools.contains(toolName) {
       XCTAssertTrue(declaredTools.contains(toolName), "Missing agent tool declaration for \(toolName)")

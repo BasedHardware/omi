@@ -4,18 +4,132 @@ import SwiftUI
 
 /// Pure collapsed-body policy so the transcript's truncation contract can be
 /// covered without requiring a running SwiftUI window.
+///
+/// The budget is measured in viewports of rendered text, not characters. Five
+/// hundred characters was five lines: every real answer collapsed, and the
+/// reader clicked "Show more" under nearly everything they asked. A reply may
+/// now fill `viewportHeightsBeforeCollapse` screens before the transcript
+/// offers to fold it, and a reply that long starts folded — restored history
+/// should not be mostly one old answer.
 enum ChatBubbleTruncation {
-  static let threshold = 500
+  /// How many screens of prose a reply may take before it is offered collapsed.
+  static let viewportHeightsBeforeCollapse: CGFloat = 2
+  /// Stands in until the transcript has measured itself, and in tests.
+  static let fallbackViewportHeight: CGFloat = 720
+  static let fallbackColumnWidth: CGFloat = 640
+  /// A collapsed body is never shorter than this many lines, whatever the
+  /// window: a few lines and "Show more" is a teaser, not a message.
+  static let minimumLines = 12
 
-  static func shouldTruncate(text: String, isStreaming: Bool, isExpanded: Bool) -> Bool {
-    !isStreaming && text.count > threshold && !isExpanded
+  /// What the collapsed body may hold, derived from the transcript's geometry.
+  struct Budget: Equatable {
+    /// Rendered lines the collapsed body may take.
+    let lines: Int
+    /// Characters one full line of prose holds at this width.
+    let charactersPerLine: Int
+
+    static let fallback = ChatBubbleTruncation.budget(
+      viewportHeight: fallbackViewportHeight, columnWidth: fallbackColumnWidth)
   }
 
-  static func displayText(_ text: String, isStreaming: Bool, isExpanded: Bool) -> String {
-    guard shouldTruncate(text: text, isStreaming: isStreaming, isExpanded: isExpanded) else {
-      return text
+  /// - Parameters:
+  ///   - viewportHeight: the transcript's visible height; `0` before it is measured.
+  ///   - columnWidth: the message column; `0` before it is measured.
+  ///   - fontScale: the reader's text-size preference, as the prose renders it.
+  static func budget(viewportHeight: CGFloat, columnWidth: CGFloat, fontScale: CGFloat = 1) -> Budget {
+    let fontSize = round(14 * max(fontScale, 0.5))
+    let lineHeight = fontSize * 1.25 + OmiMarkdownContent.chatLineSpacing(fontSize: fontSize)
+    let height = viewportHeight > 0 ? viewportHeight : fallbackViewportHeight
+    let width = columnWidth > 0 ? columnWidth : fallbackColumnWidth
+    // SF at text sizes averages about half an em per glyph, and prose wraps
+    // before the edge, so a line holds a bit less than the width allows.
+    let charactersPerLine = max(20, Int((width / (fontSize * 0.5)) * 0.85))
+    let lines = max(minimumLines, Int((height * viewportHeightsBeforeCollapse) / lineHeight))
+    return Budget(lines: lines, charactersPerLine: charactersPerLine)
+  }
+
+  /// Lines the text takes when wrapped at `charactersPerLine`: each source line
+  /// wraps on its own, and a blank one is the small gap between paragraphs.
+  static func estimatedLines(_ text: String, charactersPerLine: Int) -> Double {
+    text.split(separator: "\n", omittingEmptySubsequences: false).reduce(0) { total, line in
+      total + lineCost(line, charactersPerLine: charactersPerLine)
     }
-    return String(text.prefix(threshold)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+  }
+
+  private static func lineCost(_ line: Substring, charactersPerLine: Int) -> Double {
+    let count = line.trimmingCharacters(in: .whitespaces).count
+    guard count > 0 else { return 0.35 }
+    return max(1, (Double(count) / Double(max(charactersPerLine, 1))).rounded(.up))
+  }
+
+  static func exceedsBudget(_ text: String, budget: Budget) -> Bool {
+    estimatedLines(text, charactersPerLine: budget.charactersPerLine) > Double(budget.lines)
+  }
+
+  /// Whether an answer that has just finished streaming keeps its full body.
+  ///
+  /// Truncation is for restored history — a long transcript should not be
+  /// mostly one old reply. An answer the reader just watched arrive is the
+  /// opposite case: clamping it at the moment it settles takes back everything
+  /// they read, and shrinks the document by thousands of points under a
+  /// transcript that was following the live edge, so the reply they were
+  /// reading is replaced by its own first paragraph. A forty-item list
+  /// collapsed to three the instant it finished.
+  static func settlingKeepsFullBody(wasStreaming: Bool?, isStreaming: Bool?) -> Bool {
+    wasStreaming == true && isStreaming != true
+  }
+
+  static func shouldTruncate(
+    text: String, isStreaming: Bool, isExpanded: Bool, budget: Budget = .fallback
+  ) -> Bool {
+    !isStreaming && !isExpanded && exceedsBudget(text, budget: budget)
+  }
+
+  static func displayText(
+    _ text: String, isStreaming: Bool, isExpanded: Bool, budget: Budget = .fallback
+  ) -> String {
+    guard shouldTruncate(text: text, isStreaming: isStreaming, isExpanded: isExpanded, budget: budget)
+    else { return text }
+    return collapsedPrefix(text, budget: budget) + "…"
+  }
+
+  /// The first `budget.lines` rendered lines, cut at a source line where it can
+  /// be — mid-word cuts read as damage — and by characters only inside a single
+  /// paragraph too long to fit. A fence opened inside the kept prefix is closed
+  /// so the hidden remainder does not turn the ellipsis into code.
+  static func collapsedPrefix(_ text: String, budget: Budget) -> String {
+    var remaining = Double(budget.lines)
+    var kept = [Substring]()
+    var fenceOpen = false
+    for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+      let cost = lineCost(line, charactersPerLine: budget.charactersPerLine)
+      if cost > remaining {
+        let characters = Int(remaining.rounded(.down)) * budget.charactersPerLine
+        if characters > 0 { kept.append(line.prefix(characters)) }
+        break
+      }
+      remaining -= cost
+      if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") { fenceOpen.toggle() }
+      kept.append(line)
+    }
+    var prefix = kept.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    if fenceOpen { prefix += "\n```\n" }
+    return prefix
+  }
+}
+
+// MARK: - Transcript viewport
+
+private struct ChatTranscriptViewportKey: EnvironmentKey {
+  static let defaultValue: CGSize = .zero
+}
+
+extension EnvironmentValues {
+  /// The visible size of the transcript a row is drawn in, so a row can size
+  /// its own collapse budget in screens. `.zero` until the transcript measures.
+  var chatTranscriptViewport: CGSize {
+    get { self[ChatTranscriptViewportKey.self] }
+    set { self[ChatTranscriptViewportKey.self] = newValue }
   }
 }
 
@@ -36,7 +150,11 @@ enum ChatAssistantAnswerText {
       }
     }
 
-    let fallbackText = fallback.trimmingCharacters(in: .whitespacesAndNewlines)
+    // A body that is only the blocks' own degradation has nothing the cards
+    // above it do not already say, so it is not answer text at all.
+    let fallbackText =
+      ChatStructuredFallbackText.bodyIsBlockProjection(text: fallback, contentBlocks: contentBlocks)
+      ? "" : fallback.trimmingCharacters(in: .whitespacesAndNewlines)
     guard
       let lastTool = contentBlocks.lastIndex(where: { block in
         if case .toolCall = block { return true }
@@ -59,6 +177,85 @@ enum ChatAssistantAnswerText {
       return beforeTools.joined(separator: "\n")
     }
     return fallbackText
+  }
+}
+
+/// The unaware-client projection of a turn's structured blocks.
+///
+/// A turn that answers with cards writes no prose, so the runtime synthesizes
+/// one line per block — "Goal - Make Omi Great Again", the bare word "Task"
+/// once per task card — and puts it on the message's ordinary text field. That
+/// is the degradation contract for clients that cannot draw the cards
+/// (`agent/src/runtime/content-block-fallback.ts`). A client that *does* draw
+/// them must recognize its own projection and not print it back underneath the
+/// controls it just rendered. Mobile recognizes it the same way, in
+/// `ServerMessage.textIsStructuredFallback`; the two must agree, so this
+/// mirrors the producer case for case.
+enum ChatStructuredFallbackText {
+  static func bodyIsBlockProjection(text: String, contentBlocks: [ChatContentBlock]) -> Bool {
+    guard !contentBlocks.isEmpty else { return false }
+    let projection = projected(contentBlocks)
+    guard !projection.isEmpty else { return false }
+    let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return body.isEmpty || normalized(body) == normalized(projection)
+  }
+
+  static func projected(_ contentBlocks: [ChatContentBlock]) -> String {
+    contentBlocks.map(line(for:)).filter { !$0.isEmpty }.joined(separator: "\n")
+  }
+
+  private static func normalized(_ value: String) -> String {
+    value.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+  }
+
+  private static func labelled(_ label: String, _ details: String?...) -> String {
+    var unique: [String] = []
+    for detail in details {
+      let trimmed = detail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      guard !trimmed.isEmpty, !unique.contains(trimmed) else { continue }
+      unique.append(trimmed)
+    }
+    return unique.isEmpty ? label : "\(label) - \(unique.joined(separator: " - "))"
+  }
+
+  private static func nonEmpty(_ value: String, or fallback: String) -> String {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? fallback : trimmed
+  }
+
+  private static func line(for block: ChatContentBlock) -> String {
+    switch block {
+    case .text(_, let text):
+      return nonEmpty(text, or: "Message")
+    case .toolCall(_, let name, _, _, let input, let output):
+      return labelled("Tool", name, output ?? input?.summary)
+    case .thinking(_, let text):
+      return labelled("Thinking", text)
+    case .discoveryCard(_, let title, let summary, _):
+      return labelled("Discovery", title, summary)
+    case .questionCard(_, _, let text, _, _, _, _):
+      return nonEmpty(text, or: "Question")
+    case .taskCard:
+      return "Task"
+    case .goalLink(_, _, let summary):
+      return labelled("Goal", summary)
+    case .captureLink(_, _, _, let summary):
+      return labelled("Capture", summary)
+    case .conversationLink(_, _, let summary, _):
+      return labelled("Meeting notes ready", summary)
+    case .memoryLink(_, _, let summary):
+      return labelled("Memory", summary)
+    case .citation(_, let reference):
+      return labelled("Source", reference.title, reference.preview)
+    case .agentSpawn(_, _, _, _, let title, let objective, _):
+      return labelled("Agent started", title, objective)
+    case .agentCompletion(_, _, _, _, let title, _, let output, _):
+      return labelled("Agent completed", title, output)
+    case .memoryReviewCard:
+      return "Memory review"
+    case .followUp(_, let question):
+      return nonEmpty(question, or: "Follow-up")
+    }
   }
 }
 
@@ -271,8 +468,22 @@ struct ProactiveNotificationBadge: Equatable {
       (label, systemImage) = ("Memory", "brain.head.profile")
     case .integration:
       (label, systemImage) = ("Integration", "sparkles.rectangle.stack")
+    case .functional:
+      (label, systemImage) = ("Omi", "bell")
     case .general:
+      // Decode-only: rows journaled before proactive kinds were part of the
+      // continuity key. No producer can reach it (`showNotification` requires a
+      // kind), so this arm is history, not a category.
       (label, systemImage) = ("Notification", "bell")
+    case .trial, .onboarding:
+      // Never journaled, so never rendered as a transcript row. Kept exhaustive
+      // so a future decision to journal them has to state its badge here.
+      (label, systemImage) = ("Omi", "bell")
+    case .dailyRecap:
+      // Never journaled either — the recap's transcript presence is the
+      // dedicated `ChatDailyRecapRow` day boundary, not a bell card. Kept
+      // exhaustive for the same reason.
+      (label, systemImage) = ("Daily Recap", "calendar")
     }
   }
 }
@@ -332,7 +543,14 @@ enum ChatBubbleMetadataBand: Equatable {
 
   static func of(_ message: ChatMessage) -> Self {
     guard message.sender == .ai, !message.isStreaming else { return .hidden }
-    guard !message.copyableText.isEmpty else { return .timestampOnly }
+    guard !message.copyableText.isEmpty else {
+      // **A row whose whole content is a rich block gets no band.** A memory
+      // card carries its own header and time on its face; reserving a strip
+      // for a second timestamp underneath it left the card floating in dead
+      // space with nothing to copy or rate. A row with nothing at all still
+      // keeps its timestamp — that stamp is all it has.
+      return message.contentBlocks.isEmpty ? .timestampOnly : .hidden
+    }
     return .actions
   }
 }
@@ -352,13 +570,27 @@ enum ChatBubbleIdentity {
       && lhs.text == rhs.text
       && lhs.rating == rhs.rating
       && lhs.isSynced == rhs.isSynced
-      && lhs.copyableText == rhs.copyableText
+      // `copyableText` is deliberately absent: it derives purely from
+      // `(contentBlocks, text, isStreaming)` — every one of which this
+      // conjunction already compares — so its term was logically redundant.
+      // It was also ruinous: SwiftUI re-runs this equality for every bubble on
+      // every transcript body pass, and each evaluation re-derived and
+      // whitespace-normalized the full answer text, dominating sampled switch
+      // mounts (~600 ms of a ~1.3 s navigate-to-chat).
       && lhs.displayResources == rhs.displayResources
       && lhs.journalStatus == rhs.journalStatus
       && lhs.citations.map(\.id) == rhs.citations.map(\.id)
       && (lhs.metadata != nil) == (rhs.metadata != nil)
-      && ChatContentBlockCodec.comparisonData(lhs.contentBlocks)
-        == ChatContentBlockCodec.comparisonData(rhs.contentBlocks)
+      // Direct field equality. This used to go through
+      // `ChatContentBlockCodec.comparisonData`, which JSON-encoded BOTH sides of
+      // every unchanged row — two serializations per bubble per transcript
+      // pass — for a comparison the enum can make field-by-field for free.
+      // It is deliberately slightly stricter than the old encode: toolCall
+      // status pairs the encoder collapsed (.running/.slow/.stalled all
+      // persisted as "running") now compare unequal, which only ever forces
+      // an extra re-render mid-turn — the isStreaming guard above already
+      // re-renders through those states anyway.
+      && lhs.contentBlocks == rhs.contentBlocks
       && appIDs.0 == appIDs.1
       && showsOmiMark.0 == showsOmiMark.1
       && isDuplicate.0 == isDuplicate.1
@@ -481,5 +713,29 @@ struct ChatSuggestedTaskRow: View {
         failed = true
       }
     }
+  }
+}
+
+/// **How a turn that stopped mid-sentence tells the reader it was cut off.**
+///
+/// A voice barge-in persists whatever the assistant had said so far with a
+/// terminal `.failed` status. Before this, a truncated answer rendered exactly
+/// like a complete one — "…arrive on Saturday," with nothing to say it was
+/// interrupted — because the only failure affordance was a stamp for a row
+/// with no text at all.
+enum ChatTurnFailurePresentation: Equatable {
+  /// Not a failed assistant row.
+  case none
+  /// The turn failed with nothing to show: the row is the notice.
+  case emptyTurnStamp
+  /// The turn failed after saying something: show it, then mark the cut.
+  case truncatedAnswer
+
+  static func of(_ message: ChatMessage) -> Self {
+    guard message.sender == .ai, !message.isStreaming, message.journalStatus == .failed else {
+      return .none
+    }
+    guard message.text.isEmpty, message.contentBlocks.isEmpty else { return .truncatedAnswer }
+    return .emptyTurnStamp
   }
 }

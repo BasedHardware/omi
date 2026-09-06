@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -54,6 +55,11 @@ class AuthoritativeTriggerSnapshot:
     rows: tuple[AuthoritativeTriggerRow, ...]
     failure_reason: str | None = None
     policy: TriggerRuntimePolicy = DEFAULT_TRIGGER_RUNTIME_POLICY
+    # The reservation store owns the budget window using the profile's IANA
+    # timezone.  Returning the same authority lets clients pace their local
+    # mirror under that window instead of silently using the host timezone.
+    budget_day: str | None = None
+    budget_timezone: str | None = None
 
 
 @dataclass(frozen=True)
@@ -170,6 +176,30 @@ def _empty_watchlist_revision(uid: str, account_generation: int) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _budget_authority(uid: str, at: datetime, client: Any) -> tuple[str, str] | None:
+    """Read the content-free profile timezone used by JIT reservations.
+
+    Some old or synthetic users have no timezone yet.  Keep the snapshot
+    readable for compatibility; the client will use its legacy fallback and
+    the paid reservation remains the final authority.  A malformed timezone is
+    never projected as a plausible value.
+    """
+
+    try:
+        snapshot = client.document(f'users/{uid}').get()
+        payload = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+        timezone_name = payload.get('time_zone') if isinstance(payload, dict) else None
+        if not isinstance(timezone_name, str):
+            return None
+        timezone_name = timezone_name.strip()
+        if not timezone_name:
+            return None
+        zone = ZoneInfo(timezone_name)
+        return at.astimezone(zone).date().isoformat(), timezone_name
+    except Exception:
+        return None
+
+
 def read_authoritative_trigger_snapshot(
     uid: str,
     *,
@@ -200,6 +230,7 @@ def read_authoritative_trigger_snapshot(
         trailing = read_memory_v3_trusted_account_generation(uid=uid, db_client=client)
         if trailing.read_error_reason is not V3AccountGenerationFailureReason.MISSING_STATE_HEAD:
             return AuthoritativeTriggerSnapshot(uid, 0, '', 0, '', False, (), 'generation_unavailable')
+        budget_authority = _budget_authority(uid, datetime.now(timezone.utc), client)
         return AuthoritativeTriggerSnapshot(
             owner_id=uid,
             account_generation=0,
@@ -208,6 +239,8 @@ def read_authoritative_trigger_snapshot(
             snapshot_revision=_empty_watchlist_revision(uid, 0),
             complete=True,
             rows=(),
+            budget_day=budget_authority[0] if budget_authority else None,
+            budget_timezone=budget_authority[1] if budget_authority else None,
         )
     except Exception:
         return AuthoritativeTriggerSnapshot(uid, 0, '', 0, '', False, (), 'generation_unavailable')
@@ -283,6 +316,9 @@ def read_authoritative_trigger_snapshot(
 
     revision = _revision(uid, account_generation, head_commit_id, commit_sequence, items, rows)
     rows.sort(key=lambda row: row.memory_id)
+    # Keep the projected day tied to the same instant as the fenced snapshot.
+    # A second clock read here could straddle a profile-local midnight.
+    budget_authority = _budget_authority(uid, authority_time, client)
     return AuthoritativeTriggerSnapshot(
         owner_id=uid,
         account_generation=account_generation,
@@ -291,6 +327,8 @@ def read_authoritative_trigger_snapshot(
         snapshot_revision=revision,
         complete=True,
         rows=tuple(rows),
+        budget_day=budget_authority[0] if budget_authority else None,
+        budget_timezone=budget_authority[1] if budget_authority else None,
     )
 
 

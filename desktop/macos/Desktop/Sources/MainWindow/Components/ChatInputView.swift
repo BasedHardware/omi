@@ -93,6 +93,9 @@ struct ChatInputView: View {
   @Environment(\.fontScale) private var fontScale
   @State private var isDropTargeted = false
   @State private var hasMarkedText = false
+  /// Caret claim for stray typing — a counter, because a flag already `true` cannot re-claim a caret
+  /// AppKit has since given away (`OmiTextEditor.focusRequest`).
+  @State private var caretClaims = 0
 
   private var hasText: Bool {
     !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -173,8 +176,11 @@ struct ChatInputView: View {
                 textColor: Ink.nsPrimaryOnGlass,
                 textContainerInset: NSSize(width: inputPaddingH, height: inputPaddingV),
                 onSubmit: handleSubmit,
-                onMarkedTextChange: { hasMarkedText = $0 }
+                onMarkedTextChange: { hasMarkedText = $0 },
+                focusRequest: caretClaims
               )
+              // Typing with nothing focused means this composer, not the page's search bar behind it.
+              .straysTypingHere(priority: .primary) { caretClaims &+= 1 }
             }
             .frame(maxHeight: 200)
             .clipped()

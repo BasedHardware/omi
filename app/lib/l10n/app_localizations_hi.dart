@@ -9824,12 +9824,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
-  String get chatScopeToday => 'आज';
-
-  @override
-  String get chatScopeThisWeek => 'इस सप्ताह';
-
-  @override
   String chatScopeAbout(String title) {
     return 'इसके बारे में: $title';
   }
@@ -9892,4 +9886,51 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendant का स्टोरेज भर गया है और यह अभी भी रिकॉर्डिंग मोड में है, इसलिए संग्रहीत ऑडियो स्थानांतरित नहीं किया जा सकता। रिकॉर्डिंग रोकने के लिए Pendant का बटन दबाएँ, फिर दोबारा सिंक करें।';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'रिकॉर्ड नहीं हुआ ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'ट्रांसक्रिप्शन ऑडियो प्राप्त नहीं कर रहा है';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'कार्य';
+
+  @override
+  String get chatBlockGoal => 'लक्ष्य';
+
+  @override
+  String get chatBlockConversation => 'बातचीत';
+
+  @override
+  String get chatBlockMemory => 'स्मृति';
+
+  @override
+  String get chatBlockQuestion => 'प्रश्न';
+
+  @override
+  String get chatBlockOpenInGoals => 'लक्ष्यों में खोलें';
+
+  @override
+  String get chatBlockOpenConversation => 'बातचीत खोलें';
+
+  @override
+  String get chatBlockOpenInMemories => 'स्मृतियों में खोलें';
+
+  @override
+  String get chatBlockUnavailable => 'अब उपलब्ध नहीं है';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'अनुशंसित अगले कदम';
+
+  @override
+  String get couldNotLoadMemories => 'यादें लोड नहीं हो सकीं';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'नॉलेज ग्राफ़ लोड नहीं हो सका';
 }

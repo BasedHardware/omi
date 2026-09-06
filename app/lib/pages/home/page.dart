@@ -869,7 +869,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               },
                             ),
                             if (home.selectedIndex == 0)
-                              Positioned(left: 16, right: 16, bottom: 78, child: _buildChatBar(context)),
+                              Positioned(
+                                left: 16,
+                                right: 16,
+                                bottom: 78,
+                                child: Row(
+                                  children: [
+                                    Expanded(child: _buildChatBar(context)),
+                                    const SizedBox(width: 10),
+                                    const HomeRecordButton(),
+                                  ],
+                                ),
+                              ),
                           ],
                         );
                       },
@@ -895,7 +906,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       onTap: () {
         HapticFeedback.lightImpact();
         PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat');
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)));
+        Navigator.push(context,
+            MaterialPageRoute(fullscreenDialog: true, builder: (context) => const ChatPage(isPivotBottom: false)));
       },
       child: Container(
         height: 62,
@@ -903,21 +915,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(32),
           border: Border.all(color: const Color(0xFF35343B), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.65),
-              blurRadius: 60,
-              spreadRadius: 14,
-              offset: const Offset(0, -16),
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 32,
-              spreadRadius: 6,
-              offset: const Offset(0, -8),
-            ),
-            BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 10, offset: const Offset(0, 2)),
-          ],
         ),
         child: Row(
           children: [
@@ -935,7 +932,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat Voice');
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true)),
+                  MaterialPageRoute(
+                      fullscreenDialog: true,
+                      builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true)),
                 );
               },
               child: Container(

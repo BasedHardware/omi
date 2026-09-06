@@ -99,6 +99,12 @@ extension AppState {
         )
         segmentsToPersist.append(segment)
       } else if sttSession.useLocalSTT {
+        // Echo dedup is local-STT-only by architecture: only the local engine
+        // runs the two capture lanes (mic + system-audio tap) that produce
+        // cross-lane playback duplicates. Cloud mode mixes mic and system into
+        // one mono stream, so the same playback cannot transcribe twice and
+        // is_user comes from backend diarization — running this dedup there
+        // would risk suppressing real speech with no echo to remove.
         switch LocalTranscriptionDuplicatePolicy.decision(for: newSeg, existing: speakerSegments) {
         case .accept:
           appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
@@ -510,7 +516,7 @@ extension AppState {
         stopTranscription()
       }
       Task { @MainActor in
-        ProactiveAssistantsPlugin.shared.stopMonitoring()
+        ProactiveAssistantsPlugin.shared.stopMonitoring(reason: .paywall)
       }
 
     case "translating":

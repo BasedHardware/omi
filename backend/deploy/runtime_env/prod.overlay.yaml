@@ -61,6 +61,10 @@ overlay:
         OMI_LLM_GATEWAY_FEATURE_MODE:
           value: gateway
           category: rollout
+        # Notes v2 prod-on (2026-09-01). Calendar/OCR context stay dev-only below.
+        CONVERSATION_NOTES_V2_ENABLED:
+          value: 'true'
+          category: rollout
         MEMORY_ENABLED:
           value: 'on'
         # Canonical graph and /v3/memories first-page cursors fail closed without this HMAC.
@@ -72,6 +76,14 @@ overlay:
           secret:
             name: prod-omi-backend-secrets
             key: MCP_OAUTH_CLIENTS_JSON
+    pusher:
+      capabilities:
+      - conversation.finalize.persisted
+      - memory.canonical.mutate
+      values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
+      env:
+        MEMORY_ENABLED:
+          value: 'on'
     config_map:
       name: prod-omi-backend-config
       entries:
@@ -100,7 +112,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: dg-nova-3,modulate-velma-2,parakeet
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -132,6 +144,7 @@ overlay:
     - .github/workflows/gcp_memory_maintenance_job.yml
     - .github/workflows/gcp_frame_request_retention_job.yml
     - .github/workflows/gcp_daily_memory_sweep_job.yml
+    - .github/workflows/gcp_day3_reengagement_email_job.yml
     network:
       flags:
         --network:
@@ -197,6 +210,10 @@ overlay:
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
+            category: rollout
+          # Notes v2 prod-on (2026-09-01); keep calendar/OCR context dev-only.
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'true'
             category: rollout
           MEMORY_ENABLED:
             value: 'on'
@@ -403,6 +420,26 @@ overlay:
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS:
             value: '3'
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
+            value: 'false'
+      knowledge-ledger-drain-job:
+        env:
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware
+          MEMORY_ENABLED:
+            value: 'on'
+          KNOWLEDGE_LEDGER_DRAIN_ENABLED:
+            value: 'false'
+          KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
+            value: ''
+      day3-reengagement-email-job:
+        flags:
+          --task-timeout: 900s
+        env:
+          BASE_API_URL:
+            value: https://api.omi.me
+          DAY3_REENGAGEMENT_EMAIL_ENABLED:
+            value: 'false'
+          DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
             value: 'false'
       memory-maintenance-job:
         flags:

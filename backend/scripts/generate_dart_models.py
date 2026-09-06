@@ -8,7 +8,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
@@ -52,8 +52,15 @@ SCHEMA_GROUPS = {
             'ConversationAudioSpan',
             'ConversationAudio',
             'CalendarEventLink',
+            'CalendarCaptureGap',
             'TranscriptMatchSnippet',
             'Conversation',
+            'ProjectedActionItem',
+            'ProjectedSection',
+            'ProjectedEvent',
+            'ProjectedStructure',
+            'ProjectionProvenance',
+            'ClientProcessing',
             'ConversationSearchItem',
             'ConversationTestPromptResponse',
             'MergeConversationsResponse',
@@ -318,6 +325,7 @@ SCHEMA_GROUPS = {
             'DailySummaryUnresolvedQuestion',
             'DailySummaryDecisionMade',
             'DailySummaryKnowledgeNugget',
+            'LearnedMemoryRef',
             'DailySummaryDayStats',
             'DailySummaryLocationPin',
             'DailySummaryResponse',
@@ -336,6 +344,7 @@ SCHEMA_GROUPS = {
             'PricingOption',
             'SubscriptionPlan',
             'PhoneCallQuota',
+            'TranscriptionAllowanceSnapshot',
             'UserSubscriptionResponse',
             'UsageStats',
             'UsageHistoryPoint',
@@ -499,6 +508,55 @@ def is_untyped_object_schema(schema: dict[str, Any]) -> bool:
     return schema.get('type') == 'object' or schema.get('additionalProperties') is not None
 
 
+_SCHEMA_DOC_KEYS = frozenset({'title', 'description', 'example', 'examples', 'deprecated'})
+
+
+def _structural_schema(schema: Any) -> Any:
+    """Drop documentation keys so input/output schema comparison is structural."""
+    if isinstance(schema, dict):
+        canonical: dict[str, Any] = {}
+        for key, value in schema.items():
+            if key in _SCHEMA_DOC_KEYS:
+                continue
+            if key == 'required' and isinstance(value, list):
+                canonical[key] = sorted(value)
+            else:
+                canonical[key] = _structural_schema(value)
+        return canonical
+    if isinstance(schema, list):
+        return [_structural_schema(item) for item in schema]
+    return schema
+
+
+def schemas_structurally_equal(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    return _structural_schema(left) == _structural_schema(right)
+
+
+def resolve_output_ref_alias(schema_name: str, target_schemas: tuple[str, ...], all_schemas: dict[str, Any]) -> str:
+    """Alias ``Name-Output`` to ``Name`` only when the schemas are structurally identical.
+
+    Pydantic/OpenAPI emits a serializer-specific ``-Output`` sibling that is often
+    identical to the input model. Silently decoding it as the input shape is safe
+    only while that remains true; a later required-field or type split would
+    misdecode at runtime. Fail generation when they diverge, naming the schema.
+    """
+    if schema_name in target_schemas or not schema_name.endswith('-Output'):
+        return schema_name
+    base_name = schema_name[: -len('-Output')]
+    if base_name not in target_schemas:
+        return schema_name
+    output_schema = all_schemas.get(schema_name)
+    base_schema = all_schemas.get(base_name)
+    if not isinstance(output_schema, dict) or not isinstance(base_schema, dict):
+        raise ValueError(f'cannot alias OpenAPI schema {schema_name} to {base_name}: missing schema definition')
+    if not schemas_structurally_equal(cast(dict[str, Any], output_schema), cast(dict[str, Any], base_schema)):
+        raise ValueError(
+            f'OpenAPI schema {schema_name} diverges from {base_name}; '
+            'refuse to alias a serializer-specific output onto the input shape'
+        )
+    return base_name
+
+
 def dart_type_for(
     schema: dict[str, Any],
     required: bool,
@@ -546,7 +604,7 @@ def dart_type_for(
     nullable = nullable or not required
     ref = unwrapped.get('$ref')
     if isinstance(ref, str):
-        schema_name = ref.rsplit('/', 1)[-1]
+        schema_name = resolve_output_ref_alias(ref.rsplit('/', 1)[-1], target_schemas, all_schemas)
         if schema_name in target_schemas:
             ref_schema = all_schemas.get(schema_name, {})
             return DartType(

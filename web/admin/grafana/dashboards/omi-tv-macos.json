@@ -322,7 +322,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "Firestore: % of signups with a conversation within 7 days \u2014 the aha moment. Biggest controllable lever \u2014 first-5-minutes work.",
+      "description": "% of first-seen macOS users who asked 2+ questions (typed chat or push-to-talk) after completing onboarding, within their first 48 hours (PostHog; matured signups only). The aha moment \u2014 biggest controllable lever, first-5-minutes work.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -883,10 +883,34 @@
             "axisPlacement": "auto",
             "fillOpacity": 80,
             "lineWidth": 0
-          },
-          "unit": "percent"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Day"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Retention"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "x": 0,
@@ -2572,7 +2596,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Sessions/user"
+              "options": "Queries/user"
             },
             "properties": [
               {
@@ -2656,8 +2680,8 @@
               "type": "timestamp"
             },
             {
-              "selector": "avg_sessions_per_user",
-              "text": "Sessions/user",
+              "selector": "avg_per_user",
+              "text": "Queries/user",
               "type": "number"
             },
             {
@@ -2684,7 +2708,7 @@
         }
       ],
       "timeFrom": "30d",
-      "title": "Floating bar sessions per user  \u00b7  ${d_fbs}",
+      "title": "Floating bar queries per user  \u00b7  ${d_fbs}",
       "type": "timeseries"
     },
     {
@@ -4304,6 +4328,379 @@
       "timeFrom": "60d",
       "title": "Omi Desktop rating \u2014 daily",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "Daily activation rate: % of that day's first-seen macOS users who asked 2+ questions (typed or PTT) after onboarding, within 48h. Only matured days (older than 48h) appear.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#22c55e"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "unit": "percent",
+          "min": 0,
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 95,
+        "w": 24,
+        "h": 7
+      },
+      "id": 996,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "timeseries",
+          "url": "http://127.0.0.1:8899/api/omi/stats/activation?days=60&_tzdates=date",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "daily",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "time",
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
+            },
+            {
+              "selector": "rate",
+              "text": "Activation rate",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "timeFrom": "60d",
+      "title": "Activation rate \u2014 daily",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "Positive share of thumbs on general Omi answers (up / rated, macOS only) \u2014 computed from the chat DB, so ALL history is classified. Text = main-window chat, Voice = floating-bar responses. Excluded: proactive-notification cards (memory/insight/suggestion/task/goal) and mobile ratings. Last bucket is the current partial day.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "All %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#94a3b8",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Text %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3b82f6",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Voice %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#22c55e",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 102,
+        "w": 12,
+        "h": 7
+      },
+      "id": 997,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "timeseries",
+          "url": "http://127.0.0.1:8899/api/omi/stats/message-ratings?days=60&_tzdates=date",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "daily",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "time",
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
+            },
+            {
+              "selector": "all",
+              "text": "All %",
+              "type": "number"
+            },
+            {
+              "selector": "text",
+              "text": "Text %",
+              "type": "number"
+            },
+            {
+              "selector": "voice",
+              "text": "Voice %",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "timeFrom": "60d",
+      "title": "Thumbs positive % \u2014 daily",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "Positive share of thumbs on general Omi answers (up / rated, macOS only) \u2014 computed from the chat DB, so ALL history is classified. Text = main-window chat, Voice = floating-bar responses. Excluded: proactive-notification cards (memory/insight/suggestion/task/goal) and mobile ratings. NYC Monday weeks; last bucket is the partial current week.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "All %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#94a3b8",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Text %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3b82f6",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Voice %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#22c55e",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 102,
+        "w": 12,
+        "h": 7
+      },
+      "id": 998,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "timeseries",
+          "url": "http://127.0.0.1:8899/api/omi/stats/message-ratings?days=60&_tzdates=week",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "weekly",
+          "columns": [
+            {
+              "selector": "week",
+              "text": "time",
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
+            },
+            {
+              "selector": "all",
+              "text": "All %",
+              "type": "number"
+            },
+            {
+              "selector": "text",
+              "text": "Text %",
+              "type": "number"
+            },
+            {
+              "selector": "voice",
+              "text": "Voice %",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "timeFrom": "60d",
+      "title": "Thumbs positive % \u2014 weekly",
+      "type": "timeseries"
     }
   ],
   "refresh": "1h",
@@ -4597,7 +4994,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Ffloating-bar-usage%3Fdays%3D30&root=data&fields=avg_sessions_per_user&agg=avg&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Ffloating-bar-usage%3Fdays%3D30&root=data&fields=avg_per_user&agg=avg&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"

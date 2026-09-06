@@ -22,7 +22,7 @@ from database.webhook_health import (
 from models.conversation import Conversation
 from models.users import WebhookType, webhook_url_from_setting
 from utils.conversations.render import populate_speaker_names, populate_folder_names
-from utils.conversations.render import conversation_to_dict
+from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration
 from utils.executors import db_executor, run_blocking
 from utils.http_client import get_webhook_client, get_webhook_circuit_breaker, get_webhook_semaphore
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind, resolve_client_kind
@@ -33,6 +33,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 _DEV_WEBHOOK_RETRY_DELAYS = (1.0, 5.0, 30.0)
+
+# Deterministic rejections will not change on a repeat post — retrying a 400
+# can only reproduce it. 408 and 429 are the transient 4xx members and keep
+# the retry schedule. (2026-09-05: one dead developer webhook endpoint
+# returning 400 produced 3,282 delivery attempts in 30 minutes because every
+# delivery walked the full 4-attempt schedule.)
+_DEV_WEBHOOK_NO_RETRY_STATUSES = frozenset(range(400, 500)) - {408, 429}
+
+
+def _is_deterministic_rejection(status_code: int) -> bool:
+    return status_code in _DEV_WEBHOOK_NO_RETRY_STATUSES
+
 
 _AUDIO_BYTES_WEBHOOK_CHUNK_SECONDS = 1
 _AUDIO_BYTES_WEBHOOK_MIN_SAMPLE_RATE = 1000
@@ -152,6 +164,12 @@ async def _post_dev_webhook(
                 )
                 return response
             failure_reason = f'HTTP {response.status_code}'
+            if _is_deterministic_rejection(response.status_code):
+                # Deterministic rejection: a repeat post cannot converge. Fall
+                # through to the final handling below (ERROR log + DLQ) with
+                # this response as the last one — DLQ, circuit breaker, and
+                # auto-disable all fire off the final response unchanged.
+                break
         except Exception as e:
             last_response = None
             last_exception = e
@@ -217,7 +235,7 @@ async def _handle_dev_webhook_disable(uid: str, wtype: str, should_disable: bool
 
 
 def _build_conversation_webhook_payload_sync(uid: str, memory: Conversation) -> dict:
-    payload = conversation_to_dict(memory)
+    payload = redact_conversation_for_integration(conversation_to_dict(memory))
     populate_speaker_names(uid, [payload])
     populate_folder_names(uid, [payload])
     return payload

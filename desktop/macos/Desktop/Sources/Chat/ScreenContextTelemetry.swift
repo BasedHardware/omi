@@ -438,6 +438,12 @@ enum ScreenContextWorkContextBuilder {
   static let staleCaptureThresholdSeconds = 60
   static let voiceTurnStaleCaptureThresholdSeconds = 15
 
+  static func isoFormatter(timeZone: TimeZone = .current) -> ISO8601DateFormatter {
+    let formatter = ISO8601DateFormatter()
+    formatter.timeZone = timeZone
+    return formatter
+  }
+
   /// Ambient turns without Screen Recording get this instead of silence, so the
   /// model can explain a blind answer when the question was screen-dependent —
   /// without manufacturing a permission request for generic utterances.
@@ -466,7 +472,7 @@ enum ScreenContextWorkContextBuilder {
     screenRecordingGranted: Bool,
     imageAttached: Bool,
     capturedAt: Date = Date(),
-    formatter: ISO8601DateFormatter = ISO8601DateFormatter()
+    formatter: ISO8601DateFormatter = isoFormatter()
   ) -> [String: Any] {
     guard screenRecordingGranted else {
       return permissionDeniedPayload(windowMinutes: 1)
@@ -519,7 +525,7 @@ enum ScreenContextWorkContextBuilder {
     let includeScreen = parseBool(arguments["include_screen"]) ?? false
     let now = Date()
     let start = now.addingTimeInterval(-Double(minutes) * 60)
-    let formatter = ISO8601DateFormatter()
+    let formatter = isoFormatter()
 
     // Cheap index first. A durable handle (URL / file) already names the document the
     // user means, so answering "where was that pricing doc" must not require Screen
@@ -783,9 +789,10 @@ enum ScreenContextWorkContextBuilder {
     return latestCaptureAgeSeconds > staleThresholdSeconds
   }
 
-  static func freshScreenCapturePayload(now: Date = Date(), formatter: ISO8601DateFormatter = ISO8601DateFormatter())
-    -> [String: Any]?
-  {
+  static func freshScreenCapturePayload(
+    now: Date = Date(),
+    formatter: ISO8601DateFormatter = isoFormatter()
+  ) -> [String: Any]? {
     guard ScreenCaptureManager.captureScreenData() != nil else { return nil }
     return [
       "available": true,

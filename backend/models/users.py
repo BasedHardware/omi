@@ -110,6 +110,11 @@ class ChatUsageQuota(BaseModel):
     percent: float = 0.0
     allowed: bool = True
     reset_at: Optional[int] = None  # unix seconds — start of next month UTC
+    # Catalog exhaustion policy for this plan's chat allocation. True means going
+    # past `limit` accrues a charge instead of blocking, so a client must not
+    # gate sends on `allowed` alone (`utils.subscription.enforce_chat_quota`
+    # returns without raising for these plans).
+    is_overage_plan: bool = False
 
 
 class Subscription(BaseModel):
@@ -179,6 +184,19 @@ class PhoneCallQuota(BaseModel):
     reset_at: Optional[int] = None  # unix seconds — start of next month UTC
 
 
+class TranscriptionAllowanceSnapshot(BaseModel):
+    """The one server answer to which STT mode the client should open (local-models free tier, S16).
+
+    ``mode``: ``managed`` (Omi-billed socket), ``on_device`` (the plan's managed
+    minutes are spent; the local engine is free on every plan), ``blocked``
+    (desktop trial paywall). ``remaining_seconds`` is null when unlimited.
+    """
+
+    mode: str
+    remaining_seconds: Optional[int] = None
+    reason: str = ''
+
+
 class UserSubscriptionResponse(BaseModel):
     subscription: Subscription
     transcription_seconds_used: int
@@ -203,6 +221,9 @@ class UserSubscriptionResponse(BaseModel):
     # — value is `subscription.current_period_end`. Null otherwise. The desktop client
     # uses this to render a "Neo desktop access ends on <date>" notice.
     desktop_grandfather_until: Optional[int] = None
+    # Resolved once per request by `resolve_transcription_allowance`; the same
+    # answer the listen socket enforces. Null only on servers that predate it.
+    transcription_allowance: Optional[TranscriptionAllowanceSnapshot] = None
 
     @field_validator("subscription", mode="before")
     @classmethod

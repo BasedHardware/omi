@@ -219,6 +219,10 @@ struct JITTriggerSnapshot: Codable, Equatable, Sendable {
   let rows: [JITTriggerSnapshotRow]
   let policy: JITTriggerRuntimePolicy
   let failureReason: String?
+  /// The profile timezone and current budget day used by the server's
+  /// reservation transaction. Optional for compatibility with older servers.
+  let budgetDay: String?
+  let budgetTimezone: String?
 
   enum CodingKeys: String, CodingKey {
     case ownerID = "owner_id"
@@ -228,12 +232,15 @@ struct JITTriggerSnapshot: Codable, Equatable, Sendable {
     case snapshotRevision = "snapshot_revision"
     case complete, rows, policy
     case failureReason = "failure_reason"
+    case budgetDay = "budget_day"
+    case budgetTimezone = "budget_timezone"
   }
 
   init(
     ownerID: String, accountGeneration: Int, headCommitID: String, commitSequence: Int,
     snapshotRevision: String, complete: Bool, rows: [JITTriggerSnapshotRow],
-    policy: JITTriggerRuntimePolicy = .ratifiedV1, failureReason: String?
+    policy: JITTriggerRuntimePolicy = .ratifiedV1, failureReason: String?,
+    budgetDay: String? = nil, budgetTimezone: String? = nil
   ) {
     self.ownerID = ownerID
     self.accountGeneration = accountGeneration
@@ -244,6 +251,8 @@ struct JITTriggerSnapshot: Codable, Equatable, Sendable {
     self.rows = rows
     self.policy = policy
     self.failureReason = failureReason
+    self.budgetDay = budgetDay
+    self.budgetTimezone = budgetTimezone
   }
 }
 
@@ -353,6 +362,43 @@ enum JITTriggerMirrorSchema {
         table.column("semanticFingerprint", .text).notNull()
         table.column("updatedAt", .datetime).notNull()
       }
+    }
+    migrator.registerMigration("createJITNanoBillingObservations") { db in
+      try db.create(table: "jit_nano_billing_observations", ifNotExists: true) { table in
+        table.column("observationID", .text).primaryKey()
+        table.column("ownerID", .text).notNull()
+        table.column("accountGeneration", .integer).notNull()
+        table.column("snapshotRevision", .text).notNull()
+        table.column("budgetDay", .text).notNull()
+        table.column("lane", .text).notNull()
+        table.column("contextID", .text).notNull()
+        table.column("candidateID", .text).notNull()
+        table.column("executionID", .text)
+        table.column("dispatch", .text).notNull()
+        table.column("outcome", .text).notNull()
+        table.column("operation", .text).notNull()
+        table.column("requestID", .text)
+        table.column("provider", .text)
+        table.column("providerModel", .text)
+        table.column("providerResponseID", .text)
+        table.column("fallbackClass", .text)
+        table.column("inputTokens", .integer)
+        table.column("outputTokens", .integer)
+        table.column("totalTokens", .integer)
+        table.column("cachedInputTokens", .integer)
+        table.column("cacheWriteTokens", .integer)
+        table.column("usageStatus", .text).notNull()
+        table.column("costStatus", .text).notNull()
+        table.column("estimatedCostMicroUSD", .integer)
+        table.column("providerAttempts", .integer)
+        table.column("attemptIDsJSON", .text).notNull()
+        table.column("updatedAt", .datetime).notNull()
+      }
+      try db.create(
+        index: "idx_jit_nano_billing_execution",
+        on: "jit_nano_billing_observations",
+        columns: ["ownerID", "executionID"],
+        options: [.ifNotExists])
     }
     migrator.registerMigration("addJITTriggerRuntimePolicy") { db in
       let encoder = JSONEncoder()
@@ -711,6 +757,31 @@ actor JITTriggerMirror {
     }
   }
 
+  /// Today's ambient nano spend, read from the same receipts that enforce the
+  /// daily cap, so pacing and the cap can never disagree about what was bought.
+  func ambientNanoUsage(budgetDay: String, now: Date) async throws -> JITAmbientNanoUsage {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw JITTriggerMirrorError.databaseUnavailable }
+    return try await pool.read { db in
+      try Self.ambientNanoUsage(budgetDay: budgetDay, now: now, in: db)
+    }
+  }
+
+  static func ambientNanoUsage(budgetDay: String, now: Date, in db: Database) throws -> JITAmbientNanoUsage {
+    let row = try Row.fetchOne(
+      db,
+      sql: """
+        SELECT COUNT(*) AS used, MAX(updatedAt) AS lastSpentAt
+        FROM jit_trigger_wakeup_receipts
+        WHERE triggerID = 'ambient-nano' AND budgetDay = ?
+          AND (state = 'delivered' OR (state IN ('claimed', 'executing') AND leaseExpiresAt > ?))
+        """,
+      arguments: [budgetDay, now])
+    let used: Int = row?["used"] ?? 0
+    let lastSpentAt: Date? = row?["lastSpentAt"]
+    return JITAmbientNanoUsage(used: used, lastSpentAt: used > 0 ? lastSpentAt : nil)
+  }
+
   func claimAmbientNanoChange(
     contextID: String,
     semanticFingerprint: String,
@@ -818,6 +889,105 @@ actor JITTriggerMirror {
         """,
       arguments: [contextID, semanticFingerprint, now])
     return true
+  }
+
+  /// Store only the bounded nano transport/accounting envelope. Prompt and
+  /// model response content never enters the mirror. Rejected, malformed and
+  /// unknown attempts are retained so a later full run cannot erase the fact
+  /// that a provider request was actually dispatched.
+  func recordNanoBillingObservation(_ observation: JITProactivityNanoBillingObservation) async {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return }
+    try? await pool.write { db in
+      try Self.recordNanoBillingObservation(observation, in: db)
+    }
+  }
+
+  static func recordNanoBillingObservation(
+    _ observation: JITProactivityNanoBillingObservation,
+    in db: Database,
+    now: Date = Date()
+  ) throws {
+    guard !observation.ownerID.isEmpty,
+      observation.accountGeneration >= 0,
+      !observation.snapshotRevision.isEmpty,
+      !observation.budgetDay.isEmpty,
+      !observation.contextID.isEmpty,
+      !observation.candidateID.isEmpty,
+      observation.attemptIDs.count <= 8,
+      observation.attemptIDs.allSatisfy({ !$0.isEmpty && $0.count <= 200 })
+    else { throw JITTriggerMirrorError.malformedRow }
+    let attemptIDsJSON = String(
+      decoding: try JSONSerialization.data(withJSONObject: observation.attemptIDs, options: [.sortedKeys]),
+      as: UTF8.self)
+    try db.execute(
+      sql: """
+        INSERT INTO jit_nano_billing_observations (
+          observationID, ownerID, accountGeneration, snapshotRevision, budgetDay,
+          lane, contextID, candidateID, executionID, dispatch, outcome, operation,
+          requestID, provider, providerModel, providerResponseID, fallbackClass, inputTokens, outputTokens,
+          totalTokens, cachedInputTokens, cacheWriteTokens, usageStatus, costStatus,
+          estimatedCostMicroUSD, providerAttempts, attemptIDsJSON, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(observationID) DO UPDATE SET
+          ownerID = excluded.ownerID,
+          accountGeneration = excluded.accountGeneration,
+          snapshotRevision = excluded.snapshotRevision,
+          budgetDay = excluded.budgetDay,
+          lane = excluded.lane,
+          contextID = excluded.contextID,
+          candidateID = excluded.candidateID,
+          executionID = excluded.executionID,
+          dispatch = excluded.dispatch,
+          outcome = excluded.outcome,
+          operation = excluded.operation,
+          requestID = excluded.requestID,
+          provider = excluded.provider,
+          providerModel = excluded.providerModel,
+          providerResponseID = excluded.providerResponseID,
+          fallbackClass = excluded.fallbackClass,
+          inputTokens = excluded.inputTokens,
+          outputTokens = excluded.outputTokens,
+          totalTokens = excluded.totalTokens,
+          cachedInputTokens = excluded.cachedInputTokens,
+          cacheWriteTokens = excluded.cacheWriteTokens,
+          usageStatus = excluded.usageStatus,
+          costStatus = excluded.costStatus,
+          estimatedCostMicroUSD = excluded.estimatedCostMicroUSD,
+          providerAttempts = excluded.providerAttempts,
+          attemptIDsJSON = excluded.attemptIDsJSON,
+          updatedAt = excluded.updatedAt
+        """,
+      arguments: [
+        observation.observationID,
+        observation.ownerID,
+        observation.accountGeneration,
+        observation.snapshotRevision,
+        observation.budgetDay,
+        observation.lane.rawValue,
+        observation.contextID,
+        observation.candidateID,
+        observation.executionID,
+        observation.dispatch,
+        observation.outcome,
+        observation.operation,
+        observation.requestID,
+        observation.provider,
+        observation.providerModel,
+        observation.providerResponseID,
+        observation.fallbackClass,
+        observation.inputTokens,
+        observation.outputTokens,
+        observation.totalTokens,
+        observation.cachedInputTokens,
+        observation.cacheWriteTokens,
+        observation.usageStatus,
+        observation.costStatus,
+        observation.estimatedCostMicroUSD,
+        observation.providerAttempts,
+        attemptIDsJSON,
+        now,
+      ])
   }
 
   static func claimWakeup(

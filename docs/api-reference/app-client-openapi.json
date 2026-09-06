@@ -4961,6 +4961,53 @@
         "title": "BulkMoveConversationsResponse",
         "type": "object"
       },
+      "CalendarCaptureGap": {
+        "description": "An accepted calendar event with no overlapping kept conversation.",
+        "properties": {
+          "coverage": {
+            "default": "not_captured",
+            "description": "Capture coverage verdict",
+            "title": "Coverage",
+            "type": "string"
+          },
+          "end_time": {
+            "description": "Event end time",
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "event_id": {
+            "description": "Google Calendar event ID",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "start_time": {
+            "description": "Event start time",
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "status": {
+            "default": "confirmed",
+            "description": "Calendar event status",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "description": "Event title/summary",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "title",
+          "start_time",
+          "end_time"
+        ],
+        "title": "CalendarCaptureGap",
+        "type": "object"
+      },
       "CalendarEventLink": {
         "description": "Links a conversation to a Google Calendar event.",
         "properties": {
@@ -6495,6 +6542,11 @@
             "title": "Allowed",
             "type": "boolean"
           },
+          "is_overage_plan": {
+            "default": false,
+            "title": "Is Overage Plan",
+            "type": "boolean"
+          },
           "limit": {
             "anyOf": [
               {
@@ -6736,6 +6788,45 @@
           }
         },
         "title": "ClickUpTeamsResponse",
+        "type": "object"
+      },
+      "ClientProcessing": {
+        "additionalProperties": false,
+        "properties": {
+          "action_items": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectedActionItem"
+            },
+            "maxItems": 25,
+            "title": "Action Items",
+            "type": "array"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProjectionProvenance"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "structure": {
+            "$ref": "#/components/schemas/ProjectedStructure"
+          },
+          "transcript_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Transcript Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "transcript_sha256",
+          "structure",
+          "provenance"
+        ],
+        "title": "ClientProcessing",
         "type": "object"
       },
       "ColdStartSequence": {
@@ -7071,6 +7162,16 @@
             ],
             "title": "Client Platform"
           },
+          "client_processing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientProcessing"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "conversation_audio": {
             "anyOf": [
               {
@@ -7258,6 +7359,16 @@
               }
             ],
             "title": "Processing Memory Id"
+          },
+          "processing_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationProcessingState"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "screenshot_sharing_enabled": {
             "default": true,
@@ -7675,6 +7786,18 @@
             "title": "Attempt Count",
             "type": "integer"
           },
+          "fanout_status": {
+            "default": "unknown",
+            "enum": [
+              "pending",
+              "leased",
+              "completed",
+              "fenced",
+              "unknown"
+            ],
+            "title": "Fanout Status",
+            "type": "string"
+          },
           "job_id": {
             "title": "Job Id",
             "type": "string"
@@ -7699,6 +7822,17 @@
           "terminal": {
             "title": "Terminal",
             "type": "boolean"
+          },
+          "terminal_outcome": {
+            "default": "unknown",
+            "enum": [
+              "success",
+              "failure",
+              "stale",
+              "unknown"
+            ],
+            "title": "Terminal Outcome",
+            "type": "string"
           }
         },
         "required": [
@@ -7875,6 +8009,15 @@
         ],
         "title": "ConversationPhoto",
         "type": "object"
+      },
+      "ConversationProcessingState": {
+        "description": "Why a conversation's ``structured`` holds the §1.7 deterministic minimum.\n\nAbsent (``None``) on every conversation the server enriched itself, and on a\nconversation that already carries a ``client_processing`` projection.\nClients check ``client_processing`` FIRST: a projection that arrives after\nthe terminal persist is stamped by its own ingress mutation and does not\nrewrite this field, so a projected conversation may still read\n``local_pending`` and must render the projection regardless.\n\n- ``local_pending``: a capable client is expected to deliver a projection.\n  Render a spinner with a timeout, not a permanent empty state.\n- ``none``: no projection is coming. Render \"Summary unavailable on the\n  free plan\".",
+        "enum": [
+          "local_pending",
+          "none"
+        ],
+        "title": "ConversationProcessingState",
+        "type": "string"
       },
       "ConversationRecordingResponse": {
         "properties": {
@@ -8114,6 +8257,16 @@
             ],
             "title": "Client Platform"
           },
+          "client_processing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientProcessing"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "conversation_audio": {
             "anyOf": [
               {
@@ -8309,6 +8462,16 @@
               }
             ],
             "title": "Processing Memory Id"
+          },
+          "processing_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationProcessingState"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "screenshot_sharing_enabled": {
             "default": true,
@@ -8754,6 +8917,16 @@
             "description": "Client platform (ios/android/macos)",
             "title": "Client Platform"
           },
+          "client_processing": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler: a malformed projection is dropped and the conversation still lands. Display only — never an input to intelligence.",
+            "title": "Client Processing"
+          },
           "client_session_id": {
             "anyOf": [
               {
@@ -9046,6 +9219,19 @@
           "end"
         ],
         "title": "CreateConversationTranscriptSegment",
+        "type": "object"
+      },
+      "CreateDailySummaryRequest": {
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "title": "CreateDailySummaryRequest",
         "type": "object"
       },
       "CreateFolderRequest": {
@@ -9622,6 +9808,39 @@
             ],
             "title": "Action Items Count"
           },
+          "action_items_created": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Items Created"
+          },
+          "memories_created": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memories Created"
+          },
+          "proactive_moments": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proactive Moments"
+          },
           "total_conversations": {
             "anyOf": [
               {
@@ -9643,6 +9862,17 @@
               }
             ],
             "title": "Total Duration Minutes"
+          },
+          "watching_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watching Minutes"
           }
         },
         "title": "DailySummaryDayStats",
@@ -9893,6 +10123,13 @@
               }
             ],
             "title": "Locations"
+          },
+          "memories_learned": {
+            "items": {
+              "$ref": "#/components/schemas/LearnedMemoryRef"
+            },
+            "title": "Memories Learned",
+            "type": "array"
           },
           "overview": {
             "anyOf": [
@@ -10448,6 +10685,79 @@
           "message"
         ],
         "title": "DeleteLimitlessConversationsResponse",
+        "type": "object"
+      },
+      "DesktopDailyUsageRequest": {
+        "properties": {
+          "client_device_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Client Device Id",
+            "type": "string"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "listening_seconds": {
+            "maximum": 86400.0,
+            "minimum": 0.0,
+            "title": "Listening Seconds",
+            "type": "integer"
+          },
+          "proactive_cards_acted": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Proactive Cards Acted",
+            "type": "integer"
+          },
+          "proactive_cards_shown": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Proactive Cards Shown",
+            "type": "integer"
+          },
+          "ptt_turns": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Ptt Turns",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "watching_seconds": {
+            "maximum": 86400.0,
+            "minimum": 0.0,
+            "title": "Watching Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "timezone",
+          "client_device_id",
+          "watching_seconds",
+          "listening_seconds",
+          "proactive_cards_shown",
+          "proactive_cards_acted",
+          "ptt_turns"
+        ],
+        "title": "DesktopDailyUsageRequest",
+        "type": "object"
+      },
+      "DesktopDailyUsageResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "DesktopDailyUsageResponse",
         "type": "object"
       },
       "DeterministicFacts": {
@@ -12388,6 +12698,23 @@
         "title": "FeedbackCreate",
         "type": "object"
       },
+      "FeedbackReason": {
+        "description": "Structured reason for a thumbs-down.\n\nThe first five match the values the mobile client has always sent to\n`POST /v1/users/analytics/chat_message`; keeping them identical means the\nledger and the legacy `analytics` rows stay comparable. The remaining five\nare desktop-only reason chips for proactive-notification cards (focus,\ninsight, task, memory) — a distinct taxonomy from a chat answer's, added\nalongside the mobile five rather than folded into them so neither surface's\ncategories are diluted by the other's.",
+        "enum": [
+          "too_verbose",
+          "incorrect_or_hallucination",
+          "not_helpful_or_irrelevant",
+          "didnt_follow_instructions",
+          "other",
+          "not_about_me",
+          "already_done",
+          "wrong_facts",
+          "bad_timing",
+          "not_useful"
+        ],
+        "title": "FeedbackReason",
+        "type": "string"
+      },
       "FeedbackRecord": {
         "additionalProperties": false,
         "properties": {
@@ -13454,6 +13781,18 @@
       },
       "Geolocation": {
         "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
           "address": {
             "anyOf": [
               {
@@ -13464,6 +13803,46 @@
               }
             ],
             "title": "Address"
+          },
+          "altitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude"
+          },
+          "capture_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "current_position",
+                  "last_known_position",
+                  "manual",
+                  "integration"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Source"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           },
           "google_place_id": {
             "anyOf": [
@@ -13510,6 +13889,18 @@
       "GeolocationInput": {
         "description": "Released wire contract for coordinates accepted at legacy API boundaries.\n\nBounds are enforced before any value is cached, geocoded, or persisted. Keeping\nthis transport shape broad preserves clients released before the bound contract\nexisted, while ``Geolocation`` remains the only usable server-side value.",
         "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
           "address": {
             "anyOf": [
               {
@@ -13520,6 +13911,46 @@
               }
             ],
             "title": "Address"
+          },
+          "altitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude"
+          },
+          "capture_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "current_position",
+                  "last_known_position",
+                  "manual",
+                  "integration"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Source"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           },
           "google_place_id": {
             "anyOf": [
@@ -14474,6 +14905,12 @@
       "GoogleCalendarEvent": {
         "description": "Response model for a Google Calendar event.",
         "properties": {
+          "all_day": {
+            "default": false,
+            "description": "True when the event has a date but no time",
+            "title": "All Day",
+            "type": "boolean"
+          },
           "attendee_emails": {
             "default": [],
             "description": "List of attendee email addresses",
@@ -14491,6 +14928,12 @@
             },
             "title": "Attendees",
             "type": "array"
+          },
+          "description": {
+            "default": "",
+            "description": "Event description, truncated for transport",
+            "title": "Description",
+            "type": "string"
           },
           "end_time": {
             "description": "Event end time",
@@ -14514,6 +14957,12 @@
             ],
             "description": "Link to open event in Google Calendar",
             "title": "Html Link"
+          },
+          "location": {
+            "default": "",
+            "description": "Event location",
+            "title": "Location",
+            "type": "string"
           },
           "start_time": {
             "description": "Event start time",
@@ -15119,6 +15568,17 @@
       "JITRolloutDecisionEnvelope": {
         "additionalProperties": false,
         "properties": {
+          "budget_contract_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Contract Version"
+          },
           "cache_hit": {
             "title": "Cache Hit",
             "type": "boolean"
@@ -15384,6 +15844,31 @@
             "title": "Account Generation",
             "type": "integer"
           },
+          "budget_day": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Day"
+          },
+          "budget_timezone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Timezone"
+          },
           "commit_sequence": {
             "minimum": 0.0,
             "title": "Commit Sequence",
@@ -15567,6 +16052,42 @@
           "edges"
         ],
         "title": "KnowledgeGraphResponse",
+        "type": "object"
+      },
+      "LearnedMemoryRef": {
+        "description": "One memory the day actually produced, addressed by its canonical id.\n\nThis is the identity `knowledge_nuggets` never had: a client can render a\nnative review card and vote or correct through the existing memory\nendpoints. Review state (`user_review`, `edited`) is deliberately absent —\nclients read it live from the memory so a vote on one device shows on the\nother.",
+        "properties": {
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "category": {
+            "default": "",
+            "title": "Category",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "memory_id": {
+            "title": "Memory Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memory_id",
+          "content"
+        ],
+        "title": "LearnedMemoryRef",
         "type": "object"
       },
       "LedgerMirrorAliasEnvelope": {
@@ -15947,6 +16468,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "dead_letter_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dead Letter Reason"
+          },
           "delivered_at": {
             "anyOf": [
               {
@@ -15969,12 +16501,59 @@
             "title": "Delivery State",
             "type": "string"
           },
+          "fetch_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Fetch Count",
+            "type": "integer"
+          },
           "intent_id": {
             "maxLength": 128,
             "minLength": 1,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Intent Id",
             "type": "string"
+          },
+          "last_fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fetched At"
+          },
+          "last_rejection_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Rejection At"
+          },
+          "last_rejection_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Rejection Code"
+          },
+          "materialization_attempts": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Materialization Attempts",
+            "type": "integer"
           },
           "materialization_receipt_id": {
             "anyOf": [
@@ -16188,6 +16767,236 @@
         "title": "LocationContextConsentUpdate",
         "type": "object"
       },
+      "MaterializableProactiveIntent": {
+        "additionalProperties": false,
+        "description": "Wire-safe intent state; terminal dead letters never leave the store.",
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "blocks": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "captureLink": "#/components/schemas/CaptureLinkSpec",
+                  "conversationLink": "#/components/schemas/ConversationLinkSpec",
+                  "goalLink": "#/components/schemas/GoalLinkSpec",
+                  "memoryLink": "#/components/schemas/MemoryLinkSpec",
+                  "questionCard": "#/components/schemas/QuestionCardSpec",
+                  "taskCard": "#/components/schemas/TaskCardSpec"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/QuestionCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/TaskCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/GoalLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/CaptureLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/ConversationLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/MemoryLinkSpec"
+                }
+              ]
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "cold_start_sequence_terminal_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal Receipt Id"
+          },
+          "cold_start_sequence_terminal_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "completed",
+                  "abandoned"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal State"
+          },
+          "continuity_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Continuity Key",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dead_letter_reason": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[a-z0-9_:.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dead Letter Reason"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "delivery_state": {
+            "default": "ready",
+            "enum": [
+              "ready",
+              "pending_kernel_receipt",
+              "delivered"
+            ],
+            "title": "Delivery State",
+            "type": "string"
+          },
+          "fetch_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Fetch Count",
+            "type": "integer"
+          },
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "last_fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fetched At"
+          },
+          "last_rejection_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Rejection At"
+          },
+          "last_rejection_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z0-9_]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Rejection Code"
+          },
+          "materialization_attempts": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Materialization Attempts",
+            "type": "integer"
+          },
+          "materialization_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materialization Receipt Id"
+          },
+          "source": {
+            "enum": [
+              "daily_opener",
+              "capture_arrival",
+              "deferral_reraise",
+              "agent_judgment",
+              "cold_start_rich",
+              "cold_start_sparse"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatFirstSubject"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "intent_id",
+          "continuity_key",
+          "account_generation",
+          "source",
+          "blocks",
+          "created_at"
+        ],
+        "title": "MaterializableProactiveIntent",
+        "type": "object"
+      },
       "MaterializePromptsRequest": {
         "additionalProperties": false,
         "properties": {
@@ -16203,6 +17012,14 @@
             "minimum": 0.0,
             "title": "Control Generation",
             "type": "integer"
+          },
+          "deferrals": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationDeferral"
+            },
+            "maxItems": 16,
+            "title": "Deferrals",
+            "type": "array"
           },
           "initial_page_loaded": {
             "default": false,
@@ -16222,6 +17039,14 @@
             },
             "maxItems": 16,
             "title": "Receipts",
+            "type": "array"
+          },
+          "rejections": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationRejection"
+            },
+            "maxItems": 16,
+            "title": "Rejections",
             "type": "array"
           },
           "source_surface": {
@@ -16248,9 +17073,23 @@
         "properties": {
           "intents": {
             "items": {
-              "$ref": "#/components/schemas/ProactiveIntent"
+              "$ref": "#/components/schemas/MaterializableProactiveIntent"
             },
             "title": "Intents",
+            "type": "array"
+          },
+          "receipt_outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationReceiptOutcome"
+            },
+            "title": "Receipt Outcomes",
+            "type": "array"
+          },
+          "rejection_outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationRejectionOutcome"
+            },
+            "title": "Rejection Outcomes",
             "type": "array"
           }
         },
@@ -16900,6 +17739,17 @@
             "title": "Arguments",
             "type": "object"
           },
+          "belief_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Belief Class"
+          },
           "capture_confidence": {
             "anyOf": [
               {
@@ -16933,6 +17783,17 @@
             ],
             "description": "Expected durability horizon for the fact",
             "title": "Durability"
+          },
+          "half_life_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Half Life Days"
           },
           "headline": {
             "anyOf": [
@@ -16989,6 +17850,16 @@
             "description": "Stable entity id for who/what the fact is about",
             "title": "Subject Entity Id"
           },
+          "subject_scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemorySubjectScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "tags": {
             "description": "The tags of the memory and learning",
             "items": {
@@ -17004,6 +17875,18 @@
             },
             "title": "Uncertainty Reasons",
             "type": "array"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
           },
           "veracity": {
             "anyOf": [
@@ -17154,6 +18037,29 @@
             "title": "Arguments",
             "type": "object"
           },
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "belief_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Belief Class"
+          },
           "body": {
             "anyOf": [
               {
@@ -17226,6 +18132,28 @@
             "title": "Curation Weight",
             "type": "integer"
           },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "currency_band": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Band"
+          },
           "data_protection_level": {
             "anyOf": [
               {
@@ -17260,6 +18188,17 @@
             },
             "title": "Evidence",
             "type": "array"
+          },
+          "half_life_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Half Life Days"
           },
           "headline": {
             "anyOf": [
@@ -17543,6 +18482,18 @@
               }
             ],
             "title": "Valid At"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
           },
           "veracity": {
             "anyOf": [
@@ -19647,115 +20598,16 @@
         "title": "PrivateCloudSyncResponse",
         "type": "object"
       },
-      "ProactiveIntent": {
+      "ProactiveMaterializationDeferral": {
         "additionalProperties": false,
-        "description": "A server-side instruction, not a Chat transcript row.\n\nThe local desktop kernel is the sole writer of the visible assistant turn.\nThis record remains deliverable until that kernel has committed and\nacknowledged its stable ``intent_id``; cold-start intents make that\nexplicit as ``pending_kernel_receipt``.",
+        "description": "A fetched intent the kernel intentionally left behind a transcript tail.",
         "properties": {
-          "account_generation": {
-            "minimum": 0.0,
-            "title": "Account Generation",
-            "type": "integer"
-          },
-          "blocks": {
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "captureLink": "#/components/schemas/CaptureLinkSpec",
-                  "conversationLink": "#/components/schemas/ConversationLinkSpec",
-                  "goalLink": "#/components/schemas/GoalLinkSpec",
-                  "memoryLink": "#/components/schemas/MemoryLinkSpec",
-                  "questionCard": "#/components/schemas/QuestionCardSpec",
-                  "taskCard": "#/components/schemas/TaskCardSpec"
-                },
-                "propertyName": "type"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/QuestionCardSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/TaskCardSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/GoalLinkSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/CaptureLinkSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/ConversationLinkSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/MemoryLinkSpec"
-                }
-              ]
-            },
-            "maxItems": 8,
-            "minItems": 1,
-            "title": "Blocks",
-            "type": "array"
-          },
-          "cold_start_sequence_terminal_receipt_id": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "minLength": 1,
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cold Start Sequence Terminal Receipt Id"
-          },
-          "cold_start_sequence_terminal_state": {
-            "anyOf": [
-              {
-                "enum": [
-                  "completed",
-                  "abandoned"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cold Start Sequence Terminal State"
-          },
-          "continuity_key": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-            "title": "Continuity Key",
-            "type": "string"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "delivered_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Delivered At"
-          },
-          "delivery_state": {
-            "default": "ready",
+          "code": {
             "enum": [
-              "ready",
-              "pending_kernel_receipt",
-              "delivered"
+              "tail_question",
+              "streaming_tail"
             ],
-            "title": "Delivery State",
+            "title": "Code",
             "type": "string"
           },
           "intent_id": {
@@ -19764,53 +20616,13 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Intent Id",
             "type": "string"
-          },
-          "materialization_receipt_id": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "minLength": 1,
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Materialization Receipt Id"
-          },
-          "source": {
-            "enum": [
-              "daily_opener",
-              "capture_arrival",
-              "deferral_reraise",
-              "agent_judgment",
-              "cold_start_rich",
-              "cold_start_sparse"
-            ],
-            "title": "Source",
-            "type": "string"
-          },
-          "subject": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ChatFirstSubject"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "required": [
           "intent_id",
-          "continuity_key",
-          "account_generation",
-          "source",
-          "blocks",
-          "created_at"
+          "code"
         ],
-        "title": "ProactiveIntent",
+        "title": "ProactiveMaterializationDeferral",
         "type": "object"
       },
       "ProactiveMaterializationReceipt": {
@@ -19837,6 +20649,102 @@
           "receipt_id"
         ],
         "title": "ProactiveMaterializationReceipt",
+        "type": "object"
+      },
+      "ProactiveMaterializationReceiptOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "acknowledged",
+              "already_terminal",
+              "missing",
+              "conflict",
+              "generation_mismatch"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "outcome"
+        ],
+        "title": "ProactiveMaterializationReceiptOutcome",
+        "type": "object"
+      },
+      "ProactiveMaterializationRejection": {
+        "additionalProperties": false,
+        "description": "Content-free typed rejection emitted by the local kernel.",
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9_]+$",
+            "title": "Code",
+            "type": "string"
+          },
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "required": [
+          "intent_id",
+          "code"
+        ],
+        "title": "ProactiveMaterializationRejection",
+        "type": "object"
+      },
+      "ProactiveMaterializationRejectionOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "recorded",
+              "absorbed",
+              "generation_mismatch",
+              "malformed",
+              "missing"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "outcome"
+        ],
+        "title": "ProactiveMaterializationRejectionOutcome",
         "type": "object"
       },
       "ProactiveNotification": {
@@ -19867,6 +20775,16 @@
                 "type": "null"
               }
             ]
+          },
+          "client_processing": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler so a malformed projection cannot 422 a finished recording. Hash-bound to the persisted transcript. Display only — never an input to intelligence.",
+            "title": "Client Processing"
           }
         },
         "title": "ProcessConversationRequest",
@@ -19982,6 +20900,151 @@
           }
         },
         "title": "ProgressExtractUpdateResponse",
+        "type": "object"
+      },
+      "ProjectedActionItem": {
+        "additionalProperties": false,
+        "description": "Display-only action item. No ids, owners, due dates, or capture fields.",
+        "properties": {
+          "completed": {
+            "default": false,
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "ProjectedActionItem",
+        "type": "object"
+      },
+      "ProjectedEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "duration": {
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "Duration",
+            "type": "integer"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "start",
+          "duration"
+        ],
+        "title": "ProjectedEvent",
+        "type": "object"
+      },
+      "ProjectedSection": {
+        "additionalProperties": false,
+        "properties": {
+          "body_markdown": {
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "heading": {
+            "title": "Heading",
+            "type": "string"
+          }
+        },
+        "required": [
+          "heading",
+          "body_markdown"
+        ],
+        "title": "ProjectedSection",
+        "type": "object"
+      },
+      "ProjectedStructure": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/CategoryEnum",
+            "default": "other"
+          },
+          "emoji": {
+            "default": "🧠",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectedEvent"
+            },
+            "maxItems": 12,
+            "title": "Events",
+            "type": "array"
+          },
+          "overview": {
+            "default": "",
+            "title": "Overview",
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectedSection"
+            },
+            "maxItems": 12,
+            "title": "Sections",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "ProjectedStructure",
+        "type": "object"
+      },
+      "ProjectionProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "device_class": {
+            "title": "Device Class",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "runtime": {
+            "title": "Runtime",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_id",
+          "runtime",
+          "device_class",
+          "generated_at"
+        ],
+        "title": "ProjectionProvenance",
         "type": "object"
       },
       "PublicFairUseCaseStatusResponse": {
@@ -20128,6 +21191,18 @@
       },
       "RateMessageRequest": {
         "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
           "rating": {
             "anyOf": [
               {
@@ -20138,6 +21213,16 @@
               }
             ],
             "title": "Rating"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedbackReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "RateMessageRequest",
@@ -21864,6 +22949,25 @@
         "title": "ShareTasksRequest",
         "type": "object"
       },
+      "SharedActionItem": {
+        "description": "Public share projection of an action item.",
+        "properties": {
+          "completed": {
+            "default": false,
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "SharedActionItem",
+        "type": "object"
+      },
       "SharedActionItemPreview": {
         "properties": {
           "description": {
@@ -21913,6 +23017,31 @@
           "count"
         ],
         "title": "SharedActionItemsResponse",
+        "type": "object"
+      },
+      "SharedAppResult": {
+        "properties": {
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "app_id",
+          "content"
+        ],
+        "title": "SharedAppResult",
         "type": "object"
       },
       "SharedAssistantSettings": {
@@ -22026,126 +23155,19 @@
         "type": "object"
       },
       "SharedConversationResponse": {
-        "additionalProperties": true,
+        "description": "Public unauthenticated shared-conversation payload. Only declared fields are returned.",
         "properties": {
-          "app_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "App Id"
-          },
           "apps_results": {
-            "default": [],
             "items": {
-              "$ref": "#/components/schemas/AppResult"
+              "$ref": "#/components/schemas/SharedAppResult"
             },
             "title": "Apps Results",
             "type": "array"
-          },
-          "audio_files": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/AudioFile"
-            },
-            "title": "Audio Files",
-            "type": "array"
-          },
-          "calendar_event": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/CalendarEventLink"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "call_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Twilio call SID for phone call conversations",
-            "title": "Call Id"
-          },
-          "client_device_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Device Id"
-          },
-          "client_platform": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Platform"
-          },
-          "conversation_audio": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ConversationAudio"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
-          },
-          "data_protection_level": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data Protection Level"
-          },
-          "deferred": {
-            "default": false,
-            "title": "Deferred",
-            "type": "boolean"
-          },
-          "discarded": {
-            "default": false,
-            "title": "Discarded",
-            "type": "boolean"
-          },
-          "external_data": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "External Data"
           },
           "finished_at": {
             "anyOf": [
@@ -22159,41 +23181,9 @@
             ],
             "title": "Finished At"
           },
-          "folder_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "ID of the folder this conversation belongs to",
-            "title": "Folder Id"
-          },
-          "geolocation": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Geolocation"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "id": {
             "title": "Id",
             "type": "string"
-          },
-          "imported": {
-            "default": false,
-            "title": "Imported",
-            "type": "boolean"
-          },
-          "is_locked": {
-            "default": false,
-            "title": "Is Locked",
-            "type": "boolean"
           },
           "language": {
             "anyOf": [
@@ -22206,99 +23196,19 @@
             ],
             "title": "Language"
           },
-          "meeting_dedup_speech_s": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Meeting Dedup Speech S"
-          },
-          "meeting_duration_s": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Meeting Duration S"
-          },
-          "meeting_treatment_eligible": {
-            "default": false,
-            "title": "Meeting Treatment Eligible",
-            "type": "boolean"
-          },
-          "meeting_treatment_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Meeting Treatment Reason"
-          },
           "people": {
-            "default": [],
             "items": {
-              "$ref": "#/components/schemas/Person"
+              "$ref": "#/components/schemas/SharedPerson"
             },
             "title": "People",
             "type": "array"
           },
-          "photos": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/ConversationPhoto"
-            },
-            "title": "Photos",
-            "type": "array"
-          },
           "plugins_results": {
-            "default": [],
             "items": {
-              "$ref": "#/components/schemas/PluginResult"
+              "$ref": "#/components/schemas/SharedPluginResult"
             },
             "title": "Plugins Results",
             "type": "array"
-          },
-          "private_cloud_sync_enabled": {
-            "default": false,
-            "title": "Private Cloud Sync Enabled",
-            "type": "boolean"
-          },
-          "processing_conversation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Processing Conversation Id"
-          },
-          "processing_memory_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Processing Memory Id"
-          },
-          "screenshot_sharing_enabled": {
-            "default": true,
-            "title": "Screenshot Sharing Enabled",
-            "type": "boolean"
           },
           "source": {
             "anyOf": [
@@ -22310,11 +23220,6 @@
               }
             ],
             "default": "omi"
-          },
-          "starred": {
-            "default": false,
-            "title": "Starred",
-            "type": "boolean"
           },
           "started_at": {
             "anyOf": [
@@ -22340,52 +23245,14 @@
             "default": "completed"
           },
           "structured": {
-            "$ref": "#/components/schemas/Structured"
-          },
-          "suggested_summarization_apps": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Suggested Summarization Apps",
-            "type": "array"
+            "$ref": "#/components/schemas/SharedStructured"
           },
           "transcript_segments": {
-            "default": [],
             "items": {
-              "$ref": "#/components/schemas/TranscriptSegment"
+              "$ref": "#/components/schemas/SharedTranscriptSegment"
             },
             "title": "Transcript Segments",
             "type": "array"
-          },
-          "transcript_segments_compressed": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": false,
-            "title": "Transcript Segments Compressed"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          },
-          "uses_custom_stt": {
-            "default": false,
-            "title": "Uses Custom Stt",
-            "type": "boolean"
           },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
@@ -22400,6 +23267,199 @@
           "structured"
         ],
         "title": "SharedConversationResponse",
+        "type": "object"
+      },
+      "SharedEvent": {
+        "description": "Public share projection of a structured event.",
+        "properties": {
+          "created": {
+            "default": false,
+            "title": "Created",
+            "type": "boolean"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "duration": {
+            "default": 30,
+            "title": "Duration",
+            "type": "integer"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "start"
+        ],
+        "title": "SharedEvent",
+        "type": "object"
+      },
+      "SharedPerson": {
+        "description": "Speaker-label projection for a shared conversation.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "SharedPerson",
+        "type": "object"
+      },
+      "SharedPluginResult": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "plugin_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Id"
+          }
+        },
+        "required": [
+          "plugin_id",
+          "content"
+        ],
+        "title": "SharedPluginResult",
+        "type": "object"
+      },
+      "SharedStructured": {
+        "description": "Public share projection of conversation structure.",
+        "properties": {
+          "action_items": {
+            "items": {
+              "$ref": "#/components/schemas/SharedActionItem"
+            },
+            "title": "Action Items",
+            "type": "array"
+          },
+          "category": {
+            "$ref": "#/components/schemas/CategoryEnum",
+            "default": "other"
+          },
+          "emoji": {
+            "default": "🧠",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/SharedEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "overview": {
+            "default": "",
+            "title": "Overview",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "SharedStructured",
+        "type": "object"
+      },
+      "SharedTranscriptSegment": {
+        "description": "Public share projection of a transcript turn.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "number"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "is_user": {
+            "title": "Is User",
+            "type": "boolean"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "SPEAKER_00",
+            "title": "Speaker"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "start": {
+            "title": "Start",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "is_user",
+          "start",
+          "end"
+        ],
+        "title": "SharedTranscriptSegment",
         "type": "object"
       },
       "ShortlistEligibility": {
@@ -25452,6 +26512,36 @@
         "title": "TranscriptSegment",
         "type": "object"
       },
+      "TranscriptionAllowanceSnapshot": {
+        "description": "The one server answer to which STT mode the client should open (local-models free tier, S16).\n\n``mode``: ``managed`` (Omi-billed socket), ``on_device`` (the plan's managed\nminutes are spent; the local engine is free on every plan), ``blocked``\n(desktop trial paywall). ``remaining_seconds`` is null when unlimited.",
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "remaining_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Seconds"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "TranscriptionAllowanceSnapshot",
+        "type": "object"
+      },
       "TranscriptionErrorDetail": {
         "properties": {
           "error": {
@@ -27231,6 +28321,16 @@
           },
           "subscription": {
             "$ref": "#/components/schemas/Subscription"
+          },
+          "transcription_allowance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptionAllowanceSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "transcription_seconds_limit": {
             "title": "Transcription Seconds Limit",
@@ -31283,19 +32383,19 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -31546,19 +32646,19 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -31634,19 +32734,19 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -34546,6 +35646,112 @@
         "summary": "Get App Subscription"
       }
     },
+    "/v1/calendar/capture-gaps": {
+      "get": {
+        "description": "Accepted calendar events in [start, end] with no overlapping non-discarded conversation.\n\nThe honesty surface for the Conversations list (SCA-381): what was booked\nbut never recorded. Read-only against Google Calendar; it never creates or\nmutates conversations. Declined, cancelled, tentative, and all-day / >8h\nblocks are excluded by ``select_capture_gaps``.",
+        "operationId": "get_calendar_capture_gaps_v1_calendar_capture_gaps_get",
+        "parameters": [
+          {
+            "description": "Window start (ISO format, inclusive)",
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "description": "Window start (ISO format, inclusive)",
+              "format": "date-time",
+              "title": "Start",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Window end (ISO format, inclusive)",
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "description": "Window end (ISO format, inclusive)",
+              "format": "date-time",
+              "title": "End",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarCaptureGap"
+                  },
+                  "title": "Response Get Calendar Capture Gaps V1 Calendar Capture Gaps Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Calendar Capture Gaps",
+        "tags": [
+          "google_calendar"
+        ]
+      }
+    },
     "/v1/calendar/google/events": {
       "get": {
         "description": "List Google Calendar events within a time range.\n\nUsed by the event picker UI when manually linking a conversation to a calendar event.",
@@ -34615,7 +35821,7 @@
             "schema": {
               "default": 20,
               "description": "Maximum number of events to return",
-              "maximum": 100,
+              "maximum": 500,
               "minimum": 1,
               "title": "Max Results",
               "type": "integer"
@@ -54957,7 +56163,7 @@
     },
     "/v1/users/analytics/chat_message": {
       "post": {
-        "description": "Submit feedback rating for a chat message.\n\nArgs:\n    message_id: ID of the message being rated\n    value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = neutral/removed)\n    reason: Optional reason for thumbs down. Valid values:\n        - 'too_verbose': Response was too long or wordy\n        - 'incorrect_or_hallucination': Response contained incorrect information\n        - 'not_helpful_or_irrelevant': Response didn't address the question\n        - 'didnt_follow_instructions': Response didn't follow user instructions\n        - 'other': Other reason",
+        "description": "Submit feedback rating for a chat message.\n\nArgs:\n    message_id: ID of the message being rated\n    value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = user cleared)\n    reason: Optional reason for thumbs down. Enum keys only.",
         "operationId": "set_chat_message_analytics_v1_users_analytics_chat_message_post",
         "parameters": [
           {
@@ -55575,6 +56781,92 @@
           }
         ],
         "summary": "Get Daily Summaries",
+        "tags": [
+          "v1"
+        ]
+      },
+      "post": {
+        "description": "Generate (or return) a daily summary for a local calendar date.\n\nNo FCM token is required and no push is sent — the caller is looking at the\nscreen. A record already stored for that date is returned without spending\nLLM tokens.",
+        "operationId": "create_user_daily_summary_v1_users_daily_summaries_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDailySummaryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailySummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Create User Daily Summary",
         "tags": [
           "v1"
         ]
@@ -56277,6 +57569,93 @@
           }
         ],
         "summary": "Delete Account",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/desktop-usage/daily": {
+      "post": {
+        "operationId": "record_desktop_daily_usage_v1_users_desktop_usage_daily_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopDailyUsageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopDailyUsageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Record Desktop Daily Usage",
         "tags": [
           "v1"
         ]
@@ -58069,7 +59448,7 @@
     },
     "/v1/users/me/subscription": {
       "get": {
-        "description": "Gets the user's subscription plan and usage.",
+        "description": "Gets the user's subscription plan and usage, plus the one transcription-allowance answer.",
         "operationId": "get_user_subscription_endpoint_v1_users_me_subscription_get",
         "parameters": [
           {
@@ -63774,19 +65153,19 @@
           },
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -64117,6 +65496,22 @@
                 }
               ],
               "title": "X-Omi-Sync-Capture-Manifest"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Conversation-Geolocation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Conversation-Geolocation"
             }
           },
           {

@@ -147,7 +147,7 @@ class _DailySummaryCardMapState extends State<_DailySummaryCardMap> {
             width: 22,
             height: 22,
             child: Container(
-              decoration: const BoxDecoration(color: Colors.deepPurple, shape: BoxShape.circle),
+              decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
               child: const Icon(Icons.location_on, color: Colors.white, size: 13),
             ),
           ),

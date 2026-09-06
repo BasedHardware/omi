@@ -131,6 +131,10 @@ async function waitForSend(): Promise<void> {
 }
 
 const emit = (e: MainChatEvent): void => eventCb?.(e)
+const acceptHosted = (requestId: string, runId: string): void => {
+  emit({ type: 'accepted', requestId, runId })
+  emit({ type: 'hosted_request_started', requestId, runId })
+}
 const lastAssistant = (
   msgs: { role: string; content: string }[]
 ): { content: string } | undefined => [...msgs].reverse().find((m) => m.role === 'assistant')
@@ -155,7 +159,7 @@ describe('useChat — pi_mono engine', () => {
       p = result.current.send('hello')
       await waitForSend()
       const rid = sendArgs!.requestId
-      emit({ type: 'accepted', requestId: rid, runId: 'run-1' })
+      acceptHosted(rid, 'run-1')
       emit({ type: 'text_delta', requestId: rid, runId: 'run-1', text: 'Hi ' })
       emit({ type: 'text_delta', requestId: rid, runId: 'run-1', text: 'there' })
       await flush()
@@ -193,6 +197,7 @@ describe('useChat — pi_mono engine', () => {
     expect('sessionId' in aiReq).toBe(false)
     expect(JSON.parse(String(aiReq.metadata))).toEqual({ evidence })
     expect(persisted.at(-1)?.at(-1)?.evidence).toEqual(evidence)
+    expect(result.current.quotaCheckSeq).toBe(1)
   })
 
   it('surfaces FRIENDLY copy on a failed turn (never the raw error) and does NOT write an error line to the shared thread', async () => {
@@ -201,7 +206,7 @@ describe('useChat — pi_mono engine', () => {
       const p = result.current.send('boom')
       await waitForSend()
       const rid = sendArgs!.requestId
-      emit({ type: 'accepted', requestId: rid, runId: 'run-2' })
+      acceptHosted(rid, 'run-2')
       emit({
         type: 'run_finished',
         requestId: rid,
@@ -238,7 +243,7 @@ describe('useChat — pi_mono engine', () => {
       p = result.current.send('question')
       await waitForSend()
       const rid = sendArgs!.requestId
-      emit({ type: 'accepted', requestId: rid, runId: 'run-x' })
+      acceptHosted(rid, 'run-x')
       emit({ type: 'text_delta', requestId: rid, runId: 'run-x', text: 'partial' })
       await flush()
     })
@@ -284,7 +289,7 @@ describe('useChat — pi_mono tool-activity line', () => {
       p = result.current.send('do a thing')
       await waitForSend()
       const rid = sendArgs!.requestId
-      emit({ type: 'accepted', requestId: rid, runId: 'run-t1' })
+      acceptHosted(rid, 'run-t1')
       // A tool starts before any reply text → the transient line fills the gap.
       emit({
         type: 'tool_activity',
@@ -340,7 +345,7 @@ describe('useChat — pi_mono tool-activity line', () => {
       p = result.current.send('multi')
       await waitForSend()
       const rid = sendArgs!.requestId
-      emit({ type: 'accepted', requestId: rid, runId: 'run-t2' })
+      acceptHosted(rid, 'run-t2')
       emit({
         type: 'tool_activity',
         requestId: rid,
@@ -455,22 +460,24 @@ describe('useChat — first-chat not ready (retry once)', () => {
         const sendMock = setSend(async (args) => {
           sendArgs = args
           call++
-          return call === 1
-            ? {
-                runId: '',
-                requestId: args.requestId,
-                ok: false,
-                text: '',
-                terminalStatus: 'failed',
-                error: marker
-              }
-            : {
-                runId: 'run-ok',
-                requestId: args.requestId,
-                ok: true,
-                text: 'Hi there',
-                terminalStatus: 'succeeded'
-              }
+          if (call === 1) {
+            return {
+              runId: '',
+              requestId: args.requestId,
+              ok: false,
+              text: '',
+              terminalStatus: 'failed',
+              error: marker
+            }
+          }
+          acceptHosted(args.requestId, 'run-ok')
+          return {
+            runId: 'run-ok',
+            requestId: args.requestId,
+            ok: true,
+            text: 'Hi there',
+            terminalStatus: 'succeeded'
+          }
         })
         const result = await mountFake()
 
@@ -500,6 +507,7 @@ describe('useChat — first-chat not ready (retry once)', () => {
         expect(saveSpy).toHaveBeenCalledTimes(2)
         expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human', text: 'hello' })
         expect(saveSpy.mock.calls[1][0]).toMatchObject({ sender: 'ai', text: 'Hi there' })
+        expect(result.current.quotaCheckSeq).toBe(1)
       } finally {
         vi.useRealTimers()
       }
@@ -549,6 +557,7 @@ describe('useChat — first-chat not ready (retry once)', () => {
         expect(saveSpy).toHaveBeenCalledTimes(1)
         expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human' })
         expect(speakSpy).not.toHaveBeenCalled()
+        expect(result.current.quotaCheckSeq).toBe(0)
       } finally {
         vi.useRealTimers()
       }
@@ -560,6 +569,7 @@ describe('useChat — first-chat not ready (retry once)', () => {
     try {
       const sendMock = setSend(async (args) => {
         sendArgs = args
+        emit({ type: 'accepted', requestId: args.requestId, runId: 'r' })
         return {
           runId: 'r',
           requestId: args.requestId,
@@ -585,6 +595,7 @@ describe('useChat — first-chat not ready (retry once)', () => {
       expect(lastAssistant(result.current.history)?.content).not.toContain('the model exploded')
       expect(saveSpy).toHaveBeenCalledTimes(1)
       expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human' })
+      expect(result.current.quotaCheckSeq).toBe(0)
     } finally {
       vi.useRealTimers()
     }
@@ -927,7 +938,7 @@ describe('useChat — pi_mono per-turn watchdog', () => {
         void result.current.send('hello')
         await pumpToSend()
         // Run WAS accepted (server ack'd) then the terminal event never comes.
-        emit({ type: 'accepted', requestId: sendArgs!.requestId, runId: 'run-hang' })
+        acceptHosted(sendArgs!.requestId, 'run-hang')
         await vi.advanceTimersByTimeAsync(1)
       })
       // Pre-deadline: spinner latched, no reply.
@@ -945,6 +956,7 @@ describe('useChat — pi_mono per-turn watchdog', () => {
       expect(saveSpy).toHaveBeenCalledTimes(1)
       expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human' })
       expect(speakSpy).not.toHaveBeenCalled()
+      expect(result.current.quotaCheckSeq).toBe(1)
     } finally {
       vi.useRealTimers()
     }
@@ -958,7 +970,7 @@ describe('useChat — pi_mono per-turn watchdog', () => {
       await act(async () => {
         p = result.current.send('hello')
         await pumpToSend()
-        emit({ type: 'accepted', requestId: sendArgs!.requestId, runId: 'run-late' })
+        acceptHosted(sendArgs!.requestId, 'run-late')
         await vi.advanceTimersByTimeAsync(1)
       })
       await act(async () => {
@@ -995,6 +1007,7 @@ describe('useChat — pi_mono per-turn watchdog', () => {
       const anyZombie = persisted.some((t) => t.some((m) => /late reply/.test(m.content)))
       expect(anyZombie).toBe(false)
       expect(speakSpy).not.toHaveBeenCalled()
+      expect(result.current.quotaCheckSeq).toBe(1)
     } finally {
       vi.useRealTimers()
     }
@@ -1009,7 +1022,7 @@ describe('useChat — pi_mono per-turn watchdog', () => {
         p = result.current.send('hello')
         await pumpToSend()
         const rid = sendArgs!.requestId
-        emit({ type: 'accepted', requestId: rid, runId: 'run-fast' })
+        acceptHosted(rid, 'run-fast')
         emit({ type: 'text_delta', requestId: rid, runId: 'run-fast', text: 'Hi there' })
         sendResolve!({
           runId: 'run-fast',
@@ -1024,6 +1037,7 @@ describe('useChat — pi_mono per-turn watchdog', () => {
       expect(lastAssistant(result.current.history)?.content).toBe('Hi there')
       expect(result.current.sending).toBe(false)
       expect(saveSpy).toHaveBeenCalledTimes(2)
+      expect(result.current.quotaCheckSeq).toBe(1)
       const savesBefore = saveSpy.mock.calls.length
 
       // The watchdog was cleared on completion — crossing the deadline is a no-op:
@@ -1058,7 +1072,7 @@ describe('useChat — pi_mono per-turn watchdog', () => {
       await act(async () => {
         void result.current.send('hello')
         await pumpToSend()
-        emit({ type: 'accepted', requestId: sendArgs!.requestId, runId: 'run-inf' })
+        acceptHosted(sendArgs!.requestId, 'run-inf')
         await vi.advanceTimersByTimeAsync(1)
       })
       // Cross the deadline → watchdog recovers the bubble, invalidates the turn, and

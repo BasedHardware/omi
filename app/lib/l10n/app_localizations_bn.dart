@@ -9850,12 +9850,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
-  String get chatScopeToday => 'আজ';
-
-  @override
-  String get chatScopeThisWeek => 'এই সপ্তাহ';
-
-  @override
   String chatScopeAbout(String title) {
     return '$title সম্পর্কে';
   }
@@ -9918,4 +9912,51 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendant-এর স্টোরেজ পূর্ণ এবং এটি এখনও রেকর্ডিং মোডে আছে, তাই সংরক্ষিত অডিও স্থানান্তর করা যাচ্ছে না। রেকর্ডিং বন্ধ করতে Pendant-এর বোতাম টিপুন, তারপর আবার সিঙ্ক করুন।';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'রেকর্ড করা হয়নি ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'ট্রান্সক্রিপশন অডিও গ্রহণ করছে না';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'কাজ';
+
+  @override
+  String get chatBlockGoal => 'লক্ষ্য';
+
+  @override
+  String get chatBlockConversation => 'কথোপকথন';
+
+  @override
+  String get chatBlockMemory => 'স্মৃতি';
+
+  @override
+  String get chatBlockQuestion => 'প্রশ্ন';
+
+  @override
+  String get chatBlockOpenInGoals => 'লক্ষ্যে খুলুন';
+
+  @override
+  String get chatBlockOpenConversation => 'কথোপকথন খুলুন';
+
+  @override
+  String get chatBlockOpenInMemories => 'স্মৃতিতে খুলুন';
+
+  @override
+  String get chatBlockUnavailable => 'আর উপলব্ধ নেই';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'প্রস্তাবিত পরবর্তী পদক্ষেপ';
+
+  @override
+  String get couldNotLoadMemories => 'স্মৃতি লোড করা যায়নি';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'নলেজ গ্রাফ লোড করা যায়নি';
 }

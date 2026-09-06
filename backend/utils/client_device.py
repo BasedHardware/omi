@@ -1,6 +1,6 @@
 """Stable per-install client device identity (provenance only).
 
-Contract (see docs/memory/domain_model.md):
+Contract (see backend/docs/memory/domain_model.md):
   client_device_id = "{platform}_{hash}"
   hash = first 8 hex chars of sha256(stable per-install id)
   Headers: X-Device-Id-Hash + X-App-Platform (+ optional X-App-Version)

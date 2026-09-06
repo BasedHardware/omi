@@ -49,6 +49,10 @@ PENDING_REQUEST_RECOVERY_COOLDOWN = 300
 # lease is already finalizing this job reports the non-terminal `job_leased`
 # error. That is healthy in-flight work, not a failed attempt.
 FINALIZATION_IN_FLIGHT_ERROR = 'job_leased'
+# Advertise the generation-aware opcode-201 result handling capability. A
+# pusher only sends generation-aware stale responses after seeing this value.
+FINALIZATION_RESULT_PROTOCOL = 2
+FINALIZATION_STALE_GENERATION_ERROR = 'job_stale_generation'
 
 
 @dataclass
@@ -176,6 +180,7 @@ class ListenPusherSession:
             if pending.get('finalization_job_id'):
                 payload['finalization_job_id'] = pending['finalization_job_id']
                 payload['dispatch_generation'] = pending.get('dispatch_generation') or 1
+                payload['finalization_result_protocol'] = FINALIZATION_RESULT_PROTOCOL
             data.extend(bytes(json.dumps(payload), "utf-8"))
             await self.pusher_ws.send(cast(bytes, data))
             logger.info(f"Sent process_conversation request to pusher: {conversation_id} {self.uid} {self.session_id}")
@@ -316,7 +321,41 @@ class ListenPusherSession:
                     conversation_id = result.get("conversation_id")
 
                     if "error" in result:
-                        if result.get("terminal"):
+                        if result.get("error") == FINALIZATION_STALE_GENERATION_ERROR:
+                            # A delayed stale response must not delete a newer
+                            # request for this conversation. Only drop when the
+                            # response identifies the generation still pending.
+                            pending = self.pending_conversation_requests.get(conversation_id)
+                            rejected_generation = result.get("dispatch_generation")
+                            pending_generation = (
+                                (pending.get('dispatch_generation') or 1) if pending is not None else None
+                            )
+                            if (
+                                pending is not None
+                                and isinstance(rejected_generation, int)
+                                and not isinstance(rejected_generation, bool)
+                                and pending_generation == rejected_generation
+                            ):
+                                self.pending_conversation_requests.pop(conversation_id, None)
+                                logger.info(
+                                    'Conversation finalization superseded by durable replay '
+                                    'conversation=%s dispatch_generation=%s uid=%s session=%s',
+                                    conversation_id,
+                                    rejected_generation,
+                                    self.uid,
+                                    self.session_id,
+                                )
+                            else:
+                                logger.info(
+                                    'Ignoring delayed stale finalization response '
+                                    'conversation=%s rejected_generation=%s pending_generation=%s uid=%s session=%s',
+                                    conversation_id,
+                                    rejected_generation,
+                                    pending_generation,
+                                    self.uid,
+                                    self.session_id,
+                                )
+                        elif result.get("terminal"):
                             # The job reached its attempt budget and is now
                             # dead-lettered. Retrying it would never converge.
                             self.pending_conversation_requests.pop(conversation_id, None)
@@ -339,7 +378,12 @@ class ListenPusherSession:
                                 # queued. Keep the request so this live session can
                                 # reclaim it instead of stranding `processing`.
                                 pending['sent_at'] = self.deps.now() - PENDING_REQUEST_TIMEOUT - 1
-                            logger.error(f"Conversation processing failed: {self.uid} {self.session_id}")
+                            # The pusher released its durable lease back to queued
+                            # and the pending entry stays armed for bounded retry —
+                            # this is in-flight work with a live recovery path, not
+                            # a server fault. The terminal dead-lettering above is
+                            # the fault signal and stays at ERROR.
+                            logger.warning(f"Conversation processing failed: {self.uid} {self.session_id}")
                     elif result.get('fenced'):
                         self.pending_conversation_requests.pop(conversation_id, None)
                         logger.info(

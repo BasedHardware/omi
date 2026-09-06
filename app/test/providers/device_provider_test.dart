@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -50,6 +52,7 @@ void main() {
       type: DeviceType.fieldy,
       rssi: -50,
       firmwareRevision: '3.0.20',
+      serialNumber: 'OMI-SERIAL-001',
     );
 
     await provider.setConnectedDevice(device);
@@ -63,7 +66,16 @@ void main() {
     expect(connectedProperties['firmwareRevision'], device.firmwareRevision);
     expect(connectedProperties['type'], 'fieldy');
     expect(connectedProperties['device_vendor'], 'fieldlabs');
+    expect(connectedProperties['hardware_family'], 'fieldy');
+    expect(
+        connectedProperties['transport_device_id'], sha256.convert(utf8.encode(device.id)).toString().substring(0, 16));
+    expect(connectedProperties['transport_id_stability'], 'platform_dependent');
+    expect(
+        connectedProperties['hardware_id'], sha256.convert(utf8.encode('OMI-SERIAL-001')).toString().substring(0, 16));
+    expect(connectedProperties['hardware_id_kind'], 'manufacturer_serial');
+    expect(connectedProperties['hardware_id_stable'], isTrue);
     expect(analytics.personProperties.any((properties) => properties['device_vendor'] == 'fieldlabs'), isTrue);
+    expect(analytics.personProperties.any((properties) => properties['hardware_family'] == 'fieldy'), isTrue);
   });
 
   test('find device coalesces overlapping provider requests', () async {
@@ -136,6 +148,12 @@ void main() {
 
     expect(analytics.events.where((event) => event == 'Device Paired'), hasLength(2));
     expect(analytics.events.where((event) => event == 'Device Connected'), hasLength(3));
+    final pairedProperties = [
+      for (var i = 0; i < analytics.events.length; i++)
+        if (analytics.events[i] == 'Device Paired') analytics.eventProperties[i],
+    ];
+    expect(pairedProperties.first, containsPair('hardware_id_kind', 'unavailable'));
+    expect(pairedProperties.first, containsPair('hardware_id_stable', false));
     for (final uid in ['user-a', 'user-b']) {
       expect(analytics.personPropertiesByUser[uid]?['has_paired_device'], isTrue);
       expect(DateTime.tryParse(analytics.personPropertiesByUser[uid]?['first_paired_at'] as String), isNotNull);
@@ -195,6 +213,7 @@ void main() {
     expect(sessionEvents.single, containsPair('reason', 'connection_timeout'));
     expect(sessionEvents.single, containsPair('hci_reason_code', 8));
     expect(sessionEvents.single, containsPair('device_vendor', 'omi'));
+    expect(sessionEvents.single, containsPair('hardware_family', 'omi_devkit'));
     expect(sessionEvents.single, containsPair('model', 'Omi DevKit 2'));
     expect(sessionEvents.single, containsPair('firmware_revision', '3.0.20'));
     expect(sessionEvents.single, isNot(contains('reconnect_attempt_count')));

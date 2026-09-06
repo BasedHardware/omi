@@ -20,6 +20,7 @@ from database._client import get_customer_firestore_client
 from database import llm_usage as llm_usage_db
 from database import redis_db
 from database import users as users_db
+from llm_gateway.gateway.request_context import jit_budget_forward_headers
 from utils.http_client import get_llm_gateway_semaphore
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -50,6 +51,7 @@ from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.other import endpoints as auth
+from utils.retrieval.tools.perplexity_tools import WEB_SEARCH_RETRIEVAL_APPENDIX
 from utils.subscription import enforce_desktop_chat_quota
 
 _MAX_BODY_BYTES = 16 * 1024 * 1024
@@ -254,10 +256,24 @@ _MANAGED_CHAT_ALIASES = {
 # Non-conversational desktop callers (the automation planner and the local-agent
 # loop) ask for a single-shot structured completion, not a chat turn. They select
 # the structured lane explicitly so they never inherit chat-agent routing.
+# Legacy Haiku specialist aliases used the company Anthropic key on this
+# router; remap them onto the same structured lane so leftover fielded clients
+# stop billing direct Haiku. Kill-switch / BYOK still resolve Haiku via
+# _MODEL_ROUTES when gateway_mode is off.
 _MANAGED_STRUCTURED_ALIASES = {
     'omi-structured',
     CHAT_STRUCTURED_AUTO_LANE_ID,
+    'claude-haiku-4-5-20251001',
+    'claude-haiku-4-5',
 }
+# The realtime voice `think_deeper` escalation: a single-shot, no-tools Luna
+# completion with an explicit reasoning effort. OpenAI rejects function tools
+# combined with a non-none reasoning_effort on gpt-5.6-luna (/v1/chat/completions),
+# so this alias deliberately carries no client tools and the effort travels as a
+# per-request parameter instead of the tooled chat-agent lane's pinned `none`.
+THINKING_MODEL_ALIAS = 'omi-luna-think'
+_THINKING_REASONING_EFFORTS = frozenset({'high', 'xhigh'})
+_MANAGED_THINKING_ALIASES = {THINKING_MODEL_ALIAS}
 WEB_SEARCH_AUTO_LANE_ID = feature_auto_lane_id('web_search')
 _MAX_TOKENS = 16_384
 # Top-level automatic prompt caching. Anthropic places this breakpoint on the last
@@ -277,15 +293,24 @@ def _managed_lane_id(body: Mapping[str, object]) -> str:
     return CHAT_AGENT_AUTO_LANE_ID
 
 
+def _is_thinking_escalation(body: Mapping[str, object]) -> bool:
+    """True when this request is a no-tools Luna thinking escalation."""
+    model = body.get('model')
+    if not isinstance(model, str):
+        return False
+    return model.strip().lower() in _MANAGED_THINKING_ALIASES
+
+
 def _uses_managed_chat_agent(body: Mapping[str, object]) -> bool:
-    """Route managed conversational traffic to Luna, but preserve specialist calls.
+    """Route managed desktop traffic onto gateway lanes.
 
     Desktop conversational traffic uses the managed Luna chat agent for Sonnet
-    and leftover Opus aliases plus explicit auto/Luna lane ids. Extraction jobs
-    still use Haiku; those legacy Anthropic calls must not inherit the chat-agent
-    personality/system prompt or have their requested model rewritten to Luna.
-    An omitted model uses the managed chat-agent default; an explicit unknown
-    model fails closed in the normal request validation path.
+    and leftover Opus aliases plus explicit auto/Luna lane ids. Legacy Haiku
+    extraction aliases join the structured lane so they do not inherit the
+    chat-agent personality or keep using the company Anthropic key. The voice
+    thinking escalation joins the chat-agent lane without tools. An omitted
+    model uses the managed chat-agent default; an explicit unknown model fails
+    closed in the normal request validation path.
     """
     if 'model' not in body:
         return True
@@ -295,7 +320,11 @@ def _uses_managed_chat_agent(body: Mapping[str, object]) -> bool:
     normalized = model.strip().lower()
     if not normalized:
         return True
-    if normalized in _MANAGED_CHAT_ALIASES or normalized in _MANAGED_STRUCTURED_ALIASES:
+    if (
+        normalized in _MANAGED_CHAT_ALIASES
+        or normalized in _MANAGED_STRUCTURED_ALIASES
+        or normalized in _MANAGED_THINKING_ALIASES
+    ):
         return True
     if normalized in _MODEL_ROUTES:
         return normalized in _MANAGED_CHAT_ALIASES
@@ -459,6 +488,31 @@ def _with_public_web_routing_instruction(messages: list[dict[str, object]]) -> l
             )
             return updated
     return [{'role': 'system', 'content': _PUBLIC_WEB_ROUTING_INSTRUCTION}, *updated]
+
+
+def _append_web_search_retrieval_appendix(messages: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Append the fixed primary-source retrieval hint to the last user message.
+
+    The managed web-search lane sends the raw client question to sonar-pro,
+    which retrieves what the query describes — product-history questions stop
+    at the vendor marketing site (live RCA 2026-09-02). The same appendix the
+    agentic tool's hop-2 uses redirects retrieval at founder interviews,
+    Product Hunt launch posts, and postmortems. Idempotent.
+    """
+    updated = [dict(message) for message in messages]
+    for message in reversed(updated):
+        if message.get('role') != 'user':
+            continue
+        content = message.get('content')
+        if isinstance(content, str):
+            if WEB_SEARCH_RETRIEVAL_APPENDIX not in content:
+                message['content'] = f'{content}{WEB_SEARCH_RETRIEVAL_APPENDIX}'
+        elif isinstance(content, list) and not any(
+            isinstance(block, Mapping) and block.get('text') == WEB_SEARCH_RETRIEVAL_APPENDIX for block in content
+        ):
+            message['content'] = [*content, {'type': 'text', 'text': WEB_SEARCH_RETRIEVAL_APPENDIX}]
+        return updated
+    return updated
 
 
 def _carries_private_tool_output(messages: object) -> bool:
@@ -638,6 +692,22 @@ def _log_gateway_rejection(response: httpx.Response, *, lane_id: str, request_id
     sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
 
 
+def _thinking_escalation_effort(body: Mapping[str, object]) -> str:
+    """Validated Luna reasoning effort for a thinking escalation.
+
+    The desktop client owns the product-level mapping (`normal` -> high,
+    `heavy` -> xhigh); this router only accepts the two wire values the
+    escalation surface defines. Anything else fails closed with a 400 rather
+    than silently billing an unintended effort tier.
+    """
+    effort = body.get('reasoning_effort')
+    if effort is None or (isinstance(effort, str) and not effort.strip()):
+        return 'high'
+    if isinstance(effort, str) and effort.strip() in _THINKING_REASONING_EFFORTS:
+        return effort.strip()
+    raise ValueError('unsupported reasoning_effort for omi-luna-think')
+
+
 def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LANE_ID) -> dict[str, object]:
     messages = body.get('messages')
     if not isinstance(messages, list):
@@ -660,7 +730,16 @@ def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LAN
         # are a live lookup, not a client-tool continuation.
         result.pop('tools', None)
         result.pop('tool_choice', None)
-        result['messages'] = _with_public_web_routing_instruction(translated)
+        result['messages'] = _append_web_search_retrieval_appendix(_with_public_web_routing_instruction(translated))
+    if _is_thinking_escalation(body):
+        # Single-shot Luna reasoning: OpenAI rejects function tools combined
+        # with a non-none reasoning_effort on gpt-5.6-luna, so the escalation
+        # never carries client tools. The validated effort is server-authored
+        # here, not a verbatim client passthrough.
+        result.pop('tools', None)
+        result.pop('tool_choice', None)
+        result.pop('reasoning_effort', None)
+        result['reasoning_effort'] = _thinking_escalation_effort(body)
     return result
 
 
@@ -790,7 +869,7 @@ def _request(
     if choice is not None and result.get('tools'):
         result['tool_choice'] = choice
     result['cache_control'] = dict(_PROMPT_CACHE_CONTROL)
-    return model, result
+    return cast(str, result['model']), result  # response.model = SERVED model, never the alias
 
 
 def _usage_field(usage: object, field: str) -> int:
@@ -1320,11 +1399,34 @@ def _gateway_feature_for_lane(lane_id: str) -> str:
 
 
 def _gateway_request_headers(
-    request_id: str, lane_id: str = CHAT_AGENT_AUTO_LANE_ID, platform: str | None = None
+    request_id: str,
+    lane_id: str = CHAT_AGENT_AUTO_LANE_ID,
+    platform: str | None = None,
+    jit_headers: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     headers = llm_gateway_headers(feature=_gateway_feature_for_lane(lane_id), platform=platform)
     headers['X-Omi-Request-ID'] = request_id
+    if jit_headers:
+        headers.update(jit_headers)
     return headers
+
+
+def _jit_headers_for_forward(
+    contract_version: str | None,
+    run_id: str | None,
+    max_attempts: str | None,
+    max_output_tokens: str | None,
+    max_input_tokens: str | None,
+    max_spend_micro_usd: str | None,
+) -> dict[str, str]:
+    return jit_budget_forward_headers(
+        contract_version,
+        run_id,
+        max_attempts,
+        max_output_tokens,
+        max_input_tokens,
+        max_spend_micro_usd,
+    )
 
 
 def _record_gateway_result(
@@ -1360,6 +1462,7 @@ async def _stream_gateway(
     request_id: str = 'unknown',
     platform: str | None = None,
     lane_id: str = CHAT_AGENT_AUTO_LANE_ID,
+    jit_headers: Mapping[str, str] | None = None,
 ) -> AsyncIterator[bytes]:
     usage_token = set_usage_context(uid, _gateway_feature_for_lane(lane_id))
     frame_buffer = bytearray()
@@ -1376,7 +1479,7 @@ async def _stream_gateway(
             async with get_llm_gateway_client().stream(
                 'POST',
                 f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                headers=_gateway_request_headers(request_id, lane_id, platform),
+                headers=_gateway_request_headers(request_id, lane_id, platform, jit_headers),
                 json=gateway_payload,
             ) as response:
                 if response.status_code >= 400:
@@ -1581,9 +1684,36 @@ async def _chat_completions_unobserved(
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
     x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
     x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
+    x_omi_jit_contract_version: str | None = None,
+    x_omi_jit_run_id: str | None = None,
+    x_omi_jit_max_attempts: str | None = None,
+    x_omi_jit_max_output_tokens: str | None = None,
+    x_omi_jit_max_input_tokens: str | None = None,
+    x_omi_jit_max_spend_micro_usd: str | None = None,
 ) -> JSONResponse | StreamingResponse:
     if x_omi_chat_contract_version not in {None, '1'}:
         raise HTTPException(status_code=426, detail='Unsupported chat contract version')
+    # Direct unit callers invoke the FastAPI endpoint without dependency
+    # injection, so omitted Header defaults arrive as Param objects.  Treat
+    # those as absent just as the HTTP adapter does; only actual strings may
+    # activate the explicit JIT qualification capability.
+    jit_header_values = tuple(
+        value if isinstance(value, str) else None
+        for value in (
+            x_omi_jit_contract_version,
+            x_omi_jit_run_id,
+            x_omi_jit_max_attempts,
+            x_omi_jit_max_output_tokens,
+            x_omi_jit_max_input_tokens,
+            x_omi_jit_max_spend_micro_usd,
+        )
+    )
+    try:
+        jit_headers = _jit_headers_for_forward(
+            *jit_header_values,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     request_id = x_omi_request_id or str(uuid4())
     stub_headers = {
         'Cache-Control': 'no-cache',
@@ -1592,7 +1722,7 @@ async def _chat_completions_unobserved(
     }
     # Hermetic offline profile: short-circuit before quota / Anthropic, matching
     # the retired Rust llm_stub intercept so T2 chat flows stay deterministic.
-    if llm_stub_enabled():
+    if llm_stub_enabled() and not jit_headers:
         if body.get('stream') is True:
             return StreamingResponse(
                 stub_chat_completions_stream(body),
@@ -1603,7 +1733,12 @@ async def _chat_completions_unobserved(
     payload: dict[str, object] = {}
     try:
         gateway_mode = should_route_chat_agent_through_gateway() and _uses_managed_chat_agent(body)
-        if gateway_mode and get_byok_key('anthropic'):
+        if jit_headers and not gateway_mode:
+            raise RuntimeError('JIT qualification requires the managed gateway')
+        # A BYOK Anthropic key cannot serve the managed Luna thinking lane, so
+        # thinking escalations stay on the gateway instead of falling back to
+        # direct Anthropic (which would 400 on the Luna alias).
+        if gateway_mode and not jit_headers and not _is_thinking_escalation(body) and get_byok_key('anthropic'):
             record_fallback(
                 component='llm_gateway',
                 from_mode='managed_gateway',
@@ -1616,7 +1751,11 @@ async def _chat_completions_unobserved(
             public_model = _managed_lane_id(body)
             # Structured single-shot callers must not inherit the web-search
             # lane even if a leftover client still sets omi_web_search.
-            if public_model == CHAT_AGENT_AUTO_LANE_ID and _web_search_requested(body):
+            if (
+                public_model == CHAT_AGENT_AUTO_LANE_ID
+                and not _is_thinking_escalation(body)
+                and _web_search_requested(body)
+            ):
                 web_search_authorization = await _web_search_authorized(uid, from_mode='managed_web_search')
                 if _web_search_eligible(body, authorization=web_search_authorization):
                     public_model = WEB_SEARCH_AUTO_LANE_ID
@@ -1645,7 +1784,7 @@ async def _chat_completions_unobserved(
     if body.get('stream') is True:
         if gateway_mode:
             return StreamingResponse(
-                _stream_gateway(gateway_payload, uid, request_id, x_app_platform, public_model),
+                _stream_gateway(gateway_payload, uid, request_id, x_app_platform, public_model, jit_headers),
                 media_type='text/event-stream',
                 headers={
                     'Cache-Control': 'no-cache',
@@ -1682,7 +1821,7 @@ async def _chat_completions_unobserved(
             async with get_llm_gateway_semaphore():
                 response = await get_llm_gateway_client().post(
                     f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                    headers=_gateway_request_headers(request_id, public_model, x_app_platform),
+                    headers=_gateway_request_headers(request_id, public_model, x_app_platform, jit_headers),
                     json=gateway_payload,
                 )
             response.raise_for_status()
@@ -1695,12 +1834,15 @@ async def _chat_completions_unobserved(
             _record_gateway_result(lane_id=public_model, outcome='success', reason='ok', request_id=request_id)
             result_recorded = True
             await _record_usage(uid, _openai_usage_as_anthropic(response_body.get('usage')))
+            response_headers = {
+                'X-Omi-Chat-Contract-Version': '1',
+                'X-Request-Id': request_id,
+            }
+            if jit_headers and response.headers.get('x-omi-jit-gateway-receipt'):
+                response_headers['X-Omi-Jit-Gateway-Receipt'] = response.headers['x-omi-jit-gateway-receipt']
             return JSONResponse(
                 response_body,
-                headers={
-                    'X-Omi-Chat-Contract-Version': '1',
-                    'X-Request-Id': request_id,
-                },
+                headers=response_headers,
             )
         except HTTPException:
             raise
@@ -1752,6 +1894,12 @@ async def chat_completions(
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
     x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
     x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
+    x_omi_jit_contract_version: str | None = Header(None, alias='X-Omi-Jit-Contract-Version'),
+    x_omi_jit_run_id: str | None = Header(None, alias='X-Omi-Jit-Run-Id'),
+    x_omi_jit_max_attempts: str | None = Header(None, alias='X-Omi-Jit-Max-Attempts'),
+    x_omi_jit_max_output_tokens: str | None = Header(None, alias='X-Omi-Jit-Max-Output-Tokens'),
+    x_omi_jit_max_input_tokens: str | None = Header(None, alias='X-Omi-Jit-Max-Input-Tokens'),
+    x_omi_jit_max_spend_micro_usd: str | None = Header(None, alias='X-Omi-Jit-Max-Spend-Micro-Usd'),
     user_agent: str | None = Header(None, alias='User-Agent'),
 ) -> JSONResponse | StreamingResponse:
     attempt = ClientJourneyAttempt(
@@ -1765,6 +1913,12 @@ async def chat_completions(
             x_app_platform=x_app_platform,
             x_omi_chat_contract_version=x_omi_chat_contract_version,
             x_omi_request_id=x_omi_request_id,
+            x_omi_jit_contract_version=x_omi_jit_contract_version,
+            x_omi_jit_run_id=x_omi_jit_run_id,
+            x_omi_jit_max_attempts=x_omi_jit_max_attempts,
+            x_omi_jit_max_output_tokens=x_omi_jit_max_output_tokens,
+            x_omi_jit_max_input_tokens=x_omi_jit_max_input_tokens,
+            x_omi_jit_max_spend_micro_usd=x_omi_jit_max_spend_micro_usd,
         )
     except asyncio.CancelledError:
         attempt.cancel()

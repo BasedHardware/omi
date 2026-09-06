@@ -1,0 +1,225 @@
+name: Apply Cloud Storage lifecycle (private-cloud-sync)
+
+# The private-cloud-sync bucket's lifecycle was managed by nothing: console and
+# gsutil only. This workflow is the single writer. `gcloud storage buckets
+# update --lifecycle-file` REPLACES the whole lifecycle config, so the apply is
+# fenced by a describe -> superset validation -> apply -> describe -> assert
+# sequence, and every artifact is uploaded.
+#
+# push  -> development only. prod is dispatch-only, typed-confirmation gated,
+#          and additionally gated by the `prod` GitHub Environment reviewer.
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'backend/deploy/storage-lifecycle/**'
+      - 'backend/scripts/validate_storage_lifecycle.py'
+      - '.github/workflows/gcp_storage_lifecycle.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Bucket environment to reconcile'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - prod
+      lifecycle_variant:
+        description: 'apply = checked-in lifecycle; rollback = pre-change rules only'
+        required: true
+        default: 'apply'
+        type: choice
+        options:
+          - apply
+          - rollback
+      confirmation:
+        description: 'Type APPLY_STORAGE_LIFECYCLE_PROD for prod'
+        required: false
+        default: ''
+        type: string
+      release_sha:
+        description: 'Exact current main SHA (prod only)'
+        required: false
+        default: ''
+        type: string
+
+# Deliberately NOT the backend-stack lock: this workflow builds and deploys no
+# code, and must not queue behind or block a backend release.
+concurrency:
+  group: storage-lifecycle-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'development' }}
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'development' }}
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    env:
+      RESOLVED_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'development' }}
+      LIFECYCLE_VARIANT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.lifecycle_variant || 'apply' }}
+    steps:
+      - name: Validate storage lifecycle input
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CONFIRMATION: ${{ github.event.inputs.confirmation }}
+          DEPLOY_SHA: ${{ github.event.inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$RESOLVED_ENVIRONMENT" != "development" && "$RESOLVED_ENVIRONMENT" != "prod" ]]; then
+            echo "Invalid environment: $RESOLVED_ENVIRONMENT."
+            exit 1
+          fi
+          if [[ "$LIFECYCLE_VARIANT" != "apply" && "$LIFECYCLE_VARIANT" != "rollback" ]]; then
+            echo "Invalid lifecycle_variant: $LIFECYCLE_VARIANT."
+            exit 1
+          fi
+          # A push never reaches prod: the resolved environment is hardcoded to
+          # development on that trigger. prod requires a dispatch, the typed
+          # confirmation, an exact main SHA, and the prod environment reviewer.
+          if [[ "$RESOLVED_ENVIRONMENT" == "prod" ]]; then
+            if [[ "$EVENT_NAME" != "workflow_dispatch" ]]; then
+              echo "prod is dispatch-only."
+              exit 1
+            fi
+            if [[ "$CONFIRMATION" != "APPLY_STORAGE_LIFECYCLE_PROD" ]]; then
+              echo "Refusing prod lifecycle mutation without APPLY_STORAGE_LIFECYCLE_PROD confirmation."
+              exit 1
+            fi
+            if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "prod requires release_sha to be an exact 40-character main SHA."
+              exit 1
+            fi
+          fi
+          echo "Reconciling $RESOLVED_ENVIRONMENT lifecycle (variant $LIFECYCLE_VARIANT) via $EVENT_NAME."
+
+      - name: Checkout lifecycle control plane
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Admit exact proven main source
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DEPLOY_SHA: ${{ github.event.inputs.release_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if [[ "$RESOLVED_ENVIRONMENT" == "prod" ]]; then
+            test "$DEPLOY_SHA" = "$(git rev-parse 'origin/main^{commit}')"
+            proof_path="${RUNNER_TEMP}/release-eligibility-${DEPLOY_SHA}.json"
+            gh api -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}&per_page=100" \
+              > "$proof_path"
+            python3 .github/scripts/verify_backend_release_admission.py \
+              --sha "$DEPLOY_SHA" --repository "$GITHUB_REPOSITORY" \
+              --workflow-runs "$proof_path" --require-first-attempt
+            git checkout --detach "$DEPLOY_SHA"
+            test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+          else
+            git checkout --detach "$GITHUB_SHA"
+            test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          fi
+          echo "Applying lifecycle from $(git rev-parse HEAD)."
+
+      - name: Select and source-validate the lifecycle document
+        id: select
+        run: |
+          set -euo pipefail
+          suffix=''
+          if [[ "$LIFECYCLE_VARIANT" == "rollback" ]]; then suffix='.rollback'; fi
+          file="backend/deploy/storage-lifecycle/${RESOLVED_ENVIRONMENT}${suffix}.json"
+          test -f "$file"
+          bucket="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['bucket'])" "$file")"
+          project="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['project'])" "$file")"
+          case "$RESOLVED_ENVIRONMENT" in
+            development) expected_bucket='omi-dev-private-cloud-sync' ;;
+            prod) expected_bucket='omi-private-cloud-sync' ;;
+            *) echo "Invalid environment: $RESOLVED_ENVIRONMENT."; exit 1 ;;
+          esac
+          if [[ "$bucket" != "$expected_bucket" ]]; then
+            echo "Lifecycle file bucket $bucket does not match the expected $RESOLVED_ENVIRONMENT bucket $expected_bucket."
+            exit 1
+          fi
+          if [[ "$project" != "${{ vars.GCP_PROJECT_ID }}" ]]; then
+            echo "Lifecycle file project $project does not match the environment project ${{ vars.GCP_PROJECT_ID }}."
+            exit 1
+          fi
+          python3 backend/scripts/validate_storage_lifecycle.py --desired "$file" --source-only
+          {
+            echo "file=$file"
+            echo "bucket=$bucket"
+            echo "project=$project"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Capture live bucket state before apply
+        run: |
+          set -euo pipefail
+          gcloud storage buckets describe "gs://${{ steps.select.outputs.bucket }}" \
+            --project="${{ steps.select.outputs.project }}" --raw --format=json > before.json
+          gcloud storage buckets notifications list "gs://${{ steps.select.outputs.bucket }}" \
+            --project="${{ steps.select.outputs.project }}" --format=json > notifications.json
+          python3 -c "import json;print(json.dumps(json.load(open('before.json')).get('lifecycle', {}), indent=2))"
+
+      - name: Refuse to drop any live rule
+        run: |
+          set -euo pipefail
+          extra=()
+          if [[ "$LIFECYCLE_VARIANT" == "rollback" ]]; then
+            # Scoped removal: only rules the apply variant declared (the Coldline
+            # rule) may be dropped; a later live rule still blocks the rollback.
+            apply_file="backend/deploy/storage-lifecycle/${RESOLVED_ENVIRONMENT}.json"
+            test -f "$apply_file"
+            extra+=(--allow-rule-removal-of "$apply_file")
+          fi
+          python3 backend/scripts/validate_storage_lifecycle.py \
+            --desired "${{ steps.select.outputs.file }}" \
+            --live before.json \
+            --notifications notifications.json \
+            "${extra[@]}"
+
+      - name: Apply lifecycle
+        run: |
+          set -euo pipefail
+          python3 -c "import json,sys;json.dump(json.load(open(sys.argv[1]))['lifecycle'],open('apply.json','w'))" \
+            "${{ steps.select.outputs.file }}"
+          gcloud storage buckets update "gs://${{ steps.select.outputs.bucket }}" \
+            --project="${{ steps.select.outputs.project }}" --lifecycle-file=apply.json
+
+      - name: Assert the applied lifecycle equals the checked-in document
+        run: |
+          set -euo pipefail
+          gcloud storage buckets describe "gs://${{ steps.select.outputs.bucket }}" \
+            --project="${{ steps.select.outputs.project }}" --raw --format=json > after.json
+          python3 backend/scripts/validate_storage_lifecycle.py \
+            --desired "${{ steps.select.outputs.file }}" --live after.json --expect-applied
+
+      - name: Upload lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: storage-lifecycle-${{ env.RESOLVED_ENVIRONMENT }}-${{ github.run_id }}
+          path: |
+            before.json
+            after.json
+            notifications.json
+            apply.json
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Print apply receipt
+        run: |
+          echo "storage-lifecycle-receipt bucket=${{ steps.select.outputs.bucket }} project=${{ steps.select.outputs.project }} variant=$LIFECYCLE_VARIANT sha=$(git rev-parse HEAD) applied_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"

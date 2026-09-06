@@ -9846,12 +9846,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
-  String get chatScopeToday => 'Dnes';
-
-  @override
-  String get chatScopeThisWeek => 'Tento týden';
-
-  @override
   String chatScopeAbout(String title) {
     return 'O: $title';
   }
@@ -9914,4 +9908,51 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Úložiště Pendantu je plné a stále je v režimu nahrávání, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu zastavte nahrávání a poté znovu synchronizujte.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Nezaznamenáno ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripce nepřijímá zvuk';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Úkol';
+
+  @override
+  String get chatBlockGoal => 'Cíl';
+
+  @override
+  String get chatBlockConversation => 'Konverzace';
+
+  @override
+  String get chatBlockMemory => 'Vzpomínka';
+
+  @override
+  String get chatBlockQuestion => 'Otázka';
+
+  @override
+  String get chatBlockOpenInGoals => 'Otevřít v Cílech';
+
+  @override
+  String get chatBlockOpenConversation => 'Otevřít konverzaci';
+
+  @override
+  String get chatBlockOpenInMemories => 'Otevřít ve Vzpomínkách';
+
+  @override
+  String get chatBlockUnavailable => 'Již není k dispozici';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Doporučené další kroky';
+
+  @override
+  String get couldNotLoadMemories => 'Nepodařilo se načíst vzpomínky';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nepodařilo se načíst graf znalostí';
 }

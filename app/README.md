@@ -24,7 +24,7 @@ Before getting started, make sure your device is connected and unlocked. If you'
    Java runtime and `firebase-tools`/`npx`; `make dev-up` names what's missing.
 
    `make dev-status` shows what came up; `make dev-down` stops it. Ports, seeded
-   users, and troubleshooting: [`docs/runbooks/local-emulator-manual-qa.md`](../docs/runbooks/local-emulator-manual-qa.md).
+   users, and troubleshooting: [`backend/docs/runbooks/local-emulator-manual-qa.md`](../backend/docs/runbooks/local-emulator-manual-qa.md).
 
 2. Navigate to the app directory:
    ```bash
@@ -93,7 +93,14 @@ To build and deploy the app to an iPhone so it can run independently from your l
 
 1. Build the iOS app with release mode and specific flavor:
    ```bash
-   flutter build ios --flavor dev --release
+   # After the normal setup has seeded the iOS/Firebase files:
+   source setup.sh
+   setup_app_env local_dev "$LOCAL_API_BASE_URL"
+   scripts/validate_mobile_build_config.sh --flavor dev --profile local_dev
+   flutter build ios --flavor dev --release \
+     --dart-define=OMI_APP_PROFILE=local_dev \
+     --dart-define=OMI_API_BASE_URL="$LOCAL_API_BASE_URL" \
+     --dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST="$LOCAL_DEV_HOST"
    ```
    This produces an .app bundle at:
    ```

@@ -59,10 +59,10 @@ def test_dart_generator_cli_uses_utf8_when_the_process_locale_does_not():
 
 
 def test_conversation_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'conversation')
 
-    assert GENERATED_DART_PATH.read_text() == generated
+    assert GENERATED_DART_PATH.read_text(encoding='utf-8') == generated
     for schema_name in generate_dart_models.SCHEMA_GROUPS['conversation']['schemas']:
         assert f'class Generated{schema_name}' in generated
     assert 'items: _required(_readFieldValue<List<GeneratedConversationSearchItem>>' in generated
@@ -74,10 +74,10 @@ def test_conversation_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_messages_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'messages')
 
-    assert MESSAGES_DART_PATH.read_text() == generated
+    assert MESSAGES_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedMessage' in generated
     assert 'class GeneratedResponseMessage' in generated
     assert 'class GeneratedMessageReportResponse' in generated
@@ -92,13 +92,17 @@ def test_messages_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_message_adapter_preserves_arbitrary_chart_data_union_payloads():
-    adapter = (ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'message.dart').read_text()
+    adapter = (ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'message.dart').read_text(encoding='utf-8')
 
     assert 'Map<String, dynamic>? rawChartData;' in adapter
     assert "const requiredKeys = {'chart_type', 'title', 'datasets'};" in adapter
     assert "return (chartType == 'line' || chartType == 'bar') && requiredKeys.every(json.containsKey);" in adapter
     assert 'static ServerMessage fromResponseJson(Map<String, dynamic> json)' in adapter
-    assert "Map<String, dynamic>.from(json)..remove('evidence')" in adapter
+    # The cascade is formatted across lines by `dart format`, so match the
+    # operations rather than one physical line.
+    assert "Map<String, dynamic>.from(json)" in adapter
+    assert "..remove('evidence')" in adapter
+    assert "..remove('content_blocks')" in adapter
     assert 'wire.GeneratedResponseMessage.fromJson(generatedJson)' in adapter
     assert 'askForNps: generated.askForNps ?? false' in adapter
     assert 'final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);' in adapter
@@ -108,10 +112,10 @@ def test_message_adapter_preserves_arbitrary_chart_data_union_payloads():
 
 
 def test_action_items_folders_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'action_items_folders')
 
-    assert ACTION_ITEMS_FOLDERS_DART_PATH.read_text() == generated
+    assert ACTION_ITEMS_FOLDERS_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedActionItemResponse' in generated
     assert 'class GeneratedActionItemsResponse' in generated
     assert 'class GeneratedActionItemsSearchResponse' in generated
@@ -131,7 +135,7 @@ def test_action_items_folders_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_action_items_adapter_uses_generated_envelope_defaults():
-    adapter = (ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'action_item.dart').read_text()
+    adapter = (ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'action_item.dart').read_text(encoding='utf-8')
 
     # Phase 4.1 collapsed the hand-written wrappers into typedefs over the
     # generated wire types, so JSON encode/decode is provided by GeneratedX.
@@ -141,10 +145,10 @@ def test_action_items_adapter_uses_generated_envelope_defaults():
 
 
 def test_api_keys_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'api_keys')
 
-    assert API_KEYS_DART_PATH.read_text() == generated
+    assert API_KEYS_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedDevApiKey' in generated
     assert 'class GeneratedDevApiKeyCreated' in generated
     assert 'class GeneratedMcpApiKey' in generated
@@ -155,10 +159,10 @@ def test_api_keys_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_phone_calls_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'phone_calls')
 
-    assert PHONE_CALLS_DART_PATH.read_text() == generated
+    assert PHONE_CALLS_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedPhoneNumberResponse' in generated
     assert 'class GeneratedPhoneNumbersResponse' in generated
     assert 'class GeneratedTokenResponse' in generated
@@ -166,26 +170,26 @@ def test_phone_calls_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_people_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'people')
 
-    assert PEOPLE_DART_PATH.read_text() == generated
+    assert PEOPLE_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedPerson' in generated
     assert 'this.speechSamplesVersion = 3' in generated
 
 
 def test_person_adapter_preserves_required_timestamp_behavior():
-    adapter = (ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'person.dart').read_text()
+    adapter = (ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'person.dart').read_text(encoding='utf-8')
 
     assert "FormatException('Missing required field: created_at')" in adapter
     assert "FormatException('Missing required field: updated_at')" in adapter
 
 
 def test_imports_integrations_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'imports_integrations')
 
-    assert IMPORTS_INTEGRATIONS_DART_PATH.read_text() == generated
+    assert IMPORTS_INTEGRATIONS_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedImportJobResponse' in generated
     assert 'class GeneratedIntegrationResponse' in generated
     assert 'class GeneratedOAuthUrlResponse' in generated
@@ -197,10 +201,10 @@ def test_imports_integrations_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_device_speech_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'device_speech')
 
-    assert DEVICE_SPEECH_DART_PATH.read_text() == generated
+    assert DEVICE_SPEECH_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedFirmwareVersionResponse' in generated
     assert 'class GeneratedHasSpeechProfileResponse' in generated
     assert 'class GeneratedSpeechProfileResponse' in generated
@@ -213,10 +217,10 @@ def test_device_speech_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_misc_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'misc')
 
-    assert MISC_DART_PATH.read_text() == generated
+    assert MISC_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedFcmTokenResponse' in generated
     assert 'class GeneratedDeleteKnowledgeGraphResponse' in generated
     assert 'class GeneratedKnowledgeGraphResponse' in generated
@@ -227,10 +231,10 @@ def test_misc_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_wrapped_task_integrations_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'wrapped_task_integrations')
 
-    assert WRAPPED_TASK_INTEGRATIONS_DART_PATH.read_text() == generated
+    assert WRAPPED_TASK_INTEGRATIONS_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedWrappedStatusResponse' in generated
     assert 'class GeneratedGenerateWrappedResponse' in generated
     assert 'class GeneratedTaskIntegrationsResponse' in generated
@@ -249,10 +253,10 @@ def test_wrapped_task_integrations_wire_dart_is_generated_from_app_client_openap
 
 
 def test_apps_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'apps')
 
-    assert APPS_DART_PATH.read_text() == generated
+    assert APPS_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedAppSelectOption' in generated
     assert 'class GeneratedAppCapabilityResponse' in generated
     assert 'class GeneratedAppThumbnailUploadResponse' in generated
@@ -282,10 +286,10 @@ def test_apps_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_users_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'users')
 
-    assert USERS_DART_PATH.read_text() == generated
+    assert USERS_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedUserStatusResponse' in generated
     assert 'class GeneratedUserWebhooksStatusResponse' in generated
     assert 'class GeneratedStoreRecordingPermissionResponse' in generated
@@ -315,10 +319,10 @@ def test_users_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_subscription_usage_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'subscription_usage')
 
-    assert SUBSCRIPTION_USAGE_DART_PATH.read_text() == generated
+    assert SUBSCRIPTION_USAGE_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedUserSubscriptionResponse' in generated
     assert 'class GeneratedUserUsageResponse' in generated
     assert 'final List<String> features;' in generated
@@ -328,10 +332,10 @@ def test_subscription_usage_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_privacy_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'privacy')
 
-    assert PRIVACY_DART_PATH.read_text() == generated
+    assert PRIVACY_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedMigrationRequest' in generated
     assert 'class GeneratedBatchMigrationRequest' in generated
     assert 'class GeneratedMigrationTargetRequest' in generated
@@ -344,10 +348,10 @@ def test_privacy_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_announcements_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'announcements')
 
-    assert ANNOUNCEMENTS_DART_PATH.read_text() == generated
+    assert ANNOUNCEMENTS_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedTargeting' in generated
     assert 'class GeneratedDisplay' in generated
     assert 'class GeneratedAnnouncement' in generated
@@ -357,10 +361,10 @@ def test_announcements_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_audio_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'audio')
 
-    assert AUDIO_DART_PATH.read_text() == generated
+    assert AUDIO_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedAudioPrecacheResponse' in generated
     assert 'class GeneratedAudioFileUrlInfo' in generated
     assert 'class GeneratedAudioUrlsResponse' in generated
@@ -371,10 +375,10 @@ def test_audio_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_payments_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'payments')
 
-    assert PAYMENTS_DART_PATH.read_text() == generated
+    assert PAYMENTS_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedStripeConnectAccountResponse' in generated
     assert 'class GeneratedStripeOnboardingStatusResponse' in generated
     assert 'class GeneratedStripeSupportedCountryResponse' in generated
@@ -395,10 +399,10 @@ def test_payments_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_memories_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'memories')
 
-    assert MEMORIES_DART_PATH.read_text() == generated
+    assert MEMORIES_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedEvidence' in generated
     assert 'class GeneratedMemoryDB' in generated
     assert 'class GeneratedMemoryEditResponse' in generated
@@ -412,10 +416,10 @@ def test_memories_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_goals_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'goals')
 
-    assert GOALS_DART_PATH.read_text() == generated
+    assert GOALS_DART_PATH.read_text(encoding='utf-8') == generated
     assert 'class GeneratedGoalResponse' in generated
     assert 'class GeneratedGoalSuggestionResponse' in generated
     assert 'class GeneratedAdviceResponse' in generated
@@ -426,10 +430,10 @@ def test_goals_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_task_intelligence_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_dart_models.build_output(spec, 'task_intelligence')
 
-    assert TASK_INTELLIGENCE_DART_PATH.read_text() == generated
+    assert TASK_INTELLIGENCE_DART_PATH.read_text(encoding='utf-8') == generated
     for name in (
         'GeneratedCandidateRecord',
         'GeneratedGoalDetailProjection',
@@ -451,7 +455,7 @@ def test_task_intelligence_wire_dart_is_generated_from_app_client_openapi():
     assert 'static const dependency = GeneratedContextMatchSignal._("dependency");' in generated
     assert 'factory GeneratedContextMatchSignal.fromJson(dynamic value)' in generated
     assert '_readValueList(value, GeneratedContextMatchSignal.fromJson)' in generated
-    action_items_generated = ACTION_ITEMS_FOLDERS_DART_PATH.read_text()
+    action_items_generated = ACTION_ITEMS_FOLDERS_DART_PATH.read_text(encoding='utf-8')
     assert 'class GeneratedActionItemCreateRequest' in action_items_generated
     assert 'class GeneratedActionItemUpdateRequest' in action_items_generated
     assert 'final GeneratedPatchField<String> goalId;' in action_items_generated
@@ -459,7 +463,7 @@ def test_task_intelligence_wire_dart_is_generated_from_app_client_openapi():
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():
-    generated = GENERATED_DART_PATH.read_text()
+    generated = GENERATED_DART_PATH.read_text(encoding='utf-8')
 
     assert 'const ["action_items", "actionItems"]' in generated
     assert 'const ["start", "startsAt"]' in generated
@@ -516,7 +520,7 @@ def test_generator_rejects_unsupported_schema_shapes_without_string_fallback():
 
 
 def test_conversation_fixtures_validate_against_python_schema_authority():
-    fixtures = json.loads(CONVERSATION_FIXTURE_PATH.read_text())
+    fixtures = json.loads(CONVERSATION_FIXTURE_PATH.read_text(encoding='utf-8'))
 
     for name, payload in fixtures.items():
         conversation = Conversation.model_validate(payload)

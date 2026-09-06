@@ -54,6 +54,7 @@ import { cn } from '@/lib/utils';
 import { SETTINGS_SECTIONS, type SettingsSectionId } from '@/lib/settingsSections';
 import { PROFILE_MENU_MAX_HEIGHT } from '@/lib/profileMenu';
 import { ConfettiBurst } from '@/components/ui/ConfettiBurst';
+import { OpenSurface } from '@/components/ui/OpenSurface';
 
 /** How long the banner takes to swell and pop, and the burst to clear it. */
 const BANNER_BURST_MS = 420;
@@ -461,10 +462,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               >
                 <div className="relative">
                   <Bell className="w-5 h-5" />
-                  {unreadCount > 0 && (
+                  <span className="t-badge" data-open={unreadCount > 0 ? 'true' : 'false'}>
                     <span
                       className={cn(
-                        'absolute -top-2.5 -right-2.5',
+                        't-badge-dot',
                         'min-w-[18px] h-[18px] px-1',
                         'flex items-center justify-center',
                         'bg-red-500 text-white text-[10px] font-bold',
@@ -473,7 +474,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     >
                       {unreadCount > 99 ? '99+' : unreadCount}
                     </span>
-                  )}
+                  </span>
                 </div>
               </button>
 
@@ -490,11 +491,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
                   aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
                 >
-                  {isExpanded ? (
-                    <PanelLeftClose className="w-5 h-5" />
-                  ) : (
-                    <PanelLeft className="w-5 h-5" />
-                  )}
+                  <span className="t-icon-swap" data-state={isExpanded ? 'a' : 'b'}>
+                    <span className="t-icon" data-icon="a">
+                      <PanelLeftClose className="w-5 h-5" />
+                    </span>
+                    <span className="t-icon" data-icon="b">
+                      <PanelLeft className="w-5 h-5" />
+                    </span>
+                  </span>
                 </button>
               )}
 
@@ -783,17 +787,19 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           </button>
 
           {/* Collapsed: the menu is a popover beside the rail. */}
-          {!showText && menuOpen && (
-            <div
+          {!showText && (
+            <OpenSurface
+              open={menuOpen}
+              data-origin="bottom-left"
               className={cn(
+                't-dropdown',
                 'absolute bottom-0 left-full z-[60] ml-2 w-64 origin-bottom-left',
                 'overflow-hidden rounded-card border border-stroke bg-bg-raised',
                 'shadow-[0_18px_40px_-12px_rgba(0,0,0,0.6)]',
-                'animate-slideUp',
               )}
             >
               <ProfileMenuRows onNavigate={closeUserMenu} onSignOut={handleSignOut} />
-            </div>
+            </OpenSurface>
           )}
         </div>
       </aside>

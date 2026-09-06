@@ -44,7 +44,8 @@ final class ShortcutSettingsTests: XCTestCase {
     defer { ShortcutSettings.shared.askOmiShortcut = previousShortcut }
 
     let preset = ShortcutSettings.askOmiCommandJShortcut
-    OnboardingFloatingBarShortcutStepView.selectPreset(preset, settings: ShortcutSettings.shared)
+    let model = SBOnboardingModel(appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.pickShortcut(preset, isTalk: false)
 
     XCTAssertEqual(ShortcutSettings.shared.askOmiShortcut, preset)
     XCTAssertFalse(ShortcutSettings.shared.askOmiUsesCustomShortcut)
@@ -55,7 +56,8 @@ final class ShortcutSettingsTests: XCTestCase {
     defer { ShortcutSettings.shared.pttShortcut = previousShortcut }
 
     let preset = ShortcutSettings.pttPresets[0]
-    OnboardingVoiceShortcutStepView.selectPreset(preset, settings: ShortcutSettings.shared)
+    let model = SBOnboardingModel(appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.pickShortcut(preset, isTalk: true)
 
     XCTAssertEqual(ShortcutSettings.shared.pttShortcut, preset)
     XCTAssertFalse(ShortcutSettings.shared.pttUsesCustomShortcut)

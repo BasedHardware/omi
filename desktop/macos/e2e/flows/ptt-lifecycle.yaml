@@ -4,16 +4,40 @@ tier: 2
 description: Real push-to-talk start/release lifecycle through the automation bridge
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Analytics/AnalyticsManager+Questions.swift
   - desktop/macos/Desktop/Sources/AudioLevelMonitor.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchVoiceMorphMark.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
-  - desktop/macos/Desktop/Sources/Providers/RealtimeConversationToolProjection.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+AutomationSnapshot.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentQueryResult.swift
+  - desktop/macos/Desktop/Sources/Chat/APIClient+HigherModel.swift
   - desktop/macos/Desktop/Sources/Chat/ExternalSurfaceRunAuthority.swift
+  # Area ownership, not step-level execution: these files gate the PTT
+  # deferral-completion pathway (background runs spawned by voice turns). This
+  # flow drives only the too-short-turn lifecycle; the delta pathway itself is
+  # covered behaviorally in CompletionDeltaPolicyTests and its end-to-end flow
+  # is blocked on the delivery work tracked in
+  # https://github.com/BasedHardware/omi/issues/12732.
+  - desktop/macos/Desktop/Sources/Chat/CompletionDeltaPolicy.swift
+  - desktop/macos/Desktop/Sources/Chat/DesktopCoordinatorService.swift
   - desktop/macos/Desktop/Sources/DefaultsKey.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/LegacyVoiceJournalImporter.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTAttemptLifecycleRecorder.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PTTCaptureReadinessPolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NetworkReachability.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PTTLanguageIdentifier.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DeadlinedOperation.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationFormatter.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationPolisher.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationTranscriber.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/PTTRoutePolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/TextInsertionSink.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeAudioTrim.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeCommandParser.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeSession.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeWakeWordProbeSchedule.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager+OwnerBoundaryTestSupport.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager+InputDeviceRouting.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/ShortcutSettings.swift

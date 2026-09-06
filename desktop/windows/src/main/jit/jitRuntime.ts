@@ -130,7 +130,6 @@ export class WindowsJitRuntime {
   private snapshotReceipt: JitMirrorReceipt | null = null
   private snapshotAt = 0
   private ledgerReceipt: JitLedgerMirrorReceipt | null = null
-  private ledgerAt = 0
   private policy: JitRuntimePolicy | null = null
   private calendarCacheAt = 0
   private calendarCache: { authorized: boolean; events: JitCalendarEvent[] } | null = null
@@ -196,7 +195,6 @@ export class WindowsJitRuntime {
     this.snapshotReceipt = null
     this.snapshotAt = 0
     this.ledgerReceipt = null
-    this.ledgerAt = 0
     this.policy = null
   }
 
@@ -258,7 +256,7 @@ export class WindowsJitRuntime {
     authority: JitRuntimeAuthority
     triggers: JitCompiledTrigger[]
     receipt: JitMirrorReceipt
-    ledger: JitLedgerMirrorReceipt
+    ledger: JitLedgerMirrorReceipt | null
     policy: JitRuntimePolicy
   } | null> {
     const ownerId = this.deps.ownerId()
@@ -272,9 +270,6 @@ export class WindowsJitRuntime {
       this.snapshotReceipt &&
       this.snapshotAt > 0 &&
       this.now() - this.snapshotAt < SNAPSHOT_CACHE_MS &&
-      this.ledgerReceipt &&
-      this.ledgerAt > 0 &&
-      this.now() - this.ledgerAt < SNAPSHOT_CACHE_MS &&
       this.policy
     ) {
       try {
@@ -293,132 +288,130 @@ export class WindowsJitRuntime {
         }
       } catch {
         this.snapshotReceipt = null
-        this.ledgerReceipt = null
         this.policy = null
       }
     }
     try {
-      const ledgerPages: JitLedgerMirrorPage[] = []
-      let cursor: string | null = null
-      const cursors = new Set<string>()
-      let previousPage: JitLedgerMirrorPage | null = null
-      // The backend cursor is signed and bounded by its authoritative scan. Do
-      // not impose a client page-count ceiling: a large legacy ledger must
-      // converge instead of silently rolling back after page 32. The repeated
-      // cursor guard remains the termination fence for a malformed server.
-      while (true) {
-        const page = await this.deps.client.ledgerMirrorPage(cursor)
-        if (
-          page.failureReason ||
-          page.schemaVersion !== 'knowledge_ledger_mirror.v1' ||
-          page.ownerId !== ownerId ||
-          page.rows.length > 500 ||
-          !page.chainRevision ||
-          page.scannedCount < page.rows.length ||
-          page.projectedCount < page.rows.length ||
-          page.projectedCount > page.scannedCount ||
-          page.terminalCount < 0 ||
-          page.terminalCount > page.scannedCount
-        )
-          throw new Error('incomplete ledger mirror page')
-        if (previousPage) {
-          const first = ledgerPages[0]
+      try {
+        const ledgerPages: JitLedgerMirrorPage[] = []
+        let cursor: string | null = null
+        const cursors = new Set<string>()
+        let previousPage: JitLedgerMirrorPage | null = null
+        // The backend cursor is signed and bounded by its authoritative scan. Do
+        // not impose a client page-count ceiling: a large legacy ledger must
+        // converge instead of silently rolling back after page 32. The repeated
+        // cursor guard remains the termination fence for a malformed server.
+        while (true) {
+          const page = await this.deps.client.ledgerMirrorPage(cursor)
           if (
-            page.accountGeneration !== first.accountGeneration ||
-            page.sourceGeneration !== first.sourceGeneration ||
-            page.writerEpoch !== first.writerEpoch ||
-            page.headCommitId !== first.headCommitId ||
-            page.commitSequence !== first.commitSequence ||
-            page.epochId !== first.epochId
+            page.failureReason ||
+            page.schemaVersion !== 'knowledge_ledger_mirror.v1' ||
+            page.ownerId !== ownerId ||
+            page.rows.length > 500 ||
+            !page.chainRevision ||
+            page.scannedCount < page.rows.length ||
+            page.projectedCount < page.rows.length ||
+            page.projectedCount > page.scannedCount ||
+            page.terminalCount < 0 ||
+            page.terminalCount > page.scannedCount
           )
-            throw new Error('ledger mirror fence changed')
-          if (
-            page.scannedCount <= previousPage.scannedCount ||
-            page.projectedCount < previousPage.projectedCount ||
-            page.chainRevision === previousPage.chainRevision ||
-            (page.terminalCountFromServer === true &&
-              previousPage.terminalCountFromServer === true &&
-              page.terminalCount < previousPage.terminalCount)
-          )
-            throw new Error('ledger mirror chain transition invalid')
+            throw new Error('incomplete ledger mirror page')
+          if (previousPage) {
+            const first = ledgerPages[0]
+            if (
+              page.accountGeneration !== first.accountGeneration ||
+              page.sourceGeneration !== first.sourceGeneration ||
+              page.writerEpoch !== first.writerEpoch ||
+              page.headCommitId !== first.headCommitId ||
+              page.commitSequence !== first.commitSequence ||
+              page.epochId !== first.epochId
+            )
+              throw new Error('ledger mirror fence changed')
+            if (
+              page.scannedCount <= previousPage.scannedCount ||
+              page.projectedCount < previousPage.projectedCount ||
+              page.chainRevision === previousPage.chainRevision ||
+              (page.terminalCountFromServer === true &&
+                previousPage.terminalCountFromServer === true &&
+                page.terminalCount < previousPage.terminalCount)
+            )
+              throw new Error('ledger mirror chain transition invalid')
+          }
+          ledgerPages.push(page)
+          previousPage = page
+          if (page.finalPage) break
+          if (!page.nextCursor || cursors.has(page.nextCursor))
+            throw new Error('ledger mirror cursor incomplete')
+          cursors.add(page.nextCursor)
+          cursor = page.nextCursor
         }
-        ledgerPages.push(page)
-        previousPage = page
-        if (page.finalPage) break
-        if (!page.nextCursor || cursors.has(page.nextCursor))
-          throw new Error('ledger mirror cursor incomplete')
-        cursors.add(page.nextCursor)
-        cursor = page.nextCursor
-      }
-      const lastPage = ledgerPages.at(-1)
-      if (!lastPage?.finalPage) throw new Error('ledger mirror final page missing')
-      const firstPage = ledgerPages[0]
-      const accumulatedRows = ledgerPages.flatMap((page) => page.rows)
-      if (!firstPage || firstPage.projectedCount !== firstPage.rows.length)
-        throw new Error('ledger mirror first projected count mismatch')
-      for (let index = 1; index < ledgerPages.length; index++) {
-        const previous = ledgerPages[index - 1]
-        const current = ledgerPages[index]
-        if (current.projectedCount - previous.projectedCount !== current.rows.length)
-          throw new Error('ledger mirror projected count omitted or torn')
+        const lastPage = ledgerPages.at(-1)
+        if (!lastPage?.finalPage) throw new Error('ledger mirror final page missing')
+        const firstPage = ledgerPages[0]
+        const accumulatedRows = ledgerPages.flatMap((page) => page.rows)
+        if (!firstPage || firstPage.projectedCount !== firstPage.rows.length)
+          throw new Error('ledger mirror first projected count mismatch')
+        for (let index = 1; index < ledgerPages.length; index++) {
+          const previous = ledgerPages[index - 1]
+          const current = ledgerPages[index]
+          if (current.projectedCount - previous.projectedCount !== current.rows.length)
+            throw new Error('ledger mirror projected count omitted or torn')
+          if (
+            (current.terminalCountFromServer === true) !==
+            (previous.terminalCountFromServer === true)
+          )
+            throw new Error('ledger mirror terminal fence changed')
+          if (
+            current.terminalCountFromServer === true &&
+            current.terminalCount - previous.terminalCount !==
+              current.rows.filter((row) => row.status !== 'active').length
+          )
+            throw new Error('ledger mirror terminal count omitted or torn')
+        }
+        if (lastPage.projectedCount !== accumulatedRows.length)
+          throw new Error('ledger mirror cumulative projected count mismatch')
+        const accumulatedTerminalCount = accumulatedRows.filter(
+          (row) => row.status !== 'active'
+        ).length
         if (
-          (current.terminalCountFromServer === true) !==
-          (previous.terminalCountFromServer === true)
+          lastPage.terminalCountFromServer === true &&
+          lastPage.terminalCount !== accumulatedTerminalCount
         )
-          throw new Error('ledger mirror terminal fence changed')
-        if (
-          current.terminalCountFromServer === true &&
-          current.terminalCount - previous.terminalCount !==
-            current.rows.filter((row) => row.status !== 'active').length
-        )
-          throw new Error('ledger mirror terminal count omitted or torn')
-      }
-      if (lastPage.projectedCount !== accumulatedRows.length)
-        throw new Error('ledger mirror cumulative projected count mismatch')
-      const accumulatedTerminalCount = accumulatedRows.filter(
-        (row) => row.status !== 'active'
-      ).length
-      if (
-        lastPage.terminalCountFromServer === true &&
-        lastPage.terminalCount !== accumulatedTerminalCount
-      )
-        throw new Error('ledger mirror cumulative terminal count mismatch')
-      const terminalCount = lastPage.terminalCountFromServer
-        ? lastPage.terminalCount
-        : accumulatedTerminalCount
-      const ledger = reconcileJitLedgerMirror(
-        this.deps.db,
-        {
-          fence: {
-            ownerId: lastPage.ownerId,
-            accountGeneration: lastPage.accountGeneration,
-            sourceGeneration: lastPage.sourceGeneration,
-            writerEpoch: lastPage.writerEpoch,
-            headCommitId: lastPage.headCommitId,
-            commitSequence: lastPage.commitSequence,
-            epochId: lastPage.epochId,
-            pageRevision: lastPage.pageRevision,
-            schemaVersion: lastPage.schemaVersion,
-            chainRevision: lastPage.chainRevision,
-            scannedCount: lastPage.scannedCount,
-            projectedCount: lastPage.projectedCount,
-            terminalCount
+          throw new Error('ledger mirror cumulative terminal count mismatch')
+        const terminalCount = lastPage.terminalCountFromServer
+          ? lastPage.terminalCount
+          : accumulatedTerminalCount
+        this.ledgerReceipt = reconcileJitLedgerMirror(
+          this.deps.db,
+          {
+            fence: {
+              ownerId: lastPage.ownerId,
+              accountGeneration: lastPage.accountGeneration,
+              sourceGeneration: lastPage.sourceGeneration,
+              writerEpoch: lastPage.writerEpoch,
+              headCommitId: lastPage.headCommitId,
+              commitSequence: lastPage.commitSequence,
+              epochId: lastPage.epochId,
+              pageRevision: lastPage.pageRevision,
+              schemaVersion: lastPage.schemaVersion,
+              chainRevision: lastPage.chainRevision,
+              scannedCount: lastPage.scannedCount,
+              projectedCount: lastPage.projectedCount,
+              terminalCount
+            },
+            rows: accumulatedRows,
+            aliases: ledgerPages.flatMap((page) => page.aliases)
           },
-          rows: accumulatedRows,
-          aliases: ledgerPages.flatMap((page) => page.aliases)
-        },
-        ownerId,
-        this.now()
-      )
+          ownerId,
+          this.now()
+        )
+      } catch {
+        // Fail closed for the mirror only. A torn or incomplete ledger must not
+        // discard a complete trigger snapshot or reopen the Insight pipeline.
+      }
       const snapshot = await this.deps.client.triggerSnapshot()
-      if (
-        !snapshot.complete ||
-        Boolean(snapshot.failureReason) ||
-        snapshot.accountGeneration !== ledger.accountGeneration ||
-        snapshot.headCommitId !== ledger.headCommitId ||
-        snapshot.commitSequence !== ledger.commitSequence
-      )
-        throw new Error('trigger and ledger authority mismatch')
+      if (!snapshot.complete || Boolean(snapshot.failureReason))
+        throw new Error('incomplete trigger snapshot')
       const receipt = reconcileJitTriggerSnapshot(this.deps.db, snapshot, ownerId, this.now())
       const triggers = readCompiledJitTriggers(this.deps.db, receipt)
       if (
@@ -432,8 +425,6 @@ export class WindowsJitRuntime {
         throw new Error('embedding trigger threshold disagrees with policy')
       this.snapshotReceipt = receipt
       this.snapshotAt = this.now()
-      this.ledgerReceipt = ledger
-      this.ledgerAt = this.now()
       this.policy = snapshot.policy
       return {
         authority: {
@@ -445,14 +436,12 @@ export class WindowsJitRuntime {
         },
         triggers,
         receipt,
-        ledger,
+        ledger: this.ledgerReceipt,
         policy: snapshot.policy
       }
     } catch {
       this.snapshotReceipt = null
       this.snapshotAt = 0
-      this.ledgerReceipt = null
-      this.ledgerAt = 0
       this.policy = null
       return null
     }
@@ -526,6 +515,11 @@ export class WindowsJitRuntime {
     }
     if (evaluation.nextLane === 'bounded_planned_triage')
       return { kind: 'suppressed', reason: 'planned_match_ambiguous' }
+    if (evaluation.nextLane === 'none') {
+      return loaded.triggers.length === 0
+        ? { kind: 'suppressed', reason: 'empty_watchlist' }
+        : { kind: 'suppressed', reason: 'planned_runtime_rejected' }
+    }
     return { kind: 'suppressed', reason: 'no_eligible_planned_trigger' }
   }
 
@@ -691,7 +685,7 @@ export class WindowsJitRuntime {
     }) => Promise<'approved' | 'rejected' | 'unknown'>
   }): Promise<JitAdmission> {
     const loaded = await this.refreshSnapshot()
-    if (!loaded) return { kind: 'legacy_fallback', reason: 'authoritative_snapshot_unavailable' }
+    if (!loaded) return { kind: 'suppressed', reason: 'authoritative_snapshot_unavailable' }
     if (
       !input.contextId ||
       !/^[0-9a-f]{8,128}$/i.test(input.semanticFingerprint) ||
@@ -933,11 +927,24 @@ export class WindowsJitRuntime {
       this.rollout.rollout === 'enabled' &&
       this.rollout.killSwitch === 'disabled' &&
       this.rollout.effective === 'enabled'
+    return effective && this.policy !== null && this.snapshotReceipt?.ownerId === ownerId
+  }
+
+  /**
+   * Insight pipeline gate. Effective rollout consumes the visit even when the
+   * trigger snapshot is incomplete or the ledger mirror failed — those are
+   * suppress, not a licence to run the legacy Gemini path.
+   */
+  shouldSuppressLegacyInsight(): boolean {
+    const ownerId = this.deps.ownerId()
     return (
-      effective &&
-      this.policy !== null &&
-      this.snapshotReceipt?.ownerId === ownerId &&
-      this.ledgerReceipt?.ownerId === ownerId
+      ownerId !== null &&
+      this.deps.authorizationCurrent() &&
+      this.rollout !== null &&
+      this.now() - this.rolloutAt < ROLLOUT_CACHE_MS &&
+      this.rollout.rollout === 'enabled' &&
+      this.rollout.killSwitch === 'disabled' &&
+      this.rollout.effective === 'enabled'
     )
   }
 

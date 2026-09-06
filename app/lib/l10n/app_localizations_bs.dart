@@ -9873,12 +9873,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
-  String get chatScopeToday => 'Danas';
-
-  @override
-  String get chatScopeThisWeek => 'Ove sedmice';
-
-  @override
   String chatScopeAbout(String title) {
     return 'O: $title';
   }
@@ -9942,4 +9936,51 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Memorija Pendanta je puna i još uvijek je u režimu snimanja, pa se pohranjeni zvuk ne može prenijeti. Pritisnite dugme na Pendantu da zaustavite snimanje, a zatim ponovo sinhronizujte.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Nije snimljeno ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripcija ne prima audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Zadatak';
+
+  @override
+  String get chatBlockGoal => 'Cilj';
+
+  @override
+  String get chatBlockConversation => 'Razgovor';
+
+  @override
+  String get chatBlockMemory => 'Sjećanje';
+
+  @override
+  String get chatBlockQuestion => 'Pitanje';
+
+  @override
+  String get chatBlockOpenInGoals => 'Otvori u Ciljevima';
+
+  @override
+  String get chatBlockOpenConversation => 'Otvori razgovor';
+
+  @override
+  String get chatBlockOpenInMemories => 'Otvori u Sjećanjima';
+
+  @override
+  String get chatBlockUnavailable => 'Više nije dostupno';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Preporučeni sljedeći koraci';
+
+  @override
+  String get couldNotLoadMemories => 'Nije moguće učitati uspomene';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nije moguće učitati graf znanja';
 }

@@ -103,6 +103,11 @@ env:
     value: "0.01"
   - name: USE_VERTEX_AI
     value: "true"
+  # Direct-provider surfaces (desktop_proxy, omni_relay) write their attempts
+  # to the gateway ledger under this switch; the manifest declares it, this is
+  # where it actually reaches the pod.
+  - name: LLM_GATEWAY_ACCOUNTING_ENABLED
+    value: "true"
   - name: GEMINI_API_KEY
     valueFrom:
       secretKeyRef:
@@ -134,7 +139,7 @@ env:
   - name: OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED
     value: "true"
   - name: CONVERSATION_NOTES_V2_ENABLED
-    value: "false"
+    value: "true"
   - name: MEETING_RECEIPT_RECONCILER_ENABLED
     value: "false"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
@@ -143,6 +148,8 @@ env:
     value: "false"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
     value: "false"
+  - name: WAKE_WORD_ADJUDICATION_ENABLED
+    value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
     value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
@@ -160,6 +167,8 @@ env:
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_ENABLED
     value: "on"
+  - name: MEMORY_BELIEF_MODEL_ENABLED
+    value: "false"
   - name: MEMORY_V3_CURSOR_SECRET
     valueFrom:
       secretKeyRef:
@@ -309,6 +318,13 @@ env:
         key: OPENROUTER_API_KEY
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
+  - name: OMI_FIRESTORE_DATA_PLANE_PROJECT
+    value: "based-hardware"
+  - name: POSTHOG_PROJECT_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: POSTHOG_PROJECT_API_KEY
   - name: GCP_LOCATION
     value: "us-central1"
   - name: HOSTED_PARAKEET_API_URL
@@ -323,7 +339,7 @@ env:
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: STT_SERVICE_MODELS
-    value: "dg-nova-3,modulate-velma-2,parakeet"
+    value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS

@@ -9892,12 +9892,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get accountCutoverOpenStore => 'Deschide magazinul';
 
   @override
-  String get chatScopeToday => 'Astăzi';
-
-  @override
-  String get chatScopeThisWeek => 'Săptămâna aceasta';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Despre: $title';
   }
@@ -9960,4 +9954,51 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Spațiul de stocare al Pendantului este plin și acesta este încă în modul de înregistrare, așa că audio-ul stocat nu poate fi transferat. Apăsați butonul Pendantului pentru a opri înregistrarea, apoi sincronizați din nou.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Neînregistrat ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'Transcrierea nu primește audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Sarcină';
+
+  @override
+  String get chatBlockGoal => 'Obiectiv';
+
+  @override
+  String get chatBlockConversation => 'Conversație';
+
+  @override
+  String get chatBlockMemory => 'Amintire';
+
+  @override
+  String get chatBlockQuestion => 'Întrebare';
+
+  @override
+  String get chatBlockOpenInGoals => 'Deschide în Obiective';
+
+  @override
+  String get chatBlockOpenConversation => 'Deschide conversația';
+
+  @override
+  String get chatBlockOpenInMemories => 'Deschide în Amintiri';
+
+  @override
+  String get chatBlockUnavailable => 'Nu mai este disponibil';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Pașii următori recomandați';
+
+  @override
+  String get couldNotLoadMemories => 'Nu s-au putut încărca amintirile';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nu s-a putut încărca graful de cunoștințe';
 }

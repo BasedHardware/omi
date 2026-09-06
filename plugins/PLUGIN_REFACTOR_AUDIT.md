@@ -1,5 +1,12 @@
 # Plugin Refactor Audit for #8559
 
+> **Superseded note (2026-09-03):** the SDK `auth.py`, `webhook.py`, and
+> `fastapi.py` helper modules mentioned below were deleted on 2026-07-13
+> (commit `f6ac87773f`) as speculative helpers with zero callers. The SDK is
+> models-only today (`__init__.py` + `models.py`). `plugins/_mem0` and the
+> `plugins/advanced/` references below have since been deleted too. The rest
+> of this document is preserved as the historical decision record.
+
 Date: 2026-06-29
 
 ## Summary

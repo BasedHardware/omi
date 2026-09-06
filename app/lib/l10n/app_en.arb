@@ -11639,14 +11639,6 @@
     "@accountCutoverOpenStore": {
         "description": "Button that opens the app store for a required cutover upgrade"
     },
-    "chatScopeToday": "Today",
-    "@chatScopeToday": {
-        "description": "Chat timeframe scope chip for today"
-    },
-    "chatScopeThisWeek": "This week",
-    "@chatScopeThisWeek": {
-        "description": "Chat timeframe scope chip for this week"
-    },
     "chatScopeAbout": "About: {title}",
     "@chatScopeAbout": {
         "description": "Chat scope chip when asking about a specific conversation",
@@ -11735,5 +11727,70 @@
     "pendantFullSyncBlocked": "Your Pendant's storage is full and it's still in recording mode, so its stored audio can't be transferred. Press the Pendant's button to stop recording, then sync again.",
     "@pendantFullSyncBlocked": {
         "description": "Shown when offline sync stalls because the Limitless Pendant's flash storage is full; a full pendant stays armed in recording mode and serves no stored audio until recording is stopped"
+    },
+    "conversationsNotCapturedCount": "Not captured ({count})",
+    "@conversationsNotCapturedCount": {
+        "description": "Header for the calendar capture-gap group in the conversations list",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "transcriptionNoAudio": "Transcription not receiving audio",
+    "@transcriptionNoAudio": {
+        "description": "Status when an active call transcription socket receives no audio frames"
+    },
+    "tapPlusToStartRecording": "Tap + to start recording",
+    "@tapPlusToStartRecording": {
+        "description": "Empty-home hint pointing at the + record button"
+    },
+    "chatBlockTask": "Task",
+    "@chatBlockTask": {
+        "description": "Eyebrow label on a chat task card block"
+    },
+    "chatBlockGoal": "Goal",
+    "@chatBlockGoal": {
+        "description": "Eyebrow label on a chat goal link block"
+    },
+    "chatBlockConversation": "Conversation",
+    "@chatBlockConversation": {
+        "description": "Eyebrow label on a chat conversation/capture link block"
+    },
+    "chatBlockMemory": "Memory",
+    "@chatBlockMemory": {
+        "description": "Eyebrow label on a chat memory link block"
+    },
+    "chatBlockQuestion": "Question",
+    "@chatBlockQuestion": {
+        "description": "Eyebrow label on a chat question card block"
+    },
+    "chatBlockOpenInGoals": "Open in Goals",
+    "@chatBlockOpenInGoals": {
+        "description": "Action on a chat goal link block"
+    },
+    "chatBlockOpenConversation": "Open conversation",
+    "@chatBlockOpenConversation": {
+        "description": "Action on a chat conversation link block"
+    },
+    "chatBlockOpenInMemories": "Open in Memories",
+    "@chatBlockOpenInMemories": {
+        "description": "Action on a chat memory link block"
+    },
+    "chatBlockUnavailable": "No longer available",
+    "@chatBlockUnavailable": {
+        "description": "Status shown when a chat block's entity no longer exists"
+    },
+    "chatBlockRecommendedNextSteps": "Recommended next steps",
+    "@chatBlockRecommendedNextSteps": {
+        "description": "Header above recommended action items on a chat conversation link block"
+    },
+    "couldNotLoadMemories": "Couldn't load memories",
+    "couldNotLoadKnowledgeGraph": "Couldn't load knowledge graph",
+    "@couldNotLoadMemories": {
+        "description": "Retryable error when fetching memories failed instead of returning an empty list"
+    },
+    "@couldNotLoadKnowledgeGraph": {
+        "description": "Short user-facing error when the knowledge graph request is non-200; must not include the response body"
     }
 }

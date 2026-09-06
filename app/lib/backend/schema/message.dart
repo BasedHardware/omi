@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
+import 'package:omi/backend/schema/chat_content_block.dart';
 import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
+import 'package:omi/backend/schema/memory_review.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
 import 'package:uuid/uuid.dart';
 
@@ -275,10 +277,14 @@ class ServerMessage {
   }
 
   static ServerMessage fromGeneratedWireJson(Map<String, dynamic> json) {
-    // Evidence is deliberately fail-soft UI chrome. Decode it through the
-    // bounded compatibility parser below instead of letting the strict
-    // generated DTO reject an otherwise valid text answer.
-    final generatedJson = Map<String, dynamic>.from(json)..remove('evidence');
+    // Evidence and content blocks are deliberately fail-soft UI chrome. Decode
+    // them through the bounded compatibility parsers below instead of letting
+    // the strict generated DTO reject an otherwise valid text answer — an FCM
+    // push carries `content_blocks` as JSON text, which the generated
+    // `List<Map>` reader rejects outright.
+    final generatedJson = Map<String, dynamic>.from(json)
+      ..remove('evidence')
+      ..remove('content_blocks');
     final generated = wire.GeneratedMessage.fromJson(generatedJson);
     final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
     return ServerMessage.fromGenerated(
@@ -290,7 +296,9 @@ class ServerMessage {
   }
 
   static ServerMessage fromResponseJson(Map<String, dynamic> json) {
-    final generatedJson = Map<String, dynamic>.from(json)..remove('evidence');
+    final generatedJson = Map<String, dynamic>.from(json)
+      ..remove('evidence')
+      ..remove('content_blocks');
     final generated = wire.GeneratedResponseMessage.fromJson(generatedJson);
     final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
     return ServerMessage.fromGeneratedResponse(
@@ -386,10 +394,7 @@ class ServerMessage {
 
   /// Decode only additive evidence fields. A malformed or unknown payload is
   /// treated as absent so released text/chat behavior remains unchanged.
-  static ChatEvidenceReferenceEnvelope? _decodeEvidenceEnvelope(
-    Map<String, dynamic> json,
-    String? metadata,
-  ) {
+  static ChatEvidenceReferenceEnvelope? _decodeEvidenceEnvelope(Map<String, dynamic> json, String? metadata) {
     final direct =
         json['evidence'] ?? json['evidence_envelope'] ?? json['evidence_refs'] ?? json['evidence_references'];
     final parsedDirect = _tryEvidenceEnvelope(direct);
@@ -419,8 +424,13 @@ class ServerMessage {
   }
 
   static List<Map<String, dynamic>> _decodeContentBlocks(dynamic firstClass, String? metadata) {
-    final direct = _mapList(firstClass);
-    if (direct.isNotEmpty || firstClass is List) return direct;
+    // FCM data payloads are Dict[str, str], so a push (the only transport that
+    // carries a `day_summary` message today) delivers `content_blocks` as JSON
+    // text. Decode it here so both transports have one decoder; anything
+    // malformed degrades to "no blocks", never to a lost message.
+    final firstClassValue = firstClass is String ? _tryDecodeJson(firstClass) : firstClass;
+    final direct = _mapList(firstClassValue);
+    if (direct.isNotEmpty || firstClassValue is List) return direct;
     if (metadata == null || metadata.isEmpty) return const [];
     try {
       final decoded = jsonDecode(metadata);
@@ -435,36 +445,64 @@ class ServerMessage {
     return value.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList(growable: false);
   }
 
-  static const _desktopChatChromeTypes = {
-    'goalLink',
-    'goal_link',
-    'taskCard',
-    'task_card',
-    'questionCard',
-    'question_card',
-  };
+  List<ChatContentBlock>? _typedContentBlocks;
+  static Object? _tryDecodeJson(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    try {
+      return jsonDecode(trimmed);
+    } on FormatException {
+      return null;
+    }
+  }
 
-  /// Desktop Chat-first cards (goal/task/question) are interactive shell chrome.
-  /// Mobile has no renderer for them, so fallback dumps like
-  /// `Goal - … Task Task Task` should not appear in the phone timeline.
-  bool get hideFromMobileChat {
-    if (sender != MessageSender.ai) return false;
-    if (type != MessageType.text) return false;
-    if (files.isNotEmpty || memories.isNotEmpty) return false;
+  /// The `memoryReviewCard` block for this message, when it carries a usable one.
+  MemoryReviewCardBlock? get memoryReviewCard {
+    for (final block in contentBlocks) {
+      final card = MemoryReviewCardBlock.tryFromBlock(block);
+      if (card != null) return card;
+    }
+    return null;
+  }
+
+  /// The one grounded follow-up question the answer invites, when present.
+  String? get followUpQuestion {
+    for (final block in contentBlocks) {
+      if (!_followUpTypes.contains(block['type'])) continue;
+      final text = block['text'];
+      if (text is String && text.trim().isNotEmpty) return text.trim();
+    }
+    return null;
+  }
+
+  static const _followUpTypes = {'followUp', 'follow_up'};
+
+  /// Typed projection of [contentBlocks], decoded once per message.
+  ///
+  /// The raw list stays authoritative on the wire (see [toJson]); this is the
+  /// renderable view used by the chat content-block widgets.
+  List<ChatContentBlock> get typedContentBlocks => _typedContentBlocks ??= ChatContentBlock.decodeList(contentBlocks);
+
+  /// True when [text] carries nothing beyond the fallback text synthesized from
+  /// [contentBlocks]. The interactive blocks then replace the body instead of
+  /// repeating it.
+  bool get textIsStructuredFallback {
     if (contentBlocks.isEmpty) return false;
-    if (!_blocksAreDesktopChatChromeOnly(contentBlocks)) return false;
     final fallback = _structuredFallbackText(contentBlocks);
     if (fallback.isEmpty) return false;
     final body = text.trim();
     return body.isEmpty || _normalizeWhitespace(body) == _normalizeWhitespace(fallback);
   }
 
-  static List<ServerMessage> visibleOnMobile(Iterable<ServerMessage> messages) {
-    return messages.where((message) => !message.hideFromMobileChat).toList();
-  }
-
-  static bool _blocksAreDesktopChatChromeOnly(List<Map<String, dynamic>> blocks) {
-    return blocks.every((block) => _desktopChatChromeTypes.contains(block['type']));
+  /// Returns the canonical body fallback for one raw wire block.
+  ///
+  /// A rich block can replace the ordinary message body on clients that know
+  /// how to render it. Unrecognised or display-only blocks still need their
+  /// synthesized line in that mode; otherwise a mixed turn silently loses
+  /// thinking, tool, citation, or future block content.
+  String? structuredFallbackTextForRawBlock(Map<String, dynamic> block) {
+    final fallback = _blockFallbackText(block).trim();
+    return fallback.isEmpty ? null : fallback;
   }
 
   static String _normalizeWhitespace(String value) {
@@ -482,8 +520,11 @@ class ServerMessage {
   }
 
   static String _blockFallbackText(Map<String, dynamic> block) {
-    String value(String camel, [String? snake]) =>
-        ((block[camel] ?? (snake == null ? null : block[snake])) as String? ?? '').trim();
+    String value(String camel, [String? snake]) {
+      final candidate = block[camel] ?? (snake == null ? null : block[snake]);
+      return candidate is String ? candidate.trim() : '';
+    }
+
     String labelled(String label, Iterable<String> details) {
       final unique = details.where((detail) => detail.isNotEmpty).toSet().toList(growable: false);
       return unique.isEmpty ? label : '$label - ${unique.join(' - ')}';
@@ -503,6 +544,17 @@ class ServerMessage {
       case 'questionCard':
       case 'question_card':
         return value('text').isEmpty ? 'Question' : value('text');
+      case 'memoryReviewCard':
+      case 'memory_review_card':
+      case 'followUp':
+      case 'follow_up':
+        // Both render natively on mobile — MemoryReviewCard draws its own
+        // "Things I learned today" heading, and ChatFollowUpChip draws the
+        // question. Inventing the same words as fallback prose says them
+        // twice; and when the block is malformed enough that no card renders
+        // (MemoryReviewCardBlock.tryFromBlock returns null for an item-less
+        // block), a bare heading over nothing is worse than no heading.
+        return '';
       case 'taskCard':
       case 'task_card':
         return 'Task';

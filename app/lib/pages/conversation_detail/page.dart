@@ -13,7 +13,6 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:omi/utils/share_sheet.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:tuple/tuple.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
@@ -701,16 +700,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
               ),
             ),
-            title: Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 8.0),
-                child: Text(
-                  _getTabTitle(context, selectedTab),
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
+            // No title: the tab bar below already names the active view, so a
+            // header label only crowds the row with the back button and actions.
+            // _getTabTitle still backs the `active_tab` search analytics property.
             titleSpacing: 0,
             actions: [
               Consumer<ConversationDetailProvider>(
@@ -725,10 +717,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           width: 36,
                           height: 36,
                           margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withValues(alpha: 0.3),
-                            shape: BoxShape.circle,
-                          ),
+                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                           child: IconButton(
                             padding: EdgeInsets.zero,
                             tooltip: context.l10n.askAboutThisConversation,
@@ -1344,17 +1333,16 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
           widget.onTapWhenSearchEmpty!();
         }
       },
-      child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
-        selector: (context, provider) =>
-            Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
-        builder: (context, data, child) {
+      child: Selector<ConversationDetailProvider, bool>(
+        selector: (context, provider) => provider.conversation.discarded,
+        builder: (context, discarded, child) {
           return Stack(
             children: [
               CustomScrollView(
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
                 slivers: [
                   const SliverToBoxAdapter(child: GetSummaryWidgets()),
-                  data.item1
+                  discarded
                       ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                       : GetAppsWidgets(
                           searchQuery: widget.searchQuery,

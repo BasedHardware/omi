@@ -558,30 +558,78 @@ class GeneratedDailySummaryKnowledgeNugget {
   }
 }
 
+class GeneratedLearnedMemoryRef {
+  final DateTime? capturedAt;
+  final String category;
+  final String content;
+  final String memoryId;
+
+  const GeneratedLearnedMemoryRef({
+    this.capturedAt,
+    this.category = "",
+    required this.content,
+    required this.memoryId,
+  });
+
+  factory GeneratedLearnedMemoryRef.fromJson(Map<String, dynamic> json) {
+    return GeneratedLearnedMemoryRef(
+      capturedAt: _readFieldValue<DateTime>(_readField(json, const ["captured_at"]), "captured_at", _readDateTime, requiredField: false, nullable: true),
+      category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: false, defaultValue: ""), "category"),
+      content: _required(_readFieldValue<String>(_readField(json, const ["content"]), "content", _readString, requiredField: true, nullable: false), "content"),
+      memoryId: _required(_readFieldValue<String>(_readField(json, const ["memory_id"]), "memory_id", _readString, requiredField: true, nullable: false), "memory_id"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'captured_at': capturedAt?.toUtc().toIso8601String(),
+      'category': category,
+      'content': content,
+      'memory_id': memoryId,
+    };
+  }
+}
+
 class GeneratedDailySummaryDayStats {
   final int? actionItemsCount;
+  final int? actionItemsCreated;
+  final int? memoriesCreated;
+  final int? proactiveMoments;
   final int? totalConversations;
   final int? totalDurationMinutes;
+  final int? watchingMinutes;
 
   const GeneratedDailySummaryDayStats({
     this.actionItemsCount,
+    this.actionItemsCreated,
+    this.memoriesCreated,
+    this.proactiveMoments,
     this.totalConversations,
     this.totalDurationMinutes,
+    this.watchingMinutes,
   });
 
   factory GeneratedDailySummaryDayStats.fromJson(Map<String, dynamic> json) {
     return GeneratedDailySummaryDayStats(
       actionItemsCount: _readFieldValue<int>(_readField(json, const ["action_items_count"]), "action_items_count", _readInt, requiredField: false, nullable: true),
+      actionItemsCreated: _readFieldValue<int>(_readField(json, const ["action_items_created"]), "action_items_created", _readInt, requiredField: false, nullable: true),
+      memoriesCreated: _readFieldValue<int>(_readField(json, const ["memories_created"]), "memories_created", _readInt, requiredField: false, nullable: true),
+      proactiveMoments: _readFieldValue<int>(_readField(json, const ["proactive_moments"]), "proactive_moments", _readInt, requiredField: false, nullable: true),
       totalConversations: _readFieldValue<int>(_readField(json, const ["total_conversations"]), "total_conversations", _readInt, requiredField: false, nullable: true),
       totalDurationMinutes: _readFieldValue<int>(_readField(json, const ["total_duration_minutes"]), "total_duration_minutes", _readInt, requiredField: false, nullable: true),
+      watchingMinutes: _readFieldValue<int>(_readField(json, const ["watching_minutes"]), "watching_minutes", _readInt, requiredField: false, nullable: true),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'action_items_count': actionItemsCount,
+      'action_items_created': actionItemsCreated,
+      'memories_created': memoriesCreated,
+      'proactive_moments': proactiveMoments,
       'total_conversations': totalConversations,
       'total_duration_minutes': totalDurationMinutes,
+      'watching_minutes': watchingMinutes,
     };
   }
 }
@@ -633,6 +681,7 @@ class GeneratedDailySummaryResponse {
   final String? id;
   final List<GeneratedDailySummaryKnowledgeNugget>? knowledgeNuggets;
   final List<GeneratedDailySummaryLocationPin>? locations;
+  final List<GeneratedLearnedMemoryRef>? memoriesLearned;
   final String? overview;
   final GeneratedDailySummaryDayStats? stats;
   final List<GeneratedDailySummaryUnresolvedQuestion>? unresolvedQuestions;
@@ -648,6 +697,7 @@ class GeneratedDailySummaryResponse {
     this.id,
     this.knowledgeNuggets,
     this.locations,
+    this.memoriesLearned,
     this.overview,
     this.stats,
     this.unresolvedQuestions,
@@ -665,6 +715,7 @@ class GeneratedDailySummaryResponse {
       id: _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: false, nullable: true),
       knowledgeNuggets: _readFieldValue<List<GeneratedDailySummaryKnowledgeNugget>>(_readField(json, const ["knowledge_nuggets"]), "knowledge_nuggets", (value) => _readObjectList(value, GeneratedDailySummaryKnowledgeNugget.fromJson), requiredField: false, nullable: true),
       locations: _readFieldValue<List<GeneratedDailySummaryLocationPin>>(_readField(json, const ["locations"]), "locations", (value) => _readObjectList(value, GeneratedDailySummaryLocationPin.fromJson), requiredField: false, nullable: true),
+      memoriesLearned: _readFieldValue<List<GeneratedLearnedMemoryRef>>(_readField(json, const ["memories_learned"]), "memories_learned", (value) => _readObjectList(value, GeneratedLearnedMemoryRef.fromJson), requiredField: false, nullable: true),
       overview: _readFieldValue<String>(_readField(json, const ["overview"]), "overview", _readString, requiredField: false, nullable: true),
       stats: _readFieldValue<GeneratedDailySummaryDayStats>(_readField(json, const ["stats"]), "stats", (value) => _readObject(value, GeneratedDailySummaryDayStats.fromJson), requiredField: false, nullable: true),
       unresolvedQuestions: _readFieldValue<List<GeneratedDailySummaryUnresolvedQuestion>>(_readField(json, const ["unresolved_questions"]), "unresolved_questions", (value) => _readObjectList(value, GeneratedDailySummaryUnresolvedQuestion.fromJson), requiredField: false, nullable: true),
@@ -683,6 +734,7 @@ class GeneratedDailySummaryResponse {
       'id': id,
       'knowledge_nuggets': knowledgeNuggets?.map((value) => value.toJson()).toList(),
       'locations': locations?.map((value) => value.toJson()).toList(),
+      'memories_learned': memoriesLearned?.map((value) => value.toJson()).toList(),
       'overview': overview,
       'stats': stats?.toJson(),
       'unresolved_questions': unresolvedQuestions?.map((value) => value.toJson()).toList(),

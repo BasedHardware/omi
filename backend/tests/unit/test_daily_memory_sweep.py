@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from google.cloud import firestore
 import pytest
 
-from models.memory_apply import MemoryControlState
+from models.memory_apply import MemoryControlState, WriterMode
 from models.memory_contracts import deterministic_contract_id
 from services.users import data_export
 from utils.memory.daily_memory_sweep import (
@@ -20,6 +20,13 @@ from utils.memory.daily_memory_sweep import (
     DailySweepInput,
     DailySweepModelAuthority,
     MAX_CATCH_UP_DAYS,
+    QA_SWEEP_MAX_CATCH_UP_DAYS,
+    QA_SWEEP_MAX_SDK_RETRIES,
+    QA_SWEEP_MAX_MEMORY_LOOKUPS,
+    QA_SWEEP_MAX_MODEL_COST_USD,
+    QA_SWEEP_MAX_SUMMARY_CONVERSATIONS,
+    QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS,
+    QA_SWEEP_MAX_TRANSCRIPT_FETCHES,
     SweepAuthority,
     SweepAuthorityState,
     completed_local_day_window,
@@ -52,8 +59,10 @@ from utils.memory.daily_memory_sweep import (
     read_daily_memory_sweep_cohort_assignment,
     run_daily_memory_sweep_scheduler,
     produce_completed_day_daily_summary_sources,
+    firestore_daily_sweep_source_provider,
 )
 from models.product_memory import normalized_memory_content_key
+from utils.llm.usage_tracker import get_current_context
 
 
 def _candidate(**updates):
@@ -375,6 +384,46 @@ def test_runner_uses_local_completed_days_and_cursor(monkeypatch):
     assert first.completed_local_dates == (date(2026, 8, 23),)
     assert written == ["fact-alice-role"]
     assert second.status == "not_due"
+
+
+def test_unknown_slot_fails_that_candidate_not_the_day(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    written = []
+
+    def apply(_uid, _local_date, candidate, **_kwargs):
+        if candidate.candidate_id == "fact-bad-slot":
+            raise ValueError("unsupported knowledge ledger slot: mystery")
+        written.append(candidate.candidate_id)
+        return "mem-ok", None
+
+    monkeypatch.setattr("utils.memory.daily_memory_sweep._apply_candidate", apply)
+    monkeypatch.setattr("utils.memory.daily_memory_sweep._finish_receipt", lambda *args, **kwargs: None)
+
+    packet = DailySweepInput(
+        uid="user-1",
+        local_date=date(2026, 8, 23),
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        **_packet_kwargs(date(2026, 8, 23)),
+        candidates=(
+            _candidate(candidate_id="fact-bad-slot", source_id="conversation-bad"),
+            _candidate(candidate_id="fact-ok", source_id="conversation-ok", content="Alice ships Fridays", slot=None),
+        ),
+    )
+    output = run_daily_memory_sweep(
+        "user-1",
+        "America/New_York",
+        datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        {packet.local_date: packet},
+        db_client=db,
+        authority=SweepAuthorityState(enabled=True),
+    )
+
+    assert output.status == "committed"
+    assert output.skipped_count == 1
+    assert written == ["fact-ok"]
 
 
 def test_runner_limits_missed_day_catch_up(monkeypatch):
@@ -1257,6 +1306,7 @@ def test_returned_payload_expiry_keeps_content_free_tombstone_and_blocks_replay(
 def test_user_export_includes_both_candidate_stages_and_model_receipts(monkeypatch):
     monkeypatch.setattr(data_export, "get_user_profile", lambda _uid: {})
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", lambda *_args, **_kwargs: ())
+    monkeypatch.setattr(data_export.conversations_db, "iter_all_conversation_photos", lambda *_args, **_kwargs: ())
     monkeypatch.setattr(data_export, "get_people", lambda _uid: ())
     monkeypatch.setattr(data_export, "get_standalone_action_items", lambda *_args, **_kwargs: ())
     monkeypatch.setattr(data_export.chat_db, "iter_all_messages", lambda *_args, **_kwargs: ())
@@ -1366,6 +1416,7 @@ def test_completed_day_model_candidates_are_staged_before_apply_and_reused(monke
     assert len(first.daily_summary) == 1
     assert first.daily_summary[0].source_refs == ("conversation:conversation-1",)
     assert len(calls) == 1
+
     assert calls[0] == (("conversation-1", "stable summary"),)
     staged = next(payload for path, payload in db.store.items() if "daily_summary_staged" in path)
     assert staged["candidate_count"] == 1
@@ -1392,9 +1443,131 @@ def test_completed_day_model_candidates_are_staged_before_apply_and_reused(monke
     assert len(calls) == 1
 
 
+def test_qa_completed_day_rejects_a_stage_from_another_run(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    local_date = date(2026, 8, 23)
+    window = completed_local_day_window(local_date, "UTC")
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
+        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+    )
+    model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
+
+    def agent(_uid, _rows, _lookup, **_kwargs):
+        return _agent_output(
+            memories=[SimpleNamespace(content="fact from prior run", conversation_ids=["conversation-1"])]
+        )
+
+    first = produce_completed_day_daily_summary_sources(
+        "user-1",
+        local_date,
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=model,
+        agent_runner=agent,
+        window_override=window,
+    )
+    assert first.source_status == "complete"
+    second = produce_completed_day_daily_summary_sources(
+        "user-1",
+        local_date,
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=model,
+        agent_runner=agent,
+        window_override=window,
+        qa_run_id="qa-run-1",
+    )
+    assert second.source_status == "incomplete"
+
+
+def test_qa_source_provider_rejects_a_preexisting_packet(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    local_date = date(2026, 8, 23)
+    db.document(f"users/user-1/daily_memory_sweep_sources/{local_date.isoformat()}").set(
+        {"schema_version": "daily_memory_sweep.v1", "uid": "user-1", "complete": True}
+    )
+    with pytest.raises(ValueError, match="pre-existing source packet"):
+        firestore_daily_sweep_source_provider(
+            "user-1",
+            local_date,
+            control,
+            db_client=db,
+            timezone_name="UTC",
+            qa_run_id="qa-run-1",
+        )
+
+
+def test_qa_completed_day_uses_tight_real_input_and_provider_envelope(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    local_date = date(2026, 8, 23)
+    window = completed_local_day_window(local_date, "UTC")
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
+        lambda *_args, **kwargs: (
+            (_day_source("conversation-1", "stable summary"),),
+            "complete",
+        ),
+    )
+    model = DailySweepModelAuthority(
+        enabled=True,
+        model_name="test",
+        max_candidates=1,
+        max_cost_usd=QA_SWEEP_MAX_MODEL_COST_USD,
+    )
+    seen = {}
+
+    def agent(_uid, _rows, _lookup, **kwargs):
+        seen.update(kwargs)
+        seen["usage_context"] = get_current_context()
+        return _agent_output(
+            memories=[SimpleNamespace(content="fact from QA pass", conversation_ids=["conversation-1"])]
+        )
+
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        local_date,
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=model,
+        agent_runner=agent,
+        window_override=window,
+        qa_run_id="qa-run-1",
+    )
+    assert result.source_status == "complete"
+    assert result.model_cost_usd <= QA_SWEEP_MAX_MODEL_COST_USD
+    # The QA receipt prices the checked-in Luna input/output envelope, rather
+    # than only the short source spine; this stays below the 5-cent cap.
+    assert result.model_cost_usd >= 0.0027
+    assert seen["max_candidates"] == 1
+    assert seen["max_transcript_fetches"] == QA_SWEEP_MAX_TRANSCRIPT_FETCHES
+    assert seen["max_memory_lookups"] == QA_SWEEP_MAX_MEMORY_LOOKUPS
+    assert seen["max_provider_retries"] == QA_SWEEP_MAX_SDK_RETRIES
+    assert seen["usage_context"].uid == "user-1"
+    assert seen["usage_context"].feature == "memories"
+    assert get_current_context() is None
+    assert QA_SWEEP_MAX_CATCH_UP_DAYS == 1
+    assert QA_SWEEP_MAX_SUMMARY_CONVERSATIONS == 1
+    assert QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS == 2_000
+
+
 def test_completed_day_agent_assigns_folders_for_unopened_conversations(monkeypatch):
     db = _Db()
     control = _open_control(monkeypatch)
+    refreshes = []
+    monkeypatch.setattr(
+        "database.folders.update_folder_conversation_count",
+        lambda uid, folder_id: refreshes.append((uid, folder_id)),
+    )
     db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
     local_date = date(2026, 8, 23)
     window = completed_local_day_window(local_date, "UTC")
@@ -1445,11 +1618,17 @@ def test_completed_day_agent_assigns_folders_for_unopened_conversations(monkeypa
     staged = next(payload for path, payload in db.store.items() if "daily_summary_staged" in path)
     assert staged["folder_assignments"] == [{"conversation_id": "conversation-1", "folder_id": "folder-1"}]
     assert db.store["users/user-1/conversations/conversation-1"]["folder_id"] == "folder-1"
+    assert refreshes == [("user-1", "folder-1")]
 
 
 def test_folder_backstop_never_overwrites_and_requires_obligation(monkeypatch):
     from utils.memory.daily_memory_sweep import _apply_daily_sweep_folder_assignments
 
+    refreshes = []
+    monkeypatch.setattr(
+        "database.folders.update_folder_conversation_count",
+        lambda uid, folder_id: refreshes.append((uid, folder_id)),
+    )
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep.firestore.transactional",
         lambda function: lambda transaction, *args: function(transaction, *args),
@@ -1477,6 +1656,7 @@ def test_folder_backstop_never_overwrites_and_requires_obligation(monkeypatch):
     assert db.store["users/user-1/conversations/filed"]["folder_id"] == "existing"
     assert "folder_id" not in db.store["users/user-1/conversations/eager"]
     assert db.store["users/user-1/conversations/open-pending"]["folder_id"] == "folder-1"
+    assert refreshes == [("user-1", "folder-1")]
 
 
 def test_completed_day_memory_without_valid_citation_is_dropped(monkeypatch):
@@ -1782,3 +1962,299 @@ def test_unstructured_fallback_marker_matches_the_prompt_rule():
     assert UNSTRUCTURED_SUMMARY_MARKER in prompts._DAILY_SWEEP_SHARED_RULES
     rule = next(line for line in prompts._DAILY_SWEEP_SHARED_RULES.splitlines() if UNSTRUCTURED_SUMMARY_MARKER in line)
     assert "NEVER set a slot" in rule
+
+
+def _legacy_row_payload(index: int, content: str):
+    from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState
+    from models.memory_evidence import SourceState
+
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    return {
+        "memory_id": f"memory-{index:05d}",
+        "uid": "user-1",
+        "version": 1,
+        "tier": MemoryTier.long_term.value,
+        "status": MemoryItemStatus.active.value,
+        "processing_state": ProcessingState.processed.value,
+        "content": content,
+        "source_state": SourceState.active.value,
+        "sensitivity_labels": [],
+        "visibility": "private",
+        "user_asserted": True,
+        "captured_at": now,
+        "updated_at": now,
+        "ledger_commit_id": f"commit-{index}",
+        "ledger_sequence": index + 1,
+    }
+
+
+class _PaginatedLegacyDb:
+    """A fake whose legacy query obeys limit + start_after over sorted rows."""
+
+    def __init__(self, rows):
+        self._rows = sorted(rows, key=lambda snapshot: snapshot.id)
+
+    def collection(self, _path):
+        rows = self._rows
+
+        class Query:
+            def __init__(self, normalized=False, after_id=None, count=None):
+                self.normalized = normalized
+                self.after_id = after_id
+                self.count = count
+
+            def where(self, *, filter):
+                return Query(
+                    self.normalized or filter.field_path == "normalized_content_key", self.after_id, self.count
+                )
+
+            def limit(self, count):
+                return Query(self.normalized, self.after_id, count)
+
+            def start_after(self, snapshot):
+                return Query(self.normalized, snapshot.id, self.count)
+
+            def stream(self):
+                if self.normalized:
+                    return []
+                selected = [row for row in rows if self.after_id is None or row.id > self.after_id]
+                return selected[: self.count] if self.count is not None else selected
+
+        class Collection:
+            def where(self, *, filter):
+                return Query(filter.field_path == "normalized_content_key")
+
+        return Collection()
+
+
+class _LegacySnapshot:
+    def __init__(self, payload, row_id):
+        self._payload = payload
+        self.id = row_id
+
+    def to_dict(self):
+        return self._payload
+
+
+def test_legacy_compatibility_proof_survives_a_real_accounts_cohort():
+    """Regression: dev sweep stuck since 2026-08-30 (canonical_occupant_query_unavailable).
+
+    The compatibility occupant proof capped the whole cohort at one 64-row
+    page, so an account with more active unslotted facts than that — the
+    owner's dogfood account holds ~196 — could never complete a sweep day:
+    every hourly run failed closed with "exceeded proof budget". Completeness
+    now comes from draining the cursor; the duplicate is still found even
+    when it sits past the old cap.
+    """
+
+    rows = [_legacy_row_payload(index, f"legacy fact {index}") for index in range(700)]
+    rows[650]["content"] = "Alice owns release review"
+    db = _PaginatedLegacyDb([_LegacySnapshot(payload, payload["memory_id"]) for payload in rows])
+
+    occupant = _find_active_slot_or_subject("user-1", _candidate(slot=None), db_client=db)
+
+    assert occupant is not None and occupant.memory_id == "memory-00650"
+
+
+def test_legacy_compatibility_proof_completes_with_no_duplicate_past_the_old_cap():
+    rows = [_legacy_row_payload(index, f"legacy fact {index}") for index in range(100)]
+    db = _PaginatedLegacyDb([_LegacySnapshot(payload, payload["memory_id"]) for payload in rows])
+
+    occupant = _find_active_slot_or_subject("user-1", _candidate(slot=None), db_client=db)
+
+    assert occupant is None
+
+
+def test_legacy_compatibility_proof_still_fails_closed_above_the_scan_ceiling():
+    from utils.memory.daily_memory_sweep import MAX_LEGACY_COMPAT_OCCUPANT_SCAN, SweepAuthoritativeQueryUnavailable
+
+    total = MAX_LEGACY_COMPAT_OCCUPANT_SCAN + 1
+    rows = [_legacy_row_payload(index, f"legacy fact {index}") for index in range(total)]
+    db = _PaginatedLegacyDb([_LegacySnapshot(payload, payload["memory_id"]) for payload in rows])
+
+    with pytest.raises(SweepAuthoritativeQueryUnavailable):
+        _find_active_slot_or_subject("user-1", _candidate(slot=None), db_client=db)
+
+
+def test_scheduler_skips_predrain_accounts_without_error_or_claims(monkeypatch):
+    """Regression: enrolled-but-undrained accounts failed the job hourly.
+
+    Every beta account starts in ``compatibility`` writer mode until the
+    maintenance drain publishes its ledger cutover, and ordinary ledger writes
+    are refused there (``require_writer_admitted``). The scheduler used to
+    claim the day anyway: the write died with WriterAdmissionError, the burned
+    receipt lease shadowed the retries as ``source_idempotency_conflict``, and
+    the hourly job exited 1 — observed continuously in dev on the dogfood
+    account (still compatibility at epoch 0). Pre-drain is an expected rollout
+    state: skip quietly, advance the fair page, and leave the account's day
+    cursor untouched so pending days catch up after the drain.
+    """
+
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+    )
+    assert control.writer_mode is not WriterMode.ledger
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    db = _Db()
+    source_calls = []
+
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: source_calls.append(True),
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: True,
+    )
+
+    assert summary.errors == ()
+    assert summary.completed_uids == ("user-1",)
+    assert summary.failed_uids == ()
+    assert summary.blocked_users == 1
+    assert source_calls == []
+    # No receipt claim, cursor write, or any other document was touched.
+    assert db.store == {}
+
+
+def test_scheduler_proceeds_for_ledger_mode_accounts(monkeypatch):
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    db = _Db()
+    source_calls = []
+
+    run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: source_calls.append(True) or None,
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: True,
+    )
+
+    # The gate is passed: the scheduler advanced beyond writer-mode admission
+    # into ordinary day planning for this account (which asks the source
+    # provider for the pending day's packet).
+    assert source_calls != []
+
+
+# --- S5 (§1.8): a basic account is not admitted to the sweep -----------------
+
+
+def _ledger_control(monkeypatch):
+    """An account that has completed ledger cutover, so the writer-mode skip
+    above the plan gate does not fire and the plan gate is what is under test."""
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.read_account_deletion_projection_fence",
+        lambda _uid, db_client: type("Fence", (), {"blocks_projection_writes": False})(),
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.firestore.transactional",
+        lambda function: lambda transaction, *args: function(transaction, *args),
+    )
+    return control
+
+
+def _plan_decision(*, allowed: bool, reason: str):
+    from config.plan_catalog import PlanType
+    from utils.managed_compute import Decision
+
+    return Decision(
+        allowed=allowed,
+        reason=reason,
+        feature="memories",
+        funding_owner="omi",
+        plan=PlanType.basic if not allowed else PlanType.unlimited,
+        plan_resolved=True,
+    )
+
+
+def _run_sweep_for_plan(monkeypatch, *, suppression_on: bool, allowed: bool, reason: str):
+    db = _Db()
+    _ledger_control(monkeypatch)
+    source_calls = []
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.free_tier_memory_suppression_enabled",
+        lambda: suppression_on,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.authorize_managed_compute",
+        lambda *_args, **_kwargs: _plan_decision(allowed=allowed, reason=reason),
+    )
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: source_calls.append(True),
+        timezone_resolver=lambda _uid: "UTC",
+        timezone_reconciler=lambda *_args: True,
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: DailySweepCohortDecision.enabled,
+    )
+    return summary, source_calls, db
+
+
+# red-proof: delete the `if free_tier_memory_suppression_enabled():` block in the scheduler
+def test_basic_account_is_not_admitted_by_the_sweep_producer(monkeypatch):
+    """Named proof (b). Acked, not rejected: a definite plan answer is a
+    successful bounded decision, so the fair page cursor may advance. A reject
+    would burn receipt leases and strand the tail behind an account that is
+    never going to be swept."""
+    summary, source_calls, db = _run_sweep_for_plan(
+        monkeypatch, suppression_on=True, allowed=False, reason="basic_not_entitled"
+    )
+    assert source_calls == [], "a basic account must not reach the candidate producer"
+    assert summary.completed_uids == ("user-1",)
+    assert summary.failed_uids == ()
+    assert summary.blocked_users == 1
+    assert db.store == {}, "a suppressed account must not write cursor or receipt state"
+
+
+def test_paid_account_is_still_swept_with_the_flag_on(monkeypatch):
+    _summary, source_calls, _db = _run_sweep_for_plan(
+        monkeypatch, suppression_on=True, allowed=True, reason="plan_paid"
+    )
+    assert source_calls != [], "a paid account must still reach the candidate producer"
+
+
+def test_flag_off_admits_a_basic_account_exactly_as_today(monkeypatch):
+    """Dark rollout: with the flag off the plan is not consulted at all."""
+    _summary, source_calls, _db = _run_sweep_for_plan(
+        monkeypatch, suppression_on=False, allowed=False, reason="basic_not_entitled"
+    )
+    assert source_calls != []

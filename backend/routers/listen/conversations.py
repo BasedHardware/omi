@@ -14,8 +14,10 @@ from models.message_event import ConversationEvent, ConversationSessionEvent, La
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
 from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
+from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
 from utils.transcribe_decisions import (
     ConversationLifecycleAction,
@@ -145,6 +147,14 @@ class LiveConversationController:
             return True
         return route == 'noop'
 
+    def _should_report_no_audio_teardown(self) -> bool:
+        """Multi-channel session (phone calls today) that never sent a first audio byte."""
+
+        return bool(
+            getattr(self.host, 'is_multi_channel', False)
+            and getattr(self.host.state, 'first_audio_byte_timestamp', None) is None
+        )
+
     async def process_conversation(self, conversation_id: str) -> bool:
         data = await self.host.persistence.call(
             conversations_db.get_conversation,
@@ -159,6 +169,9 @@ class LiveConversationController:
         recording_session_id = recording_session_id_for_lifecycle_event(
             self.host.recording_session_ids_by_conversation, conversation_id
         )
+        # Snapshot before the fenced delete: the outcome is only truthful if the
+        # delete actually wins the race to content, so emit after `deleted`.
+        was_no_audio_session = self._should_report_no_audio_teardown()
         deleted = await self.host.persistence.call(
             lifecycle_service.delete_empty_recording_conversation,
             self.host.request.uid,
@@ -166,6 +179,20 @@ class LiveConversationController:
             recording_session_id,
         )
         if deleted:
+            if was_no_audio_session:
+                # A phone_call that stayed silent for its whole duration must be
+                # distinguishable from a call that was never transcribed at all;
+                # the empty-conversation deletion itself is unchanged.
+                logger.warning(
+                    'Listen session tore down with no audio received source=%s platform=%s',
+                    self.host.request.source,
+                    self.host.client_device_context.platform,
+                )
+                record_listen_audio_outcome(
+                    source=self.host.request.source,
+                    outcome='no_audio_teardown',
+                    platform=self.host.client_device_context.platform,
+                )
             return True
         latest = await self.host.persistence.call(
             conversations_db.get_conversation,
@@ -231,10 +258,9 @@ class LiveConversationController:
             if action == RecordingSessionReconnectAction.resume_current:
                 self.host.state.current_conversation_id = conversation_id
                 # Persist the custom-STT marker on resume so a conversation that
-                # started under normal STT but continues under custom STT (or vice
-                # versa) cannot bypass the Omi-paid LLM cost gate: once any session
-                # was custom-STT, the conversation must not run Omi-paid enrichment
-                # without an LLM BYOK key.
+                # started under normal STT but continues under custom STT keeps
+                # accurate provenance: once any session was custom-STT, the
+                # conversation is marked as such.
                 if self.host.use_custom_stt and not existing.get('uses_custom_stt', False):
                     await self.host.persistence.call(
                         conversations_db.update_conversation,
@@ -280,11 +306,15 @@ class LiveConversationController:
             client_device_id=context.client_device_id,
             client_platform=context.platform,
             external_data=external_data,
+            geolocation=request.geolocation,
         )
         await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,
             request.uid,
-            conversation.model_dump(),
+            # The modeled field's None default is omitted, never stamped:
+            # persist is merge=True, so a dumped None would become an
+            # explicit Firestore key on every fresh recording.
+            omit_null_processing_state(conversation.model_dump()),
             idempotent=bool(self.host.client_conversation_id and conversation_id == self.host.client_conversation_id),
         )
         await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)

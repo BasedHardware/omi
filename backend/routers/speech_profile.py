@@ -105,8 +105,11 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     if aseg.frame_rate != 16000:
         raise HTTPException(status_code=400, detail="Invalid codec, must be opus 16khz.")
 
-    if aseg.duration_seconds < 5 or aseg.duration_seconds > 120:
-        raise HTTPException(status_code=400, detail="Audio duration is invalid (must be 5-120 seconds)")
+    # Upper bound must stay >= the app's onboarding recording cap (maxDuration = 150 in
+    # app/lib/providers/speech_profile_provider.dart) plus headroom: a 120s cap rejected
+    # ~28% of prod onboarding uploads (users whose Q&A ran past 2 minutes).
+    if aseg.duration_seconds < 5 or aseg.duration_seconds > 180:
+        raise HTTPException(status_code=400, detail="Audio duration is invalid (must be 5-180 seconds)")
 
     try:
         apply_vad_for_speech_profile(file_path)

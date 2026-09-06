@@ -9844,12 +9844,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get accountCutoverOpenStore => 'Öppna butik';
 
   @override
-  String get chatScopeToday => 'I dag';
-
-  @override
-  String get chatScopeThisWeek => 'Denne uken';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Om: $title';
   }
@@ -9911,4 +9905,51 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Lagringen på Pendant er full, og den er fortsatt i opptaksmodus, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Ikke fanget opp ($count)';
+  }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripsjon mottar ikke lyd';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
+
+  @override
+  String get chatBlockTask => 'Oppgave';
+
+  @override
+  String get chatBlockGoal => 'Mål';
+
+  @override
+  String get chatBlockConversation => 'Samtale';
+
+  @override
+  String get chatBlockMemory => 'Minne';
+
+  @override
+  String get chatBlockQuestion => 'Spørsmål';
+
+  @override
+  String get chatBlockOpenInGoals => 'Åpne i Mål';
+
+  @override
+  String get chatBlockOpenConversation => 'Åpne samtale';
+
+  @override
+  String get chatBlockOpenInMemories => 'Åpne i Minner';
+
+  @override
+  String get chatBlockUnavailable => 'Ikke lenger tilgjengelig';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Anbefalte neste trinn';
+
+  @override
+  String get couldNotLoadMemories => 'Kunne ikke laste minner';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Kunne ikke laste kunnskapsgrafen';
 }

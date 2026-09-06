@@ -20,10 +20,18 @@ Tuning knobs:
         event boost should widen 100x. Those policies are listed here and always
         serve their base limit.
 
-        Default: "action_items:list". Read from env at startup, so the exemption
-        is operator-escapable without a code change: set
-        RATE_LIMIT_BOOST_EXEMPT="" to put every policy back under the boost.
+        Default: "action_items:list,action_items:list_hot_client". Read from env
+        at startup, so the exemption is operator-escapable without a code change:
+        set RATE_LIMIT_BOOST_EXEMPT="" to put every policy back under the boost.
         Unknown names are ignored (a typo must not take the process down).
+
+    ACTION_ITEMS_LIST_HOT_CLIENT_MAX: requests per 60s that one uid may make to
+        GET /v1/action-items *from a hot-loop client class* (see
+        utils/action_items_list_guard.py). This is a second, stricter ceiling
+        that composes with action_items:list rather than replacing it: every
+        client keeps the 12/min cap, and a client identified as the stale
+        polling build additionally may not exceed this number. Default 4.
+        Set to 0 to disable the extra ceiling (the rollback).
 
 Redis efficiency:
     Each check = 1 Lua script call (atomic INCR + TTL check).
@@ -39,9 +47,27 @@ import os
 RATE_LIMIT_BOOST: float = float(os.getenv("RATE_LIMIT_BOOST", "1.0"))
 RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "false").lower() == "true"
 
+
+def _hot_client_max() -> int:
+    """Base per-minute ceiling for the hot-loop list client class.
+
+    Read once at import like every other policy number. Invalid input falls back
+    to the default rather than raising: a typo in an env var must not refuse to
+    start the process, and this is a cost control, not a correctness control.
+    """
+    raw = os.getenv("ACTION_ITEMS_LIST_HOT_CLIENT_MAX", "4").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return 4
+    return max(0, value)
+
+
+ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
+
 # Policies the boost must not touch. Env-overridable (see module docstring);
 # resolved against RATE_POLICIES below so a typo is dropped, not enforced.
-_BOOST_EXEMPT_DEFAULT = "action_items:list"
+_BOOST_EXEMPT_DEFAULT = "action_items:list,action_items:list_hot_client"
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
 # ---------------------------------------------------------------------------
@@ -61,6 +87,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # cheaper than :create — no Deepgram, just LLM structuring). Used per finished
     # conversation by Parakeet/local-STT users, so a bit more headroom than :create.
     "conversations:from-segments": (30, 3600),
+    # Desktop sends running per-day totals periodically; allow several devices
+    # plus reconnect bursts while still capping accidental hot loops.
+    "users:desktop_usage_daily": (600, 3600),
     # Chat — 2-6 LLM calls per message
     "chat:send_message": (120, 3600),
     "chat:initial": (60, 3600),
@@ -103,6 +132,13 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # prod this cap resolved to 1,200/60s and never fired once, while the loop
     # ran at ~97/min — 48.8% of all billable Firestore document reads.
     "action_items:list": (12, 60),
+    # Second, stricter ceiling for the hot-loop client class only. It does not
+    # replace action_items:list — both buckets are checked, so the tighter one
+    # binds for a stale poller while every other client is governed solely by
+    # the 12/min policy above. Base max is env-tunable
+    # (ACTION_ITEMS_LIST_HOT_CLIENT_MAX, 0 disables); boost-exempt for the same
+    # reason as its parent policy.
+    "action_items:list_hot_client": (ACTION_ITEMS_LIST_HOT_CLIENT_MAX, 60),
     "action_items:write": (120, 3600),
     # Memories — single LLM call each
     "memories:create": (60, 3600),
@@ -181,6 +217,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "test:prompt": (30, 3600),
     # Apps
     "apps:generate_prompts": (30, 3600),
+    # Persona intro message is a billable LLM call (Features.PERSONA) with no
+    # quota gate, unlike its sibling generate_prompts. Same bound as that
+    # sibling until a quota-gate policy decision is made (see #12781).
+    "apps:twitter_initial_message": (30, 3600),
     # TTS — ElevenLabs proxy. Coarse outer ring; fine-grained burst + daily
     # char caps are enforced in database.redis_db.check_tts_rate_limit.
     "tts:synthesize": (300, 3600),

@@ -109,27 +109,6 @@ private struct DismissButtonPressStyle: ButtonStyle {
   }
 }
 
-/// The Apps surface contains three different catalog kinds. Keeping the kind
-/// explicit prevents marketplace filters from looking like they also refine
-/// local imports and memory exports.
-enum AppsCatalogKind: String, CaseIterable, Identifiable {
-  case all = "All"
-  case apps = "Apps"
-  case imports = "Imports"
-  case exports = "Exports"
-
-  var id: String { rawValue }
-
-  var icon: String {
-    switch self {
-    case .all: return "square.grid.2x2"
-    case .apps: return "app.badge"
-    case .imports: return "arrow.down.circle"
-    case .exports: return "arrow.up.circle"
-    }
-  }
-}
-
 enum AppsPageCategoryFilter {
   static let allCategoriesOptionId = ""
   static let allCategoriesTitle = "All Categories"
@@ -215,6 +194,17 @@ struct AppsPage: View {
   @State private var exportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
   @State private var viewAllSection: String? = nil  // "featured", "integrations", "notifications"
   @State private var selectedKind: AppsCatalogKind = .all
+  @State private var showAddMcpServerSheet = false
+  @State private var selectedLocalMcpServer: LocalMcpStore.Entry?
+  @State private var showAddSkillSheet = false
+  @State private var editingSkill: LocalSkillsStore.Skill?
+  @State private var selectedCatalogEntry: ExtensionCatalog.Entry?
+  @AppStorage(AppsSectionDestination.storageKey) private var selectedSectionRawValue =
+    AppsSectionDestination.apps.rawValue
+
+  private var selectedSection: AppsSectionDestination {
+    AppsSectionDestination(rawValue: selectedSectionRawValue) ?? .apps
+  }
 
   var body: some View {
     GeometryReader { proxy in
@@ -224,7 +214,7 @@ struct AppsPage: View {
         QuerySearchBar(
           text: $searchText,
           accessibilityID: "apps-search-field",
-          placeholder: searchPlaceholder
+          placeholder: searchPlaceholder, searchSurface: .apps
         )
 
         VStack(spacing: 0) {
@@ -258,7 +248,11 @@ struct AppsPage: View {
       // Search never changes scope on the user's behalf. In All, the same
       // query is applied to apps, imports, and exports; a narrower Kind keeps
       // the query local to that catalog.
-      guard selectedKind == .apps || selectedKind == .all else { return }
+      guard selectedSection == .apps else { return }
+      guard selectedKind == .apps || selectedKind == .all else {
+        SearchAnalytics.scheduleQueryEntered(surface: .apps, query: newValue) { appsSearchResultCount }
+        return
+      }
       appProvider.searchQuery = newValue
       if !newValue.isEmpty {
         viewAllSection = nil
@@ -266,9 +260,33 @@ struct AppsPage: View {
       }
       scheduleAppSearch(for: newValue)
     }
+    .dismissableSheet(isPresented: $showAddMcpServerSheet) {
+      AddMcpServerSheet(appProvider: appProvider, onDismiss: { showAddMcpServerSheet = false })
+        .frame(width: 460, height: 424)
+    }
+    .dismissableSheet(item: $selectedLocalMcpServer) { server in
+      LocalMcpDetailSheet(
+        server: server, appProvider: appProvider, onDismiss: { selectedLocalMcpServer = nil }
+      )
+      .frame(width: 460, height: 420)
+    }
+    .dismissableSheet(isPresented: $showAddSkillSheet) {
+      SkillEditorSheet(appProvider: appProvider, editingSkill: nil, onDismiss: { showAddSkillSheet = false })
+        .frame(width: 520, height: 460)
+    }
+    .dismissableSheet(item: $selectedCatalogEntry) { entry in
+      ExtensionDetailSheet(
+        entry: entry, appProvider: appProvider, onDismiss: { selectedCatalogEntry = nil }
+      )
+      .frame(width: 460, height: entry.install.needsInput ? 420 : 340)
+    }
+    .dismissableSheet(item: $editingSkill) { skill in
+      SkillEditorSheet(appProvider: appProvider, editingSkill: skill, onDismiss: { editingSkill = nil })
+        .frame(width: 520, height: 460)
+    }
     .dismissableSheet(item: $selectedApp) { app in
       AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { selectedApp = nil })
-        .frame(width: 500, height: 650)
+        .frame(width: 480, height: 560)
         .onAppear {
           AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
         }
@@ -282,7 +300,7 @@ struct AppsPage: View {
           selectedConnector = nil
         }
       )
-      .frame(width: 520, height: 620)
+      .frame(width: 500, height: 540)
       .onAppear {
         automationPresentationDidAppear(.importConnector(connector.id))
       }
@@ -298,7 +316,7 @@ struct AppsPage: View {
           selectedExportDestination = nil
         }
       )
-      .frame(width: 520, height: 620)
+      .frame(width: 500, height: 540)
       .onAppear {
         automationPresentationDidAppear(.exportDestination(destination.rawValue))
       }
@@ -315,6 +333,7 @@ struct AppsPage: View {
     }
     .onAppear {
       consumeAutomationPresentationCommand()
+      Task { await appProvider.fetchUserExtensions() }
       // If apps are already loaded, notify sidebar to clear loading indicator
       if !appProvider.isLoading {
         NotificationCenter.default.post(name: .appsPageDidLoad, object: nil)
@@ -342,14 +361,23 @@ struct AppsPage: View {
   }
 
   private func selectApp(_ app: OmiApp) {
+    SearchAnalytics.resultOpened(
+      surface: .apps, resultIndex: filteredApps.firstIndex { $0.id == app.id },
+      searchIsActive: hasSearchQuery)
     selectedApp = app
   }
 
   private func selectConnector(_ connector: ImportConnector) {
+    SearchAnalytics.resultOpened(
+      surface: .apps, resultIndex: visibleImportConnectors.firstIndex { $0.id == connector.id },
+      searchIsActive: hasSearchQuery)
     selectedConnector = connector
   }
 
   private func selectDestination(_ destination: MemoryExportDestination) {
+    SearchAnalytics.resultOpened(
+      surface: .apps, resultIndex: visibleExportEntries.firstIndex { $0.destination == destination },
+      searchIsActive: hasSearchQuery)
     selectedExportDestination = destination
   }
 
@@ -427,21 +455,32 @@ struct AppsPage: View {
   private var appsControlsBar: some View {
     PageQueryToolbar(
       refinement: {
-        kindMenu
-        if selectedKind == .apps {
-          appsFiltersMenu
+        if selectedSection == .apps {
+          kindMenu
+          if selectedKind == .apps {
+            appsFiltersMenu
+          }
         }
       },
       activeFilters: {
         ActivePageFilterStrip(filters: activeAppFilters, onClearAll: clearAppFilters)
       },
       actions: {
+        AppsSectionNavigation(
+          selected: selectedSection,
+          onSelect: { selectedSectionRawValue = $0.rawValue }
+        )
         appsMoreMenu
       }
     )
   }
 
   private var searchPlaceholder: String {
+    switch selectedSection {
+    case .mcp: return "Search MCP servers…"
+    case .skills: return "Search skills…"
+    case .apps: break
+    }
     switch selectedKind {
     case .all: return "Search apps, imports, and exports…"
     case .apps: return "Search apps…"
@@ -597,6 +636,7 @@ struct AppsPage: View {
         appProvider.searchQuery == query
       else { return }
       await appProvider.searchApps()
+      SearchAnalytics.queryEntered(surface: .apps, query: query, resultsCount: appsSearchResultCount)
     }
   }
 
@@ -622,6 +662,30 @@ struct AppsPage: View {
 
   @ViewBuilder
   private var catalogContent: some View {
+    switch selectedSection {
+    case .apps:
+      appsCatalogContent
+    case .mcp:
+      McpServersSection(
+        appProvider: appProvider,
+        searchText: searchText,
+        onAdd: { showAddMcpServerSheet = true },
+        onSelectLocal: { selectedLocalMcpServer = $0 },
+        onSelectCatalogEntry: { selectedCatalogEntry = $0 }
+      )
+    case .skills:
+      SkillsSection(
+        appProvider: appProvider,
+        searchText: searchText,
+        onAdd: { showAddSkillSheet = true },
+        onSelect: { editingSkill = $0 },
+        onSelectCatalogEntry: { selectedCatalogEntry = $0 }
+      )
+    }
+  }
+
+  @ViewBuilder
+  private var appsCatalogContent: some View {
     switch selectedKind {
     case .imports:
       ImportsSection(
@@ -771,6 +835,12 @@ struct AppsPage: View {
 
   private var hasSearchQuery: Bool {
     !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  private var appsSearchResultCount: Int {
+    selectedKind.searchResultCount(
+      apps: filteredApps.count, imports: visibleImportConnectors.count,
+      exports: visibleExportEntries.count)
   }
 
   private var visibleImportConnectors: [ImportConnector] {

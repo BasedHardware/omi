@@ -268,8 +268,8 @@ class _ResumeController(LiveConversationController):
 
 async def test_resume_persists_custom_stt_marker_when_session_uses_custom_stt():
     """A conversation that started under normal STT but resumes under custom STT
-    must get the durable uses_custom_stt marker, or it could run Omi-paid LLM
-    enrichment without a BYOK key (#7690)."""
+    must get the durable uses_custom_stt marker, or its custom-STT provenance is
+    lost for metering and the fair-use lane (#7690)."""
     host = _ResumeHost(
         existing_conversation={'id': 'conv-1', 'status': 'in_progress', 'discarded': False, 'uses_custom_stt': False},
         use_custom_stt=True,
@@ -319,7 +319,9 @@ class _CreateConversationHost:
         conversation_snapshot_known: bool = False,
         binding_conversation_id: str | None = None,
     ) -> None:
-        self.request = SimpleNamespace(uid='uid-1', source='omi', call_id=None, conversation_role=None)
+        self.request = SimpleNamespace(
+            uid='uid-1', source='omi', call_id=None, conversation_role=None, geolocation=None
+        )
         self.client_device_context = SimpleNamespace(client_device_id='dev-1', platform='desktop')
         self.language = 'en'
         self.use_custom_stt = False

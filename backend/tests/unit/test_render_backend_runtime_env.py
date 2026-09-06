@@ -2,6 +2,7 @@
 
 import json
 import runpy
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -174,6 +175,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'OPENAI_API_KEY=OPENAI_API_KEY:latest' in memory_secrets
     assert 'PINECONE_API_KEY=PINECONE_API_KEY:latest' in memory_secrets
     assert 'TYPESENSE_API_KEY=TYPESENSE_API_KEY:latest' in memory_secrets
+    assert 'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest' in memory_secrets
 
 
 @pytest.mark.parametrize('env', ['dev', 'prod'])
@@ -196,7 +198,10 @@ def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
         'POSTHOG_HOST',
     }
     assert daily_names.isdisjoint(maintenance.get('env', {}))
-    assert 'POSTHOG_PROJECT_API_KEY' not in maintenance.get('secrets', {})
+    assert maintenance.get('secrets', {}).get('POSTHOG_PROJECT_API_KEY') == {
+        'secret': 'POSTHOG_PROJECT_API_KEY',
+        'version': 'latest',
+    }
     assert {
         'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
         'MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED',
@@ -213,7 +218,12 @@ def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
 
 
 def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
-    serialized = json.dumps(_MANIFEST['environments']['dev'], sort_keys=True)
+    dev = deepcopy(_MANIFEST['environments']['dev'])
+    # The dev-only ledger drain has an explicit operational fence for the two
+    # owner test accounts. Product/runtime surfaces must still contain no
+    # first-user or capture admission lists.
+    dev['cloud_run']['jobs'].pop('knowledge-ledger-drain-job', None)
+    serialized = json.dumps(dev, sort_keys=True)
     assert 'vi7SA9ckQCe4ccobWNxlbdcNdC23' not in serialized
 
     cloud_run = _MANIFEST['environments']['dev']['cloud_run']
@@ -442,6 +452,37 @@ def test_backend_service_deploys_remove_retired_canonical_memory_env_vars():
         job = manifest[env]['cloud_run']['jobs']['memory-maintenance-job']
         job_flags = _MODULE['_render_flags'](job['flags'])
         assert f'--remove-env-vars={retired}' in job_flags, f'memory-maintenance-job for {env} must strip {retired}'
+
+
+def _deploy_backend_stack_step_flags(step_id: str) -> str:
+    action = Path(__file__).resolve().parents[3] / '.github/actions/deploy-backend-stack/action.yml'
+    text = action.read_text(encoding='utf-8')
+    marker = f'id: {step_id}\n'
+    start = text.index(marker)
+    flags_key = text.index('flags: >-', start)
+    env_key = text.index('env_vars:', flags_key)
+    return text[flags_key:env_key]
+
+
+def test_backend_integration_deploy_pins_mcp_serving_capacity():
+    # Live prod backend-integration was maxScale=25, minScale=1, concurrency=300
+    # on 1 CPU. ChatGPT openai-mcp POSTs then 503 with "no available instance"
+    # because I/O-bound MCP work does not trip CPU scale-out. Pin scale-out
+    # here only; do not copy onto backend / backend-sync.
+    integration_flags = _deploy_backend_stack_step_flags('deploy-backend-integration')
+    backend_flags = _deploy_backend_stack_step_flags('deploy-backend')
+    sync_flags = _deploy_backend_stack_step_flags('deploy-backend-sync')
+    for flag in (
+        '--cpu=2',
+        '--memory=2Gi',
+        '--concurrency=40',
+        '--min-instances=3',
+        '--max-instances=50',
+        '--no-cpu-throttling',
+    ):
+        assert flag in integration_flags, flag
+        assert flag not in backend_flags, flag
+        assert flag not in sync_flags, flag
 
 
 VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'

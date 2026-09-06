@@ -19,6 +19,9 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/models/chat_evidence_reference.dart';
+import 'package:omi/pages/chat/widgets/chat_followup_chip.dart';
+import 'package:omi/pages/chat/widgets/content_blocks/chat_content_block_list.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -33,6 +36,8 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
 import 'chart_message_widget.dart';
 import 'package:omi/widgets/components/chat_evidence_card.dart';
+import 'package:omi/widgets/components/memory_review_card.dart';
+import 'package:omi/utils/share_sheet.dart';
 import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
@@ -170,6 +175,44 @@ Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color co
   return FaIcon(_getThinkingIcon(thinkingText), size: size, color: color);
 }
 
+/// Conversation-shaped evidence is the same source list as [ServerMessage.memories].
+/// Keep those citations on [MemoriesMessageWidget] only.
+bool isConversationSourceEvidence(ChatEvidenceReferenceKind kind) {
+  return kind == ChatEvidenceReferenceKind.conversationSummary || kind == ChatEvidenceReferenceKind.conversationSegment;
+}
+
+/// Supplemental chrome to render beside the answer. Conversation sources that
+/// already appear as citation cards are stripped so the message has one list.
+ChatEvidenceReferenceEnvelope? visibleSupplementalEvidence(ServerMessage message) {
+  final evidence = message.evidenceEnvelope;
+  if (evidence == null || evidence.isEmpty) return null;
+  if (message.memories.isEmpty) return evidence;
+  final leftover = evidence.references.where((ref) => !isConversationSourceEvidence(ref.kind)).toList();
+  if (leftover.isEmpty) return null;
+  return ChatEvidenceReferenceEnvelope(
+    schemaVersion: evidence.schemaVersion,
+    requestId: evidence.requestId,
+    references: leftover,
+  );
+}
+
+/// Resolve a cited conversation from the local grouped map, then fetch by id.
+/// A miss in the map is not a failure — the fetch is the second authority.
+Future<ServerConversation?> resolveChatCitationConversation({
+  required ConversationProvider conversations,
+  required String conversationId,
+  required Future<ServerConversation?> Function(String id) fetchConversation,
+}) async {
+  final located = conversations.getConversationDateAndIndexById(conversationId);
+  if (located != null) {
+    final group = conversations.groupedConversations[located.$1];
+    if (group != null && located.$2 >= 0 && located.$2 < group.length) {
+      return group[located.$2];
+    }
+  }
+  return fetchConversation(conversationId);
+}
+
 class AIMessage extends StatefulWidget {
   final bool showTypingIndicator;
   final bool showThinkingAfterText;
@@ -180,6 +223,7 @@ class AIMessage extends StatefulWidget {
   final App? appSender;
   final Function(ServerConversation) updateConversation;
   final Function(int, {String? reason}) setMessageNps;
+  final Future<ServerConversation?> Function(String id)? fetchConversation;
 
   const AIMessage({
     super.key,
@@ -192,6 +236,7 @@ class AIMessage extends StatefulWidget {
     this.appSender,
     this.showTypingIndicator = false,
     this.showThinkingAfterText = false,
+    this.fetchConversation,
   });
 
   @override
@@ -212,21 +257,19 @@ class _AIMessageState extends State<AIMessage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SelectionArea(
-          contextMenuBuilder: (context, selectableRegionState) {
-            return omiSelectionMenuBuilder(context, selectableRegionState, widget.onAskOmi ?? (text) {});
-          },
-          child: buildMessageWidget(
-            widget.message,
-            widget.sendMessage,
-            widget.showTypingIndicator,
-            widget.displayOptions,
-            widget.appSender,
-            widget.updateConversation,
-            widget.setMessageNps,
-            onAskOmi: widget.onAskOmi,
-            showThinkingAfterText: widget.showThinkingAfterText,
-          ),
+        // Selection stays on markdown text only. Wrapping citation
+        // GestureDetectors in SelectionArea eats taps on iOS.
+        buildMessageWidget(
+          widget.message,
+          widget.sendMessage,
+          widget.showTypingIndicator,
+          widget.displayOptions,
+          widget.appSender,
+          widget.updateConversation,
+          widget.setMessageNps,
+          onAskOmi: widget.onAskOmi,
+          showThinkingAfterText: widget.showThinkingAfterText,
+          fetchConversation: widget.fetchConversation,
         ),
       ],
     );
@@ -243,18 +286,44 @@ Widget buildMessageWidget(
   Function(int, {String? reason}) sendMessageNps, {
   Function(String)? onAskOmi,
   bool showThinkingAfterText = false,
+  Future<ServerConversation?> Function(String id)? fetchConversation,
 }) {
+  final hasRenderableBlocks = ChatContentBlockList.hasRenderableBlocks(message);
+  // A message whose text is only the fallback synthesized from its blocks has
+  // nothing to say that the components do not already show, so the components
+  // replace the body instead of repeating it. Keep this decision explicit for
+  // the block list: day summaries, memory citations, and the initial-options
+  // surface still render the normal body and must not render its text block a
+  // second time below it.
+  final blocksReplaceBody = hasRenderableBlocks &&
+      message.memories.isEmpty &&
+      message.type != MessageType.daySummary &&
+      !displayOptions &&
+      message.textIsStructuredFallback;
+  final contentBlocks = hasRenderableBlocks
+      ? ChatContentBlockList(
+          message: message,
+          sendMessage: sendMessage,
+          onAskOmi: onAskOmi,
+          renderStructuredFallbackText: blocksReplaceBody,
+          fetchConversation: fetchConversation,
+        )
+      : null;
+
   final Widget messageWidget;
-  if (message.memories.isNotEmpty) {
+  if (blocksReplaceBody) {
+    messageWidget = contentBlocks!;
+  } else if (message.memories.isNotEmpty) {
     messageWidget = MemoriesMessageWidget(
       showTypingIndicator: showTypingIndicator,
-      messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
+      messageMemories: message.memories,
       messageText: message.isEmpty ? '...' : message.text.decodeString,
       updateConversation: updateConversation,
       message: message,
       setMessageNps: sendMessageNps,
       date: message.createdAt,
       onAskOmi: onAskOmi,
+      fetchConversation: fetchConversation,
     );
   } else if (message.type == MessageType.daySummary) {
     messageWidget = DaySummaryWidget(
@@ -282,18 +351,38 @@ Widget buildMessageWidget(
     );
   }
 
-  final evidence = message.evidenceEnvelope;
-  if (evidence == null || evidence.isEmpty) return messageWidget;
+  final evidence = visibleSupplementalEvidence(message);
+  final appendBlocks = contentBlocks != null && !blocksReplaceBody;
+  // Native content blocks. Both are additive chrome: an absent or malformed
+  // block leaves the answer exactly as it renders today.
+  final reviewCard = showTypingIndicator ? null : message.memoryReviewCard;
+  final followUp = showTypingIndicator ? null : message.followUpQuestion;
+  if (evidence == null && !appendBlocks && reviewCard == null && followUp == null) return messageWidget;
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisSize: MainAxisSize.min,
     children: [
       messageWidget,
-      const SizedBox(height: 8),
-      // The released mobile surface has no trusted evidence navigator yet.
-      // Keep cards non-actionable until one is supplied; arbitrary URI fields
-      // can never become an external action.
-      ChatEvidenceReferenceList(envelope: evidence),
+      if (appendBlocks) ...[
+        const SizedBox(height: 8),
+        contentBlocks,
+      ],
+      if (reviewCard != null) ...[
+        const SizedBox(height: 12),
+        MemoryReviewCard(
+          items: reviewCard.items,
+          source: MemoryReviewSource.chatBlock,
+          impressionKey: reviewCard.id.isNotEmpty ? reviewCard.id : message.id,
+        ),
+      ],
+      if (evidence != null) ...[
+        const SizedBox(height: 8),
+        // The released mobile surface has no trusted evidence navigator yet.
+        // Keep cards non-actionable until one is supplied; arbitrary URI fields
+        // can never become an external action.
+        ChatEvidenceReferenceList(envelope: evidence),
+      ],
+      if (followUp != null) ...[const SizedBox(height: 8), ChatFollowUpChip(question: followUp, onSend: sendMessage)],
     ],
   );
 }
@@ -583,7 +672,13 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                           widget.onAskOmi?.call(text);
                         }, selectedText: selectedText);
                       },
-                      child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                      // Force full available width: SelectionArea + MarkdownBody
+                      // otherwise size to the text's minimum intrinsic width, which
+                      // collapses the message to ~1 word per line on iOS.
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                      ),
                     );
                   },
                 ),
@@ -644,6 +739,7 @@ class MemoriesMessageWidget extends StatefulWidget {
   final Function(int, {String? reason}) setMessageNps;
   final DateTime date;
   final Function(String)? onAskOmi;
+  final Future<ServerConversation?> Function(String id)? fetchConversation;
 
   const MemoriesMessageWidget({
     super.key,
@@ -655,6 +751,7 @@ class MemoriesMessageWidget extends StatefulWidget {
     required this.setMessageNps,
     required this.date,
     this.onAskOmi,
+    this.fetchConversation,
   });
 
   @override
@@ -815,102 +912,115 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
         else if (widget.showTypingIndicator && widget.message.thinkings.any((t) => t.toLowerCase().contains('chart')))
           _buildChartShimmer(),
         const SizedBox(height: 16),
-        for (var data in widget.messageMemories.indexed) ...[
-          Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(0.0, 4.0, 0.0, 4.0),
-            child: GestureDetector(
-              onTap: () async {
-                final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                if (connectivityProvider.isConnected) {
-                  var memProvider = Provider.of<ConversationProvider>(context, listen: false);
-                  // Groups are keyed by the local day of `startedAt ?? createdAt`; deriving the
-                  // key from the message's raw UTC `createdAt` missed the group for anyone off
-                  // UTC and the tap silently did nothing (#10980).
-                  final located = memProvider.getConversationDateAndIndexById(data.$2.id);
-                  var idx = located?.$2 ?? -1;
-                  var date = located?.$1 ?? conversationLocalDayKey(data.$2.createdAt);
-
-                  if (idx != -1) {
-                    context.read<ConversationDetailProvider>().updateConversation(data.$2.id, date);
-                    var m = memProvider.groupedConversations[date]![idx];
-                    PlatformManager.instance.analytics.chatMessageConversationClicked(m);
-                    await Navigator.of(
-                      context,
-                    ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: m)));
-                  } else {
-                    if (conversationDetailLoading[data.$1]) return;
-                    setState(() => conversationDetailLoading[data.$1] = true);
-                    ServerConversation? m = await getConversationById(data.$2.id);
-                    if (m == null) return;
-                    (idx, date) = memProvider.addConversationWithDateGrouped(m);
-                    PlatformManager.instance.analytics.chatMessageConversationClicked(m);
-                    setState(() => conversationDetailLoading[data.$1] = false);
-                    if (context.mounted) {
-                      context.read<ConversationDetailProvider>().updateConversation(m.id, date);
-                      await Navigator.of(
-                        context,
-                      ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: m)));
-                    }
-                    if (SharedPreferencesUtil().modifiedConversationDetails?.id == m.id) {
-                      ServerConversation modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;
-                      widget.updateConversation(SharedPreferencesUtil().modifiedConversationDetails!);
-                      var copy = List<MessageConversation>.from(widget.messageMemories);
-                      copy[data.$1] = MessageConversation(
-                        modifiedDetails.id,
-                        modifiedDetails.createdAt,
-                        MessageConversationStructured(
-                          modifiedDetails.structured.title,
-                          modifiedDetails.structured.emoji,
+        Column(
+          key: const ValueKey('chat-citation-list'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var data in widget.messageMemories.indexed)
+              Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(0.0, 4.0, 0.0, 4.0),
+                child: GestureDetector(
+                  key: ValueKey('chat-citation-${data.$2.id}'),
+                  onTap: () => _openCitedConversation(data.$1, data.$2),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
+                    width: double.maxFinite,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1F1F25),
+                      borderRadius: BorderRadius.circular(16.0),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${tryDecodeText(data.$2.structured.emoji)} ${data.$2.structured.title}',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      );
-                      widget.messageMemories.clear();
-                      widget.messageMemories.addAll(copy);
-                      SharedPreferencesUtil().modifiedConversationDetails = null;
-                      setState(() {});
-                    }
-                  }
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(context.l10n.pleaseCheckInternetConnection),
-                      duration: const Duration(seconds: 2),
+                        const SizedBox(width: 8),
+                        conversationDetailLoading[data.$1]
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54),
+                      ],
                     ),
-                  );
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
-                width: double.maxFinite,
-                decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16.0)),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${tryDecodeText(data.$2.structured.emoji)} ${data.$2.structured.title}',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    conversationDetailLoading[data.$1]
-                        ? const SizedBox(
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ],
     );
+  }
+
+  Future<void> _openCitedConversation(int index, MessageConversation citation) async {
+    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+    if (!connectivityProvider.isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.pleaseCheckInternetConnection), duration: const Duration(seconds: 2)),
+      );
+      return;
+    }
+
+    final memProvider = Provider.of<ConversationProvider>(context, listen: false);
+    final fetch = widget.fetchConversation ?? getConversationById;
+    ServerConversation? conversation = await resolveChatCitationConversation(
+      conversations: memProvider,
+      conversationId: citation.id,
+      fetchConversation: (id) async {
+        if (conversationDetailLoading[index]) return null;
+        setState(() => conversationDetailLoading[index] = true);
+        try {
+          return await fetch(id);
+        } finally {
+          if (mounted) setState(() => conversationDetailLoading[index] = false);
+        }
+      },
+    );
+
+    if (!mounted) return;
+    if (conversation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.conversationNotFoundOrDeleted), duration: const Duration(seconds: 2)),
+      );
+      return;
+    }
+
+    var located = memProvider.getConversationDateAndIndexById(conversation.id);
+    var date = located?.$1;
+    if (date == null) {
+      (_, date) = memProvider.addConversationWithDateGrouped(conversation);
+    }
+
+    PlatformManager.instance.analytics.chatMessageConversationClicked(conversation);
+    if (!context.mounted) return;
+    context.read<ConversationDetailProvider>().updateConversation(conversation.id, date);
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: conversation)));
+
+    if (SharedPreferencesUtil().modifiedConversationDetails?.id == conversation.id) {
+      final modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;
+      widget.updateConversation(modifiedDetails);
+      final copy = List<MessageConversation>.from(widget.messageMemories);
+      copy[index] = MessageConversation(
+        modifiedDetails.id,
+        modifiedDetails.createdAt,
+        MessageConversationStructured(modifiedDetails.structured.title, modifiedDetails.structured.emoji),
+      );
+      widget.messageMemories.clear();
+      widget.messageMemories.addAll(copy);
+      SharedPreferencesUtil().modifiedConversationDetails = null;
+      if (mounted) setState(() {});
+    }
   }
 
   String tryDecodeText(String text) {
@@ -1173,7 +1283,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8, left: 4),
+      padding: const EdgeInsets.only(left: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1188,11 +1298,6 @@ class _MessageActionBarState extends State<MessageActionBar> {
                 properties: {'message': widget.messageText},
               );
 
-              // Implicit positive feedback - user copied the message (silent, no UI change)
-              if (_selectedNps == null) {
-                widget.setMessageNps?.call(1, reason: 'user_copied_message');
-              }
-
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1206,7 +1311,6 @@ class _MessageActionBarState extends State<MessageActionBar> {
               }
             },
           ),
-          const SizedBox(width: 20),
           // Thumbs up button
           _buildActionButton(
             icon: _selectedNps == 1 ? FontAwesomeIcons.solidThumbsUp : FontAwesomeIcons.thumbsUp,
@@ -1219,7 +1323,6 @@ class _MessageActionBarState extends State<MessageActionBar> {
               widget.setMessageNps?.call(_selectedNps ?? 0);
             },
           ),
-          const SizedBox(width: 20),
           // Thumbs down button
           _buildActionButton(
             icon: _selectedNps == -1 ? FontAwesomeIcons.solidThumbsDown : FontAwesomeIcons.thumbsDown,
@@ -1238,23 +1341,17 @@ class _MessageActionBarState extends State<MessageActionBar> {
               }
             },
           ),
-          const SizedBox(width: 20),
           // Share button
           _buildActionButton(
             icon: FontAwesomeIcons.share,
             onTap: () async {
               if (widget.messageText.isEmpty) return;
               HapticFeedback.lightImpact();
-              await Share.share(widget.messageText);
+              await Share.share(widget.messageText, sharePositionOrigin: shareSheetOrigin());
               PlatformManager.instance.analytics.track(
                 'Chat Message Shared',
                 properties: {'message': widget.messageText},
               );
-
-              // Implicit positive feedback - user shared the message (silent, no UI change)
-              if (_selectedNps == null) {
-                widget.setMessageNps?.call(1, reason: 'user_shared_message');
-              }
             },
           ),
         ],
@@ -1263,13 +1360,19 @@ class _MessageActionBarState extends State<MessageActionBar> {
   }
 
   Widget _buildActionButton({required FaIconData icon, required VoidCallback onTap, bool isSelected = false}) {
+    // The 14pt glyph alone is far below the 44pt tap minimum; pad the hit area
+    // (34x38) so finger taps on copy/share actually land. Visual pitch is kept
+    // by dropping the 20pt gaps between buttons in favour of this padding.
     return InkWell(
       splashColor: Colors.transparent,
       focusColor: Colors.transparent,
       hoverColor: Colors.transparent,
       highlightColor: Colors.transparent,
       onTap: onTap,
-      child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade600, size: 14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade600, size: 14),
+      ),
     );
   }
 }

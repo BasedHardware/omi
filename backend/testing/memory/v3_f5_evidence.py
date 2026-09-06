@@ -20,7 +20,7 @@ EXPECTED_PRINCIPAL = "serviceAccount:memory-v3-f5-evidence@omi-memory-evidence-n
 EXPECTED_APPROVAL_SUBJECT = "memory-V3-F5 real-service read-only evidence shared-nonprod 2026-06-20"
 EXPECTED_APPROVAL_ARTIFACT_PATH = "docs/approvals/memory-v3-f5-shared-nonprod-oracle-review.md"
 EXPECTED_ORACLE_REVIEW_ARTIFACT = (
-    "docs/operational/memory_readiness_evidence_markers.md#f4-before-f5-real-service-evidence-2026-06-20"
+    "backend/docs/operational/memory_readiness_evidence_markers.md#f4-before-f5-real-service-evidence-2026-06-20"
 )
 APPROVED_PATHS = (
     "control/config metadata",

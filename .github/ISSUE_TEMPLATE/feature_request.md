@@ -11,7 +11,7 @@ assignees: ''
 
 - [ ] Fits the memory-first loop: Capture → Understand → Remember → Retrieve → Act
 - Primary loop layer (pick one): Capture / Understand / Memory / Intelligence / Retrieval-Action / UX-Polish / Docs-Tooling
-- [ ] Does **not** conflict with a [locked product invariant](https://github.com/BasedHardware/Omi/tree/main/docs/product/invariants) (or explain the exception below)
+- [ ] Does **not** conflict with a [locked product invariant](https://github.com/BasedHardware/Omi/tree/main/product/invariants) (or explain the exception below)
 
 **Is your feature request related to a problem? Please describe.**
 A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]

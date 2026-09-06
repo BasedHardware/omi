@@ -1,7 +1,7 @@
 version: 2
 name: home
 tier: manual
-description: Home tab — chat-first panel under the always-on search bar, plus its header controls and Capture/Listening status (v0.12.119+ redesign, replaces dashboard.yaml)
+description: Home tab — chat-first panel under the always-on search bar, plus its header controls and Capture/Listening status (v0.12.119+ redesign; the only Home flow since dashboard.yaml was retired with DashboardPage)
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
@@ -10,8 +10,13 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/DesktopWindowLayoutPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  # The four home_* bridge actions this surface observes. (The fifth,
+  # home_connect_toggle, refuses here: nothing renders a Connect tray any more.)
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationHomeStageActions.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QuerySearchBar.swift
+  - desktop/macos/Desktop/Sources/Analytics/SearchAnalytics.swift
+  - desktop/macos/Desktop/Sources/Analytics/AnalyticsManager+Search.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryResultsPanel.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryAnswerThread.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
