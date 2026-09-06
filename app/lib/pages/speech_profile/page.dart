@@ -452,19 +452,35 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 const SizedBox(height: 10),
-                                Text(
-                                  SharedPreferencesUtil().hasSpeakerProfile
-                                      ? context.l10n.speechProfileOwnerTitle(SharedPreferencesUtil().givenName)
-                                      : context.l10n.speechProfileIntro,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: SharedPreferencesUtil().hasSpeakerProfile ? 24 : 20,
-                                    height: 1.4,
-                                    fontWeight:
-                                        SharedPreferencesUtil().hasSpeakerProfile ? FontWeight.w600 : FontWeight.w400,
+                                if (SharedPreferencesUtil().hasSpeakerProfile)
+                                  // "<Name>'s Speech Profile" always stays on one line:
+                                  // it shrinks to fit rather than wrapping.
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      context.l10n.speechProfileOwnerTitle(SharedPreferencesUtil().givenName),
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 24,
+                                        height: 1.4,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  Text(
+                                    context.l10n.speechProfileIntro,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      height: 1.4,
+                                      fontWeight: FontWeight.w400,
+                                    ),
                                   ),
-                                ),
                                 const SizedBox(height: 20),
                                 if (SharedPreferencesUtil().hasSpeakerProfile)
                                   (provider.isInitialising || _isCheckingAvailability)
