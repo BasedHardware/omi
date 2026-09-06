@@ -149,8 +149,9 @@ def _qos_fakes() -> dict[str, ModuleType | None]:
     tiktoken_mod.encoding_for_model = MagicMock(return_value=_Encoding())
     byok = _stub_mod(
         'utils.byok',
-        get_byok_key=MagicMock(return_value=None),
         get_byok_llm_provider=MagicMock(return_value=None),
+        get_byok_key=MagicMock(return_value=None),
+        get_byok_oauth_credential=MagicMock(return_value=None),
         get_byok_uid=MagicMock(return_value=None),
     )
     return {
