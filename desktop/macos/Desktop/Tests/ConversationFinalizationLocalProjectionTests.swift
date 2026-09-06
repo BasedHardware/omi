@@ -148,7 +148,7 @@ private final class LocalProjectionURLStub: URLProtocol, @unchecked Sendable {
 
 #if DEBUG
   final class ConversationFinalizationLocalProjectionTests: XCTestCase {
-    private var testUserId: String!
+    private var testUserId = ""
     private var userDir: URL?
 
     override func setUp() async throws {
@@ -160,8 +160,9 @@ private final class LocalProjectionURLStub: URLProtocol, @unchecked Sendable {
       await RewindDatabase.shared.configure(userId: testUserId)
       try await RewindDatabase.shared.initialize()
 
-      let appSupport = FileManager.default
-        .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+      let appSupport = try XCTUnwrap(
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+      )
       userDir =
         appSupport
         .appendingPathComponent("Omi", isDirectory: true)
