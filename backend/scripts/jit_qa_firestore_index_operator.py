@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Reconcile the four Firestore composites required by the isolated JIT QA path.
+"""Reconcile the ten Firestore composites required by the isolated JIT QA path.
 
 The checked-in manifest is the source of truth, but the QA database is a
 separate development database that must not receive the full production
 manifest merely to exercise JIT history and entity-timeline reads.  This
-operator validates the complete generated manifest, selects four named query
+operator validates the complete generated manifest, selects ten named query
 requirements from it, and delegates inventory/provisioning/waiting to the
 shared Firestore reconciler.
 """
@@ -19,6 +19,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from database.firestore_index_registry import (
+    DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY,
+    DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY,
+    DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY,
+    DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY,
+    DAILY_SWEEP_ACTIVE_FACT_SUBJECT_CONTENT_QUERY,
+    DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY,
     ENTITY_TIMELINE_CONVERSATIONS_QUERY,
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
     UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
@@ -37,6 +43,12 @@ TARGET_REQUIREMENTS = (
     ENTITY_TIMELINE_CONVERSATIONS_QUERY.index_requirement,
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY.index_requirement,
     UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY.index_requirement,
+    DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.index_requirement,
+    DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY.index_requirement,
+    DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY.index_requirement,
+    DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY.index_requirement,
+    DAILY_SWEEP_ACTIVE_FACT_SUBJECT_CONTENT_QUERY.index_requirement,
+    DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY.index_requirement,
 )
 
 
@@ -73,7 +85,7 @@ def _target_signatures() -> set[reconciler.IndexSignature]:
 
 
 def selected_manifest(*, manifest_path: Path = MANIFEST_PATH) -> tuple[dict[str, Any], set[reconciler.IndexSignature]]:
-    """Validate the canonical manifest and return only the four QA entries."""
+    """Validate the canonical manifest and return only the ten QA entries."""
 
     generated = reconciler.verify_manifest_source(manifest_path)
     targets = _target_signatures()
@@ -106,7 +118,7 @@ def build_plan(
     manifest_path: Path = MANIFEST_PATH,
     runner: reconciler.CommandRunner = reconciler.subprocess.run,
 ) -> dict[str, Any]:
-    """Read the named database and report only the four selected requirements."""
+    """Read the named database and report only the ten selected requirements."""
 
     _require_target(project, database)
     manifest, expected = selected_manifest(manifest_path=manifest_path)
@@ -183,8 +195,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout-seconds", type=float, default=3600.0)
     parser.add_argument("--poll-interval-seconds", type=float, default=10.0)
     sub = parser.add_subparsers(dest="operation", required=True)
-    sub.add_parser("plan", help="read the named database and print the four-index plan")
-    apply = sub.add_parser("apply", help="create/wait for the four indexes after explicit confirmation")
+    sub.add_parser("plan", help="read the named database and print the ten-index plan")
+    apply = sub.add_parser("apply", help="create/wait for the ten indexes after explicit confirmation")
     apply.add_argument("--confirmation", required=True)
     return parser
 
