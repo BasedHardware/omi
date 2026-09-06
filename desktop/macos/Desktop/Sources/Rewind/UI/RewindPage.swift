@@ -483,7 +483,7 @@ struct RewindPage: View {
         QuerySearchBar(
           text: $viewModel.searchQuery,
           accessibilityID: "rewind-search-field",
-          placeholder: "Search screen history…",
+          placeholder: "Search rewind",
           focus: $isSearchFocused, searchSurface: .rewind
         )
         .onChange(of: viewModel.searchQuery) { _, query in
