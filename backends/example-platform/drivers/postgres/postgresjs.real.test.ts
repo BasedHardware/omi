@@ -1680,6 +1680,19 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       const createdResponse = await deviceRequest("/v1/device-sessions", "POST", httpCreate);
       expect(createdResponse.status).toBe(201);
       const httpSession = (await createdResponse.json() as { session: { id: string } }).session;
+      const keylessIngress = createPostgresFirebaseDeviceSessionRuntime(ingressOptions);
+      const readWithoutReceipt = (path: string, runtime = ingress) => runtime.fetch(new Request(`https://service.example${path}`, { headers: { authorization: "Bearer device.qa.valid" } }));
+      for (const runtime of [ingress, keylessIngress]) {
+        for (const tail of ["", "/transcript"]) {
+          expect((await readWithoutReceipt(`/v1/device-sessions/${httpSession.id}${tail}`, runtime)).status).toBe(200);
+        }
+      }
+      expect((await readWithoutReceipt("/v1/device-sessions/ownership", keylessIngress)).status).toBe(503);
+      for (const path of ["/v1/device-sessions", ...["audio", "complete", "transcribe"].map(tail => `/v1/device-sessions/${httpSession.id}/${tail}`)]) {
+        const request = () => new Request(`https://service.example${path}`, { method: "POST", headers: { authorization: "Bearer device.qa.valid" }, body: JSON.stringify(httpCreate) });
+        expect((await ingress.fetch(request())).status).toBe(400);
+        expect((await keylessIngress.fetch(request())).status).toBe(503);
+      }
       const replayedResponse = await deviceRequest("/v1/device-sessions", "POST", httpCreate);
       expect(replayedResponse.status).toBe(201);
       expect(await replayedResponse.json()).toMatchObject({ session: { id: httpSession.id } });
@@ -1718,6 +1731,11 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       });
       try {
         await bindCaptureIdentity(reboundAccount);
+        for (const tail of ["", "/transcript"]) {
+          const deniedRead = await readWithoutReceipt(`/v1/device-sessions/${httpSession.id}${tail}`);
+          expect(deniedRead.status).toBe(404);
+          expect(await deniedRead.json()).toEqual({ error: { code: "device_session_not_found" } });
+        }
         const reboundResponse = await ingress.fetch(new Request("https://service.example/v1/device-sessions/ownership", { headers: { authorization: "Bearer device.qa.valid" } }));
         expect(reboundResponse.status).toBe(200);
         expect((await reboundResponse.json() as { ownership: { ownerKey: string } }).ownership.ownerKey).not.toBe(ownership.ownerKey);
@@ -1735,6 +1753,9 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       const legacyUpload = await uploads.open(context, { ...legacyInput, deviceName: null });
       await ownerSql.unsafe("UPDATE omi_memory.listen_capture_audio_uploads SET captured_account_epoch=NULL WHERE account_id=$1 AND session_id=$2", [accountId, legacyUpload.id]);
       expect(await uploads.read(context, legacyUpload.id)).toMatchObject({ id: legacyUpload.id });
+      for (const tail of ["", "/transcript"]) {
+        expect((await readWithoutReceipt(`/v1/device-sessions/${legacyUpload.id}${tail}`, keylessIngress)).status).toBe(200);
+      }
       await expect(uploads.open(context, { ...legacyInput, deviceName: null })).rejects.toMatchObject({ code: "capture_ownership_changed" });
       await expect(uploads.append(context, legacyUpload.id, 0, audio)).rejects.toMatchObject({ code: "capture_ownership_changed" });
       await expect(uploads.complete(context, legacyUpload.id)).rejects.toMatchObject({ code: "capture_ownership_changed" });
