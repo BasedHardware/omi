@@ -424,9 +424,9 @@ async def test_will_retry_finalization_error_logs_warning_not_error(caplog):
 
     records = [r for r in caplog.records if r.getMessage().startswith("Conversation processing failed")]
     assert records, "expected a will-retry failure record"
-    assert all(r.levelno == logging.WARNING for r in records), (
-        "the will-retry finalization branch must log at WARNING, not ERROR"
-    )
+    assert all(
+        r.levelno == logging.WARNING for r in records
+    ), "the will-retry finalization branch must log at WARNING, not ERROR"
     # WARNING must not mean dropped: the request stays armed for bounded retry.
     assert session.pending_conversation_requests['conv-1']['retries'] == 1
 

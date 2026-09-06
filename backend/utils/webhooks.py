@@ -45,6 +45,7 @@ _DEV_WEBHOOK_NO_RETRY_STATUSES = frozenset(range(400, 500)) - {408, 429}
 def _is_deterministic_rejection(status_code: int) -> bool:
     return status_code in _DEV_WEBHOOK_NO_RETRY_STATUSES
 
+
 _AUDIO_BYTES_WEBHOOK_CHUNK_SECONDS = 1
 _AUDIO_BYTES_WEBHOOK_MIN_SAMPLE_RATE = 1000
 _AUDIO_BYTES_WEBHOOK_MAX_SAMPLE_RATE = 192000
