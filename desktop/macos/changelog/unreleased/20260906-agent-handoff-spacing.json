@@ -1,0 +1,3 @@
+{
+  "change": "Chat answers no longer run the pre-tool sentence and the post-tool continuation together when Omi pauses to think or search mid-turn (\"...handle it.Capture the context...\" now renders as two properly separated sentences)"
+}

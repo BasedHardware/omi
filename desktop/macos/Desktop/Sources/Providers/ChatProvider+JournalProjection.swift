@@ -182,12 +182,17 @@ extension ChatProvider {
     // The authoritative answer replaces every streamed projection, so the raw
     // accumulator this turn was built from has no further reader.
     streamingBuffer.finishStreaming(messageId: messageId)
-    messages[index].applyAuthoritativeTerminalAnswer(queryText)
+    // The streamed projection applied sentence spacing to every flush; the
+    // terminal answer must honor the same contract or a joined agent handoff
+    // ("…handle it.Capture the…") that was only ever visible as fixed would
+    // reappear the moment the turn settles — and be persisted that way.
+    let normalizedTerminalText = Self.normalizeAssistantSentenceSpacing(queryText)
+    messages[index].applyAuthoritativeTerminalAnswer(normalizedTerminalText)
     messages[index].applySelectedSourceFallback(
       selectedReferences: selectedReferences,
       requestedSources: requestedSources,
       retrievedReferences: turnReferences,
-      fallbackText: queryText)
+      fallbackText: normalizedTerminalText)
     messages[index].isStreaming = false
     // A number this turn never assigned is one the reader was shown a turn ago.
     let inheritedReferences = ChatCitationMarkup.inheritedReferences(
