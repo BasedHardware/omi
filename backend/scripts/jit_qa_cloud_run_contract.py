@@ -33,7 +33,6 @@ TYPESENSE_API_SECRET = "jit-qa-typesense-api-key"
 TYPESENSE_COLLECTION = "jit_qa_canonical_memory_atoms"
 TYPESENSE_READINESS_COLLECTION = "jit_qa_typesense_readiness"
 TYPESENSE_ENTRYPOINT = "/usr/local/bin/jit-qa-typesense-entrypoint"
-TYPESENSE_API_PORT = 8080
 TYPESENSE_CPU = "1"
 TYPESENSE_MEMORY = "1Gi"
 TYPESENSE_MIN_INSTANCES = 1

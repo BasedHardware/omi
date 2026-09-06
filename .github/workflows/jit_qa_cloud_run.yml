@@ -227,13 +227,20 @@ jobs:
           gcloud run services describe "$QA_TYPESENSE_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$typesense_resource"
           typesense_url="$(gcloud run services describe "$QA_TYPESENSE_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format='value(status.url)')"
           typesense_host="${typesense_url#https://}"
-          typesense_image="$(python3 - "$typesense_resource" "$SOURCE_SHA" "$typesense_host" <<'PY'
+          typesense_tag="gcr.io/${QA_PROJECT}/${QA_TYPESENSE_SERVICE}:${SOURCE_SHA}"
+          typesense_digest="$(gcloud container images describe "$typesense_tag" --format='value(image_summary.digest)')"
+          [[ "$typesense_digest" =~ ^sha256:[a-f0-9]{64}$ ]] || {
+            echo "Typesense source-SHA registry tag has no immutable digest" >&2
+            exit 1
+          }
+          expected_typesense_image="gcr.io/${QA_PROJECT}/${QA_TYPESENSE_SERVICE}@${typesense_digest}"
+          typesense_image="$(python3 - "$typesense_resource" "$SOURCE_SHA" "$typesense_host" "$expected_typesense_image" <<'PY'
           import json
           import re
           import sys
 
           resource = json.load(open(sys.argv[1], encoding="utf-8"))
-          source_sha, expected_host = sys.argv[2:]
+          source_sha, expected_host, expected_image = sys.argv[2:]
           metadata = resource.get("metadata", {})
           labels = metadata.get("labels", {}) if isinstance(metadata, dict) else {}
           if labels.get("managed-by") != "github-actions" or labels.get("jit-qa") != "true":
@@ -253,6 +260,8 @@ jobs:
               r"gcr\.io/based-hardware-dev/typesense-jit-qa@sha256:[0-9a-f]{64}", image
           ):
               raise SystemExit("Typesense service image is not an immutable QA digest")
+          if image != expected_image:
+              raise SystemExit("Typesense service image does not match the reviewed source-SHA registry digest")
           print(image)
           PY
           )"

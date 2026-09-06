@@ -654,7 +654,7 @@ def main() -> int:
             kinds=args.kinds,
             limit=args.limit,
         )
-    except (ProjectionError, OSError, ValueError) as exc:
+    except (RuntimeError, OSError, ValueError) as exc:
         failure = {
             "schema_version": SCHEMA_VERSION,
             "status": "failed",

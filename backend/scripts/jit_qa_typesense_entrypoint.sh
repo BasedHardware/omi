@@ -15,8 +15,10 @@ fi
 data_dir="${TYPESENSE_DATA_DIR:-/tmp/typesense}"
 mkdir -p "$data_dir"
 
+# Typesense 27.1 maps TYPESENSE_API_KEY to its api-key server setting. Keep
+# the secret in the environment supplied by Cloud Run Secret Manager instead
+# of exposing it in the process argument list.
 exec "$typesense_binary" \
     --data-dir "$data_dir" \
     --api-address 0.0.0.0 \
-    --api-port "${PORT:-8080}" \
-    --api-key "$TYPESENSE_API_KEY"
+    --api-port "${PORT:-8080}"

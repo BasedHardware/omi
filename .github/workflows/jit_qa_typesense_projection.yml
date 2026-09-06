@@ -44,7 +44,9 @@ env:
   QA_MODE: ${{ inputs.mode }}
 
 concurrency:
-  group: jit-qa-typesense-projection
+  # Typesense is a shared dependency of the application-plane workflow. A
+  # projection rebuild must not race a QA service deploy or verification.
+  group: jit-isolated-qa-cloud-run-development
   cancel-in-progress: false
 
 jobs:
@@ -152,6 +154,11 @@ jobs:
             fi
             sleep 1
           done
+          unauthenticated_status="$(curl --silent --show-error -o /dev/null -w '%{http_code}' "$smoke_url/collections")"
+          [[ "$unauthenticated_status" =~ ^(401|403)$ ]] || {
+            echo "Typesense smoke did not enforce the environment-provided API key" >&2
+            exit 1
+          }
           curl --fail --silent --show-error -X POST "$smoke_url/collections" \
             -H "X-TYPESENSE-API-KEY: $smoke_key" -H 'Content-Type: application/json' \
             --data '{"name":"jit_qa_smoke","fields":[{"name":"content","type":"string"}]}' >/dev/null

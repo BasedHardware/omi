@@ -11,26 +11,18 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "jit_qa_typesense_projection.py"
 
-for key, value in {
-    "ENCRYPTION_SECRET": "12345678901234567890123456789012",
-    "TYPESENSE_HOST": "typesense-jit-qa-1031333818730.us-central1.run.app",
-    "TYPESENSE_HOST_PORT": "443",
-    "TYPESENSE_PROTOCOL": "https",
-    "TYPESENSE_API_KEY": "qa-typesense-test-key",
-    "MEMORY_TYPESENSE_COLLECTION": "jit_qa_canonical_memory_atoms",
-    "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
-    "OMI_FIRESTORE_DATA_PLANE_PROJECT": "based-hardware-dev",
-    "FIRESTORE_DATABASE_ID": "jit-qa",
-    "OMI_ENV_STAGE": "dev",
-    "OMI_JIT_QA_AUTH_ONLY": "true",
-    "OMI_JIT_QA_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
-}.items():
-    os.environ.setdefault(key, value)
-
 spec = importlib.util.spec_from_file_location("jit_qa_typesense_projection_for_test", SCRIPT)
 assert spec is not None and spec.loader is not None
 PROJECTION = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(PROJECTION)
+
+
+@pytest.fixture(autouse=True)
+def restore_environment():
+    original = os.environ.copy()
+    yield
+    os.environ.clear()
+    os.environ.update(original)
 
 
 def _environment() -> dict[str, str]:
@@ -67,6 +59,12 @@ def test_typesense_url_accepts_only_the_named_cloud_run_service():
     ):
         with pytest.raises(PROJECTION.ProjectionError):
             PROJECTION.parse_typesense_url(value)
+
+
+def test_typesense_entrypoint_keeps_api_key_out_of_process_arguments():
+    entrypoint = (ROOT / "scripts" / "jit_qa_typesense_entrypoint.sh").read_text(encoding="utf-8")
+    assert "TYPESENSE_API_KEY" in entrypoint
+    assert "--api-key" not in entrypoint
 
 
 def test_runtime_environment_rejects_shared_data_plane_and_emulator():
@@ -373,6 +371,7 @@ def test_projection_documents_uses_typesense_export_jsonl(monkeypatch: pytest.Mo
             )
 
     requests = []
+    monkeypatch.setenv("TYPESENSE_API_KEY", "opaque-qa-key")
     monkeypatch.setattr(PROJECTION, "urlopen", lambda request, timeout: (requests.append(request), ExportResponse())[1])
     documents = PROJECTION._projection_documents(
         "https://typesense-jit-qa-1031333818730.us-central1.run.app", PROJECTION.COLLECTION
@@ -386,3 +385,32 @@ def test_failed_receipt_is_content_free_and_private(tmp_path: Path):
     PROJECTION.write_receipt(path, {"status": "failed", "failure_type": "ProjectionError"})
     assert json.loads(path.read_text(encoding="utf-8"))["status"] == "failed"
     assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_cli_sanitizes_unexpected_runtime_error_into_failure_receipt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+):
+    output = tmp_path / "runtime-error.json"
+    monkeypatch.setattr(
+        PROJECTION,
+        "_parse_args",
+        lambda: SimpleNamespace(
+            source_sha="a" * 40,
+            run_id="projection-runtime-error",
+            typesense_url="https://typesense-jit-qa-1031333818730.us-central1.run.app",
+            typesense_image="gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "b" * 64,
+            typesense_base_image=PROJECTION.TYPESENSE_BASE_IMAGE_27_1,
+            query="travel plan",
+            kinds="fact",
+            limit=8,
+            output=output,
+        ),
+    )
+    monkeypatch.setattr(PROJECTION, "run_projection", lambda **_: (_ for _ in ()).throw(RuntimeError("secret body")))
+
+    assert PROJECTION.main() == 1
+    failure = json.loads(output.read_text(encoding="utf-8"))
+    assert failure["status"] == "failed"
+    assert failure["failure_type"] == "RuntimeError"
+    assert "secret body" not in output.read_text(encoding="utf-8")
+    assert "secret body" not in capsys.readouterr().err

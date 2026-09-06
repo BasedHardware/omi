@@ -12,8 +12,9 @@ to the development registry by digest.
 The service has one container, one warm instance, a maximum of one instance,
 1 CPU, 1 GiB memory, and an ephemeral `/tmp/typesense` data directory. Its
 only credential is `jit-qa-typesense-api-key`, which must be explicitly labeled
-as owned by the QA plane. The wrapper reads that key from the environment and
-passes it to the Typesense server without logging it. No Firestore, Firebase,
+as owned by the QA plane. The wrapper reads that key from the environment; the
+pinned Typesense 27.1 server maps `TYPESENSE_API_KEY` to its API-key setting,
+so the secret never appears in the process argument list. No Firestore, Firebase,
 customer credential, queue, Redis, or production Typesense binding is given to
 the service.
 
@@ -55,9 +56,11 @@ dispatch. Pass an actual term from an active QA ledger row and a unique,
 lowercase run id. A service restart loses `/tmp/typesense`; the separate
 readiness marker is lost with it, and the QA backend fails closed for
 current-ledger search. Rerun the workflow rehydration step with a new run id
-and compare the new content-free receipt's projection digest/count against the
-authoritative Firestore-backed result. Do not hand-inject a document or treat
-an empty search as readiness.
+and verify the new content-free rebuild receipt plus an actual QA app query
+against the authoritative Firestore-backed result. The projection digest is
+evidence for that rebuild snapshot; it is not a live content-hash invariant
+that the app must recompute or export on every chat query. Do not hand-inject a
+document or treat an empty search as readiness.
 
 The projection workflow deliberately does not deploy application services. The
 existing `.github/workflows/jit_qa_cloud_run.yml` resolves and validates this
@@ -68,7 +71,7 @@ following narrow environment and secret bindings to both:
 # Resolve and validate the service in the existing deploy/verify job.
 typesense_url="$(gcloud run services describe "$QA_TYPESENSE_SERVICE" \
   --project "$QA_PROJECT" --region "$QA_REGION" --format='value(status.url)')"
-[[ "$typesense_url" =~ ^https://typesense-jit-qa-[a-z0-9-]+\.run\.app$ ]]
+[[ "$typesense_url" =~ ^https://typesense-jit-qa-([a-z0-9-]+-uc\.a\.run\.app|[0-9]+\.us-central1\.run\.app)$ ]]
 typesense_host="${typesense_url#https://}"
 
 # Append these literals to the existing QA HTTP-service environment.
@@ -88,9 +91,10 @@ The integration owner must carry the resolved host into both `backend-jit-qa`
 and `desktop-backend-jit-qa`, retain the existing `jit-qa` Firestore fence, and
 add a post-deploy resource check using
 `validate_typesense_cloud_run_resource` plus an app-level `search_knowledge`
-probe. The projection workflow's readiness receipt remains the source of the
-expected immutable Typesense image digest; no normal-dev or production
-Typesense endpoint is an acceptable substitute.
+probe. Resolve the live service image from the immutable development registry
+tag `gcr.io/based-hardware-dev/typesense-jit-qa:$SOURCE_SHA`, and require its
+digest to match the service image. No normal-dev or production Typesense
+endpoint is an acceptable substitute.
 
 Dispatch `mode=bootstrap` first when the named QA database does not yet contain
 an active intent-backed ledger row. This builds, smoke-tests, and deploys the

@@ -440,12 +440,14 @@ def test_typesense_workflow_smokes_images_before_publish_and_has_unready_bootstr
     assert "mode:" in text
     assert "- bootstrap" in text and "- prove" in text
     assert "docker run --detach --name \"$smoke_name\"" in text
+    assert "unauthenticated_status" in text
     assert '"$smoke_url/collections/jit_qa_smoke/documents/export?include_fields=id,content"' in text
     assert 'scripts/jit_qa_typesense_projection.py --help' in text
     assert "if: ${{ inputs.mode == 'prove' }}" in text
     assert "if: ${{ inputs.mode == 'bootstrap' }}" in text
     assert '"status": "not_qualified"' in text
     assert '"readiness_marker": "absent"' in text
+    assert "group: jit-isolated-qa-cloud-run-development" in text
 
 
 def test_bounded_proactivity_capability_is_required_on_qa_http_and_gateway_only():
@@ -460,7 +462,7 @@ def test_bounded_proactivity_capability_is_required_on_qa_http_and_gateway_only(
 
 def test_qa_cloud_run_rendered_typesense_shell_accepts_real_host_and_digest():
     text = WORKFLOW.read_text(encoding="utf-8")
-    start = 'typesense_image="$(python3 - "$typesense_resource" "$SOURCE_SHA" "$typesense_host" <<\'PY\''
+    start = 'typesense_image="$(python3 - "$typesense_resource" "$SOURCE_SHA" "$typesense_host" "$expected_typesense_image" <<\'PY\''
     rendered = text.split(start, 1)[1].split("\n          PY", 1)[0]
     rendered = textwrap.dedent(rendered.lstrip("\n"))
     image = "gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "a" * 64
@@ -480,7 +482,7 @@ def test_qa_cloud_run_rendered_typesense_shell_accepts_real_host_and_digest():
             json.dump(resource, file)
             file.flush()
             result = subprocess.run(
-                [sys.executable, "-", file.name, "b" * 40, host],
+                [sys.executable, "-", file.name, "b" * 40, host, image],
                 input=rendered,
                 text=True,
                 capture_output=True,
@@ -488,6 +490,26 @@ def test_qa_cloud_run_rendered_typesense_shell_accepts_real_host_and_digest():
             )
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip() == image
+
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8") as file:
+        json.dump(resource, file)
+        file.flush()
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-",
+                file.name,
+                "b" * 40,
+                "typesense-jit-qa-1031333818730.us-central1.run.app",
+                "gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "c" * 64,
+            ],
+            input=rendered,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    assert result.returncode != 0
+    assert "source-SHA registry digest" in result.stderr
 
 
 def test_qa_cloud_run_renders_typesense_host_and_key_into_both_http_services():
@@ -520,3 +542,9 @@ def test_qa_cloud_run_renders_typesense_host_and_key_into_both_http_services():
     deploy_line = next(line for line in text.splitlines() if "--set-secrets" in line and "TYPESENSE_API_KEY" in line)
     assert 'for pair in "$QA_SERVICE:$BACKEND_IMAGE" "$QA_DESKTOP_SERVICE:$DESKTOP_IMAGE"' in text
     assert "TYPESENSE_API_KEY=${QA_TYPESENSE_SECRET}:latest" in deploy_line
+
+
+def test_typesense_entrypoint_uses_environment_key_without_secret_argument():
+    entrypoint = (BACKEND_ROOT / "scripts" / "jit_qa_typesense_entrypoint.sh").read_text(encoding="utf-8")
+    assert "TYPESENSE_API_KEY" in entrypoint
+    assert "--api-key" not in entrypoint
