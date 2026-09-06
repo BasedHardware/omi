@@ -6,14 +6,21 @@ multi-year trajectory analysis, and ChatToolResponse contract compliance.
 """
 
 import asyncio
+import re
 import sys
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-from test_main import install_dependency_stubs
-
-install_dependency_stubs()
+# Fail fast if real runtime dependencies are not installed
+try:
+    import fastapi
+    import httpx
+    import pydantic
+except ImportError as e:
+    print(f"❌ [ERROR] Live smoke test requires real runtime dependencies: {e}")
+    print("Please install requirements: pip install -r requirements.txt")
+    sys.exit(1)
 
 import main
 import models
@@ -47,7 +54,11 @@ async def run_live_smoke_tests():
         assert "United States" in resp.result, "Missing country name in result"
         assert "GDP" in resp.result, "Missing GDP in result"
         assert "Coordinates:" in resp.result, "Missing Coordinates in result"
-        print("✅ [PASS] /tools/country-profile (USA): Synthesized profile with coordinates")
+        # Assert live-only numeric markers (preventing vacuous passes on stubbed/empty data)
+        assert re.search(r"Lat \d+\.\d+, Lon -\d+\.\d+", resp.result), "Expected valid live numeric coordinates for USA"
+        assert re.search(r"GDP: \$\d+(\.\d+)?[TMKB]", resp.result), "Expected valid live formatted GDP"
+        assert re.search(r"Total Population: \d+(\.\d+)?[TMKB] people", resp.result), "Expected valid live formatted population"
+        print("✅ [PASS] /tools/country-profile (USA): Synthesized profile with live coordinates and metrics")
         passed += 1
     except Exception as e:
         print(f"❌ [FAIL] /tools/country-profile: {e}")

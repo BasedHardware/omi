@@ -7,12 +7,14 @@ and geopolitical discovery using the official World Bank Open Data API for Omi A
 import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional, Tuple
+import urllib.parse
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from models import (
+    COMMON_COUNTRY_ALIASES,
     INDICATOR_MAP,
     ChatToolResponse,
     CompareEconomiesRequest,
@@ -28,124 +30,8 @@ DEFAULT_USER_AGENT = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 (Omi-WorldBank-Integration/1.0)"
 )
 
-# Common country aliases mapped to ISO-3 codes
-STATIC_COUNTRY_ALIASES: Dict[str, str] = {
-    "us": "USA",
-    "usa": "USA",
-    "united states": "USA",
-    "united states of america": "USA",
-    "america": "USA",
-    "uk": "GBR",
-    "united kingdom": "GBR",
-    "great britain": "GBR",
-    "britain": "GBR",
-    "england": "GBR",
-    "germany": "DEU",
-    "deutschland": "DEU",
-    "france": "FRA",
-    "india": "IND",
-    "bharat": "IND",
-    "china": "CHN",
-    "prc": "CHN",
-    "japan": "JPN",
-    "nippon": "JPN",
-    "south korea": "KOR",
-    "korea": "KOR",
-    "republic of korea": "KOR",
-    "north korea": "PRK",
-    "russia": "RUS",
-    "russian federation": "RUS",
-    "brazil": "BRA",
-    "brasil": "BRA",
-    "canada": "CAN",
-    "australia": "AUS",
-    "mexico": "MEX",
-    "italy": "ITA",
-    "spain": "ESP",
-    "indonesia": "IDN",
-    "saudi arabia": "SAU",
-    "turkey": "TUR",
-    "turkiye": "TUR",
-    "taiwan": "TWN",
-    "netherlands": "NLD",
-    "holland": "NLD",
-    "switzerland": "CHE",
-    "singapore": "SGP",
-    "uae": "ARE",
-    "united arab emirates": "ARE",
-    "dubai": "ARE",
-    "south africa": "ZAF",
-    "argentina": "ARG",
-    "sweden": "SWE",
-    "poland": "POL",
-    "belgium": "BEL",
-    "norway": "NOR",
-    "ireland": "IRL",
-    "israel": "ISR",
-    "austria": "AUT",
-    "nigeria": "NGA",
-    "egypt": "EGY",
-    "vietnam": "VNM",
-    "pakistan": "PAK",
-    "bangladesh": "BGD",
-    "philippines": "PHL",
-    "malaysia": "MYS",
-    "thailand": "THA",
-    "new zealand": "NZL",
-    "chile": "CHL",
-    "colombia": "COL",
-    "portugal": "PRT",
-    "greece": "GRC",
-    "ukraine": "UKR",
-    "world": "WLD",
-    "global": "WLD",
-    # Standard ISO-2 and ISO-3 codes
-    "can": "CAN",
-    "mex": "MEX",
-    "ind": "IND",
-    "usa": "USA",
-    "gbr": "GBR",
-    "deu": "DEU",
-    "jpn": "JPN",
-    "fra": "FRA",
-    "bra": "BRA",
-    "chn": "CHN",
-    "aus": "AUS",
-    "ita": "ITA",
-    "esp": "ESP",
-    "idn": "IDN",
-    "sau": "SAU",
-    "tur": "TUR",
-    "twn": "TWN",
-    "nld": "NLD",
-    "che": "CHE",
-    "sgp": "SGP",
-    "are": "ARE",
-    "zaf": "ZAF",
-    "arg": "ARG",
-    "swe": "SWE",
-    "pol": "POL",
-    "bel": "BEL",
-    "nor": "NOR",
-    "irl": "IRL",
-    "isr": "ISR",
-    "aut": "AUT",
-    "nga": "NGA",
-    "egy": "EGY",
-    "vnm": "VNM",
-    "pak": "PAK",
-    "bgd": "BGD",
-    "phl": "PHL",
-    "mys": "MYS",
-    "tha": "THA",
-    "nzl": "NZL",
-    "chl": "CHL",
-    "col": "COL",
-    "prt": "PRT",
-    "grc": "GRC",
-    "ukr": "UKR",
-    "wld": "WLD",
-}
+# Canonical country aliases derived from models as single source of truth
+STATIC_COUNTRY_ALIASES: Dict[str, str] = COMMON_COUNTRY_ALIASES
 
 
 # Map ISO-3 codes to canonical country display names
@@ -300,7 +186,8 @@ async def _resolve_country_code(query: str) -> Tuple[str, str]:
     # Fallback to direct World Bank API query for unmapped/uncached country codes
     client = _get_http_client()
     try:
-        resp = await client.get(f"{WORLD_BANK_BASE_URL}/country/{clean}?format=json")
+        clean_encoded = urllib.parse.quote(clean)
+        resp = await client.get(f"{WORLD_BANK_BASE_URL}/country/{clean_encoded}?format=json")
         if resp.status_code == 200:
             data = resp.json()
             if len(data) > 1 and isinstance(data[1], list) and len(data[1]) > 0:
@@ -375,7 +262,6 @@ async def get_manifest():
             "inflation, population, life expectancy, unemployment, and CO2 emissions across 200+ countries."
         ),
         "description_for_human": "Ask Omi about any country's GDP, inflation, population, economic profile, or compare national economies.",
-        "logo_url": "https://raw.githubusercontent.com/BasedHardware/omi/main/plugins/logos/worldbank.png",
         "contact_email": "support@omi.me",
         "legal_info_url": "https://www.worldbank.org/en/about/legal/terms-of-use-for-datasets",
         "tools": [

@@ -1,6 +1,6 @@
 # 🌐 World Bank Global Economic & Country Intelligence (Omi Integration App)
 
-An official, zero-authentication Omi integration app providing real-time macroeconomic indicators, national profiles, comparative economics, and geopolitical discovery directly from the official **World Bank Open Data API** (`api.worldbank.org/v2`).
+A community-built, zero-authentication Omi integration app providing real-time macroeconomic indicators, national profiles, comparative economics, and geopolitical discovery directly from the official **World Bank Open Data API** (`api.worldbank.org/v2`).
 
 Designed specifically for **Omi AI wearable users**, this integration allows users to query authoritative global data hands-free via voice or chat.
 
@@ -77,10 +77,11 @@ curl -X POST "http://localhost:8000/tools/country-profile" \
 **Response:**
 ```json
 {
-  "result": "🌍 Country Profile: United States (USA)\n• Capital: Washington, D.C.\n• Region: North America\n• Income Level: High income\n• Coordinates: Lat 38.89, Lon -77.03\n\n📊 Key Macroeconomic Indicators:\n• GDP (Nominal): $27.36T\n• GDP per Capita: $81.70K\n• Inflation Rate: +3.41%\n• Total Population: 334.91M\n• Life Expectancy: 77.50 years",
+  "result": "🌍 Economic Profile: United States (USA)\n• Capital: Washington, D.C.\n• Region: North America\n• Income Classification: High income\n• Coordinates: Lat 38.89, Lon -77.03\n\n📊 Core Macroeconomic Indicators:\n• GDP: $27.36T (2023)\n• GDP Per Capita: $81.70K (2023)\n• Inflation Rate: +4.12% (2023)\n• Total Population: 334.91M people (2023)\n• Life Expectancy: 77.4 years (2023)",
   "error": null
 }
 ```
+
 
 ---
 
