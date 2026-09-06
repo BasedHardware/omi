@@ -242,10 +242,34 @@ type OmiJitReceiptState = {
   providerAttempts: number;
   costMicroUSD: number | null;
   invalid: boolean;
+  /** Last request activity. States are retained after invalidation so an
+   * unknown receipt cannot be bypassed by starting a fresh state object. */
+  lastTouchedAt: number;
 };
 
 const omiJitReceiptStates = new Map<string, OmiJitReceiptState>();
 let omiJitFetchGuardInstalled = false;
+let omiJitUpstreamFetch: typeof globalThis.fetch | undefined;
+const OMI_JIT_STATE_TTL_MS = 30 * 60 * 1_000;
+
+function pruneExpiredOmiJitReceiptStates(now = Date.now()): void {
+  for (const [executionID, state] of omiJitReceiptStates) {
+    if (now - state.lastTouchedAt > OMI_JIT_STATE_TTL_MS) omiJitReceiptStates.delete(executionID);
+  }
+}
+
+/** Test-only reset; the extension installs its fetch guard at most once per
+ * process, while unit tests need to restore the host fetch between cases. */
+export function __resetOmiJitFetchGuardForTest(): void {
+  if (omiJitUpstreamFetch) globalThis.fetch = omiJitUpstreamFetch;
+  omiJitUpstreamFetch = undefined;
+  omiJitFetchGuardInstalled = false;
+  omiJitReceiptStates.clear();
+}
+
+export function __omiJitReceiptStateCountForTest(): number {
+  return omiJitReceiptStates.size;
+}
 
 function omiJitBudgetFromRequestHeaders(headers: Headers): OmiJitBudget | undefined {
   const contractVersion = headers.get("x-omi-jit-contract-version") || undefined;
@@ -302,12 +326,20 @@ function installOmiJitFetchGuard(): void {
   if (omiJitFetchGuardInstalled || typeof globalThis.fetch !== "function") return;
   omiJitFetchGuardInstalled = true;
   const upstreamFetch = globalThis.fetch.bind(globalThis);
+  omiJitUpstreamFetch = upstreamFetch;
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const requestHeaders = new Headers(input instanceof Request ? input.headers : undefined);
     if (init?.headers) new Headers(init.headers).forEach((value, key) => requestHeaders.set(key, value));
     const budget = omiJitBudgetFromRequestHeaders(requestHeaders);
     if (!budget) return upstreamFetch(input, init);
-    const state = omiJitReceiptStates.get(budget.executionID) ?? { providerAttempts: 0, costMicroUSD: 0, invalid: false };
+    pruneExpiredOmiJitReceiptStates();
+    const state = omiJitReceiptStates.get(budget.executionID) ?? {
+      providerAttempts: 0,
+      costMicroUSD: 0,
+      invalid: false,
+      lastTouchedAt: Date.now(),
+    };
+    state.lastTouchedAt = Date.now();
     omiJitReceiptStates.set(budget.executionID, state);
     if (state.invalid || state.providerAttempts >= budget.maxProviderAttempts
       || (state.costMicroUSD !== null && state.costMicroUSD >= budget.maxEstimatedSpendMicroUSD)) {
@@ -316,31 +348,130 @@ function installOmiJitFetchGuard(): void {
     try {
       const response = await upstreamFetch(input, init);
       let receipt = omiJitGatewayReceiptFromHeader(response.headers.get("x-omi-jit-gateway-receipt") || undefined);
-      if (!receipt && response.body) {
-        try { receipt = omiJitGatewayReceiptFromSSE(await response.clone().text()); } catch { /* missing receipt below */ }
-      }
-      const relayContext = await omiRelayContextRaw();
-      if (!receipt || receipt.runID !== budget.executionID || receipt.contractVersion !== budget.contractVersion
-        || receipt.aggregate.attemptCount !== receipt.attempts.length) {
-        state.invalid = true;
+      const recordReceipt = async (candidate: OmiJitGatewayReceipt | undefined): Promise<void> => {
+        const relayContext = await omiRelayContextRaw();
+        if (!candidate || candidate.runID !== budget.executionID || candidate.contractVersion !== budget.contractVersion
+          || candidate.aggregate.attemptCount !== candidate.attempts.length) {
+          state.invalid = true;
+          return;
+        }
+        state.providerAttempts += candidate.aggregate.attemptCount;
+        if (candidate.aggregate.costStatus === "estimated"
+          && Number.isSafeInteger(candidate.aggregate.estimatedCostMicroUSD)
+          && Number(candidate.aggregate.estimatedCostMicroUSD) >= 0
+          && state.costMicroUSD !== null) {
+          state.costMicroUSD += Number(candidate.aggregate.estimatedCostMicroUSD);
+        } else {
+          // Unknown attribution is terminal for this execution. Retaining the
+          // invalid state prevents a later tool round from spending blindly.
+          state.costMicroUSD = null;
+          state.invalid = true;
+        }
+        await appendOmiJitReceipt(omiJitReceiptPathFromRelayContext(relayContext), candidate);
+      };
+      if (receipt) {
+        await recordReceipt(receipt);
         return response;
       }
-      state.providerAttempts += receipt.aggregate.attemptCount;
-      if (receipt.aggregate.costStatus === "estimated"
-        && Number.isSafeInteger(receipt.aggregate.estimatedCostMicroUSD)
-        && Number(receipt.aggregate.estimatedCostMicroUSD) >= 0
-        && state.costMicroUSD !== null) {
-        state.costMicroUSD += Number(receipt.aggregate.estimatedCostMicroUSD);
-      } else {
-        state.costMicroUSD = null;
+      if (!response.body) {
+        await recordReceipt(undefined);
+        return response;
       }
-      await appendOmiJitReceipt(omiJitReceiptPathFromRelayContext(relayContext), receipt);
-      return response;
+
+      // Keep the provider body byte-for-byte intact while inspecting SSE
+      // frames. A clone().text() here would consume/buffer the whole stream
+      // before pi-ai can receive its first delta.
+      const decoder = new TextDecoder();
+      let lineBuffer = "";
+      let bodyReceipt: OmiJitGatewayReceipt | undefined;
+      let receiptRecorded = false;
+      const inspect = (chunk: Uint8Array, flush = false): OmiJitGatewayReceipt | undefined => {
+        let newlyObserved: OmiJitGatewayReceipt | undefined;
+        lineBuffer += decoder.decode(chunk, { stream: !flush });
+        const lines = lineBuffer.split(/\r\n|\n|\r/);
+        lineBuffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data:")) continue;
+          try {
+            const parsed = JSON.parse(line.slice(5).trim()) as { omi_jit_receipt?: unknown };
+            const parsedReceipt = parseOmiJitGatewayReceipt(parsed.omi_jit_receipt);
+            if (parsedReceipt && !bodyReceipt) {
+              bodyReceipt = parsedReceipt;
+              newlyObserved = parsedReceipt;
+            }
+          } catch { /* provider frames are not necessarily JSON */ }
+        }
+        if (flush && lineBuffer.startsWith("data:")) {
+          try {
+            const parsed = JSON.parse(lineBuffer.slice(5).trim()) as { omi_jit_receipt?: unknown };
+            const parsedReceipt = parseOmiJitGatewayReceipt(parsed.omi_jit_receipt);
+            if (parsedReceipt && !bodyReceipt) {
+              bodyReceipt = parsedReceipt;
+              newlyObserved = parsedReceipt;
+            }
+          } catch { /* incomplete provider frame */ }
+          lineBuffer = "";
+        }
+        return newlyObserved;
+      };
+      const sourceReader = response.body.getReader();
+      let bodyFinalized = false;
+      const finalizeBody = async (): Promise<void> => {
+        if (bodyFinalized) return;
+        bodyFinalized = true;
+        const newlyObserved = inspect(new Uint8Array(), true);
+        if (!receiptRecorded) {
+          receiptRecorded = true;
+          await recordReceipt(newlyObserved ?? bodyReceipt);
+        }
+      };
+      const body = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          try {
+            const { done, value } = await sourceReader.read();
+            if (done) {
+              await finalizeBody();
+              controller.close();
+              return;
+            }
+            const newlyObserved = inspect(value);
+            // Pi may stop consuming immediately after the [DONE] frame. The
+            // receipt must be durable before this chunk becomes visible so
+            // the adapter can join it even when EOF is never read.
+            if (newlyObserved && !receiptRecorded) {
+              receiptRecorded = true;
+              await recordReceipt(newlyObserved);
+            }
+            // Preserve the exact bytes and chunk boundaries supplied by the
+            // provider; only the side-channel inspection is transformed.
+            controller.enqueue(value);
+          } catch (error) {
+            state.invalid = true;
+            controller.error(error);
+          }
+        },
+        async cancel(reason) {
+          // A consumer abort before EOF makes the receipt incomplete. Keep
+          // the execution blocked rather than allowing a later round to spend.
+          state.invalid = true;
+          await sourceReader.cancel(reason);
+        },
+      });
+      return new Response(body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: new Headers(response.headers),
+      });
     } catch (error) {
       state.invalid = true;
       throw error;
     }
   };
+}
+
+/** Test-only entry point for the process-global fetch guard. */
+export function __installOmiJitFetchGuardForTest(): void {
+  installOmiJitFetchGuard();
 }
 
 export function omiJitBudgetFromRelayContext(raw: string): OmiJitBudget | undefined {

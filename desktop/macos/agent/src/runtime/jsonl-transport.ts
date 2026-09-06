@@ -226,8 +226,15 @@ export class JsonlTransport {
         outputTokens: result.run.outputTokens ?? Math.ceil(result.text.length / 4),
         cacheReadTokens: result.run.cacheReadTokens ?? 0,
         cacheWriteTokens: result.run.cacheWriteTokens ?? 0,
-        jitCostStatus: adapterReceipt?.jitCostStatus,
-        jitEstimatedCostUsd: adapterReceipt?.jitEstimatedCostUsd,
+        // executeRun terminalizes cancellations/failures as a result. A JIT
+        // provider may have been billed before that terminal status, so never
+        // relay a successful estimate for a non-successful run.
+        jitCostStatus: result.terminalStatus === "succeeded"
+          ? adapterReceipt?.jitCostStatus
+          : (input.metadata?.jitBudget ? "unknown" as const : undefined),
+        jitEstimatedCostUsd: result.terminalStatus === "succeeded"
+          ? adapterReceipt?.jitEstimatedCostUsd
+          : (input.metadata?.jitBudget ? null : undefined),
         jitProviderAttempts: adapterReceipt?.jitProviderAttempts,
         jitReceiptAttemptIDs: adapterReceipt?.jitReceiptAttemptIDs,
         modelsUsed: context.modelsUsed ? [...context.modelsUsed] : undefined,

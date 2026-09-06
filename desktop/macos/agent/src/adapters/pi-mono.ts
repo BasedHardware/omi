@@ -945,12 +945,25 @@ export class PiMonoAdapter implements HarnessAdapter {
     const pending = this.pendingRequests.get(generation);
     if (pending) {
       this.pendingRequests.delete(generation);
+      const jitUsage = this.activeJitBudget ? this.activeJitUsage : undefined;
+      // Abort can race a provider response, so consume any receipt already
+      // written before clearing the accumulator. The result is deliberately
+      // unknown: a cancelled turn cannot prove that all provider work settled.
+      if (jitUsage) this.recordJitGatewayReceipts();
       pending.resolve({
         text: "",
         sessionId: pending.sessionId || sessionId,
         costUsd: 0,
-        inputTokens: 0,
-        outputTokens: 0,
+        inputTokens: jitUsage?.input ?? 0,
+        outputTokens: jitUsage?.output ?? 0,
+        cacheReadTokens: jitUsage?.cacheRead ?? 0,
+        cacheWriteTokens: jitUsage?.cacheWrite ?? 0,
+        ...(jitUsage ? {
+          jitCostStatus: "unknown" as const,
+          jitEstimatedCostUsd: null,
+          jitProviderAttempts: jitUsage.providerAttempts,
+          jitReceiptAttemptIDs: [...jitUsage.receiptAttemptIDs],
+        } : {}),
       });
     }
     this.activePromptGeneration = 0;
@@ -1405,25 +1418,6 @@ export class PiMonoAdapter implements HarnessAdapter {
     });
   }
 
-  private recordJitUsage(usage: PiUsage | undefined): void {
-    const totals = this.activeJitUsage;
-    if (!totals) return;
-    totals.attempts += 1;
-    if (!usage) {
-      totals.costUsd = null;
-      return;
-    }
-    totals.input += Math.max(0, usage.input || 0);
-    totals.output += Math.max(0, usage.output || 0);
-    totals.cacheRead += Math.max(0, usage.cacheRead || 0);
-    totals.cacheWrite += Math.max(0, usage.cacheWrite || 0);
-    if (typeof usage.cost?.total === "number" && Number.isFinite(usage.cost.total)) {
-      if (totals.costUsd !== null) totals.costUsd += Math.max(0, usage.cost.total);
-    } else {
-      totals.costUsd = null;
-    }
-  }
-
   /** Consume only gateway-signed receipt lines; pi's configured zero-rate
    * model usage is never used as a JIT money estimate. */
   private recordJitGatewayReceipts(): boolean {
@@ -1558,8 +1552,6 @@ export class PiMonoAdapter implements HarnessAdapter {
         this.rejectJitGatewayReceipt(generation, pending);
         return;
       }
-    } else {
-      this.recordJitUsage(message?.usage);
     }
     const errorMessage = typeof message?.errorMessage === "string" && message.errorMessage.trim()
       ? normalizeProviderHTTPErrorMessage(message.errorMessage)

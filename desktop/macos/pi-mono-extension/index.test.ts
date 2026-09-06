@@ -48,6 +48,8 @@ import {
   omiBuiltInToolPolicyFromRelayContext,
   applyOmiProviderHeaders,
   OMI_CHAT_CONTRACT_VERSION,
+  __installOmiJitFetchGuardForTest,
+  __resetOmiJitFetchGuardForTest,
 } from "./index.ts";
 import type { ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { agentControlCapabilityManifest } from "../agent/dist/runtime/control-tool-manifest.js";
@@ -138,6 +140,150 @@ test("JIT gateway receipt parser accepts trusted header and terminal SSE framing
     "openai",
   );
   assert.equal(omiJitGatewayReceiptFromHeader("not-base64"), undefined);
+});
+
+test("JIT fetch guard forwards streaming bytes before the receipt arrives", async () => {
+  const originalFetch = globalThis.fetch;
+  const previousContextFile = process.env.OMI_CONTEXT_FILE;
+  const contextPath = pathJoin(tmpdir(), `omi-jit-context-${process.pid}-${Date.now()}.json`);
+  const receiptPath = `${contextPath}.receipts`;
+  const executionID = "b".repeat(64);
+  const receipt = {
+    schema_version: "jit-gateway-receipt-v1",
+    run_id: executionID,
+    contract_version: "jit-cloud-qa-v1",
+    attempts: [{
+      attempt_id: "invocation:stream",
+      provider: "openai",
+      configured_model: "gpt-5.6-luna",
+      cost_basis: "rate_card",
+      usage_status: "confirmed",
+      cost_status: "estimated",
+      normalized_uncached_input_tokens: 1,
+      cached_input_tokens: 0,
+      cache_write_tokens: 0,
+      output_tokens: 1,
+      estimated_cost_micro_usd: 1,
+    }],
+    aggregate: {
+      attempt_count: 1,
+      normalized_uncached_input_tokens: 1,
+      cached_input_tokens: 0,
+      cache_write_tokens: 0,
+      output_tokens: 1,
+      estimated_cost_micro_usd: 1,
+      cost_status: "estimated",
+    },
+  };
+  const budgetHeaders = {
+    "x-omi-jit-contract-version": "jit-cloud-qa-v1",
+    "x-omi-jit-run-id": executionID,
+    "x-omi-jit-max-attempts": "3",
+    "x-omi-jit-max-output-tokens": "2048",
+    "x-omi-jit-max-input-tokens": "32768",
+    "x-omi-jit-max-spend-micro-usd": "50000",
+  };
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  const firstChunk = new TextEncoder().encode("data: {");
+  const secondChunk = new TextEncoder().encode(
+    `\"choices\":[]}${"\n\n"}data: ${JSON.stringify({ omi_jit_receipt: receipt })}\n\ndata: [DONE]\n\n`,
+  );
+  try {
+    await writeFile(contextPath, JSON.stringify({ jitReceiptPath: receiptPath }), "utf8");
+    process.env.OMI_CONTEXT_FILE = contextPath;
+    __resetOmiJitFetchGuardForTest();
+    globalThis.fetch = (async () => new Response(new ReadableStream<Uint8Array>({
+      start(streamController) {
+        controller = streamController;
+        streamController.enqueue(firstChunk);
+      },
+    }))) as typeof globalThis.fetch;
+    __installOmiJitFetchGuardForTest();
+
+    const response = await globalThis.fetch("https://qa.example/v1/chat", { headers: budgetHeaders });
+    const reader = response.body!.getReader();
+    const first = await reader.read();
+    assert.deepEqual(first.value, firstChunk);
+    controller!.enqueue(secondChunk);
+    const second = await reader.read();
+    assert.deepEqual(second.value, secondChunk);
+    // Pi stops after [DONE] and does not necessarily drain the HTTP body. The
+    // receipt must already be durable at this point.
+    assert.match(await readFile(receiptPath, "utf8"), new RegExp(executionID));
+    await reader.cancel("provider done");
+  } finally {
+    __resetOmiJitFetchGuardForTest();
+    globalThis.fetch = originalFetch;
+    if (previousContextFile === undefined) delete process.env.OMI_CONTEXT_FILE;
+    else process.env.OMI_CONTEXT_FILE = previousContextFile;
+    await rm(contextPath, { force: true });
+    await rm(receiptPath, { force: true });
+  }
+});
+
+test("JIT fetch guard permanently blocks a run after unknown receipt cost", async () => {
+  const originalFetch = globalThis.fetch;
+  const previousContextFile = process.env.OMI_CONTEXT_FILE;
+  const executionID = "c".repeat(64);
+  const contextPath = pathJoin(tmpdir(), `omi-jit-context-${process.pid}-${Date.now()}.json`);
+  const receipt = {
+    schema_version: "jit-gateway-receipt-v1",
+    run_id: executionID,
+    contract_version: "jit-cloud-qa-v1",
+    attempts: [{
+      attempt_id: "invocation:unknown",
+      provider: "openai",
+      configured_model: "gpt-5.6-luna",
+      cost_basis: "rate_card",
+      usage_status: "unknown",
+      cost_status: "unknown",
+      normalized_uncached_input_tokens: 1,
+      cached_input_tokens: 0,
+      cache_write_tokens: 0,
+      output_tokens: 1,
+      estimated_cost_micro_usd: null,
+    }],
+    aggregate: {
+      attempt_count: 1,
+      normalized_uncached_input_tokens: 1,
+      cached_input_tokens: 0,
+      cache_write_tokens: 0,
+      output_tokens: 1,
+      estimated_cost_micro_usd: null,
+      cost_status: "unknown",
+    },
+  };
+  const headers = {
+    "x-omi-jit-contract-version": "jit-cloud-qa-v1",
+    "x-omi-jit-run-id": executionID,
+    "x-omi-jit-max-attempts": "3",
+    "x-omi-jit-max-output-tokens": "2048",
+    "x-omi-jit-max-input-tokens": "32768",
+    "x-omi-jit-max-spend-micro-usd": "50000",
+  };
+  try {
+    await writeFile(contextPath, JSON.stringify({ jitReceiptPath: `${contextPath}.receipts` }), "utf8");
+    process.env.OMI_CONTEXT_FILE = contextPath;
+    __resetOmiJitFetchGuardForTest();
+    globalThis.fetch = (async () => new Response(
+      `data: ${JSON.stringify({ omi_jit_receipt: receipt })}\n\n`,
+      { headers: { "content-type": "text/event-stream" } },
+    )) as typeof globalThis.fetch;
+    __installOmiJitFetchGuardForTest();
+    const response = await globalThis.fetch("https://qa.example/v1/chat", { headers });
+    await response.text();
+    await assert.rejects(
+      globalThis.fetch("https://qa.example/v1/chat", { headers }),
+      /receipt missing or qualification budget exhausted/,
+    );
+  } finally {
+    __resetOmiJitFetchGuardForTest();
+    globalThis.fetch = originalFetch;
+    if (previousContextFile === undefined) delete process.env.OMI_CONTEXT_FILE;
+    else process.env.OMI_CONTEXT_FILE = previousContextFile;
+    await rm(contextPath, { force: true });
+    await rm(`${contextPath}.receipts`, { force: true });
+  }
 });
 
 test("built-in tool authority requires an explicit kernel default token", () => {

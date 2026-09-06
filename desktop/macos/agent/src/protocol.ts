@@ -913,8 +913,8 @@ export interface ErrorMessage extends QueryScopedOutbound {
   message: string;
   failure?: RuntimeFailurePayload;
   /** Qualification-only gateway attribution; failures are always unknown. */
-  jitCostStatus?: "estimated" | "unknown";
-  jitEstimatedCostUsd?: number | null;
+  jitCostStatus?: "unknown";
+  jitEstimatedCostUsd?: null;
 }
 
 /** Sent when ACP requires user authentication (OAuth) */
