@@ -4,7 +4,7 @@ import {
   DeviceAudioError,
   type DeviceAudioErrorCode,
   DEVICE_AUDIO_LIMITS,
-} from "../src/device-audio";
+} from "./device-audio";
 
 function packet(sequence: number, fragment: number, payload: number[]) {
   return Uint8Array.from([sequence & 255, sequence >> 8, fragment, ...payload]);

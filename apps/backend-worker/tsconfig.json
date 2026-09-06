@@ -11,6 +11,7 @@
     "test",
     "worker-configuration.d.ts",
     "scripts",
-    "migrations"
+    "migrations",
+    "../../backends/example-platform/drivers/model/device-audio.ts"
   ]
 }

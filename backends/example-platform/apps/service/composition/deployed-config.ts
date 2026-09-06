@@ -27,8 +27,11 @@ export function readDeployedConfig(env: Readonly<Record<string, string | undefin
   if (!/^omi:auto:[a-z0-9][a-z0-9-]{0,95}$/.test(laneId)) throw new TypeError("invalid_render_lane");
   const accountTimezone = required("OMI_ACCOUNT_TIMEZONE");
   new Intl.DateTimeFormat("en", { timeZone: accountTimezone }).format(0);
+  const transcriptionApiKey = required("OMI_TRANSCRIPTION_API_KEY");
+  const transcriptionModel = required("OMI_TRANSCRIPTION_MODEL");
+  if (!/^[\x21-\x7e]{1,4096}$/.test(transcriptionApiKey) || !/^[a-z0-9][a-z0-9.-]{0,63}$/.test(transcriptionModel)) throw new TypeError("invalid_transcription_configuration");
   return Object.freeze({
-    port, databaseUrl, databaseSocketDirectory, accountTimezone,
+    port, databaseUrl, databaseSocketDirectory, accountTimezone, transcriptionApiKey, transcriptionModel,
     projectId: required("OMI_FIREBASE_PROJECT_ID"),
     applicationId: required("OMI_APPLICATION_ID"),
     databaseGeneration: hex("OMI_DATABASE_GENERATION_DIGEST"),

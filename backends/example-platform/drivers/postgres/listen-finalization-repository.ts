@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import type { DeviceTranscriptionRecord, DeviceTranscriptionRepository } from "../../apps/service/listen/device-transcription";
+import { parsePrerecordedTranscription } from "../../apps/service/listen/prerecorded-transcription";
 import { parseDeviceSessionUploadCreate, DEVICE_UPLOAD_SESSION_ID, type DeviceSessionUpload, type DeviceSessionUploadRepository } from "../../apps/service/stores/device-session-upload";
 import { isProxy } from "node:util/types";
 
@@ -35,6 +37,7 @@ import { sha256CanonicalContent } from "../../core/retrieve/content-digest";
 import type {
   CheckedOutPostgresConnection,
   PostgresTransactionPool,
+  SqlValue,
 } from "./connection";
 import {
   PostgresRepositoryError,
@@ -351,7 +354,13 @@ export const createPostgresListenFinalizationRepository = (
     return withAuthorizedSerializableConnectionTransaction(
       options.pool,
       preflight(context),
-      callback,
+      async (transaction) => {
+        const result = await callback(transaction);
+        const rows = await transaction.connection.query<{ now: unknown }>({ name: "listen.capture.final_clock", text: "SELECT floor(extract(epoch FROM clock_timestamp()))::bigint AS now", values: [] });
+        try { assertAuthorizedLedgerWriteContextCurrentAt(transaction.authority, integer(rows[0]?.now)); }
+        catch { throw new PostgresRepositoryError("expired_context"); }
+        return result;
+      },
       options.observability ?? {},
     );
   };
@@ -529,5 +538,92 @@ export function createPostgresDeviceSessionUploadRepository(options: PostgresLis
       return query(context, { name: "listen.audio.append", text: "SELECT omi_memory.append_listen_audio_upload($1,$2,$3::bytea) AS session", values: [id(sessionId), index, new Uint8Array(bytes)] });
     },
     complete: (context, sessionId) => query(context, { name: "listen.audio.complete", text: "SELECT omi_memory.complete_listen_audio_upload($1) AS session", values: [id(sessionId)] }),
+  });
+}
+
+export function createPostgresDeviceTranscriptionRepository(options: PostgresListenFinalizationRepositoryOptions): DeviceTranscriptionRepository {
+  const parse = (value: unknown): DeviceTranscriptionRecord | null => {
+    if (value === null) return null;
+    if (typeof value !== "object" || Array.isArray(value)) return fail("persistence_failed");
+    const row = value as Record<string, unknown>;
+    if (typeof row.sessionId !== "string" || !DEVICE_UPLOAD_SESSION_ID.test(row.sessionId)
+      || !["queued", "running", "completed", "failed"].includes(String(row.state))
+      || typeof row.startedAt !== "string" || !Number.isFinite(Date.parse(row.startedAt))
+      || (row.errorCode !== null && typeof row.errorCode !== "string")) return fail("persistence_failed");
+    return Object.freeze({ sessionId: row.sessionId, state: row.state as DeviceTranscriptionRecord["state"],
+      providerResult: row.providerResult === null ? null : parsePrerecordedTranscription(row.providerResult),
+      discardedLeadingPackets: integer(row.discardedLeadingPackets), errorCode: row.errorCode as string | null,
+      updatedAt: integer(row.updatedAt), startedAt: new Date(row.startedAt).toISOString(), codec: integer(row.codec),
+      chunkCount: integer(row.chunkCount), byteCount: integer(row.byteCount),
+    });
+  };
+  const run = <Result>(context: AuthorizedLedgerWriteContext, callback: (connection: CheckedOutPostgresConnection) => Promise<Result>): Promise<Result> =>
+    withAuthorizedSerializableConnectionTransaction(options.pool, preflight(context), async ({ authority, connection }) => {
+      const result = await callback(connection);
+      const rows = await connection.query<{ now: unknown }>({ name: "listen.transcription.final_clock", text: "SELECT floor(extract(epoch FROM clock_timestamp()))::bigint AS now", values: [] });
+      try { assertAuthorizedLedgerWriteContextCurrentAt(authority, integer(rows[0]?.now)); }
+      catch { throw new PostgresRepositoryError("expired_context"); }
+      return result;
+    }, options.observability ?? {});
+  const id = (value: string) => { if (!DEVICE_UPLOAD_SESSION_ID.test(value)) throw new TypeError("invalid_device_request"); return value; };
+  const execute = (context: AuthorizedLedgerWriteContext, name: string, query: string, values: readonly SqlValue[]) => run(context, async connection => {
+    const rows = await connection.query<{ result: unknown }>({ name, text: query, values });
+    if (rows.length !== 1) return fail("persistence_failed");
+    return rows[0]!.result;
+  });
+  return Object.freeze({
+    async read(context, sessionId) { return parse(await execute(context, "listen.transcription.read", "SELECT omi_memory.read_listen_audio_transcription($1) AS result", [id(sessionId)])); },
+    async claim(context, sessionId, token) {
+      const value = await execute(context, "listen.transcription.claim", "SELECT omi_memory.claim_listen_audio_transcription($1,$2::uuid) AS result", [id(sessionId), id(token)]);
+      const result = parse(value);
+      if (result === null) return null;
+      const owned = (value as Record<string, unknown>).owned;
+      if (typeof owned !== "boolean") return fail("persistence_failed");
+      return Object.freeze({ ...result, owned });
+    },
+    async loadAudio(context, sessionId, token) {
+      return run(context, async connection => {
+        const rows = await connection.query<{ chunk_index: unknown; bytes: unknown }>({ name: "listen.transcription.audio", text: "SELECT * FROM omi_memory.load_listen_transcription_audio($1,$2::uuid)", values: [id(sessionId), id(token)] });
+        let bytes = 0;
+        if (rows.length > 65536) return fail("persistence_failed");
+        return Object.freeze(rows.map((row, index) => {
+          if (integer(row.chunk_index) !== index || !(row.bytes instanceof Uint8Array) || row.bytes.length < 1 || row.bytes.length > 1048576) return fail("persistence_failed");
+          bytes += row.bytes.length;
+          if (bytes > 8388608) return fail("persistence_failed");
+          return new Uint8Array(row.bytes);
+        }));
+      });
+    },
+    async save(context, sessionId, token, result, discarded, error, retryable) {
+      if (!Number.isSafeInteger(discarded) || discarded < 0 || discarded > 65536
+        || (error !== null && !["transcription_unavailable", "invalid_audio", "invalid_transcript", "attempt_limit"].includes(error))
+        || (result === null) === (error === null)) throw new TypeError("invalid_transcription");
+      const saved = parse(await execute(context, "listen.transcription.save", "SELECT omi_memory.save_listen_audio_transcription($1,$2::uuid,$3::text::jsonb,$4,$5,$6) AS result",
+        [id(sessionId), id(token), result === null ? null : JSON.stringify(parsePrerecordedTranscription(result)), discarded, error, retryable]));
+      return saved ?? fail("persistence_failed");
+    },
+    async complete(context, sessionId) {
+      return parse(await execute(context, "listen.transcription.complete", "SELECT omi_memory.complete_listen_audio_transcription($1) AS result", [id(sessionId)])) ?? fail("persistence_failed");
+    },
+    async appendSegments(context, sessionId, segments, appendedAt) {
+      if (segments.length < 1 || segments.length > 128) throw new TypeError("invalid_transcription_batch");
+      const requests = segments.map(segment => normalizeAppend(parseListenCaptureAppendRequest({ version: LISTEN_CAPTURE_APPEND_VERSION,
+        session_id: id(sessionId), segment, appended_at: appendedAt })));
+      await run(context, async connection => {
+        const rows = await connection.query<Record<string, unknown>>({ name: "listen.transcription.append_segments",
+          text: `SELECT appended.* FROM jsonb_array_elements($2::text::jsonb) WITH ORDINALITY AS input(value,position)
+            CROSS JOIN LATERAL omi_memory.append_listen_capture_segment($1,input.value->>'id',input.value->>'text',
+              (input.value->>'is_user')::boolean,(input.value->>'start')::double precision,(input.value->>'end')::double precision,
+              $3::timestamptz,input.value->>'content_hash') AS appended ORDER BY input.position`,
+          values: [id(sessionId), JSON.stringify(requests.map(request => ({ ...request.segment,
+            content_hash: segmentHash(context.account_id, sessionId, request, request.appended_at) }))), requests[0]!.appended_at],
+        });
+        if (rows.length !== requests.length) fail("persistence_failed");
+        for (const [index, row] of rows.entries()) {
+          const appended = parseAppend([row]);
+          if (appended.segment_id !== requests[index]!.segment.id) fail("persistence_failed");
+        }
+      });
+    },
   });
 }

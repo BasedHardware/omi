@@ -157,6 +157,92 @@ beforeEach(() => {
 });
 
 describe("device session request validators", () => {
+  test("explicit transcription authenticates, targets one owned session, and replays the durable result", async () => {
+    let calls = 0;
+    const bindings = {
+      ...env,
+      AI: {
+        run: async () => {
+          calls += 1;
+          return {
+            text: "Recorded speech",
+            segments: [{ start: 0, end: 0.1, text: "Recorded speech" }],
+          };
+        },
+      },
+    };
+    const opened = await fetchWorker(
+      "/v1/device-sessions",
+      {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: JSON.stringify({ ...openBody, codec: 1 }),
+      },
+      bindings
+    );
+    const { session } = (await opened.json()) as { session: { id: string } };
+    const path = `/v1/device-sessions/${session.id}/transcribe`;
+    expect((await fetchWorker(path, { method: "POST" }, bindings)).status).toBe(
+      401
+    );
+    expect(
+      (
+        await fetchWorker(
+          path,
+          { method: "POST", headers: authenticatedHeaders },
+          bindings
+        )
+      ).status
+    ).toBe(409);
+    expect(
+      (
+        await fetchWorker(
+          `/v1/device-sessions/${session.id}/audio`,
+          {
+            method: "POST",
+            headers: authenticatedHeaders,
+            body: JSON.stringify({
+              chunkIndex: 0,
+              bytesBase64: btoa(String.fromCharCode(0, 0, 0, 128, 129)),
+            }),
+          },
+          bindings
+        )
+      ).status
+    ).toBe(200);
+    expect(
+      (
+        await fetchWorker(
+          `/v1/device-sessions/${session.id}/complete`,
+          { method: "POST", headers: authenticatedHeaders },
+          bindings
+        )
+      ).status
+    ).toBe(200);
+    const completed = await fetchWorker(
+      path,
+      { method: "POST", headers: authenticatedHeaders },
+      bindings
+    );
+    expect(completed.status).toBe(200);
+    expect(await completed.json()).toMatchObject({
+      transcription: {
+        sessionId: session.id,
+        state: "completed",
+        text: "Recorded speech",
+      },
+    });
+    expect(
+      (
+        await fetchWorker(
+          path,
+          { method: "POST", headers: authenticatedHeaders },
+          bindings
+        )
+      ).status
+    ).toBe(200);
+    expect(calls).toBe(1);
+  });
   test("recording create replay returns the original session and conflicting metadata is refused", async () => {
     const post = (body: unknown) =>
       fetchWorker("/v1/device-sessions", {

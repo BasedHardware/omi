@@ -4,6 +4,7 @@ import { createProductionCursor } from "./production-cursor";
 import type { ApplicationReadSnapshotAttestation } from "../../../core/retrieve/application-read";
 
 const env = {
+  OMI_TRANSCRIPTION_API_KEY: "test-only", OMI_TRANSCRIPTION_MODEL: "nova-3",
   OMI_ACCOUNT_TIMEZONE: "UTC",
   OMI_DATABASE_URL: "postgres://app:test-only@localhost/db",
   OMI_FIREBASE_PROJECT_ID: "test-project", OMI_APPLICATION_ID: "app:test",

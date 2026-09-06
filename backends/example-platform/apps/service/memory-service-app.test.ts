@@ -147,5 +147,7 @@ test("device upload routes preserve original body and cancellation through the c
   expect(seenBody).toBe(raw);
   controller.abort();
   expect(seenSignal?.aborted).toBe(true);
-  expect((await app.request("/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/transcript")).status).toBe(404);
+  expect((await app.request("/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/transcript")).status).toBe(403);
+  expect((await app.request("/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/transcribe", { method: "POST" })).status).toBe(403);
+  expect((await app.request("/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/download")).status).toBe(404);
 });

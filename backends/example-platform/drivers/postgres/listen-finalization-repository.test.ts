@@ -74,6 +74,7 @@ class FakeConnection implements CheckedOutPostgresConnection {
     this.statements.push(statement);
     if (statement.name === "authority.set_local") return [];
     if (statement.name === "authority.lock_and_revalidate") return [authorityRow() as unknown as Row];
+    if (statement.name === "listen.capture.final_clock") return [{ now: 100 } as unknown as Row];
     if (this.failure && statement.name === this.failure) {
       throw Object.assign(new Error("provider detail"), { code: "P1001" });
     }
@@ -208,6 +209,7 @@ describe("PostgreSQL Listen finalization repository", () => {
     expect(connection.statements.map((statement) => statement.name)).toEqual([
       "authority.set_local", "authority.lock_and_revalidate", "listen.capture.read_finalization_input",
       "listen.capture.finalize",
+      "listen.capture.final_clock",
     ]);
     expect(pool.identities.every((identity) => identity === connection.connectionIdentity)).toBe(true);
   });

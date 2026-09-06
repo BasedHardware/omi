@@ -90,6 +90,25 @@ jest.mock('../src/omiNative', () => ({
 
 import {useNativeDevices} from '../src/app/useNativeDevices';
 
+function transcriptResponse(path: string) {
+  return {
+    id: 'req',
+    status: 200,
+    body: JSON.stringify({
+      transcription: {
+        sessionId: path.split('/')[3],
+        state: 'completed',
+        text: 'Recorded speech',
+        segments: [],
+        language: null,
+        errorCode: null,
+        updatedAt: 1,
+        discardedLeadingPackets: 0,
+      },
+    }),
+  };
+}
+
 function sessionResponse(
   status: number,
   overrides: Record<string, unknown> = {},
@@ -190,6 +209,8 @@ beforeEach(() => {
   mockBackend.request.mockReset();
   mockBackend.request.mockImplementation(
     async (request: {path: string; body?: string}) => {
+      if (request.path.endsWith('/transcribe'))
+        return transcriptResponse(request.path);
       if (request.path.endsWith('/complete')) {
         return sessionResponse(200, {state: 'complete', endedAt: 2});
       }
@@ -510,6 +531,10 @@ test('drains queued audio before completing a session', async () => {
   const order: string[] = [];
   mockBackend.request.mockImplementation(
     async (request: {path: string; body?: string}) => {
+      if (request.path.endsWith('/transcribe')) {
+        order.push('transcribe');
+        return transcriptResponse(request.path);
+      }
       if (request.path === '/v1/device-sessions') {
         await new Promise<void>(resolve => {
           resolveOpen = resolve;
@@ -566,9 +591,62 @@ test('drains queued audio before completing a session', async () => {
     appendGates.shift()?.();
     await waitFor(() => order.includes('complete'));
   });
-  expect(order).toEqual(['audio', 'audio', 'complete']);
+  expect(order).toEqual(['audio', 'audio', 'complete', 'transcribe']);
   expect(disconnectDone).toBe(true);
 });
+
+test.each([false, true])(
+  'transcription never blocks disconnect and retires its late result when disabled=%s',
+  async retired => {
+    let finish!: () => void;
+    const prior = mockBackend.request.getMockImplementation()!;
+    mockBackend.request.mockImplementation(async request => {
+      if (request.path.endsWith('/transcribe')) {
+        await new Promise<void>(resolve => {
+          finish = resolve;
+        });
+        throw new TypeError('Transcription connection lost');
+      }
+      return prior(request);
+    });
+    const hook = await renderHook();
+    await ReactTestRenderer.act(async () => {
+      emitNative({
+        type: 'audio',
+        deviceId: 'omi-1',
+        codec: 21,
+        payloadBase64: 'AQID',
+      });
+      await waitFor(() =>
+        mockBackend.request.mock.calls.some(([request]) =>
+          request.path.endsWith('/audio'),
+        ),
+      );
+    });
+    await ReactTestRenderer.act(async () => {
+      await hook.latest().toggleDevice('omi-1', true);
+    });
+    expect(hook.latest().deviceBusy).toBe(false);
+    expect(hook.latest().deviceScanMessage).toBe(
+      'Recording saved. Transcription is in progress.',
+    );
+    if (retired) await hook.setEnabled(false);
+    await ReactTestRenderer.act(async () => {
+      finish();
+    });
+    if (retired) expect(hook.latest().deviceScanMessage).toBeNull();
+    else
+      expect(hook.latest().deviceScanMessage).toBe(
+        'Recording saved, but transcription could not finish. Open its transcript to retry.',
+      );
+    expect(
+      mockBackend.request.mock.calls.filter(([request]) =>
+        request.path.endsWith('/transcribe'),
+      ),
+    ).toHaveLength(1);
+    await hook.unmount();
+  },
+);
 
 test('completes a session that opens after disconnect', async () => {
   let resolveOpen: () => void = () => undefined;
@@ -743,6 +821,7 @@ test.each(['open', 'audio', 'complete'] as const)(
           : secondId
         : request.path.split('/')[3];
       const action = opening ? 'open' : request.path.split('/')[4];
+      if (action === 'transcribe') return transcriptResponse(request.path);
       if (id === firstId && action === stage && !blocked) {
         blocked = true;
         await new Promise<void>(resolve => {
@@ -870,6 +949,8 @@ test('retries the same indexed packet before sending the next or completing', as
   mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
   let appends = 0;
   mockBackend.request.mockImplementation(async request => {
+    if (request.path.endsWith('/transcribe'))
+      return transcriptResponse(request.path);
     if (request.path.endsWith('/audio') && ++appends === 1) {
       return {
         id: 'req',
@@ -920,7 +1001,7 @@ test('retries the same indexed packet before sending the next or completing', as
       {chunkIndex: 1, bytesBase64: 'BAUG'},
     ]);
     expect(mockBackend.request.mock.calls.at(-1)?.[0].path).toMatch(
-      /\/complete$/,
+      /\/transcribe$/,
     );
     expect(hook.latest().deviceScanMessage).toBeNull();
   } finally {
@@ -1052,6 +1133,8 @@ test('retries idempotent completion on a transient transport failure', async () 
   let completions = 0;
   mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
   mockBackend.request.mockImplementation(async request => {
+    if (request.path.endsWith('/transcribe'))
+      return transcriptResponse(request.path);
     if (request.path.endsWith('/complete') && ++completions === 1) {
       throw new TypeError('Failed to fetch');
     }
@@ -1121,6 +1204,8 @@ test('recovers a lost open response before draining and completing the capture',
   let opens = 0;
   mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
   mockBackend.request.mockImplementation(async request => {
+    if (request.path.endsWith('/transcribe'))
+      return transcriptResponse(request.path);
     if (request.path === '/v1/device-sessions' && ++opens === 1) {
       throw new TypeError('Open response lost');
     }
@@ -1152,6 +1237,7 @@ test('recovers a lost open response before draining and completing the capture',
       'device-sessions',
       'audio',
       'complete',
+      'transcribe',
     ]);
     expect(requests[1]?.body).toBe(requests[0]?.body);
     expect(mockBackend.createRecordingId).toHaveBeenCalledTimes(1);

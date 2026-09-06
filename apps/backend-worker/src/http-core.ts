@@ -42,7 +42,11 @@ import { type RetrievalEnv } from "./retrieval";
 import { type CanonicalService } from "./canonical-service";
 import { readCanonicalMemoryPage } from "./memory-service";
 import { requestCanonicalTasks } from "./canonical-tasks";
-import { readDeviceTranscription } from "./device-transcriptions";
+import {
+  readDeviceTranscription,
+  processDeviceTranscriptions,
+  type TranscriptionAI,
+} from "./device-transcriptions";
 import { parseTaskLimit, readTasks } from "./tasks";
 import {
   backendError,
@@ -898,12 +902,55 @@ export async function handleTranscription(
   });
 }
 
+export async function handleTranscribe(
+  context: CoreContext
+): Promise<Response> {
+  const { DB, ATTACHMENTS, AI } = context.env;
+  if (DB === undefined || ATTACHMENTS === undefined || AI === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const accountId = context.get("accountId"),
+    sessionId = context.req.param("id");
+  const session = await DB.prepare(
+    "SELECT state FROM device_sessions WHERE id = ? AND account_id = ?"
+  )
+    .bind(sessionId, accountId)
+    .first<{ state: string }>();
+  if (session === null)
+    return backendError("not_found", "refresh_history", 404);
+  if (session.state !== "complete")
+    return backendError("conflict", "retry", 409);
+  await processDeviceTranscriptions(
+    DB,
+    ATTACHMENTS,
+    AI as TranscriptionAI,
+    Date.now(),
+    { accountId, sessionId }
+  );
+  const response = await handleTranscription(context);
+  if (response.status !== 200) return response;
+  const payload = (await response.json()) as {
+    transcription: { state: string };
+  };
+  return json(
+    payload,
+    payload.transcription.state === "queued" ||
+      payload.transcription.state === "running"
+      ? 202
+      : 200
+  );
+}
+
 export const publicRoutes: readonly CoreRoute[] = [
   { method: "GET", path: "/health", handle: handleHealth },
   { method: "GET", path: "/ready", handle: handleReady },
 ];
 
 export const v1Routes: readonly CoreRoute[] = [
+  {
+    method: "POST",
+    path: "/v1/device-sessions/:id/transcribe",
+    handle: handleTranscribe,
+  },
   { method: "POST", path: "/v1/tasks/ops", handle: handleTaskWrite },
   {
     method: "GET",

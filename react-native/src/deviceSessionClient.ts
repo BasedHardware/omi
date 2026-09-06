@@ -1,4 +1,8 @@
 import type {NativeHttpResponse, OmiBackend} from './omiNative';
+import {
+  parseRecordingTranscript,
+  type RecordingTranscript,
+} from './recordingTranscript';
 
 export type DeviceSessionRecord = {
   id: string;
@@ -201,4 +205,23 @@ export function isTransientDeviceSessionError(error: unknown): boolean {
       'code' in error &&
       error.code === 'OMI_HTTP_TRANSPORT')
   );
+}
+
+export async function transcribeDeviceSession(
+  backend: OmiBackend,
+  sessionId: string,
+): Promise<RecordingTranscript> {
+  const response = await backend.request({
+    id: `device-session-transcribe-${sessionId}`,
+    method: 'POST',
+    path: `/v1/device-sessions/${encodeURIComponent(sessionId)}/transcribe`,
+  });
+  rejectIfUnusable(response);
+  const transcript =
+    response.status === 200 || response.status === 202
+      ? parseRecordingTranscript(response.body, sessionId)
+      : null;
+  if (transcript === null)
+    throw new Error('Backend did not acknowledge transcription');
+  return transcript;
 }

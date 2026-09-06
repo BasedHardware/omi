@@ -1,11 +1,11 @@
 # Deployed entry increment
 
 Development setup on 2026-09-07 created the isolated `based-hardware-dev`
-PostgreSQL 18.4 instance and applied tested migrations 1–46. The application
+PostgreSQL 18.4 instance and applied tested migrations 1–48. The application
 login has only `omi_platform_application` membership, with neither superuser
 nor RLS bypass; private database URL, codec and cursor secret versions are all
-version 1. Credentials are outside source and OpenTofu state. Seven runtime IAM
-grants remain unapplied because the operator cannot change project/secret IAM
+version 1. Credentials are outside source and OpenTofu state. The seven original runtime IAM grants and the transcription secret grant
+remain unapplied because the operator cannot change project/secret IAM
 or create the custom Firebase verification role. No Cloud Run service is live,
 and schema installation alone does not release a database generation or mint
 account/grant authority.
@@ -35,6 +35,8 @@ Required configuration:
 | `OMI_ACCOUNT_TIMEZONE`           | Explicit IANA timezone for this dev connection; per-account profile lookup remains unwired                                                                                |
 | `OMI_LLM_GATEWAY_URL`            | HTTPS internal gateway, with `/v1/chat/completions` appended when absent                                                                                                  |
 | `OMI_LLM_GATEWAY_SERVICE_TOKEN`  | Gateway service credential; no provider API key                                                                                                                           |
+| `OMI_TRANSCRIPTION_API_KEY` | Service-owned Deepgram credential; never forwarded to the app |
+| `OMI_TRANSCRIPTION_MODEL` | Explicit deployed model, such as `nova-3` |
 | `OMI_MEMORY_RENDER_LANE`         | Provisioned `omi:auto:*` semantic lane supporting nonstream JSON completion; provider/model routing remains gateway-owned                                                 |
 | `PORT`                           | Listener port; defaults to 8080                                                                                                                                           |
 
@@ -118,7 +120,7 @@ issuance producer.
 
 The entry admits two simultaneous domain requests with a four-connection pool
 and a 2-MiB HTTP body ceiling; individual routes enforce their smaller limits.
-Each request has a shared 25-second cancellation budget, propagated through the
+Ordinary requests have a shared 25-second cancellation budget; explicit transcription has 135 seconds for the bounded 120-second provider call and persistence. Cancellation propagates through the
 PostgreSQL authority transactions and gateway fetch/body consumption. Gateway
 requests also enforce 256-KiB input/output limits. Invalid or ungrounded citations
 fail the read. Accepted and STM coverage remain explicitly unavailable.

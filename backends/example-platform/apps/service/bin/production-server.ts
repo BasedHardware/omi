@@ -1,4 +1,5 @@
 import { createPostgresRenderResponseRepository } from "../../../drivers/postgres/product-projection-repository";
+import { createDeepgramTranscriptionSource } from "../../../drivers/model/deepgram-transcription";
 import type { PostgresFirebaseAuthorizationRuntimeOptions } from "../../../drivers/postgres/firebase-authorized-runtime-support";
 import { createPersistedRenderModel } from "../../../drivers/model/persisted-render";
 import { createFirebaseAdminIdTokenAdapter } from "../../../drivers/firebase/admin-id-token";
@@ -11,6 +12,10 @@ import { buildDeterministicAnchors } from "../../../core/retrieve/tree";
 import { createServedCounter } from "../observability/served-count";
 import { readDeployedConfig } from "../composition/deployed-config";
 import { createProductionCursor } from "../composition/production-cursor";
+
+export function requestTimeoutMilliseconds(method: string, path: string): number {
+  return method === "POST" && /^\/v1\/device-sessions\/[^/]+\/transcribe$/.test(path) ? 135000 : 25000;
+}
 
 export async function startProductionServer(env: Readonly<Record<string, string | undefined>>) {
   const config = readDeployedConfig(env);
@@ -37,6 +42,9 @@ export async function startProductionServer(env: Readonly<Record<string, string 
       mcp_handler: () => Response.json({ error: "unavailable" }, { status: 503, headers: { "cache-control": "no-store" } }),
       tasks: { authorization, codecRootSecret: config.codecKey, cursorSigningKeyset },
       device_sessions: authorization,
+      transcription_source: createDeepgramTranscriptionSource({
+        apiKey: config.transcriptionApiKey, model: config.transcriptionModel, timeoutMilliseconds: 120000,
+      }),
       memory_read: {
         authorization,
         product: {
@@ -74,7 +82,7 @@ export async function startProductionServer(env: Readonly<Record<string, string 
   });
   let inFlight = 0;
   const server = Bun.serve({
-    hostname: "0.0.0.0", port: config.port, idleTimeout: 120, maxRequestBodySize: 2 * 1024 * 1024,
+    hostname: "0.0.0.0", port: config.port, idleTimeout: 150, maxRequestBodySize: 2 * 1024 * 1024,
     async fetch(request) {
       const path = new URL(request.url).pathname;
       if (path === "/health" || path === "/ready") return runtime.fetch(request);
@@ -84,7 +92,7 @@ export async function startProductionServer(env: Readonly<Record<string, string 
       const cancel = () => controller.abort();
       request.signal.addEventListener("abort", cancel, { once: true });
       if (request.signal.aborted) controller.abort();
-      const deadline = setTimeout(cancel, 25000);
+      const deadline = setTimeout(cancel, requestTimeoutMilliseconds(request.method, path));
       try { return await runtime.fetch(new Request(request, { signal: controller.signal })); }
       finally {
         clearTimeout(deadline);
