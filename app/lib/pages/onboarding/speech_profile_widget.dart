@@ -47,15 +47,19 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
   /// fades out together instead of pieces changing on their own.
   String? _frozenText;
   bool? _frozenNoDevice;
+  double? _frozenProgress;
 
   void _syncAllDone(SpeechProfileProvider provider) {
     final ended = provider.uploadingProfile || provider.profileCompleted;
     if (ended && _frozenText == null) {
       _frozenText = provider.text;
       _frozenNoDevice = provider.device == null;
+      // Recording ends at the target, so the bar stays full until it fades.
+      _frozenProgress = 1.0;
     } else if (!ended && _frozenText != null) {
       _frozenText = null;
       _frozenNoDevice = null;
+      _frozenProgress = null;
     }
     if (provider.profileCompleted) {
       if (_allDoneVisible || _allDoneTimer != null) return;
@@ -173,6 +177,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
           _syncAllDone(provider);
           final recordingText = _frozenText ?? provider.text;
           final showMicDisclaimer = _frozenNoDevice ?? (provider.device == null);
+          final recordingProgress = _frozenProgress ?? provider.sentenceProgress;
           return MessageListener<SpeechProfileProvider>(
             showInfo: (info) {
               if (info == 'SKIP_UNAVAILABLE') {
@@ -555,7 +560,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
 
                                       const SizedBox(height: 12),
 
-                                      SpeechProgressBar(progress: provider.sentenceProgress),
+                                      SpeechProgressBar(progress: recordingProgress),
 
                                       const SizedBox(height: 12),
 

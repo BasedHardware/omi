@@ -53,6 +53,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
   /// fades out together instead of pieces changing on their own.
   String? _frozenText;
   bool? _frozenNoDevice;
+  double? _frozenProgress;
 
   /// Keeps the finished recording on screen for [allDoneHold] once the profile
   /// is saved, then reveals All done; resets when a new recording starts.
@@ -61,9 +62,12 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
     if (ended && _frozenText == null) {
       _frozenText = provider.text;
       _frozenNoDevice = provider.device == null;
+      // Recording ends at the target, so the bar stays full until it fades.
+      _frozenProgress = 1.0;
     } else if (!ended && _frozenText != null) {
       _frozenText = null;
       _frozenNoDevice = null;
+      _frozenProgress = null;
     }
     if (provider.profileCompleted) {
       if (_allDoneVisible || _allDoneTimer != null) return;
@@ -352,6 +356,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
           _syncAllDone(provider);
           final recordingText = _frozenText ?? provider.text;
           final showMicDisclaimer = _frozenNoDevice ?? (provider.device == null);
+          final recordingProgress = _frozenProgress ?? provider.sentenceProgress;
           return MessageListener<SpeechProfileProvider>(
             showInfo: (info) {
               if (info == 'SKIP_UNAVAILABLE') {
@@ -649,7 +654,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                                                 children: [
                                                   const SpeechTopicsCard(),
                                                   const SizedBox(height: 12),
-                                                  SpeechProgressBar(progress: provider.sentenceProgress),
+                                                  SpeechProgressBar(progress: recordingProgress),
                                                 ],
                                               ),
                                             ),
