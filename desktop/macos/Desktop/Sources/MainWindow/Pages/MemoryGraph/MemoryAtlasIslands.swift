@@ -143,6 +143,12 @@ enum MemoryAtlasIslands {
       let rings = trace(mask)
         .filter { abs(area(of: $0)) >= floor }
         .map { $0.map(normalize) }
+        // Land with nobody on it is not territory. The blurred field can put
+        // a lobe or a sliver where the group's influence merely spills, and a
+        // lake traced inside an island comes back as a ring of its own; both
+        // drew as a zone with no entity in it. A ring that holds none of the
+        // group's members is dropped here, once, where the members are known.
+        .filter { ring in (members[group] ?? []).contains { memoryAtlasCoastlineContains([ring], $0) } }
       if !rings.isEmpty { result[group] = rings }
     }
     return result

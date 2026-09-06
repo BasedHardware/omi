@@ -43,6 +43,28 @@ final class MemoryAtlasIslandsTests: XCTestCase {
     XCTAssertTrue(memoryAtlasCoastlineContains(coastlines[0] ?? [], CGPoint(x: 0.8, y: 0.5)))
   }
 
+  /// Every island holds at least one of the group's members.
+  ///
+  /// A ring of members leaves a lake in the middle of their island, and the
+  /// tracer returns that lake as a ring of its own; the field's blur can also
+  /// spill a sliver of land past the last member. Both drew on the map as a
+  /// zone with nobody in it, which reads as the map inventing a place.
+  func testAnIslandWithNoMemberOnItIsNotDrawn() {
+    let ring = (0..<24).map { index -> CGPoint in
+      let angle = Double(index) / 24 * 2 * Double.pi
+      return CGPoint(x: 0.5 + 0.12 * CGFloat(cos(angle)), y: 0.5 + 0.12 * CGFloat(sin(angle)))
+    }
+    let coastlines = MemoryAtlasIslands.coastlines(members: [0: ring])
+
+    let rings = coastlines[0] ?? []
+    XCTAssertFalse(rings.isEmpty, "A ring of members still holds land")
+    for island in rings {
+      XCTAssertTrue(
+        ring.contains { memoryAtlasCoastlineContains([island], $0) },
+        "An island with no member on it must not be drawn")
+    }
+  }
+
   /// Two groups sitting in each other's laps get no territory there.
   ///
   /// Ownership by a hair is not ownership. Where the detector splits one dense
