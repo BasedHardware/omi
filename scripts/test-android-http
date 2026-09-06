@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+repo_root=$(git rev-parse --show-toplevel)
+build_dir=$(mktemp -d /tmp/omi-v5-android-http.XXXXXX)
+trap 'rm -rf "$build_dir"' EXIT
+javac --release 17 -d "$build_dir" \
+  "$repo_root/react-native/android/app/src/main/java/com/rnruntime/OmiBackendTransport.java" \
+  "$repo_root/react-native/android/transport-tests/BackendTransportTest.java"
+java -ea --add-modules jdk.httpserver -cp "$build_dir" com.rnruntime.BackendTransportTest

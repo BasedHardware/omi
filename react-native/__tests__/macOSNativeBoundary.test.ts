@@ -429,7 +429,12 @@ test('opens the system browser and waits on loopback instead of an auth sheet', 
   expect(signIn).toContain('http://127.0.0.1:%u/callback');
   expect(signIn).not.toContain('callbackURLScheme:@"http"');
   expect(signIn).not.toContain('prefersEphemeralWebBrowserSession');
-  expect(signIn).not.toContain('ASWebAuthenticationSession alloc');
+  const desktopBrowserStart = signIn.indexOf('OmiAuthAcceptCallback');
+  const desktopBrowser = signIn.slice(
+    desktopBrowserStart,
+    signIn.indexOf('#else', desktopBrowserStart),
+  );
+  expect(desktopBrowser).not.toContain('ASWebAuthenticationSession alloc');
   // Opening the browser is not itself a sign-in failure; only a failed open
   // (or a later loopback timeout) rejects.
   expect(signIn).toMatch(

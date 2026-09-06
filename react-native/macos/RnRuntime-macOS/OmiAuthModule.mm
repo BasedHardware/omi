@@ -1,6 +1,13 @@
 #import "OmiAuthModule.h"
 
+#import <TargetConditionals.h>
+#if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
+#else
+#import <AuthenticationServices/AuthenticationServices.h>
+#import <UIKit/UIKit.h>
+#import "OmiAuthMobileCallback.h"
+#endif
 #import <CommonCrypto/CommonDigest.h>
 #import <LocalAuthentication/LocalAuthentication.h>
 #import <Security/Security.h>
@@ -32,6 +39,7 @@ NSString *OmiAuthKeychainService(void) {
   static dispatch_once_t once;
   dispatch_once(&once, ^{
     NSString *identity = @"adhoc.unknown";
+    #if TARGET_OS_OSX
     SecCodeRef code = NULL;
     CFDictionaryRef rawInfo = NULL;
     if (SecCodeCopySelf(kSecCSDefaultFlags, &code) == errSecSuccess &&
@@ -56,6 +64,10 @@ NSString *OmiAuthKeychainService(void) {
       }
     }
     if (code != NULL) CFRelease(code);
+    #else
+    identity = @"ios";
+    OmiAuthDataProtectionKeychain = YES;
+    #endif
     NSString *bundle = NSBundle.mainBundle.bundleIdentifier ?: @"unknown";
     service = [NSString stringWithFormat:@"%@.v2.%@.bundle.%@",
         OmiAuthKeychainServiceBase, identity, bundle];
@@ -354,6 +366,7 @@ static BOOL OmiAuthCopySessionIntoOwnKeychain(NSDictionary *session) {
 BOOL OmiAuthImportShippingSessionIfNeeded(void) {
   if (OmiAuthShippingSessionIgnored()) return NO;
   if (OmiAuthReadKeychainSession(OmiAuthKeychainService()) != nil) return YES;
+  #if TARGET_OS_OSX
   if (OmiAuthUsesDataProtectionKeychain()) {
     for (NSString *service in OmiAuthShippingKeychainServices()) {
       NSDictionary *session = OmiAuthReadKeychainSession(service);
@@ -362,6 +375,7 @@ BOOL OmiAuthImportShippingSessionIfNeeded(void) {
   }
   NSDictionary *defaultsSession = OmiAuthReadShippingPreferences();
   if (defaultsSession != nil && OmiAuthCopySessionIntoOwnKeychain(defaultsSession)) return YES;
+  #endif
   return NO;
 }
 
@@ -485,7 +499,12 @@ static OSStatus OmiAuthClearSessionIfCurrent(NSString *expectedRefreshToken) {
   }
 }
 
+#if TARGET_OS_OSX
 @interface OmiAuthModule ()
+#else
+@interface OmiAuthModule () <ASWebAuthenticationPresentationContextProviding>
+@property(nonatomic, strong) ASWebAuthenticationSession *authenticationSession;
+#endif
 @property(nonatomic) int loopbackListener;
 @property(nonatomic) BOOL settled;
 @property(nonatomic) BOOL signInCompleting;
@@ -508,6 +527,10 @@ RCT_EXPORT_MODULE(OmiAuth)
 }
 
 - (void)closeLoopback {
+  #if !TARGET_OS_OSX
+  [self.authenticationSession cancel];
+  self.authenticationSession = nil;
+  #endif
   if (self.loopbackListener >= 0) {
     shutdown(self.loopbackListener, SHUT_RDWR);
     close(self.loopbackListener);
@@ -638,9 +661,11 @@ RCT_EXPORT_MODULE(OmiAuth)
 
 - (void)bringOmiToFront {
   // The browser owned the foreground while the user signed in; hand it back.
+  #if TARGET_OS_OSX
   [NSApp activate];
   NSWindow *window = NSApp.keyWindow ?: NSApp.windows.firstObject;
   [window makeKeyAndOrderFront:nil];
+  #endif
 }
 
 - (void)finishSignInAttempt:(NSUInteger)attempt
@@ -745,6 +770,7 @@ RCT_EXPORT_MODULE(OmiAuth)
   }
   NSURLComponents *callback = [NSURLComponents componentsWithURL:callbackURL resolvingAgainstBaseURL:NO];
   NSURLComponents *redirect = [NSURLComponents componentsWithString:redirectURI];
+  #if TARGET_OS_OSX
   if (![callback.scheme.lowercaseString isEqualToString:@"http"] ||
       ![callback.host.lowercaseString isEqualToString:@"127.0.0.1"] ||
       ![callback.port isEqualToNumber:redirect.port] ||
@@ -753,6 +779,9 @@ RCT_EXPORT_MODULE(OmiAuth)
       ![redirect.scheme.lowercaseString isEqualToString:@"http"] ||
       ![redirect.host.lowercaseString isEqualToString:@"127.0.0.1"] ||
       ![redirect.path isEqualToString:@"/callback"]) {
+  #else
+  if (!OmiAuthMobileCallbackIsValid(callbackURL, state)) {
+  #endif
     [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNAUTHORIZED"
                       message:@"Omi cloud sign in was cancelled or failed" error:nil
                       resolve:resolve reject:reject];
@@ -847,8 +876,16 @@ RCT_REMAP_METHOD(signIn,
     NSString *state = OmiAuthRandomValue();
     NSString *verifier = OmiAuthRandomValue();
     uint16_t port = 0;
+    #if TARGET_OS_OSX
     int listener = OmiAuthListenLoopback(&port);
-    if (state.length == 0 || verifier.length == 0 || listener < 0 || port == 0) {
+    #else
+    int listener = -1;
+    #endif
+    if (state.length == 0 || verifier.length == 0
+        #if TARGET_OS_OSX
+        || listener < 0 || port == 0
+        #endif
+    ) {
       if (listener >= 0) close(listener);
       reject(@"OMI_AUTH_UNCONFIGURED", @"Could not prepare Omi cloud sign in", nil);
       return;
@@ -864,7 +901,11 @@ RCT_REMAP_METHOD(signIn,
     // http://127.0.0.1:port/callback. Isolated auth sheets block that mixed-
     // content bounce, so the leftover "close this window" page stays up and
     // no session is stored. The system browser allows the loopback hop.
+    #if TARGET_OS_OSX
     NSString *redirectURI = [NSString stringWithFormat:@"http://127.0.0.1:%u/callback", port];
+    #else
+    NSString *redirectURI = @"omi-rnruntime://auth/callback";
+    #endif
     NSURLComponents *authorize = [NSURLComponents componentsWithString:@"https://api.omi.me/v1/auth/authorize"];
     authorize.queryItems = @[
       [NSURLQueryItem queryItemWithName:@"provider" value:@"google"],
@@ -873,6 +914,7 @@ RCT_REMAP_METHOD(signIn,
       [NSURLQueryItem queryItemWithName:@"code_challenge" value:OmiAuthCodeChallenge(verifier)],
       [NSURLQueryItem queryItemWithName:@"code_challenge_method" value:@"S256"],
     ];
+    #if TARGET_OS_OSX
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
       NSURL *callbackURL = OmiAuthAcceptCallback(listener, port, 180, state);
       dispatch_async(dispatch_get_main_queue(), ^{
@@ -895,8 +937,37 @@ RCT_REMAP_METHOD(signIn,
                                resolve:resolve
                                 reject:reject];
     }
+    #else
+    self.authenticationSession = [[ASWebAuthenticationSession alloc]
+        initWithURL:authorize.URL callbackURLScheme:@"omi-rnruntime"
+        completionHandler:^(NSURL *callbackURL, NSError *error) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if (attempt != self.signInAttempt) return;
+        [self completeSignInWithCallback:(error == nil ? callbackURL : nil) state:state verifier:verifier
+                            redirectURI:redirectURI attempt:attempt resolve:resolve reject:reject];
+      });
+    }];
+    self.authenticationSession.presentationContextProvider = self;
+    if (![self.authenticationSession start]) {
+      [self completeSignInWithCallback:nil state:state verifier:verifier
+                          redirectURI:redirectURI attempt:attempt resolve:resolve reject:reject];
+    }
+    #endif
   });
 }
+
+#if !TARGET_OS_OSX
+- (ASPresentationAnchor)presentationAnchorForWebAuthenticationSession:(ASWebAuthenticationSession *)session {
+  for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+    if (scene.activationState != UISceneActivationStateForegroundActive ||
+        ![scene isKindOfClass:UIWindowScene.class]) continue;
+    for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+      if (window.isKeyWindow) return window;
+    }
+  }
+  return UIApplication.sharedApplication.delegate.window;
+}
+#endif
 
 RCT_REMAP_METHOD(signOut,
                  signOutWithResolver:(RCTPromiseResolveBlock)resolve
