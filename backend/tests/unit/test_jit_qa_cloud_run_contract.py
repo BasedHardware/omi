@@ -441,6 +441,19 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "environment: prod" not in text
 
 
+def test_qa_workflows_admit_only_proven_merged_ancestors():
+    for workflow in (WORKFLOW, TYPESENSE_WORKFLOW):
+        text = workflow.read_text(encoding="utf-8")
+        admit = text[text.index("  admit:") : text.index("\n  build:")]
+        assert '[[ "${GITHUB_REF}" == "refs/heads/main" ]]' in admit
+        assert 'main_sha="$(git rev-parse --verify refs/remotes/origin/main)"' in admit
+        assert 'git cat-file -e "${RELEASE_SHA}^{commit}"' in admit
+        assert 'git merge-base --is-ancestor "$RELEASE_SHA" "$main_sha"' in admit
+        assert "verify_backend_release_admission.py" in admit
+        assert "--require-first-attempt" in admit
+        assert '[[ "$RELEASE_SHA" == "$(git rev-parse --verify refs/remotes/origin/main)" ]]' not in admit
+
+
 def test_typesense_workflow_smokes_images_before_publish_and_has_unready_bootstrap():
     text = TYPESENSE_WORKFLOW.read_text(encoding="utf-8")
     assert "mode:" in text

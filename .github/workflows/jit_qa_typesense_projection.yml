@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_sha:
-        description: Exact current main SHA with a successful first-attempt Release Eligibility proof
+        description: Immutable main ancestor SHA with a successful first-attempt Release Eligibility proof
         required: true
         type: string
       mode:
@@ -63,7 +63,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Require current main and Release Eligibility proof
+      - name: Require merged main ancestor and Release Eligibility proof
         id: source
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
@@ -73,7 +73,15 @@ jobs:
           [[ "${GITHUB_REF}" == "refs/heads/main" ]]
           printf '%s\n' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          [[ "$RELEASE_SHA" == "$(git rev-parse --verify refs/remotes/origin/main)" ]]
+          main_sha="$(git rev-parse --verify refs/remotes/origin/main)"
+          git cat-file -e "${RELEASE_SHA}^{commit}" || {
+            echo "ERROR: release_sha is not a commit in the fetched main history." >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "$RELEASE_SHA" "$main_sha" || {
+            echo "ERROR: release_sha is not an ancestor of current main $main_sha." >&2
+            exit 1
+          }
           proof_path="${RUNNER_TEMP}/release-eligibility-${RELEASE_SHA}.json"
           gh api -H 'Accept: application/vnd.github+json' "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${RELEASE_SHA}&per_page=100" > "$proof_path"
           python3 .github/scripts/verify_backend_release_admission.py --sha "$RELEASE_SHA" --repository "$GITHUB_REPOSITORY" --workflow-runs "$proof_path" --require-first-attempt
