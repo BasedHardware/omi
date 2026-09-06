@@ -147,7 +147,15 @@ jobs:
           smoke_name="jit-qa-typesense-smoke-${GITHUB_RUN_ID}"
           smoke_port=18108
           smoke_key="jit-qa-typesense-local-smoke-key"
-          cleanup_smoke() { docker rm -f "$smoke_name" >/dev/null 2>&1 || true; }
+          smoke_passed=0
+          cleanup_smoke() {
+            if [[ "$smoke_passed" != 1 ]] && docker inspect "$smoke_name" >/dev/null 2>&1; then
+              echo "Typesense smoke container diagnostics:" >&2
+              docker inspect --format='status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}' "$smoke_name" >&2 || true
+              docker logs --tail 200 "$smoke_name" 2>&1 | sed "s/${smoke_key}/[redacted]/g" >&2 || true
+            fi
+            docker rm -f "$smoke_name" >/dev/null 2>&1 || true
+          }
           trap cleanup_smoke EXIT
           docker run --detach --name "$smoke_name" --publish "$smoke_port:8080" \
             --env "TYPESENSE_API_KEY=$smoke_key" --env TYPESENSE_DATA_DIR=/tmp/typesense "$typesense_tag" >/dev/null
@@ -179,6 +187,7 @@ jobs:
             "$smoke_url/collections/jit_qa_smoke/documents/export?include_fields=id,content" > "$export_response"
           grep -Fq '"id":"smoke-1"' "$export_response"
           grep -Fq '"content":"isolated QA smoke"' "$export_response"
+          smoke_passed=1
           if [[ "$MODE" == "prove" ]]; then
             python3 backend/scripts/runtime_image_contracts.py smoke \
               --dockerfile backend/Dockerfile --image "$runner_tag"

@@ -65,6 +65,8 @@ def test_typesense_entrypoint_keeps_api_key_out_of_process_arguments():
     entrypoint = (ROOT / "scripts" / "jit_qa_typesense_entrypoint.sh").read_text(encoding="utf-8")
     assert "TYPESENSE_API_KEY" in entrypoint
     assert "--api-key" not in entrypoint
+    assert 'elif [ -x /opt/typesense-server ]; then' in entrypoint
+    assert "/opt/typesense-server/typesense-server" not in entrypoint
 
 
 def test_runtime_environment_rejects_shared_data_plane_and_emulator():

@@ -468,6 +468,12 @@ def test_typesense_workflow_smokes_images_before_publish_and_has_unready_bootstr
     assert '"status": "not_qualified"' in text
     assert '"readiness_marker": "absent"' in text
     assert "group: jit-isolated-qa-cloud-run-development" in text
+    assert 'smoke_passed=0' in text
+    assert (
+        'docker inspect --format=\'status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}\'' in text
+    )
+    assert 'docker logs --tail 200 "$smoke_name"' in text
+    assert 'smoke_passed=1' in text
 
 
 def test_bounded_proactivity_capability_is_required_on_qa_http_and_gateway_only():

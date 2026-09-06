@@ -5,8 +5,11 @@ set -eu
 
 if command -v typesense-server >/dev/null 2>&1; then
     typesense_binary="$(command -v typesense-server)"
-elif [ -x /opt/typesense-server/typesense-server ]; then
-    typesense_binary="/opt/typesense-server/typesense-server"
+elif [ -x /opt/typesense-server ]; then
+    # The pinned docker.io/typesense/typesense:27.1 image exposes the server
+    # binary directly at /opt/typesense-server (its image entrypoint), rather
+    # than in an /opt/typesense-server/ directory.
+    typesense_binary="/opt/typesense-server"
 else
     echo "Typesense server binary is unavailable in the pinned image" >&2
     exit 78
