@@ -20,6 +20,12 @@ from utils.memory.daily_memory_sweep import (
     DailySweepInput,
     DailySweepModelAuthority,
     MAX_CATCH_UP_DAYS,
+    QA_SWEEP_MAX_CATCH_UP_DAYS,
+    QA_SWEEP_MAX_MEMORY_LOOKUPS,
+    QA_SWEEP_MAX_MODEL_COST_USD,
+    QA_SWEEP_MAX_SUMMARY_CONVERSATIONS,
+    QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS,
+    QA_SWEEP_MAX_TRANSCRIPT_FETCHES,
     SweepAuthority,
     SweepAuthorityState,
     completed_local_day_window,
@@ -1407,6 +1413,7 @@ def test_completed_day_model_candidates_are_staged_before_apply_and_reused(monke
     assert len(first.daily_summary) == 1
     assert first.daily_summary[0].source_refs == ("conversation:conversation-1",)
     assert len(calls) == 1
+
     assert calls[0] == (("conversation-1", "stable summary"),)
     staged = next(payload for path, payload in db.store.items() if "daily_summary_staged" in path)
     assert staged["candidate_count"] == 1
@@ -1431,6 +1438,54 @@ def test_completed_day_model_candidates_are_staged_before_apply_and_reused(monke
     )
     assert second.daily_summary == first.daily_summary
     assert len(calls) == 1
+
+
+def test_qa_completed_day_uses_tight_real_input_and_provider_envelope(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    local_date = date(2026, 8, 23)
+    window = completed_local_day_window(local_date, "UTC")
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
+        lambda *_args, **kwargs: (
+            (_day_source("conversation-1", "stable summary"),),
+            "complete",
+        ),
+    )
+    model = DailySweepModelAuthority(
+        enabled=True,
+        model_name="test",
+        max_candidates=1,
+        max_cost_usd=QA_SWEEP_MAX_MODEL_COST_USD,
+    )
+    seen = {}
+
+    def agent(_uid, _rows, _lookup, **kwargs):
+        seen.update(kwargs)
+        return _agent_output(
+            memories=[SimpleNamespace(content="fact from QA pass", conversation_ids=["conversation-1"])]
+        )
+
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        local_date,
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=model,
+        agent_runner=agent,
+        window_override=window,
+        qa_run_id="qa-run-1",
+    )
+    assert result.source_status == "complete"
+    assert result.model_cost_usd <= QA_SWEEP_MAX_MODEL_COST_USD
+    assert seen["max_candidates"] == 1
+    assert seen["max_transcript_fetches"] == QA_SWEEP_MAX_TRANSCRIPT_FETCHES
+    assert seen["max_memory_lookups"] == QA_SWEEP_MAX_MEMORY_LOOKUPS
+    assert QA_SWEEP_MAX_CATCH_UP_DAYS == 1
+    assert QA_SWEEP_MAX_SUMMARY_CONVERSATIONS == 1
+    assert QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS == 2_000
 
 
 def test_completed_day_agent_assigns_folders_for_unopened_conversations(monkeypatch):

@@ -1,4 +1,9 @@
 import importlib.util
+import json
+import os
+import subprocess
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -31,11 +36,16 @@ class _Snapshot:
 
 
 class _Ref:
-    def __init__(self, payload):
+    def __init__(self, payload, *, projectable=True):
         self.payload = payload
+        self.projectable = projectable
 
-    def get(self):
-        return _Snapshot(self.payload)
+    def get(self, *, field_paths=None):
+        if field_paths is not None and not self.projectable:
+            raise TypeError("projection unavailable")
+        if field_paths is None or self.payload is None:
+            return _Snapshot(self.payload)
+        return _Snapshot({field: self.payload[field] for field in field_paths if field in self.payload})
 
 
 class _Query:
@@ -76,7 +86,7 @@ class _Db:
         self.projectable = projectable
 
     def document(self, path):
-        return _Ref(self.documents.get(path))
+        return _Ref(self.documents.get(path), projectable=self.projectable)
 
     def collection(self, _path):
         return _Collection(self.rows, projectable=self.projectable)
@@ -109,6 +119,12 @@ def _db(*rows):
         "model_name": "gpt-5.6-luna",
         "max_model_candidates": 1,
         "max_model_cost_usd": 0.05,
+        "max_catch_up_days": 1,
+        "max_summary_conversations": 1,
+        "max_summary_input_characters": 2000,
+        "max_transcript_fetches": 0,
+        "max_transcript_fetch_characters": 0,
+        "max_memory_lookups": 0,
         "provider_calls_allowed": 1,
     }
     output = {
@@ -132,7 +148,34 @@ def _db(*rows):
         "status": "completed",
         "model_policy": policy,
     }
-    return _Db({run_path: run, output_path: output}, list(map(_Snapshot, rows)))
+    documents = {run_path: run, output_path: output}
+    for row in rows:
+        conversation_id = row["source_id"].removeprefix("conversation:")
+        documents[f"users/{OPERATOR.QA_SWEEP_UID}/conversations/{conversation_id}"] = {
+            "uid": OPERATOR.QA_SWEEP_UID,
+            "status": "completed",
+            "finished_at": datetime.now(timezone.utc),
+            "discarded": False,
+        }
+        documents[f"{OPERATOR.CANONICAL_COLLECTION}/{row['memory_id']}"] = {
+            "memory_id": row["memory_id"],
+            "uid": OPERATOR.QA_SWEEP_UID,
+            "status": "active",
+            "processing_state": "processed",
+            "source_state": "active",
+            "content": "A synthetic QA fact.",
+            "ledger_schema_version": "knowledge_ledger.v1",
+            "updated_at": datetime.now(timezone.utc),
+            "evidence": [
+                {
+                    "source_id": row["source_id"],
+                    "source_type": row["source_type"],
+                    "source_version": row["source_version"],
+                    "source_state": "active",
+                }
+            ],
+        }
+    return _Db(documents, list(map(_Snapshot, rows)))
 
 
 def _job_resource(*, source_sha=SOURCE_SHA, image=IMAGE):
@@ -146,7 +189,13 @@ def test_consumer_requires_joined_current_chat_backed_output():
     result = OPERATOR.verify_qa_sweep_run(_db(_source_row()), run_id=RUN_ID)
 
     assert result["status"] == "PASS"
-    assert result["input_evidence"] == {"chat_backed_rows": 1, "source_types": ["daily_summary"]}
+    assert result["input_evidence"] == {
+        "source_surface": "recorded_conversation",
+        "verified_source_count": 1,
+        "source_types": ["daily_summary"],
+    }
+    assert result["canonical_output"]["hydrated_memory_count"] == 1
+    assert result["canonical_output"]["content_disclosed"] is False
 
 
 def test_job_source_admission_ties_live_digest_to_reviewed_sha():
@@ -185,6 +234,48 @@ def test_consumer_requires_projection_and_bounded_inventory():
     rows = [_source_row(memory_id=f"memory-{index}") for index in range(9)]
     with pytest.raises(OPERATOR.JITQASweepOperatorError, match="more than eight"):
         OPERATOR.verify_qa_sweep_run(_db(*rows), run_id=RUN_ID, minimum_output_rows=1)
+
+
+def test_consumer_reads_source_and_canonical_outputs_by_metadata_projection():
+    db = _db(_source_row())
+    source_path = f"users/{OPERATOR.QA_SWEEP_UID}/conversations/chat-1"
+    db.documents[source_path]["status"] = "processing"
+    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="terminal and eligible"):
+        OPERATOR.verify_qa_sweep_run(db, run_id=RUN_ID)
+
+    db = _db(_source_row())
+    canonical_path = f"{OPERATOR.CANONICAL_COLLECTION}/memory-qa-1"
+    db.documents[canonical_path]["status"] = "superseded"
+    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="not active"):
+        OPERATOR.verify_qa_sweep_run(db, run_id=RUN_ID)
+
+
+def test_validate_job_cli_imports_without_runtime_secret(tmp_path):
+    resource_path = tmp_path / "resource.json"
+    resource_path.write_text(json.dumps(_job_resource()), encoding="utf-8")
+    clean_env = {"PATH": os.environ["PATH"], "PYTHONPATH": str(BACKEND_ROOT)}
+    help_result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--help"], env=clean_env, capture_output=True, text=True, check=False
+    )
+    assert help_result.returncode == 0, help_result.stderr
+    validate_result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--source-sha",
+            SOURCE_SHA,
+            "--expected-image",
+            IMAGE,
+            "--resource-json",
+            str(resource_path),
+            "validate-job",
+        ],
+        env=clean_env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert validate_result.returncode == 0, validate_result.stderr
 
 
 def test_qa_environment_validation_uses_explicit_mapping_and_fixed_policy():

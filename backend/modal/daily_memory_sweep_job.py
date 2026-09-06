@@ -106,7 +106,12 @@ def run_daily_memory_sweep_job() -> None:
         now=now,
         uid_inventory=inventory,
         source_provider=lambda uid, local_date, control, **kwargs: firestore_daily_sweep_source_provider(
-            uid, local_date, control, db_client=default_db_client, timezone_name=kwargs.get("timezone_name", "UTC")
+            uid,
+            local_date,
+            control,
+            db_client=default_db_client,
+            timezone_name=kwargs.get("timezone_name", "UTC"),
+            qa_run_id=kwargs.get("qa_run_id"),
         ),
         timezone_resolver=lambda uid: get_user_time_zone(uid) or "UTC",
         cohort_authorizer=qa_sweep_cohort_authorizer if qa_run_id is not None else jit_admission_cohort_authorizer,

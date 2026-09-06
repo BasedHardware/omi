@@ -173,6 +173,17 @@ QA_SWEEP_COHORT = "jit-qa-sweep-v1"
 QA_SWEEP_MODEL_NAME = "gpt-5.6-luna"
 QA_SWEEP_MAX_MODEL_CANDIDATES = 1
 QA_SWEEP_MAX_MODEL_COST_USD = 0.05
+# Qualification uses the same completed-day producer with an explicit tighter
+# envelope.  Zero phase-B requests/lookups makes one provider call the real
+# maximum for one completed day, instead of pricing the production envelope as
+# if it were a cheap single call.
+QA_SWEEP_MAX_CATCH_UP_DAYS = 1
+QA_SWEEP_MAX_SUMMARY_CONVERSATIONS = 1
+QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS = 2_000
+QA_SWEEP_MAX_TRANSCRIPT_FETCHES = 0
+QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS = 0
+QA_SWEEP_MAX_MEMORY_LOOKUPS = 0
+QA_SWEEP_MAX_PROVIDER_CALLS = 1
 QA_SWEEP_RECEIPT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-run.v1"
 QA_SWEEP_OUTPUT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-output.v1"
 QA_SWEEP_RUN_COLLECTION = "jit_qa_sweep_runs"
@@ -4049,6 +4060,9 @@ def _load_or_stage_daily_summary_candidates(
     agent_runner: Any,
     folder_options: Sequence[Tuple[str, str]] = (),
     max_candidates: int,
+    max_transcript_fetches: int = MAX_DAILY_TRANSCRIPT_FETCHES,
+    max_fetch_characters: int = MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS,
+    max_memory_lookups: int = MAX_DAILY_MEMORY_LOOKUPS,
     sweep_generation: int = 1,
 ) -> Optional[Tuple[Tuple[DailySweepCandidate, ...], Tuple[Dict[str, str], ...]]]:
     """Stage the complete bounded daily-summary agent page before apply.
@@ -4178,10 +4192,10 @@ def _load_or_stage_daily_summary_candidates(
             folder_options=tuple(folder_options) if needs_folder_ids else (),
             needs_folder_ids=needs_folder_ids,
             max_candidates=max_candidates,
-            max_transcript_fetches=MAX_DAILY_TRANSCRIPT_FETCHES,
-            max_fetch_characters=MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS,
+            max_transcript_fetches=max_transcript_fetches,
+            max_fetch_characters=max_fetch_characters,
             memory_searcher=_daily_sweep_ledger_searcher(uid, db_client=db_client),
-            max_memory_lookups=MAX_DAILY_MEMORY_LOOKUPS,
+            max_memory_lookups=max_memory_lookups,
             cache_key=f"daily-sweep:{uid}",
         )
         candidates: List[DailySweepCandidate] = []
@@ -4437,6 +4451,7 @@ def produce_completed_day_daily_summary_sources(
     agent_runner: Optional[Any] = None,
     window_override: Optional[CompletedLocalDayWindow] = None,
     sweep_generation: int = 1,
+    qa_run_id: Optional[str] = None,
 ) -> DailySweepRuntimeSources:
     """Produce the exact completed-day source, including its bounded agent run.
 
@@ -4513,12 +4528,24 @@ def produce_completed_day_daily_summary_sources(
             model_cost_usd=0.0,
         )
 
+    is_qa_run = qa_run_id is not None
+    max_summary_conversations = (
+        QA_SWEEP_MAX_SUMMARY_CONVERSATIONS if is_qa_run else MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS
+    )
+    max_summary_characters = (
+        QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS if is_qa_run else MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS
+    )
+    max_transcript_fetches = QA_SWEEP_MAX_TRANSCRIPT_FETCHES if is_qa_run else MAX_DAILY_TRANSCRIPT_FETCHES
+    max_fetch_characters = (
+        QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS if is_qa_run else MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS
+    )
+    max_memory_lookups = QA_SWEEP_MAX_MEMORY_LOOKUPS if is_qa_run else MAX_DAILY_MEMORY_LOOKUPS
     conversation_rows, conversation_status = _read_completed_day_conversation_sources(
         uid,
         window,
         db_client=db_client,
-        max_conversations=MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS,
-        max_summary_characters=MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS,
+        max_conversations=max_summary_conversations,
+        max_summary_characters=max_summary_characters,
     )
     if conversation_status == "incomplete":
         return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
@@ -4557,8 +4584,11 @@ def produce_completed_day_daily_summary_sources(
     estimated_cost = (
         (
             2 * spine_characters
-            + MAX_DAILY_TRANSCRIPT_FETCHES * MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS
-            + daily_sweep_phase_b_overhead_characters(MAX_DAILY_MEMORY_LOOKUPS)
+            + max_transcript_fetches * max_fetch_characters
+            + daily_sweep_phase_b_overhead_characters(
+                max_memory_lookups,
+                max_candidate_rows=model.max_candidates,
+            )
         )
         / 1000.0
     ) * MODEL_COST_PER_1K_INPUT_CHARACTERS_USD
@@ -4580,6 +4610,9 @@ def produce_completed_day_daily_summary_sources(
         agent_runner=runner,
         folder_options=folder_options,
         max_candidates=model.max_candidates,
+        max_transcript_fetches=max_transcript_fetches,
+        max_fetch_characters=max_fetch_characters,
+        max_memory_lookups=max_memory_lookups,
         sweep_generation=sweep_generation,
     )
     if staged is None:
@@ -4680,6 +4713,7 @@ def firestore_daily_sweep_source_provider(
     db_client: Any,
     timezone_name: str = "UTC",
     window_override: Optional[CompletedLocalDayWindow] = None,
+    qa_run_id: Optional[str] = None,
 ) -> DailySweepRuntimeSources:
     """Read one bounded backend-produced source packet for the scheduler.
 
@@ -4705,7 +4739,13 @@ def firestore_daily_sweep_source_provider(
             db_client=db_client,
             window_override=window_override,
             sweep_generation=current_cursor.sweep_generation,
+            qa_run_id=qa_run_id,
         )
+        if qa_run_id is not None:
+            # Onboarding is a separate producer path and may add another model
+            # invocation.  QA input must come from an eligible completed
+            # recorded conversation source, so stop at the summary producer.
+            return summary_sources
         model_authority = daily_memory_sweep_model_authority_from_environment()
         onboarding_production = _produce_onboarding_sources(
             uid,
@@ -4832,13 +4872,17 @@ def firestore_daily_sweep_source_provider(
         # the scheduler must not advance its cursor.
         raise
     parsed_daily_summary = parse("daily_summary", source_type="daily_summary", authority=SweepAuthority.sweep_inference)
-    parsed_onboarding = parse(
-        "onboarding_cold_start",
-        source_type="onboarding",
-        authority=SweepAuthority.direct_user_statement,
-        trusted_direct=True,
+    parsed_onboarding = (
+        parse(
+            "onboarding_cold_start",
+            source_type="onboarding",
+            authority=SweepAuthority.direct_user_statement,
+            trusted_direct=True,
+        )
+        if qa_run_id is None
+        else ()
     )
-    raw_onboarding_source_keys = payload.get("onboarding_source_keys", ())
+    raw_onboarding_source_keys = payload.get("onboarding_source_keys", ()) if qa_run_id is None else ()
     if not isinstance(raw_onboarding_source_keys, (list, tuple)):
         raise ValueError("daily sweep onboarding source keys must be a list")
     onboarding_source_keys = tuple(
@@ -4848,7 +4892,7 @@ def firestore_daily_sweep_source_provider(
         not item.startswith("onboarding:") for item in onboarding_source_keys
     ):
         raise ValueError("daily sweep onboarding source keys are invalid")
-    raw_onboarding_progress = payload.get("onboarding_source_progress", {})
+    raw_onboarding_progress = payload.get("onboarding_source_progress", {}) if qa_run_id is None else {}
     if not isinstance(raw_onboarding_progress, Mapping):
         raise ValueError("daily sweep onboarding source progress is invalid")
     onboarding_source_progress = {
@@ -4944,7 +4988,13 @@ def write_qa_sweep_run_receipt(
         "model_name": QA_SWEEP_MODEL_NAME,
         "max_model_candidates": QA_SWEEP_MAX_MODEL_CANDIDATES,
         "max_model_cost_usd": QA_SWEEP_MAX_MODEL_COST_USD,
-        "provider_calls_allowed": 1,
+        "max_catch_up_days": QA_SWEEP_MAX_CATCH_UP_DAYS,
+        "max_summary_conversations": QA_SWEEP_MAX_SUMMARY_CONVERSATIONS,
+        "max_summary_input_characters": QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS,
+        "max_transcript_fetches": QA_SWEEP_MAX_TRANSCRIPT_FETCHES,
+        "max_transcript_fetch_characters": QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS,
+        "max_memory_lookups": QA_SWEEP_MAX_MEMORY_LOOKUPS,
+        "provider_calls_allowed": QA_SWEEP_MAX_PROVIDER_CALLS,
     }
     output_path = f"users/{QA_SWEEP_UID}/daily_memory_sweep_receipts"
     output_payload = {
@@ -5033,6 +5083,7 @@ def run_daily_memory_sweep_scheduler(
     timezone_reconciler: Optional[Any] = None,
     max_users: int = 400,
     qa_run_id: Optional[str] = None,
+    max_catch_up_days: Optional[int] = None,
 ) -> DailySweepSchedulerSummary:
     """Runtime producer/scheduler/adaptor behind the closed backend authority.
 
@@ -5048,6 +5099,13 @@ def run_daily_memory_sweep_scheduler(
         raise ValueError("now must be timezone-aware")
     if qa_run_id is not None:
         qa_run_id = validate_qa_sweep_run_id(qa_run_id)
+    catch_up_days = (
+        QA_SWEEP_MAX_CATCH_UP_DAYS
+        if qa_run_id is not None
+        else (MAX_CATCH_UP_DAYS if max_catch_up_days is None else max_catch_up_days)
+    )
+    if catch_up_days < 1 or catch_up_days > MAX_CATCH_UP_DAYS:
+        raise ValueError("max_catch_up_days must be between 1 and the bounded maximum")
     bounded_uids = tuple(sorted({uid.strip() for uid in uid_inventory if uid.strip()}))[: max(1, min(400, max_users))]
 
     # Crash-recovery cleanup is a privacy lifecycle operation, not a rollout
@@ -5158,7 +5216,12 @@ def run_daily_memory_sweep_scheduler(
                 if not callable(timezone_reconciler) or not timezone_reconciler(uid, timezone_name):
                     raise ValueError("timezone_changed_requires_reconciliation")
                 cursor = _read_cursor(db_client, uid, control)
-            pending_dates = _pending_completed_dates(cursor, timezone_name=timezone_name, now=now)
+            pending_dates = _pending_completed_dates(
+                cursor,
+                timezone_name=timezone_name,
+                now=now,
+                max_days=catch_up_days,
+            )
             if not pending_dates:
                 completed_uids.append(uid)
                 return ProcessOutcome.ack()
@@ -5180,6 +5243,7 @@ def run_daily_memory_sweep_scheduler(
                         control,
                         timezone_name=timezone_name,
                         window_override=transition_window,
+                        qa_run_id=qa_run_id,
                     )
                 except TypeError:
                     # Preserve the narrow three-argument provider contract for
@@ -5206,6 +5270,7 @@ def run_daily_memory_sweep_scheduler(
                 authority=resolved_authority,
                 claimant=f"scheduler:{uuid4().hex}",
                 qa_run_id=qa_run_id,
+                max_catch_up_days=catch_up_days,
             )
             committed += output.committed_count
             idempotent += output.idempotent_count
@@ -5283,6 +5348,13 @@ __all__ = [
     "QA_SWEEP_MODEL_NAME",
     "QA_SWEEP_MAX_MODEL_CANDIDATES",
     "QA_SWEEP_MAX_MODEL_COST_USD",
+    "QA_SWEEP_MAX_CATCH_UP_DAYS",
+    "QA_SWEEP_MAX_SUMMARY_CONVERSATIONS",
+    "QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS",
+    "QA_SWEEP_MAX_TRANSCRIPT_FETCHES",
+    "QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS",
+    "QA_SWEEP_MAX_MEMORY_LOOKUPS",
+    "QA_SWEEP_MAX_PROVIDER_CALLS",
     "QA_SWEEP_RECEIPT_SCHEMA_VERSION",
     "QA_SWEEP_OUTPUT_SCHEMA_VERSION",
     "QA_SWEEP_RUN_COLLECTION",
