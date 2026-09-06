@@ -16,6 +16,7 @@ from typing import Any, Literal
 
 from google.cloud import firestore
 
+from database._client import get_firestore_client
 from llm_gateway.gateway.accounting import rate_card_for, rounded_micro_usd
 
 _COLLECTION = 'jit_cloud_qa_budgets_v1'
@@ -46,8 +47,6 @@ def _doc_id(owner_uid: str, run_id: str) -> str:
 
 def _client() -> Any:
     """Use the selected Firestore client; never fall back to local state."""
-
-    from database._client import get_firestore_client
 
     return get_firestore_client()
 
