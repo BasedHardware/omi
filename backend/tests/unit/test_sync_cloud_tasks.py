@@ -1049,6 +1049,9 @@ def _load_sync_router_for_fast_path():
         sys.modules[mod_name] = MagicMock()
 
     sys.modules['utils'].__path__ = []
+    # Hand-rolled sys.modules poking (not testing.import_isolation.stub_modules): new
+    # submodule imports by the sync pipeline must be added to heavy_deps explicitly,
+    # since a MagicMock parent does not resolve submodules by itself.
     sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_async_resolve_geolocation
     sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(return_value=False)
     sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
