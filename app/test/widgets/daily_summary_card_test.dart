@@ -49,15 +49,14 @@ void main() {
       DailySummaryCard.mapHeight,
     );
 
+    // The card hands its pins to the shared preview widget (URL building and
+    // the auth gate are covered by omi_map_preview_test).
     final preview = tester.widget<OmiMapPreview>(find.byType(OmiMapPreview));
     expect(preview.pins, hasLength(2));
-    final image = tester.widget<CachedNetworkImage>(find.byType(CachedNetworkImage));
-    expect(image.imageUrl, contains('/v1/static-map?pins='));
-    expect(image.imageUrl, contains('37.7749%2C-122.4194'));
-    expect(image.imageUrl, contains('37.7849%2C-122.4094'));
-    // Repeat renders of the same card reuse the same URL (image cache hit).
-    expect(image.imageUrl, contains('width='));
-    expect(image.imageUrl, contains('height='));
+    expect(preview.pins.first.latitude, 37.7749);
+    expect(preview.pins.first.longitude, -122.4194);
+    expect(preview.pins.last.latitude, 37.7849);
+    expect(preview.pins.last.longitude, -122.4094);
   });
 
   testWidgets('renders a centered preview for a recap with one valid location', (tester) async {
@@ -67,8 +66,7 @@ void main() {
 
     final preview = tester.widget<OmiMapPreview>(find.byType(OmiMapPreview));
     expect(preview.pins, hasLength(1));
-    final image = tester.widget<CachedNetworkImage>(find.byType(CachedNetworkImage));
-    expect(image.imageUrl, contains('51.5072%2C-0.1276'));
+    expect(preview.pins.single.latitude, 51.5072);
   });
 
   testWidgets('treats repeated coordinates as a single map location', (tester) async {
@@ -81,8 +79,10 @@ void main() {
 
     await _pumpCard(tester, summary);
 
-    final image = tester.widget<CachedNetworkImage>(find.byType(CachedNetworkImage));
-    expect(Uri.decodeQueryComponent(image.imageUrl.split('pins=')[1].split('&')[0]), '51.5072,-0.1276');
+    // Both pins flow to the preview; URL-side dedupe is asserted in
+    // omi_map_preview_test's buildOmiStaticMapUrl cases.
+    final preview = tester.widget<OmiMapPreview>(find.byType(OmiMapPreview));
+    expect(preview.pins, hasLength(2));
   });
 
   testWidgets('shows the offline pin-dot canvas when the image cannot load', (tester) async {
@@ -91,9 +91,10 @@ void main() {
     await _pumpCard(tester, summary);
     await tester.pumpAndSettle();
 
-    // The test environment cannot reach the proxy, so the widget must settle
-    // on the fallback canvas rather than an error state.
+    // The test environment cannot reach the proxy and auth cannot resolve, so
+    // the widget must settle on the fallback canvas rather than an error state.
     expect(find.byKey(const ValueKey('omi_map_preview_fallback')), findsWidgets);
+    expect(find.byType(CachedNetworkImage), findsNothing);
     expect(find.text('Yesterday'), findsOneWidget);
   });
 

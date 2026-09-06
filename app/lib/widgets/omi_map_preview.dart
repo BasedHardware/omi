@@ -6,6 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 
+/// Resolves the Authorization header for proxy image requests. Injectable so
+/// tests can control when the header arrives (or never does).
+typedef OmiMapAuthHeaderResolver = Future<String?> Function();
+
 /// A single map pin coordinate rendered by [OmiMapPreview].
 class OmiMapPin {
   const OmiMapPin({required this.latitude, required this.longitude});
@@ -51,6 +55,7 @@ class OmiMapPreview extends StatefulWidget {
     required this.pins,
     this.backgroundColor = const Color(0xFF1A1A1F),
     this.imageUrl,
+    this.authHeaderProvider,
   });
 
   final List<OmiMapPin> pins;
@@ -60,7 +65,12 @@ class OmiMapPreview extends StatefulWidget {
 
   /// Pre-built image URL. Tests use this to avoid the network; production
   /// callers leave it null so [buildOmiStaticMapUrl] builds the proxy URL.
+  /// An explicit URL skips the auth gate (headers are optional for it).
   final String? imageUrl;
+
+  /// How the session's Authorization header is resolved. Tests inject a
+  /// controllable future; production uses [getAuthHeader].
+  final OmiMapAuthHeaderResolver? authHeaderProvider;
 
   @override
   State<OmiMapPreview> createState() => _OmiMapPreviewState();
@@ -78,7 +88,7 @@ class _OmiMapPreviewState extends State<OmiMapPreview> {
   Future<void> _resolveAuthHeader() async {
     String? header;
     try {
-      header = await getAuthHeader();
+      header = await (widget.authHeaderProvider ?? getAuthHeader)();
     } catch (_) {
       header = null; // offline/unauthenticated: fall back to the canvas below
     }
@@ -96,23 +106,45 @@ class _OmiMapPreviewState extends State<OmiMapPreview> {
         if (widget.pins.isEmpty || !width.isFinite || !height.isFinite || width <= 0 || height <= 0) {
           return fallback;
         }
-        final url = widget.imageUrl ??
-            buildOmiStaticMapUrl(
-              pins: widget.pins,
-              width: width.round(),
-              height: height.round(),
-            );
-        return CachedNetworkImage(
-          key: ValueKey(url),
-          imageUrl: url,
-          httpHeaders: {if (_authHeader != null) 'Authorization': _authHeader!},
-          fit: BoxFit.cover,
+        final url = widget.imageUrl;
+        if (url != null) {
+          return _image(url: url, width: width, height: height, fallback: fallback, authRequired: false);
+        }
+        // The proxy request carries the session token; firing it before the
+        // header resolves would 401, and the URL-derived image cache key would
+        // never re-fetch once the header arrives. The pin-dot canvas (which
+        // already doubles as the error/offline render) holds the frame until
+        // the header resolves.
+        if (_authHeader == null) {
+          return fallback;
+        }
+        return _image(
+          url: buildOmiStaticMapUrl(pins: widget.pins, width: width.round(), height: height.round()),
           width: width,
           height: height,
-          placeholder: (_, __) => fallback,
-          errorWidget: (_, __, ___) => fallback,
+          fallback: fallback,
+          authRequired: true,
         );
       },
+    );
+  }
+
+  Widget _image({
+    required String url,
+    required double width,
+    required double height,
+    required Widget fallback,
+    required bool authRequired,
+  }) {
+    return CachedNetworkImage(
+      key: ValueKey(url),
+      imageUrl: url,
+      httpHeaders: {if (authRequired) 'Authorization': _authHeader!},
+      fit: BoxFit.cover,
+      width: width,
+      height: height,
+      placeholder: (_, __) => fallback,
+      errorWidget: (_, __, ___) => fallback,
     );
   }
 }

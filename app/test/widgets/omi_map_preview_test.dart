@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -84,9 +86,45 @@ void main() {
     // Placeholder state is the fallback canvas — never a spinner or error.
     expect(find.byKey(const ValueKey('omi_map_preview_fallback')), findsOneWidget);
     await tester.pumpAndSettle();
-    // The test env cannot reach the proxy; the error path keeps the canvas.
+    // The test env cannot reach the proxy (and auth cannot resolve here), so
+    // both the auth gate and the error path keep the canvas.
     expect(find.byKey(const ValueKey('omi_map_preview_fallback')), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('no network image until the auth header resolves; canvas holds the frame', (tester) async {
+    // Regression: firing the authed request before the header resolved 401'd,
+    // and the URL-derived image cache key never re-fetched — a permanent
+    // fallback. The widget must render only the canvas until auth resolves.
+    final headerCompleter = Completer<String>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 200,
+            height: 100,
+            child: OmiMapPreview(
+              pins: const [OmiMapPin(latitude: 37.7749, longitude: -122.4194)],
+              authHeaderProvider: () => headerCompleter.future,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('omi_map_preview_fallback')), findsOneWidget);
+    expect(find.byType(CachedNetworkImage), findsNothing);
+
+    headerCompleter.complete('Bearer test-token');
+    // One frame delivers the header through the async resolver, the next
+    // rebuilds with the authed image.
+    await tester.pump();
+    await tester.pump();
+
+    final image = tester.widget<CachedNetworkImage>(find.byType(CachedNetworkImage));
+    expect(image.imageUrl, contains('/v1/static-map?pins='));
+    expect(image.httpHeaders, containsPair('Authorization', 'Bearer test-token'));
   });
 
   testWidgets('empty pins render only the fallback canvas', (tester) async {
