@@ -529,6 +529,11 @@ checks:
     triggers: ["backend/charts/pusher/**", "backend/scripts/verify_shared_config_migration.py", "backend/tests/unit/test_verify_shared_config_migration.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-39: static preflight that fails closed when pusher chart env/envFrom config references are structurally invalid (the 2026-07-22 REDIS_DB_HOST outage class)"
+  - id: pusher-cohost-env-diff
+    command: ["python3", "backend/scripts/verify_pusher_cohost_env_diff.py"]
+    triggers: ["backend/charts/pusher/**", "backend/charts/backend-listen/**", "backend/scripts/verify_pusher_cohost_env_diff.py", "backend/tests/unit/test_verify_pusher_cohost_env_diff.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-08-30 pusher finalization outage: unexplained pusher vs backend-listen env divergence must fail the deploy path (decision 4 co-host env-diff)"
   - id: conversation-lifecycle-write-guard
     command: ["python3", "backend/scripts/check_conversation_lifecycle_writes.py"]
     triggers: ["backend/**/*.py", "backend/scripts/check_conversation_lifecycle_writes.py"]
