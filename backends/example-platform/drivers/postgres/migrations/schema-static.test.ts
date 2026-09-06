@@ -150,9 +150,18 @@ const expectedTables = [
   "postgres_restore_admission_revisions",
   "postgres_restore_admission_heads",
   "platform_schema_migrations",
+  "listen_audio_transcriptions",
+  "listen_capture_audio_chunks",
+  "listen_capture_audio_uploads",
+  "listen_conversation_read_revisions",
+  "memory_render_responses",
+  "task_records",
+  "task_sequences",
+  "task_stragglers",
+  "task_write_receipts",
 ] as const;
 
-describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
+describe("static PostgreSQL schema contract", () => {
   test("contains exactly the reviewed expand-only surface", () => {
     expect(tables.map((table) => table.name).sort()).toEqual([...expectedTables].sort());
     expect(allSql).not.toMatch(/CREATE\s+(?:TABLE|TYPE).*\b(?:search|embedding|experiment)/i);
@@ -761,7 +770,7 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(grants.length).toBeGreaterThan(0);
     expect(grants.join("\n")).not.toMatch(/\b(?:ALL|DELETE|TRUNCATE|CREATE|ALTER|DROP)\b/);
     const updateGrants = grants.filter((grant) => /\bUPDATE\b/.test(grant));
-    expect(updateGrants).toHaveLength(3);
+    expect(updateGrants).toHaveLength(4);
     expect(updateGrants[0]).toContain("UPDATE (commit_id, sequence, updated_at)");
     expect(updateGrants[0]).toContain("omi_memory.memory_graph_heads");
     expect(updateGrants[0]).not.toContain("INSERT");
@@ -769,6 +778,11 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(updateGrants[1]).toContain("omi_memory.memory_idempotency_receipts");
     expect(updateGrants[2]).toContain("UPDATE (state_revision, state_digest, updated_at)");
     expect(updateGrants[2]).toContain("omi_memory.memory_work_heads");
+    expect(updateGrants[3]).toBe("GRANT SELECT,INSERT,UPDATE ON omi_memory.%I TO omi_platform_application',target);");
+    const taskSql = migrationSql.find(migration => migration.version === 47)!.sql;
+    expect(taskSql).toContain("FOREACH target IN ARRAY ARRAY['task_records','task_sequences','task_write_receipts','task_stragglers'] LOOP");
+    expect(taskSql).toContain("CREATE POLICY task_update");
+    expect(taskSql).toContain("current_setting(''omi.capability'',true)=''tasks.write''");
     expect(grants.join("\n")).not.toContain("omi_memory.platform_schema_migrations TO omi_platform_application");
     const workGrants = grants.filter((grant) => /omi_memory\.memory_work_/.test(grant));
     expect(workGrants).toHaveLength(7);
