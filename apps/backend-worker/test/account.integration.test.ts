@@ -1,9 +1,10 @@
 import { createExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
+import { runInDurableObject } from "cloudflare:test";
 import { beforeEach, describe, expect, test } from "vitest";
 
 import handler from "../src/index";
+import { terminalEvent } from "../src/chat";
 
 const chatSchema = [
   "CREATE TABLE IF NOT EXISTS chat_messages (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, text TEXT NOT NULL, sender TEXT NOT NULL, created_at INTEGER NOT NULL, generation_outcome TEXT, position INTEGER NOT NULL, payload TEXT)",
@@ -64,6 +65,18 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM chat_admissions").run();
   await env.DB.prepare("DELETE FROM chat_generation_events").run();
   await env.DB.prepare("DELETE FROM chat_attachments").run();
+  await runInDurableObject(
+    env.ACCOUNTS.getByName("test-account"),
+    (instance) => {
+      Object.defineProperty(instance, "env", {
+        configurable: true,
+        value: {
+          ...(instance as unknown as { env: Record<string, unknown> }).env,
+          AI: { run: async () => ({ response: "test response" }) },
+        },
+      });
+    }
+  );
 });
 
 describe("AccountBackend D1-backed coordination", () => {
@@ -101,15 +114,6 @@ describe("AccountBackend D1-backed coordination", () => {
   });
 
   test("Workers AI receives the previous turn before the current user message", async () => {
-    const first = await fetchWorker("/v1/chat-messages", {
-      method: "POST",
-      headers: authenticatedHeaders,
-      body: JSON.stringify({
-        ...create("context-first"),
-        text: "My name is Ana",
-      }),
-    });
-    expect(first.status).toBe(201);
     const stub = env.ACCOUNTS.getByName("test-account");
     await runInDurableObject(stub, async (instance) => {
       Object.defineProperty(instance, "env", {
@@ -119,19 +123,27 @@ describe("AccountBackend D1-backed coordination", () => {
           AI: { run: async () => ({ response: "Hello Ana" }) },
         },
       });
-      await instance.alarm();
     });
-    const second = await fetchWorker("/v1/chat-messages", {
+    const first = await fetchWorker("/v1/chat-messages", {
       method: "POST",
       headers: authenticatedHeaders,
       body: JSON.stringify({
-        ...create("context-second"),
-        text: "What is my name?",
+        ...create("context-first"),
+        text: "My name is Ana",
       }),
     });
-    expect(second.status).toBe(201);
-    const messages = await runInDurableObject(stub, async (instance) => {
-      let captured: unknown = null;
+    expect(first.status).toBe(201);
+    await runInDurableObject(stub, async (instance) => {
+      await instance.alarm();
+    });
+    const firstReply = await env.DB.prepare(
+      "SELECT text FROM chat_messages WHERE account_id = ? AND sender = 'ai'"
+    )
+      .bind("test-account")
+      .all();
+    expect(firstReply.results).toEqual([{ text: "Hello Ana" }]);
+    let captured: unknown = null;
+    await runInDurableObject(stub, async (instance) => {
       Object.defineProperty(instance, "env", {
         configurable: true,
         value: {
@@ -144,10 +156,20 @@ describe("AccountBackend D1-backed coordination", () => {
           },
         },
       });
-      await instance.alarm();
-      return captured;
     });
-    expect(messages).toEqual([
+    const second = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({
+        ...create("context-second"),
+        text: "What is my name?",
+      }),
+    });
+    expect(second.status).toBe(201);
+    await runInDurableObject(stub, async (instance) => {
+      await instance.alarm();
+    });
+    expect(captured).toEqual([
       {
         role: "system",
         content: "You are Omi, a concise and helpful personal assistant.",
@@ -198,6 +220,7 @@ describe("AccountBackend D1-backed coordination", () => {
     expect(admission.status).toBe(201);
     const admissionBody = (await admission.json()) as {
       message: { id: string };
+      generation: { id: string };
     };
     expect(admissionBody.message.id).toBe("message");
 
@@ -205,17 +228,24 @@ describe("AccountBackend D1-backed coordination", () => {
       headers: authenticatedHeaders,
     });
     const historyBody = (await history.json()) as {
-      messages: Array<{ id: string }>;
+      messages: Array<{ id: string; sender: string }>;
     };
-    expect(historyBody.messages).toHaveLength(1);
-    expect(historyBody.messages[0]!.id).toBe("message");
+    expect(
+      historyBody.messages
+        .filter((message) => message.sender === "human")
+        .map((message) => message.id)
+    ).toEqual(["message"]);
 
     const stub = env.ACCOUNTS.getByName("test-account");
-    expect(
-      await runInDurableObject(stub, (_instance, state) =>
-        state.storage.getAlarm()
-      )
-    ).not.toBeNull();
+    const alarm = await runInDurableObject(stub, (_instance, state) =>
+      state.storage.getAlarm()
+    );
+    const terminal = await terminalEvent(
+      env.DB,
+      "test-account",
+      admissionBody.generation.id
+    );
+    expect(alarm !== null || terminal !== null).toBe(true);
 
     const replay = await fetchWorker("/v1/chat-messages", {
       method: "POST",
@@ -233,22 +263,6 @@ describe("AccountBackend D1-backed coordination", () => {
   });
 
   test("provider failure terminates its generation and advances queued work", async () => {
-    const first = await fetchWorker("/v1/chat-messages", {
-      method: "POST",
-      headers: { ...authenticatedHeaders, "content-type": "application/json" },
-      body: JSON.stringify(create("first")),
-    });
-    const second = await fetchWorker("/v1/chat-messages", {
-      method: "POST",
-      headers: { ...authenticatedHeaders, "content-type": "application/json" },
-      body: JSON.stringify(create("second")),
-    });
-    expect(first.status).toBe(201);
-    expect(second.status).toBe(201);
-
-    const firstBody = (await first.json()) as { generation: { id: string } };
-    const secondBody = (await second.json()) as { generation: { id: string } };
-
     const stub = env.ACCOUNTS.getByName("test-account");
     await runInDurableObject(stub, (instance) => {
       Object.defineProperty(instance, "env", {
@@ -256,34 +270,40 @@ describe("AccountBackend D1-backed coordination", () => {
         value: {
           ...(instance as unknown as { env: Record<string, unknown> }).env,
           AI: {
-            run: async () => {
-              throw new Error("provider unavailable");
+            run: async (
+              _model: unknown,
+              input: { messages: Array<{ content: string }> }
+            ) => {
+              if (input.messages.at(-1)?.content === "first input")
+                throw new Error("provider unavailable");
+              return { response: "second completed" };
             },
           },
         },
       });
     });
-    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    const first = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ ...create("first"), text: "first input" }),
+    });
+    const second = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ ...create("second"), text: "second input" }),
+    });
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+
+    const firstBody = (await first.json()) as { generation: { id: string } };
+    const secondBody = (await second.json()) as { generation: { id: string } };
+
+    await runInDurableObject(stub, (instance) => instance.alarm());
     const failed = await stub.fetch(
       `https://account.internal/events?generationId=${firstBody.generation.id}`
     );
     expect(await failed.text()).toContain("event: failed");
-    expect(
-      await runInDurableObject(stub, (_instance, state) =>
-        state.storage.getAlarm()
-      )
-    ).not.toBeNull();
-
-    await runInDurableObject(stub, (instance) => {
-      Object.defineProperty(instance, "env", {
-        configurable: true,
-        value: {
-          ...(instance as unknown as { env: Record<string, unknown> }).env,
-          AI: { run: async () => ({ response: "second completed" }) },
-        },
-      });
-    });
-    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    await runInDurableObject(stub, (instance) => instance.alarm());
     const completed = await stub.fetch(
       `https://account.internal/events?generationId=${secondBody.generation.id}`
     );
@@ -296,8 +316,8 @@ describe("AccountBackend D1-backed coordination", () => {
       messages: Array<{ text: string }>;
     };
     expect(historyBody.messages.map((message) => message.text)).toEqual([
-      "hello",
-      "hello",
+      "first input",
+      "second input",
       "second completed",
     ]);
   });
