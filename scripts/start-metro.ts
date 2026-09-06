@@ -11,6 +11,22 @@ export async function startMetro(port: number, host = "127.0.0.1") {
   const projectRoot = resolve(import.meta.dir, "../react-native");
   const context = await loadConfig({ projectRoot });
   const config = await loadMetroConfig(context, { port, maxWorkers: 2 });
+  config.serializer.getModulesRunBeforeMainModule = () =>
+    [
+      "react-native",
+      ...Object.values(context.platforms)
+        .map((platform: any) => platform.npmPackageName)
+        .filter((name): name is string => typeof name === "string"),
+    ].map((name) =>
+      require.resolve(
+        resolve(
+          projectRoot,
+          "../node_modules",
+          name,
+          "Libraries/Core/InitializeCore"
+        )
+      )
+    );
   const { middleware, attachHmrServer, end } =
     await require("metro").createConnectMiddleware(config);
   const app = require("connect")();
