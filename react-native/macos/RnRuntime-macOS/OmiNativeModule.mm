@@ -1,4 +1,5 @@
 #import "OmiNativeModule.h"
+#import "../../apple/OmiDeviceInformation.h"
 
 #import <CoreBluetooth/CoreBluetooth.h>
 #import <TargetConditionals.h>
@@ -12,6 +13,7 @@ static NSString *const OmiAudioUUID = @"19b10001-e8f2-537e-4f6c-d104768a1214";
 static NSString *const OmiCodecUUID = @"19b10002-e8f2-537e-4f6c-d104768a1214";
 static NSString *const OmiBatteryServiceUUID = @"180F";
 static NSString *const OmiBatteryLevelUUID = @"2A19";
+static NSString *const OmiInformationServiceUUID = @"180A";
 
 @interface OmiNativeModule () <CBCentralManagerDelegate, CBPeripheralDelegate>
 @property(nonatomic, strong) CBCentralManager *central;
@@ -272,10 +274,11 @@ RCT_REMAP_METHOD(disconnectDevice,
     [central cancelPeripheralConnection:peripheral];
     return;
   }
+  [self.devices[peripheral.identifier.UUIDString] removeObjectForKey:@"information"];
   self.connectionState = @"connected";
   self.lastEvent = @"Connected to Omi";
   peripheral.delegate = self;
-  [peripheral discoverServices:@[ [CBUUID UUIDWithString:OmiServiceUUID], [CBUUID UUIDWithString:OmiBatteryServiceUUID] ]];
+  [peripheral discoverServices:@[ [CBUUID UUIDWithString:OmiServiceUUID], [CBUUID UUIDWithString:OmiBatteryServiceUUID], [CBUUID UUIDWithString:OmiInformationServiceUUID] ]];
   if (self.connectResolve != nil) {
     RCTPromiseResolveBlock resolve = self.connectResolve;
     self.connectResolve = nil;
@@ -327,6 +330,10 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
     if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiServiceUUID]]) {
       [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiAudioUUID], [CBUUID UUIDWithString:OmiCodecUUID] ]
                                forService:service];
+    } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiInformationServiceUUID]]) {
+      NSMutableArray<CBUUID *> *uuids = [NSMutableArray array];
+      for (NSString *uuid in OmiInformationFields()) [uuids addObject:[CBUUID UUIDWithString:uuid]];
+      [peripheral discoverCharacteristics:uuids forService:service];
     } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiBatteryServiceUUID]]) {
       [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiBatteryLevelUUID] ] forService:service];
     }
@@ -338,6 +345,10 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
     return;
   }
   for (CBCharacteristic *characteristic in service.characteristics) {
+    if (OmiInformationFields()[characteristic.UUID.UUIDString] != nil &&
+        (characteristic.properties & CBCharacteristicPropertyRead) != 0) {
+      [peripheral readValueForCharacteristic:characteristic];
+    }
     if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiAudioUUID]]) {
       [peripheral setNotifyValue:YES forCharacteristic:characteristic];
     } else if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiCodecUUID]] ||
@@ -365,6 +376,18 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     return;
   }
   NSString *identifier = peripheral.identifier.UUIDString;
+  NSString *field = OmiInformationFields()[characteristic.UUID.UUIDString];
+  if (field != nil) {
+    NSString *value = OmiDecodeDeviceInformation(characteristic.value);
+    if (value != nil) {
+      NSMutableDictionary *device = self.devices[identifier];
+      NSMutableDictionary *information = [device[@"information"] mutableCopy] ?: [NSMutableDictionary dictionary];
+      information[field] = value;
+      device[@"information"] = information;
+      [self emitSnapshot];
+    }
+    return;
+  }
   if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiCodecUUID]] && characteristic.value.length > 0) {
     const unsigned char *bytes = (const unsigned char *)characteristic.value.bytes;
     self.codec = @(bytes[0]);
@@ -461,6 +484,8 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     @"connected": @([self.connectionState isEqualToString:@"connected"] &&
                     [self.connectedPeripheral.identifier.UUIDString isEqualToString:identifier]),
   } mutableCopy];
+  NSDictionary *information = self.devices[identifier][@"information"];
+  if (information != nil) device[@"information"] = information;
   NSNumber *battery = self.batteries[identifier];
   if (battery != nil) {
     device[@"battery"] = battery;
