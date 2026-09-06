@@ -355,10 +355,24 @@ enum BrainMapLocalRebuilder {
 
   typealias Extract = @Sendable (String) async throws -> KnowledgeGraphExtractResponse
 
+  /// Where a rebuild is, as a fraction the bar can fill to. Reading the
+  /// account is the first tenth, extraction the middle four fifths (one
+  /// batch at a time), saving and reloading the rest.
+  struct Progress: Equatable, Sendable {
+    let label: String
+    let fraction: Double
+
+    static func extracting(completed: Int, of total: Int) -> Progress {
+      Progress(
+        label: "Extracting \(completed) of \(total)…",
+        fraction: 0.1 + 0.8 * Double(completed) / Double(max(total, 1)))
+    }
+  }
+
   static func run(
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     isAuthorizationCurrent: @escaping @Sendable () -> Bool,
-    progress: @MainActor @escaping (String) -> Void,
+    progress: @MainActor @escaping (Progress) -> Void,
     extract: Extract = { text in
       try await APIClient.shared.extractKnowledgeGraph(text: text, includeExisting: false)
     }
@@ -366,7 +380,7 @@ enum BrainMapLocalRebuilder {
     var report = Report()
     var sources: [BrainMapRebuildSource] = []
 
-    await progress("Reading conversations…")
+    await progress(Progress(label: "Reading conversations…", fraction: 0.02))
     var offset = 0
     var conversations: [ServerConversation] = []
     while conversations.count < maxConversations {
@@ -383,7 +397,7 @@ enum BrainMapLocalRebuilder {
       }
     }
 
-    await progress("Reading memories…")
+    await progress(Progress(label: "Reading memories…", fraction: 0.07))
     if let memories = try? await APIClient.shared.getMemories(limit: maxMemories) {
       for memory in memories {
         if let source = BrainMapRebuildSources.memory(id: memory.id, content: memory.content) {
@@ -411,7 +425,7 @@ enum BrainMapLocalRebuilder {
     var extractions: [(batch: [BrainMapRebuildSource], graph: KnowledgeGraphExtractResponse)] = []
     for (index, batch) in batches.enumerated() {
       guard isAuthorizationCurrent() else { throw LocalMutationAuthorizationError.revoked }
-      await progress("Extracting \(index + 1) of \(batches.count)…")
+      await progress(.extracting(completed: index, of: batches.count))
       do {
         let graph = try await extract(BrainMapExtractionBatches.text(for: batch))
         extractions.append((batch, graph))
@@ -422,7 +436,7 @@ enum BrainMapLocalRebuilder {
     }
     guard !extractions.isEmpty else { throw Failure.everyExtractionFailed }
 
-    await progress("Saving…")
+    await progress(Progress(label: "Saving…", fraction: 0.92))
     let assembled = BrainMapLocalGraphAssembly.assemble(extractions)
     report.nodes = assembled.nodes.count
     report.edges = assembled.edges.count

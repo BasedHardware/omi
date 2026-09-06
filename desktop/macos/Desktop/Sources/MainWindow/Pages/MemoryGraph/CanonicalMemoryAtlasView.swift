@@ -146,6 +146,7 @@ struct CanonicalMemoryAtlasPage: View {
           onOpenMemory: onOpenMemory,
           onRebuild: { Task { await viewModel.rebuildCanonicalAtlas() } },
           isRebuilding: viewModel.isRebuilding,
+          rebuildFraction: viewModel.rebuildFraction,
           onLeave: onBack
         )
       }
@@ -193,6 +194,7 @@ struct CanonicalMemoryAtlasTabView: View {
         onOpenMemory: onOpenMemory,
         onRebuild: { Task { await viewModel.rebuildCanonicalAtlas() } },
         isRebuilding: viewModel.isRebuilding,
+        rebuildFraction: viewModel.rebuildFraction,
         externalSearchText: $searchText,
         showsSearchField: showsSearchField,
         onLeave: onLeave
@@ -237,6 +239,8 @@ private struct CanonicalMemoryAtlasSurface: View {
   /// view model to drive it (the inline preview, offscreen export renders).
   let onRebuild: (() -> Void)?
   let isRebuilding: Bool
+  /// How far the running rebuild has got, 0...1.
+  let rebuildFraction: Double
   var externalSearchText: Binding<String>? = nil
   var showsSearchField = true
   /// Where Escape goes once the map itself has nothing left to undo. Absent on
@@ -291,6 +295,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     onOpenMemory: ((String) -> Void)? = nil,
     onRebuild: (() -> Void)? = nil,
     isRebuilding: Bool = false,
+    rebuildFraction: Double = 0,
     externalSearchText: Binding<String>? = nil,
     showsSearchField: Bool = true,
     onLeave: (() -> Void)? = nil,
@@ -312,6 +317,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     self.onOpenMemory = onOpenMemory
     self.onRebuild = onRebuild
     self.isRebuilding = isRebuilding
+    self.rebuildFraction = rebuildFraction
     self.externalSearchText = externalSearchText
     self.showsSearchField = showsSearchField
     self.onLeave = onLeave
@@ -531,16 +537,7 @@ private struct CanonicalMemoryAtlasSurface: View {
             )
             .accessibilityHidden(true)
           }
-
-          // While the map is being rebuilt the old one is still underneath,
-          // faded: what is coming replaces it, so it is not worth reading.
-          if isRebuilding {
-            Ink.surface.opacity(0.72)
-              .allowsHitTesting(true)
-            MemoryAtlasBuildingIndicator()
-          }
         }
-        .animation(OmiMotion.gated(.easeOut(duration: 0.2)), value: isRebuilding)
         .onAppear { viewportSize = proxy.size }
         .onChange(of: proxy.size) { _, newSize in viewportSize = newSize }
         // Zooming back out is leaving the place you were in, pressed or not. Without this the
@@ -691,7 +688,10 @@ private struct CanonicalMemoryAtlasSurface: View {
       // menu: the server graph is rebuilt from everything the account knows
       // (conversations, memories, people, goals), and a stale or thin map has
       // no other recovery path from inside the atlas.
-      if let onRebuild {
+      if isRebuilding {
+        // The bar takes the button's place: one thing in that corner at a time.
+        MemoryAtlasBuildingIndicator(fraction: rebuildFraction)
+      } else if let onRebuild {
         Button(action: onRebuild) {
           HStack(spacing: 6) {
             Image(systemName: "arrow.clockwise")
@@ -705,10 +705,8 @@ private struct CanonicalMemoryAtlasSurface: View {
           .glassChip()
         }
         .buttonStyle(.plain)
-        .disabled(isRebuilding)
-        .opacity(isRebuilding ? 0.45 : 1)
         .help("Rebuild the Brain Map from all of your conversations and memories")
-        .accessibilityLabel(isRebuilding ? "Rebuilding Brain Map" : "Rebuild Brain Map")
+        .accessibilityLabel("Rebuild Brain Map")
         .accessibilityIdentifier("memory_atlas_rebuild")
       }
     }
@@ -1981,42 +1979,34 @@ struct MemoryAtlasGlassMark: View {
   }
 }
 
-/// The one thing on screen while the map is being built: a thin bar that
-/// moves, and the words. No percentage, because a rebuild's length is set by
-/// the server's extraction calls and a number that stalls is worse than none.
+/// Where the Rebuild button was while the map is being built: a thin bar
+/// that fills from empty to full as the rebuild advances, and the words
+/// under it. No number, because the bar already is the number.
 struct MemoryAtlasBuildingIndicator: View {
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @State private var phase: CGFloat = 0
+  let fraction: Double
 
-  private let trackWidth: CGFloat = 160
+  private let trackWidth: CGFloat = 140
   private let trackHeight: CGFloat = 3
 
   var body: some View {
-    VStack(spacing: 12) {
+    VStack(alignment: .trailing, spacing: 6) {
       ZStack(alignment: .leading) {
         Capsule().fill(Ink.primary.opacity(0.10))
         Capsule()
-          .fill(Ink.primary.opacity(0.55))
-          .frame(width: trackWidth * 0.36)
-          // Reduced motion gets a still bar; motion is the only thing this
-          // view has to say and even that is optional.
-          .offset(x: reduceMotion ? trackWidth * 0.32 : phase * trackWidth * 0.64)
+          .fill(Ink.primary.opacity(0.6))
+          .frame(width: trackWidth * min(max(fraction, 0), 1))
       }
       .frame(width: trackWidth, height: trackHeight)
-      .clipShape(Capsule())
+      .animation(OmiMotion.gated(.easeOut(duration: 0.35)), value: fraction)
 
       Text("Building Brain Map")
-        .scaledFont(size: 12, weight: .medium)
+        .scaledFont(size: 11, weight: .medium)
         .foregroundColor(Ink.secondary)
     }
-    .padding(24)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel("Building Brain Map")
+    .accessibilityValue("\(Int((min(max(fraction, 0), 1) * 100).rounded())) percent")
     .accessibilityIdentifier("memory_atlas_building")
-    .onAppear {
-      guard !reduceMotion else { return }
-      withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { phase = 1 }
-    }
   }
 }
 
@@ -2126,7 +2116,8 @@ enum MemoryAtlasExportPreview {
         compact: false,
         evidenceProvider: { _ in [] },
         onRebuild: {},
-        isRebuilding: true
+        isRebuilding: true,
+        rebuildFraction: 0.62
       )
     )
   }

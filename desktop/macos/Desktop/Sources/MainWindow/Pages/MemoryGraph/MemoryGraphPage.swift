@@ -231,6 +231,8 @@ class MemoryGraphViewModel: ObservableObject {
 
   @Published var isLoading = false
   @Published var isRebuilding = false
+  /// How far the running rebuild has got, 0...1, for the bar in the toolbar.
+  @Published private(set) var rebuildFraction: Double = 0
   @Published var isEmpty = true
   @Published var selectedNodeId: String?
   @Published private(set) var searchMatchCount: Int?
@@ -475,6 +477,8 @@ class MemoryGraphViewModel: ObservableObject {
   /// source, so on a full account this is minutes, not seconds.
   static let rebuildPollInterval: TimeInterval = 5
   static let rebuildPollBudget: TimeInterval = 10 * 60
+  /// What a server rebuild usually takes; the bar paces itself against it.
+  static let rebuildTypicalDuration: TimeInterval = 4 * 60
   /// HTTP answers that mean "not on the server, not now": conflict, rate
   /// limit, and a server without the route at all.
   static let serverRebuildRefusals: Set<Int> = [404, 405, 409, 429]
@@ -498,9 +502,11 @@ class MemoryGraphViewModel: ObservableObject {
       return false
     }
     isRebuilding = true
+    rebuildFraction = 0
     defer {
       if generation == sessionGeneration {
         isRebuilding = false
+        rebuildFraction = 0
       }
     }
 
@@ -535,7 +541,14 @@ class MemoryGraphViewModel: ObservableObject {
         // A server that predates the status field answers the old way: the
         // first non-empty graph is taken as the rebuilt one.
         let finished = response.rebuild?.finished(since: requestedAt) ?? Self.hasAtlasContent(response)
-        guard finished else { continue }
+        guard finished else {
+          // The server reports no fraction, so the bar advances with time
+          // against a typical rebuild and waits near the end for the answer.
+          let elapsed = Date().timeIntervalSince(requestedAt)
+          rebuildFraction = 0.05 + 0.85 * min(1, elapsed / Self.rebuildTypicalDuration)
+          continue
+        }
+        rebuildFraction = 1
 
         let ownerName = ownerNameProvider()
         let projection = await Task.detached(priority: .userInitiated) {
@@ -586,8 +599,10 @@ class MemoryGraphViewModel: ObservableObject {
       let report = try await BrainMapLocalRebuilder.run(
         authorizationSnapshot: authorizationSnapshot,
         isAuthorizationCurrent: { RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) },
-        // The surface shows one bar and no narration; the steps go to the log.
-        progress: { text in log("Memory atlas: local rebuild — \(text)") }
+        progress: { [weak self] progress in
+          log("Memory atlas: local rebuild — \(progress.label)")
+          self?.rebuildFraction = progress.fraction
+        }
       )
       log(
         "Memory atlas: local rebuild read \(report.conversations) conversations, \(report.memories) memories, \(report.people) people, \(report.goals) goals in \(report.batches) batches (\(report.failedBatches) failed) -> \(report.nodes) nodes, \(report.edges) edges"
@@ -595,6 +610,7 @@ class MemoryGraphViewModel: ObservableObject {
       guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
         return false
       }
+      rebuildFraction = 0.96
       let response = try await fetchGraphWithLocalRebuild(authorizationSnapshot)
       guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
         return false
@@ -606,6 +622,7 @@ class MemoryGraphViewModel: ObservableObject {
       guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
         return false
       }
+      rebuildFraction = 1
       canonicalAtlasProjection = projection
       graphResponse = response
       isEmpty = !Self.hasAtlasContent(response)
