@@ -195,6 +195,13 @@ def test_jit_projection_declares_optional_plugin_sdk_fallback(contracts_module):
     )
     dependencies = contracts_module.third_party_dependency_modules(unfiltered)
     assert 'omi_plugin_sdk.models.ActionItem' in dependencies
+    filtered = replace(unfiltered, dependency_probe_exclusions=projection.dependency_probe_exclusions)
+    filtered_dependencies = contracts_module.third_party_dependency_modules(filtered)
+    assert not any(
+        dependency == 'omi_plugin_sdk' or dependency.startswith('omi_plugin_sdk.')
+        for dependency in filtered_dependencies
+    )
+    assert 'pydantic' in filtered_dependencies
     assert projection.dependency_probe_exclusions == frozenset({'omi_plugin_sdk'})
 
 
