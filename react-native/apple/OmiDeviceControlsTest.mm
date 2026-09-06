@@ -3,6 +3,29 @@
 
 int main() {
   @autoreleasepool {
+    OmiFindPattern pattern;
+    NSUInteger ticket = pattern.begin();
+    assert(OmiFindPattern::level == 3 && OmiFindPattern::delayMs == 750);
+    for (int index = 0; index < 3; index++) {
+      assert(pattern.send(ticket));
+      assert(!pattern.send(ticket));
+      assert(!pattern.complete());
+      assert(pattern.acknowledge(ticket));
+      assert(!pattern.acknowledge(ticket));
+      assert(pattern.complete() == (index == 2));
+    }
+    assert(!pattern.send(ticket));
+    ticket = pattern.begin();
+    assert(pattern.send(ticket));
+    assert(pattern.acknowledge(ticket));
+    pattern.cancel();
+    assert(!pattern.send(ticket));
+    assert(!pattern.acknowledge(ticket));
+    NSUInteger replacement = pattern.begin();
+    assert(!pattern.send(ticket));
+    assert(pattern.send(replacement));
+    pattern.cancel();
+    assert(!pattern.acknowledge(replacement));
     const uint8_t mask[] = {128, 1, 0, 0};
     NSNumber *features = OmiDeviceFeatures([NSData dataWithBytes:mask length:4]);
     assert(features.unsignedIntValue == 384);
