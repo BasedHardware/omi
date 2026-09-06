@@ -31,8 +31,12 @@ database, or UID allowlist. The image must be a `gcr.io` development image
 pinned by a SHA-256 digest and its `source-sha` label must equal the admitted
 deployed source SHA. Before any credentialed operation, the runner
 installs the pinned `backend/pylock.runtime.toml` environment and runs both
-operator and seed `--help` import checks under the complete QA data-plane
-environment.
+operator imports. Seed imports are deferred until after development
+authentication and load the named `ENCRYPTION_SECRET` from Secret Manager in
+process memory; the secret is never written to the receipt or workflow
+artifact. Index operations use
+`backend/scripts/jit_qa_firestore_index_operator.py` and do not import the seed
+runtime.
 
 Run the actions in this order for a fresh named database:
 
@@ -41,21 +45,27 @@ Run the actions in this order for a fresh named database:
    `redis.googleapis.com` in `based-hardware-dev` and enables it only when the
    service is not already enabled. This operation does not require a `run_id`
    and does not mutate a Redis instance or any Firestore data.
-2. `bootstrap` with confirmation `PREPARE_QA`. This is create-only and fails
+2. `indexes-plan` to inspect the two required named-database composites. If
+   either is `MISSING`, run `indexes-apply` with confirmation
+   `APPLY_JIT_QA_INDEXES`; this is restricted to the canonical
+   `memory_items.updated_at + __name__` history query and the
+   `conversations.discarded + status + created_at + __name__` entity-timeline
+   query.
+3. `bootstrap` with confirmation `PREPARE_QA`. This is create-only and fails
    before writing when any collection already exists.
-3. `prepare` with the chosen lowercase synthetic `run_id` and confirmation
+4. `prepare` with the chosen lowercase synthetic `run_id` and confirmation
    `PREPARE_QA`. This creates only the 101 owned synthetic rows and evidence
    through `backend/scripts/jit_qa_seed_and_verify.py`.
-4. `inspect` to capture the content-free pre-drain state.
-5. `drain-verify` with `DRAIN_VERIFY_QA`. This executes the existing job three
+5. `inspect` to capture the content-free pre-drain state.
+6. `drain-verify` with `DRAIN_VERIFY_QA`. This executes the existing job three
    times using Cloud Run execution overrides, waits for each exact execution,
    parses its aggregate log line, and runs the seed operator's real durable
    100 + 1 + stable-retry verification. The persistent job gate is checked
    again after every execution and must remain `false`.
-6. `rollback` with `ROLLBACK_QA` only after a reviewed successful proof. This
+7. `rollback` with `ROLLBACK_QA` only after a reviewed successful proof. This
    calls the canonical writer-transition rollback helper and checks that all
    synthetic rows/evidence remain present with the same metadata digest.
-7. `rollforward` with `ROLLFORWARD_QA` after rollback. This executes one
+8. `rollforward` with `ROLLFORWARD_QA` after rollback. This executes one
    bounded retry, requires zero migrated rows and one cutover, then verifies
    the canonical ledger fences are restored.
 

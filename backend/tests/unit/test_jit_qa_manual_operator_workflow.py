@@ -43,6 +43,8 @@ def test_manual_operator_uses_existing_seed_contract_without_deploying_resources
     for operation in (
         "bootstrap",
         "ensure-infrastructure-api",
+        "indexes-plan",
+        "indexes-apply",
         "prepare",
         "inspect",
         "drain-verify",
@@ -61,6 +63,8 @@ def test_manual_operator_uses_existing_seed_contract_without_deploying_resources
     assert "ROLLBACK_QA" in text
     assert "ENABLE_QA_API" in text
     assert "redis.googleapis.com" in text
+    assert "jit_qa_firestore_index_operator.py" in text
+    assert "APPLY_JIT_QA_INDEXES" in text
     assert "gcloud run deploy" not in text
     assert "gcloud run jobs deploy" not in text
     assert "gcloud scheduler" not in text
@@ -85,13 +89,14 @@ def test_dependency_setup_executes_pinned_runtime_help_smoke_with_qa_environment
     assert step["env"]["OMI_FIRESTORE_DATA_PLANE_PROJECT"] == "${{ env.QA_PROJECT }}"
     assert step["env"]["FIREBASE_AUTH_PROJECT_ID"] == "based-hardware"
     assert "pylock.runtime.toml" in step["run"]
-    assert "scripts/jit_qa_seed_and_verify.py --help" in step["run"]
+    assert "scripts/jit_qa_seed_and_verify.py --help" not in step["run"]
+    assert "scripts/jit_qa_firestore_index_operator.py --help" in step["run"]
 
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
         (root / "backend" / "scripts").mkdir(parents=True)
         (root / "backend" / "scripts" / "jit_qa_manual_operator.py").write_text("", encoding="utf-8")
-        (root / "backend" / "scripts" / "jit_qa_seed_and_verify.py").write_text("", encoding="utf-8")
+        (root / "backend" / "scripts" / "jit_qa_firestore_index_operator.py").write_text("", encoding="utf-8")
         fake_bin = root / "fake-bin"
         fake_bin.mkdir()
         (fake_bin / "uv").write_text(
@@ -134,7 +139,25 @@ def test_dependency_setup_executes_pinned_runtime_help_smoke_with_qa_environment
         assert result.returncode == 0, result.stderr
         calls = (root / "python-calls").read_text(encoding="utf-8").splitlines()
         assert any("scripts/jit_qa_manual_operator.py --help" in call for call in calls)
-        assert any("scripts/jit_qa_seed_and_verify.py --help" in call for call in calls)
+        assert any("scripts/jit_qa_firestore_index_operator.py --help" in call for call in calls)
+
+
+def test_seed_runtime_help_is_deferred_until_auth_and_secret_manager_resolution():
+    step = _step("Verify seed runtime imports with the named QA secret")
+    command = step["run"]
+    assert "gcloud secrets versions access latest" in command
+    assert "--secret=ENCRYPTION_SECRET" in command
+    assert 'export ENCRYPTION_SECRET="$(' in command
+    assert "jit_qa_seed_and_verify.py --help" in command
+    assert "unset ENCRYPTION_SECRET" in command
+
+    action_step = _step("Run read-only or seed operator action")
+    action_command = action_step["run"]
+    assert "gcloud secrets versions access latest" in action_command
+    assert "jit_qa_seed_and_verify.py" in action_command
+    assert "--secret=ENCRYPTION_SECRET" in action_command
+    assert "indexes-plan" in action_command
+    assert "indexes-apply" in action_command
 
 
 def test_mutating_seed_step_executes_with_source_sha_and_sanitized_artifact_only():
@@ -207,6 +230,7 @@ def test_qa_provision_enables_only_the_fixed_development_redis_api_before_resour
             "set -euo pipefail\n"
             "printf '%s\\n' \"$*\" >> \"$CALLS\"\n"
             "if [[ \"${1:-}\" == services && \"${2:-}\" == list ]]; then\n"
+            "  [[ \" $* \" != *\" --limit=1 \"* ]] || exit 0\n"
             "  [[ $(cat \"$STATE\") == enabled ]] && printf 'redis.googleapis.com\\n'; exit 0\n"
             "fi\n"
             "if [[ \"${1:-}\" == services && \"${2:-}\" == enable ]]; then printf 'enabled\\n' > \"$STATE\"; exit 0; fi\n"
@@ -319,6 +343,20 @@ def test_seed_bash_step_runs_with_fake_cli_and_cannot_lose_source_sha():
             '{"deployed_source_sha":"' + "a" * 40 + '","current_main_sha":"' + "b" * 40 + '"}',
             encoding="utf-8",
         )
+        fake_bin = root / "bin"
+        fake_bin.mkdir()
+        (fake_bin / "gcloud").write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "if [[ ${1:-} == secrets && ${2:-} == versions && ${3:-} == access ]]; then\n"
+            "  printf 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\n'\n"
+            "  exit 0\n"
+            "fi\n"
+            "echo \"unexpected gcloud command: $*\" >&2\n"
+            "exit 2\n",
+            encoding="utf-8",
+        )
+        (fake_bin / "gcloud").chmod(0o755)
         fake_python = root / "fake-python"
         fake_python.write_text(
             "#!/usr/bin/env bash\n"
@@ -332,7 +370,7 @@ def test_seed_bash_step_runs_with_fake_cli_and_cannot_lose_source_sha():
         )
         fake_python.chmod(0o755)
         environment = {
-            "PATH": os.environ["PATH"],
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
             "RUNNER_TEMP": str(runner_temp),
             "QA_PYTHON": str(fake_python),
             "QA_PROJECT": "based-hardware-dev",
