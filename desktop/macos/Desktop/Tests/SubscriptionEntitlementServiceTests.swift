@@ -79,6 +79,17 @@ final class SubscriptionEntitlementServiceTests: XCTestCase {
     XCTAssertEqual(fetches.value, 1)
   }
 
+  func testCachedDecisionFailsOpenUntilSnapshotLands() async throws {
+    let service = SubscriptionEntitlementService(
+      observeAuthChanges: false,
+      fetchSubscription: { try Self.decodeSubscription(plan: "basic") },
+      isByokActive: { false })
+    XCTAssertEqual(service.cachedDecisionForManagedProactivity(), .allowManagedProactivity)
+    let fetched = await service.decisionForManagedProactivity()
+    XCTAssertEqual(fetched, .planGated)
+    XCTAssertEqual(service.cachedDecisionForManagedProactivity(), .planGated)
+  }
+
   func testServiceFetchFailureFailsOpen() async {
     let service = SubscriptionEntitlementService(
       observeAuthChanges: false,

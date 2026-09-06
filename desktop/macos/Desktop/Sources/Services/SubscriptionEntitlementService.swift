@@ -109,6 +109,16 @@ final class SubscriptionEntitlementService: @unchecked Sendable {
     withLock { cached?.response }
   }
 
+  /// Sync peek for call sites that cannot await (recording start). Empty or
+  /// expired cache is unknown plan and fails open.
+  func cachedDecisionForManagedProactivity() -> SubscriptionEntitlementDecision {
+    let info = cachedSnapshot?.subscription
+    return SubscriptionEntitlement.decision(
+      plan: info?.plan,
+      features: info?.features ?? [],
+      isByokActive: isByokActive())
+  }
+
   func decisionForManagedProactivity() async -> SubscriptionEntitlementDecision {
     let info = await snapshot()?.subscription
     return SubscriptionEntitlement.decision(
