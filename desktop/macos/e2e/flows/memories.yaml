@@ -165,8 +165,11 @@ steps:
       result.detail.zoom: "2.2"
 
   - id: S11
-    name: Go into a neighbourhood and read its name
-    do: "Note a territory caption printed on the map (an all-caps name inside an outlined island), then run the enter action below with that caption. Verify the camera frames that island, its coastline is the only one still drawn, and the entities on it are named."
+    name: Go into a neighbourhood
+    # Territories are not painted (`CanonicalMemoryAtlasSurface.drawsTerritories` is off), so there is
+    # no caption to press; the region is entered through the bridge by its caption text. What the
+    # user sees is the camera framing that group's entities and every entity in it named.
+    do: "Run the enter action below. Verify the camera moves to frame a group of entities and that every entity in the framed group is named; no territory outline or caption is painted anywhere on the map."
     bridge.action:
       name: memory_atlas_enter_region
       params:
@@ -177,8 +180,8 @@ steps:
       result.detail.target: "page"
 
   - id: S12
-    name: The island survives selecting something on it
-    do: "With a neighbourhood entered, select an entity standing on it by name. Verify the island keeps its outline, its shading, and its caption while the inspector is open — the frame the user is reading in must not disappear because they picked something inside it."
+    name: Selecting an entity opens the inspector without losing the map
+    do: "With a neighbourhood entered, select an entity by name. Verify its ring grows a step, its connections are drawn strongly while the rest recede, the inspector opens on the right listing its connections and the memories or conversations it came from, and the map underneath stays where it was."
     bridge.action:
       name: memory_atlas_select
       params:
@@ -189,7 +192,7 @@ steps:
 
   - id: S13
     name: Escape backs out one layer per press
-    do: "Press Escape three times with the main window key (not the floating bar). First clears the selection, resets the camera to the whole map, and leaves the island drawn; second leaves the neighbourhood and brings every other coastline back without moving the camera; third closes the Brain Map page back to Memories."
+    do: "Press Escape three times with the main window key (not the floating bar). First clears the selection and resets the camera to the whole map; second ends the neighbourhood mode (only its entity naming changes, since no territory is painted); third closes the Brain Map page back to Memories."
     expect:
       text_visible:
         - Memories
