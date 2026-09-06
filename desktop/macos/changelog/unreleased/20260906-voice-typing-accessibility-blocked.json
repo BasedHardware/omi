@@ -1,0 +1,3 @@
+{
+  "change": "Voice typing now always copies (or pastes) what you dictated instead of occasionally asking Omi to type it for you when Accessibility access hasn't been granted"
+}
