@@ -25,6 +25,7 @@ type StoredSession = {
 };
 
 export type DeviceSessionCreateRequest = {
+  captureId: string;
   deviceId: string;
   deviceName: string | null;
   codec: number;
@@ -55,7 +56,14 @@ export function parseDeviceSessionCreate(
   const item = body as Record<string, unknown>;
   if (
     Object.keys(item).some(
-      (key) => !["deviceId", "deviceName", "codec"].includes(key)
+      (key) => !["captureId", "deviceId", "deviceName", "codec"].includes(key)
+    )
+  )
+    return null;
+  if (
+    typeof item["captureId"] !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+      item["captureId"]
     )
   )
     return null;
@@ -84,6 +92,7 @@ export function parseDeviceSessionCreate(
     return null;
   if ("transcript" in item || "text" in item) return null;
   return {
+    captureId: item["captureId"],
     deviceId: item["deviceId"],
     deviceName:
       typeof item["deviceName"] === "string" ? item["deviceName"] : null,
@@ -146,15 +155,17 @@ export async function openDeviceSession(
   accountId: string,
   request: DeviceSessionCreateRequest,
   now: number
-): Promise<DeviceSession> {
+): Promise<DeviceSession | null> {
+  if (parseDeviceSessionCreate(request) === null) return null;
   const id = crypto.randomUUID();
   const r2Prefix = `device-sessions/${accountId}/${id}`;
   await db
     .prepare(
       `INSERT INTO device_sessions (
         id, account_id, device_id, device_name, codec, state, r2_prefix,
-        byte_count, chunk_count, started_at, ended_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'open', ?, 0, 0, ?, NULL, ?, ?)`
+        byte_count, chunk_count, started_at, ended_at, created_at, updated_at, capture_id
+      ) VALUES (?, ?, ?, ?, ?, 'open', ?, 0, 0, ?, NULL, ?, ?, ?)
+      ON CONFLICT(account_id, capture_id) DO NOTHING`
     )
     .bind(
       id,
@@ -165,11 +176,23 @@ export async function openDeviceSession(
       r2Prefix,
       now,
       now,
-      now
+      now,
+      request.captureId
     )
     .run();
-  const row = await loadSession(db, accountId, id);
+  const row = await db
+    .prepare(
+      "SELECT * FROM device_sessions WHERE account_id = ? AND capture_id = ?"
+    )
+    .bind(accountId, request.captureId)
+    .first<StoredSession>();
   if (row === null) throw new Error("device session insert failed");
+  if (
+    row.device_id !== request.deviceId ||
+    row.device_name !== request.deviceName ||
+    row.codec !== request.codec
+  )
+    return null;
   return toDeviceSession(row);
 }
 

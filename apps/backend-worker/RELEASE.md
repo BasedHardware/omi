@@ -10,7 +10,9 @@ Chat generation sends at most 40 earlier messages and 32 KiB of UTF-8 history to
 
 Account Durable Objects serialize D1 admissions across external database awaits so simultaneous retries return the same generation and parallel requests cannot exceed the chat limit.
 
-Migration `0007_device_audio_chunks.sql` adds the per-packet hash and acknowledgment ledger. Database triggers count each claim and successful upload once, including concurrent retries. Existing packets are not backfilled or overwritten. Ship the indexed client and Worker together; old requests without an index are rejected. The app retries transient upload and completion failures at 500, 1000 and 2000 ms, retains the head packet until acknowledgment, and cancels retries on sign-out/unmount. Its aggregate pending-memory ceiling is 8 MiB. Session opening is not retried because creation has no idempotency key. This is brief interruption recovery, not persistent offline storage.
+Migration `0007_device_audio_chunks.sql` adds the per-packet hash and acknowledgment ledger. Database triggers count each claim and successful upload once, including concurrent retries. Existing packets are not backfilled or overwritten. Ship the indexed client and Worker together; old requests without an index are rejected. The app retries transient upload and completion failures at 500, 1000 and 2000 ms, retains the head packet until acknowledgment, and cancels retries on sign-out/unmount. Its aggregate pending-memory ceiling is 8 MiB. Session opening also retries transient failures with the same native-minted capture ID and immutable metadata. This is brief interruption recovery, not persistent offline storage.
+
+Migration `0008_device_capture_id.sql` adds a nullable capture ID and account-scoped unique index. Existing rows retain NULL capture IDs; no historical identity is fabricated. Updated clients require `createRecordingId` on the native backend bridge (or browser cryptographic UUID support). Creation requires the capture ID; coordinate the client and Worker release. Replays return the same server session, and changed device metadata returns 409.
 
 ## Recording processing and canonical services
 
@@ -50,7 +52,7 @@ The checked-in `account_id` and `R2_ACCOUNT_ID` must identify that same account.
 
    ```json
    {
-     "schema_version": "0007_device_audio_chunks.sql",
+     "schema_version": "0008_device_capture_id.sql",
      "migrations": [
        {
          "name": "0001_tasks.sql",
@@ -79,6 +81,10 @@ The checked-in `account_id` and `R2_ACCOUNT_ID` must identify that same account.
        {
          "name": "0007_device_audio_chunks.sql",
          "sha256": "57bae0f17f4ee8bdfcbd92dbf4daa713c83ea6850280b06d5cb25cfa8426060c"
+       },
+       {
+         "name": "0008_device_capture_id.sql",
+         "sha256": "4bedaeb4a22ac0a9e08fdc14bce9030135a10ccf4ec8746403a9fa0d748ef918"
        }
      ],
      "evidence_id": "ops-20260818-1"

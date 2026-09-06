@@ -103,20 +103,42 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 export async function openDeviceSession(
   backend: OmiBackend,
-  input: {deviceId: string; deviceName?: string; codec: number},
+  input: {
+    captureId: string;
+    deviceId: string;
+    deviceName?: string;
+    codec: number;
+  },
 ): Promise<DeviceSessionRecord> {
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+      input.captureId,
+    )
+  ) {
+    throw new Error('Invalid recording identity');
+  }
   const response = await backend.request({
-    id: `device-session-open-${input.deviceId}`,
+    id: `device-session-open-${input.captureId}`,
     method: 'POST',
     path: '/v1/device-sessions',
     body: JSON.stringify({
+      captureId: input.captureId,
       deviceId: input.deviceId,
       ...(input.deviceName !== undefined ? {deviceName: input.deviceName} : {}),
       codec: input.codec,
     }),
   });
   rejectIfUnusable(response);
-  return parseSession(parseObject(response.body).session);
+  const session = parseSession(parseObject(response.body).session);
+  if (
+    session.deviceId !== input.deviceId ||
+    session.codec !== input.codec ||
+    session.deviceName !== (input.deviceName ?? null) ||
+    session.state === 'failed'
+  ) {
+    throw new Error('Backend did not acknowledge the recording identity');
+  }
+  return session;
 }
 
 export async function appendDeviceSessionAudio(

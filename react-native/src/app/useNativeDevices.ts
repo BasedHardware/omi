@@ -61,6 +61,7 @@ export const DEVICE_UPLOAD_LIMITS = {
 } as const;
 
 type CaptureSession = {
+  captureId: string | null;
   id: string | null;
   deviceId: string;
   codec: number;
@@ -141,15 +142,38 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
             const device = nativeSnapshotRef.current?.devices.find(
               item => item.id === capture.deviceId,
             );
-            const session = await openDeviceSession(backend, {
-              deviceId: capture.deviceId,
-              deviceName: device?.name,
-              codec: capture.codec,
+            if (capture.captureId === null) {
+              if (backend.createRecordingId === undefined) {
+                throw new Error('Native recording identity is unavailable');
+              }
+              const captureId = await backend.createRecordingId();
+              if (!current() || capture.failed) {
+                return;
+              }
+              if (
+                !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+                  captureId,
+                )
+              ) {
+                throw new Error('Native recording identity is invalid');
+              }
+              capture.captureId = captureId;
+            }
+            const captureId = capture.captureId;
+            await retry(async () => {
+              const session = await openDeviceSession(backend, {
+                captureId,
+                deviceId: capture.deviceId,
+                deviceName: device?.name,
+                codec: capture.codec,
+              });
+              if (current() && !capture.failed) {
+                capture.id = session.id;
+              }
             });
-            if (!current()) {
+            if (!current() || capture.failed || capture.id === null) {
               return;
             }
-            capture.id = session.id;
           }
           while (current() && !capture.failed && capture.pending.length > 0) {
             const chunk = capture.pending[0]!;
@@ -239,6 +263,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       let capture = captureRef.current;
       if (capture === null) {
         capture = {
+          captureId: null,
           id: null,
           deviceId: event.deviceId,
           codec: event.codec,
