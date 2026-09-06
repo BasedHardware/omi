@@ -231,9 +231,6 @@ class MemoryGraphViewModel: ObservableObject {
 
   @Published var isLoading = false
   @Published var isRebuilding = false
-  /// What the rebuild is doing right now, for the button. `nil` when idle or
-  /// when the server is doing the work and there is nothing to narrate.
-  @Published private(set) var rebuildProgress: String?
   @Published var isEmpty = true
   @Published var selectedNodeId: String?
   @Published private(set) var searchMatchCount: Int?
@@ -585,14 +582,12 @@ class MemoryGraphViewModel: ObservableObject {
     generation: Int,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async -> Bool {
-    defer {
-      if generation == sessionGeneration { rebuildProgress = nil }
-    }
     do {
       let report = try await BrainMapLocalRebuilder.run(
         authorizationSnapshot: authorizationSnapshot,
         isAuthorizationCurrent: { RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) },
-        progress: { [weak self] text in self?.rebuildProgress = text }
+        // The surface shows one bar and no narration; the steps go to the log.
+        progress: { text in log("Memory atlas: local rebuild — \(text)") }
       )
       log(
         "Memory atlas: local rebuild read \(report.conversations) conversations, \(report.memories) memories, \(report.people) people, \(report.goals) goals in \(report.batches) batches (\(report.failedBatches) failed) -> \(report.nodes) nodes, \(report.edges) edges"
@@ -600,7 +595,6 @@ class MemoryGraphViewModel: ObservableObject {
       guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
         return false
       }
-      rebuildProgress = "Loading…"
       let response = try await fetchGraphWithLocalRebuild(authorizationSnapshot)
       guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
         return false

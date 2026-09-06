@@ -146,7 +146,6 @@ struct CanonicalMemoryAtlasPage: View {
           onOpenMemory: onOpenMemory,
           onRebuild: { Task { await viewModel.rebuildCanonicalAtlas() } },
           isRebuilding: viewModel.isRebuilding,
-          rebuildProgress: viewModel.rebuildProgress,
           onLeave: onBack
         )
       }
@@ -194,7 +193,6 @@ struct CanonicalMemoryAtlasTabView: View {
         onOpenMemory: onOpenMemory,
         onRebuild: { Task { await viewModel.rebuildCanonicalAtlas() } },
         isRebuilding: viewModel.isRebuilding,
-        rebuildProgress: viewModel.rebuildProgress,
         externalSearchText: $searchText,
         showsSearchField: showsSearchField,
         onLeave: onLeave
@@ -239,8 +237,6 @@ private struct CanonicalMemoryAtlasSurface: View {
   /// view model to drive it (the inline preview, offscreen export renders).
   let onRebuild: (() -> Void)?
   let isRebuilding: Bool
-  /// What a running rebuild is doing, when it has something to say.
-  let rebuildProgress: String?
   var externalSearchText: Binding<String>? = nil
   var showsSearchField = true
   /// Where Escape goes once the map itself has nothing left to undo. Absent on
@@ -295,7 +291,6 @@ private struct CanonicalMemoryAtlasSurface: View {
     onOpenMemory: ((String) -> Void)? = nil,
     onRebuild: (() -> Void)? = nil,
     isRebuilding: Bool = false,
-    rebuildProgress: String? = nil,
     externalSearchText: Binding<String>? = nil,
     showsSearchField: Bool = true,
     onLeave: (() -> Void)? = nil,
@@ -317,7 +312,6 @@ private struct CanonicalMemoryAtlasSurface: View {
     self.onOpenMemory = onOpenMemory
     self.onRebuild = onRebuild
     self.isRebuilding = isRebuilding
-    self.rebuildProgress = rebuildProgress
     self.externalSearchText = externalSearchText
     self.showsSearchField = showsSearchField
     self.onLeave = onLeave
@@ -537,7 +531,16 @@ private struct CanonicalMemoryAtlasSurface: View {
             )
             .accessibilityHidden(true)
           }
+
+          // While the map is being rebuilt the old one is still underneath,
+          // faded: what is coming replaces it, so it is not worth reading.
+          if isRebuilding {
+            Ink.surface.opacity(0.72)
+              .allowsHitTesting(true)
+            MemoryAtlasBuildingIndicator()
+          }
         }
+        .animation(OmiMotion.gated(.easeOut(duration: 0.2)), value: isRebuilding)
         .onAppear { viewportSize = proxy.size }
         .onChange(of: proxy.size) { _, newSize in viewportSize = newSize }
         // Zooming back out is leaving the place you were in, pressed or not. Without this the
@@ -691,15 +694,9 @@ private struct CanonicalMemoryAtlasSurface: View {
       if let onRebuild {
         Button(action: onRebuild) {
           HStack(spacing: 6) {
-            if isRebuilding {
-              ProgressView()
-                .controlSize(.mini)
-                .tint(Ink.secondary)
-            } else {
-              Image(systemName: "arrow.clockwise")
-                .scaledFont(size: 11, weight: .semibold)
-            }
-            Text(isRebuilding ? (rebuildProgress ?? "Rebuilding…") : "Rebuild")
+            Image(systemName: "arrow.clockwise")
+              .scaledFont(size: 11, weight: .semibold)
+            Text("Rebuild")
               .scaledFont(size: 12, weight: .semibold)
           }
           .foregroundColor(Ink.secondary)
@@ -709,6 +706,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         }
         .buttonStyle(.plain)
         .disabled(isRebuilding)
+        .opacity(isRebuilding ? 0.45 : 1)
         .help("Rebuild the Brain Map from all of your conversations and memories")
         .accessibilityLabel(isRebuilding ? "Rebuilding Brain Map" : "Rebuild Brain Map")
         .accessibilityIdentifier("memory_atlas_rebuild")
@@ -1983,6 +1981,45 @@ struct MemoryAtlasGlassMark: View {
   }
 }
 
+/// The one thing on screen while the map is being built: a thin bar that
+/// moves, and the words. No percentage, because a rebuild's length is set by
+/// the server's extraction calls and a number that stalls is worse than none.
+struct MemoryAtlasBuildingIndicator: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var phase: CGFloat = 0
+
+  private let trackWidth: CGFloat = 160
+  private let trackHeight: CGFloat = 3
+
+  var body: some View {
+    VStack(spacing: 12) {
+      ZStack(alignment: .leading) {
+        Capsule().fill(Ink.primary.opacity(0.10))
+        Capsule()
+          .fill(Ink.primary.opacity(0.55))
+          .frame(width: trackWidth * 0.36)
+          // Reduced motion gets a still bar; motion is the only thing this
+          // view has to say and even that is optional.
+          .offset(x: reduceMotion ? trackWidth * 0.32 : phase * trackWidth * 0.64)
+      }
+      .frame(width: trackWidth, height: trackHeight)
+      .clipShape(Capsule())
+
+      Text("Building Brain Map")
+        .scaledFont(size: 12, weight: .medium)
+        .foregroundColor(Ink.secondary)
+    }
+    .padding(24)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Building Brain Map")
+    .accessibilityIdentifier("memory_atlas_building")
+    .onAppear {
+      guard !reduceMotion else { return }
+      withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { phase = 1 }
+    }
+  }
+}
+
 /// Deterministic, data-backed atlas for offscreen `ViewExporter` renders. The
 /// live atlas needs a signed-in account and a server graph, so QA has no way to
 /// visually regression-test the map without this fixed sample. Same file as
@@ -2077,6 +2114,19 @@ enum MemoryAtlasExportPreview {
         compact: false,
         evidenceProvider: { _ in [] },
         onRebuild: {}
+      )
+    )
+  }
+
+  /// The map mid-rebuild: the old map faded under the building indicator.
+  static func buildingSurface() -> AnyView {
+    hosted(
+      CanonicalMemoryAtlasSurface(
+        graph: singleTypeGraph(),
+        compact: false,
+        evidenceProvider: { _ in [] },
+        onRebuild: {},
+        isRebuilding: true
       )
     )
   }
