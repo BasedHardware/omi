@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "build": "bun run --cwd packages/contracts/ratified build && bun x tsc -b && bun run --cwd pwa build",
-    "check": "bun run boundaries && bun run format:check && bun run lint && bun run typecheck && bun run test && bun run native:test",
+    "check": "bun run boundaries && bun run format:check && bun run lint && bun run typecheck && bun run test && bun run native:test && bun run platform:check",
     "boundaries": "bun scripts/check-boundaries.ts",
     "format": "bun x prettier --write 'apps/**/*.{json,ts}' 'pwa/**/*.{html,json,js,ts,css}' 'react-native/*.{js,json,ts,tsx}' 'react-native/src/**/*.{ts,tsx}' 'react-native/__tests__/**/*.{ts,tsx}' 'scripts/**/*.ts'",
     "format:check": "bun x prettier --check 'apps/**/*.{json,ts}' 'pwa/**/*.{html,json,js,ts,css}' '!pwa/dist/**' 'react-native/*.{js,json,ts,tsx}' 'react-native/src/**/*.{ts,tsx}' 'react-native/__tests__/**/*.{ts,tsx}' 'scripts/**/*.ts'",
@@ -28,7 +28,8 @@
     "setup": "scripts/setup",
     "test": "bun run --cwd react-native test -- --runInBand && bun run --cwd apps/backend-worker test && bun run --cwd packages/contracts/ratified verify && bun run --cwd pwa test",
     "typecheck": "bun run build && bun run --cwd react-native typecheck && bun run --cwd apps/backend-worker typecheck && bun run --cwd pwa typecheck",
-    "push:v5": "scripts/push-v5"
+    "push:v5": "scripts/push-v5",
+    "platform:check": "bun run --cwd backends/example-platform check:deployed"
   },
   "devDependencies": {
     "prettier": "2.8.8",

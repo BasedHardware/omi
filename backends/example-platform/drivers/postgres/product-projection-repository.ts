@@ -524,3 +524,36 @@ export const createPostgresProductProjectionWriteRepository = (
 ): ProductProjectionWriteRepository => defineProductProjectionWriteRepository(
   (context, request) => append(options.pool, context, request, options.observability ?? {}),
 );
+
+export function createPostgresRenderResponseRepository(pool: PostgresTransactionPool) {
+  const access = async (context: AuthorizedLedgerWriteContext, key: string, response?: string): Promise<string | null> => {
+    if (context.capability !== "memories.read" || !/^[a-f0-9]{64}$/.test(key)
+      || (response !== undefined && Buffer.byteLength(response) > 262144)) throw new TypeError("invalid_render_cache_request");
+    return withAuthorizedSerializableConnectionTransaction(pool, context, async ({ connection }) => {
+      if (response !== undefined) {
+        await connection.execute({
+          name: "render_response.publish",
+          text: `INSERT INTO omi_memory.memory_render_responses (account_id, account_epoch, request_digest, response_json)
+                 VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+          values: [context.account_id, context.account_epoch, key, response],
+        });
+      }
+      const rows = await connection.query<{ response_json: string }>({
+        name: "render_response.read",
+        text: `SELECT response_json FROM omi_memory.memory_render_responses
+               WHERE account_id = $1 AND account_epoch = $2 AND request_digest = $3`,
+        values: [context.account_id, context.account_epoch, key],
+      });
+      if (rows.length > 1 || (rows[0] && typeof rows[0].response_json !== "string")) throw new Error("invalid_render_cache_response");
+      return rows[0]?.response_json ?? null;
+    });
+  };
+  return Object.freeze({
+    read: (context: AuthorizedLedgerWriteContext, key: string) => access(context, key),
+    publish: async (context: AuthorizedLedgerWriteContext, key: string, response: string) => {
+      const winner = await access(context, key, response);
+      if (winner === null) throw new Error("render_cache_publish_failed");
+      return winner;
+    },
+  });
+}

@@ -1,12 +1,16 @@
 # Local PostgreSQL qualification
 
 This workflow provides a repeatable PostgreSQL 18.4 environment for memory-system
-development. It uses synthetic data only. Docker CLI and Colima are managed by
-`machine-config`; this repository owns the digest-pinned database and runtime controls.
+development. It uses synthetic data only and accepts an existing Docker daemon on
+macOS or Linux. This repository owns the digest-pinned database and runtime controls.
+Test credentials and per-worktree state use the operating system temporary directory
+under `omi-postgres-tests`; no particular mounted volume is required. Preserved state
+is temporary and can be removed by operating system cleanup.
 
-## One-time Mac prerequisite
+## Optional managed Mac runtime
 
-From `/Users/dazheng/machine-config`:
+If no Docker daemon is available and you use the existing `machine-config` installation,
+run from that installation:
 
 ```sh
 ./macctl plan

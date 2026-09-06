@@ -12,6 +12,21 @@ const request = Object.freeze({
 });
 
 describe("PostgreSQL Firebase memory route port", () => {
+  test("preserves the request cancellation signal into the runtime", async () => {
+    const controller = new AbortController();
+    let signal: AbortSignal | undefined;
+    const port = createPostgresFirebaseMemoryRouteReadPort({
+      authenticate: async () => true,
+      read: async (_token, _now, _request, suppliedSignal) => {
+        signal = suppliedSignal;
+        return { kind: "unavailable" };
+      },
+    });
+    await port.read({ ...request, signal: controller.signal });
+    expect(signal).toBe(controller.signal);
+    controller.abort();
+    expect(signal?.aborted).toBe(true);
+  });
   for (const [runtimeOutcome, routeOutcome] of [
     [{ kind: "denied", outcome: "authentication" }, { kind: "authentication_denied" }],
     [{ kind: "denied", outcome: "authorization" }, { kind: "authorization_denied" }],

@@ -232,6 +232,7 @@ export const registerMemoryRoutes = (app: Hono, deps: MemoryRouteDependencies): 
   const handler = async (context: {
     req: {
       url: string;
+      raw?: Request;
       header: (name: string) => string | undefined;
       query: (name: string) => string | undefined;
     };
@@ -282,6 +283,7 @@ export const registerMemoryRoutes = (app: Hono, deps: MemoryRouteDependencies): 
         bearer_token: token,
         now_epoch_seconds: now,
         request: Object.freeze({ limit: page.limit, cursor: page.cursor }),
+        ...(context.req.raw ? { signal: context.req.raw.signal } : {}),
       }));
       if (outcome === null) {
         recordDomainRead("failed");
