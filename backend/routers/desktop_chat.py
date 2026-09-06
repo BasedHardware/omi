@@ -764,9 +764,7 @@ async def _install_oauth_credential(uid: str, provider: str) -> None:
     try:
         credential = await run_blocking(oauth_executor, get_llm_oauth_credential, uid, provider)
     except LLMOAuthError as error:
-        raise HTTPException(
-            status_code=503, detail='LLM OAuth credential is temporarily unavailable'
-        ) from error
+        raise HTTPException(status_code=503, detail='LLM OAuth credential is temporarily unavailable') from error
     if credential is None:
         raise HTTPException(
             status_code=403, detail='LLM OAuth credential is unavailable; reconnect the provider in Settings'
@@ -921,9 +919,7 @@ async def _stream_oauth(
                 index = tool_indexes.get(call_id)
                 if index is None:
                     index = (
-                        raw_index
-                        if isinstance(raw_index, int) and not isinstance(raw_index, bool)
-                        else next_tool_index
+                        raw_index if isinstance(raw_index, int) and not isinstance(raw_index, bool) else next_tool_index
                     )
                     tool_indexes[call_id] = index
                     next_tool_index = max(next_tool_index, index + 1)
@@ -1975,9 +1971,7 @@ async def _chat_completions_unobserved(
         if oauth_provider is not None:
             await _install_oauth_credential(uid, oauth_provider)
         gateway_mode = (
-            should_route_chat_agent_through_gateway()
-            and _uses_managed_chat_agent(body)
-            and oauth_provider is None
+            should_route_chat_agent_through_gateway() and _uses_managed_chat_agent(body) and oauth_provider is None
         )
         if jit_headers and not gateway_mode:
             raise RuntimeError('JIT qualification requires the managed gateway')
