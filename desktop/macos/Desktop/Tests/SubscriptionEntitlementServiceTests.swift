@@ -70,10 +70,12 @@ final class SubscriptionEntitlementServiceTests: XCTestCase {
         return try Self.decodeSubscription(plan: "basic")
       },
       isByokActive: { byok.value })
-    XCTAssertEqual(await service.decisionForManagedProactivity(), .planGated)
+    let first = await service.decisionForManagedProactivity()
+    XCTAssertEqual(first, .planGated)
     XCTAssertEqual(fetches.value, 1)
     byok.value = true
-    XCTAssertEqual(await service.decisionForManagedProactivity(), .allowManagedProactivity)
+    let second = await service.decisionForManagedProactivity()
+    XCTAssertEqual(second, .allowManagedProactivity)
     XCTAssertEqual(fetches.value, 1)
   }
 
@@ -82,7 +84,8 @@ final class SubscriptionEntitlementServiceTests: XCTestCase {
       observeAuthChanges: false,
       fetchSubscription: { throw URLError(.notConnectedToInternet) },
       isByokActive: { false })
-    XCTAssertEqual(await service.decisionForManagedProactivity(), .allowManagedProactivity)
+    let decision = await service.decisionForManagedProactivity()
+    XCTAssertEqual(decision, .allowManagedProactivity)
   }
 
   func testAuthChangeInvalidatesCache() async throws {
@@ -94,9 +97,11 @@ final class SubscriptionEntitlementServiceTests: XCTestCase {
         return try Self.decodeSubscription(plan: "plus")
       },
       isByokActive: { false })
-    XCTAssertEqual(await service.decisionForManagedProactivity(), .allowManagedProactivity)
+    let before = await service.decisionForManagedProactivity()
+    XCTAssertEqual(before, .allowManagedProactivity)
     NotificationCenter.default.post(name: .userDidSignOut, object: nil)
-    XCTAssertEqual(await service.decisionForManagedProactivity(), .allowManagedProactivity)
+    let after = await service.decisionForManagedProactivity()
+    XCTAssertEqual(after, .allowManagedProactivity)
     XCTAssertEqual(fetches.value, 2)
   }
 
