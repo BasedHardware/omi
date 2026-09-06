@@ -588,25 +588,25 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                                           children: [
                                             if (provider.text.isNotEmpty)
                                               Padding(
-                                                padding: const EdgeInsets.fromLTRB(32, 0, 32, 36),
-                                                // A fixed three-line area (18px text at 1.4 line height)
-                                                // that fills from the bottom; the widget itself keeps
-                                                // only the last three whole lines, so nothing is ever
-                                                // clipped or scrolled.
-                                                child: ClipRect(
-                                                  child: SizedBox(
-                                                    height: 3 * 18 * 1.4,
-                                                    child: Align(
-                                                      alignment: Alignment.bottomCenter,
-                                                      child: FadeInWordsText(
-                                                        text: provider.text,
-                                                        visibleLines: 3,
-                                                        style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontSize: 18,
-                                                          fontWeight: FontWeight.w400,
-                                                          height: 1.4,
-                                                        ),
+                                                padding: const EdgeInsets.fromLTRB(32, 0, 32, 48),
+                                                // The widget keeps only the last three whole lines, so
+                                                // the area is never clipped: it is at least three lines
+                                                // tall (so the card below stays put) and grows if the
+                                                // rendered lines run taller than that estimate.
+                                                child: ConstrainedBox(
+                                                  constraints: BoxConstraints(
+                                                    minHeight: MediaQuery.textScalerOf(context).scale(18) * 1.4 * 3,
+                                                  ),
+                                                  child: Align(
+                                                    alignment: Alignment.bottomCenter,
+                                                    child: FadeInWordsText(
+                                                      text: provider.text,
+                                                      visibleLines: 3,
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 18,
+                                                        fontWeight: FontWeight.w400,
+                                                        height: 1.4,
                                                       ),
                                                     ),
                                                   ),

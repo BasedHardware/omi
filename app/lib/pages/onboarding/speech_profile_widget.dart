@@ -518,29 +518,29 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                           // exactly (fontSize 20, full-white, taller viewport), hidden
                           // entirely until the first words arrive.
                           if (provider.text.isNotEmpty) ...[
-                            // A fixed three-line area (20px text at 1.5 line height)
-                            // that fills from the bottom; the widget itself keeps only
-                            // the last three whole lines, so nothing is clipped.
-                            ClipRect(
-                              child: SizedBox(
-                                height: 3 * 20 * 1.5,
-                                child: Align(
-                                  alignment: Alignment.bottomCenter,
-                                  child: FadeInWordsText(
-                                    text: provider.text,
-                                    visibleLines: 3,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w400,
-                                      height: 1.5,
-                                      fontFamily: 'Manrope',
-                                    ),
+                            // The widget keeps only the last three whole lines, so the
+                            // area is never clipped: at least three lines tall (so the
+                            // card below stays put), growing if rendered lines run taller.
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minHeight: MediaQuery.textScalerOf(context).scale(20) * 1.5 * 3,
+                              ),
+                              child: Align(
+                                alignment: Alignment.bottomCenter,
+                                child: FadeInWordsText(
+                                  text: provider.text,
+                                  visibleLines: 3,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w400,
+                                    height: 1.5,
+                                    fontFamily: 'Manrope',
                                   ),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 28),
+                            const SizedBox(height: 36),
                           ],
 
                           const SpeechTopicsCard(),
