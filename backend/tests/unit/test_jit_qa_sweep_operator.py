@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from llm_gateway.gateway.config_loader import load_gateway_config
+
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = BACKEND_ROOT / "scripts" / "jit_qa_sweep_operator.py"
 
@@ -249,8 +251,6 @@ def test_consumer_requires_joined_current_chat_backed_output():
 
 
 def test_qa_memories_route_is_single_attempt_without_fallback():
-    from llm_gateway.gateway.config_loader import load_gateway_config
-
     config = load_gateway_config(prod_mode=True)
     lane = config.lanes["omi:auto:memories"]
     route = config.route_artifacts[lane.active_route]

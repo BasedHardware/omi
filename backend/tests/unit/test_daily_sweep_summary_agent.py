@@ -72,6 +72,37 @@ _TRANSCRIPTS = {
 }
 
 
+@pytest.fixture(scope="module")
+def _qa_prompt_value():
+    """Build the real prompt during fixture setup, outside call-phase timing."""
+
+    parser = memories_module.PydanticOutputParser(pydantic_object=memories_module.DailySweepAgentPassOutput)
+    return daily_sweep_summary_agent_prompt.invoke(
+        {
+            "user_name": "Dave",
+            "current_date": "2026-09-05",
+            "memories_str": "(none)",
+            "summaries_block": "[conversation-1] Dave chose Tuesday for gym training",
+            "folder_task": "Folder task: none. folder_assignments must be empty.",
+            "max_candidates": 1,
+            "max_transcript_fetches": 0,
+            "max_memory_lookups": 0,
+            "format_instructions": parser.get_format_instructions(),
+        }
+    )
+
+
+@pytest.fixture(scope="module")
+def _qa_gateway_model():
+    return GatewayContextChatOpenAI(
+        model="omi:auto:memories",
+        api_key="test-only",
+        base_url="https://qa.invalid/v1",
+        max_retries=0,
+        omi_gateway_feature="memories",
+    )
+
+
 def test_single_pass_when_no_transcript_requested():
     llm = _ScriptedLlm(
         [
@@ -228,30 +259,9 @@ def test_qa_budget_is_sent_to_gateway_and_accounting_stays_outside_model_schema(
     assert request["usage_tokens"] == {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120}
 
 
-def test_gateway_payload_has_server_owner_and_full_qa_budget_envelope():
+def test_gateway_payload_has_server_owner_and_full_qa_budget_envelope(_qa_prompt_value, _qa_gateway_model):
     uid = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
     request_id = str(uuid4())
-    parser = memories_module.PydanticOutputParser(pydantic_object=memories_module.DailySweepAgentPassOutput)
-    prompt_value = daily_sweep_summary_agent_prompt.invoke(
-        {
-            "user_name": "Dave",
-            "current_date": "2026-09-05",
-            "memories_str": "(none)",
-            "summaries_block": "[conversation-1] Dave chose Tuesday for gym training",
-            "folder_task": "Folder task: none. folder_assignments must be empty.",
-            "max_candidates": 1,
-            "max_transcript_fetches": 0,
-            "max_memory_lookups": 0,
-            "format_instructions": parser.get_format_instructions(),
-        }
-    )
-    model = GatewayContextChatOpenAI(
-        model="omi:auto:memories",
-        api_key="test-only",
-        base_url="https://qa.invalid/v1",
-        max_retries=0,
-        omi_gateway_feature="memories",
-    )
     headers = {
         "x-omi-request-id": request_id,
         "x-omi-jit-contract-version": QA_SWEEP_JIT_CONTRACT_VERSION,
@@ -263,7 +273,9 @@ def test_gateway_payload_has_server_owner_and_full_qa_budget_envelope():
     }
 
     with track_usage(uid, Features.MEMORIES):
-        payload = model._get_request_payload(prompt_value, max_completion_tokens=256, extra_headers=headers)
+        payload = _qa_gateway_model._get_request_payload(
+            _qa_prompt_value, max_completion_tokens=256, extra_headers=headers
+        )
 
     payload_headers = payload["extra_headers"]
     assert payload_headers["X-Omi-User-Uid"] == uid
@@ -280,7 +292,7 @@ def test_gateway_payload_has_server_owner_and_full_qa_budget_envelope():
     # gateway's input preflight counts the serialized JSON body itself.
     request_body = {key: value for key, value in payload.items() if key != "extra_headers"}
     serialized_request_body = json.dumps(request_body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    assert len(serialized_request_body) > len(prompt_value.to_string().encode("utf-8"))
+    assert len(serialized_request_body) > len(_qa_prompt_value.to_string().encode("utf-8"))
     assert 0 < len(serialized_request_body) <= QA_SWEEP_MAX_INPUT_TOKENS
 
 
