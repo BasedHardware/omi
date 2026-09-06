@@ -2,7 +2,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {omiAuth, subscribeOmiBackendSessionInvalidated} from '../omiNative';
 
 export function useOnboarding(
-  macDesktop: boolean,
+  nativeSessionRequired: boolean,
   refreshReads: (
     initial: boolean,
     options?: {ignoreEnabled?: boolean},
@@ -11,7 +11,7 @@ export function useOnboarding(
   const [signingIn, setSigningIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [onboardingRequired, setOnboardingRequired] = useState<boolean | null>(
-    macDesktop ? null : false,
+    nativeSessionRequired ? null : false,
   );
   const authOperationRef = useRef(0);
 
@@ -19,7 +19,7 @@ export function useOnboarding(
     let active = true;
     const operation = authOperationRef.current;
     const auth = omiAuth;
-    if (!macDesktop) {
+    if (!nativeSessionRequired) {
       setOnboardingRequired(false);
       return () => {
         active = false;
@@ -53,7 +53,7 @@ export function useOnboarding(
     return () => {
       active = false;
     };
-  }, [macDesktop]);
+  }, [nativeSessionRequired]);
 
   // Every sign-in path — first-run Welcome, Settings, Connectors, Home
   // recovery — is the same native OmiAuth session. A successful signIn always
@@ -115,12 +115,16 @@ export function useOnboarding(
     } catch {
       hasSession = false;
     }
-    if (operation === authOperationRef.current && macDesktop && !hasSession) {
+    if (
+      operation === authOperationRef.current &&
+      nativeSessionRequired &&
+      !hasSession
+    ) {
       setOnboardingRequired(true);
     }
     // No refreshReads here: a signed-out Mac must not fire cloud reads, and
     // a late response must not overwrite the next session's fresh load.
-  }, [macDesktop]);
+  }, [nativeSessionRequired]);
 
   // A ready session can die mid-run (native refresh cleared the keychain on a
   // definitive failure). Chat/read 401s and unconfigured credentials call
@@ -128,7 +132,7 @@ export function useOnboarding(
   // same Welcome as sign-out instead of keeping signed-in chrome up.
   const revalidateSession = useCallback(async () => {
     const auth = omiAuth;
-    if (!macDesktop || auth === undefined || auth === null) {
+    if (!nativeSessionRequired || auth === undefined || auth === null) {
       return;
     }
     const operation = authOperationRef.current;
@@ -141,16 +145,16 @@ export function useOnboarding(
     if (operation === authOperationRef.current && !hasSession) {
       setOnboardingRequired(true);
     }
-  }, [macDesktop]);
+  }, [nativeSessionRequired]);
 
   useEffect(() => {
-    if (!macDesktop) {
+    if (!nativeSessionRequired) {
       return;
     }
     return subscribeOmiBackendSessionInvalidated(() => {
       revalidateSession().catch(() => undefined);
     });
-  }, [macDesktop, revalidateSession]);
+  }, [nativeSessionRequired, revalidateSession]);
 
   return {
     authError,
