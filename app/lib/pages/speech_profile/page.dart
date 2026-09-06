@@ -48,9 +48,23 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
   bool _allDoneVisible = false;
   Timer? _allDoneTimer;
 
+  /// Snapshot of the recording view taken the moment recording ends, so every
+  /// part of it (last words, card, bar, mic disclaimer) holds still and later
+  /// fades out together instead of pieces changing on their own.
+  String? _frozenText;
+  bool? _frozenNoDevice;
+
   /// Keeps the finished recording on screen for [allDoneHold] once the profile
   /// is saved, then reveals All done; resets when a new recording starts.
   void _syncAllDone(SpeechProfileProvider provider) {
+    final ended = provider.uploadingProfile || provider.profileCompleted;
+    if (ended && _frozenText == null) {
+      _frozenText = provider.text;
+      _frozenNoDevice = provider.device == null;
+    } else if (!ended && _frozenText != null) {
+      _frozenText = null;
+      _frozenNoDevice = null;
+    }
     if (provider.profileCompleted) {
       if (_allDoneVisible || _allDoneTimer != null) return;
       _allDoneTimer = Timer(allDoneHold, () {
@@ -137,7 +151,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
 
   /// The last three lines the user said while recording. The 2 s grace before
   /// finalizing keeps the final sentence visible before this fades out.
-  Widget _transcript(SpeechProfileProvider provider) {
+  Widget _transcript(String text) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(32, 0, 32, 48),
       // The widget keeps only the last three whole lines, so
@@ -151,7 +165,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
         child: Align(
           alignment: Alignment.bottomCenter,
           child: FadeInWordsText(
-            text: provider.text,
+            text: text,
             visibleLines: 3,
             style: const TextStyle(
               color: Colors.white,
@@ -336,6 +350,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
       child: Consumer2<SpeechProfileProvider, CaptureProvider>(
         builder: (context, provider, _, child) {
           _syncAllDone(provider);
+          final recordingText = _frozenText ?? provider.text;
+          final showMicDisclaimer = _frozenNoDevice ?? (provider.device == null);
           return MessageListener<SpeechProfileProvider>(
             showInfo: (info) {
               if (info == 'SKIP_UNAVAILABLE') {
@@ -626,7 +642,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                                           key: const ValueKey('speech-profile-recording'),
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            if (provider.text.isNotEmpty) _transcript(provider),
+                                            if (recordingText.isNotEmpty) _transcript(recordingText),
                                             Padding(
                                               padding: const EdgeInsets.symmetric(horizontal: 24),
                                               child: Column(
@@ -637,7 +653,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                                                 ],
                                               ),
                                             ),
-                                            if (provider.device == null)
+                                            if (showMicDisclaimer)
                                               Padding(
                                                 padding: const EdgeInsets.only(top: 16),
                                                 child: Text(

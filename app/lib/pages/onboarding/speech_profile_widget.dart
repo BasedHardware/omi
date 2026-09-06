@@ -42,7 +42,21 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
   bool _allDoneVisible = false;
   Timer? _allDoneTimer;
 
+  /// Snapshot of the recording view taken the moment recording ends, so every
+  /// part of it (last words, card, bar, mic disclaimer) holds still and later
+  /// fades out together instead of pieces changing on their own.
+  String? _frozenText;
+  bool? _frozenNoDevice;
+
   void _syncAllDone(SpeechProfileProvider provider) {
+    final ended = provider.uploadingProfile || provider.profileCompleted;
+    if (ended && _frozenText == null) {
+      _frozenText = provider.text;
+      _frozenNoDevice = provider.device == null;
+    } else if (!ended && _frozenText != null) {
+      _frozenText = null;
+      _frozenNoDevice = null;
+    }
     if (provider.profileCompleted) {
       if (_allDoneVisible || _allDoneTimer != null) return;
       _allDoneTimer = Timer(allDoneHold, () {
@@ -94,8 +108,8 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
 
   /// The last three lines the user said while recording. The 2 s grace before
   /// finalizing keeps the final sentence visible before the state changes.
-  List<Widget> _transcript(BuildContext context, SpeechProfileProvider provider) {
-    if (provider.text.isEmpty) return const [];
+  List<Widget> _transcript(BuildContext context, String text) {
+    if (text.isEmpty) return const [];
     return [
       // The widget keeps only the last three whole lines, so the
       // area is never clipped: at least three lines tall (so the
@@ -107,7 +121,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
         child: Align(
           alignment: Alignment.bottomCenter,
           child: FadeInWordsText(
-            text: provider.text,
+            text: text,
             visibleLines: 3,
             style: const TextStyle(
               color: Colors.white,
@@ -157,6 +171,8 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
       child: Consumer2<SpeechProfileProvider, CaptureProvider>(
         builder: (context, provider, _, child) {
           _syncAllDone(provider);
+          final recordingText = _frozenText ?? provider.text;
+          final showMicDisclaimer = _frozenNoDevice ?? (provider.device == null);
           return MessageListener<SpeechProfileProvider>(
             showInfo: (info) {
               if (info == 'SKIP_UNAVAILABLE') {
@@ -488,71 +504,91 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                                 textAlign: TextAlign.center,
                               ),
                             ),
-                        ] else if (_allDoneVisible) ...[
-                          // All Done state (after the hold on the finished recording)
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 56,
-                            child: ElevatedButton(
-                              onPressed: () => widget.goNext(),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: Colors.black,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                elevation: 0,
-                              ),
-                              child: Text(
-                                context.l10n.allDone,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  fontFamily: 'Manrope',
-                                ),
-                              ),
-                            ),
-                          ),
                         ] else ...[
-                          // Recording state - transcript + question + progress
-                          // Transcript styling matches the Settings speech-profile page
-                          // exactly (fontSize 20, full-white, taller viewport), hidden
-                          // entirely until the first words arrive.
-                          ..._transcript(context, provider),
+                          // The finished recording holds still (see _frozenText) and then
+                          // fades out as one block while All done fades in.
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 450),
+                            switchInCurve: Curves.easeIn,
+                            switchOutCurve: Curves.easeOut,
+                            child: _allDoneVisible
+                                ? Column(
+                                    key: const ValueKey('onboarding-speech-profile-done'),
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // All Done state (after the hold on the finished recording)
+                                      const SizedBox(height: 16),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        height: 56,
+                                        child: ElevatedButton(
+                                          onPressed: () => widget.goNext(),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.white,
+                                            foregroundColor: Colors.black,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                                            elevation: 0,
+                                          ),
+                                          child: Text(
+                                            context.l10n.allDone,
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                              fontFamily: 'Manrope',
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Column(
+                                    key: const ValueKey('onboarding-speech-profile-recording'),
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // Recording state - transcript + question + progress
+                                      // Transcript styling matches the Settings speech-profile page
+                                      // exactly (fontSize 20, full-white, taller viewport), hidden
+                                      // entirely until the first words arrive.
+                                      ..._transcript(context, recordingText),
 
-                          const SpeechTopicsCard(),
+                                      const SpeechTopicsCard(),
 
-                          const SizedBox(height: 12),
+                                      const SizedBox(height: 12),
 
-                          SpeechProgressBar(progress: provider.sentenceProgress),
+                                      SpeechProgressBar(progress: provider.sentenceProgress),
 
-                          const SizedBox(height: 12),
+                                      const SizedBox(height: 12),
 
-                          if (!provider.uploadingProfile && !provider.profileCompleted)
-                            OutlinedButton(
-                              onPressed: () {
-                                provider.close();
-                                widget.onSkip();
-                              },
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Colors.white),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                              ),
-                              child: Text(
-                                context.l10n.skipForNow,
-                                style: const TextStyle(color: Colors.white, fontSize: 14, fontFamily: 'Manrope'),
-                              ),
-                            ),
+                                      if (!provider.uploadingProfile && !provider.profileCompleted)
+                                        OutlinedButton(
+                                          onPressed: () {
+                                            provider.close();
+                                            widget.onSkip();
+                                          },
+                                          style: OutlinedButton.styleFrom(
+                                            side: const BorderSide(color: Colors.white),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                                          ),
+                                          child: Text(
+                                            context.l10n.skipForNow,
+                                            style: const TextStyle(
+                                                color: Colors.white, fontSize: 14, fontFamily: 'Manrope'),
+                                          ),
+                                        ),
 
-                          if (provider.device == null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: Text(
-                                context.l10n.noDeviceConnectedUseMic,
-                                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
+                                      if (showMicDisclaimer)
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 8),
+                                          child: Text(
+                                            context.l10n.noDeviceConnectedUseMic,
+                                            style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                          ),
                         ],
                       ],
                     ),
