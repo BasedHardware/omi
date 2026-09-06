@@ -77,7 +77,10 @@ _image_generation_client: httpx.AsyncClient | None = None
 # credential failure, but they are not a bad credential: answering 401 tells
 # callers the key is invalid and makes a transient failure look permanent.
 _THROTTLED_FAILURE_CLASSES = frozenset({FailureClass.BYOK_RATE_LIMIT, FailureClass.BYOK_QUOTA})
-_SSE_FRAME_BOUNDARY = re.compile(br'(?:\r\n|\r|\n){2}')
+# Keep CRLF atomic: without the atomic group, the regex engine can backtrack
+# from ``\r\n`` to ``\r`` + ``\n`` and split a multi-line SSE event at its
+# first line ending.
+_SSE_FRAME_BOUNDARY = re.compile(br'(?>\r\n|\r|\n){2}')
 
 
 @router.post('/v1/chat/completions', response_model=None)
@@ -665,7 +668,10 @@ async def _stream_with_terminal_metrics(
             # the failed settlement still suppresses the success receipt below.
             usage_for_trace = usage_metadata
         else:
-            usage_for_trace = usage_metadata if outcome == 'success' else None
+            # A provider may report usage or a response ID before an error or
+            # client cancellation. Preserve those diagnostics, but mark their
+            # completeness and cost as indeterminate below.
+            usage_for_trace = usage_metadata
         # Per the PR behavioral contract, actual fallback requires a subsequent
         # successful provider/route.  Only stamp the actual-fallback labels when
         # the terminal outcome is success; an error or cancellation means the
@@ -683,7 +689,7 @@ async def _stream_with_terminal_metrics(
             metadata=usage_for_trace,
             usage_status=(
                 UsageStatus.CONFIRMED
-                if usage_for_trace is not None and usage_for_trace.usage is not None
+                if outcome == 'success' and usage_for_trace is not None and usage_for_trace.usage is not None
                 else UsageStatus.NOT_REPORTED if outcome == 'success' else UsageStatus.INDETERMINATE
             ),
         )

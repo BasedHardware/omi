@@ -10,6 +10,7 @@ import pytest
 from starlette.requests import Request
 
 from llm_gateway.gateway.auth import ServiceCaller
+from llm_gateway.gateway.accounting import UsageStatus
 from llm_gateway.gateway.config_loader import load_gateway_config
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.executor import ProviderRegistry, provider_request_for
@@ -1107,12 +1108,14 @@ async def test_jit_stream_receipt_reframes_split_and_coalesced_sse(monkeypatch, 
 @pytest.mark.asyncio
 async def test_jit_stream_settlement_failure_has_no_success_receipt(monkeypatch):
     recorded: list[dict[str, object]] = []
+    traces = []
 
     async def reject_settlement(_reservation, **_kwargs):
         return False
 
     monkeypatch.setattr(openai_compatible, 'settle_jit_attempt', reject_settlement)
     monkeypatch.setattr(openai_compatible, 'observe_route_result', lambda *_args, **kwargs: recorded.append(kwargs))
+    monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', lambda _context, trace: traces.append(trace))
     config = _streaming_enabled_gateway_config()
     resolved = resolve_chat_completion_route(config, valid_request(stream=True))
     route = openai_compatible.selected_serving_route(resolved)
@@ -1135,7 +1138,7 @@ async def test_jit_stream_settlement_failure_has_no_success_receipt(monkeypatch)
             chunk
             async for chunk in openai_compatible._stream_with_terminal_metrics(
                 openai_compatible._PreparedStream(
-                    first_chunk=b'data: {"choices":[]}\n\n',
+                    first_chunk=b'data: {"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":2,"total_tokens":11}}\n\n',
                     stream=remaining_stream(),
                     provider='openai',
                     model='gpt-5.6-luna',
@@ -1157,6 +1160,71 @@ async def test_jit_stream_settlement_failure_has_no_success_receipt(monkeypatch)
     assert b'event: omi_jit_receipt\n' not in output
     assert recorded and recorded[0]['outcome'] == 'error'
     assert recorded[0]['error_class'] == 'jit_budget_settlement_failed'
+    assert traces and traces[0].attempts[0].usage is not None
+    assert traces[0].attempts[0].usage_status == UsageStatus.INDETERMINATE
+
+
+@pytest.mark.asyncio
+async def test_jit_stream_preserves_multiline_crlf_event_and_split_chunks(monkeypatch):
+    async def accept_settlement(_reservation, **_kwargs):
+        return True
+
+    monkeypatch.setattr(openai_compatible, 'settle_jit_attempt', accept_settlement)
+    config = _streaming_enabled_gateway_config()
+    resolved = resolve_chat_completion_route(config, valid_request(stream=True))
+    route = openai_compatible.selected_serving_route(resolved)
+    context = openai_compatible.AccountingContext.create(
+        request_id='jit-multiline-crlf',
+        caller='backend',
+        user_uid='user-123',
+        feature='chat_agent',
+        api_surface='openai_chat_completions',
+        payer='omi',
+        jit_run_id='jit-multiline-crlf',
+        jit_contract_version='jit-cloud-qa-v1',
+    )
+    raw_chunks = [
+        b'id: event-1\r',
+        b'\ndata: {"choices":[],"usage":{\r',
+        b'\ndata: "prompt_tokens":9,"completion_tokens":2,"total_tokens":11}}\r\n',
+        b': keep-alive\r\n\r\n',
+        b'data: [DONE]\r\n\r\n',
+    ]
+
+    async def remaining_stream():
+        for chunk in raw_chunks[1:]:
+            yield chunk
+
+    output = b''.join(
+        [
+            chunk
+            async for chunk in openai_compatible._stream_with_terminal_metrics(
+                openai_compatible._PreparedStream(
+                    first_chunk=raw_chunks[0],
+                    stream=remaining_stream(),
+                    provider='openai',
+                    model='gpt-5.6-luna',
+                    fallback_used=False,
+                    fallback_reason=None,
+                    reservation=object(),
+                ),
+                resolved_route=resolved,
+                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+                route=route,
+                started_at=openai_compatible.time_request(),
+                request_id='jit-multiline-crlf',
+                accounting_context=context,
+            )
+        ]
+    )
+
+    receipt_marker = b'event: omi_jit_receipt\n'
+    assert output.count(receipt_marker) == 1
+    receipt_start = output.index(receipt_marker)
+    receipt_end = output.index(b'\n\n', receipt_start) + 2
+    assert output[:receipt_start] + output[receipt_end:] == b''.join(raw_chunks)
+    assert receipt_start > output.index(b'id: event-1')
+    assert receipt_start < output.index(b'data: [DONE]')
 
 
 @pytest.mark.asyncio
