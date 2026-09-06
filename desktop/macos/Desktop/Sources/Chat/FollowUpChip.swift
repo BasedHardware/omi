@@ -103,9 +103,12 @@ enum FollowUpChipTap {
       turnOwner: .mainChat,
       onAccepted: {
         AnalyticsManager.shared.questionOriginating(.followUp)
+      },
+      onAcceptedWithAttemptID: { attemptID in
         AnalyticsManager.shared.chatMessageSent(
           messageLength: question.count,
-          source: "follow_up_chip"
+          source: "follow_up_chip",
+          attemptID: attemptID
         )
       }
     )

@@ -851,7 +851,7 @@ class AnalyticsManager {
 
   func chatMessageSent(
     messageLength: Int, hasSelectedAppContext: Bool = false, source: String,
-    countsAsQuestion: Bool = true
+    countsAsQuestion: Bool = true, attemptID: String? = nil
   ) {
     PostHogManager.shared.chatMessageSent(
       messageLength: messageLength, hasSelectedAppContext: hasSelectedAppContext, source: source)
@@ -861,7 +861,7 @@ class AnalyticsManager {
     // question (retries of a failed turn, busy no-op paths) so the one-time
     // prompt trigger counts each logical question exactly once.
     guard countsAsQuestion else { return }
-    questionAsked(surface: .chatWindow, source: source, messageLength: messageLength, attemptID: nil)
+    questionAsked(surface: .chatWindow, source: source, messageLength: messageLength, attemptID: attemptID)
   }
 
   func desktopRatingSubmitted(rating: Int, revision: Int? = nil) {

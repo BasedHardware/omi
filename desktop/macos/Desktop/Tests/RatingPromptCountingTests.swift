@@ -99,6 +99,7 @@ final class RatingPromptCountingTests: XCTestCase {
     }
 
     var accepted = false
+    var acceptedAttemptID: String?
     let result = await provider.sendMessage(
       plan.question,
       onAccepted: {
@@ -107,10 +108,14 @@ final class RatingPromptCountingTests: XCTestCase {
           messageLength: plan.question.count, source: "query_shell",
           countsAsQuestion: plan.countsAsQuestion)
         ledger.recordAccepted(plan)
+      },
+      onAcceptedWithAttemptID: { attemptID in
+        acceptedAttemptID = attemptID
       })
 
     XCTAssertNil(result)
     XCTAssertFalse(accepted, "a refused send must never reach onAccepted")
+    XCTAssertNil(acceptedAttemptID, "a refused send must never publish an attempt ID")
     await drainCounterHops()
     XCTAssertEqual(RatingPromptManager.shared.questionCount, 0)
     // The rejected question must not become what 'Try again' re-sends.

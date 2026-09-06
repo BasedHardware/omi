@@ -442,10 +442,13 @@ struct QueryShellHome: View {
         plan.question,
         onAccepted: {
           accepted = true
+          sendLedger.recordAccepted(plan)
+        },
+        onAcceptedWithAttemptID: { attemptID in
           AnalyticsManager.shared.chatMessageSent(
             messageLength: plan.question.count, hasSelectedAppContext: false,
-            source: "query_shell", countsAsQuestion: plan.countsAsQuestion)
-          sendLedger.recordAccepted(plan)
+            source: "query_shell", countsAsQuestion: plan.countsAsQuestion,
+            attemptID: attemptID)
         })
       if !accepted, chatProvider.draftText.isEmpty {
         // The provider refused the send — give the typed question back
