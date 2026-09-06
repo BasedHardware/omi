@@ -15,12 +15,14 @@ using its current authenticated backend transport. The response is
 account and authority epoch; it is not derived from the Firebase UID. Native stores
 this response with its capture UUID, configured backend origin and login generation,
 and supplies `X-Omi-Capture-Ownership` from that journal on every subsequent session
-request. JavaScript must not select or replace the owner or receipt.
+mutation. JavaScript must not select or replace the owner or receipt. Read-only session
+and transcript requests use current account authorization without a receipt or an ownership
+preflight; historical reads do not require a configured ownership signing key.
 
 The receipt is a purpose-separated HMAC constraint under the configured codec key,
 not an authorization grant. Every request still verifies current Firebase identity,
 binding and exact capture grant. A valid receipt for another account or epoch returns
-409 `capture_ownership_changed`; malformed or missing receipts return 400. Receipts
+409 `capture_ownership_changed` on mutations; malformed or missing mutation receipts return 400. Receipts
 have no authorization lifetime and contain no credentials. Recovery first obtains
 fresh ownership and compares the stable owner key before refreshing the signature;
 signing-key rotation therefore does not require retagging a journal. An owner-key or

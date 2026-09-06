@@ -73,10 +73,11 @@ export function createPostgresFirebaseDeviceSessionRuntime(options: PostgresFire
         if (!authorized.authorized) return error(authorized.outcome === "authentication" ? 401 : authorized.outcome === "unavailable" ? 503 : 403,
           authorized.outcome === "authentication" ? "unauthorized" : authorized.outcome === "unavailable" ? "unavailable" : "forbidden");
         request.signal.throwIfAborted();
-        if (ownership === undefined) return error(503, "capture_ownership_unavailable");
-        if (readingOwnership) return Response.json({ ownership: ownership.issue(authorized.context) }, { headers: { "cache-control": "no-store" } });
+        const readingSession = request.method === "GET" && !readingOwnership;
+        if (!readingSession && ownership === undefined) return error(503, "capture_ownership_unavailable");
+        if (readingOwnership) return Response.json({ ownership: ownership!.issue(authorized.context) }, { headers: { "cache-control": "no-store" } });
         const receipt = request.headers.get("x-omi-capture-ownership");
-        ownership.verify(authorized.context, receipt);
+        if (!readingSession) ownership!.verify(authorized.context, receipt);
         const pool = bindPool(request.signal);
         if (match?.[2] === "transcribe" || match?.[2] === "transcript") {
           if (match[2] === "transcribe" && source === undefined) return error(503, "unavailable");
@@ -87,7 +88,7 @@ export function createPostgresFirebaseDeviceSessionRuntime(options: PostgresFire
                 const current = await authorize(token, signal);
                 if (!current.authorized) throw error(current.outcome === "authentication" ? 401 : current.outcome === "unavailable" ? 503 : 403,
                   current.outcome === "authentication" ? "unauthorized" : current.outcome === "unavailable" ? "unavailable" : "forbidden");
-                ownership.verify(current.context, receipt);
+                ownership!.verify(current.context, receipt);
                 return current.context;
               },
             });
