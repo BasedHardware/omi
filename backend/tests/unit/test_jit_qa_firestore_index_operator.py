@@ -89,3 +89,36 @@ def test_apply_requires_confirmation_and_delegates_only_selected_signatures(monk
     assert calls[0][1]["database"] == operator.DATABASE
     assert len(calls[0][1]["expected"]) == 2
     assert calls[1][1]["expected"] == calls[0][1]["expected"]
+
+
+def test_apply_cli_keeps_reconciler_progress_out_of_json_receipt(monkeypatch, capsys):
+    import json
+
+    signatures = operator._target_signatures()
+    monkeypatch.setattr(operator.reconciler, "provision_missing_indexes", lambda **kwargs: signatures)
+    # Exercise the actual wait function and its READY progress print.
+    monkeypatch.setattr(operator.reconciler, "list_live_indexes", lambda **kwargs: [])
+    monkeypatch.setattr(
+        operator.reconciler,
+        "expected_index_states",
+        lambda **kwargs: {signature: "READY" for signature in signatures},
+    )
+    assert (
+        operator.main(
+            [
+                "--project",
+                operator.PROJECT,
+                "--database",
+                operator.DATABASE,
+                "apply",
+                "--confirmation",
+                operator.APPLY_CONFIRMATION,
+            ]
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    receipt = json.loads(captured.out)
+    assert receipt["missing_count"] == 0
+    assert receipt["created_index_count"] == 2
+    assert "READY" in captured.err

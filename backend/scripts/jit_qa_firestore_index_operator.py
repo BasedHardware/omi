@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -142,24 +143,22 @@ def apply_plan(
     if confirmation != APPLY_CONFIRMATION:
         raise IndexOperatorError(f"apply requires {APPLY_CONFIRMATION}")
     _, expected = selected_manifest(manifest_path=manifest_path)
-    live = reconciler.list_live_indexes(project=project, database=database, runner=runner)
-    missing = reconciler.missing_index_signatures(
-        expected=expected,
-        live_indexes=live,
-        project=project,
-        database=database,
-    )
-    reconciler.provision_missing_indexes(expected=expected, project=project, database=database, runner=runner)
-    reconciler.wait_for_indexes(
-        expected=expected,
-        project=project,
-        database=database,
-        timeout_seconds=timeout_seconds,
-        poll_interval_seconds=poll_interval_seconds,
-        runner=runner,
-        sleep=sleep,
-        monotonic=monotonic,
-    )
+    # The operator's stdout is a machine-readable receipt. Shared reconciler
+    # progress belongs on stderr, including its successful READY message.
+    with redirect_stdout(sys.stderr):
+        created = reconciler.provision_missing_indexes(
+            expected=expected, project=project, database=database, runner=runner
+        )
+        reconciler.wait_for_indexes(
+            expected=expected,
+            project=project,
+            database=database,
+            timeout_seconds=timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+            runner=runner,
+            sleep=sleep,
+            monotonic=monotonic,
+        )
     plan = build_plan(
         project=project,
         database=database,
@@ -168,7 +167,7 @@ def apply_plan(
     )
     plan["schema_version"] = "omi.jit.qa.firestore-index-apply.v1"
     plan["confirmation"] = APPLY_CONFIRMATION
-    plan["created_index_count"] = len(missing)
+    plan["created_index_count"] = len(created)
     return plan
 
 
