@@ -30,6 +30,7 @@ async function recording() {
     "record-owner",
     session.id,
     new Uint8Array([0, 0, 0, 128, 129, 127]),
+    0,
     101
   );
   return session;

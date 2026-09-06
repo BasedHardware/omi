@@ -31,6 +31,13 @@ export function createD1Mock(): D1Database {
     )
   );
 
+  db.exec(
+    readFileSync(
+      new URL("../migrations/0007_device_audio_chunks.sql", import.meta.url),
+      "utf8"
+    )
+  );
+
   const prepareStatement = (
     sql: string,
     bindings: unknown[] = []

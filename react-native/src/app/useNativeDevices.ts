@@ -2,6 +2,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {
   appendDeviceSessionAudio,
   completeDeviceSession,
+  isTransientDeviceSessionError,
   openDeviceSession,
 } from '../deviceSessionClient';
 import {
@@ -52,11 +53,21 @@ function mergeBattery(
   };
 }
 
+export const DEVICE_UPLOAD_LIMITS = {
+  maxPendingBytes: 8_388_608,
+  maxSessionBytes: 8_388_608,
+  maxChunks: 65_536,
+  retryDelaysMs: [500, 1000, 2000],
+} as const;
+
 type CaptureSession = {
   id: string | null;
   deviceId: string;
   codec: number;
   pending: Uint8Array[];
+  bufferedBytes: number;
+  totalBytes: number;
+  chunkIndex: number;
   work: Promise<void> | null;
   stopped: boolean;
   failed: boolean;
@@ -74,6 +85,9 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
   const nativeSnapshotRef = useRef<PlatformNativeSnapshot | null>(null);
   const captureRef = useRef<CaptureSession | null>(null);
   const cancelledRef = useRef(false);
+  const pendingBytesRef = useRef(0);
+  const capturesRef = useRef(new Set<CaptureSession>());
+  const retryWaitsRef = useRef(new Set<() => void>());
   const epochRef = useRef(0);
   const enabledRef = useRef(enabled);
 
@@ -82,7 +96,9 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
 
   const processCapture = useCallback(
     (capture: CaptureSession, epoch: number): Promise<void> => {
-      if (capture.work !== null) return capture.work;
+      if (capture.work !== null) {
+        return capture.work;
+      }
       if (
         capture.failed ||
         capture.completed ||
@@ -94,6 +110,31 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       }
       const backend = omiBackend;
       const current = () => enabledRef.current && epoch === epochRef.current;
+      const retry = async (action: () => Promise<unknown>) => {
+        for (let attempt = 0; current() && !capture.failed; attempt += 1) {
+          try {
+            await action();
+            return;
+          } catch (error) {
+            if (!current() || capture.failed) {
+              return;
+            }
+            const delay = DEVICE_UPLOAD_LIMITS.retryDelaysMs[attempt];
+            if (!isTransientDeviceSessionError(error) || delay === undefined) {
+              throw error;
+            }
+            await new Promise<void>(resolve => {
+              const stop = () => {
+                clearTimeout(timer);
+                retryWaitsRef.current.delete(stop);
+                resolve();
+              };
+              const timer = setTimeout(stop, delay);
+              retryWaitsRef.current.add(stop);
+            });
+          }
+        }
+      };
       const work = (async () => {
         try {
           if (capture.id === null) {
@@ -105,16 +146,36 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
               deviceName: device?.name,
               codec: capture.codec,
             });
-            if (!current()) return;
+            if (!current()) {
+              return;
+            }
             capture.id = session.id;
           }
-          while (current() && capture.pending.length > 0) {
-            const chunk = capture.pending.shift()!;
-            await appendDeviceSessionAudio(backend, capture.id, chunk);
+          while (current() && !capture.failed && capture.pending.length > 0) {
+            const chunk = capture.pending[0]!;
+            await retry(() =>
+              appendDeviceSessionAudio(
+                backend,
+                capture.id!,
+                chunk,
+                capture.chunkIndex,
+              ),
+            );
+            if (!current() || capture.failed) {
+              return;
+            }
+            capture.pending.shift();
+            capture.bufferedBytes -= chunk.length;
+            pendingBytesRef.current -= chunk.length;
+            capture.chunkIndex += 1;
           }
         } catch {
-          if (!current()) return;
+          if (!current() || capture.failed) {
+            return;
+          }
           capture.failed = true;
+          pendingBytesRef.current -= capture.bufferedBytes;
+          capture.bufferedBytes = 0;
           capture.pending = [];
           setDeviceScanMessage(
             capture.id === null
@@ -123,10 +184,10 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
           );
           return;
         }
-        if (current() && capture.stopped) {
+        if (current() && !capture.failed && capture.stopped) {
           capture.completed = true;
           try {
-            await completeDeviceSession(backend, capture.id!);
+            await retry(() => completeDeviceSession(backend, capture.id!));
           } catch {
             if (current()) {
               setDeviceScanMessage(
@@ -139,6 +200,9 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       capture.work = work;
       void work.finally(() => {
         capture.work = null;
+        if (capture.failed || capture.completed) {
+          capturesRef.current.delete(capture);
+        }
         if (
           current() &&
           !capture.failed &&
@@ -157,16 +221,21 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
     cancelledRef.current = true;
     const capture = captureRef.current;
     captureRef.current = null;
-    if (capture === null) return;
+    if (capture === null) {
+      return;
+    }
     capture.stopped = true;
     const work = processCapture(capture, epochRef.current);
-    if (capture.id !== null) await work;
+    if (capture.id !== null) {
+      await work;
+    }
   }, [processCapture]);
 
   const persistAudio = useCallback(
     async (event: Extract<OmiNativeEvent, {type: 'audio'}>) => {
-      if (!enabledRef.current || omiBackend == null || cancelledRef.current)
+      if (!enabledRef.current || omiBackend == null || cancelledRef.current) {
         return;
+      }
       let capture = captureRef.current;
       if (capture === null) {
         capture = {
@@ -174,20 +243,52 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
           deviceId: event.deviceId,
           codec: event.codec,
           pending: [],
+          bufferedBytes: 0,
+          totalBytes: 0,
+          chunkIndex: 0,
           work: null,
           stopped: false,
           failed: false,
           completed: false,
         };
         captureRef.current = capture;
+        capturesRef.current.add(capture);
       }
       if (
         capture.failed ||
         capture.deviceId !== event.deviceId ||
         capture.codec !== event.codec
-      )
+      ) {
         return;
-      capture.pending.push(bytesFromBase64(event.payloadBase64));
+      }
+      const size = Math.floor((event.payloadBase64.length * 3) / 4);
+      const bytes =
+        size > DEVICE_UPLOAD_LIMITS.maxPendingBytes
+          ? null
+          : bytesFromBase64(event.payloadBase64);
+      if (
+        bytes === null ||
+        pendingBytesRef.current + bytes.length >
+          DEVICE_UPLOAD_LIMITS.maxPendingBytes ||
+        capture.totalBytes + bytes.length >
+          DEVICE_UPLOAD_LIMITS.maxSessionBytes ||
+        capture.chunkIndex + capture.pending.length >=
+          DEVICE_UPLOAD_LIMITS.maxChunks
+      ) {
+        capture.failed = true;
+        pendingBytesRef.current -= capture.bufferedBytes;
+        capture.bufferedBytes = 0;
+        capture.pending = [];
+        capturesRef.current.delete(capture);
+        setDeviceScanMessage(
+          'Recording storage limit reached. This recording could not be saved completely. Reconnect your Omi to start a new recording.',
+        );
+        return;
+      }
+      capture.pending.push(bytes);
+      capture.bufferedBytes += bytes.length;
+      capture.totalBytes += bytes.length;
+      pendingBytesRef.current += bytes.length;
       await processCapture(capture, epochRef.current);
     },
     [processCapture],
@@ -220,6 +321,15 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       active = false;
       epochRef.current += 1;
       captureRef.current = null;
+      for (const capture of capturesRef.current) {
+        capture.pending = [];
+        capture.bufferedBytes = 0;
+      }
+      capturesRef.current.clear();
+      pendingBytesRef.current = 0;
+      for (const stop of retryWaitsRef.current) {
+        stop();
+      }
       cancelledRef.current = true;
       nativeSnapshotRef.current = null;
     };
@@ -344,7 +454,9 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
           if (!enabledRef.current || epoch !== epochRef.current) {
             return;
           }
-          if (captureRef.current?.failed) captureRef.current = null;
+          if (captureRef.current?.failed) {
+            captureRef.current = null;
+          }
           cancelledRef.current = false;
         }
         if (!enabledRef.current || epoch !== epochRef.current) {
