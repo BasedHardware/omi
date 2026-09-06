@@ -248,31 +248,45 @@ def _assert_named_database_empty(db_client: Any) -> dict[str, Any]:
             "bootstrap requires a truly empty named database; " f"found collection {collection_id!r}"
         )
 
-    # This one allowlisted document is metadata-only by contract. Read its
-    # complete payload so the exact-field check also detects newly added or
-    # unexpected fields; a projection would hide those fields.
-    query = collection
-    limiter = getattr(query, "limit", None)
-    streamer = getattr(query, "stream", None)
-    if not callable(limiter) or not callable(streamer):
+    # ``list_documents`` includes missing parent documents for nested
+    # collections. That is the only bounded way to distinguish an empty
+    # direct collection from an orphan descendant, so clients without it are
+    # refused rather than treated as empty.
+    list_documents = getattr(collection, "list_documents", None)
+    if not callable(list_documents):
         raise JITQAVerificationError("bootstrap requires a bounded recovery metadata inventory")
     try:
-        snapshots = list(limiter(EMPTY_SCAN_RECOVERY_DOCUMENT_LIMIT + 1).stream())
+        document_iterator = iter(list_documents(page_size=EMPTY_SCAN_RECOVERY_DOCUMENT_LIMIT + 1))
+        document_refs = []
+        for _ in range(EMPTY_SCAN_RECOVERY_DOCUMENT_LIMIT + 1):
+            try:
+                document_refs.append(next(document_iterator))
+            except StopIteration:
+                break
     except Exception as exc:
         raise JITQAVerificationError("bootstrap could not inventory recovery metadata") from exc
-    if len(snapshots) > EMPTY_SCAN_RECOVERY_DOCUMENT_LIMIT:
+    if len(document_refs) > EMPTY_SCAN_RECOVERY_DOCUMENT_LIMIT:
         raise JITQAVerificationError("bootstrap recovery metadata inventory exceeded its hard bound")
-    if not snapshots:
-        # Firestore normally does not expose an empty collection. Treat this as
-        # a benign metadata-only race and retain the strict collection fence.
-        return {
-            "user_plane_empty": True,
-            "preexisting_runtime_metadata": True,
-            "runtime_metadata_documents": 0,
-        }
-    snapshot = snapshots[0]
-    document_id = str(getattr(snapshot, "id", ""))
-    payload = snapshot.to_dict()
+    if len(document_refs) != 1:
+        raise JITQAVerificationError("bootstrap recovery metadata inventory was empty or exceeded its allowlist")
+    document_ref = document_refs[0]
+    document_id = str(getattr(document_ref, "id", ""))
+    if document_id != EMPTY_SCAN_RECOVERY_DOCUMENT:
+        raise JITQAVerificationError("bootstrap recovery metadata has an unexpected document")
+    try:
+        child_iterator = iter(document_ref.collections(page_size=1))
+        next(child_iterator)
+    except StopIteration:
+        pass
+    except Exception as exc:
+        raise JITQAVerificationError("bootstrap could not inventory recovery metadata descendants") from exc
+    else:
+        raise JITQAVerificationError("bootstrap recovery metadata has an unexpected descendant collection")
+    try:
+        snapshot = document_ref.get()
+    except Exception as exc:
+        raise JITQAVerificationError("bootstrap could not read recovery metadata") from exc
+    payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
     if document_id != EMPTY_SCAN_RECOVERY_DOCUMENT or not isinstance(payload, Mapping):
         raise JITQAVerificationError("bootstrap recovery metadata has an unexpected document")
     if set(payload) != EMPTY_SCAN_RECOVERY_FIELDS:
@@ -381,11 +395,17 @@ def bootstrap_qa_account(db_client: Any) -> dict[str, Any]:
     marker_snapshot = marker_ref.get()
     marker = _as_dict(marker_snapshot)
     precondition = {
-        "user_plane_empty": True,
-        "preexisting_runtime_metadata": "previously_verified",
+        "mode": "resume_owned_bootstrap",
+        "user_plane_empty": None,
+        "preexisting_runtime_metadata": None,
+        "current_inventory_verified": False,
+        "previously_verified": True,
     }
     if not marker:
         precondition = _assert_named_database_empty(db_client)
+        precondition["mode"] = "fresh_bootstrap"
+        precondition["current_inventory_verified"] = True
+        precondition["previously_verified"] = False
         create = getattr(marker_ref, "create", None)
         if not callable(create):
             raise JITQAVerificationError("bootstrap requires create-only Firestore writes for its ownership marker")

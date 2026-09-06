@@ -31,6 +31,10 @@ class _Ref:
         self.db = db
         self.path = path
 
+    @property
+    def id(self):
+        return self.path.rsplit("/", 1)[-1]
+
     def select(self, _fields):
         return self
 
@@ -48,6 +52,15 @@ class _Ref:
             raise RuntimeError("already exists")
         self.db.docs[self.path] = dict(payload)
 
+    def collections(self, **_kwargs):
+        prefix = self.path + "/"
+        child_ids = {
+            path[len(prefix) :].split("/", 1)[0]
+            for path in self.db.docs
+            if path.startswith(prefix) and len(path[len(prefix) :].split("/", 1)[0]) > 0
+        }
+        return [_Collection(self.db, f"{self.path}/{child_id}") for child_id in sorted(child_ids)]
+
 
 class _Collection:
     def __init__(self, db: "_DB", path: str):
@@ -61,6 +74,15 @@ class _Collection:
 
     def select(self, _fields):
         return self
+
+    def list_documents(self, **_kwargs):
+        prefix = self.path + "/"
+        document_ids = {
+            path[len(prefix) :].split("/", 1)[0]
+            for path in self.db.docs
+            if path.startswith(prefix) and len(path[len(prefix) :].split("/", 1)[0]) > 0
+        }
+        return [self.db.document(f"{self.path}/{document_id}") for document_id in sorted(document_ids)]
 
     def limit(self, value):
         self._limit = value
@@ -253,6 +275,26 @@ def test_bootstrap_empty_inventory_accepts_only_known_recovery_cursor():
     assert db.docs[recovery_path] == before
 
 
+def test_bootstrap_rejects_recovery_cursor_descendant_and_empty_direct_inventory():
+    recovery_path = f"{operator.EMPTY_SCAN_RECOVERY_COLLECTION}/{operator.EMPTY_SCAN_RECOVERY_DOCUMENT}"
+    db = _DB(include_control=False)
+    db.docs[recovery_path] = {
+        "generation": 6,
+        "resume_after_path": None,
+        "updated_at": datetime.now(timezone.utc),
+    }
+    db.docs[f"{recovery_path}/unexpected/subdoc"] = {"owned": False}
+    with pytest.raises(operator.JITQAVerificationError, match="descendant"):
+        operator._assert_named_database_empty(db)
+
+    class EmptyRecoveryCollectionDB:
+        def collections(self):
+            return [_Collection(_DB(include_control=False), operator.EMPTY_SCAN_RECOVERY_COLLECTION)]
+
+    with pytest.raises(operator.JITQAVerificationError, match="inventory was empty"):
+        operator._assert_named_database_empty(EmptyRecoveryCollectionDB())
+
+
 @pytest.mark.parametrize(
     "payload, message",
     [
@@ -350,6 +392,13 @@ def test_bootstrap_is_create_only_and_idempotent(monkeypatch):
     second = operator.bootstrap_qa_account(db)
     assert second["profile"] == "existing"
     assert second["tester"] == "existing"
+    assert second["bootstrap_precondition"] == {
+        "mode": "resume_owned_bootstrap",
+        "user_plane_empty": None,
+        "preexisting_runtime_metadata": None,
+        "current_inventory_verified": False,
+        "previously_verified": True,
+    }
     assert db.docs == before
 
 
