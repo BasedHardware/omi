@@ -563,6 +563,9 @@ private struct CanonicalMemoryAtlasSurface: View {
       // page in the app that did not look like the app. Ink resolves on the panel's own ground
       // here, exactly as it does for the toolbar above.
       .clipped()
+      // The map runs under the chip row above it; a soft edge there reads as
+      // the map continuing, where a hard cut read as the map being cropped.
+      .glassScrollFade(top: 28, bottom: 0)
     }
     .overlay(alignment: .top) { atlasToolbar }
     .background(Color.clear)
