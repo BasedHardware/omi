@@ -1,3 +1,5 @@
+import { createPostgresFirebaseDeviceSessionRuntime } from "./firebase-device-session-runtime";
+import { createPostgresDeviceSessionUploadRepository } from "./listen-finalization-repository";
 import { createPostgresRenderResponseRepository } from "./product-projection-repository";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -1250,12 +1252,13 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         expires_at_epoch_seconds: now + 3_600,
       }, acceptAuthorityRow, now);
       const delivery = createPostgresListenFormationOutboxRepository({
-        pool: appRolePool, lease_duration_seconds: 1,
+        pool: appRolePool, lease_duration_seconds: 5,
         retry_delay_seconds: 10, max_attempts: 3,
       });
       const claimed = await delivery.claimNext(acceptContext);
       expect(claimed.kind).toBe("claimed");
       if (claimed.kind !== "claimed") throw new Error("listen_delivery_not_claimed");
+      await expect(delivery.claimNext(acceptContext)).resolves.toEqual({ kind: "none_available" });
       const loaded = await delivery.load(acceptContext, claimed.lease);
       expect(loaded).toMatchObject({
         kind: "found",
@@ -1470,8 +1473,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         kind: "source_stopped", stop_code: "authorization_or_context",
       });
 
-      await expect(delivery.claimNext(acceptContext)).resolves.toEqual({ kind: "none_available" });
-      const reclaimDeadline = Date.now() + 5_000;
+      const reclaimDeadline = Date.now() + 10_000;
       let reclaimed = await delivery.claimNext(acceptContext);
       while (reclaimed.kind === "none_available" && Date.now() < reclaimDeadline) {
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1579,6 +1581,108 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         `, [], { prepare: false });
       }
 
+      const uploads = createPostgresDeviceSessionUploadRepository({ pool: appRolePool });
+      const uploadInput = { captureId: crypto.randomUUID(), deviceId: "qa-real-omi", deviceName: "QA device", codec: 20 };
+      const openedUploads = await Promise.all([uploads.open(context, uploadInput), uploads.open(context, uploadInput)]);
+      const upload = openedUploads[0]!;
+      expect(openedUploads[1]).toEqual(upload);
+      expect(upload.id).not.toBe(uploadInput.captureId);
+      await expect(uploads.open(context, { ...uploadInput, deviceId: "changed" })).rejects.toMatchObject({ code: "idempotency_conflict" });
+      const audio = Uint8Array.of(0, 0, 0, 248, 255, 128);
+      const uploaded = await Promise.all([uploads.append(context, upload.id, 0, audio), uploads.append(context, upload.id, 0, audio), uploads.append(context, upload.id, 0, audio)]);
+      expect(uploaded.every(item => item?.chunkCount === 1 && item.byteCount === audio.length)).toBe(true);
+      await expect(uploads.append(context, upload.id, 0, Uint8Array.of(1))).rejects.toMatchObject({ code: "idempotency_conflict" });
+      await expect(uploads.append(context, upload.id, 2, audio)).rejects.toMatchObject({ code: "idempotency_conflict" });
+      const rollbackUpload = await uploads.open(context, { ...uploadInput, captureId: crypto.randomUUID() });
+      await ownerSql.unsafe(`CREATE FUNCTION omi_memory.reject_qa_audio_insert() RETURNS trigger LANGUAGE plpgsql AS $fn$ BEGIN RAISE EXCEPTION 'synthetic write failure'; END $fn$;
+        CREATE TRIGGER reject_qa_audio_insert BEFORE INSERT ON omi_memory.listen_capture_audio_chunks FOR EACH ROW EXECUTE FUNCTION omi_memory.reject_qa_audio_insert()`, [], { prepare: false });
+      try {
+        await expect(uploads.append(context, rollbackUpload.id, 0, audio)).rejects.toMatchObject({ code: "persistence_failed" });
+        expect(await uploads.read(context, rollbackUpload.id)).toMatchObject({ chunkCount: 0, byteCount: 0 });
+      } finally {
+        await ownerSql.unsafe("DROP TRIGGER reject_qa_audio_insert ON omi_memory.listen_capture_audio_chunks; DROP FUNCTION omi_memory.reject_qa_audio_insert()", [], { prepare: false });
+      }
+      expect(await uploads.append(context, rollbackUpload.id, 0, audio)).toMatchObject({ chunkCount: 1, byteCount: audio.length });
+      const expiryUpload = await uploads.open(context, { ...uploadInput, captureId: crypto.randomUUID() });
+      const expiryNow = Math.floor(Date.now() / 1000);
+      const expiring = issueQualificationContext({ ...context, issued_at_epoch_seconds: expiryNow,
+        expires_at_epoch_seconds: expiryNow + 2 }, authorityRow, expiryNow);
+      let mutationReached = false;
+      const delayedPool: PostgresTransactionPool = {
+        withTransaction: (options, callback) => appRolePool.withTransaction(options, connection => callback({
+          ...connection,
+          async query<Row extends Record<string, unknown>>(statement: import("./connection").SqlStatement): Promise<readonly Row[]> {
+            if (statement.name === "listen.audio.append") await connection.query({ name: "qa.audio.expiry_delay", text: "SELECT pg_sleep(2.1)", values: [] });
+            const rows = await connection.query<Row>(statement);
+            if (statement.name === "listen.audio.append") mutationReached = true;
+            return rows;
+          },
+        })),
+      };
+      await expect(createPostgresDeviceSessionUploadRepository({ pool: delayedPool }).append(expiring, expiryUpload.id, 0, audio))
+        .rejects.toMatchObject({ code: "expired_context" });
+      expect(mutationReached).toBe(true);
+      expect(await uploads.read(context, expiryUpload.id)).toMatchObject({ chunkCount: 0, byteCount: 0 });
+      expect(await uploads.append(context, expiryUpload.id, 0, audio)).toMatchObject({ chunkCount: 1, byteCount: audio.length });
+      const uploadEndedAt = new Date(Date.now() + 2000).toISOString();
+      await repository.append(context, { ...firstSegment, session_id: rollbackUpload.id,
+        segment: { ...firstSegment.segment, id: crypto.randomUUID(), start: 0, end: 1 }, appended_at: uploadEndedAt });
+      await expect(repository.finalize(context, { version: LISTEN_CAPTURE_FINALIZE_VERSION, session_id: rollbackUpload.id,
+        terminal_status: "completed", ended_at: uploadEndedAt })).rejects.toMatchObject({ code: "transition_invalid" });
+      await uploads.complete(context, rollbackUpload.id);
+      await expect(repository.finalize(context, { version: LISTEN_CAPTURE_FINALIZE_VERSION, session_id: rollbackUpload.id,
+        terminal_status: "completed", ended_at: uploadEndedAt })).resolves.toMatchObject({ kind: "sealed", segment_count: 1 });
+      const raced = await Promise.allSettled([uploads.append(context, upload.id, 1, audio), uploads.complete(context, upload.id)]);
+      expect(raced[1]!.status).toBe("fulfilled");
+      const completedUpload = await uploads.read(context, upload.id);
+      expect(completedUpload?.state).toBe("complete");
+      expect(completedUpload?.chunkCount).toBe(raced[0]!.status === "fulfilled" ? 2 : 1);
+      expect(completedUpload?.byteCount).toBe(completedUpload!.chunkCount * audio.length);
+      expect(await uploads.open(context, uploadInput)).toEqual(completedUpload);
+      expect(await uploads.append(context, upload.id, 0, audio)).toEqual(completedUpload);
+      expect(await uploads.complete(context, upload.id)).toEqual(completedUpload);
+      await expect(uploads.append(context, upload.id, completedUpload!.chunkCount, audio)).rejects.toMatchObject({ code: "idempotency_conflict" });
+      const [audioRows] = await ownerSql.unsafe<{ chunks: number; bytes: number; finalizations: number }[]>(`SELECT
+        (SELECT count(*)::int FROM omi_memory.listen_capture_audio_chunks WHERE account_id=$1 AND session_id=$2) AS chunks,
+        (SELECT sum(octet_length(bytes))::int FROM omi_memory.listen_capture_audio_chunks WHERE account_id=$1 AND session_id=$2) AS bytes,
+        (SELECT count(*)::int FROM omi_memory.listen_formation_finalizations WHERE account_id=$1 AND session_id=$2) AS finalizations`, [accountId, upload.id]);
+      expect(audioRows).toEqual({ chunks: completedUpload!.chunkCount, bytes: completedUpload!.byteCount, finalizations: 0 });
+      await expect(appRolePool.withTransaction({ isolationLevel: "serializable", accessMode: "read only" }, connection => connection.query({ name: "qa.raw_audio_denied", text: "SELECT bytes FROM omi_memory.listen_capture_audio_chunks", values: [] }))).rejects.toMatchObject({ code: "42501" });
+      expect(() => uploads.read({ ...context }, upload.id)).toThrow("was not issued by auth composition");
+      const deviceProject = "listen-capture-qa";
+      const deviceUid = `listen-user-${suffix}`;
+      await ownerSql.unsafe(`INSERT INTO omi_memory.firebase_identity_bindings
+        (firebase_project_id,firebase_uid,account_id,principal_id,source_control_revision) VALUES($1,$2,$3,$4,17)`, [deviceProject,deviceUid,accountId,principalId]);
+      await ownerSql.unsafe(`INSERT INTO omi_memory.firebase_application_credential_bindings
+        (account_id,firebase_project_id,firebase_uid,principal_id,application_id,credential_id) VALUES($1,$2,$3,$4,$5,$6)`, [accountId,deviceProject,deviceUid,principalId,applicationId,credentialId]);
+      const ingress = createPostgresFirebaseDeviceSessionRuntime({
+        pool: appRolePool, project_id: deviceProject, runtime_mode: "deployed", application_id: applicationId,
+        context_ttl_seconds: 60, database_generation_digest: QUALIFICATION_DATABASE_GENERATION_DIGEST,
+        id_token_adapter: { verification_source: "firebase_production", verifyIdToken: async token => ({
+          aud: deviceProject, iss: `https://securetoken.google.com/${deviceProject}`,
+          uid: token === "device.qa.valid" ? deviceUid : "unbound-other-user",
+          sub: token === "device.qa.valid" ? deviceUid : "unbound-other-user",
+          exp: now + 3600, iat: now - 60, auth_time: now - 60,
+        }) },
+      });
+      const deviceRequest = (path: string, method: string, value?: unknown, token = "device.qa.valid") => ingress.fetch(new Request(`https://service.example${path}`, {
+        method, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(value === undefined ? {} : { body: JSON.stringify(value) }),
+      }));
+      const httpCreate = { captureId: crypto.randomUUID(), deviceId: "actual-route-qa", codec: 20 };
+      const createdResponse = await deviceRequest("/v1/device-sessions", "POST", httpCreate);
+      expect(createdResponse.status).toBe(201);
+      const httpSession = (await createdResponse.json() as { session: { id: string } }).session;
+      const httpAudio = { chunkIndex: 0, bytesBase64: Buffer.from(audio).toString("base64") };
+      expect((await deviceRequest(`/v1/device-sessions/${httpSession.id}/audio`, "POST", httpAudio)).status).toBe(200);
+      expect((await deviceRequest(`/v1/device-sessions/${httpSession.id}/complete`, "POST")).status).toBe(200);
+      expect((await deviceRequest(`/v1/device-sessions/${httpSession.id}/audio`, "POST", httpAudio)).status).toBe(200);
+      expect((await deviceRequest("/v1/device-sessions", "POST", { ...httpCreate, deviceId: "changed" })).status).toBe(409);
+      expect((await deviceRequest(`/v1/device-sessions/${httpSession.id}`, "GET", undefined, "other.qa.valid")).status).toBe(403);
+      const fetchedUpload = await deviceRequest(`/v1/device-sessions/${httpSession.id}`, "GET");
+      expect(fetchedUpload.status).toBe(200);
+      expect(await fetchedUpload.json()).toMatchObject({ session: { state: "complete", byteCount: audio.length, chunkCount: 1 } });
+
+
       await ownerSql.begin(async (transaction) => {
         await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
             (account_id, application_id, credential_id, credential_generation,
@@ -1593,6 +1697,9 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
             AND credential_generation = 4 AND capability = 'listen.capture.write'`,
         [accountId, applicationId, credentialId]);
       });
+      expect((await deviceRequest(`/v1/device-sessions/${httpSession.id}`, "GET")).status).toBe(403);
+      await expect(uploads.read(context, upload.id)).rejects.toMatchObject({ code: "grant_inactive" });
+      await expect(uploads.append(context, upload.id, 0, audio)).rejects.toMatchObject({ code: "grant_inactive" });
       await expect(repository.open(context, {
         ...openRequest, session_id: `listen-revoked:${suffix}`,
         conversation_id: `listen-revoked-conversation:${suffix}`,
@@ -1611,10 +1718,13 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           "memory_strategy_definitions",
           "listen_formation_outbox", "listen_conversation_finalization_intents",
           "listen_formation_finalizations", "listen_capture_segments",
+          "listen_capture_audio_chunks", "listen_capture_audio_uploads",
           "listen_capture_session_state_revisions", "listen_capture_sessions",
         ]) {
           await transaction.unsafe(`DELETE FROM omi_memory.${table} WHERE account_id = $1`, [accountId]);
         }
+        await transaction.unsafe(`DELETE FROM omi_memory.firebase_application_credential_bindings WHERE account_id = $1`, [accountId]);
+        await transaction.unsafe(`DELETE FROM omi_memory.firebase_identity_bindings WHERE account_id = $1`, [accountId]);
         await transaction.unsafe(`DELETE FROM omi_memory.application_grant_heads WHERE account_id = $1`, [accountId]);
         await transaction.unsafe(`DELETE FROM omi_memory.application_grant_revisions WHERE account_id = $1`, [accountId]);
         await transaction.unsafe(`DELETE FROM omi_memory.application_credential_heads WHERE account_id = $1`, [accountId]);

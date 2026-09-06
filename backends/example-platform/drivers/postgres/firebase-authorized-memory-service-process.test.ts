@@ -320,3 +320,33 @@ describe("PostgreSQL Firebase production memory service process kernel", () => {
     ]) expect(source).not.toContain(forbidden);
   });
 });
+
+test("device routes share process readiness and reject mismatched authority configuration", async () => {
+  const base = fixture();
+  const authorization = base.service_options.memory_read.authorization;
+  for (const changes of [{ project_id: "other-project" }, { application_id: "other-app" }, { database_generation_digest: "b".repeat(64) }, { pool: fixture().pool }]) {
+    expect(() => createPostgresFirebaseAuthorizedMemoryServiceProcess({ ...base.options,
+      service_options: { ...base.service_options, device_sessions: { ...authorization, ...changes } },
+    })).toThrow("invalid PostgreSQL Firebase memory service process options");
+  }
+  const process = createPostgresFirebaseAuthorizedMemoryServiceProcess({ ...base.options,
+    service_options: { ...base.service_options, device_sessions: authorization },
+  });
+  const request = () => new Request("https://service.example/v1/device-sessions", { method: "POST", body: "{}" });
+  expect((await process.fetch(request())).status).toBe(503);
+  expect(await process.start()).toEqual({ kind: "ready" });
+  expect((await process.fetch(request())).status).toBe(401);
+  await process.stop();
+  expect((await process.fetch(request())).status).toBe(503);
+});
+
+test("task routes cannot use a pool outside the process readiness proof", () => {
+  const base = fixture();
+  expect(() => createPostgresFirebaseAuthorizedMemoryServiceProcess({ ...base.options,
+    service_options: { ...base.service_options, tasks: {
+      authorization: { ...base.service_options.memory_read.authorization, pool: fixture().pool },
+      codecRootSecret: new Uint8Array(32).fill(1),
+      cursorSigningKeyset: { active_key_id: "test", keys: [{ key_id: "test", secret: new Uint8Array(32).fill(2) }] },
+    } },
+  })).toThrow("invalid PostgreSQL Firebase memory service process options");
+});

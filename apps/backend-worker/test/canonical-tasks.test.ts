@@ -99,6 +99,7 @@ function fixture() {
       : null;
   const prepareRead = (principal: { uid: string }) =>
     prepareTasksRead({
+      authorityBinding: { kind: "local_qa" },
       store: tasks,
       resolveAuthorization: () => ({
         owner_account_id: principal.uid,
