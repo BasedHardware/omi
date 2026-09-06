@@ -21,6 +21,7 @@ from llm_gateway.gateway.accounting import (
     cache_requested_for_openai_request,
     cache_write_ttl_for_anthropic_request,
     image_usage,
+    jit_gateway_receipt_for_trace,
     openai_usage_from_response,
     vertex_usage_from_response,
 )
@@ -372,6 +373,46 @@ def test_openai_reasoning_tokens_are_an_output_subset_not_double_charged() -> No
     assert usage.output_tokens_include_reasoning is True
     assert usage.billable_output_tokens == 100
     assert usage.total_tokens == 110
+
+
+def test_jit_aggregate_and_receipt_preserve_reasoning_tokens() -> None:
+    context = AccountingContext.create(
+        request_id='request-reasoning-jit',
+        caller='jit-proactivity',
+        user_uid='user-123',
+        feature='jit_proactivity',
+        api_surface='openai_chat_completions',
+        payer='omi',
+        jit_run_id='jit-reasoning-run',
+        jit_contract_version='jit-cloud-qa-v1',
+    )
+    trace = AttemptTrace()
+    trace.record(
+        provider='openai',
+        configured_model='gpt-5.6-luna',
+        route_artifact_id='route.jit.001',
+        fallback_reason=None,
+        retry_ordinal=1,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(
+            usage=ProviderUsage(
+                prompt_tokens=10,
+                uncached_input_tokens=10,
+                output_tokens=100,
+                reasoning_tokens=40,
+                output_tokens_include_reasoning=True,
+            )
+        ),
+    )
+
+    receipt = jit_gateway_receipt_for_trace(context, trace)
+
+    assert receipt is not None
+    assert receipt.aggregate.output_tokens == 100
+    assert receipt.aggregate.reasoning_tokens == 40
+    assert receipt.as_dict()['aggregate']['reasoning_tokens'] == 40
+    assert receipt.as_dict()['attempts'][0]['reasoning_tokens'] == 40
 
 
 def test_vertex_and_anthropic_usage_preserve_provider_cache_fields() -> None:

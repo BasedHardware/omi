@@ -662,6 +662,7 @@ class AccountingAggregate:
     cached_input_tokens: int
     cache_write_tokens: int
     output_tokens: int
+    reasoning_tokens: int
     estimated_cost_micro_usd: int | None
     cost_status: CostStatus
 
@@ -695,6 +696,7 @@ def aggregate_accounting_events(events: list[AccountingEvent]) -> AccountingAggr
         cached_input_tokens=sum(event.cached_input_tokens for event in jit_events),
         cache_write_tokens=sum(event.cache_write_tokens for event in jit_events),
         output_tokens=sum(event.output_tokens for event in jit_events),
+        reasoning_tokens=sum(event.reasoning_tokens for event in jit_events),
         estimated_cost_micro_usd=(
             sum(event.estimated_cost_micro_usd or 0 for event in jit_events) if cost_known else None
         ),
@@ -726,6 +728,7 @@ class JITGatewayReceipt:
                 'cached_input_tokens': self.aggregate.cached_input_tokens,
                 'cache_write_tokens': self.aggregate.cache_write_tokens,
                 'output_tokens': self.aggregate.output_tokens,
+                'reasoning_tokens': self.aggregate.reasoning_tokens,
                 'estimated_cost_micro_usd': self.aggregate.estimated_cost_micro_usd,
                 'cost_status': self.aggregate.cost_status.value,
             },
@@ -758,6 +761,7 @@ def jit_gateway_receipt_for_trace(
             'cached_input_tokens': event.cached_input_tokens,
             'cache_write_tokens': event.cache_write_tokens,
             'output_tokens': event.output_tokens,
+            'reasoning_tokens': event.reasoning_tokens,
             'estimated_cost_micro_usd': event.estimated_cost_micro_usd,
         }
         for event in events

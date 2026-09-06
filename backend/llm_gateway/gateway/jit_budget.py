@@ -23,8 +23,8 @@ MAX_ATTEMPTS = 3
 MAX_SPEND_MICRO_USD = 50_000
 MAX_INPUT_TOKENS = 32_768
 MAX_OUTPUT_TOKENS = 2_048
-_KNOWN_STATUSES = frozenset({'succeeded', 'failed', 'cancelled'})
-SettlementStatus = Literal['succeeded', 'failed', 'cancelled']
+_KNOWN_STATUSES = frozenset({'succeeded', 'failed', 'cancelled', 'released'})
+SettlementStatus = Literal['succeeded', 'failed', 'cancelled', 'released']
 
 
 @dataclass(frozen=True)
@@ -236,6 +236,21 @@ def settle_jit_provider_attempt(
             return False
         if int(active.get('ordinal', -1)) != reservation.ordinal:
             return False
+        # A reservation that was never sent to a provider can be released
+        # with a trusted zero cost.  Unknown provider outcomes continue to
+        # block the run permanently; callers must opt into this path only
+        # after checking the deadline before the provider call.
+        if status == 'released' and cost_micro_usd == 0:
+            tx.update(
+                ref,
+                {
+                    'blocked': False,
+                    'cost_status': 'released',
+                    'settled_attempts': int(data.get('settled_attempts', 0)) + 1,
+                    'active_reservation': None,
+                },
+            )
+            return True
         if cost_micro_usd is None or status != 'succeeded':
             tx.update(
                 ref,

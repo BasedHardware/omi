@@ -20,6 +20,7 @@ from database._client import get_customer_firestore_client
 from database import llm_usage as llm_usage_db
 from database import redis_db
 from database import users as users_db
+from llm_gateway.gateway.request_context import jit_budget_forward_headers
 from utils.http_client import get_llm_gateway_semaphore
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -1418,30 +1419,14 @@ def _jit_headers_for_forward(
     max_input_tokens: str | None,
     max_spend_micro_usd: str | None,
 ) -> dict[str, str]:
-    values = (contract_version, run_id, max_attempts, max_output_tokens, max_input_tokens, max_spend_micro_usd)
-    if all(value is None for value in values):
-        return {}
-    if (
-        contract_version != 'jit-cloud-qa-v1'
-        or not run_id
-        or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,127}', run_id)
-    ):
-        raise ValueError('invalid JIT qualification headers')
-    try:
-        numeric = [int(value or '') for value in values[2:]]
-    except ValueError as exc:
-        raise ValueError('invalid JIT qualification budget') from exc
-    ceilings = (3, 2_048, 32_768, 50_000)
-    if any(value <= 0 or value > ceiling for value, ceiling in zip(numeric, ceilings, strict=True)):
-        raise ValueError('JIT qualification budget exceeds QA ceiling')
-    return {
-        'X-Omi-Jit-Contract-Version': contract_version,
-        'X-Omi-Jit-Run-Id': run_id,
-        'X-Omi-Jit-Max-Attempts': str(numeric[0]),
-        'X-Omi-Jit-Max-Output-Tokens': str(numeric[1]),
-        'X-Omi-Jit-Max-Input-Tokens': str(numeric[2]),
-        'X-Omi-Jit-Max-Spend-Micro-Usd': str(numeric[3]),
-    }
+    return jit_budget_forward_headers(
+        contract_version,
+        run_id,
+        max_attempts,
+        max_output_tokens,
+        max_input_tokens,
+        max_spend_micro_usd,
+    )
 
 
 def _record_gateway_result(
@@ -1737,7 +1722,7 @@ async def _chat_completions_unobserved(
     }
     # Hermetic offline profile: short-circuit before quota / Anthropic, matching
     # the retired Rust llm_stub intercept so T2 chat flows stay deterministic.
-    if llm_stub_enabled():
+    if llm_stub_enabled() and not jit_headers:
         if body.get('stream') is True:
             return StreamingResponse(
                 stub_chat_completions_stream(body),
@@ -1748,10 +1733,12 @@ async def _chat_completions_unobserved(
     payload: dict[str, object] = {}
     try:
         gateway_mode = should_route_chat_agent_through_gateway() and _uses_managed_chat_agent(body)
+        if jit_headers and not gateway_mode:
+            raise RuntimeError('JIT qualification requires the managed gateway')
         # A BYOK Anthropic key cannot serve the managed Luna thinking lane, so
         # thinking escalations stay on the gateway instead of falling back to
         # direct Anthropic (which would 400 on the Luna alias).
-        if gateway_mode and not _is_thinking_escalation(body) and get_byok_key('anthropic'):
+        if gateway_mode and not jit_headers and not _is_thinking_escalation(body) and get_byok_key('anthropic'):
             record_fallback(
                 component='llm_gateway',
                 from_mode='managed_gateway',

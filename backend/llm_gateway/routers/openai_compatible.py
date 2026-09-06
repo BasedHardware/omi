@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 import json
+import re
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Request
@@ -66,7 +67,7 @@ from llm_gateway.gateway.jit_budget import JITAttemptReservation
 from llm_gateway.gateway.request_context import JITBudgetHeaders, jit_budget_headers_for, request_id_for
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, resolve_chat_completion_route
 from llm_gateway.gateway.schemas import FailureClass, RouteArtifact, RouteServingClass
-from llm_gateway.gateway.sse import SSEEventDecoder
+from llm_gateway.gateway.sse import SSEEvent, SSEEventDecoder
 from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
 
 router = APIRouter()
@@ -76,6 +77,7 @@ _image_generation_client: httpx.AsyncClient | None = None
 # credential failure, but they are not a bad credential: answering 401 tells
 # callers the key is invalid and makes a transient failure look permanent.
 _THROTTLED_FAILURE_CLASSES = frozenset({FailureClass.BYOK_RATE_LIMIT, FailureClass.BYOK_QUOTA})
+_SSE_FRAME_BOUNDARY = re.compile(br'(?:\r\n|\r|\n){2}')
 
 
 @router.post('/v1/chat/completions', response_model=None)
@@ -593,6 +595,11 @@ async def _prepared_streaming_iterator(
                 usage_status=UsageStatus.INDETERMINATE,
             )
             first_failure = first_failure or exc.failure_class.value
+            if jit_run_id is not None:
+                # A provider failure has unknown usage.  The reservation
+                # authority blocks this run, so do not attempt a fallback that
+                # would immediately spend around the blocked reservation.
+                raise last_error
             if not is_lkg_eligible(route, exc.failure_class):
                 raise last_error
             continue
@@ -633,13 +640,32 @@ async def _stream_with_terminal_metrics(
     finish_reason = 'unknown'
     usage_metadata: ProviderResponseMetadata | None = None
     passthrough_buffer = b''
+    terminal_settlement_ok = True
     output_budget = output_budget or OutputBudgetDecision(source='none', max_completion_tokens=None)
 
-    async def observe_terminal(*, outcome: str, error_class: str, phase: str) -> None:
-        nonlocal terminal_observed
+    async def observe_terminal(*, outcome: str, error_class: str, phase: str) -> bool:
+        nonlocal terminal_observed, terminal_settlement_ok
         if terminal_observed:
-            return
+            return terminal_settlement_ok
         terminal_observed = True
+        settlement_ok = await settle_jit_attempt(
+            prepared.reservation,
+            provider=prepared.provider,
+            model=prepared.model,
+            metadata=usage_metadata if outcome == 'success' else None,
+            status='succeeded' if outcome == 'success' else ('cancelled' if outcome == 'cancelled' else 'failed'),
+        )
+        terminal_settlement_ok = settlement_ok
+        if outcome == 'success' and not settlement_ok:
+            # The provider bytes may already be visible to the caller, but a
+            # successful JIT receipt is only valid after durable settlement.
+            outcome = 'error'
+            error_class = 'jit_budget_settlement_failed'
+            # Keep provider-observed usage for diagnostics and reconciliation;
+            # the failed settlement still suppresses the success receipt below.
+            usage_for_trace = usage_metadata
+        else:
+            usage_for_trace = usage_metadata if outcome == 'success' else None
         # Per the PR behavioral contract, actual fallback requires a subsequent
         # successful provider/route.  Only stamp the actual-fallback labels when
         # the terminal outcome is success; an error or cancellation means the
@@ -654,22 +680,15 @@ async def _stream_with_terminal_metrics(
             retry_ordinal=1,
             outcome=outcome,
             error_class=error_class,
-            metadata=usage_metadata,
+            metadata=usage_for_trace,
             usage_status=(
                 UsageStatus.CONFIRMED
-                if usage_metadata is not None and usage_metadata.usage is not None
+                if usage_for_trace is not None and usage_for_trace.usage is not None
                 else UsageStatus.NOT_REPORTED if outcome == 'success' else UsageStatus.INDETERMINATE
             ),
         )
         if accounting_context is not None:
             schedule_attempt_trace(accounting_context, trace)
-        await settle_jit_attempt(
-            prepared.reservation,
-            provider=prepared.provider,
-            model=prepared.model,
-            metadata=usage_metadata if outcome == 'success' else None,
-            status='succeeded' if outcome == 'success' else ('cancelled' if outcome == 'cancelled' else 'failed'),
-        )
         _safe_observe(
             lambda: observe_route_result(
                 started_at,
@@ -703,47 +722,69 @@ async def _stream_with_terminal_metrics(
             request_id=request_id,
             api_surface='openai_chat_completions',
         )
+        return settlement_ok
+
+    async def handle_events(frame_events: list[SSEEvent]) -> bool:
+        nonlocal completion_characters, finish_reason, terminal_marker_seen, usage_metadata
+        done_seen = False
+        for event in frame_events:
+            # SSEEvent is intentionally kept behind the decoder interface; the
+            # runtime only relies on its stable data attribute here.
+            data = event.data
+            if data.strip() == '[DONE]':
+                terminal_marker_seen = True
+                done_seen = True
+                await observe_terminal(outcome='success', error_class='none', phase='terminal_marker')
+                continue
+            payload = _stream_payload(data)
+            if payload is not None:
+                observed_usage = openai_usage_from_sse_payload(
+                    payload,
+                    cache_requested=prepared.cache_requested,
+                )
+                if observed_usage is not None:
+                    usage_metadata = observed_usage
+            completion_characters += _stream_completion_character_count(data)
+            observed_finish_reason = _stream_finish_reason(data)
+            if observed_finish_reason is not None:
+                finish_reason = observed_finish_reason
+        return done_seen
+
+    async def process_jit_frame(raw_frame: bytes, *, force_boundary: bool = False) -> list[bytes]:
+        normalized = raw_frame.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
+        if force_boundary and not normalized.endswith(b'\n\n'):
+            normalized += b'\n\n'
+        done_seen = await handle_events(decoder.feed(normalized))
+        emitted: list[bytes] = []
+        if done_seen and terminal_settlement_ok:
+            receipt = (
+                jit_gateway_receipt_for_trace(accounting_context, trace) if accounting_context is not None else None
+            )
+            if receipt is not None:
+                emitted.append(jit_gateway_receipt_sse_frame(receipt))
+        emitted.append(raw_frame)
+        return emitted
 
     async def inspect_chunk(chunk: bytes) -> list[bytes]:
-        nonlocal completion_characters, finish_reason, terminal_marker_seen, usage_metadata, passthrough_buffer
+        nonlocal passthrough_buffer
+        # Non-JIT callers must receive provider bytes unchanged.  The decoder
+        # observes a copy of each chunk only for metrics and terminal state.
+        if accounting_context is None or accounting_context.jit_run_id is None:
+            await handle_events(decoder.feed(chunk))
+            return [chunk]
+
         emitted: list[bytes] = []
         passthrough_buffer += chunk
         if len(passthrough_buffer) > 1024 * 1024:
             raise ValueError('SSE frame exceeds bounded decoder buffer')
-        while b'\n\n' in passthrough_buffer or b'\r\n\r\n' in passthrough_buffer:
-            # Normalize only the framing boundary; the decoder applies the
-            # same newline normalization when inspecting the payload.
-            normalized = passthrough_buffer.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
-            if b'\n\n' not in normalized:
+        while True:
+            boundary = _SSE_FRAME_BOUNDARY.search(passthrough_buffer)
+            if boundary is None:
                 break
-            frame, passthrough_buffer = normalized.split(b'\n\n', 1)
-            frame_bytes = frame + b'\n\n'
-            frame_events = decoder.feed(frame_bytes)
-            for event in frame_events:
-                if event.data.strip() == '[DONE]':
-                    terminal_marker_seen = True
-                    await observe_terminal(outcome='success', error_class='none', phase='terminal_marker')
-                    receipt = (
-                        jit_gateway_receipt_for_trace(accounting_context, trace)
-                        if accounting_context is not None
-                        else None
-                    )
-                    if receipt is not None:
-                        emitted.append(jit_gateway_receipt_sse_frame(receipt))
-                    continue
-                payload = _stream_payload(event.data)
-                if payload is not None:
-                    observed_usage = openai_usage_from_sse_payload(
-                        payload,
-                        cache_requested=prepared.cache_requested,
-                    )
-                    if observed_usage is not None:
-                        usage_metadata = observed_usage
-                completion_characters += _stream_completion_character_count(event.data)
-                observed_finish_reason = _stream_finish_reason(event.data)
-                if observed_finish_reason is not None:
-                    finish_reason = observed_finish_reason
-            emitted.append(frame_bytes)
+            end = boundary.end()
+            raw_frame = passthrough_buffer[:end]
+            passthrough_buffer = passthrough_buffer[end:]
+            emitted.extend(await process_jit_frame(raw_frame))
         return emitted
 
     if prepared.first_chunk is None:
@@ -778,6 +819,17 @@ async def _stream_with_terminal_metrics(
         await observe_terminal(outcome='error', error_class='transport_midstream', phase='midstream')
         raise
     else:
+        if passthrough_buffer:
+            # A provider may close after a valid data line without the usual
+            # blank-line delimiter.  Inspect a synthetic delimiter while
+            # yielding the original residual bytes unchanged.
+            residual = passthrough_buffer
+            passthrough_buffer = b''
+            if accounting_context is not None and accounting_context.jit_run_id is not None:
+                for emitted in await process_jit_frame(residual, force_boundary=True):
+                    yield emitted
+            else:
+                await handle_events(decoder.feed(residual + b'\n\n'))
         if not terminal_marker_seen:
             await observe_terminal(outcome='error', error_class='eof_before_terminal_marker', phase='midstream')
     finally:
@@ -834,11 +886,20 @@ def _apply_jit_request_budget(request_body: dict[str, Any], budget: JITBudgetHea
     estimated_input_tokens = len(json.dumps(request_body, separators=(',', ':'), ensure_ascii=False).encode('utf-8'))
     if estimated_input_tokens > budget.max_input_tokens:
         raise GatewayInvalidRequestError('JIT input budget exceeded', param='messages')
+    has_output_limit = False
     for key in ('max_tokens', 'max_completion_tokens'):
-        value = request_body.get(key)
-        if isinstance(value, int) and not isinstance(value, bool):
-            request_body[key] = min(value, budget.max_output_tokens)
-    if 'max_tokens' not in request_body and 'max_completion_tokens' not in request_body:
+        if key not in request_body or request_body[key] is None:
+            # OpenAI treats the two fields as aliases.  Remove explicit nulls so
+            # they cannot suppress the qualification ceiling or reach a
+            # provider that coerces null unexpectedly.
+            request_body.pop(key, None)
+            continue
+        value = request_body[key]
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise GatewayInvalidRequestError('invalid JIT output token budget', param=key)
+        request_body[key] = min(value, budget.max_output_tokens)
+        has_output_limit = True
+    if not has_output_limit:
         request_body['max_completion_tokens'] = budget.max_output_tokens
 
 

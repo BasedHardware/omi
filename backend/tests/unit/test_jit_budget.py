@@ -160,6 +160,23 @@ def test_failed_known_cost_also_blocks_next_attempt(fake_clients):
     assert _reserve(run_id='run-failed') is None
 
 
+def test_providerless_deadline_release_returns_reservation_to_budget(fake_clients):
+    clients, current, store = fake_clients
+    current.client = clients[0]
+    reservation = _reserve(run_id='run-providerless-release')
+    assert reservation is not None
+
+    assert jit_budget.settle_jit_provider_attempt(
+        reservation=reservation,
+        cost_micro_usd=0,
+        status='released',
+    )
+    assert _reserve(run_id='run-providerless-release') is not None
+    document = next(iter(store.documents.values()))
+    assert document['blocked'] is False
+    assert document['active_reservation'] is not None
+
+
 def test_late_known_settlement_cannot_reopen_unknown_block(fake_clients):
     clients, current, _ = fake_clients
     current.client = clients[0]

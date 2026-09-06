@@ -155,7 +155,7 @@ async def execute_chat_completion(
 
     # When the active route is in shadow/disabled rollout the LKG is already
     # the serving route — there is no separate LKG fallback to try.
-    if serving_is_lkg:
+    if serving_is_lkg or max_provider_attempts is not None:
         raise last_error
 
     if first_failure is not None and select_lkg_route_for_failure(resolved_route, first_failure) is not None:
@@ -438,7 +438,11 @@ async def _execute_route(
 
         last_error = error
         failed_provider_refs.append(provider_ref)
-        if index == len(refs) - 1 or not _can_try_next_provider(route, error.failure_class):
+        if (
+            index == len(refs) - 1
+            or max_provider_attempts is not None
+            or not _can_try_next_provider(route, error.failure_class)
+        ):
             raise error
         current_fallback_reason = error.failure_class
 
@@ -511,11 +515,14 @@ async def settle_jit_attempt(
     model: str,
     metadata: ProviderResponseMetadata | None,
     status: str,
+    release_without_provider: bool = False,
 ) -> bool:
     """Settle one reservation before allowing another provider attempt."""
     if reservation is None:
         return True
-    cost_micro_usd: int | None = None
+    if release_without_provider and (metadata is not None or status != 'released'):
+        raise ValueError('a provider-less JIT release must have status=released and no metadata')
+    cost_micro_usd: int | None = 0 if release_without_provider else None
     if metadata is not None:
         cost_status, estimated_cost = estimated_provider_cost_micro_usd(
             payer='omi',
@@ -573,6 +580,11 @@ async def _attempt_provider(
         provider_request = _provider_request(resolved_route, provider_ref, route=route)
         reservation: JITAttemptReservation | None = None
         if jit_run_id is not None:
+            if deadline_monotonic <= monotonic():
+                return None, GatewayProviderFailureError(
+                    'provider request deadline exhausted',
+                    failure_class=FailureClass.TIMEOUT_BEFORE_OUTPUT,
+                )
             try:
                 units = jit_reservation_units(provider_request)
                 reservation = await reserve_jit_attempt(
@@ -597,13 +609,16 @@ async def _attempt_provider(
                 return None, GatewayInvalidRequestError('JIT provider attempt budget exhausted')
         timeout_ms = int((deadline_monotonic - monotonic()) * 1000)
         if timeout_ms <= 0:
-            await settle_jit_attempt(
+            settled = await settle_jit_attempt(
                 reservation,
                 provider=provider_ref.provider,
                 model=provider_ref.model,
                 metadata=None,
-                status='failed',
+                status='released',
+                release_without_provider=True,
             )
+            if not settled:
+                return None, GatewayInvalidRequestError('JIT provider budget settlement rejected')
             return None, GatewayProviderFailureError(
                 'provider request deadline exhausted',
                 failure_class=FailureClass.TIMEOUT_BEFORE_OUTPUT,
@@ -615,6 +630,29 @@ async def _attempt_provider(
                 credentials=credential_context,
                 timeout_ms=timeout_ms,
             )
+            settlement_ok = await settle_jit_attempt(
+                reservation,
+                provider=provider_ref.provider,
+                model=provider_ref.model,
+                metadata=response.accounting,
+                status='succeeded',
+            )
+            if not settlement_ok:
+                if attempt_trace is not None:
+                    attempt_trace.record(
+                        provider=provider_ref.provider,
+                        configured_model=provider_ref.model,
+                        route_artifact_id=route.route_artifact_id,
+                        fallback_reason=fallback_reason.value if fallback_reason is not None else None,
+                        retry_ordinal=retry_ordinal,
+                        outcome='error',
+                        error_class='jit_budget_settlement_failed',
+                        metadata=response.accounting,
+                        usage_status=(
+                            UsageStatus.CONFIRMED if response.accounting.usage is not None else UsageStatus.NOT_REPORTED
+                        ),
+                    )
+                return None, GatewayInvalidRequestError('JIT provider budget settlement rejected')
             if attempt_trace is not None:
                 attempt_trace.record(
                     provider=provider_ref.provider,
@@ -626,14 +664,6 @@ async def _attempt_provider(
                     error_class='none',
                     metadata=response.accounting,
                 )
-            if not await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=response.accounting,
-                status='succeeded',
-            ):
-                return None, GatewayInvalidRequestError('JIT provider budget settlement rejected')
             return response, None
         except ProviderFailure as exc:
             await settle_jit_attempt(
@@ -655,6 +685,12 @@ async def _attempt_provider(
                     error_class=exc.failure_class.value,
                     usage_status=UsageStatus.INDETERMINATE,
                 )
+            if jit_run_id is not None:
+                # The provider may have consumed input or output before
+                # returning a retryable error.  The authority intentionally
+                # blocks an unknown-cost reservation; never reopen it for a
+                # retry or fallback that could spend around that fact.
+                return None, error
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 return None, error
         except asyncio.CancelledError:
