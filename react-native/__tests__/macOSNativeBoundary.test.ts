@@ -717,7 +717,7 @@ test('does not construct CBCentralManager until an explicit scan or connect', ()
   );
 });
 
-test('exposes a real OmiNative CoreBluetooth module instead of a hardware stub', () => {
+test('static tripwire: OmiNative wires CoreBluetooth and tested connection policy', () => {
   const source = readNativeSource('OmiNativeModule.mm');
   const header = readNativeSource('OmiNativeModule.h');
   const entitlements = readNativeSource('RnRuntime.entitlements');
@@ -744,10 +744,12 @@ test('exposes a real OmiNative CoreBluetooth module instead of a hardware stub',
   );
   expect(connectSource).toContain('cancelPeripheralConnection:existing');
   expect(source).toContain(
-    'self.connectedPeripheral != nil && self.connectedPeripheral != peripheral',
+    'OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)',
   );
   expect(source).toContain('characteristic.isNotifying');
-  expect(source).toContain('self.audioNotifying ? @"recording" : @"idle"');
+  expect(source).toContain(
+    'OmiBleRecordingReady([self.connectionState isEqualToString:@"connected"], self.audioNotifying, self.codec != nil)',
+  );
   const scanStart = source.indexOf('RCT_REMAP_METHOD(startScan');
   const scanSource = source.slice(
     scanStart,

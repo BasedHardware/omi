@@ -10,3 +10,6 @@ xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
 xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
   "$repo_root/react-native/apple/OmiDeviceInformationTest.mm" -o "$build_dir/device-information"
 "$build_dir/device-information"
+xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
+  "$repo_root/react-native/apple/OmiBleSessionTest.mm" -o "$build_dir/ble-session"
+"$build_dir/ble-session"

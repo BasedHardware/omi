@@ -13,6 +13,11 @@ import com.facebook.react.modules.core.DeviceEventManagerModule
 class OmiNativeModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
   private val ble = OmiBleController(context, ::emit)
 
+  override fun invalidate() {
+    ble.close()
+    super.invalidate()
+  }
+
   override fun getName() = "OmiNative"
 
   @ReactMethod
