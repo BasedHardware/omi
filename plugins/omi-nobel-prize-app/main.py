@@ -5,8 +5,8 @@ and learning about seminal scientific, peace, and literary achievements using th
 official Nobel Prize API (api.nobelprize.org).
 """
 
-import html
-from typing import Any, Dict, List, Optional
+import time
+from typing import Any, Dict, List, Optional, Tuple
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -21,6 +21,7 @@ try:
         LaureateDetailsRequest,
         NobelPrizesRequest,
         SearchLaureatesRequest,
+        get_current_year,
         resolve_nobel_category,
     )
 except ImportError:
@@ -32,12 +33,78 @@ except ImportError:
         LaureateDetailsRequest,
         NobelPrizesRequest,
         SearchLaureatesRequest,
+        get_current_year,
         resolve_nobel_category,
     )
 
 BASE_API_URL = "https://api.nobelprize.org/2.1"
 API_TIMEOUT = 10.0
 USER_AGENT = "OmiNobelPrizeApp/1.0 (https://github.com/BasedHardware/omi)"
+
+# Caching Configuration
+CACHE_TTL_SECONDS = 300.0  # 5 minutes TTL
+MAX_CACHE_SIZE = 500
+_response_cache: Dict[str, Tuple[float, ChatToolResponse]] = {}
+
+# Rate Limiting Configuration
+RATE_LIMIT_WINDOW_SECONDS = 60.0  # 1 minute window
+RATE_LIMIT_MAX_REQUESTS = 60  # max 60 requests per minute per client
+_rate_limit_records: Dict[str, List[float]] = {}
+
+
+def get_cached_response(cache_key: str) -> Optional[ChatToolResponse]:
+    """Retrieve an unexpired response from in-memory cache."""
+    now = time.time()
+    if cache_key in _response_cache:
+        cached_at, response = _response_cache[cache_key]
+        if now - cached_at < CACHE_TTL_SECONDS:
+            return response
+        del _response_cache[cache_key]
+    return None
+
+
+def set_cached_response(cache_key: str, response: ChatToolResponse) -> None:
+    """Store a response in cache, evicting oldest entries on capacity overflow."""
+    if len(_response_cache) >= MAX_CACHE_SIZE:
+        oldest_keys = sorted(_response_cache.keys(), key=lambda k: _response_cache[k][0])[:100]
+        for k in oldest_keys:
+            _response_cache.pop(k, None)
+    _response_cache[cache_key] = (time.time(), response)
+
+
+def check_rate_limit(request: Optional[Request]) -> bool:
+    """Check sliding-window rate limit for client IP."""
+    if request is None:
+        return True
+
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+    elif request.client and request.client.host:
+        client_ip = request.client.host
+    else:
+        client_ip = "127.0.0.1"
+
+    now = time.time()
+    timestamps = [t for t in _rate_limit_records.get(client_ip, []) if now - t < RATE_LIMIT_WINDOW_SECONDS]
+    if len(timestamps) >= RATE_LIMIT_MAX_REQUESTS:
+        _rate_limit_records[client_ip] = timestamps
+        return False
+
+    timestamps.append(now)
+    _rate_limit_records[client_ip] = timestamps
+    return True
+
+
+def clear_cache() -> None:
+    """Flush the cache (useful for testing)."""
+    _response_cache.clear()
+
+
+def clear_rate_limits() -> None:
+    """Flush rate limit records (useful for testing)."""
+    _rate_limit_records.clear()
+
 
 app = FastAPI(
     title="Omi Nobel Prize Global Laureates App",
@@ -131,7 +198,7 @@ async def omi_tools_manifest():
         "tools": [
             {
                 "name": "get_nobel_prizes",
-                "description": "Query Nobel Prizes by year (e.g. 2023) and/or category (physics, chemistry, medicine, literature, peace, economics).",
+                "description": "Query Nobel Prizes by year (1901 to current year) and/or category (physics, chemistry, medicine, literature, peace, economics).",
                 "endpoint": "/tools/get_nobel_prizes",
                 "parameters": {
                     "type": "object",
@@ -230,8 +297,19 @@ def _format_prize_block(p: Dict[str, Any]) -> str:
 
 
 @app.post("/tools/get_nobel_prizes", response_model=ChatToolResponse)
-async def get_nobel_prizes(request: NobelPrizesRequest):
+async def get_nobel_prizes(request: NobelPrizesRequest, raw_request: Request):
     """Retrieve Nobel Prizes filtered by year and/or category."""
+    if not check_rate_limit(raw_request):
+        return JSONResponse(
+            status_code=429,
+            content={"error": "Rate limit exceeded (max 60 requests/minute). Please slow down.", "result": None},
+        )
+
+    cache_key = f"prizes:{request.year}:{request.category}:{request.limit}"
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        return cached
+
     params: Dict[str, Any] = {"limit": request.limit, "sort": "desc"}
     if request.year:
         params["nobelPrizeYear"] = request.year
@@ -261,13 +339,17 @@ async def get_nobel_prizes(request: NobelPrizesRequest):
                 cat_name = CATEGORY_DISPLAY_NAMES.get(request.category, request.category)
                 filter_desc.append(f"category '{cat_name}'")
             filter_str = " for " + " and ".join(filter_desc) if filter_desc else ""
-            return ChatToolResponse(
+            res = ChatToolResponse(
                 result=f"No Nobel Prize records found{filter_str}."
             )
+            set_cached_response(cache_key, res)
+            return res
 
         blocks = [_format_prize_block(p) for p in prizes]
         result_text = "\n\n".join(blocks)
-        return ChatToolResponse(result=result_text)
+        res = ChatToolResponse(result=result_text)
+        set_cached_response(cache_key, res)
+        return res
 
     except httpx.RequestError as e:
         return ChatToolResponse(
@@ -280,8 +362,19 @@ async def get_nobel_prizes(request: NobelPrizesRequest):
 
 
 @app.post("/tools/search_nobel_laureates", response_model=ChatToolResponse)
-async def search_nobel_laureates(request: SearchLaureatesRequest):
+async def search_nobel_laureates(request: SearchLaureatesRequest, raw_request: Request):
     """Search Nobel laureates by name or keyword."""
+    if not check_rate_limit(raw_request):
+        return JSONResponse(
+            status_code=429,
+            content={"error": "Rate limit exceeded (max 60 requests/minute). Please slow down.", "result": None},
+        )
+
+    cache_key = f"search:{request.query.lower()}:{request.limit}"
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        return cached
+
     params = {"name": request.query, "limit": request.limit}
 
     try:
@@ -300,9 +393,11 @@ async def search_nobel_laureates(request: SearchLaureatesRequest):
         data = resp.json()
         laureates = data.get("laureates", [])
         if not laureates:
-            return ChatToolResponse(
+            res = ChatToolResponse(
                 result=f"No Nobel laureates found matching '{request.query}'."
             )
+            set_cached_response(cache_key, res)
+            return res
 
         output_lines = [f"Found {len(laureates)} Nobel laureate(s) matching '{request.query}':\n"]
         for idx, l in enumerate(laureates, 1):
@@ -327,7 +422,9 @@ async def search_nobel_laureates(request: SearchLaureatesRequest):
                 output_lines.append(f"   - **{yr} {cat}**: {mot.strip()}")
             output_lines.append("")
 
-        return ChatToolResponse(result="\n".join(output_lines).strip())
+        res = ChatToolResponse(result="\n".join(output_lines).strip())
+        set_cached_response(cache_key, res)
+        return res
 
     except httpx.RequestError as e:
         return ChatToolResponse(
@@ -340,10 +437,21 @@ async def search_nobel_laureates(request: SearchLaureatesRequest):
 
 
 @app.post("/tools/get_nobel_prize_by_category", response_model=ChatToolResponse)
-async def get_nobel_prize_by_category(request: CategoryPrizesRequest):
+async def get_nobel_prize_by_category(request: CategoryPrizesRequest, raw_request: Request):
     """Retrieve recent Nobel Prizes for a specific category."""
+    if not check_rate_limit(raw_request):
+        return JSONResponse(
+            status_code=429,
+            content={"error": "Rate limit exceeded (max 60 requests/minute). Please slow down.", "result": None},
+        )
+
     cat_code = request.category
     cat_title = CATEGORY_DISPLAY_NAMES.get(cat_code, cat_code)
+
+    cache_key = f"category:{cat_code}:{request.limit}"
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        return cached
 
     params = {
         "nobelPrizeCategory": cat_code,
@@ -367,13 +475,17 @@ async def get_nobel_prize_by_category(request: CategoryPrizesRequest):
         data = resp.json()
         prizes = data.get("nobelPrizes", [])
         if not prizes:
-            return ChatToolResponse(
+            res = ChatToolResponse(
                 result=f"No Nobel Prizes found for category '{cat_title}'."
             )
+            set_cached_response(cache_key, res)
+            return res
 
         header = f"## Recent Nobel Prizes in {cat_title}\n"
         blocks = [_format_prize_block(p) for p in prizes]
-        return ChatToolResponse(result=header + "\n\n".join(blocks))
+        res = ChatToolResponse(result=header + "\n\n".join(blocks))
+        set_cached_response(cache_key, res)
+        return res
 
     except httpx.RequestError as e:
         return ChatToolResponse(
@@ -386,9 +498,19 @@ async def get_nobel_prize_by_category(request: CategoryPrizesRequest):
 
 
 @app.post("/tools/get_nobel_laureate_details", response_model=ChatToolResponse)
-async def get_nobel_laureate_details(request: LaureateDetailsRequest):
+async def get_nobel_laureate_details(request: LaureateDetailsRequest, raw_request: Request):
     """Retrieve detailed dossier and biographical information for a laureate."""
+    if not check_rate_limit(raw_request):
+        return JSONResponse(
+            status_code=429,
+            content={"error": "Rate limit exceeded (max 60 requests/minute). Please slow down.", "result": None},
+        )
+
     ident = request.identifier
+    cache_key = f"laureate:{ident.lower()}"
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        return cached
 
     try:
         async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
@@ -476,7 +598,9 @@ async def get_nobel_laureate_details(request: LaureateDetailsRequest):
         if wiki:
             details.append(f"\n**Wikipedia**: {wiki}")
 
-        return ChatToolResponse(result="\n".join(details))
+        res = ChatToolResponse(result="\n".join(details))
+        set_cached_response(cache_key, res)
+        return res
 
     except httpx.RequestError as e:
         return ChatToolResponse(

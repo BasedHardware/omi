@@ -4,27 +4,53 @@ All external HTTP requests to api.nobelprize.org are mocked.
 Tests run in milliseconds and require zero network access.
 """
 
+import importlib.util
+from pathlib import Path
 import sys
 import unittest
 from unittest.mock import AsyncMock, patch
 
+# Resolve plugin directory reliably regardless of invocation path
+CURRENT_DIR = Path(__file__).resolve().parent
+
 try:
+    import fastapi
     import httpx
+    import pydantic
     from fastapi.testclient import TestClient
-    from .main import app
-    from .models import (
-        NOBEL_CATEGORY_MAP,
-        CategoryPrizesRequest,
-        ChatToolResponse,
-        LaureateDetailsRequest,
-        NobelPrizesRequest,
-        SearchLaureatesRequest,
-        resolve_nobel_category,
-    )
     DEPS_AVAILABLE = True
 except ImportError as e:
     DEPS_AVAILABLE = False
     IMPORT_ERROR = str(e)
+
+if DEPS_AVAILABLE:
+    # Programmatically load models.py
+    _MODELS_PATH = CURRENT_DIR / "models.py"
+    _MODELS_SPEC = importlib.util.spec_from_file_location("models", _MODELS_PATH)
+    assert _MODELS_SPEC is not None and _MODELS_SPEC.loader is not None
+    models = importlib.util.module_from_spec(_MODELS_SPEC)
+    sys.modules["models"] = models
+    _MODELS_SPEC.loader.exec_module(models)
+
+    # Programmatically load main.py
+    _MAIN_PATH = CURRENT_DIR / "main.py"
+    _MAIN_SPEC = importlib.util.spec_from_file_location("main", _MAIN_PATH)
+    assert _MAIN_SPEC is not None and _MAIN_SPEC.loader is not None
+    main = importlib.util.module_from_spec(_MAIN_SPEC)
+    sys.modules["main"] = main
+    _MAIN_SPEC.loader.exec_module(main)
+
+    app = main.app
+    clear_cache = main.clear_cache
+    clear_rate_limits = main.clear_rate_limits
+    NOBEL_CATEGORY_MAP = models.NOBEL_CATEGORY_MAP
+    resolve_nobel_category = models.resolve_nobel_category
+    NobelPrizesRequest = models.NobelPrizesRequest
+    SearchLaureatesRequest = models.SearchLaureatesRequest
+    CategoryPrizesRequest = models.CategoryPrizesRequest
+    LaureateDetailsRequest = models.LaureateDetailsRequest
+    ChatToolResponse = models.ChatToolResponse
+    get_current_year = models.get_current_year
 
 
 # Sample Mock Data
@@ -111,6 +137,8 @@ class TestOmiNobelPrizeApp(unittest.TestCase):
     """Hermetic unit tests for Omi Nobel Prize app."""
 
     def setUp(self):
+        clear_cache()
+        clear_rate_limits()
         self.client = TestClient(app, raise_server_exceptions=False)
 
     def test_root_endpoint(self):
@@ -201,15 +229,18 @@ class TestOmiNobelPrizeApp(unittest.TestCase):
         self.assertIsNone(data.get("result"))
         self.assertIn("Nobel Prize API error (HTTP 502)", data.get("error", ""))
 
-    def test_get_nobel_prizes_invalid_year(self):
-        """POST /tools/get_nobel_prizes returns 422 for year before 1901."""
-        response = self.client.post(
-            "/tools/get_nobel_prizes",
-            json={"year": 1850},
-        )
-        self.assertEqual(response.status_code, 422)
-        data = response.json()
-        self.assertIn("year", data.get("error", ""))
+    def test_get_nobel_prizes_invalid_year_bounds(self):
+        """POST /tools/get_nobel_prizes rejects year before 1901 and future years."""
+        # Pre-1901
+        res_old = self.client.post("/tools/get_nobel_prizes", json={"year": 1850})
+        self.assertEqual(res_old.status_code, 422)
+        self.assertIn("year", res_old.json().get("error", "").lower())
+
+        # Future year (current_year + 1)
+        next_year = get_current_year() + 1
+        res_future = self.client.post("/tools/get_nobel_prizes", json={"year": next_year})
+        self.assertEqual(res_future.status_code, 422)
+        self.assertIn("year", res_future.json().get("error", "").lower())
 
     @patch("httpx.AsyncClient.get", new_callable=AsyncMock)
     def test_search_nobel_laureates_success(self, mock_get):
@@ -323,6 +354,38 @@ class TestOmiNobelPrizeApp(unittest.TestCase):
         data = response.json()
         self.assertIsNone(data.get("result"))
         self.assertIn("Failed to communicate with Nobel Prize API", data.get("error", ""))
+
+    @patch("httpx.AsyncClient.get", new_callable=AsyncMock)
+    def test_short_lived_cache_avoids_redundant_upstream_calls(self, mock_get):
+        """Second identical request serves from cache without hitting upstream API."""
+        mock_get.return_value = MockResponse(200, MOCK_PRIZES_PAYLOAD)
+
+        # Call 1: Populates cache
+        resp1 = self.client.post("/tools/get_nobel_prizes", json={"year": 2023, "category": "physics"})
+        self.assertEqual(resp1.status_code, 200)
+        self.assertEqual(mock_get.call_count, 1)
+
+        # Call 2: Hit cache
+        resp2 = self.client.post("/tools/get_nobel_prizes", json={"year": 2023, "category": "physics"})
+        self.assertEqual(resp2.status_code, 200)
+        self.assertEqual(mock_get.call_count, 1)  # Still 1, served from cache!
+        self.assertEqual(resp1.json(), resp2.json())
+
+    @patch("httpx.AsyncClient.get", new_callable=AsyncMock)
+    def test_server_side_rate_limiting(self, mock_get):
+        """Exceeding rate limit triggers 429 response."""
+        mock_get.return_value = MockResponse(200, MOCK_PRIZES_PAYLOAD)
+
+        # Send 60 requests (allowed)
+        for i in range(60):
+            # Vary query so it tests rate limiter and not just cache
+            resp = self.client.post("/tools/get_nobel_prizes", json={"limit": (i % 5) + 1})
+            self.assertEqual(resp.status_code, 200)
+
+        # 61st request should be throttled with 429
+        throttled = self.client.post("/tools/get_nobel_prizes", json={"limit": 1})
+        self.assertEqual(throttled.status_code, 429)
+        self.assertIn("Rate limit exceeded", throttled.json().get("error", ""))
 
 
 if __name__ == "__main__":

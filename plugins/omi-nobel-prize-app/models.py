@@ -64,7 +64,9 @@ def resolve_nobel_category(val: Optional[str]) -> Optional[str]:
     )
 
 
-CURRENT_YEAR = datetime.now().year
+def get_current_year() -> int:
+    """Return the current calendar year dynamically."""
+    return datetime.now().year
 
 
 class NobelPrizesRequest(BaseModel):
@@ -72,9 +74,7 @@ class NobelPrizesRequest(BaseModel):
 
     year: Optional[int] = Field(
         None,
-        ge=1901,
-        le=CURRENT_YEAR + 1,
-        description=f"Year the Nobel Prize was awarded (1901-{CURRENT_YEAR}). If omitted, retrieves recent prizes.",
+        description="Year the Nobel Prize was awarded (1901 to current year). If omitted, retrieves recent prizes.",
     )
     category: Optional[str] = Field(
         None,
@@ -86,6 +86,15 @@ class NobelPrizesRequest(BaseModel):
         le=25,
         description="Maximum number of prizes to return (1-25, default 5).",
     )
+
+    @field_validator("year")
+    @classmethod
+    def validate_year(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None:
+            max_year = get_current_year()
+            if v < 1901 or v > max_year:
+                raise ValueError(f"Year must be between 1901 and {max_year}.")
+        return v
 
     @field_validator("category")
     @classmethod
