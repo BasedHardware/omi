@@ -3,8 +3,9 @@ import SwiftUI
 
 /// The constant floating top bar.
 ///
-/// **It carries the destinations flat, and nothing opens.** On the left, one pill per destination:
-/// `Chat`, `Brain`, `Tasks`, `Apps`. On the right, operational status and Settings
+/// **It carries the destinations flat, and nothing opens.** On the left, the system tab bar — a native
+/// segmented control (`TopNavigationDestinationRow`), one tab per destination: `Chat`, `Memories`,
+/// `Tasks`, `Apps`. On the right, operational status and Settings
 /// stay persistent; referral remains available from Settings without competing
 /// with the product's primary destinations.
 ///
@@ -215,7 +216,8 @@ enum TopNavigationLayoutMetrics {
 
   /// The bar's own height.
   ///
-  /// The row inside it is 32 pt (the icon buttons; the pills are 30), so this is that plus a band of
+  /// The row inside it is 32 pt (the icon buttons; the native tab bar is a hair under), so this is
+  /// that plus a band of
   /// air top and bottom. Comfortably more than twice `barCornerRadius`, which matters: at exactly
   /// twice, the 22 pt corner degenerates into a capsule and the bar stops being the same *shape* as
   /// the panels under it — it becomes a giant pill sitting on two rounded rectangles.
