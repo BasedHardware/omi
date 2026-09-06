@@ -10,11 +10,23 @@ private struct RuntimeOwnerDefaultsReference: @unchecked Sendable {
 struct RuntimeOwnerAuthorizationSnapshot: Equatable, Sendable {
   let ownerID: String
   fileprivate let generation: UInt64
+  fileprivate let authorityNonce: UUID
+
+  /// Session generation captured with the owner. A fresh snapshot after a
+  /// same-owner sign-out/sign-in must not authorize work carrying the prior
+  /// session's provenance.
+  var authorizationGeneration: UInt64 { generation }
+
+  /// Per-process authority identity. Generation counters restart at zero in a
+  /// new process, so durable native notification payloads must carry this
+  /// nonce before they can be compared with a fresh snapshot.
+  var authorizationNonce: UUID { authorityNonce }
 }
 
 final class RuntimeOwnerAuthorizationAuthority: @unchecked Sendable {
   static let shared = RuntimeOwnerAuthorizationAuthority()
 
+  private let authorityNonce = UUID()
   private let lock = NSLock()
   private var generation: UInt64 = 0
   private var ownerID: String?
@@ -54,7 +66,8 @@ final class RuntimeOwnerAuthorizationAuthority: @unchecked Sendable {
       }
       guard let normalized, !revoked else { return nil }
       if expectedOwnerID != nil, normalizedExpectedOwnerID != normalized { return nil }
-      return RuntimeOwnerAuthorizationSnapshot(ownerID: normalized, generation: generation)
+      return RuntimeOwnerAuthorizationSnapshot(
+        ownerID: normalized, generation: generation, authorityNonce: authorityNonce)
     }
   }
 
@@ -69,7 +82,10 @@ final class RuntimeOwnerAuthorizationAuthority: @unchecked Sendable {
         revokeUnexpectedOwnerMismatch()
         return false
       }
-      return !revoked && normalized == snapshot.ownerID && generation == snapshot.generation
+      return !revoked
+        && normalized == snapshot.ownerID
+        && generation == snapshot.generation
+        && authorityNonce == snapshot.authorityNonce
     }
   }
 

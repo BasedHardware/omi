@@ -162,6 +162,22 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
       - uses: google-github-actions/setup-gcloud@v3
+      - name: Ensure named development Redis API is enabled before provisioning
+        run: |
+          set -euo pipefail
+          service="redis.googleapis.com"
+          enabled_service="$(timeout --foreground --kill-after=5s 60s gcloud services list --enabled \
+            --project "$QA_PROJECT" --filter="config.name=${service}" --format='value(config.name)' --limit=1)"
+          if [[ "$enabled_service" != "$service" ]]; then
+            timeout --foreground --kill-after=5s 60s gcloud services enable "$service" \
+              --project "$QA_PROJECT" --quiet
+          fi
+          enabled_service="$(timeout --foreground --kill-after=5s 60s gcloud services list --enabled \
+            --project "$QA_PROJECT" --filter="config.name=${service}" --format='value(config.name)' --limit=1)"
+          [[ "$enabled_service" == "$service" ]] || {
+            echo "ERROR: $service is not enabled in $QA_PROJECT." >&2
+            exit 1
+          }
       - name: Preflight required development secret metadata before resource mutation
         run: |
           set -euo pipefail

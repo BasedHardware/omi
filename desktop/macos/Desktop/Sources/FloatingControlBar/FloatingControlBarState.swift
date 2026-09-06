@@ -258,6 +258,8 @@ struct FloatingBarNotification: Identifiable, Equatable {
   /// Explicit feedback controls for a planned JIT trigger. This is opaque
   /// provenance only; action labels are rendered by the card.
   let jitFeedbackContext: JITTriggerFeedbackContext?
+  /// Ambient JIT feedback is delivery-scoped and has no standing trigger.
+  let jitAmbientFeedbackContext: JITAmbientFeedbackContext?
   /// Optional opaque proactive-suggestion join keys. No card content or screen
   /// provenance enters notification analytics through this field.
   let suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
@@ -280,6 +282,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     jitFeedbackContext: JITTriggerFeedbackContext? = nil,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
@@ -296,6 +299,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.context = context
     self.action = action
     self.jitFeedbackContext = jitFeedbackContext
+    self.jitAmbientFeedbackContext = jitAmbientFeedbackContext
     self.suggestionTelemetryIdentity = suggestionTelemetryIdentity
     self.insightDeliveryID = insightDeliveryID
     self.screenshotData = screenshotData

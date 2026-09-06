@@ -248,7 +248,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       ownerID: owner,
       eventID: JITProactivityReservation.identifier("event", "jit-banner-route"),
       triggerMemoryID: "memory-jit-banner-route",
-      accountGeneration: 5,
+      accountGeneration: AccountCutoverControlManager.shared.control.accountGeneration,
       triggerRevision: 9)
     let userInfo: [AnyHashable: Any] = [
       "omi.jit.feedback.v1": [
@@ -285,6 +285,51 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     XCTAssertEqual(
       JITTriggerFeedbackActionRouter.visibleActions,
       [.useful, .falsePositive, .snooze, .disable, .missedOrLate])
+
+    // A still-valid owner snapshot cannot authorize a banner from another
+    // cutover generation. Exercise the same presenter path as the positive.
+    var stalePayload = try XCTUnwrap(userInfo["omi.jit.feedback.v1"] as? [String: Any])
+    stalePayload["account_generation"] = context.accountGeneration + 1
+    presented = nil
+    XCTAssertFalse(
+      service.routeJITDetailCard(
+        title: "A useful reminder",
+        message: "The release is waiting on review.",
+        userInfo: ["omi.jit.feedback.v1": stalePayload]))
+    XCTAssertNil(presented)
+  }
+
+  @MainActor
+  func testDirectorRejectsStaleJITGenerationBeforePresentation() async throws {
+    let owner = "owner-jit-generation-gate-\(UUID().uuidString)"
+    let fixture = try XCTUnwrap(ownerFixture)
+    await fixture.establish(authOwnerID: owner)
+    let currentGeneration = AccountCutoverControlManager.shared.control.accountGeneration
+    let candidateID = JITProactivityReservation.identifier("candidate", "stale-generation")
+    let eventID = JITProactivityReservation.identifier("notification", candidateID)
+    let context = JITAmbientFeedbackContext(
+      ownerID: owner,
+      eventID: eventID,
+      candidateID: candidateID,
+      accountGeneration: currentGeneration + 1,
+      authorizationGeneration: 0,
+      authorizationNonce: UUID(uuidString: "00000000-0000-0000-0000-000000000201") ?? UUID())
+    var droppedCount = 0
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+
+    let result = service.presentContextDirectorNotification(
+      ownerID: owner,
+      title: "Stale ambient card",
+      message: "This card must not cross a cutover.",
+      decisionType: "suggest",
+      context: FloatingBarNotificationContext(
+        sourceTitle: "Context director",
+        assistantId: "context-director"),
+      jitAmbientFeedbackContext: context,
+      onDropped: { droppedCount += 1 })
+
+    XCTAssertEqual(result, .suppressed)
+    XCTAssertEqual(droppedCount, 1)
   }
 
   /// Behavioral guard for the category taxonomy: the director's real entry point must
