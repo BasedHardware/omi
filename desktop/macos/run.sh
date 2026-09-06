@@ -380,11 +380,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-AUTH_DEBUG_LOG=/private/tmp/auth-debug.log
-rm -f $AUTH_DEBUG_LOG
-auth_debug() { echo "[AUTH DEBUG][$(date +%H:%M:%S)] $1" >> $AUTH_DEBUG_LOG; }
-touch $AUTH_DEBUG_LOG
-
 # The local self-signed identity, created without a GUI and without a password prompt.
 #
 # The documented way to make this identity is Keychain Access -> Certificate Assistant, which
@@ -953,8 +948,6 @@ rewrite_bundled_dylib_load_path() {
 }
 
 step "Killing existing instances..."
-auth_debug "BEFORE pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
 # Only kill the dev app — never touch Omi Beta (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
 # Note: don't pkill cloudflared here — other agents may have tunnels running on this machine
@@ -974,8 +967,6 @@ else
     fi
 fi
 sleep 0.5  # Let cfprefsd flush after process death
-auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-auth_debug "AFTER pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
 
 # Each non-production app writes to its own bundle-and-launch log path. Never clear a
 # machine-global log here: another named QA bundle may still be running.
@@ -1317,8 +1308,6 @@ fi
 step "Building Swift app (swift build -c debug)..."
 xcrun swift build -c debug --package-path Desktop
 
-auth_debug "AFTER swift build: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-
 step "Creating app bundle..."
 substep "Removing prior bundle (if any)"
 rm -rf "$APP_BUNDLE"
@@ -1382,8 +1371,6 @@ cp -f Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 $URL_SCHEME" "$APP_BUNDLE/Contents/Info.plist"
-
-auth_debug "AFTER plist edits: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
 substep "Copying GoogleService-Info.plist"
 if [ "$LOCAL_PROFILE" = true ] && [ -f "Desktop/Sources/GoogleService-Info-Local.plist" ]; then
@@ -1525,8 +1512,6 @@ else
     substep "Named bundle ($BUNDLE_ID) — skipping provisioning profile"
 fi
 
-auth_debug "BEFORE signing: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-
 step "Preparing bundled native dependencies..."
 "$(dirname "$0")/scripts/prepare-desktop-bundle-native-deps.sh" "$APP_BUNDLE"
 
@@ -1587,9 +1572,7 @@ omi_seed_dumped_auth_session() {
     # clear any prior CLI-written Keychain item (apple-tool: partition).
     # Tokens are seeded into UserDefaults; the app migrates them into
     # Keychain on launch with the correct teamid: partition (no prompt).
-    if ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE" "$APP_PATH"; then
-        auth_debug "AFTER auth seed: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-    else
+    if ! ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE" "$APP_PATH"; then
         echo "Warning: could not seed auth into $BUNDLE_ID. Launching cold."
     fi
 }
@@ -1638,8 +1621,6 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_SETTINGS_SEED:-0}" != "1" ]; t
         echo "Set OMI_SKIP_SETTINGS_SEED=1 only when intentionally testing bundle-local settings." >&2
         exit 1
     fi
-    auth_debug "AFTER settings seed: shortcut_askOmiEnabled=$(defaults read "$BUNDLE_ID" shortcut_askOmiEnabled 2>&1 || true)"
-    auth_debug "AFTER settings seed: devLazyPermissionsEnabled=$(defaults read "$BUNDLE_ID" devLazyPermissionsEnabled 2>&1 || true)"
 fi
 
 signal_desktop_launch() {
@@ -1706,8 +1687,6 @@ if [ "$IS_NAMED_BUNDLE" = true ]; then
 fi
 printf 'launch_mode=%s fast_reason=%s bundle_id=%s profile_root=%q\n' \
     "$LAUNCH_MODE" "$FAST_BUNDLE_REASON" "$BUNDLE_ID" "$PROFILE_ROOT"
-
-auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
 # `open` starts the app from launchd, not this shell, so documented QA
 # overrides must be forwarded explicitly or they silently do nothing. Only the
