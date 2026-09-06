@@ -1,4 +1,4 @@
-# v5 production readiness — 2026-09-06
+# v5 production readiness — 2026-09-07
 
 Status: code-side fixes verified locally; production configuration and physical-device validation remain outstanding.
 
@@ -15,7 +15,7 @@ The branch was pulled from `BasedHardware/omi:v5`, already at `a14c240bec`; a fi
 
 ## Evidence
 
-`bun run setup` completed; native dependency resolution was subsequently aligned with the hoisted workspace and the pinned CocoaPods version. `bun run check` passed: 268 React Native tests, 242 Worker contract tests, 45 Workers/D1 integration tests, 33 ratified-contract tests, 40 PWA tests and one C++ boundary test, plus native JVM transport, Apple OAuth callback, and real Bun Metro startup and macOS/iOS/Android bundle-initialization regressions. Formatting, lint, typecheck and the PWA production build passed. 11 React Native lint warnings and the web bundle-size warning remain. Worker strict deployment dry-run passed.
+`bun run setup` completed; native dependency resolution was subsequently aligned with the hoisted workspace and the pinned CocoaPods version. `bun run check` passed: 268 React Native tests, 242 Worker contract tests, 48 Workers/D1 integration tests, 33 ratified-contract tests, 40 PWA tests and one C++ boundary test, plus native JVM transport, Apple OAuth callback, and real Bun Metro startup and macOS/iOS/Android bundle-initialization regressions. Formatting, lint, typecheck and the PWA production build passed. 11 React Native lint warnings and the web bundle-size warning remain. Worker strict deployment dry-run passed.
 
 The real local Wrangler Worker on 8787 and PWA proxy on 5178 passed 19 HTTP requests again after the second pass covering read routes, invalid inputs, recording creation/upload/completion, repeated completion, rejection of late audio, chat admission/replay/conflict and persisted history. Missing/wrong authorization returned 401; another client could not read the validation chat. The local emulator used actual Durable Objects, D1 and R2 with synthetic test inputs. The local-only AI binding produced an explicit failed-generation event. A separate local Worker on 8790 used a remote Workers AI binding with local D1, R2 and Durable Objects: the real PWA on 5180 received READY, recalled READY in a follow-up, and showed both persisted replies after a fresh page load. Only synthetic prompts were sent to the live model; no Worker was deployed.
 
@@ -57,3 +57,13 @@ Chat conversation IDs now use the `chat:` namespace, keeping them distinct from 
 A further audit confirms that Firebase chat admission still uses the staging lifetime limit rather than production subscription/period authority. This remains a production blocker. The local PWA also requests legacy Settings/Connectors routes absent from the Worker; native transport routes those reads to the existing legacy origin. A production web transport needs equivalent authenticated routing. Neither staging labels nor a fabricated subscription policy are proof of production entitlement.
 
 Live retry evidence: `/tmp/omi-v5-transcription-live/retry-result.log`. The production app upload client recovered a deliberately lost acknowledgment, three concurrent identical retries, and a retry after completion without duplicate counts: 396 packets, 30,462 bytes. Changed bytes returned 409. The resulting real Whisper transcript matched the generated speech. The local emulator alone received migration 0007. Final code gate: `/tmp/omi-v5-upload-recovery-final-check.log`; strict dry-run: `/tmp/omi-v5-upload-recovery-dry-run.log`.
+
+## Persistence and entitlement source check
+
+The existing `StorageBridge` is a contract, with no native log/KV implementation. The sync outbox auto-replays and lacks a sign-out disposal API, so it cannot safely replace recording queues as-is. Persistent recording recovery needs an account-bound encrypted native journal and idempotent capture creation before replay can survive process death. Android has tested AES-GCM/KeyStore primitives; Apple currently stores credentials in Keychain but has no encrypted audio-file store. Native imported/environment sessions also need verified account identity before opening a persistent partition.
+
+The legacy backend's `/v1/users/me/usage-quota` is a display snapshot, not an atomic reservation API. Its enforcement uses monthly subscription limits, cost/question units, BYOK rules and overage policy. Polling that snapshot from the Worker would not make Worker admissions part of the authoritative usage ledger. Production billing integration therefore remains unresolved.
+
+Continuous recording currently reaches the per-session cap. Safe rollover needs firmware frame boundaries with space for a complete frame (62,208 raw bytes and 256 packets). Opus also needs decoder history/overlap handling across independently decoded segments; simply splitting byte queues would not prove continuous audio preservation.
+
+Conversation metadata now selects only the first, first-human and last messages per session in D1, returning bounded UTF-8 title/overview bytes instead of whole chat histories. A real D1 regression reduced approximately 4 MB across 84 messages to two summaries below 9 KB serialized, preserving Unicode whitespace, null characters, duplicate JSON keys and lone UTF-16 surrogate IDs. Returned metadata still scales with conversation count; pagination remains in the existing caller. Live PWA proxy admission/read returned the expected chat summary alongside recording rows (`/tmp/omi-v5-conversation-live-read.log`). Final gate: `/tmp/omi-v5-conversation-metadata-final-check.log`.
