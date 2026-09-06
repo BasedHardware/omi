@@ -364,12 +364,14 @@ export function ConversationsPage({
                   <Text style={styles.conversationDetailField}>
                     Status · {selected.status}
                   </Text>
-                  <Text style={styles.conversationDetailField}>
-                    {selected.locked ? 'Locked record' : 'Unlocked record'}
-                  </Text>
-                  <Text style={styles.conversationDetailField}>
-                    {selected.discarded ? 'Discarded record' : 'Active record'}
-                  </Text>
+                  {selected.locked && (
+                    <Text style={styles.conversationDetailField}>Locked</Text>
+                  )}
+                  {selected.discarded && (
+                    <Text style={styles.conversationDetailField}>
+                      Discarded
+                    </Text>
+                  )}
                 </View>
                 {selected.source === 'omi' &&
                   selected.id.startsWith('recording:') &&
