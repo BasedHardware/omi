@@ -37,7 +37,7 @@ from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.managed_compute import Decision, authorize_managed_compute
 from utils.other.endpoints import get_current_user_uid
-from utils.subscription import is_desktop_trial_paywalled
+from utils.subscription import RELEASE_PROBE_UID, is_desktop_trial_paywalled
 
 router = APIRouter()
 
@@ -1645,6 +1645,12 @@ async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
     except HTTPException:
         return
     if action not in _PLAN_GATED_PROXY_ACTIONS:
+        return
+    # Same exemption as enforce_chat_quota: dest's candidate probe signs in as
+    # this fixed non-human Free-plan UID to prove the Gemini provider path.
+    # Gating it 402s every desktop-backend auto-dev promotion (seen on
+    # 9cbe134a3c / #12839: `gemini_proxy: HTTP 402 (untyped)`).
+    if uid == RELEASE_PROBE_UID:
         return
     funding_owner = 'byok' if get_byok_key('gemini') else 'omi'
     decision = await run_blocking(

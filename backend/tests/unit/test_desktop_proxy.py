@@ -240,6 +240,44 @@ async def test_gemini_stream_proxy_rejects_basic_stream_generate(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_gemini_proxy_allows_the_release_probe_uid_through_the_plan_gate(monkeypatch):
+    """Dest candidate probe is Free-plan `omi-release-probe`; do not 402 it.
+
+    red-proof: drop the RELEASE_PROBE_UID early-return and this fails because
+    authorize_managed_compute is stubbed to deny, so the route 402s before
+    `_proxy` — the same class as desktop_backend_auto_dev #34017664510.
+    """
+    from fastapi.responses import Response
+
+    from utils.subscription import RELEASE_PROBE_UID
+
+    auth_calls = []
+    seen = []
+
+    def authorize(*_args, **_kwargs):
+        auth_calls.append(True)
+        return _decision(allowed=False, reason="basic_not_entitled")
+
+    async def fake_proxy(request, path, streaming, uid):
+        seen.append((path, streaming, uid))
+        return Response(b'{"ok":true}', media_type="application/json")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", _passthrough_run_blocking)
+    monkeypatch.setattr(desktop_proxy, "authorize_managed_compute", authorize)
+    monkeypatch.setattr(desktop_proxy, "_proxy", fake_proxy)
+
+    response = await desktop_proxy.gemini_proxy(
+        make_request(),
+        "models/gemini-2.5-flash:generateContent",
+        RELEASE_PROBE_UID,
+    )
+
+    assert response.status_code == 200
+    assert auth_calls == []
+    assert seen == [("models/gemini-2.5-flash:generateContent", False, RELEASE_PROBE_UID)]
+
+
+@pytest.mark.asyncio
 async def test_gemini_proxy_allows_paid_generate_to_reach_the_provider(monkeypatch):
     from fastapi.responses import Response
 
