@@ -220,7 +220,10 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     )
 
     XCTAssertLessThanOrEqual(plan.visibleEdges.count, 80)
-    XCTAssertLessThanOrEqual(plan.labelNodeIDs.count, 36)
+    // The detail-level label budget; names for the selection's neighbourhood
+    // are still bounded, just by the generous budget that names smaller
+    // circles earlier.
+    XCTAssertLessThanOrEqual(plan.labelNodeIDs.count, 110)
     XCTAssertTrue(
       plan.visibleEdges.allSatisfy { edge in
         edge.edge.sourceId == "owner" || edge.edge.targetId == "owner"

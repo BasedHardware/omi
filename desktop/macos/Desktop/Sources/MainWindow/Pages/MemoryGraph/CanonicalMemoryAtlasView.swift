@@ -455,116 +455,116 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   private var mapColumn: some View {
-    VStack(spacing: 0) {
-      atlasToolbar
+    // The map owns the whole column; the toolbar floats over its top edge.
+    // Stacked above it, the toolbar's row cut the map off along the top and
+    // the territories drawn there with it.
+    GeometryReader { proxy in
+      let plan = renderPlanCache.makePlan(
+        viewportSize: proxy.size,
+        zoom: zoom,
+        pan: pan,
+        compact: compact,
+        selectedNodeID: selectedNodeID,
+        matchingNodeIDs: matchingNodeIDs,
+        matchingEdges: matchingEdges,
+        isCameraMoving: isCameraMoving
+      )
 
-      GeometryReader { proxy in
-        let plan = renderPlanCache.makePlan(
-          viewportSize: proxy.size,
-          zoom: zoom,
-          pan: pan,
-          compact: compact,
-          selectedNodeID: selectedNodeID,
-          matchingNodeIDs: matchingNodeIDs,
-          matchingEdges: matchingEdges,
-          isCameraMoving: isCameraMoving
-        )
+      // One placement pass per frame, shared by the tint the canvas paints
+      // and the buttons laid over it, so the two cannot disagree about where
+      // a region's name is.
+      let (regions, quietened) = territory(in: proxy.size, plan: plan)
 
-        // One placement pass per frame, shared by the tint the canvas paints
-        // and the buttons laid over it, so the two cannot disagree about where
-        // a region's name is.
-        let (regions, quietened) = territory(in: proxy.size, plan: plan)
+      ZStack {
+        // Hosted content paints no ground: the map sits on the same glass as every other page,
+        // so the canvas below is drawn for a light surface. `Color.clear` only sizes the stack.
+        Color.clear
 
-        ZStack {
-          // Hosted content paints no ground: the map sits on the same glass as every other page,
-          // so the canvas below is drawn for a light surface. `Color.clear` only sizes the stack.
-          Color.clear
+        atlasCanvas(size: proxy.size, plan: plan, regions: regions, quietened: quietened)
+          // Camera gestures belong to the painted atlas only. Keeping them
+          // off the enclosing ZStack prevents a click on zoom, playback, or
+          // the selection strip from also selecting a node behind the control.
+          .contentShape(Rectangle())
+          .gesture(panGesture)
+          .simultaneousGesture(magnificationGesture(in: proxy.size))
+          .simultaneousGesture(
+            SpatialTapGesture().onEnded { value in
+              selectAtlasElement(at: value.location, in: proxy.size, plan: plan)
+            }
+          )
 
-          atlasCanvas(size: proxy.size, plan: plan, regions: regions, quietened: quietened)
-            // Camera gestures belong to the painted atlas only. Keeping them
-            // off the enclosing ZStack prevents a click on zoom, playback, or
-            // the selection strip from also selecting a node behind the control.
-            .contentShape(Rectangle())
-            .gesture(panGesture)
-            .simultaneousGesture(magnificationGesture(in: proxy.size))
-            .simultaneousGesture(
-              SpatialTapGesture().onEnded { value in
-                selectAtlasElement(at: value.location, in: proxy.size, plan: plan)
-              }
-            )
-
-          // Names and territories stay up while the camera moves. They used
-          // to vanish for the length of every pan and zoom, which read as the
-          // map falling apart under the hand; the entity cohort is cached for
-          // the gesture, so what moves each frame is only where things are.
-          ForEach(plan.interactiveNodes) { placement in
-            nodeButton(
-              placement,
-              size: proxy.size,
-              relatedNodeIDs: plan.relatedNodeIDs,
-              showLabel: plan.labelNodeIDs.contains(placement.id)
-                && !quietened.contains(placement.id),
-              labelAbove: plan.labelAboveNodeIDs.contains(placement.id)
-            )
-          }
-
-          // Above the entities: a region name that an entity's own label
-          // could cover would be the one label on the map with nothing
-          // underneath it to explain itself.
-          neighbourhoodCaptions(regions: regions)
-
-          if hasNoSearchMatches {
-            searchEmptyState
-              .allowsHitTesting(false)
-          }
-
-          HStack(spacing: 8) {
-            resetViewButton
-            zoomControls
-          }
-          .padding(compact ? 8 : 12)
-          .padding(.bottom, selectedNode == nil ? 0 : (compact ? 50 : 56))
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-
-          // Compact surfaces have no room for a side panel, so they keep the
-          // strip. Wide surfaces use the inspector instead.
-          if compact, let selectedNode {
-            selectionStrip(for: selectedNode)
-              .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-          }
-
-          if !compact {
-            MemoryAtlasInputMonitor(
-              onScroll: { delta, location in
-                scrollZoom(by: delta, anchoredAt: location, in: proxy.size)
-              },
-              onFocusSearch: { searchIsFocused = true }
-            )
-            .accessibilityHidden(true)
-          }
+        // Names and territories stay up while the camera moves. They used
+        // to vanish for the length of every pan and zoom, which read as the
+        // map falling apart under the hand; the entity cohort is cached for
+        // the gesture, so what moves each frame is only where things are.
+        ForEach(plan.interactiveNodes) { placement in
+          nodeButton(
+            placement,
+            size: proxy.size,
+            relatedNodeIDs: plan.relatedNodeIDs,
+            showLabel: plan.labelNodeIDs.contains(placement.id)
+              && !quietened.contains(placement.id),
+            labelAbove: plan.labelAboveNodeIDs.contains(placement.id)
+          )
         }
-        .onAppear { viewportSize = proxy.size }
-        .onChange(of: proxy.size) { _, newSize in viewportSize = newSize }
-        // Zooming back out is leaving the place you were in, pressed or not. Without this the
-        // map keeps hiding every other coastline long after the user stopped looking at one,
-        // and the only way back is a control they have no reason to know about.
-        .onChange(of: zoom) { _, level in
-          guard enteredRegionID != nil, let departureZoom, level < departureZoom else { return }
-          leaveNeighbourhood()
+
+        // Above the entities: a region name that an entity's own label
+        // could cover would be the one label on the map with nothing
+        // underneath it to explain itself.
+        neighbourhoodCaptions(regions: regions)
+
+        if hasNoSearchMatches {
+          searchEmptyState
+            .allowsHitTesting(false)
         }
-        // A neighbourhood id belongs to the snapshot that detected it: rebuild and the same
-        // ground can return under a different number, or not at all. Being inside a place that
-        // no longer exists is a mode with nothing on screen to explain it and no way out.
-        .onChange(of: snapshot.neighbourhoods.map(\.id)) { _, regions in
-          guard let entered = enteredRegionID, !regions.contains(entered) else { return }
-          leaveNeighbourhood()
+
+        HStack(spacing: 8) {
+          resetViewButton
+          zoomControls
         }
-        // No mat. The map used to be the one dark surface a content page drew, and was the one
-        // page in the app that did not look like the app. Ink resolves on the panel's own ground
-        // here, exactly as it does for the toolbar above.
-        .clipped()
+        .padding(compact ? 8 : 12)
+        .padding(.bottom, selectedNode == nil ? 0 : (compact ? 50 : 56))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+
+        // Compact surfaces have no room for a side panel, so they keep the
+        // strip. Wide surfaces use the inspector instead.
+        if compact, let selectedNode {
+          selectionStrip(for: selectedNode)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        }
+
+        if !compact {
+          MemoryAtlasInputMonitor(
+            onScroll: { delta, location in
+              scrollZoom(by: delta, anchoredAt: location, in: proxy.size)
+            },
+            onFocusSearch: { searchIsFocused = true }
+          )
+          .accessibilityHidden(true)
+        }
       }
+      .onAppear { viewportSize = proxy.size }
+      .onChange(of: proxy.size) { _, newSize in viewportSize = newSize }
+      // Zooming back out is leaving the place you were in, pressed or not. Without this the
+      // map keeps hiding every other coastline long after the user stopped looking at one,
+      // and the only way back is a control they have no reason to know about.
+      .onChange(of: zoom) { _, level in
+        guard enteredRegionID != nil, let departureZoom, level < departureZoom else { return }
+        leaveNeighbourhood()
+      }
+      // A neighbourhood id belongs to the snapshot that detected it: rebuild and the same
+      // ground can return under a different number, or not at all. Being inside a place that
+      // no longer exists is a mode with nothing on screen to explain it and no way out.
+      .onChange(of: snapshot.neighbourhoods.map(\.id)) { _, regions in
+        guard let entered = enteredRegionID, !regions.contains(entered) else { return }
+        leaveNeighbourhood()
+      }
+      // No mat. The map used to be the one dark surface a content page drew, and was the one
+      // page in the app that did not look like the app. Ink resolves on the panel's own ground
+      // here, exactly as it does for the toolbar above.
+      .clipped()
     }
+    .overlay(alignment: .top) { atlasToolbar }
     .background(Color.clear)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("canonical_memory_atlas")
