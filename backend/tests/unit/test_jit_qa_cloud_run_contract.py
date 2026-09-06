@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -463,6 +464,8 @@ def test_typesense_workflow_smokes_images_before_publish_and_has_unready_bootstr
     assert "unauthenticated_status" in text
     assert '"$smoke_url/collections/jit_qa_smoke/documents/export?include_fields=id,content"' in text
     assert 'scripts/jit_qa_typesense_projection.py --help' in text
+    import_smoke_secrets = re.findall(r"-e ENCRYPTION_SECRET=([A-Za-z0-9_-]+)", text)
+    assert import_smoke_secrets and all(len(secret) >= 32 for secret in import_smoke_secrets)
     assert "if: ${{ inputs.mode == 'prove' }}" in text
     assert "if: ${{ inputs.mode == 'bootstrap' }}" in text
     assert '"status": "not_qualified"' in text

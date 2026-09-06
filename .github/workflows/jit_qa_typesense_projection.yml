@@ -219,7 +219,7 @@ jobs:
             python3 backend/scripts/runtime_image_contracts.py smoke \
               --dockerfile backend/Dockerfile --image "$runner_tag"
             docker run --rm --entrypoint python3 \
-              -e ENCRYPTION_SECRET=jit-qa-import-smoke-secret \
+              -e ENCRYPTION_SECRET=0123456789abcdef0123456789abcdef \
               "$runner_tag" scripts/jit_qa_typesense_projection.py --help >/dev/null
           fi
           docker push "$typesense_tag" >/dev/null
