@@ -493,33 +493,38 @@ private struct CanonicalMemoryAtlasSurface: View {
               }
             )
 
-          if !isCameraMoving {
-            ForEach(plan.interactiveNodes) { placement in
-              nodeButton(
-                placement,
-                size: proxy.size,
-                relatedNodeIDs: plan.relatedNodeIDs,
-                showLabel: plan.labelNodeIDs.contains(placement.id)
-                  && !quietened.contains(placement.id),
-                labelAbove: plan.labelAboveNodeIDs.contains(placement.id)
-              )
-            }
-
-            // Above the entities: a region name that an entity's own label
-            // could cover would be the one label on the map with nothing
-            // underneath it to explain itself.
-            neighbourhoodCaptions(regions: regions)
+          // Names and territories stay up while the camera moves. They used
+          // to vanish for the length of every pan and zoom, which read as the
+          // map falling apart under the hand; the entity cohort is cached for
+          // the gesture, so what moves each frame is only where things are.
+          ForEach(plan.interactiveNodes) { placement in
+            nodeButton(
+              placement,
+              size: proxy.size,
+              relatedNodeIDs: plan.relatedNodeIDs,
+              showLabel: plan.labelNodeIDs.contains(placement.id)
+                && !quietened.contains(placement.id),
+              labelAbove: plan.labelAboveNodeIDs.contains(placement.id)
+            )
           }
+
+          // Above the entities: a region name that an entity's own label
+          // could cover would be the one label on the map with nothing
+          // underneath it to explain itself.
+          neighbourhoodCaptions(regions: regions)
 
           if hasNoSearchMatches {
             searchEmptyState
               .allowsHitTesting(false)
           }
 
-          zoomControls
-            .padding(compact ? 8 : 12)
-            .padding(.bottom, selectedNode == nil ? 0 : (compact ? 50 : 56))
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+          HStack(spacing: 8) {
+            resetViewButton
+            zoomControls
+          }
+          .padding(compact ? 8 : 12)
+          .padding(.bottom, selectedNode == nil ? 0 : (compact ? 50 : 56))
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
 
           // Compact surfaces have no room for a side panel, so they keep the
           // strip. Wide surfaces use the inspector instead.
@@ -771,12 +776,10 @@ private struct CanonicalMemoryAtlasSurface: View {
   private func territory(
     in size: CGSize, plan: MemoryAtlasRenderPlan
   ) -> (islands: [MemoryAtlasNeighbourhoodLabels.Placed], quietened: Set<String>) {
-    // The replay and live camera gestures deliberately suppress SwiftUI
-    // labels/targets. Re-solving caption placement during those frames would
-    // still walk every visible entity against every coastline, despite none of
-    // those captions being shown. Keep the camera/replay path to Canvas-only
-    // work; territories return as soon as the frame settles.
-    guard !isCameraMoving, !compact, matchingNodeIDs == nil,
+    // Territories are solved every frame, camera moving or not: a coastline
+    // that disappears while you pan is the map losing the very shape you
+    // were following.
+    guard !compact, matchingNodeIDs == nil,
       MemoryAtlasNeighbourhoodLabels.areVisible(
         detailLevel: plan.detailLevel, hasSelection: selectedNodeID != nil,
         isInsideNeighbourhood: enteredRegionID != nil)
@@ -1504,6 +1507,25 @@ private struct CanonicalMemoryAtlasSurface: View {
     .overlay(alignment: .top) {
       Divider().overlay(Ink.separator.opacity(0.24))
     }
+  }
+
+  /// Back to the whole map, framed as it opened. A round button beside the
+  /// zoom pill: the one thing to press when you have panned or zoomed
+  /// somewhere and want the overview back.
+  private var resetViewButton: some View {
+    Button {
+      resetViewport()
+    } label: {
+      Image(systemName: "viewfinder")
+        .scaledFont(size: 12, weight: .semibold)
+        .foregroundColor(Ink.secondary)
+        .frame(width: 30, height: 30)
+        .glassChip()
+    }
+    .buttonStyle(.plain)
+    .help("Reset view")
+    .accessibilityLabel("Reset view")
+    .accessibilityIdentifier("memory_atlas_reset_view")
   }
 
   private var zoomControls: some View {
