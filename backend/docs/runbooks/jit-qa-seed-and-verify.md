@@ -14,9 +14,15 @@ seeding, run the explicit create-only bootstrap against that named database:
 python3 backend/scripts/jit_qa_seed_and_verify.py bootstrap
 ```
 
-Bootstrap fails unless the named database is truly empty, creates only the
-fixed QA UID's minimal `users/{uid}` profile and `testers/{uid}` entitlement
-marker, and calls `ensure_canonical_apply_control_state` to create the real
+Bootstrap fails unless the named database has an empty user plane. A backend
+startup may have left the one known metadata-only
+`conversation_recovery_state/byok_abandonment_sweep` cursor; bootstrap accepts
+it only with the exact `generation`, `resume_after_path` (null), and
+`updated_at` fields, and preserves it. Any other collection, document, field,
+or malformed value fails closed. The receipt distinguishes this preserved
+runtime metadata from the empty user plane. Bootstrap creates only the fixed
+QA UID's minimal `users/{uid}` profile and `testers/{uid}` entitlement marker,
+and calls `ensure_canonical_apply_control_state` to create the real
 compatibility apply-control fence. It never creates a migration completion or
 ledger cutover receipt; those remain owned by the drain job's canonical
 `publish_ledger_migration_cutover` path. A durable

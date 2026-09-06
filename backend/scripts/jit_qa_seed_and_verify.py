@@ -4,10 +4,13 @@
 This operator is deliberately narrower than the deployment workflow.  It owns
 only a deterministic, synthetic fixture in the named ``jit-qa`` Firestore
 database.  The explicit ``bootstrap`` command is create-only and may only
-initialize a truly empty named database for the fixed QA identity.  It never
-discovers or edits another account, never creates a production control plane,
-and never calls a model.  The Cloud Run workflow owns job execution; this
-command consumes its content-free execution summaries.
+initialize an empty user plane for the fixed QA identity.  It tolerates the
+one known deployment recovery cursor in ``conversation_recovery_state`` after
+validating its exact metadata shape, preserves that cursor, and rejects every
+other collection or document.  It never discovers or edits another account,
+never creates a production control plane, and never calls a model.  The Cloud
+Run workflow owns job execution; this command consumes its content-free
+execution summaries.
 
 The fixture contains 101 canonical rows that are intentionally missing the
 ledger schema marker.  The production drain's mutation budget is 100 rows per
@@ -25,7 +28,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -66,6 +69,11 @@ MUTATION_PAGE_SIZE = 100
 EXCLUSIVITY_SCAN_LIMIT = ROW_COUNT + 1
 LEDGER_DRAIN_CURSOR_PATH = "knowledge_ledger_migration_control/inventory_cursor"
 RUN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,47}$")
+EMPTY_SCAN_RECOVERY_COLLECTION = "conversation_recovery_state"
+EMPTY_SCAN_RECOVERY_DOCUMENT = "byok_abandonment_sweep"
+EMPTY_SCAN_RECOVERY_FIELDS = frozenset({"generation", "resume_after_path", "updated_at"})
+EMPTY_SCAN_RECOVERY_DOCUMENT_LIMIT = 1
+EMPTY_SCAN_RECOVERY_GENERATION_MAX = 2**63 - 1
 SUMMARY_KEYS = (
     "inventoried_users",
     "scanned_documents",
@@ -200,27 +208,113 @@ def _qa_tester_payload() -> dict[str, Any]:
     }
 
 
-def _assert_named_database_empty(db_client: Any) -> None:
+def _assert_named_database_empty(db_client: Any) -> dict[str, Any]:
     """Prove the named database is empty before creating the QA account.
 
     ``collections()`` is a metadata-only inventory.  Firestore does not retain
-    empty collections, so any collection returned by this inventory means the
-    first-bootstrap precondition is false.  We stop before reading or writing a
-    document; the named database must be genuinely empty.
+    empty collections.  The deployed backend may, however, leave one bounded
+    recovery cursor in ``conversation_recovery_state`` before first bootstrap.
+    That cursor contains no user-plane data and is preserved.  Every other
+    collection, document, field, or malformed cursor fails closed before any
+    write.
     """
 
     collections_factory = getattr(db_client, "collections", None)
     if not callable(collections_factory):
         raise JITQAVerificationError("bootstrap requires a Firestore client that can inventory collections")
     try:
-        collections = list(collections_factory())
+        collection_iterator = iter(collections_factory())
+        collections = []
+        for _ in range(2):
+            try:
+                collections.append(next(collection_iterator))
+            except StopIteration:
+                break
     except Exception as exc:
         raise JITQAVerificationError("bootstrap could not inventory the named Firestore database") from exc
-    if collections:
-        collection_id = str(getattr(collections[0], "id", ""))
+    if len(collections) > 1:
+        raise JITQAVerificationError("bootstrap requires an empty user plane; found more than one top-level collection")
+    if not collections:
+        return {
+            "user_plane_empty": True,
+            "preexisting_runtime_metadata": False,
+            "runtime_metadata_documents": 0,
+        }
+
+    collection = collections[0]
+    collection_id = str(getattr(collection, "id", ""))
+    if collection_id != EMPTY_SCAN_RECOVERY_COLLECTION:
         raise JITQAVerificationError(
             "bootstrap requires a truly empty named database; " f"found collection {collection_id!r}"
         )
+
+    # This one allowlisted document is metadata-only by contract. Read its
+    # complete payload so the exact-field check also detects newly added or
+    # unexpected fields; a projection would hide those fields.
+    query = collection
+    limiter = getattr(query, "limit", None)
+    streamer = getattr(query, "stream", None)
+    if not callable(limiter) or not callable(streamer):
+        raise JITQAVerificationError("bootstrap requires a bounded recovery metadata inventory")
+    try:
+        snapshots = list(limiter(EMPTY_SCAN_RECOVERY_DOCUMENT_LIMIT + 1).stream())
+    except Exception as exc:
+        raise JITQAVerificationError("bootstrap could not inventory recovery metadata") from exc
+    if len(snapshots) > EMPTY_SCAN_RECOVERY_DOCUMENT_LIMIT:
+        raise JITQAVerificationError("bootstrap recovery metadata inventory exceeded its hard bound")
+    if not snapshots:
+        # Firestore normally does not expose an empty collection. Treat this as
+        # a benign metadata-only race and retain the strict collection fence.
+        return {
+            "user_plane_empty": True,
+            "preexisting_runtime_metadata": True,
+            "runtime_metadata_documents": 0,
+        }
+    snapshot = snapshots[0]
+    document_id = str(getattr(snapshot, "id", ""))
+    payload = snapshot.to_dict()
+    if document_id != EMPTY_SCAN_RECOVERY_DOCUMENT or not isinstance(payload, Mapping):
+        raise JITQAVerificationError("bootstrap recovery metadata has an unexpected document")
+    if set(payload) != EMPTY_SCAN_RECOVERY_FIELDS:
+        raise JITQAVerificationError("bootstrap recovery metadata has an unexpected schema")
+    generation = payload.get("generation")
+    if (
+        not isinstance(generation, int)
+        or isinstance(generation, bool)
+        or generation < 1
+        or generation > EMPTY_SCAN_RECOVERY_GENERATION_MAX
+    ):
+        raise JITQAVerificationError("bootstrap recovery metadata has an invalid generation")
+    if payload.get("resume_after_path") is not None:
+        raise JITQAVerificationError("bootstrap recovery metadata must have a null resume cursor")
+    updated_at = payload.get("updated_at")
+    if not isinstance(updated_at, datetime) or updated_at.tzinfo is None or updated_at.utcoffset() is None:
+        raise JITQAVerificationError("bootstrap recovery metadata has an invalid timestamp")
+    if updated_at.astimezone(timezone.utc) > datetime.now(timezone.utc) + timedelta(minutes=5):
+        raise JITQAVerificationError("bootstrap recovery metadata timestamp is too far in the future")
+    metadata_digest = hashlib.sha256(
+        json.dumps(
+            {
+                "collection": collection_id,
+                "document": document_id,
+                "generation": generation,
+                "resume_after_path": None,
+                "updated_at": updated_at.astimezone(timezone.utc).isoformat(),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    return {
+        "user_plane_empty": True,
+        "preexisting_runtime_metadata": True,
+        "runtime_metadata_documents": 1,
+        "runtime_metadata_collection": collection_id,
+        "runtime_metadata_document": document_id,
+        "runtime_metadata_generation": generation,
+        "runtime_metadata_resume_after_path": None,
+        "runtime_metadata_digest": metadata_digest,
+    }
 
 
 def _assert_owned_fields(
@@ -286,8 +380,12 @@ def bootstrap_qa_account(db_client: Any) -> dict[str, Any]:
     marker_ref = db_client.document(BOOTSTRAP_PATH)
     marker_snapshot = marker_ref.get()
     marker = _as_dict(marker_snapshot)
+    precondition = {
+        "user_plane_empty": True,
+        "preexisting_runtime_metadata": "previously_verified",
+    }
     if not marker:
-        _assert_named_database_empty(db_client)
+        precondition = _assert_named_database_empty(db_client)
         create = getattr(marker_ref, "create", None)
         if not callable(create):
             raise JITQAVerificationError("bootstrap requires create-only Firestore writes for its ownership marker")
@@ -333,6 +431,7 @@ def bootstrap_qa_account(db_client: Any) -> dict[str, Any]:
         "apply_control_writer_mode": control.writer_mode.value,
         "maintenance_registry": f"canonical_memory_maintenance_registry/{QA_UID}",
         "cutover_authority": "knowledge-ledger-drain-qa-job via publish_ledger_migration_cutover",
+        "bootstrap_precondition": precondition,
     }
 
 
@@ -936,7 +1035,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-id", help="lowercase synthetic fixture namespace")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("bootstrap", help="create the fixed QA profile in a truly empty named database")
+    sub.add_parser("bootstrap", help="create the fixed QA profile in an empty QA user plane")
     sub.add_parser("prepare", help="preflight and create missing owned synthetic rows")
     sub.add_parser("inspect", help="read content-free fixture metadata")
     verify = sub.add_parser("verify", help="verify first, second, and stable retry drain summaries")

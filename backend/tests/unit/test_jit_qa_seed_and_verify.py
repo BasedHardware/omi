@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -230,6 +231,78 @@ def test_bootstrap_empty_inventory_accepts_no_collections():
     operator._assert_named_database_empty(EmptyDB())
 
 
+def test_bootstrap_empty_inventory_accepts_only_known_recovery_cursor():
+    recovery_path = f"{operator.EMPTY_SCAN_RECOVERY_COLLECTION}/{operator.EMPTY_SCAN_RECOVERY_DOCUMENT}"
+
+    class RecoveryDB(_DB):
+        def __init__(self):
+            super().__init__(include_control=False)
+            self.docs[recovery_path] = {
+                "generation": 6,
+                "resume_after_path": None,
+                "updated_at": datetime.now(timezone.utc),
+            }
+
+    db = RecoveryDB()
+    before = dict(db.docs[recovery_path])
+    receipt = operator._assert_named_database_empty(db)
+    assert receipt["user_plane_empty"] is True
+    assert receipt["preexisting_runtime_metadata"] is True
+    assert receipt["runtime_metadata_collection"] == operator.EMPTY_SCAN_RECOVERY_COLLECTION
+    assert receipt["runtime_metadata_document"] == operator.EMPTY_SCAN_RECOVERY_DOCUMENT
+    assert db.docs[recovery_path] == before
+
+
+@pytest.mark.parametrize(
+    "payload, message",
+    [
+        ({"generation": 6, "resume_after_path": "cursor", "updated_at": datetime.now(timezone.utc)}, "null resume"),
+        ({"generation": 6, "resume_after_path": None}, "schema"),
+        (
+            {"generation": 0, "resume_after_path": None, "updated_at": datetime.now(timezone.utc)},
+            "generation",
+        ),
+        (
+            {"generation": 6, "resume_after_path": None, "updated_at": datetime.now()},
+            "timestamp",
+        ),
+        (
+            {
+                "generation": 6,
+                "resume_after_path": None,
+                "updated_at": datetime.now(timezone.utc),
+                "unexpected": True,
+            },
+            "schema",
+        ),
+    ],
+)
+def test_bootstrap_rejects_malformed_known_recovery_cursor(payload, message):
+    recovery_path = f"{operator.EMPTY_SCAN_RECOVERY_COLLECTION}/{operator.EMPTY_SCAN_RECOVERY_DOCUMENT}"
+    db = _DB(include_control=False)
+    db.docs[recovery_path] = payload
+    with pytest.raises(operator.JITQAVerificationError, match=message):
+        operator._assert_named_database_empty(db)
+
+
+def test_bootstrap_rejects_extra_recovery_document_or_collection():
+    recovery_path = f"{operator.EMPTY_SCAN_RECOVERY_COLLECTION}/{operator.EMPTY_SCAN_RECOVERY_DOCUMENT}"
+    db = _DB(include_control=False)
+    db.docs[recovery_path] = {
+        "generation": 6,
+        "resume_after_path": None,
+        "updated_at": datetime.now(timezone.utc),
+    }
+    db.docs[f"{operator.EMPTY_SCAN_RECOVERY_COLLECTION}/other"] = dict(db.docs[recovery_path])
+    with pytest.raises(operator.JITQAVerificationError, match="hard bound"):
+        operator._assert_named_database_empty(db)
+
+    db = _DB(include_control=False)
+    db.docs["users/foreign"] = {"uid": "foreign"}
+    with pytest.raises(operator.JITQAVerificationError, match="more than one|truly empty"):
+        operator._assert_named_database_empty(db)
+
+
 def test_evidence_ownership_requires_full_source_metadata():
     db = _DB()
     operator.seed_fixture(db, run_id="proof-20260905")
@@ -278,6 +351,38 @@ def test_bootstrap_is_create_only_and_idempotent(monkeypatch):
     assert second["profile"] == "existing"
     assert second["tester"] == "existing"
     assert db.docs == before
+
+
+def test_bootstrap_receipt_distinguishes_preserved_runtime_metadata(monkeypatch):
+    db = _DB(include_control=False)
+    recovery_path = f"{operator.EMPTY_SCAN_RECOVERY_COLLECTION}/{operator.EMPTY_SCAN_RECOVERY_DOCUMENT}"
+    db.docs[recovery_path] = {
+        "generation": 6,
+        "resume_after_path": None,
+        "updated_at": datetime.now(timezone.utc),
+    }
+
+    def ensure_control(uid, *, db_client):
+        control_ref = db_client.document(operator._control_path())
+        control_ref.create(
+            {
+                "uid": uid,
+                "writer_mode": "compatibility",
+                "writer_epoch": 0,
+                "head_commit_id": "head0",
+                "account_generation": 1,
+                "source_generation": 1,
+                "commit_sequence": 0,
+            }
+        )
+        return SimpleNamespace(uid=uid, writer_mode=SimpleNamespace(value="compatibility"))
+
+    monkeypatch.setattr(operator, "ensure_canonical_apply_control_state", ensure_control)
+    monkeypatch.setattr(operator, "validate_environment", lambda: None)
+    receipt = operator.bootstrap_qa_account(db)
+    assert receipt["bootstrap_precondition"]["user_plane_empty"] is True
+    assert receipt["bootstrap_precondition"]["preexisting_runtime_metadata"] is True
+    assert db.docs[recovery_path]["resume_after_path"] is None
 
 
 def test_bootstrap_refuses_unowned_document_before_any_write(monkeypatch):
