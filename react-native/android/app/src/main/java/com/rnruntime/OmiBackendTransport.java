@@ -8,6 +8,12 @@ import java.net.URL;
 public final class OmiBackendTransport {
   private OmiBackendTransport() {}
 
+  public static int readTimeoutMillis(String method, String path) {
+    String route = URI.create(path).getPath();
+    return "POST".equals(method) && route != null &&
+      route.matches("/v1/device-sessions/[^/]+/transcribe") ? 150_000 : 30_000;
+  }
+
   public static HttpURLConnection openConnection(URL url) throws IOException {
     HttpURLConnection connection = (HttpURLConnection) url.openConnection();
     connection.setInstanceFollowRedirects(false);

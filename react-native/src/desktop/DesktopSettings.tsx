@@ -31,6 +31,7 @@ import {ShippingStage} from './ShippingStage';
 import {desktopTokens as token} from './tokens';
 
 type Props = {
+  deviceContent?: React.ReactNode;
   session: DesktopSession;
   signingIn: boolean;
   onSignIn: () => void;
@@ -168,6 +169,7 @@ function SettingsNav({
 }
 
 export function DesktopSettings({
+  deviceContent,
   onSignIn,
   onSignOut,
   onWorkspaceReload,
@@ -577,6 +579,7 @@ export function DesktopSettings({
         ) : null}
         <ShippingStage stageKey={pane} variant="page">
           {body}
+          {pane === 'General' ? deviceContent : null}
         </ShippingStage>
       </ScrollView>
     </View>

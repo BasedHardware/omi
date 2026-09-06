@@ -34,11 +34,18 @@ private const val OMI_AUDIO_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214"
 private const val OMI_CODEC_UUID = "19b10002-e8f2-537e-4f6c-d104768a1214"
 private const val BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb"
 private const val BATTERY_LEVEL_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
+private val FEATURES_SERVICE_UUID = UUID.fromString("19b10020-e8f2-537e-4f6c-d104768a1214")
+private val FEATURES_UUID = UUID.fromString("19b10021-e8f2-537e-4f6c-d104768a1214")
+private val SETTINGS_SERVICE_UUID = UUID.fromString("19b10010-e8f2-537e-4f6c-d104768a1214")
+private val LED_UUID = UUID.fromString("19b10011-e8f2-537e-4f6c-d104768a1214")
+private val MIC_GAIN_UUID = UUID.fromString("19b10012-e8f2-537e-4f6c-d104768a1214")
+private val CHARGING_UUID = UUID.fromString("19b10013-e8f2-537e-4f6c-d104768a1214")
 private val CLIENT_CONFIG_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
-private data class OmiDevice(val id: String, val name: String, val rssi: Int, val battery: Int? = null, val information: Map<String, String> = emptyMap())
+private data class OmiDevice(val id: String, val name: String, val rssi: Int, val battery: Int? = null, val information: Map<String, String> = emptyMap(), val features: Long? = null, val ledBrightness: Int? = null, val microphoneGain: Int? = null, val charging: Boolean? = null)
 
 private sealed class GattOp {
+  data class Write(val characteristic: BluetoothGattCharacteristic, val value: Int) : GattOp()
   data class Read(val characteristic: BluetoothGattCharacteristic) : GattOp()
   data class EnableNotify(val characteristic: BluetoothGattCharacteristic) : GattOp()
 }
@@ -65,6 +72,10 @@ class OmiBleController(
   private var gattBusy = false
   private val lease = OmiBleLease()
   private var currentGeneration = 0L
+  private var pendingSetting: String? = null
+  private var pendingSettingValue: Int? = null
+  private var settingWritten = false
+  private var settingDone: ((Int?, String?) -> Unit)? = null
 
   private val radioReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -100,25 +111,35 @@ class OmiBleController(
 
   private val scanCallback = object : ScanCallback() {
     override fun onScanResult(callbackType: Int, result: ScanResult) {
-      val device = result.device
-      val discovered = OmiDevice(
-        id = device.address,
-        name = result.scanRecord?.deviceName ?: device.name ?: "Omi",
-        rssi = result.rssi,
-        battery = results[device.address]?.battery,
-        information = results[device.address]?.information ?: emptyMap(),
-      )
-      results[device.address] = discovered
-      lastEvent = "Found ${results.size} Omi device${if (results.size == 1) "" else "s"}"
-      emit("discovery", Arguments.createMap().apply {
-        putMap("device", deviceMap(discovered))
-      })
+      synchronized(this@OmiBleController) {
+        if (!scanActive) return
+        val device = result.device
+        val discovered = OmiDevice(
+          id = device.address,
+          name = result.scanRecord?.deviceName ?: device.name ?: "Omi",
+          rssi = result.rssi,
+          battery = results[device.address]?.battery,
+          information = results[device.address]?.information ?: emptyMap(),
+          features = results[device.address]?.features,
+          ledBrightness = results[device.address]?.ledBrightness,
+          microphoneGain = results[device.address]?.microphoneGain,
+          charging = results[device.address]?.charging,
+        )
+        results[device.address] = discovered
+        lastEvent = "Found ${results.size} Omi device${if (results.size == 1) "" else "s"}"
+        emit("discovery", Arguments.createMap().apply {
+          putMap("device", deviceMap(discovered))
+        })
+      }
     }
 
     override fun onScanFailed(errorCode: Int) {
-      scanActive = false
-      lastEvent = "BLE scan failed: $errorCode"
-      finishScan()
+      synchronized(this@OmiBleController) {
+        if (!scanActive) return
+        scanActive = false
+        lastEvent = "BLE scan failed: $errorCode"
+        finishScan()
+      }
     }
   }
 
@@ -173,6 +194,7 @@ class OmiBleController(
   }.toTypedArray()
 
   @SuppressLint("MissingPermission")
+  @Synchronized
   fun startScan(timeoutSeconds: Int?, serviceUuids: List<String>, onDone: (WritableArray) -> Unit) {
     pendingScan?.invoke(devices())
     pendingScan = onDone
@@ -200,15 +222,18 @@ class OmiBleController(
     val generation = ++scanGeneration
     val timeout = (timeoutSeconds ?: 8).coerceAtLeast(0)
     handler.postDelayed({
-      if (generation == scanGeneration) {
-        stopScanInternal()
-        lastEvent = if (results.isEmpty()) "No Omi devices found" else "Found ${results.size} Omi device${if (results.size == 1) "" else "s"}"
-        finishScan()
+      synchronized(this) {
+        if (generation == scanGeneration) {
+          stopScanInternal()
+          lastEvent = if (results.isEmpty()) "No Omi devices found" else "Found ${results.size} Omi device${if (results.size == 1) "" else "s"}"
+          finishScan()
+        }
       }
     }, timeout * 1000L)
   }
 
   @SuppressLint("MissingPermission")
+  @Synchronized
   fun stopScan() {
     stopScanInternal()
     lastEvent = "Omi scan stopped"
@@ -232,7 +257,7 @@ class OmiBleController(
     }
     stopScanInternal()
     gatt?.close()
-    results[id]?.let { results[id] = it.copy(information = emptyMap()) }
+    results[id]?.let { results[id] = it.copy(information = emptyMap(), features = null, ledBrightness = null, microphoneGain = null, charging = null) }
     clearGattQueue()
     audioNotifying = false
     codec = null
@@ -278,6 +303,9 @@ class OmiBleController(
           enqueueGatt(gatt, GattOp.Read(codecChar))
           if (battery != null) enqueueGatt(gatt, GattOp.Read(battery))
           if (audio != null) enqueueGatt(gatt, GattOp.EnableNotify(audio))
+          gatt.getService(FEATURES_SERVICE_UUID)?.getCharacteristic(FEATURES_UUID)?.let { feature ->
+            if (feature.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) enqueueGatt(gatt, GattOp.Read(feature))
+          }
           val information = gatt.getService(UUID.fromString("0000180a-0000-1000-8000-00805f9b34fb"))
           OmiDeviceInformation.fields.keys.forEach { uuid ->
             information?.getCharacteristic(uuid)?.let { characteristic ->
@@ -299,6 +327,8 @@ class OmiBleController(
             retireConnection("Omi codec read failed: $status")
             return
           }
+          if (status != BluetoothGatt.GATT_SUCCESS && settingWritten &&
+              characteristic.uuid == settingUuid(pendingSetting)) finishSetting(null, "Device setting read-back failed")
           if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
             handleValue(characteristic, value)
           }
@@ -321,6 +351,8 @@ class OmiBleController(
             retireConnection("Omi codec read failed: $status")
             return
           }
+          if (status != BluetoothGatt.GATT_SUCCESS && settingWritten &&
+              characteristic.uuid == settingUuid(pendingSetting)) finishSetting(null, "Device setting read-back failed")
           if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
             handleValue(characteristic)
           }
@@ -350,6 +382,19 @@ class OmiBleController(
         }
       }
 
+      override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+        synchronized(this@OmiBleController) {
+          if (!lease.accepts(generation) || characteristic.uuid != settingUuid(pendingSetting)) return
+          if (status != BluetoothGatt.GATT_SUCCESS) {
+            finishSetting(null, "Device setting write failed")
+          } else if (settingDone != null) {
+            settingWritten = true
+            gattQueue.addFirst(GattOp.Read(characteristic))
+          }
+          finishGattOp(gatt)
+        }
+      }
+
       override fun onDescriptorWrite(
         gatt: BluetoothGatt,
         descriptor: BluetoothGattDescriptor,
@@ -358,7 +403,8 @@ class OmiBleController(
         synchronized(this@OmiBleController) {
           if (!lease.accepts(generation)) return
           if (status != android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
-            retireConnection("Omi notification subscription failed: $status")
+            if (descriptor.characteristic.uuid == UUID.fromString(OMI_AUDIO_UUID)) retireConnection("Omi notification subscription failed: $status")
+            else finishGattOp(gatt)
             return
           }
           if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS &&
@@ -414,10 +460,18 @@ class OmiBleController(
       synchronized(this) { if (lease.operationPending(generation, ticket)) retireConnection("Omi Bluetooth operation timed out") }
     }, 8000)
     val started = when (op) {
+      is GattOp.Write -> {
+        op.characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        op.characteristic.value = byteArrayOf(op.value.toByte())
+        gatt.writeCharacteristic(op.characteristic)
+      }
       is GattOp.Read -> gatt.readCharacteristic(op.characteristic)
       is GattOp.EnableNotify -> writeNotifyDescriptor(gatt, op.characteristic)
     }
-    if (!started) retireConnection("Omi Bluetooth operation failed to start")
+    if (!started) {
+      if (op is GattOp.EnableNotify && op.characteristic.uuid != UUID.fromString(OMI_AUDIO_UUID)) finishGattOp(gatt)
+      else retireConnection("Omi Bluetooth operation failed to start")
+    }
   }
 
   private fun finishGattOp(gatt: BluetoothGatt) {
@@ -448,6 +502,39 @@ class OmiBleController(
       return
     }
     when (characteristic.uuid) {
+      FEATURES_UUID -> {
+        val features = OmiDeviceControls.features(value) ?: return
+        results[id]?.let { results[id] = it.copy(features = features) }
+        val current = gatt ?: return
+        listOf("ledBrightness", "microphoneGain").forEach { setting ->
+          if (OmiDeviceControls.supports(features, setting)) {
+            current.getService(SETTINGS_SERVICE_UUID)?.getCharacteristic(settingUuid(setting))?.let { settingChar ->
+              if (settingChar.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) enqueueGatt(current, GattOp.Read(settingChar))
+            }
+          }
+        }
+        current.getService(SETTINGS_SERVICE_UUID)?.getCharacteristic(CHARGING_UUID)?.let { charging ->
+          if (charging.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) enqueueGatt(current, GattOp.Read(charging))
+          if (charging.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0) enqueueGatt(current, GattOp.EnableNotify(charging))
+        }
+        emitSnapshot()
+      }
+      LED_UUID, MIC_GAIN_UUID -> {
+        val setting = if (characteristic.uuid == LED_UUID) "ledBrightness" else "microphoneGain"
+        val device = results[id] ?: return
+        if (!OmiDeviceControls.supports(device.features, setting)) return
+        val decoded = OmiDeviceControls.value(setting, value)
+        results[id] = if (setting == "ledBrightness") device.copy(ledBrightness = decoded) else device.copy(microphoneGain = decoded)
+        if (settingWritten && pendingSetting == setting) {
+          if (decoded == pendingSettingValue) finishSetting(decoded, null) else finishSetting(null, "Device did not confirm the requested setting")
+        }
+        emitSnapshot()
+      }
+      CHARGING_UUID -> {
+        if (value.size != 1 || value[0].toInt() !in 0..1) return
+        results[id]?.let { if (it.features != null) results[id] = it.copy(charging = value[0].toInt() == 1) }
+        emitSnapshot()
+      }
       UUID.fromString(OMI_CODEC_UUID) -> if (value.isNotEmpty()) {
         codec = value[0].toInt() and 0xff
         emitSnapshot()
@@ -476,6 +563,7 @@ class OmiBleController(
   @Synchronized
   private fun retireConnection(message: String) {
     lease.retire()
+    finishSetting(null, message)
     val previous = gatt
     gatt = null
     clearGattQueue()
@@ -488,6 +576,42 @@ class OmiBleController(
     runCatching { previous?.close() }
     finishConnect(false, message)
     emitSnapshot()
+  }
+
+  private fun settingUuid(setting: String?): UUID? = when (setting) {
+    "ledBrightness" -> LED_UUID
+    "microphoneGain" -> MIC_GAIN_UUID
+    else -> null
+  }
+
+  @Synchronized
+  fun setDeviceSetting(id: String, setting: String, value: Double, done: (Int?, String?) -> Unit) {
+    val device = results[id]
+    val current = gatt
+    val uuid = settingUuid(setting)
+    val characteristic = if (uuid == null) null else current?.getService(SETTINGS_SERVICE_UUID)?.getCharacteristic(uuid)
+    val observed = if (setting == "ledBrightness") device?.ledBrightness else device?.microphoneGain
+    if (id != connectedDeviceId || connectionState != "connected" || current == null || device == null ||
+        settingDone != null || observed == null || !OmiDeviceControls.validWrite(device.features, setting, value) || characteristic == null ||
+        characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE == 0 ||
+        characteristic.properties and BluetoothGattCharacteristic.PROPERTY_READ == 0) {
+      done(null, "Device setting is unavailable")
+      return
+    }
+    pendingSetting = setting
+    pendingSettingValue = value.toInt()
+    settingWritten = false
+    settingDone = done
+    enqueueGatt(current, GattOp.Write(characteristic, value.toInt()))
+  }
+
+  private fun finishSetting(value: Int?, error: String?) {
+    val done = settingDone
+    settingDone = null
+    pendingSetting = null
+    pendingSettingValue = null
+    settingWritten = false
+    done?.invoke(value, error)
   }
 
   private fun emitSnapshot() {
@@ -521,6 +645,10 @@ class OmiBleController(
     putInt("rssi", device.rssi)
     putBoolean("connected", connectionState == "connected" && connectedDeviceId == device.id)
     device.battery?.let { putInt("battery", it) }
+    device.features?.let { putDouble("features", it.toDouble()) }
+    device.ledBrightness?.let { putInt("ledBrightness", it) }
+    device.microphoneGain?.let { putInt("microphoneGain", it) }
+    device.charging?.let { putBoolean("charging", it) }
     if (device.information.isNotEmpty()) putMap("information", Arguments.createMap().apply {
       device.information.forEach { (field, value) -> putString(field, value) }
     })

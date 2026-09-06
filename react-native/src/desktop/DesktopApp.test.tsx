@@ -1182,3 +1182,17 @@ test('desktop task edits stay disabled during an unconfirmed pending mutation', 
   });
   expect(onRetryTaskMutation).toHaveBeenCalledTimes(1);
 });
+
+test('desktop General settings mounts the live device composition slot', async () => {
+  const renderer = renderDesktop({
+    deviceContent: <Text>Live device controls</Text>,
+  });
+  expect(renderedText(renderer)).not.toContain('Live device controls');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain('Live device controls');
+  await act(async () => renderer.unmount());
+});

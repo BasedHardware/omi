@@ -176,7 +176,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     scanForOmi,
     toggleDevice,
   } = useNativeDevices({
-    enabled: !macDesktop && onboardingRequired === false,
+    enabled: onboardingRequired === false,
   });
   const searchRef = useRef<TextInput>(null);
   useEffect(() => {
@@ -792,6 +792,17 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           authError={authError}
           chatBusy={chatBusy}
           chatError={chatError}
+          deviceContent={
+            <DeviceSession
+              bluetoothStatusColor={bluetoothStatusColor}
+              deviceBusy={deviceBusy}
+              deviceScanMessage={deviceScanMessage}
+              nativeSnapshot={nativeSnapshot}
+              onScan={scanForOmi}
+              onToggle={toggleDevice}
+              variant="compact"
+            />
+          }
           draft={draft}
           hasOlderChat={hasOlderChat}
           loadingOlderChat={loadingOlderChat}

@@ -8,6 +8,7 @@ import type {Device} from '../omiNativeTypes';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {bluetoothStatusLabel} from './bluetooth';
+import {DeviceControls} from './DeviceControls';
 
 export type DeviceSessionVariant = 'affordance' | 'compact' | 'overview';
 
@@ -230,6 +231,7 @@ export function DeviceSession({
   const connected = devices.find(device => device.connected);
   const information = connected ? (
     <View accessibilityLabel="Device information">
+      <DeviceControls key={connected.id} device={connected} busy={deviceBusy} />
       {(
         [
           ['model', 'Model'],

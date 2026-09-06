@@ -36,14 +36,14 @@ test('macOS mounts product chrome only once the session is really ready', () => 
   expect(orchestrator).not.toContain('"Saved data unavailable"');
 });
 
-test('macOS first paint and session probe do not require native devices or BLE', () => {
+test('static guard: session probe stays independent of signed-in device controls', () => {
   const onboarding = readFileSync(
     resolve(__dirname, 'src/app/useOnboarding.ts'),
     'utf8',
   );
 
   expect(orchestrator).toMatch(
-    /useNativeDevices\(\{\s*enabled:\s*!macDesktop\s*&&/,
+    /useNativeDevices\(\{\s*enabled:\s*onboardingRequired === false/,
   );
   expect(orchestrator).not.toMatch(/useNativeDevices\(\)/);
   expect(onboarding).toContain('hasCloudSession');
@@ -65,7 +65,8 @@ test('macOS first paint and session probe do not require native devices or BLE',
   expect(desktopMount).toContain('onboardingRequired');
   expect(desktopMount).toContain("? 'probing'");
   expect(desktopMount).toContain("'signed-out'");
-  expect(desktopMount).not.toContain('nativeSnapshot');
+  expect(desktopMount).toContain('deviceContent=');
+  expect(desktopMount).toContain('nativeSnapshot={nativeSnapshot}');
   expect(desktopMount).not.toContain('omiNative');
   expect(desktopMount).not.toContain('useNativeDevices');
 });

@@ -56,6 +56,10 @@ export type Device = {
   rssi: number;
   connected: boolean;
   battery?: number;
+  features?: number;
+  ledBrightness?: number;
+  microphoneGain?: number;
+  charging?: boolean;
   information?: Partial<
     Record<
       'model' | 'firmware' | 'hardware' | 'manufacturer' | 'serial',
@@ -99,4 +103,9 @@ export type OmiNative = {
   stopScan(): Promise<void>;
   connectDevice(id: string): Promise<void>;
   disconnectDevice(id: string): Promise<void>;
+  setDeviceSetting?(
+    id: string,
+    setting: 'ledBrightness' | 'microphoneGain',
+    value: number,
+  ): Promise<number>;
 };

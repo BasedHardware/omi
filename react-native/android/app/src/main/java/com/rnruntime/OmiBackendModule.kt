@@ -224,7 +224,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     val connection = OmiBackendTransport.openConnection(url).apply {
       requestMethod = method
       connectTimeout = 15_000
-      readTimeout = 30_000
+      readTimeout = OmiBackendTransport.readTimeoutMillis(method, path)
       doInput = true
       setRequestProperty("authorization", "Bearer ${policy.token}")
       setRequestProperty("x-omi-contract-version", CONTRACT_VERSION)
