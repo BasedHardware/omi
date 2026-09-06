@@ -548,62 +548,66 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     XCTAssertEqual(unmeasured.position(forPointerX: 120), 0)
   }
 
-  /// **A drag on the tabs moves the lens, never the window.** The bar is a `WindowDragGesture` handle
-  /// that recognises simultaneously with anything SwiftUI inside it, which is how the first glass row
-  /// walked the whole window sideways when you dragged the selection. The press is AppKit-owned now:
-  /// the view under the pointer is an `NSView` that refuses `mouseDownCanMoveWindow` and consumes the
-  /// mouse sequence, so neither AppKit's background move nor SwiftUI's gesture ever sees it.
-  ///
-  /// This hosts the real row *inside* the real drag handle in a real window, checks that the view
-  /// hit-tested under a tab is that AppKit owner, then sends the press, the travel and the release to
-  /// it and checks the release lands on the tab under the pointer. (An off-screen window drops
-  /// `sendEvent`, so the events go to the hit view the way the window would route them.)
-  @available(macOS 26.0, *)
-  func testDraggingTheSelectionAcrossTheTabsSelectsTheReleasedTabWithoutMovingTheWindow() throws {
-    var selected: [Int] = []
-    let row = TopNavigationDestinationRow(
-      selectedIndex: SidebarNavItem.dashboard.rawValue,
-      badges: TopNavigationDestinationBadges(),
-      onSelect: { selected.append($0) }
-    )
-    let host = NSHostingView(rootView: row.padding(20).shellWindowDragHandle())
-    let size = host.fittingSize
-    let window = NSWindow(
-      contentRect: NSRect(x: 400, y: 300, width: size.width, height: size.height),
-      styleMask: [.borderless], backing: .buffered, defer: false)
-    window.isMovableByWindowBackground = false
-    window.contentView = host
-    host.frame = NSRect(origin: .zero, size: size)
-    host.layoutSubtreeIfNeeded()
-    let originBefore = window.frame.origin
+  // The glass renderer only exists when compiled against the macOS 26 SDK (see
+  // `TopNavigationDestinationRow.body`); against an older SDK the row is the system control.
+  #if compiler(>=6.2)
+    /// **A drag on the tabs moves the lens, never the window.** The bar is a `WindowDragGesture` handle
+    /// that recognises simultaneously with anything SwiftUI inside it, which is how the first glass row
+    /// walked the whole window sideways when you dragged the selection. The press is AppKit-owned now:
+    /// the view under the pointer is an `NSView` that refuses `mouseDownCanMoveWindow` and consumes the
+    /// mouse sequence, so neither AppKit's background move nor SwiftUI's gesture ever sees it.
+    ///
+    /// This hosts the real row *inside* the real drag handle in a real window, checks that the view
+    /// hit-tested under a tab is that AppKit owner, then sends the press, the travel and the release to
+    /// it and checks the release lands on the tab under the pointer. (An off-screen window drops
+    /// `sendEvent`, so the events go to the hit view the way the window would route them.)
+    @available(macOS 26.0, *)
+    func testDraggingTheSelectionAcrossTheTabsSelectsTheReleasedTabWithoutMovingTheWindow() throws {
+      var selected: [Int] = []
+      let row = TopNavigationDestinationRow(
+        selectedIndex: SidebarNavItem.dashboard.rawValue,
+        badges: TopNavigationDestinationBadges(),
+        onSelect: { selected.append($0) }
+      )
+      let host = NSHostingView(rootView: row.padding(20).shellWindowDragHandle())
+      let size = host.fittingSize
+      let window = NSWindow(
+        contentRect: NSRect(x: 400, y: 300, width: size.width, height: size.height),
+        styleMask: [.borderless], backing: .buffered, defer: false)
+      window.isMovableByWindowBackground = false
+      window.contentView = host
+      host.frame = NSRect(origin: .zero, size: size)
+      host.layoutSubtreeIfNeeded()
+      let originBefore = window.frame.origin
 
-    // Four equal segments inside the row's 20 pt padding: press on the second, release on the fourth.
-    let items = TopNavigationRoutes.primaryItems
-    let segmentWidth = (size.width - 40) / CGFloat(items.count)
-    let y = size.height / 2
-    func x(_ position: Int) -> CGFloat { 20 + segmentWidth * (CGFloat(position) + 0.5) }
-    let owner = try XCTUnwrap(host.hitTest(NSPoint(x: x(1), y: y)), "nothing under the tab")
-    XCTAssertFalse(
-      owner.mouseDownCanMoveWindow,
-      "the view under a tab must refuse to move the window, or a drag on the tabs drags the shell")
-    XCTAssertFalse(owner is NSHostingView<AnyView>, "the hosting view must not be the press owner")
+      // Four equal segments inside the row's 20 pt padding: press on the second, release on the fourth.
+      let items = TopNavigationRoutes.primaryItems
+      let segmentWidth = (size.width - 40) / CGFloat(items.count)
+      let y = size.height / 2
+      func x(_ position: Int) -> CGFloat { 20 + segmentWidth * (CGFloat(position) + 0.5) }
+      let owner = try XCTUnwrap(host.hitTest(NSPoint(x: x(1), y: y)), "nothing under the tab")
+      XCTAssertFalse(
+        owner.mouseDownCanMoveWindow,
+        "the view under a tab must refuse to move the window, or a drag on the tabs drags the shell")
+      XCTAssertFalse(owner is NSHostingView<AnyView>, "the hosting view must not be the press owner")
 
-    func event(_ type: NSEvent.EventType, at point: NSPoint) throws -> NSEvent {
-      try XCTUnwrap(
-        NSEvent.mouseEvent(
-          with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-          windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+      func event(_ type: NSEvent.EventType, at point: NSPoint) throws -> NSEvent {
+        try XCTUnwrap(
+          NSEvent.mouseEvent(
+            with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+      }
+      owner.mouseDown(with: try event(.leftMouseDown, at: NSPoint(x: x(1), y: y)))
+      for step in 1...6 {
+        let t = CGFloat(step) / 6
+        owner.mouseDragged(with: try event(.leftMouseDragged, at: NSPoint(x: x(1) + (x(3) - x(1)) * t, y: y)))
+      }
+      owner.mouseUp(with: try event(.leftMouseUp, at: NSPoint(x: x(3), y: y)))
+
+      XCTAssertEqual(selected, [items[3].index], "the release must select the tab under the pointer")
+      XCTAssertEqual(window.frame.origin, originBefore, "dragging the selection must not move the window")
     }
-    owner.mouseDown(with: try event(.leftMouseDown, at: NSPoint(x: x(1), y: y)))
-    for step in 1...6 {
-      let t = CGFloat(step) / 6
-      owner.mouseDragged(with: try event(.leftMouseDragged, at: NSPoint(x: x(1) + (x(3) - x(1)) * t, y: y)))
-    }
-    owner.mouseUp(with: try event(.leftMouseUp, at: NSPoint(x: x(3), y: y)))
-
-    XCTAssertEqual(selected, [items[3].index], "the release must select the tab under the pointer")
-    XCTAssertEqual(window.frame.origin, originBefore, "dragging the selection must not move the window")
-  }
+  #endif
 
   func testNavigationLaneMatchesFullChatWidthAndPageInsets() {
     // The 900 pt readable cap belongs to content inside the lane. The glass fills the window
