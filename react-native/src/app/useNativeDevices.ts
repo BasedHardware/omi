@@ -467,6 +467,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
         return;
       }
       setDeviceBusy(true);
+      setDeviceScanMessage(null);
       try {
         if (connected) {
           await omiNative.disconnectDevice(id);

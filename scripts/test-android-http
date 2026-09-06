@@ -9,7 +9,10 @@ javac --release 17 -d "$build_dir" \
   "$repo_root/react-native/android/transport-tests/GenerationStreamTest.java" \
   "$repo_root/react-native/android/app/src/main/java/com/rnruntime/OmiAuthPolicy.java" \
   "$repo_root/react-native/android/transport-tests/AuthPolicyTest.java" \
-  "$repo_root/react-native/android/transport-tests/BackendTransportTest.java"
+  "$repo_root/react-native/android/transport-tests/BackendTransportTest.java" \
+  "$repo_root/react-native/android/app/src/main/java/com/rnruntime/OmiDeviceInformation.java" \
+  "$repo_root/react-native/android/transport-tests/DeviceInformationTest.java"
 java -ea --add-modules jdk.httpserver -cp "$build_dir" com.rnruntime.BackendTransportTest
 java -ea -cp "$build_dir" com.rnruntime.AuthPolicyTest
 java -ea --add-modules jdk.httpserver -cp "$build_dir" com.rnruntime.GenerationStreamTest
+java -ea -cp "$build_dir" com.rnruntime.DeviceInformationTest

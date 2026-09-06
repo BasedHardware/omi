@@ -227,6 +227,25 @@ export function DeviceSession({
     </FocusPressable>
   ));
 
+  const connected = devices.find(device => device.connected);
+  const information = connected ? (
+    <View accessibilityLabel="Device information">
+      {(
+        [
+          ['model', 'Model'],
+          ['firmware', 'Firmware'],
+          ['hardware', 'Hardware'],
+          ['manufacturer', 'Manufacturer'],
+          ['serial', 'Serial number'],
+        ] as const
+      ).map(([field, label]) => (
+        <Text key={field} selectable style={styles.deviceMeta}>
+          {label}: {connected.information?.[field] ?? 'Unknown'}
+        </Text>
+      ))}
+    </View>
+  ) : null;
+
   const hintRow =
     hint !== null ? <Text style={styles.deviceHint}>{hint}</Text> : null;
 
@@ -238,6 +257,7 @@ export function DeviceSession({
         <View style={styles.homeDeviceCard}>
           {header}
           {rows}
+          {information}
           {hintRow}
         </View>
       </View>
@@ -248,6 +268,7 @@ export function DeviceSession({
     <>
       {header}
       {rows}
+      {information}
       {hintRow}
     </>
   );

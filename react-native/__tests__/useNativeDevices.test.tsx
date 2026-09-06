@@ -201,6 +201,27 @@ beforeEach(() => {
   );
 });
 
+test.each([false, true])(
+  'clears a previous device failure when retrying connected=%s',
+  async connected => {
+    const operation = connected
+      ? mockNative.disconnectDevice
+      : mockNative.connectDevice;
+    operation.mockRejectedValueOnce(new Error('unavailable'));
+    const hook = await renderHook();
+    await ReactTestRenderer.act(async () => {
+      await hook.latest().toggleDevice('omi-1', connected);
+    });
+    expect(hook.latest().deviceScanMessage).toContain('Could not');
+    await ReactTestRenderer.act(async () => {
+      await hook.latest().toggleDevice('omi-1', connected);
+    });
+    expect(operation).toHaveBeenCalledTimes(2);
+    expect(hook.latest().deviceScanMessage).toBeNull();
+    await hook.unmount();
+  },
+);
+
 test('does not probe native devices when the host disables them', async () => {
   mockNative.getSnapshot.mockClear();
   const hook = await renderHook(false);

@@ -1,0 +1,26 @@
+# Hardware device coverage
+
+The production-readiness goal includes the entire device-to-app-to-backend path. A successful BLE connection or native build does not establish hardware parity. This inventory was checked against the current v5 source and the main app's `app/lib/services/devices/connectors/omi_connection.dart`, `models.dart`, device settings and firmware flows on 2026-09-07.
+
+| Surface | Current v5 evidence | Required completion evidence |
+| --- | --- | --- |
+| Discovery and permissions | Apple CoreBluetooth and Android BLE scan, connection and permission bridges exist; shared hook tests exercise denial and stale callbacks. | Real iOS/Android discovery, denied permission recovery, Bluetooth off/on, cancellation, duplicate devices and inaccessible devices. |
+| Pairing and reconnect | Manual connect/disconnect and notification setup exist. | Remembered device, bounded automatic reconnect, intentional-disconnect distinction, service rediscovery and confirmed audio notification recovery after reconnect. |
+| Device information | Battery and audio codec are exposed. Apple and Android now read standard model, hardware/firmware revision, manufacturer and serial characteristics into shared device details; missing values remain unknown. | Physical reads, charging state and capability discovery; no invented default firmware or device identity. |
+| Live audio | Native packet assembly feeds shared recording uploads; creation identity and indexed uploads have regression coverage. | Supported codec negotiation, MTU/fragment boundaries, sequence wrap, duplicate/missing packets, disconnect mid-frame and end-to-end real-device transcript. |
+| Recording continuity | Uploads retry with stable session identity and acknowledgements. Pending audio remains in memory with an 8 MiB/session ceiling. | Account-bound encrypted durable journal, restart recovery, offline replay, safe session rollover, bounded backpressure and truthful partial-recording state. |
+| Background lifecycle | No iOS Bluetooth background mode or Android connected-device foreground service is configured. | Screen lock, app background, OS process death/relaunch and battery restrictions exercised on physical devices with durable recovery. |
+| Device storage | No v5 storage/ring synchronization connection exists. | File/ring discovery, time synchronization, resumable transfer, acknowledgment-before-advance, duplicate suppression and safe cancellation. Never erase unacknowledged audio. |
+| Buttons and feedback | Main implements button notifications and haptic/speaker actions; v5 has no corresponding bridge. | Capability-gated button actions, debounce/gesture semantics, haptic feedback and reconnection behavior. |
+| Device settings | Main exposes capability-gated LED brightness, microphone gain and charging notifications. | Validated native read/write/read-back, disconnected/error states and persistence after reconnect. |
+| Firmware | No v5 update workflow is connected. | Verified device/model compatibility, trusted artifact integrity, battery/connectivity preconditions, progress, cancellation/recovery and actual test-device update. |
+| Camera and motion | Main has supported-device photo and accelerometer paths; v5 currently implements the Omi audio service only. | Explicit model/capability support and real capture/permission/data handling for supported hardware; unsupported capabilities remain clearly unavailable. |
+| Provider-independent backend | Worker recording routes exist; portable deployed recording parity remains unfinished. | Same authenticated capture, chunk, completion, transcription and conversation flow through the PostgreSQL deployment, including retries and ownership denial. |
+| Account changes and deletion | Shared hook retires delayed transport work on invalidation. | Physical capture policy, durable queue isolation, no prior-account upload after sign-out, deletion/export coverage and abandoned upload cleanup. |
+| Platform support | iOS, Android and macOS Debug builds were verified in earlier batches. Browser native capture is explicitly unavailable; Windows hardware is unverified. | Record per-platform supported operations and execute actual hardware paths. Compilation and mocked BLE events remain separate evidence. |
+
+The main app also contains Apple Watch, OmiGlass, Ray-Ban Meta and third-party connectors. Their existence is part of the parity inventory, not proof that v5 implements them. Preserve the current product decisions and capability-specific protocols when adding support; do not label all devices supported merely because they advertise Bluetooth.
+
+Hardware acceptance remains open until both the native path and its deployed backend are exercised. Synthetic packet, state-machine and HTTP tests are required regression coverage but cannot substitute for physical device results.
+
+The device-information change passed Android, iOS and macOS builds, native decoder checks and the shared UI regression. Connection and disconnection retries now clear stale failure messages, with both recovery paths tested. The combined root gate passed with 313 React Native tests, 64 deployed-platform tests and the existing Worker, PWA, contract and native gates (`/tmp/v5-hardware-commit-check.log`). Real BLE information reads remain unverified.

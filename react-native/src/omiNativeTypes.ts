@@ -56,6 +56,12 @@ export type Device = {
   rssi: number;
   connected: boolean;
   battery?: number;
+  information?: Partial<
+    Record<
+      'model' | 'firmware' | 'hardware' | 'manufacturer' | 'serial',
+      string
+    >
+  >;
 };
 
 export type NativeSnapshot = {
