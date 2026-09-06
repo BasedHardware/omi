@@ -186,20 +186,32 @@ class WorldBankAppUnitTests(unittest.TestCase):
             self.assertIn("parameters", tool)
             self.assertIn("status_message", tool)
 
-    def test_country_alias_resolver_static(self):
-        """Verify country name and ISO alias resolution without network calls."""
+    @patch("main._get_http_client")
+    def test_country_alias_resolver(self, mock_client):
+        """Verify country name and ISO alias resolution deterministically without live network calls."""
+        mock_resp = AsyncMock()
+        mock_resp.status_code = 200
+        mock_resp.json = lambda: [{}, [{"id": "CAN", "name": "Canada"}]]
+        mock_client.return_value.get = AsyncMock(return_value=mock_resp)
+
         self.assertEqual(asyncio.run(main._resolve_country_code("US"))[0], "USA")
         self.assertEqual(asyncio.run(main._resolve_country_code("united states"))[0], "USA")
         self.assertEqual(asyncio.run(main._resolve_country_code("america"))[0], "USA")
         self.assertEqual(asyncio.run(main._resolve_country_code("UK"))[0], "GBR")
         self.assertEqual(asyncio.run(main._resolve_country_code("britain"))[0], "GBR")
+        self.assertEqual(asyncio.run(main._resolve_country_code("united kingdom"))[0], "GBR")
         self.assertEqual(asyncio.run(main._resolve_country_code("germany"))[0], "DEU")
         self.assertEqual(asyncio.run(main._resolve_country_code("india"))[0], "IND")
         self.assertEqual(asyncio.run(main._resolve_country_code("ind"))[0], "IND")
         self.assertEqual(asyncio.run(main._resolve_country_code("japan"))[0], "JPN")
+        self.assertEqual(asyncio.run(main._resolve_country_code("china"))[0], "CHN")
+        self.assertEqual(asyncio.run(main._resolve_country_code("france"))[0], "FRA")
+        self.assertEqual(asyncio.run(main._resolve_country_code("brazil"))[0], "BRA")
         self.assertEqual(asyncio.run(main._resolve_country_code("canada"))[0], "CAN")
+        self.assertEqual(asyncio.run(main._resolve_country_code("CAN"))[0], "CAN")
         self.assertEqual(asyncio.run(main._resolve_country_code("can"))[0], "CAN")
         self.assertEqual(asyncio.run(main._resolve_country_code("mexico"))[0], "MEX")
+        self.assertEqual(asyncio.run(main._resolve_country_code("MEX"))[0], "MEX")
         self.assertEqual(asyncio.run(main._resolve_country_code("mex"))[0], "MEX")
 
     @patch("main._get_http_client")
