@@ -1,0 +1,15 @@
+services:
+  omi-met-museum-app:
+    build: .
+    container_name: omi-met-museum-app
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - MET_API_BASE_URL=https://collectionapi.metmuseum.org/public/collection/v1
+      - MET_API_TIMEOUT=10.0
+      - RATE_LIMIT_REQUESTS=60
+      - RATE_LIMIT_WINDOW=60.0
+      - MAX_CACHE_SIZE=1000
+      - TRUSTED_PROXIES=127.0.0.1,::1
+    restart: unless-stopped
