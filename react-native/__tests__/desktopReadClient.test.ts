@@ -683,11 +683,11 @@ test('preserves an incomplete task projection and its reasons', async () => {
 });
 
 test('groups task epochs by deterministic UTC day boundaries', () => {
-  const now = Date.UTC(2026, 7, 14, 23, 30) / 1000;
-  expect(taskGroup(Date.UTC(2026, 7, 14, 0, 0) / 1000, now)).toBe('Today');
-  expect(taskGroup(Date.UTC(2026, 7, 13, 0, 0) / 1000, now)).toBe('Today');
-  expect(taskGroup(Date.UTC(2026, 7, 15, 0, 0) / 1000, now)).toBe('Tomorrow');
-  expect(taskGroup(Date.UTC(2026, 7, 16, 0, 0) / 1000, now)).toBe('Later');
+  const now = Date.UTC(2026, 7, 14, 23, 30);
+  expect(taskGroup(Date.UTC(2026, 7, 14, 0, 0), now)).toBe('Today');
+  expect(taskGroup(Date.UTC(2026, 7, 13, 0, 0), now)).toBe('Today');
+  expect(taskGroup(Date.UTC(2026, 7, 15, 0, 0), now)).toBe('Tomorrow');
+  expect(taskGroup(Date.UTC(2026, 7, 16, 0, 0), now)).toBe('Later');
   expect(taskGroup(null, now)).toBe('Later');
 });
 

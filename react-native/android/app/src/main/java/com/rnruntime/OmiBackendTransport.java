@@ -31,6 +31,18 @@ public final class OmiBackendTransport {
       route.startsWith("/v1/device-sessions/") ||
       route.equals("/v1/conversations") ||
       route.equals("/v1/memories") ||
-      route.equals("/v1/tasks");
+      route.equals("/v1/tasks") || route.equals("/v1/tasks/ops");
   }
+  public static boolean examplePlatformSupported(String method, String path) {
+    final String route;
+    try {
+      route = URI.create(path).getPath();
+    } catch (IllegalArgumentException error) {
+      return false;
+    }
+    return (method.equals("GET") && ("/v1/conversations".equals(route) ||
+      "/v1/memories".equals(route) || "/v1/tasks".equals(route))) ||
+      (method.equals("POST") && "/v1/tasks/ops".equals(route));
+  }
+
 }
