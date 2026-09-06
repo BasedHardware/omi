@@ -282,15 +282,6 @@ def _field_index_matches(index: Mapping[str, Any], target: FieldIndexTarget) -> 
     )
 
 
-def _field_index_state(index: Mapping[str, Any], target: FieldIndexTarget) -> str | None:
-    if not _field_index_matches(index, target):
-        return None
-    state = index.get("state")
-    if not isinstance(state, str) or not state:
-        raise IndexOperatorError(f"Firestore field index state is missing: {target.identifier}")
-    return state.upper()
-
-
 def _patchable_field_index(index: Mapping[str, Any]) -> dict[str, Any]:
     """Strip server output fields while retaining every semantic index option."""
 
@@ -326,16 +317,27 @@ def _field_target_state(
     resource_url = _field_resource_url(project=project, database=database, target=target)
     payload = field_api_request("GET", resource_url, None)
     indexes = _field_indexes_from_payload(payload, target=target, fetch=field_api_request)
-    matching_states = {state for state in (_field_index_state(index, target) for index in indexes) if state is not None}
-    if "READY" in matching_states:
+    target_states: list[str] = []
+    for index in indexes:
+        state = index.get("state")
+        if not isinstance(state, str) or not state:
+            raise IndexOperatorError(f"Firestore field index state is missing: {target.identifier}")
+        normalized_state = state.upper()
+        if normalized_state not in {"CREATING", "READY", "NEEDS_REPAIR"}:
+            raise IndexOperatorError(f"Firestore field index has unsupported state: {target.identifier}")
+        if _field_index_matches(index, target):
+            target_states.append(normalized_state)
+        elif normalized_state == "CREATING":
+            # Do not patch over a preserved index that is still building.
+            return "CREATING", None
+        elif normalized_state == "NEEDS_REPAIR":
+            raise IndexOperatorError(f"Firestore field index needs repair: {target.identifier}")
+    if "NEEDS_REPAIR" in target_states:
+        raise IndexOperatorError(f"Firestore field index needs repair: {target.identifier}")
+    if "CREATING" in target_states:
+        return "CREATING", None
+    if target_states:
         return "READY", None
-    for state in ("CREATING", "NEEDS_REPAIR"):
-        if state in matching_states:
-            if state == "NEEDS_REPAIR":
-                raise IndexOperatorError(f"Firestore field index needs repair: {target.identifier}")
-            return state, None
-    if matching_states:
-        raise IndexOperatorError(f"Firestore field index has unsupported state: {target.identifier}")
     updated_indexes = [
         *(_patchable_field_index(index) for index in indexes),
         {

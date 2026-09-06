@@ -1,3 +1,4 @@
+import copy
 from pathlib import Path
 
 import pytest
@@ -331,8 +332,16 @@ def test_field_target_waits_for_existing_creating_index_without_repatching():
             raise AssertionError("existing CREATING index must not be patched again")
         if url.endswith("/operations/field-update"):
             return {"done": True}
-        response = field_api(method, url, payload)
+        response = copy.deepcopy(field_api(method, url, payload))
         if url.endswith("/fields/status"):
+            response["indexConfig"]["indexes"] = [
+                index
+                for index in response["indexConfig"]["indexes"]
+                if not (
+                    index.get("queryScope") == "COLLECTION_GROUP"
+                    and index.get("fields") == [{"fieldPath": "status", "order": "ASCENDING"}]
+                )
+            ]
             response["indexConfig"]["indexes"].append(
                 {
                     "queryScope": "COLLECTION_GROUP",
@@ -355,6 +364,47 @@ def test_field_target_waits_for_existing_creating_index_without_repatching():
     )
 
     assert changed is False
+
+
+def test_field_target_waits_for_preserved_creating_index_even_when_target_is_ready():
+    field_api = _field_api_request(ready=True)
+
+    def request(method, url, payload):
+        response = copy.deepcopy(field_api(method, url, payload))
+        if method == "GET" and url.endswith("/fields/status"):
+            response["indexConfig"]["indexes"][0]["state"] = "CREATING"
+        return response
+
+    state, patch = operator._field_target_state(
+        project=operator.PROJECT,
+        database=operator.DATABASE,
+        target=operator.TARGET_FIELD_INDEXES[0],
+        field_api_request=request,
+    )
+
+    assert (state, patch) == ("CREATING", None)
+
+
+@pytest.mark.parametrize("replacement", ["NEEDS_REPAIR", None])
+def test_field_target_fails_closed_for_preserved_nonready_or_missing_state(replacement):
+    field_api = _field_api_request(ready=True)
+
+    def request(method, url, payload):
+        response = copy.deepcopy(field_api(method, url, payload))
+        if method == "GET" and url.endswith("/fields/status"):
+            if replacement is None:
+                response["indexConfig"]["indexes"][0].pop("state")
+            else:
+                response["indexConfig"]["indexes"][0]["state"] = replacement
+        return response
+
+    with pytest.raises(operator.IndexOperatorError, match="needs repair|state is missing"):
+        operator._field_target_state(
+            project=operator.PROJECT,
+            database=operator.DATABASE,
+            target=operator.TARGET_FIELD_INDEXES[0],
+            field_api_request=request,
+        )
 
 
 def test_field_target_rejects_needs_repair_state():
