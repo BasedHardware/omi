@@ -21,9 +21,15 @@ async function recording() {
   const session = await openDeviceSession(
     env.DB,
     "record-owner",
-    { deviceId: "pendant", deviceName: "Omi", codec: 1 },
+    {
+      captureId: crypto.randomUUID(),
+      deviceId: "pendant",
+      deviceName: "Omi",
+      codec: 1,
+    },
     100
   );
+  if (session === null) throw new Error("Recording creation failed");
   await appendDeviceSessionAudio(
     env.DB,
     env.ATTACHMENTS,

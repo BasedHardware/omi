@@ -270,6 +270,9 @@ async function browserGenerationEvents(
 }
 
 const browserBackend: OmiBackend = {
+  async createRecordingId() {
+    return globalThis.crypto.randomUUID();
+  },
   cancelGenerationEvents(generationId) {
     generationControllers.get(generationId)?.abort();
     return browserRequest(

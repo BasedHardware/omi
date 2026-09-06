@@ -692,6 +692,12 @@ RCT_EXPORT_MODULE(OmiBackend)
   });
 }
 
+RCT_REMAP_METHOD(createRecordingId,
+                 createRecordingIdWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  resolve(NSUUID.UUID.UUIDString.lowercaseString);
+}
+
 RCT_REMAP_METHOD(request,
                  requestWithValue:(NSDictionary *)value
                  resolver:(RCTPromiseResolveBlock)resolve

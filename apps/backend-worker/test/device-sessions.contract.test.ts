@@ -19,6 +19,20 @@ test("audio requires a bounded stable chunk index", () => {
   ).toBe(0);
 });
 
+test("recording creation requires a lowercase UUID v4 capture ID", () => {
+  for (const captureId of [
+    undefined,
+    null,
+    "",
+    "aaaaaaaa-aaaa-1aaa-8aaa-aaaaaaaaaaaa",
+    "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+  ]) {
+    expect(
+      parseDeviceSessionCreate({ deviceId: "pendant", codec: 1, captureId })
+    ).toBeNull();
+  }
+});
+
 beforeAll(async () => {
   void mock.module("cloudflare:workers", () => ({
     DurableObject: class {},
@@ -131,6 +145,7 @@ const fetchWorker = (
   );
 
 const openBody = {
+  captureId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   deviceId: "AA:BB:CC:DD:EE:FF",
   deviceName: "Omi",
   codec: 21,
@@ -142,8 +157,28 @@ beforeEach(() => {
 });
 
 describe("device session request validators", () => {
+  test("recording create replay returns the original session and conflicting metadata is refused", async () => {
+    const post = (body: unknown) =>
+      fetchWorker("/v1/device-sessions", {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: JSON.stringify(body),
+      });
+    const first = await post(openBody);
+    const original = await first.text();
+    expect(first.status).toBe(201);
+    const replay = await post(openBody);
+    expect(replay.status).toBe(201);
+    expect(await replay.text()).toBe(original);
+    const conflict = await post({ ...openBody, codec: 20 });
+    expect(conflict.status).toBe(409);
+    expect((await conflict.json()) as unknown).toMatchObject({
+      error: { code: "conflict" },
+    });
+  });
   test("accepts a codec byte and rejects invented transcript fields", () => {
     expect(parseDeviceSessionCreate(openBody)).toEqual({
+      captureId: openBody.captureId,
       deviceId: "AA:BB:CC:DD:EE:FF",
       deviceName: "Omi",
       codec: 21,

@@ -38,6 +38,13 @@ export function createD1Mock(): D1Database {
     )
   );
 
+  db.exec(
+    readFileSync(
+      new URL("../migrations/0008_device_capture_id.sql", import.meta.url),
+      "utf8"
+    )
+  );
+
   const prepareStatement = (
     sql: string,
     bindings: unknown[] = []

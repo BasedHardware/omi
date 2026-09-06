@@ -28,6 +28,7 @@ function backend(
   },
 ): OmiBackend {
   return {
+    createRecordingId: async () => '11111111-2222-4333-8444-555555555555',
     request: async (request: NativeHttpRequest) => ({
       id: request.id,
       status: handler(request).status,
@@ -49,6 +50,7 @@ test('opens a device session on the worker path and refuses invented transcripts
   });
 
   const opened = await openDeviceSession(client, {
+    captureId: '11111111-2222-4333-8444-555555555555',
     deviceId: 'omi-1',
     deviceName: 'Omi',
     codec: 21,
@@ -65,7 +67,11 @@ test('opens a device session on the worker path and refuses invented transcripts
           session: {...session(), transcript: 'hello'},
         }),
       })),
-      {deviceId: 'omi-1', codec: 21},
+      {
+        captureId: '11111111-2222-4333-8444-555555555555',
+        deviceId: 'omi-1',
+        codec: 21,
+      },
     ),
   ).rejects.toThrow('invented a transcript');
 });
@@ -124,7 +130,11 @@ test('fail-closes when the worker is unavailable', async () => {
           },
         }),
       })),
-      {deviceId: 'omi-1', codec: 21},
+      {
+        captureId: '11111111-2222-4333-8444-555555555555',
+        deviceId: 'omi-1',
+        codec: 21,
+      },
     ),
   ).rejects.toBeInstanceOf(DeviceSessionBackendError);
 });
@@ -161,5 +171,48 @@ test.each([{id: 'another-session', state: 'complete'}, {state: 'open'}])(
         '11111111-2222-3333-4444-555555555555',
       ),
     ).rejects.toThrow();
+  },
+);
+
+test.each([
+  {deviceId: 'other'},
+  {deviceName: 'other'},
+  {codec: 20},
+  {state: 'failed'},
+])(
+  'rejects an open acknowledgement for different capture metadata %j',
+  async overrides => {
+    await expect(
+      openDeviceSession(
+        backend(() => ({
+          status: 200,
+          body: JSON.stringify({session: session(overrides)}),
+        })),
+        {
+          captureId: '11111111-2222-4333-8444-555555555555',
+          deviceId: 'omi-1',
+          deviceName: 'Omi',
+          codec: 21,
+        },
+      ),
+    ).rejects.toThrow('recording identity');
+  },
+);
+
+test.each(['not-a-uuid', 'AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE'])(
+  'rejects invalid recording identity %s before HTTP dispatch',
+  async captureId => {
+    const handler = jest.fn(() => ({
+      status: 201,
+      body: JSON.stringify({session: session()}),
+    }));
+    await expect(
+      openDeviceSession(backend(handler), {
+        captureId,
+        deviceId: 'omi-1',
+        codec: 21,
+      }),
+    ).rejects.toThrow('Invalid recording identity');
+    expect(handler).not.toHaveBeenCalled();
   },
 );

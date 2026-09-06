@@ -14,6 +14,31 @@ import {
 
 const directory = new URL("../migrations/", import.meta.url);
 
+test("capture ID migration preserves multiple legacy sessions with unknown capture identity", () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(
+      readFileSync(new URL("0004_device_sessions.sql", directory), "utf8")
+    );
+    db.exec(
+      "INSERT INTO device_sessions (id, account_id, device_id, codec, state, r2_prefix, started_at, created_at, updated_at) VALUES ('old-open', 'owner', 'pendant', 1, 'open', 'old-open', 1, 1, 1), ('old-complete', 'owner', 'pendant', 1, 'complete', 'old-complete', 2, 2, 2)"
+    );
+    db.exec(
+      readFileSync(new URL("0008_device_capture_id.sql", directory), "utf8")
+    );
+    expect(
+      db
+        .query("SELECT id, state, capture_id FROM device_sessions ORDER BY id")
+        .all()
+    ).toEqual([
+      { id: "old-complete", state: "complete", capture_id: null },
+      { id: "old-open", state: "open", capture_id: null },
+    ]);
+  } finally {
+    db.close();
+  }
+});
+
 test("upload migration quarantines open legacy audio and preserves terminal and empty sessions", () => {
   const db = new Database(":memory:");
   try {
@@ -359,6 +384,7 @@ describe("D1 migration manifest", () => {
       "0005_device_session_uploads.sql",
       "0006_device_transcriptions.sql",
       "0007_device_audio_chunks.sql",
+      "0008_device_capture_id.sql",
     ];
     expect(D1_MIGRATIONS.map((migration) => migration.fileName)).toEqual(files);
 

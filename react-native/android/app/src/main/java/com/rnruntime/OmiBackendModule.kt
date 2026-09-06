@@ -63,6 +63,11 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
   }
 
   @ReactMethod
+  fun createRecordingId(promise: Promise) {
+    promise.resolve(java.util.UUID.randomUUID().toString())
+  }
+
+  @ReactMethod
   fun request(value: ReadableMap, promise: Promise) {
     executor.execute {
       try {

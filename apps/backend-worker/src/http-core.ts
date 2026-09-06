@@ -648,17 +648,15 @@ export async function handleDeviceSessionOpen(
     return backendError("bad_request", "edit_request", 400);
   const request = parseDeviceSessionCreate(parsed.value);
   if (request === null) return backendError("validation", "edit_request", 422);
-  return json(
-    {
-      session: await openDeviceSession(
-        db,
-        context.get("accountId"),
-        request,
-        Date.now()
-      ),
-    },
-    201
+  const session = await openDeviceSession(
+    db,
+    context.get("accountId"),
+    request,
+    Date.now()
   );
+  return session === null
+    ? backendError("conflict", "edit_request", 409)
+    : json({ session }, 201);
 }
 
 export async function handleDeviceSessionAudio(
