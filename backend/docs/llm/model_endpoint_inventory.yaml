@@ -158,6 +158,7 @@ surfaces:
   - llm_gateway/gateway/providers.py::host:api.anthropic.com
   - llm_gateway/routers/anthropic_messages.py::host:api.anthropic.com
   - llm_gateway/routers/dependencies.py::host:openrouter.ai
+  - utils/llm/oauth.py::host:api.openai.com
   current_provider_model: utils.llm.model_config feature profile
   request_shape: plain chat, structured output, parser chain, streaming, tool calling via LangChain
   gateway_lane_capability_needed: generated feature lanes
