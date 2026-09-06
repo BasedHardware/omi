@@ -239,6 +239,7 @@ async def test_conversation_processing_frame_carries_selected_oauth_provider(mon
         'byok_llm_provider': 'chatgpt',
         'finalization_job_id': 'job-1',
         'dispatch_generation': 3,
+        'finalization_result_protocol': 2,
     }
 
 
