@@ -74,13 +74,25 @@ test('public native hardware surface does not advertise unimplemented adapters',
   expect(source).toContain('ConnectionPhase');
 });
 
-test('native module selection keeps a registered implementation', () => {
-  const nativeModule = {} as OmiNative;
+test('native scan supplies both arguments required by Android and iOS bridges', async () => {
+  const startScan = jest.fn(async () => []);
+  const getSnapshot = jest.fn();
+  const nativeModule = Object.create(null) as OmiNative;
+  Object.defineProperties(nativeModule, {
+    startScan: {value: startScan},
+    getSnapshot: {value: getSnapshot},
+  });
 
   const selected = resolveOmiNative(nativeModule);
 
   expect(selected.installed).toBe(true);
-  expect(selected.adapter).toBe(nativeModule);
+  expect(selected.adapter?.getSnapshot).toBe(getSnapshot);
+  await selected.adapter!.startScan();
+  expect(startScan).toHaveBeenLastCalledWith(8, []);
+  await selected.adapter!.startScan(3);
+  expect(startScan).toHaveBeenLastCalledWith(3, []);
+  await selected.adapter!.startScan(2, ['custom-service']);
+  expect(startScan).toHaveBeenLastCalledWith(2, ['custom-service']);
 });
 
 test('native module selection reports an unavailable platform without a simulator', () => {
