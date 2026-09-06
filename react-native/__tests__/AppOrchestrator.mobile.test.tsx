@@ -144,3 +144,35 @@ test.each(['ios', 'android'] as const)(
     }
   },
 );
+
+test.each([true, false])(
+  'unfinished mobile setup hands off device connection only after consent: %s',
+  async connect => {
+    mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+    mockNative.getSnapshot.mockClear();
+    mockNative.startScan.mockClear();
+    mockNative.connectDevice.mockClear();
+    try {
+      const renderer = await renderApp();
+      expect(control(renderer, 'First-run onboarding')).toBeDefined();
+      expect(mockNative.getSnapshot).not.toHaveBeenCalled();
+      expect(mockNative.startScan).not.toHaveBeenCalled();
+      expect(mockNative.connectDevice).not.toHaveBeenCalled();
+      await act(async () =>
+        control(
+          renderer,
+          connect
+            ? 'Agree and connect Omi'
+            : 'Agree and continue without a device',
+        ).props.onPress(),
+      );
+      expect(control(renderer, 'First-run onboarding')).toBeUndefined();
+      expect(mockAuth.markOnboardingComplete).toHaveBeenCalled();
+      expect(Boolean(control(renderer, 'Scan for Omi devices'))).toBe(connect);
+      expect(mockNative.startScan).not.toHaveBeenCalled();
+      expect(mockNative.connectDevice).not.toHaveBeenCalled();
+    } finally {
+      mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+    }
+  },
+);

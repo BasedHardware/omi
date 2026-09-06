@@ -8,23 +8,26 @@ export function useOnboarding(
     options?: {ignoreEnabled?: boolean},
   ) => Promise<void>,
 ) {
+  const [setupRequired, setSetupRequired] = useState(false);
+  const [completingSetup, setCompletingSetup] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [onboardingRequired, setOnboardingRequired] = useState<boolean | null>(
-    nativeSessionRequired ? null : false,
+    null,
   );
   const authOperationRef = useRef(0);
+
+  useEffect(
+    () => () => {
+      ++authOperationRef.current;
+    },
+    [],
+  );
 
   useEffect(() => {
     let active = true;
     const operation = authOperationRef.current;
     const auth = omiAuth;
-    if (!nativeSessionRequired) {
-      setOnboardingRequired(false);
-      return () => {
-        active = false;
-      };
-    }
     if (auth === undefined || auth === null) {
       // A Mac without the native OmiAuth module can never establish a real
       // cloud session. It must stay on Welcome — never a faked ready shell.
@@ -33,20 +36,20 @@ export function useOnboarding(
         active = false;
       };
     }
-    Promise.all([auth.hasCompletedOnboarding(), auth.hasCloudSession()])
-      .then(async ([completed, hasSession]) => {
+    Promise.all([
+      auth.hasCompletedOnboarding(),
+      nativeSessionRequired ? auth.hasCloudSession() : Promise.resolve(true),
+    ])
+      .then(([completed, hasSession]) => {
         if (!active || operation !== authOperationRef.current) {
           return;
         }
-        if (hasSession && !completed) {
-          await auth.markOnboardingComplete();
-        }
-        if (active && operation === authOperationRef.current) {
-          setOnboardingRequired(!hasSession);
-        }
+        setSetupRequired(hasSession && !completed);
+        setOnboardingRequired(!hasSession || !completed);
       })
       .catch(() => {
         if (active && operation === authOperationRef.current) {
+          setSetupRequired(!nativeSessionRequired);
           setOnboardingRequired(true);
         }
       });
@@ -56,9 +59,8 @@ export function useOnboarding(
   }, [nativeSessionRequired]);
 
   // Every sign-in path — first-run Welcome, Settings, Connectors, Home
-  // recovery — is the same native OmiAuth session. A successful signIn always
-  // records completion and leaves first-run, so no surface can strand the
-  // user on Welcome after the native session is established.
+  // recovery — is the same native OmiAuth session. Successful sign-in resumes
+  // unfinished setup; only explicit setup completion enables the product.
   const signInAndRefresh = useCallback(async () => {
     if (omiAuth === undefined || omiAuth === null) {
       return;
@@ -72,12 +74,15 @@ export function useOnboarding(
         return;
       }
       if (result.signedIn) {
-        await omiAuth.markOnboardingComplete();
+        const completed = await omiAuth.hasCompletedOnboarding();
         if (operation !== authOperationRef.current) {
           return;
         }
-        setOnboardingRequired(false);
-        await refreshReads(false, {ignoreEnabled: true});
+        setSetupRequired(!completed);
+        setOnboardingRequired(!completed);
+        if (completed) {
+          await refreshReads(false, {ignoreEnabled: true});
+        }
       } else {
         setAuthError('Sign in was not completed. Try again.');
       }
@@ -92,6 +97,44 @@ export function useOnboarding(
       }
     }
   }, [refreshReads]);
+
+  const completeSetup = useCallback(async () => {
+    if (!setupRequired || completingSetup || omiAuth == null) {
+      return false;
+    }
+    const operation = ++authOperationRef.current;
+    setCompletingSetup(true);
+    setAuthError(null);
+    try {
+      if (nativeSessionRequired && !(await omiAuth.hasCloudSession())) {
+        if (operation === authOperationRef.current) {
+          setSetupRequired(false);
+          setOnboardingRequired(true);
+        }
+        return false;
+      }
+      if (operation !== authOperationRef.current) {
+        return false;
+      }
+      await omiAuth.markOnboardingComplete();
+      if (operation !== authOperationRef.current) {
+        return false;
+      }
+      setSetupRequired(false);
+      setOnboardingRequired(false);
+      await refreshReads(false, {ignoreEnabled: true});
+      return operation === authOperationRef.current;
+    } catch {
+      if (operation === authOperationRef.current) {
+        setAuthError('Setup could not be saved. Try again.');
+      }
+      return false;
+    } finally {
+      if (operation === authOperationRef.current) {
+        setCompletingSetup(false);
+      }
+    }
+  }, [completingSetup, nativeSessionRequired, refreshReads, setupRequired]);
 
   const completeFirstRun = signInAndRefresh;
 
@@ -109,6 +152,8 @@ export function useOnboarding(
     }
     const operation = ++authOperationRef.current;
     setSigningIn(false);
+    setCompletingSetup(false);
+    setAuthError(null);
     const result = await auth.signOut();
     if (!result.signedOut) {
       throw new Error('Could not clear this app session.');
@@ -127,6 +172,7 @@ export function useOnboarding(
       nativeSessionRequired &&
       !hasSession
     ) {
+      setSetupRequired(false);
       setOnboardingRequired(true);
     }
     // No refreshReads here: a signed-out Mac must not fire cloud reads, and
@@ -150,6 +196,10 @@ export function useOnboarding(
       hasSession = false;
     }
     if (operation === authOperationRef.current && !hasSession) {
+      ++authOperationRef.current;
+      setCompletingSetup(false);
+      setSigningIn(false);
+      setSetupRequired(false);
       setOnboardingRequired(true);
     }
   }, [nativeSessionRequired]);
@@ -165,6 +215,9 @@ export function useOnboarding(
 
   return {
     authError,
+    completeSetup,
+    completingSetup,
+    setupRequired,
     cancelSignIn,
     completeFirstRun,
     onboardingRequired,
