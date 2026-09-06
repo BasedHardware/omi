@@ -476,6 +476,20 @@ def test_typesense_workflow_smokes_images_before_publish_and_has_unready_bootstr
     assert 'smoke_passed=1' in text
 
 
+def test_typesense_provision_checks_out_admitted_source_before_auth_and_mutation():
+    text = TYPESENSE_WORKFLOW.read_text(encoding="utf-8")
+    provision = text[text.index("  provision:") : text.index("\n  deploy:")]
+    checkout = provision.index("uses: actions/checkout@v7")
+    helper_check = provision.index("Verify the checked-in Typesense key-shape helper")
+    auth = provision.index("uses: google-github-actions/auth@v3")
+    first_secret_mutation = provision.index('gcloud secrets create "$QA_TYPESENSE_SECRET"')
+    assert checkout < helper_check < auth < first_secret_mutation
+    assert 'ref: ${{ needs.admit.outputs.source_sha }}' in provision
+    assert 'fetch-depth: 1' in provision
+    assert 'test -r "$helper"' in provision
+    assert 'python3 "$helper" --help >/dev/null' in provision
+
+
 def test_bounded_proactivity_capability_is_required_on_qa_http_and_gateway_only():
     key = "OMI_JIT_PROACTIVITY_BUDGET_CONTRACT"
     for profile in ("backend", "desktop", "gateway"):

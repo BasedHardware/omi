@@ -21,7 +21,7 @@ KEY_BYTES = 32
 KEY_HEX_LENGTH = KEY_BYTES * 2
 LEGACY_TRAILING_LF_LENGTH = KEY_HEX_LENGTH + 1
 KeyShape = Literal["valid", "legacy_trailing_lf", "invalid"]
-_HEX_KEY_RE = re.compile(rb"[0-9a-f]{64}\Z")
+_HEX_KEY_RE = re.compile(rb"[0-9a-f]+\Z")
 
 
 def classify_typesense_api_key(value: bytes) -> KeyShape:

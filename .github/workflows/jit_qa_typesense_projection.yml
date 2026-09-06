@@ -242,6 +242,16 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.admit.outputs.source_sha }}
+          fetch-depth: 1
+      - name: Verify the checked-in Typesense key-shape helper
+        run: |
+          set -euo pipefail
+          helper="backend/scripts/jit_qa_typesense_key_shape.py"
+          test -r "$helper"
+          python3 "$helper" --help >/dev/null
       - uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
