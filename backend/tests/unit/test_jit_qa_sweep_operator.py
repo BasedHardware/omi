@@ -125,6 +125,8 @@ def _db(*rows):
         "max_transcript_fetches": 0,
         "max_transcript_fetch_characters": 0,
         "max_memory_lookups": 0,
+        "sdk_max_retries": 0,
+        "gateway_max_attempts": 1,
         "provider_calls_allowed": 1,
     }
     output = {
@@ -147,6 +149,14 @@ def _db(*rows):
         "database": OPERATOR.QA_SWEEP_DATABASE,
         "status": "completed",
         "model_policy": policy,
+        "model_dispatch_evidence": [
+            {
+                "provider_invocations": 1,
+                "provider_attempts_observed": 1,
+                "sdk_max_retries": 0,
+                "usage_observed": False,
+            }
+        ],
     }
     documents = {run_path: run, output_path: output}
     for row in rows:
@@ -247,6 +257,20 @@ def test_consumer_reads_source_and_canonical_outputs_by_metadata_projection():
     canonical_path = f"{OPERATOR.CANONICAL_COLLECTION}/memory-qa-1"
     db.documents[canonical_path]["status"] = "superseded"
     with pytest.raises(OPERATOR.JITQASweepOperatorError, match="not active"):
+        OPERATOR.verify_qa_sweep_run(db, run_id=RUN_ID)
+
+
+def test_consumer_requires_exact_ledger_schema_and_dispatch_bounds():
+    db = _db(_source_row())
+    db.documents[f"{OPERATOR.CANONICAL_COLLECTION}/memory-qa-1"]["ledger_schema_version"] = "legacy.v0"
+    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="unsupported ledger schema"):
+        OPERATOR.verify_qa_sweep_run(db, run_id=RUN_ID)
+
+    db = _db(_source_row())
+    db.documents[f"{OPERATOR.QA_SWEEP_RUN_COLLECTION}/{RUN_ID}"]["model_dispatch_evidence"][0][
+        "provider_attempts_observed"
+    ] = 2
+    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="attempt evidence"):
         OPERATOR.verify_qa_sweep_run(db, run_id=RUN_ID)
 
 

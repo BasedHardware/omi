@@ -10,6 +10,7 @@ workflow execution counter or log line as product output.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -38,6 +39,8 @@ QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS = 2_000
 QA_SWEEP_MAX_TRANSCRIPT_FETCHES = 0
 QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS = 0
 QA_SWEEP_MAX_MEMORY_LOOKUPS = 0
+QA_SWEEP_MAX_SDK_RETRIES = 0
+QA_SWEEP_MAX_GATEWAY_ATTEMPTS = 1
 QA_SWEEP_MAX_PROVIDER_CALLS = 1
 QA_SWEEP_RECEIPT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-run.v1"
 QA_SWEEP_OUTPUT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-output.v1"
@@ -89,16 +92,39 @@ def validate_qa_sweep_run_id(run_id: str) -> str:
 
 
 def validate_qa_sweep_environment(environ: Mapping[str, str] | None = None) -> str:
-    """Lazy bridge to runtime validation so ``validate-job`` stays pure.
+    """Validate the fixed QA override set without importing runtime secrets."""
 
-    The daily sweep module imports encryption-backed runtime dependencies. Job
-    resource validation has no reason to import that path, so this wrapper
-    defers it until a real Firestore verification is requested.
-    """
-
-    from utils.memory.daily_memory_sweep import validate_qa_sweep_environment as validate
-
-    return validate(environ)
+    env = environ if environ is not None else os.environ
+    run_id = validate_qa_sweep_run_id(env.get("OMI_JIT_QA_SWEEP_RUN_ID", ""))
+    required = {
+        "OMI_ENV_STAGE": "dev",
+        "GOOGLE_CLOUD_PROJECT": QA_SWEEP_PROJECT,
+        "GCLOUD_PROJECT": QA_SWEEP_PROJECT,
+        "OMI_FIRESTORE_DATA_PLANE_PROJECT": QA_SWEEP_PROJECT,
+        "FIRESTORE_DATABASE_ID": QA_SWEEP_DATABASE,
+        "FIREBASE_AUTH_PROJECT_ID": "based-hardware",
+        "MEMORY_ENABLED": "on",
+        "OMI_JIT_QA_AUTH_ONLY": "true",
+        "OMI_JIT_QA_UID_ALLOWLIST": QA_SWEEP_UID,
+        "OMI_JIT_QA_SWEEP_ADMISSION": "true",
+        "MEMORY_DAILY_MEMORY_SWEEP_ENABLED": "true",
+        "MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH": "false",
+        "MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED": "true",
+        "MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME": QA_SWEEP_MODEL_NAME,
+        "MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES": str(QA_SWEEP_MAX_MODEL_CANDIDATES),
+        "MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD": f"{QA_SWEEP_MAX_MODEL_COST_USD:g}",
+        "MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED": "true",
+        "MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG": "jit-qa-sweep-v1",
+        "MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED": "false",
+    }
+    for name, expected in required.items():
+        if env.get(name, "").strip().casefold() != expected.casefold():
+            raise ValueError(f"QA sweep requires {name}={expected!r}")
+    if env.get("FIRESTORE_EMULATOR_HOST", "").strip():
+        raise ValueError("QA sweep proof must use named Cloud Firestore")
+    if env.get("SERVICE_ACCOUNT_JSON", "").strip() or env.get("FIREBASE_AUTH_CREDENTIALS_PATH", "").strip():
+        raise ValueError("QA sweep proof cannot select customer Firebase credentials")
+    return run_id
 
 
 def _projected_document(db_client: Any, path: str, fields: Sequence[str], *, label: str) -> dict[str, Any]:
@@ -279,13 +305,11 @@ def _validate_canonical_outputs(db_client: Any, rows: list[dict[str, Any]]) -> d
         if getattr(payload.get("source_state"), "value", payload.get("source_state")) != "active":
             raise JITQASweepOperatorError("QA sweep canonical memory output source is not active")
         schema = payload.get("ledger_schema_version")
-        if not isinstance(schema, str) or not schema.strip():
-            raise JITQASweepOperatorError("QA sweep canonical memory output has no ledger schema")
+        if schema != "knowledge_ledger.v1":
+            raise JITQASweepOperatorError("QA sweep canonical memory output has an unsupported ledger schema")
         content = payload.get("content")
         if not isinstance(content, str) or not content.strip():
             raise JITQASweepOperatorError("QA sweep canonical memory output has no content")
-        import hashlib
-
         content_digests[memory_id] = hashlib.sha256(content.encode("utf-8")).hexdigest()
         evidence = payload.get("evidence")
         if not isinstance(evidence, list) or not evidence:
@@ -353,6 +377,8 @@ def verify_qa_sweep_run(db_client: Any, *, run_id: str, minimum_output_rows: int
         "max_transcript_fetches": QA_SWEEP_MAX_TRANSCRIPT_FETCHES,
         "max_transcript_fetch_characters": QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS,
         "max_memory_lookups": QA_SWEEP_MAX_MEMORY_LOOKUPS,
+        "sdk_max_retries": QA_SWEEP_MAX_SDK_RETRIES,
+        "gateway_max_attempts": QA_SWEEP_MAX_GATEWAY_ATTEMPTS,
         "provider_calls_allowed": QA_SWEEP_MAX_PROVIDER_CALLS,
     }:
         raise JITQASweepOperatorError("QA sweep model policy is outside the bounded proof contract")
@@ -360,6 +386,29 @@ def verify_qa_sweep_run(db_client: Any, *, run_id: str, minimum_output_rows: int
         raise JITQASweepOperatorError("QA sweep output row points at an unexpected receipt collection")
     if output_payload.get("candidate_receipt_join_field") != "qa_run_id":
         raise JITQASweepOperatorError("QA sweep output row has no run-id join field")
+    dispatch_rows = run_payload.get("model_dispatch_evidence")
+    if not isinstance(dispatch_rows, list) or len(dispatch_rows) > QA_SWEEP_MAX_PROVIDER_CALLS:
+        raise JITQASweepOperatorError("QA sweep dispatch evidence is missing or exceeds the provider-call bound")
+    for dispatch in dispatch_rows:
+        if not isinstance(dispatch, Mapping):
+            raise JITQASweepOperatorError("QA sweep dispatch evidence is malformed")
+        if dispatch.get("sdk_max_retries") != QA_SWEEP_MAX_SDK_RETRIES:
+            raise JITQASweepOperatorError("QA sweep dispatch SDK retry bound is outside the proof contract")
+        for key in ("provider_invocations", "provider_attempts_observed"):
+            value = dispatch.get(key)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0 or value > 1:
+                raise JITQASweepOperatorError("QA sweep dispatch attempt evidence is outside the proof contract")
+        usage_observed = dispatch.get("usage_observed")
+        if not isinstance(usage_observed, bool):
+            raise JITQASweepOperatorError("QA sweep dispatch usage evidence is malformed")
+        if usage_observed:
+            usage = dispatch.get("usage_tokens")
+            if (
+                not isinstance(usage, Mapping)
+                or not usage
+                or any(not isinstance(value, int) or isinstance(value, bool) or value < 0 for value in usage.values())
+            ):
+                raise JITQASweepOperatorError("QA sweep observed usage evidence is malformed")
     committed_candidates = output_payload.get("committed_candidates")
     if not isinstance(committed_candidates, int) or committed_candidates < minimum_output_rows:
         raise JITQASweepOperatorError("QA sweep produced fewer durable candidates than required")
@@ -396,6 +445,7 @@ def verify_qa_sweep_run(db_client: Any, *, run_id: str, minimum_output_rows: int
         "producer_receipt_path": f"{QA_SWEEP_RUN_COLLECTION}/{run_id}",
         "output_collection": OUTPUT_COLLECTION,
         "model_policy": dict(policy),
+        "model_dispatch_evidence": [dict(item) for item in dispatch_rows],
     }
 
 

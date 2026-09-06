@@ -1,4 +1,4 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, cast
 
@@ -649,6 +649,9 @@ class DailySweepAgentPassOutput(BaseModel):
     transcript_requests: List[DailySweepTranscriptRequest] = Field(default=[])
     memory_lookups: List[DailySweepMemoryLookup] = Field(default=[])
     folder_assignments: List[DailySweepFolderAssignment] = Field(default=[])
+    # Content-free dispatch/usage evidence used by the isolated QA seam.  A
+    # missing provider usage payload stays missing; zero is never fabricated.
+    dispatch_evidence: Dict[str, Any] = Field(default_factory=dict)
 
 
 _DAILY_SWEEP_FOLDER_TASK = (
@@ -722,6 +725,7 @@ def run_daily_sweep_summary_agent(
     max_memory_lookups: int = 4,
     cache_key: Optional[str] = None,
     llm: Optional[Any] = None,
+    max_provider_retries: Optional[int] = None,
 ) -> DailySweepAgentPassOutput:
     """Run the bounded two-phase daily agent; raises MemoryExtractionError on failure.
 
@@ -750,9 +754,32 @@ def run_daily_sweep_summary_agent(
         'format_instructions': parser.get_format_instructions(),
     }
 
+    dispatch_evidence: Dict[str, Any] = {
+        'provider_invocations': 0,
+        'provider_attempts_observed': 0,
+        'sdk_max_retries': max_provider_retries,
+        'usage_observed': False,
+    }
+
     def invoke(prompt: Any, prompt_input: Dict[str, Any]) -> DailySweepAgentPassOutput:
-        model = llm if llm is not None else get_llm('memories', cache_key=cache_key)
-        return parser.invoke(model.invoke(prompt.invoke(prompt_input)))
+        model = llm if llm is not None else get_llm('memories', cache_key=cache_key, max_retries=max_provider_retries)
+        dispatch_evidence['provider_invocations'] += 1
+        # max_retries=0 is the actual SDK setting for QA. This count is the
+        # request dispatch observed by this process; the gateway route's
+        # max_attempts is separately admitted in the QA receipt policy.
+        dispatch_evidence['provider_attempts_observed'] += 1
+        response = model.invoke(prompt.invoke(prompt_input))
+        usage = getattr(response, 'usage_metadata', None)
+        if isinstance(usage, Mapping):
+            numeric = {
+                key: usage[key]
+                for key in ('input_tokens', 'output_tokens', 'total_tokens')
+                if isinstance(usage.get(key), int) and not isinstance(usage.get(key), bool) and usage[key] >= 0
+            }
+            if numeric:
+                dispatch_evidence['usage_observed'] = True
+                dispatch_evidence['usage_tokens'] = numeric
+        return parser.invoke(response)
 
     def lookup_results_block(lookups: Sequence[Any]) -> str:
         sections = []
@@ -793,7 +820,9 @@ def run_daily_sweep_summary_agent(
             ][: max(0, max_transcript_fetches)]
             lookups = list(first.memory_lookups)[: max(0, max_memory_lookups)] if callable(memory_searcher) else []
             if not requests and not lookups:
-                return _sanitized_daily_sweep_output(first, known_ids, max_candidates)
+                sanitized = _sanitized_daily_sweep_output(first, known_ids, max_candidates)
+                sanitized.dispatch_evidence = dict(dispatch_evidence)
+                return sanitized
             excerpts = "\n\n".join(
                 f"[{request.conversation_id}] "
                 f"({_neutralize_fences(str(request.reason or '')[:DAILY_SWEEP_REQUEST_REASON_CHARACTERS])})\n"
@@ -822,7 +851,9 @@ def run_daily_sweep_summary_agent(
             memory_lookups=[],
             folder_assignments=second.folder_assignments or first.folder_assignments,
         )
-        return _sanitized_daily_sweep_output(merged, known_ids, max_candidates)
+        sanitized = _sanitized_daily_sweep_output(merged, known_ids, max_candidates)
+        sanitized.dispatch_evidence = dict(dispatch_evidence)
+        return sanitized
     except Exception as error:
         logger.error("Daily sweep summary agent failed: %s", type(error).__name__)
         raise MemoryExtractionError("daily_sweep_summary_agent") from error
@@ -861,5 +892,9 @@ def _sanitized_daily_sweep_output(
         if assignment.conversation_id in known_ids and assignment.folder_id.strip()
     ]
     return DailySweepAgentPassOutput(
-        memories=memories, transcript_requests=[], memory_lookups=[], folder_assignments=assignments
+        memories=memories,
+        transcript_requests=[],
+        memory_lookups=[],
+        folder_assignments=assignments,
+        dispatch_evidence=dict(output.dispatch_evidence),
     )

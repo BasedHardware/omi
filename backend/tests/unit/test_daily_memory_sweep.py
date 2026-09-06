@@ -21,6 +21,7 @@ from utils.memory.daily_memory_sweep import (
     DailySweepModelAuthority,
     MAX_CATCH_UP_DAYS,
     QA_SWEEP_MAX_CATCH_UP_DAYS,
+    QA_SWEEP_MAX_SDK_RETRIES,
     QA_SWEEP_MAX_MEMORY_LOOKUPS,
     QA_SWEEP_MAX_MODEL_COST_USD,
     QA_SWEEP_MAX_SUMMARY_CONVERSATIONS,
@@ -1483,6 +1484,7 @@ def test_qa_completed_day_uses_tight_real_input_and_provider_envelope(monkeypatc
     assert seen["max_candidates"] == 1
     assert seen["max_transcript_fetches"] == QA_SWEEP_MAX_TRANSCRIPT_FETCHES
     assert seen["max_memory_lookups"] == QA_SWEEP_MAX_MEMORY_LOOKUPS
+    assert seen["max_provider_retries"] == QA_SWEEP_MAX_SDK_RETRIES
     assert QA_SWEEP_MAX_CATCH_UP_DAYS == 1
     assert QA_SWEEP_MAX_SUMMARY_CONVERSATIONS == 1
     assert QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS == 2_000

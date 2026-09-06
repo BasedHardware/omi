@@ -183,6 +183,8 @@ QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS = 2_000
 QA_SWEEP_MAX_TRANSCRIPT_FETCHES = 0
 QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS = 0
 QA_SWEEP_MAX_MEMORY_LOOKUPS = 0
+QA_SWEEP_MAX_SDK_RETRIES = 0
+QA_SWEEP_MAX_GATEWAY_ATTEMPTS = 1
 QA_SWEEP_MAX_PROVIDER_CALLS = 1
 QA_SWEEP_RECEIPT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-run.v1"
 QA_SWEEP_OUTPUT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-output.v1"
@@ -3252,6 +3254,8 @@ class DailySweepRuntimeSources:
     # Content-free accounting used to enforce the model budget.  It is never
     # emitted as a user-facing telemetry payload.
     model_cost_usd: float = 0.0
+    # Content-free provider dispatch and usage evidence for qualification.
+    model_dispatch_evidence: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_iterables(
@@ -3266,6 +3270,7 @@ class DailySweepRuntimeSources:
         onboarding_source_progress: Optional[Mapping[str, int]] = None,
         eligibility_proof: Literal["completed_transcript_v1", "none"] = "none",
         model_cost_usd: float = 0.0,
+        model_dispatch_evidence: Optional[Mapping[str, Any]] = None,
     ) -> "DailySweepRuntimeSources":
         summary_values = tuple(daily_summary)
         onboarding_values = tuple(onboarding_cold_start)
@@ -3285,6 +3290,7 @@ class DailySweepRuntimeSources:
             onboarding_source_progress=dict(onboarding_source_progress or {}),
             eligibility_proof=eligibility_proof,
             model_cost_usd=model_cost_usd,
+            model_dispatch_evidence=dict(model_dispatch_evidence or {}),
         )
 
     def candidates(self) -> Tuple[DailySweepCandidate, ...]:
@@ -4063,6 +4069,8 @@ def _load_or_stage_daily_summary_candidates(
     max_transcript_fetches: int = MAX_DAILY_TRANSCRIPT_FETCHES,
     max_fetch_characters: int = MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS,
     max_memory_lookups: int = MAX_DAILY_MEMORY_LOOKUPS,
+    max_provider_retries: Optional[int] = None,
+    dispatch_evidence: Optional[Dict[str, Any]] = None,
     sweep_generation: int = 1,
 ) -> Optional[Tuple[Tuple[DailySweepCandidate, ...], Tuple[Dict[str, str], ...]]]:
     """Stage the complete bounded daily-summary agent page before apply.
@@ -4156,6 +4164,8 @@ def _load_or_stage_daily_summary_candidates(
         )
         if payload.get("candidate_digest") != expected_digest:
             return None
+        if dispatch_evidence is not None and isinstance(payload.get("dispatch_evidence"), Mapping):
+            dispatch_evidence.update(dict(payload["dispatch_evidence"]))
         return staged, assignments
 
     try:
@@ -4197,7 +4207,10 @@ def _load_or_stage_daily_summary_candidates(
             memory_searcher=_daily_sweep_ledger_searcher(uid, db_client=db_client),
             max_memory_lookups=max_memory_lookups,
             cache_key=f"daily-sweep:{uid}",
+            max_provider_retries=max_provider_retries,
         )
+        if dispatch_evidence is not None and isinstance(getattr(output, "dispatch_evidence", None), Mapping):
+            dispatch_evidence.update(dict(output.dispatch_evidence))
         candidates: List[DailySweepCandidate] = []
         for index, memory in enumerate(getattr(output, "memories", ()) or ()):
             content = str(getattr(memory, "content", "") or "").strip()[:MAX_CONTENT_CHARACTERS]
@@ -4295,6 +4308,7 @@ def _load_or_stage_daily_summary_candidates(
             "staged_at": datetime.now(timezone.utc),
             "expires_at": datetime.now(timezone.utc) + STAGED_CANDIDATE_RETENTION,
             "model_invocation_id": invocation_id,
+            "dispatch_evidence": dict(dispatch_evidence or {}),
         }
 
         def stage_if_open(transaction: Any) -> bool:
@@ -4562,6 +4576,7 @@ def produce_completed_day_daily_summary_sources(
         return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
 
     runner = agent_runner
+    dispatch_evidence: Dict[str, Any] = {}
     if runner is None:
         # The deployment may only name the model configured for the existing
         # memory route.  It cannot select an arbitrary model through a source
@@ -4585,9 +4600,13 @@ def produce_completed_day_daily_summary_sources(
         (
             2 * spine_characters
             + max_transcript_fetches * max_fetch_characters
-            + daily_sweep_phase_b_overhead_characters(
-                max_memory_lookups,
-                max_candidate_rows=model.max_candidates,
+            + (
+                daily_sweep_phase_b_overhead_characters(
+                    max_memory_lookups,
+                    max_candidate_rows=model.max_candidates,
+                )
+                if is_qa_run
+                else daily_sweep_phase_b_overhead_characters(max_memory_lookups)
             )
         )
         / 1000.0
@@ -4613,6 +4632,8 @@ def produce_completed_day_daily_summary_sources(
         max_transcript_fetches=max_transcript_fetches,
         max_fetch_characters=max_fetch_characters,
         max_memory_lookups=max_memory_lookups,
+        max_provider_retries=QA_SWEEP_MAX_SDK_RETRIES if is_qa_run else None,
+        dispatch_evidence=dispatch_evidence,
         sweep_generation=sweep_generation,
     )
     if staged is None:
@@ -4635,6 +4656,7 @@ def produce_completed_day_daily_summary_sources(
         source_status="complete" if candidates else "complete_zero",
         eligibility_proof="completed_transcript_v1",
         model_cost_usd=estimated_cost,
+        model_dispatch_evidence=dispatch_evidence,
     )
 
 
@@ -4771,6 +4793,7 @@ def firestore_daily_sweep_source_provider(
             ),
             eligibility_proof=summary_sources.eligibility_proof,
             model_cost_usd=summary_sources.model_cost_usd,
+            model_dispatch_evidence=summary_sources.model_dispatch_evidence,
         )
     raw_payload = snapshot.to_dict() or {}
     payload: Dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
@@ -4943,6 +4966,7 @@ class DailySweepSchedulerSummary:
     # account therefore stays eligible without imposing head-of-line blocking.
     completed_uids: Tuple[str, ...] = ()
     failed_uids: Tuple[str, ...] = ()
+    model_dispatch_evidence: Tuple[Mapping[str, Any], ...] = ()
 
 
 def _qa_sweep_run_ref(db_client: Any, run_id: str) -> Any:
@@ -4994,6 +5018,8 @@ def write_qa_sweep_run_receipt(
         "max_transcript_fetches": QA_SWEEP_MAX_TRANSCRIPT_FETCHES,
         "max_transcript_fetch_characters": QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS,
         "max_memory_lookups": QA_SWEEP_MAX_MEMORY_LOOKUPS,
+        "sdk_max_retries": QA_SWEEP_MAX_SDK_RETRIES,
+        "gateway_max_attempts": QA_SWEEP_MAX_GATEWAY_ATTEMPTS,
         "provider_calls_allowed": QA_SWEEP_MAX_PROVIDER_CALLS,
     }
     output_path = f"users/{QA_SWEEP_UID}/daily_memory_sweep_receipts"
@@ -5012,6 +5038,7 @@ def write_qa_sweep_run_receipt(
         "skipped_candidates": summary.skipped_candidates,
         "error_count": len(summary.errors),
         "model_policy": policy,
+        "model_dispatch_evidence": [dict(item) for item in summary.model_dispatch_evidence],
         "candidate_receipt_collection": output_path,
         "candidate_receipt_join_field": "qa_run_id",
     }
@@ -5032,6 +5059,7 @@ def write_qa_sweep_run_receipt(
         "candidate_receipt_collection": output_path,
         "candidate_receipt_join_field": "qa_run_id",
         "model_policy": policy,
+        "model_dispatch_evidence": [dict(item) for item in summary.model_dispatch_evidence],
         "error_count": len(summary.errors),
     }
     _create_or_verify_qa_sweep_document(
@@ -5129,6 +5157,7 @@ def run_daily_memory_sweep_scheduler(
     errors: List[str] = []
     completed_uids: List[str] = []
     failed_uids: List[str] = []
+    model_dispatch_evidence: List[Mapping[str, Any]] = []
 
     def process_one(uid: str) -> ProcessOutcome:
         nonlocal attempted, committed_users, blocked_users, committed, idempotent, skipped
@@ -5251,6 +5280,8 @@ def run_daily_memory_sweep_scheduler(
                     sources = source_provider(uid, local_date, control)
                 if not isinstance(sources, DailySweepRuntimeSources):
                     raise ValueError("daily sweep source provider returned an invalid source bundle")
+                if sources.model_dispatch_evidence:
+                    model_dispatch_evidence.append(dict(sources.model_dispatch_evidence))
                 packets[local_date] = build_daily_sweep_input(
                     uid,
                     local_date,
@@ -5300,6 +5331,7 @@ def run_daily_memory_sweep_scheduler(
         errors=tuple(errors[:16]),
         completed_uids=tuple(completed_uids),
         failed_uids=tuple(failed_uids),
+        model_dispatch_evidence=tuple(model_dispatch_evidence),
     )
 
 
@@ -5354,6 +5386,8 @@ __all__ = [
     "QA_SWEEP_MAX_TRANSCRIPT_FETCHES",
     "QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS",
     "QA_SWEEP_MAX_MEMORY_LOOKUPS",
+    "QA_SWEEP_MAX_SDK_RETRIES",
+    "QA_SWEEP_MAX_GATEWAY_ATTEMPTS",
     "QA_SWEEP_MAX_PROVIDER_CALLS",
     "QA_SWEEP_RECEIPT_SCHEMA_VERSION",
     "QA_SWEEP_OUTPUT_SCHEMA_VERSION",
