@@ -520,6 +520,13 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "environment: prod" not in text
 
 
+def test_workflow_backend_memory_literal_matches_contract():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    CONTRACT.validate_workflow_backend_memory(text)
+    with pytest.raises(CONTRACT.JITQAContractError, match="matching BACKEND_MEMORY"):
+        CONTRACT.validate_workflow_backend_memory(text.replace("--memory=4Gi", "--memory=8Gi"))
+
+
 def test_qa_workflows_admit_only_proven_merged_ancestors():
     for workflow in (WORKFLOW, TYPESENSE_WORKFLOW):
         text = workflow.read_text(encoding="utf-8")

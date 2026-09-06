@@ -5,8 +5,10 @@ import pytest
 
 from scripts import jit_qa_firestore_index_operator as operator
 
+_UNSET = object()
 
-def _field_api_request(*, ready: bool = False):
+
+def _field_api_request(*, ready: bool = False, api_scope: object = _UNSET):
     indexes = [
         {
             "name": "projects/based-hardware-dev/databases/jit-qa/collectionGroups/conversations/fields/status/indexes/asc",
@@ -30,6 +32,9 @@ def _field_api_request(*, ready: bool = False):
                 "state": "READY",
             }
         )
+    if api_scope is not _UNSET:
+        for index in indexes:
+            index["apiScope"] = api_scope
     calls = []
 
     def request(method, url, payload):
@@ -320,6 +325,48 @@ def test_field_target_is_idempotent_when_collection_group_index_is_present():
 
     assert changed is False
     assert all(method == "GET" for method, _url, _payload in field_api.calls)
+
+
+def test_field_target_accepts_explicit_any_api_scope():
+    field_api = _field_api_request(ready=True, api_scope="ANY_API")
+
+    changed = operator._apply_field_target(
+        project=operator.PROJECT,
+        database=operator.DATABASE,
+        target=operator.TARGET_FIELD_INDEXES[0],
+        field_api_request=field_api,
+        timeout_seconds=1,
+        poll_interval_seconds=1,
+        sleep=lambda _seconds: None,
+        monotonic=lambda: 0,
+    )
+
+    assert changed is False
+
+
+def test_field_target_rejects_non_any_api_scope_on_target():
+    field_api = _field_api_request(ready=True, api_scope="DATASTORE_MODE_API")
+
+    with pytest.raises(operator.IndexOperatorError, match="apiScope must be ANY_API"):
+        operator._field_target_state(
+            project=operator.PROJECT,
+            database=operator.DATABASE,
+            target=operator.TARGET_FIELD_INDEXES[0],
+            field_api_request=field_api,
+        )
+
+
+@pytest.mark.parametrize("api_scope", ["UNKNOWN_SCOPE", None, 123])
+def test_field_target_rejects_invalid_api_scope_on_preserved_index(api_scope):
+    field_api = _field_api_request(api_scope=api_scope)
+
+    with pytest.raises(operator.IndexOperatorError, match="apiScope must be ANY_API"):
+        operator._field_target_state(
+            project=operator.PROJECT,
+            database=operator.DATABASE,
+            target=operator.TARGET_FIELD_INDEXES[0],
+            field_api_request=field_api,
+        )
 
 
 def test_field_target_waits_for_existing_creating_index_without_repatching():

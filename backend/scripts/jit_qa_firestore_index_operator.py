@@ -4,7 +4,7 @@
 The checked-in manifest is the source of truth, but the QA database is a
 separate development database that must not receive the full production
 manifest merely to exercise JIT history and entity-timeline reads.  This
-operator validates the complete generated manifest, selects ten named query
+operator validates the complete generated manifest, selects a bounded set of named query
 requirements from it, and delegates inventory/provisioning/waiting to the
 shared Firestore reconciler.
 """
@@ -256,6 +256,7 @@ def _field_indexes_from_payload(
         raise IndexOperatorError("Firestore field config contains a malformed index")
     normalized = []
     for index in raw_indexes:
+        _validate_field_api_scope(index)
         fields = index.get("fields")
         if not isinstance(fields, list) or not fields or not all(isinstance(field, Mapping) for field in fields):
             raise IndexOperatorError("Firestore field config contains an index with malformed fields")
@@ -271,7 +272,18 @@ def _field_indexes_from_payload(
     return normalized
 
 
+def _validate_field_api_scope(index: Mapping[str, Any]) -> None:
+    """Require Firestore-native field indexes, treating omission as ANY_API."""
+
+    if "apiScope" not in index:
+        return
+    api_scope = index["apiScope"]
+    if api_scope != "ANY_API":
+        raise IndexOperatorError("Firestore field index apiScope must be ANY_API or omitted")
+
+
 def _field_index_matches(index: Mapping[str, Any], target: FieldIndexTarget) -> bool:
+    _validate_field_api_scope(index)
     fields = index.get("fields")
     if not isinstance(fields, list) or len(fields) != 1 or not isinstance(fields[0], Mapping):
         return False
@@ -285,6 +297,7 @@ def _field_index_matches(index: Mapping[str, Any], target: FieldIndexTarget) -> 
 def _patchable_field_index(index: Mapping[str, Any]) -> dict[str, Any]:
     """Strip server output fields while retaining every semantic index option."""
 
+    _validate_field_api_scope(index)
     query_scope = index.get("queryScope")
     fields = index.get("fields")
     if not isinstance(query_scope, str) or not query_scope:
