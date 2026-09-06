@@ -53,6 +53,7 @@ describe("executable PostgreSQL resource lifecycle", () => {
         return { exitCode: 0, stdout: `volume|${state.volumeName}|/var/lib/postgresql`, stderr: "" };
       }
       if (args[1] === "image") return { exitCode: 0, stdout: "linux/amd64", stderr: "" };
+      if (args[1] === "info") return { exitCode: 0, stdout: '[["driver-type","io.containerd.snapshotter.v1"]]', stderr: "" };
       if (args[1] === "exec") return { exitCode: 0, stdout: "/var/lib/postgresql/18/docker", stderr: "" };
       return { exitCode: 1, stdout: "", stderr: "unexpected" };
     };
@@ -61,6 +62,15 @@ describe("executable PostgreSQL resource lifecycle", () => {
       "docker", "image", "inspect", "--platform", "linux/amd64",
       "--format", "{{.Os}}/{{.Architecture}}", state.image,
     ]);
+    calls.length = 0;
+    expect(() => verifyOwnedContainerConfiguration(args => args[1] === "info"
+      ? { exitCode: 0, stdout: '[["Backing Filesystem","extfs"]]', stderr: "" }
+      : run(args), state)).not.toThrow();
+    expect(calls).toContainEqual([
+      "docker", "image", "inspect", "--format", "{{.Os}}/{{.Architecture}}", state.image,
+    ]);
+    expect(() => verifyOwnedContainerConfiguration(args => args[1] === "image"
+      ? { exitCode: 0, stdout: "linux/arm64", stderr: "" } : run(args), state)).toThrow("postgres_test_container_configuration_mismatch");
     expect(() => verifyOwnedContainerConfiguration((args) => {
       const result = run(args);
       return args[1] === "inspect" && args.some((arg) => arg.includes(".HostConfig.PortBindings"))

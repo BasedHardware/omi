@@ -86,11 +86,17 @@ export const verifyOwnedContainerConfiguration = (
   // The containerd image store keeps the pinned multi-architecture index as the
   // visible image object. Select the frozen child platform explicitly so the
   // check proves the executable manifest rather than inspecting the index.
+  const driver = run(["docker", "info", "--format", "{{json .DriverStatus}}"]);
+  let driverStatus: unknown;
+  try { driverStatus = JSON.parse(driver.stdout); } catch { return fail("postgres_test_container_configuration_mismatch"); }
+  if (driver.exitCode !== 0 || (driverStatus !== null && !Array.isArray(driverStatus))) return fail("postgres_test_container_configuration_mismatch");
+  const containerd = Array.isArray(driverStatus) && driverStatus.some(row =>
+    Array.isArray(row) && row[0] === "driver-type" && row[1] === "io.containerd.snapshotter.v1");
   const image = run([
-    "docker", "image", "inspect", "--platform", "linux/amd64",
+    "docker", "image", "inspect", ...(containerd ? ["--platform", "linux/amd64"] : []),
     "--format", "{{.Os}}/{{.Architecture}}", state.image,
   ]);
-  if (image.stdout !== "linux/amd64") return fail("postgres_test_container_configuration_mismatch");
+  if (image.exitCode !== 0 || image.stdout !== "linux/amd64") return fail("postgres_test_container_configuration_mismatch");
   const pgdata = run(["docker", "exec", state.containerName, "printenv", "PGDATA"]);
   if (pgdata.stdout !== "/var/lib/postgresql/18/docker") {
     return fail("postgres_test_container_configuration_mismatch");
