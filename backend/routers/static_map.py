@@ -6,10 +6,15 @@ server-side and rendered images are shared across users via Redis
 image proxy on the project's key.
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
+from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
 from utils.static_map import MalformedPinsError, fetch_static_map, parse_pins
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -28,7 +33,16 @@ async def get_static_map(
 
     image = await fetch_static_map(parsed, width, height)
     if image is None:
-        # The app renders its offline pin-dot canvas for any failure here.
+        # The app renders its offline pin-dot canvas for any failure here —
+        # count the degrade through the shared fallback telemetry.
+        record_fallback(
+            component='static_map',
+            from_mode='provider_static_map',
+            to_mode='client_pin_canvas',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
         raise HTTPException(status_code=502, detail='Static map is temporarily unavailable')
 
     return Response(content=image, media_type='image/png', headers={'Cache-Control': 'private, max-age=86400'})

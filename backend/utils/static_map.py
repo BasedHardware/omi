@@ -11,10 +11,12 @@ Coordinates are never logged — only counts and outcomes (see
 ``utils/conversations/location.py`` for the same rule).
 """
 
+import asyncio
 import hashlib
 import json
 import logging
 import os
+import time
 from typing import List, Optional, Tuple
 
 from database.redis_db import r
@@ -33,6 +35,12 @@ _MAX_PINS = 50
 # a style bump invalidates old entries without a flush.
 _CACHE_VERSION = 1
 _CACHE_TTL_SECONDS = 604800  # 7 days
+# Stampede dedup: per-key render lock TTL (bounds how long a crashed holder can
+# wedge waiters), how often waiters poll the cache, and how long they wait
+# before rendering unlocked.
+_RENDER_LOCK_TTL_SECONDS = 30
+_RENDER_POLL_INTERVAL_SECONDS = 0.25
+_RENDER_WAIT_TIMEOUT_SECONDS = 15.0
 
 # Dark styling shared by every preview. Mirrors the look the app shipped with
 # client-side Google Static Maps (conversation detail geolocation card).
@@ -84,8 +92,8 @@ def parse_pins(pins: str) -> List[Tuple[float, float]]:
     """
     if not pins:
         raise MalformedPinsError('pins must be a non-empty pipe-separated list of lat,lng pairs')
-    parsed = []
-    seen = set()
+    parsed: List[Tuple[float, float]] = []
+    seen: set[Tuple[float, float]] = set()
     for chunk in pins.split('|'):
         parts = chunk.split(',')
         if len(parts) != 2:
@@ -115,6 +123,9 @@ def build_static_map_url(pins: List[Tuple[float, float]], width: int, height: in
     One pin renders centered at street zoom; several pins use the provider's
     ``visible=`` auto-fit so every stop lands inside the frame.
 
+    Callers pass already-normalized dimensions (see ``_effective_dimensions``);
+    the provider serves at most 640px per axis (1280 with ``scale=2``).
+
     Provider URL budget: the Maps Static API restricts URLs to 16,384
     characters (https://developers.google.com/maps/documentation/maps-static/
     start). The old 2,048 figure is the legacy v2 limit and now belongs to the
@@ -123,7 +134,7 @@ def build_static_map_url(pins: List[Tuple[float, float]], width: int, height: in
     twice, in ``markers`` and ``visible``), comfortably inside the limit;
     re-measure if the style list, pin cap, or provider changes.
     """
-    size = f'size={min(width, _MAX_AXIS_PX)}x{min(height, _MAX_AXIS_PX)}'
+    size = f'size={width}x{height}'
     scale = 'scale=2'
     locations = '%7C'.join(f'{latitude:.4f},{longitude:.4f}' for latitude, longitude in pins)
     # White markers match the app's pin styling (and the brand's no-purple rule).
@@ -136,6 +147,18 @@ def build_static_map_url(pins: List[Tuple[float, float]], width: int, height: in
     )
 
 
+def _effective_dimensions(width: int, height: int) -> Tuple[int, int]:
+    """Normalize oversized requests with one proportional scale factor.
+
+    Scaling both axes by ``min(1, 640/width, 640/height)`` (instead of
+    independent per-axis clamps) preserves the aspect ratio AND makes every
+    request that differs only by scale share one cache entry — the provider
+    serves at most 640px per axis (1280 with ``scale=2``).
+    """
+    factor = min(1.0, _MAX_AXIS_PX / width, _MAX_AXIS_PX / height)
+    return int(width * factor), int(height * factor)
+
+
 def _cache_key(pins: List[Tuple[float, float]], width: int, height: int) -> str:
     # Sorting makes the key order-insensitive even if a caller passes unsorted pins.
     payload = json.dumps({'v': _CACHE_VERSION, 'pins': sorted(pins), 'w': width, 'h': height}, sort_keys=True)
@@ -143,20 +166,25 @@ def _cache_key(pins: List[Tuple[float, float]], width: int, height: int) -> str:
     return f'staticmap:{digest}'
 
 
-async def fetch_static_map(pins: List[Tuple[float, float]], width: int, height: int) -> Optional[bytes]:
-    """Return cached rendered bytes, fetching from the provider on a miss.
-
-    Returns ``None`` on any upstream failure — callers surface an error and the
-    app falls back to its offline canvas; a failure is never cached.
-    """
-    key = _cache_key(pins, width, height)
+async def _read_cache(key: str) -> Optional[bytes]:
     try:
         cached = await run_blocking(db_executor, r.get, key)
         if cached:
             return cached if isinstance(cached, bytes) else bytes(cached)
     except Exception as error:
         logger.warning('static map cache read failed error_type=%s', type(error).__name__)
+    return None
 
+
+async def _write_cache(key: str, image: bytes) -> None:
+    try:
+        await run_blocking(db_executor, r.set, key, image, ex=_CACHE_TTL_SECONDS)
+    except Exception as error:
+        logger.warning('static map cache write failed error_type=%s', type(error).__name__)
+
+
+async def _render_from_provider(pins: List[Tuple[float, float]], width: int, height: int) -> Optional[bytes]:
+    """Fetch a fresh render from the provider. Failures return ``None`` and are never cached."""
     api_key = os.getenv('GOOGLE_MAPS_API_KEY')
     if not api_key:
         logger.error('static map render unavailable: GOOGLE_MAPS_API_KEY is not set')
@@ -178,9 +206,82 @@ async def fetch_static_map(pins: List[Tuple[float, float]], width: int, height: 
             len(pins),
         )
         return None
-
-    try:
-        await run_blocking(db_executor, r.set, key, response.content, ex=_CACHE_TTL_SECONDS)
-    except Exception as error:
-        logger.warning('static map cache write failed error_type=%s', type(error).__name__)
     return response.content
+
+
+async def fetch_static_map(pins: List[Tuple[float, float]], width: int, height: int) -> Optional[bytes]:
+    """Return cached rendered bytes, fetching from the provider on a miss.
+
+    Returns ``None`` on any upstream failure — callers surface an error and the
+    app falls back to its offline canvas; a failure is never cached.
+
+    Stampede dedup: a cache miss takes a short-lived per-key render lock
+    (``r.set(nx=True)``). The lock holder renders once; concurrent misses poll
+    the cache for the holder's result and, if the wait budget expires, render
+    without the lock — a lost lock must never turn into a 502, so every lock
+    error path fails open to a plain fetch.
+    """
+    width, height = _effective_dimensions(width, height)
+    key = _cache_key(pins, width, height)
+
+    cached = await _read_cache(key)
+    if cached:
+        return cached
+
+    lock_key = f'{key}:render-lock'
+    lock_acquired = False
+    # 'acquired' -> we render; 'held' -> wait for the holder; 'unavailable' ->
+    # the lock infrastructure itself is broken, so fail open immediately:
+    # polling a broken cache for 15s would only add latency to every request.
+    lock_state = 'unavailable'
+    try:
+        try:
+            acquired = await run_blocking(db_executor, r.set, lock_key, '1', ex=_RENDER_LOCK_TTL_SECONDS, nx=True)
+            lock_state = 'acquired' if acquired else 'held'
+        except Exception as error:
+            # Fail open: lock errors degrade to unprotected rendering.
+            logger.warning('static map render-lock acquire failed error_type=%s', type(error).__name__)
+
+        if lock_state == 'acquired':
+            lock_acquired = True
+            # Recheck: the previous holder may have finished between our miss
+            # and acquiring the lock.
+            cached = await _read_cache(key)
+            if cached:
+                return cached
+            image = await _render_from_provider(pins, width, height)
+            if image is not None:
+                await _write_cache(key, image)
+            return image
+
+        if lock_state != 'held':
+            # Lock unavailable (Redis broken): render immediately, no wait —
+            # the cache write is best-effort like every other Redis touch.
+            image = await _render_from_provider(pins, width, height)
+            if image is not None:
+                await _write_cache(key, image)
+            return image
+
+        # Someone else holds the render lock: wait for their result instead of
+        # stacking a duplicate provider call.
+        deadline = time.monotonic() + _RENDER_WAIT_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            await asyncio.sleep(_RENDER_POLL_INTERVAL_SECONDS)
+            cached = await _read_cache(key)
+            if cached:
+                return cached
+        # Wait budget exhausted (holder crashed or is wedged): fail open and
+        # render without holding the lock.
+        logger.warning('static map render-lock wait timed out; rendering unlocked')
+        image = await _render_from_provider(pins, width, height)
+        if image is not None:
+            await _write_cache(key, image)
+        return image
+    finally:
+        if lock_acquired:
+            try:
+                await run_blocking(db_executor, r.delete, lock_key)
+            except Exception as error:
+                # The lock has a TTL; failing to release only risks one
+                # duplicate render after this holder is done.
+                logger.warning('static map render-lock release failed error_type=%s', type(error).__name__)
