@@ -30,6 +30,7 @@ export interface PostgresFirebaseAuthorizedMemoryServiceAppOptions {
   readonly tasks?: PostgresFirebaseTasksOptions;
   readonly conversations?: PostgresFirebaseConversationReadOptions;
   readonly device_sessions?: PostgresFirebaseAuthorizationRuntimeOptions;
+  readonly device_ownership_key?: Uint8Array;
   readonly transcription_source?: PrerecordedTranscriptionSource;
 }
 
@@ -47,7 +48,7 @@ export const createPostgresFirebaseAuthorizedMemoryServiceApp = (
   const descriptors = Object.getOwnPropertyDescriptors(options);
   const required = ["mcp_handler", "memory_read", "now_epoch_seconds", "counter"] as const;
   if (Reflect.ownKeys(descriptors).some((key) =>
-    typeof key !== "string" || ![...required, "observability", "tasks", "device_sessions", "transcription_source", "conversations"].includes(key))
+    typeof key !== "string" || ![...required, "observability", "tasks", "device_sessions", "transcription_source", "device_ownership_key", "conversations"].includes(key))
     || required.some((key) => !Object.hasOwn(descriptors, key))
     || Object.values(descriptors).some((entry) => !entry.enumerable || !("value" in entry))) {
     throw new TypeError("invalid PostgreSQL Firebase memory service options");
@@ -70,7 +71,7 @@ export const createPostgresFirebaseAuthorizedMemoryServiceApp = (
     },
     (descriptors.observability?.value ?? {}) as ServiceAppObservability,
     descriptors.tasks ? createPostgresFirebaseTasksRuntime(descriptors.tasks.value as PostgresFirebaseTasksOptions) : undefined,
-    descriptors.device_sessions ? createPostgresFirebaseDeviceSessionRuntime(descriptors.device_sessions.value as PostgresFirebaseAuthorizationRuntimeOptions, descriptors.transcription_source?.value as PrerecordedTranscriptionSource | undefined) : undefined,
+    descriptors.device_sessions ? createPostgresFirebaseDeviceSessionRuntime(descriptors.device_sessions.value as PostgresFirebaseAuthorizationRuntimeOptions, descriptors.transcription_source?.value as PrerecordedTranscriptionSource | undefined, descriptors.device_ownership_key?.value as Uint8Array | undefined) : undefined,
     descriptors.conversations ? createPostgresFirebaseConversationReadRuntime(descriptors.conversations.value as PostgresFirebaseConversationReadOptions) : undefined,
   );
 };

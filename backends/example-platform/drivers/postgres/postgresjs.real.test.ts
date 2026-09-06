@@ -1668,14 +1668,76 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           exp: now + 3600, iat: now - 60, auth_time: now - 60,
         }) },
       } as const;
-      const ingress = createPostgresFirebaseDeviceSessionRuntime(ingressOptions);
+      const ownershipKey = new Uint8Array(32).fill(7);
+      const ingress = createPostgresFirebaseDeviceSessionRuntime(ingressOptions, undefined, ownershipKey);
+      const ownerResponse = await ingress.fetch(new Request("https://service.example/v1/device-sessions/ownership", { headers: { authorization: "Bearer device.qa.valid" } }));
+      expect(ownerResponse.status).toBe(200);
+      const ownership = (await ownerResponse.json() as { ownership: { ownerKey: string; receipt: string } }).ownership;
       const deviceRequest = (path: string, method: string, value?: unknown, token = "device.qa.valid") => ingress.fetch(new Request(`https://service.example${path}`, {
-        method, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(value === undefined ? {} : { body: JSON.stringify(value) }),
+        method, headers: { authorization: `Bearer ${token}`, "x-omi-capture-ownership": ownership.receipt, "content-type": "application/json" }, ...(value === undefined ? {} : { body: JSON.stringify(value) }),
       }));
       const httpCreate = { captureId: crypto.randomUUID(), deviceId: "actual-route-qa", codec: 20 };
       const createdResponse = await deviceRequest("/v1/device-sessions", "POST", httpCreate);
       expect(createdResponse.status).toBe(201);
       const httpSession = (await createdResponse.json() as { session: { id: string } }).session;
+      const replayedResponse = await deviceRequest("/v1/device-sessions", "POST", httpCreate);
+      expect(replayedResponse.status).toBe(201);
+      expect(await replayedResponse.json()).toMatchObject({ session: { id: httpSession.id } });
+      await ownerSql.unsafe(`INSERT INTO omi_memory.account_control_revisions
+        (account_id,control_revision,account_generation,account_epoch,lifecycle_state,deletion_epoch,observed_at,record_schema_version,record_json,content_hash)
+        VALUES($1,18,'new',13,'active',NULL,clock_timestamp(),'control-v1','{}'::jsonb,$2)`, [accountId,"e".repeat(64)]);
+      await ownerSql.unsafe("UPDATE omi_memory.account_control_heads SET control_revision=18,activated_epoch=13,activation_control_revision=18 WHERE account_id=$1", [accountId]);
+      try {
+        const changedOwnerResponse = await ingress.fetch(new Request("https://service.example/v1/device-sessions/ownership", { headers: { authorization: "Bearer device.qa.valid" } }));
+        expect(changedOwnerResponse.status).toBe(200);
+        const changedOwner = (await changedOwnerResponse.json() as { ownership: { ownerKey: string; receipt: string } }).ownership;
+        expect(changedOwner.ownerKey).not.toBe(ownership.ownerKey);
+        const refused = await deviceRequest("/v1/device-sessions", "POST", httpCreate);
+        expect(refused.status).toBe(409);
+        expect(await refused.json()).toEqual({ error: { code: "capture_ownership_changed" } });
+        const newReceiptReplay = await ingress.fetch(new Request("https://service.example/v1/device-sessions", {
+          method: "POST", headers: { authorization: "Bearer device.qa.valid", "x-omi-capture-ownership": changedOwner.receipt }, body: JSON.stringify(httpCreate),
+        }));
+        expect(newReceiptReplay.status).toBe(409);
+        expect(await newReceiptReplay.json()).toEqual({ error: { code: "capture_ownership_changed" } });
+      } finally {
+        await ownerSql.unsafe("UPDATE omi_memory.account_control_heads SET control_revision=17,activated_epoch=12,activation_control_revision=17 WHERE account_id=$1", [accountId]);
+        await ownerSql.unsafe("DELETE FROM omi_memory.account_control_revisions WHERE account_id=$1 AND control_revision=18", [accountId]);
+      }
+      const reboundAccount = `rebound-${suffix}`;
+      const authorityTables = ["account_control_revisions", "account_control_heads", "application_credential_revisions", "application_credential_heads", "application_grant_revisions", "application_grant_heads"];
+      await ownerSql.unsafe("INSERT INTO omi_memory.platform_accounts(account_id) VALUES($1)", [reboundAccount]);
+      for (const table of authorityTables) await ownerSql.unsafe(`INSERT INTO omi_memory.${table}
+        SELECT (jsonb_populate_record(NULL::omi_memory.${table}, to_jsonb(source)||jsonb_build_object('account_id',$2::text))).*
+        FROM omi_memory.${table} source WHERE source.account_id=$1::text`, [accountId,reboundAccount]);
+      const bindCaptureIdentity = async (target: string) => ownerSql.begin(async transaction => {
+        await transaction.unsafe("DELETE FROM omi_memory.firebase_application_credential_bindings WHERE firebase_project_id=$1 AND firebase_uid=$2", [deviceProject,deviceUid]);
+        await transaction.unsafe("UPDATE omi_memory.firebase_identity_bindings SET account_id=$3 WHERE firebase_project_id=$1 AND firebase_uid=$2", [deviceProject,deviceUid,target]);
+        await transaction.unsafe(`INSERT INTO omi_memory.firebase_application_credential_bindings
+          (account_id,firebase_project_id,firebase_uid,principal_id,application_id,credential_id) VALUES($1,$2,$3,$4,$5,$6)`, [target,deviceProject,deviceUid,principalId,applicationId,credentialId]);
+      });
+      try {
+        await bindCaptureIdentity(reboundAccount);
+        const reboundResponse = await ingress.fetch(new Request("https://service.example/v1/device-sessions/ownership", { headers: { authorization: "Bearer device.qa.valid" } }));
+        expect(reboundResponse.status).toBe(200);
+        expect((await reboundResponse.json() as { ownership: { ownerKey: string } }).ownership.ownerKey).not.toBe(ownership.ownerKey);
+        const reboundOpen = await deviceRequest("/v1/device-sessions", "POST", httpCreate);
+        expect(reboundOpen.status).toBe(409);
+        expect(await reboundOpen.json()).toEqual({ error: { code: "capture_ownership_changed" } });
+        expect((await ownerSql.unsafe<{ count: number }[]>("SELECT count(*)::int AS count FROM omi_memory.listen_capture_audio_uploads WHERE account_id=$1", [reboundAccount]))[0]?.count).toBe(0);
+      } finally {
+        await bindCaptureIdentity(accountId);
+        for (const table of [...authorityTables].reverse()) await ownerSql.unsafe(`DELETE FROM omi_memory.${table} WHERE account_id=$1`, [reboundAccount]);
+        await ownerSql.unsafe("DELETE FROM omi_memory.memory_graph_heads WHERE account_id=$1", [reboundAccount]);
+        await ownerSql.unsafe("DELETE FROM omi_memory.platform_accounts WHERE account_id=$1", [reboundAccount]);
+      }
+      const legacyInput = { ...httpCreate, captureId: crypto.randomUUID() };
+      const legacyUpload = await uploads.open(context, { ...legacyInput, deviceName: null });
+      await ownerSql.unsafe("UPDATE omi_memory.listen_capture_audio_uploads SET captured_account_epoch=NULL WHERE account_id=$1 AND session_id=$2", [accountId, legacyUpload.id]);
+      expect(await uploads.read(context, legacyUpload.id)).toMatchObject({ id: legacyUpload.id });
+      await expect(uploads.open(context, { ...legacyInput, deviceName: null })).rejects.toMatchObject({ code: "capture_ownership_changed" });
+      await expect(uploads.append(context, legacyUpload.id, 0, audio)).rejects.toMatchObject({ code: "capture_ownership_changed" });
+      await expect(uploads.complete(context, legacyUpload.id)).rejects.toMatchObject({ code: "capture_ownership_changed" });
       const httpAudio = { chunkIndex: 0, bytesBase64: Buffer.from(audio).toString("base64") };
       expect((await deviceRequest(`/v1/device-sessions/${httpSession.id}/audio`, "POST", httpAudio)).status).toBe(200);
       expect((await deviceRequest(`/v1/device-sessions/${httpSession.id}/complete`, "POST")).status).toBe(200);
@@ -1750,8 +1812,8 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       await expect(appRolePool.withTransaction({ isolationLevel: "serializable", accessMode: "read only" }, connection => connection.query({ name: "qa.raw_transcription_denied", text: "SELECT provider_result FROM omi_memory.listen_audio_transcriptions", values: [] }))).rejects.toMatchObject({ code: "42501" });
       const httpTranscriptionSession = await newRecording();
       let speechCalls = 0;
-      const transcriptionIngress = createPostgresFirebaseDeviceSessionRuntime(ingressOptions, { transcribe: async () => { speechCalls += 1; return transcript; } });
-      const transcriptionRequest = (method: string, action: string, token = "device.qa.valid") => transcriptionIngress.fetch(new Request(`https://service.example/v1/device-sessions/${httpTranscriptionSession.id}/${action}`, { method, headers: { authorization: `Bearer ${token}` } }));
+      const transcriptionIngress = createPostgresFirebaseDeviceSessionRuntime(ingressOptions, { transcribe: async () => { speechCalls += 1; return transcript; } }, ownershipKey);
+      const transcriptionRequest = (method: string, action: string, token = "device.qa.valid") => transcriptionIngress.fetch(new Request(`https://service.example/v1/device-sessions/${httpTranscriptionSession.id}/${action}`, { method, headers: { authorization: `Bearer ${token}`, "x-omi-capture-ownership": ownership.receipt } }));
       expect((await deviceRequest(`/v1/device-sessions/${httpTranscriptionSession.id}/transcribe`, "POST")).status).toBe(503);
       expect((await transcriptionRequest("POST", "transcribe", "other.qa.valid")).status).toBe(403);
       expect(speechCalls).toBe(0);
@@ -1765,22 +1827,22 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       let tokenExpired = false;
       const expiringIngress = createPostgresFirebaseDeviceSessionRuntime({ ...ingressOptions, id_token_adapter: {
         verification_source: "firebase_production", verifyIdToken: async token => ({ ...await ingressOptions.id_token_adapter.verifyIdToken(token), exp: tokenExpired ? Math.floor(Date.now()/1000)-1 : now+3600 }),
-      } }, { transcribe: async () => { tokenExpired = true; return transcript; } });
-      expect((await expiringIngress.fetch(new Request(`https://service.example/v1/device-sessions/${tokenExpirySession.id}/transcribe`, { method: "POST", headers: { authorization: "Bearer device.qa.valid" } }))).status).toBe(401);
+      } }, { transcribe: async () => { tokenExpired = true; return transcript; } }, ownershipKey);
+      expect((await expiringIngress.fetch(new Request(`https://service.example/v1/device-sessions/${tokenExpirySession.id}/transcribe`, { method: "POST", headers: { authorization: "Bearer device.qa.valid", "x-omi-capture-ownership": ownership.receipt } }))).status).toBe(401);
       expect(await transcriptions.read(context, tokenExpirySession.id)).toMatchObject({ state: "running", providerResult: null });
       const disconnectedSession = await newRecording();
       const disconnected = new AbortController();
       let disconnectedProviderCalls = 0;
       const disconnectingIngress = createPostgresFirebaseDeviceSessionRuntime(ingressOptions, { transcribe: async () => {
         disconnectedProviderCalls += 1; disconnected.abort(); return transcript;
-      } });
+      } }, ownershipKey);
       expect((await disconnectingIngress.fetch(new Request(`https://service.example/v1/device-sessions/${disconnectedSession.id}/transcribe`, {
-        method: "POST", headers: { authorization: "Bearer device.qa.valid" }, signal: disconnected.signal,
+        method: "POST", headers: { authorization: "Bearer device.qa.valid", "x-omi-capture-ownership": ownership.receipt }, signal: disconnected.signal,
       }))).status).toBe(503);
       expect(await transcriptions.read(context, disconnectedSession.id)).toMatchObject({ state: "running", providerResult: transcript });
       expect((await ownerSql.unsafe<{ count: number }[]>("SELECT count(*)::int AS count FROM omi_memory.listen_capture_segments WHERE account_id=$1 AND session_id=$2", [accountId, disconnectedSession.id]))[0]?.count).toBe(0);
       expect((await disconnectingIngress.fetch(new Request(`https://service.example/v1/device-sessions/${disconnectedSession.id}/transcribe`, {
-        method: "POST", headers: { authorization: "Bearer device.qa.valid" },
+        method: "POST", headers: { authorization: "Bearer device.qa.valid", "x-omi-capture-ownership": ownership.receipt },
       }))).status).toBe(200);
       expect(disconnectedProviderCalls).toBe(1);
       const multibyteSession = await newRecording();

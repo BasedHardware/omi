@@ -43,6 +43,7 @@ export async function startProductionServer(env: Readonly<Record<string, string 
       tasks: { authorization, codecRootSecret: config.codecKey, cursorSigningKeyset },
       conversations: { authorization, codecRootSecret: config.codecKey, cursorSigningKeyset },
       device_sessions: authorization,
+      device_ownership_key: config.codecKey,
       transcription_source: createDeepgramTranscriptionSource({
         apiKey: config.transcriptionApiKey, model: config.transcriptionModel, timeoutMilliseconds: 120000,
       }),

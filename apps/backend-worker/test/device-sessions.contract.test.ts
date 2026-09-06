@@ -284,6 +284,18 @@ describe("device session request validators", () => {
 });
 
 describe("device session ingest", () => {
+  test("ownership requires authentication and stays unavailable without canonical account epochs", async () => {
+    expect((await fetchWorker("/v1/device-sessions/ownership")).status).toBe(
+      401
+    );
+    const response = await fetchWorker("/v1/device-sessions/ownership", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "capture_ownership_unavailable" },
+    });
+  });
   test("opens, stores bytes in the bound bucket, and lists metadata only", async () => {
     const opened = await fetchWorker("/v1/device-sessions", {
       method: "POST",
