@@ -274,7 +274,6 @@ class TestWSAuthDependencyBYOK:
 
         asyncio.run(authenticate_and_assert_context())
 
-
     @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
     @patch('utils.other.endpoints.validate_byok_websocket_keys', return_value=({}, None))
     @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
