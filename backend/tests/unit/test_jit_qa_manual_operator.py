@@ -69,7 +69,7 @@ def _firestore_document(**fields):
 
 
 def test_job_contract_requires_immutable_source_admitted_qa_resource():
-    result = OPERATOR.validate_job_resource(_resource(), source_sha=SOURCE_SHA)
+    result = OPERATOR.validate_job_resource(_resource(), source_sha=SOURCE_SHA, expected_image=IMAGE)
     assert result == {
         "job": OPERATOR.JOB,
         "image": IMAGE,
@@ -88,26 +88,33 @@ def test_job_contract_requires_immutable_source_admitted_qa_resource():
 )
 def test_job_contract_rejects_wrong_environment(changes, message):
     with pytest.raises(OPERATOR.OperatorError, match=message):
-        OPERATOR.validate_job_resource(_resource(**changes), source_sha=SOURCE_SHA)
+        OPERATOR.validate_job_resource(_resource(**changes), source_sha=SOURCE_SHA, expected_image=IMAGE)
 
 
 def test_job_contract_rejects_tagged_image_stale_source_and_customer_binding():
     resource = _resource()
     resource["spec"]["template"]["spec"]["template"]["spec"]["containers"][0]["image"] = IMAGE.replace("@sha256:", ":")
     with pytest.raises(OPERATOR.OperatorError, match="immutable"):
-        OPERATOR.validate_job_resource(resource, source_sha=SOURCE_SHA)
+        OPERATOR.validate_job_resource(resource, source_sha=SOURCE_SHA, expected_image=IMAGE)
 
     resource = _resource()
     resource["metadata"]["labels"]["source-sha"] = "c" * 40
     with pytest.raises(OPERATOR.OperatorError, match="source admission"):
-        OPERATOR.validate_job_resource(resource, source_sha=SOURCE_SHA)
+        OPERATOR.validate_job_resource(resource, source_sha=SOURCE_SHA, expected_image=IMAGE)
 
     resource = _resource()
     resource["spec"]["template"]["spec"]["template"]["spec"]["containers"][0]["env"].append(
         {"name": "GOOGLE_APPLICATION_CREDENTIALS", "value": "/customer/key.json"}
     )
     with pytest.raises(OPERATOR.OperatorError, match="forbidden credential"):
-        OPERATOR.validate_job_resource(resource, source_sha=SOURCE_SHA)
+        OPERATOR.validate_job_resource(resource, source_sha=SOURCE_SHA, expected_image=IMAGE)
+
+
+def test_job_contract_rejects_live_digest_that_does_not_match_admitted_source_tag():
+    with pytest.raises(OPERATOR.OperatorError, match="does not match"):
+        OPERATOR.validate_job_resource(
+            _resource(), source_sha=SOURCE_SHA, expected_image=IMAGE.replace("b" * 64, "c" * 64)
+        )
 
 
 def test_execution_name_and_state_are_fail_closed():

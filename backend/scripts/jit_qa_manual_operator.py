@@ -104,7 +104,7 @@ def require_source_sha(value: str) -> str:
     return value
 
 
-def validate_job_resource(resource: Mapping[str, Any], *, source_sha: str) -> dict[str, str]:
+def validate_job_resource(resource: Mapping[str, Any], *, source_sha: str, expected_image: str) -> dict[str, str]:
     """Validate the live job with the deployment workflow's shared contract."""
 
     require_source_sha(source_sha)
@@ -123,6 +123,12 @@ def validate_job_resource(resource: Mapping[str, Any], *, source_sha: str) -> di
         r"gcr\.io/based-hardware-dev/knowledge-ledger-drain-qa-job@sha256:[0-9a-f]{64}", image
     ):
         raise OperatorError("QA drain job must serve the immutable development image digest")
+    if not re.fullmatch(
+        r"gcr\.io/based-hardware-dev/knowledge-ledger-drain-qa-job@sha256:[0-9a-f]{64}", expected_image
+    ):
+        raise OperatorError("resolved QA drain image is not an immutable development image digest")
+    if image != expected_image:
+        raise OperatorError("live QA drain image does not match the digest resolved from the admitted source tag")
     expected_environment, expected_secret_bindings = qa_contract.resource_environment("drain")
     try:
         qa_contract.validate_cloud_run_resource(
@@ -333,6 +339,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     job = sub.add_parser("validate-job")
     job.add_argument("--source-sha", required=True)
+    job.add_argument("--expected-image", required=True)
     job.add_argument("--resource-json", type=Path, required=True)
     name = sub.add_parser("execution-name")
     name.add_argument("--execution-json", type=Path, required=True)
@@ -352,7 +359,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "validate-job":
             print(
                 json.dumps(
-                    validate_job_resource(_load_mapping(args.resource_json), source_sha=args.source_sha),
+                    validate_job_resource(
+                        _load_mapping(args.resource_json),
+                        source_sha=args.source_sha,
+                        expected_image=args.expected_image,
+                    ),
                     sort_keys=True,
                 )
             )

@@ -198,11 +198,20 @@ jobs:
             exit 1
           }
           "$QA_PYTHON" - <<'PY'
+          import json
           import google.auth
           import os
           from pathlib import Path
 
           path = Path(os.environ["GOOGLE_APPLICATION_CREDENTIALS"])
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          if payload.get("type") != "service_account":
+              raise SystemExit("development auth action must provide a service-account credential")
+          if payload.get("project_id") != os.environ["QA_PROJECT"]:
+              raise SystemExit("development auth action credential is not scoped to the QA project")
+          client_email = payload.get("client_email")
+          if not isinstance(client_email, str) or not client_email.endswith("@based-hardware-dev.iam.gserviceaccount.com"):
+              raise SystemExit("development auth action credential has an unexpected service-account identity")
           credentials, project = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
           if credentials is None:
               raise SystemExit("auth action did not resolve ADC credentials")
@@ -236,21 +245,21 @@ jobs:
         run: |
           set -euo pipefail
           service="redis.googleapis.com"
-          state="$(timeout --foreground --kill-after=5s 60s gcloud services describe "$service" \
-            --project "$QA_PROJECT" --format='value(state)' 2>/dev/null || true)"
+          enabled_service="$(timeout --foreground --kill-after=5s 60s gcloud services list --enabled \
+            --project "$QA_PROJECT" --filter="config.name=${service}" --format='value(config.name)' --limit=1)"
           mutation="false"
-          if [[ "$state" != "ENABLED" ]]; then
+          if [[ "$enabled_service" != "$service" ]]; then
             timeout --foreground --kill-after=5s 60s gcloud services enable "$service" \
               --project "$QA_PROJECT" --quiet
             mutation="true"
           fi
-          state="$(timeout --foreground --kill-after=5s 60s gcloud services describe "$service" \
-            --project "$QA_PROJECT" --format='value(state)')"
-          [[ "$state" == "ENABLED" ]] || {
-            echo "ERROR: $service is not enabled in $QA_PROJECT (state=$state)." >&2
+          enabled_service="$(timeout --foreground --kill-after=5s 60s gcloud services list --enabled \
+            --project "$QA_PROJECT" --filter="config.name=${service}" --format='value(config.name)' --limit=1)"
+          [[ "$enabled_service" == "$service" ]] || {
+            echo "ERROR: $service is not enabled in $QA_PROJECT." >&2
             exit 1
           }
-          "$QA_PYTHON" - "$SOURCE_SHA" "$RUN_ID" "$state" "$mutation" \
+          "$QA_PYTHON" - "$SOURCE_SHA" "$RUN_ID" "ENABLED" "$mutation" \
             "$RUNNER_TEMP/jit-qa-operator/source.json" \
             > "$RUNNER_TEMP/jit-qa-operator/artifacts/operator-receipt.json" <<'PY'
           import json
@@ -278,12 +287,22 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
           set -euo pipefail
+          image_tag="gcr.io/${QA_PROJECT}/knowledge-ledger-drain-qa-job:${SOURCE_SHA}"
+          image_digest="$(timeout --foreground --kill-after=5s 60s gcloud container images describe "$image_tag" \
+            --format='value(image_summary.digest)')"
+          [[ "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+            echo "ERROR: admitted QA drain source tag did not resolve to an immutable digest." >&2
+            exit 1
+          }
+          resolved_image="gcr.io/${QA_PROJECT}/knowledge-ledger-drain-qa-job@${image_digest}"
+          echo "QA_DRAIN_IMAGE=$resolved_image" >> "$GITHUB_ENV"
           timeout --foreground --kill-after=5s 60s gcloud run jobs describe "$QA_DRAIN_JOB" \
             --project "$QA_PROJECT" \
             --region "$QA_REGION" \
             --format=json > "$RUNNER_TEMP/jit-qa-operator/job.json"
           "$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py validate-job \
             --source-sha "$SOURCE_SHA" \
+            --expected-image "$QA_DRAIN_IMAGE" \
             --resource-json "$RUNNER_TEMP/jit-qa-operator/job.json" \
             > "$RUNNER_TEMP/jit-qa-operator/job-contract.json"
 
@@ -440,6 +459,7 @@ jobs:
               --format=json > "$operator_dir/job.json"
             "$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py validate-job \
               --source-sha "$SOURCE_SHA" \
+              --expected-image "$QA_DRAIN_IMAGE" \
               --resource-json "$operator_dir/job.json" \
               > "$operator_dir/job-contract.json"
           }

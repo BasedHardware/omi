@@ -55,6 +55,8 @@ def test_manual_operator_uses_existing_seed_contract_without_deploying_resources
     assert "--update-env-vars \"KNOWLEDGE_LEDGER_DRAIN_ENABLED=true" in text
     assert "jobs executions describe" in text
     assert "jit_qa_manual_operator.py validate-job" in text
+    assert "gcloud container images describe" in text
+    assert "--expected-image \"$QA_DRAIN_IMAGE\"" in text
     assert "DRAIN_VERIFY_QA" in text
     assert "ROLLBACK_QA" in text
     assert "ENABLE_QA_API" in text
@@ -186,6 +188,8 @@ def test_qa_provision_enables_only_the_fixed_development_redis_api_before_resour
     redis_step = next(step for step in steps if step.get("name") == "Create or verify the 1 GiB Basic Redis dependency")
     assert 'service="redis.googleapis.com"' in api_command
     assert '--project "$QA_PROJECT"' in api_command
+    assert "gcloud services list --enabled" in api_command
+    assert "--filter=\"config.name=${service}\"" in api_command
     assert "timeout --foreground --kill-after=5s 60s gcloud services enable" in api_command
     assert steps.index(api_step) < steps.index(redis_step)
     redis_command = redis_step["run"]
@@ -196,14 +200,16 @@ def test_qa_provision_enables_only_the_fixed_development_redis_api_before_resour
         fake_bin = root / "bin"
         fake_bin.mkdir()
         state = root / "state"
-        state.write_text("DISABLED\n", encoding="utf-8")
+        state.write_text("disabled\n", encoding="utf-8")
         calls = root / "calls"
         (fake_bin / "gcloud").write_text(
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
             "printf '%s\\n' \"$*\" >> \"$CALLS\"\n"
-            "if [[ \"${1:-}\" == services && \"${2:-}\" == describe ]]; then cat \"$STATE\"; exit 0; fi\n"
-            "if [[ \"${1:-}\" == services && \"${2:-}\" == enable ]]; then printf 'ENABLED\\n' > \"$STATE\"; exit 0; fi\n"
+            "if [[ \"${1:-}\" == services && \"${2:-}\" == list ]]; then\n"
+            "  [[ $(cat \"$STATE\") == enabled ]] && printf 'redis.googleapis.com\\n'; exit 0\n"
+            "fi\n"
+            "if [[ \"${1:-}\" == services && \"${2:-}\" == enable ]]; then printf 'enabled\\n' > \"$STATE\"; exit 0; fi\n"
             "echo \"unexpected gcloud command: $*\" >&2\n"
             "exit 2\n",
             encoding="utf-8",
@@ -222,7 +228,7 @@ def test_qa_provision_enables_only_the_fixed_development_redis_api_before_resour
             text=True,
         )
         assert result.returncode == 0, result.stderr
-        assert state.read_text(encoding="utf-8").strip() == "ENABLED"
+        assert state.read_text(encoding="utf-8").strip() == "enabled"
         assert any(
             "services enable redis.googleapis.com" in line for line in calls.read_text(encoding="utf-8").splitlines()
         )
