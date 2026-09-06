@@ -63,6 +63,17 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
   }
 
   @ReactMethod
+  fun createWriteId(promise: Promise) {
+    try {
+      val bytes = ByteArray(32)
+      java.security.SecureRandom().nextBytes(bytes)
+      promise.resolve(bytes.joinToString("") { "%02x".format(it.toInt() and 0xff) })
+    } catch (_: Exception) {
+      promise.reject("OMI_WRITE_ENTROPY", "Native write identity is unavailable")
+    }
+  }
+
+  @ReactMethod
   fun createRecordingId(promise: Promise) {
     promise.resolve(java.util.UUID.randomUUID().toString())
   }
@@ -343,9 +354,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
   }
 
   private fun examplePlatformSupported(method: String, path: String): Boolean {
-    if (method != "GET") return false
-    val route = runCatching { URI(path).path }.getOrNull() ?: path
-    return route == "/v1/conversations" || route == "/v1/memories"
+    return OmiBackendTransport.examplePlatformSupported(method, path)
   }
 
   private class TransportException(val code: String, message: String) : Exception(message)

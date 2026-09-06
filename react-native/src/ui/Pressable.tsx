@@ -17,6 +17,19 @@ export function FocusPressable({
   return (
     <NativePressable
       {...props}
+      aria-checked={props['aria-checked'] ?? props.accessibilityState?.checked}
+      aria-selected={
+        props['aria-selected'] ?? props.accessibilityState?.selected
+      }
+      aria-expanded={
+        props['aria-expanded'] ?? props.accessibilityState?.expanded
+      }
+      aria-busy={props['aria-busy'] ?? props.accessibilityState?.busy}
+      disabled={
+        props.disabled ??
+        props['aria-disabled'] ??
+        props.accessibilityState?.disabled
+      }
       onBlur={event => {
         setFocused(false);
         onBlur?.(event);

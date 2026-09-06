@@ -12,7 +12,7 @@ public final class BackendTransportTest {
       "/v1/settings", "/v1/chat-messages", "/v1/chat-generations/id/events",
       "/v1/chat-generations/id", "/v1/chat-attachments", "/v1/chat-attachments/id/complete",
       "/v1/device-sessions", "/v1/device-sessions/id/audio", "/v1/conversations",
-      "/v1/memories", "/v1/tasks"
+      "/v1/memories", "/v1/tasks", "/v1/tasks/ops"
     }) {
       assert OmiBackendTransport.isV5BackendPath(path) : path;
       assert OmiBackendTransport.isV5BackendPath(path + "?limit=10") : path;
@@ -22,6 +22,10 @@ public final class BackendTransportTest {
     }) {
       assert !OmiBackendTransport.isV5BackendPath(path) : path;
     }
+    assert OmiBackendTransport.examplePlatformSupported("GET", "/v1/tasks?limit=2");
+    assert OmiBackendTransport.examplePlatformSupported("POST", "/v1/tasks/ops");
+    assert !OmiBackendTransport.examplePlatformSupported("DELETE", "/v1/tasks/ops");
+    assert !OmiBackendTransport.examplePlatformSupported("POST", "/v1/tasks");
     AtomicInteger redirects = new AtomicInteger();
     HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     server.createContext("/target", exchange -> {

@@ -3,7 +3,7 @@ import ReactTestRenderer from 'react-test-renderer';
 
 jest.mock('../src/desktopReadClient', () => {
   const actual = jest.requireActual('../src/desktopReadClient');
-  return {...actual, loadDesktopReads: jest.fn()};
+  return {...actual, loadDesktopReads: jest.fn(), loadTasks: jest.fn()};
 });
 
 jest.mock('../src/omiNative', () => ({
@@ -17,6 +17,7 @@ import {
   desktopBackendServiceCopy,
   desktopProjectionUnavailableCopy,
   loadDesktopReads,
+  loadTasks,
 } from '../src/desktopReadClient';
 
 const readsMock = loadDesktopReads as jest.Mock;
@@ -77,6 +78,7 @@ function successOutcomes(titles: string[]): DesktopReadOutcomes {
     tasks: {
       status: 'success',
       value: {
+        accountEpoch: null,
         items: [],
         page: {
           windowStatus: 'complete',
@@ -139,6 +141,7 @@ async function renderReads(props: {enabled: boolean}) {
 
 beforeEach(() => {
   readsMock.mockReset();
+  (loadTasks as jest.Mock).mockReset();
 });
 
 test('ignoreEnabled loads while the gate is still closed', async () => {
@@ -455,5 +458,37 @@ test('an older superseded refresh cannot overwrite a newer refresh', async () =>
     resolveOlder(successOutcomes(['STALE RESULT']));
   });
   expect(reads.latest().reads.map(item => item.id)).toEqual(['Newer result']);
+  reads.unmount();
+});
+
+test('task-only refresh preserves the account epoch and retires late session reads', async () => {
+  readsMock.mockResolvedValue(successOutcomes(['Saved']));
+  const reads = await renderReads({enabled: true});
+  const outcome = successOutcomes([]).tasks;
+  if (outcome.status !== 'success') {
+    throw new Error('fixture');
+  }
+  const taskRead = {...outcome.value, accountEpoch: 8};
+  (loadTasks as jest.Mock).mockResolvedValueOnce(taskRead);
+  await ReactTestRenderer.act(async () => {
+    expect(await reads.latest().refreshTasks()).toEqual(taskRead);
+  });
+  expect(reads.latest().readOutcomes?.tasks).toEqual({
+    status: 'success',
+    value: taskRead,
+  });
+  let resolve!: (value: typeof taskRead) => void;
+  (loadTasks as jest.Mock).mockReturnValueOnce(
+    new Promise(value => {
+      resolve = value;
+    }),
+  );
+  const pending = reads.latest().refreshTasks();
+  await reads.rerender({enabled: false});
+  await ReactTestRenderer.act(async () => {
+    resolve(taskRead);
+    await pending;
+  });
+  expect(reads.latest().readOutcomes).toBeNull();
   reads.unmount();
 });

@@ -150,6 +150,7 @@ const outcomes = {
   tasks: {
     status: 'success' as const,
     value: {
+      accountEpoch: null,
       items: [
         {
           kind: 'task' as const,
@@ -821,6 +822,7 @@ test('a successful empty read is the only path to the empty claims', async () =>
     tasks: {
       status: 'success' as const,
       value: {
+        accountEpoch: null,
         items: [],
         page: {
           windowStatus: 'complete' as const,
@@ -1085,4 +1087,98 @@ test('Settings does not expose cloud mutations when account values failed to loa
   expect(
     renderer.root.findAll(node => node.props.accessibilityLabel === 'Update'),
   ).toHaveLength(0);
+});
+
+test('actual desktop Tasks controls toggle and edit through shared mutation callbacks', () => {
+  const onTaskToggle = jest.fn();
+  const onTaskEdit = jest.fn();
+  const renderer = renderDesktop({
+    writesAvailable: true,
+    onTaskToggle,
+    onTaskEdit,
+    outcomes: {
+      ...outcomes,
+      tasks: {
+        ...outcomes.tasks,
+        value: {
+          ...outcomes.tasks.value,
+          accountEpoch: 0,
+          items: outcomes.tasks.value.items.map(item => ({
+            ...item,
+            revision: 'a'.repeat(64),
+          })),
+        },
+      },
+    },
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress();
+  });
+  const toggle = renderer.root.find(
+    node =>
+      node.props.accessibilityLabel ===
+      'Complete task: Ship the desktop chrome',
+  );
+  expect(toggle.props.accessibilityRole).toBe('checkbox');
+  expect(toggle.props.disabled).toBe(false);
+  act(() => {
+    toggle.props.onPress();
+  });
+  expect(onTaskToggle).toHaveBeenCalledWith('task-1');
+  act(() => {
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel ===
+          'Edit task: Ship the desktop chrome',
+      )
+      .props.onPress();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Task description')
+      .props.onChangeText('Ship the tested desktop task controls');
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Save task description')
+      .props.onPress();
+  });
+  expect(onTaskEdit).toHaveBeenCalledWith(
+    'task-1',
+    'Ship the tested desktop task controls',
+  );
+});
+
+test('desktop task edits stay disabled during an unconfirmed pending mutation', () => {
+  const onRetryTaskMutation = jest.fn();
+  const renderer = renderDesktop({
+    writesAvailable: true,
+    onTaskToggle: jest.fn(),
+    onTaskEdit: jest.fn(),
+    busyTaskId: 'task-1',
+    taskMutationError: 'Task edit could not be confirmed',
+    onRetryTaskMutation,
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress();
+  });
+  expect(
+    renderer.root.find(
+      node =>
+        node.props.accessibilityLabel ===
+        'Complete task: Ship the desktop chrome',
+    ).props.disabled,
+  ).toBe(true);
+  expect(renderedText(renderer)).toContain('Task edit could not be confirmed');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Retry task change')
+      .props.onPress();
+  });
+  expect(onRetryTaskMutation).toHaveBeenCalledTimes(1);
 });

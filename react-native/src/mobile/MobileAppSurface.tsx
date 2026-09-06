@@ -1,15 +1,20 @@
-import React, {memo, useCallback, useMemo} from 'react';
+import {FocusPressable as Pressable} from '../ui/Pressable';
+import React, {memo, useCallback, useMemo, useState} from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import {
+  TaskEditor,
+  TaskMutationStatus,
+  type TaskMutationProps,
+} from '../ui/TaskEditor';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import House from 'lucide-react-native/icons/house';
 import ListFilter from 'lucide-react-native/icons/list-filter';
@@ -56,7 +61,7 @@ export type MobileCaptureState = {
   transcript: string;
 };
 
-export type MobileAppSurfaceProps = {
+export type MobileAppSurfaceProps = TaskMutationProps & {
   activeRoute: MobileRoute;
   capture: MobileCaptureState;
   device: MobileDeviceState;
@@ -74,7 +79,6 @@ export type MobileAppSurfaceProps = {
   onOpenDevice: () => void;
   onOpenCalls: () => void;
   onRouteChange: (route: MobileRoute) => void;
-  onTaskToggle?: (id: string, completed: boolean) => void;
   onViewTasks: () => void;
   onViewRecaps: () => void;
   onExpandMindMap: () => void;
@@ -111,38 +115,53 @@ const StatePanel = memo(function StatePanel({
 const TaskRow = memo(function TaskRow({
   task,
   onToggle,
+  onEdit,
+  busy,
 }: {
   task: MobileTask;
-  onToggle?: (id: string, completed: boolean) => void;
+  onToggle?: (id: string) => void;
+  onEdit?: (id: string) => void;
+  busy: boolean;
 }) {
-  const handlePress = useCallback(
-    () => onToggle?.(task.id, !task.completed),
-    [onToggle, task.completed, task.id],
-  );
   return (
-    <Pressable
-      accessibilityLabel={`${
-        onToggle === undefined
-          ? task.completed
+    <View style={styles.taskRow}>
+      <Pressable
+        accessibilityLabel={`${
+          onToggle
+            ? task.completed
+              ? 'Reopen'
+              : 'Complete'
+            : task.completed
             ? 'Completed'
             : 'Open'
-          : task.completed
-          ? 'Reopen'
-          : 'Complete'
-      } ${task.title}`}
-      accessibilityRole={onToggle === undefined ? 'text' : 'checkbox'}
-      accessibilityState={{
-        checked: task.completed,
-        disabled: onToggle === undefined,
-      }}
-      disabled={onToggle === undefined}
-      onPress={handlePress}
-      style={styles.taskRow}>
-      <View style={[styles.checkbox, task.completed && styles.checkboxDone]} />
-      <Text style={[styles.taskText, task.completed && styles.taskTextDone]}>
-        {task.title}
-      </Text>
-    </Pressable>
+        } ${task.title}`}
+        accessibilityRole={onToggle ? 'checkbox' : 'text'}
+        accessibilityState={{
+          checked: task.completed,
+          disabled: !onToggle || busy,
+          busy,
+        }}
+        disabled={!onToggle || busy}
+        onPress={() => onToggle?.(task.id)}
+        style={styles.taskToggle}>
+        <View
+          style={[styles.checkbox, task.completed && styles.checkboxDone]}
+        />
+        <Text style={[styles.taskText, task.completed && styles.taskTextDone]}>
+          {task.title}
+        </Text>
+      </Pressable>
+      {onEdit && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Edit ${task.title}`}
+          disabled={busy}
+          onPress={() => onEdit(task.id)}
+          style={styles.taskEdit}>
+          <Text style={styles.taskEditText}>Edit</Text>
+        </Pressable>
+      )}
+    </View>
   );
 });
 
@@ -231,6 +250,12 @@ export function MobileAppSurface({
   onOpenSettings,
   onRouteChange,
   onTaskToggle,
+  onTaskEdit,
+  busyTaskId = null,
+  taskMutationError = null,
+  onRetryTaskMutation,
+  onDismissTaskMutation,
+  writesAvailable = false,
   onViewRecaps,
   onViewTasks,
   recaps,
@@ -238,6 +263,40 @@ export function MobileAppSurface({
   tasks,
   taskStatus,
 }: MobileAppSurfaceProps): React.JSX.Element {
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const selectedTask = tasks.find(task => task.id === selectedTaskId);
+  const taskFeedback = useMemo(
+    () => (
+      <>
+        <TaskMutationStatus
+          writesAvailable={writesAvailable}
+          taskMutationError={taskMutationError}
+          onRetryTaskMutation={onRetryTaskMutation}
+          onDismissTaskMutation={onDismissTaskMutation}
+          busyTaskId={busyTaskId}
+        />
+        {writesAvailable && onTaskEdit && selectedTask && (
+          <TaskEditor
+            id={selectedTask.id}
+            title={selectedTask.title}
+            busy={busyTaskId !== null}
+            failed={taskMutationError !== null}
+            onSave={onTaskEdit}
+            onClose={() => setSelectedTaskId(null)}
+          />
+        )}
+      </>
+    ),
+    [
+      writesAvailable,
+      taskMutationError,
+      onRetryTaskMutation,
+      onDismissTaskMutation,
+      busyTaskId,
+      onTaskEdit,
+      selectedTask,
+    ],
+  );
   const rows = useMemo<DashboardRow[]>(
     () => [
       {kind: 'capture', key: 'capture'},
@@ -284,6 +343,7 @@ export function MobileAppSurface({
               actionLabel="View All"
               title="Tasks"
             />
+            {taskFeedback}
             {taskStatus === 'ready' ? (
               tasks.length === 0 ? (
                 <StatePanel noun="tasks" status="empty" />
@@ -292,7 +352,13 @@ export function MobileAppSurface({
                   {tasks.slice(0, 3).map(task => (
                     <TaskRow
                       key={task.id}
-                      onToggle={onTaskToggle}
+                      onToggle={writesAvailable ? onTaskToggle : undefined}
+                      onEdit={
+                        writesAvailable && onTaskEdit
+                          ? setSelectedTaskId
+                          : undefined
+                      }
+                      busy={busyTaskId !== null}
                       task={task}
                     />
                   ))}
@@ -355,6 +421,10 @@ export function MobileAppSurface({
       mindMapStatus,
       onExpandMindMap,
       onTaskToggle,
+      onTaskEdit,
+      writesAvailable,
+      busyTaskId,
+      taskFeedback,
       onViewRecaps,
       onViewTasks,
       recaps,
@@ -392,9 +462,19 @@ export function MobileAppSurface({
                 contentContainerStyle={styles.secondaryList}
                 data={tasks}
                 keyExtractor={task => task.id}
+                ListHeaderComponent={taskFeedback}
                 ListEmptyComponent={<StatePanel noun="tasks" status="empty" />}
                 renderItem={({item}) => (
-                  <TaskRow onToggle={onTaskToggle} task={item} />
+                  <TaskRow
+                    onToggle={writesAvailable ? onTaskToggle : undefined}
+                    onEdit={
+                      writesAvailable && onTaskEdit
+                        ? setSelectedTaskId
+                        : undefined
+                    }
+                    busy={busyTaskId !== null}
+                    task={item}
+                  />
                 )}
               />
             ) : (
@@ -680,6 +760,15 @@ const styles = StyleSheet.create({
     minHeight: 64,
     paddingVertical: mobileSpace.md,
   },
+  taskToggle: {
+    flex: 1,
+    minHeight: 44,
+    flexDirection: 'row',
+    gap: mobileSpace.md,
+    alignItems: 'flex-start',
+  },
+  taskEdit: {minHeight: 44, minWidth: 44, justifyContent: 'center'},
+  taskEditText: {color: mobileColor.text, fontSize: 13},
   checkbox: {
     borderColor: mobileColor.textSubtle,
     borderRadius: mobileRadius.round,

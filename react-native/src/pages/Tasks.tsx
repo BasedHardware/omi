@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Platform,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -16,6 +17,11 @@ import {
   type TaskProjection,
 } from '../desktopReadClient';
 import {FocusPressable} from '../ui/Pressable';
+import {
+  TaskEditor,
+  TaskMutationStatus,
+  type TaskMutationProps,
+} from '../ui/TaskEditor';
 import {ReadStatus} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 
@@ -25,7 +31,7 @@ function formatTaskDue(dueAt: number | null): string {
   if (dueAt === null) {
     return 'No due date';
   }
-  return new Date(dueAt * 1000).toLocaleDateString(undefined, {
+  return new Date(dueAt).toLocaleDateString(undefined, {
     day: 'numeric',
     month: 'short',
     timeZone: 'UTC',
@@ -35,13 +41,20 @@ function formatTaskDue(dueAt: number | null): string {
 export function TasksPage({
   outcome,
   loading,
-}: {
+  onTaskToggle,
+  onTaskEdit,
+  busyTaskId = null,
+  taskMutationError = null,
+  onRetryTaskMutation,
+  onDismissTaskMutation,
+  writesAvailable = false,
+}: TaskMutationProps & {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
 }) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const nowEpochSeconds = useRef(Math.floor(Date.now() / 1000)).current;
+  const nowMs = useRef(Date.now()).current;
   const tasks = useMemo(
     () =>
       outcome?.status === 'success'
@@ -63,11 +76,9 @@ export function TasksPage({
     () =>
       taskGroups.map(label => ({
         label,
-        tasks: filtered.filter(
-          task => taskGroup(task.dueAt, nowEpochSeconds) === label,
-        ),
+        tasks: filtered.filter(task => taskGroup(task.dueAt, nowMs) === label),
       })),
-    [filtered, nowEpochSeconds],
+    [filtered, nowMs],
   );
   const error = outcome?.status === 'error' ? outcome.error : null;
   const filtering = query.trim() !== '';
@@ -91,6 +102,13 @@ export function TasksPage({
           value={query}
         />
       </View>
+      <TaskMutationStatus
+        writesAvailable={writesAvailable}
+        taskMutationError={taskMutationError}
+        onRetryTaskMutation={onRetryTaskMutation}
+        onDismissTaskMutation={onDismissTaskMutation}
+        busyTaskId={busyTaskId}
+      />
       {loading && outcome === null ? (
         <View style={styles.projectionEmpty}>
           <ActivityIndicator color="#888888" />
@@ -128,45 +146,85 @@ export function TasksPage({
                 {group.tasks.map(task => {
                   const selected = task.id === selectedId;
                   return (
-                    <FocusPressable
-                      accessibilityLabel={`${
-                        task.completed ? 'Completed' : 'Open'
-                      } task: ${task.title}`}
-                      accessibilityRole="button"
-                      accessibilityState={{selected}}
-                      key={task.id}
-                      onPress={() => setSelectedId(task.id)}
-                      style={({pressed}) => [
-                        styles.taskCard,
-                        selected && styles.taskCardSelected,
-                        pressed && styles.pressed,
-                      ]}>
+                    <View key={task.id}>
                       <View
-                        accessibilityElementsHidden
-                        importantForAccessibility="no-hide-descendants"
                         style={[
-                          styles.taskCompletion,
-                          task.completed && styles.taskCompletionDone,
+                          styles.taskCard,
+                          selected && styles.taskCardSelected,
                         ]}>
-                        {task.completed && (
-                          <Text style={styles.taskCheck}>✓</Text>
-                        )}
+                        <FocusPressable
+                          accessibilityLabel={`${
+                            writesAvailable
+                              ? task.completed
+                                ? 'Reopen'
+                                : 'Complete'
+                              : task.completed
+                              ? 'Completed'
+                              : 'Open'
+                          } ${task.title}`}
+                          accessibilityRole={
+                            writesAvailable && onTaskToggle
+                              ? 'checkbox'
+                              : 'text'
+                          }
+                          accessibilityState={{
+                            checked: task.completed,
+                            disabled:
+                              !writesAvailable ||
+                              !onTaskToggle ||
+                              busyTaskId !== null,
+                            busy: busyTaskId === task.id,
+                          }}
+                          disabled={
+                            !writesAvailable ||
+                            !onTaskToggle ||
+                            busyTaskId !== null
+                          }
+                          onPress={() => onTaskToggle?.(task.id)}
+                          style={taskStyles.toggle}>
+                          <View
+                            style={[
+                              styles.taskCompletion,
+                              task.completed && styles.taskCompletionDone,
+                            ]}>
+                            {task.completed && (
+                              <Text style={styles.taskCheck}>✓</Text>
+                            )}
+                          </View>
+                        </FocusPressable>
+                        <FocusPressable
+                          accessibilityLabel={`${
+                            task.completed ? 'Completed' : 'Open'
+                          } task: ${task.title}`}
+                          accessibilityRole="button"
+                          accessibilityState={{selected}}
+                          onPress={() => setSelectedId(task.id)}
+                          style={styles.taskCardText}>
+                          <Text
+                            style={[
+                              styles.taskDescription,
+                              task.completed && styles.taskDescriptionDone,
+                            ]}>
+                            {task.title}
+                          </Text>
+                          <Text style={styles.taskDue}>
+                            {task.completed
+                              ? `Completed · ${formatTaskDue(task.dueAt)}`
+                              : formatTaskDue(task.dueAt)}
+                          </Text>
+                        </FocusPressable>
                       </View>
-                      <View style={styles.taskCardText}>
-                        <Text
-                          style={[
-                            styles.taskDescription,
-                            task.completed && styles.taskDescriptionDone,
-                          ]}>
-                          {task.title}
-                        </Text>
-                        <Text style={styles.taskDue}>
-                          {task.completed
-                            ? `Completed · ${formatTaskDue(task.dueAt)}`
-                            : formatTaskDue(task.dueAt)}
-                        </Text>
-                      </View>
-                    </FocusPressable>
+                      {selected && writesAvailable && onTaskEdit && (
+                        <TaskEditor
+                          id={task.id}
+                          title={task.title}
+                          busy={busyTaskId !== null}
+                          failed={taskMutationError !== null}
+                          onSave={onTaskEdit}
+                          onClose={() => setSelectedId(null)}
+                        />
+                      )}
+                    </View>
                   );
                 })}
               </View>
@@ -186,3 +244,12 @@ export function TasksPage({
     </View>
   );
 }
+
+const taskStyles = StyleSheet.create({
+  toggle: {
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
