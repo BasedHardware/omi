@@ -15,6 +15,7 @@ on:
           - prepare
           - inspect
           - drain-verify
+          - sweep-verify
           - rollback
           - rollforward
       source_sha:
@@ -26,7 +27,7 @@ on:
         required: false
         type: string
       confirmation:
-        description: Use ENABLE_QA_API, APPLY_JIT_QA_INDEXES, PREPARE_QA, DRAIN_VERIFY_QA, ROLLFORWARD_QA, or ROLLBACK_QA for mutating operations
+        description: Use ENABLE_QA_API, APPLY_JIT_QA_INDEXES, PREPARE_QA, DRAIN_VERIFY_QA, SWEEP_VERIFY_QA, ROLLFORWARD_QA, or ROLLBACK_QA for mutating operations
         required: false
         type: string
 
@@ -36,6 +37,7 @@ env:
   QA_DATABASE: jit-qa
   QA_UID: vi7SA9ckQCe4ccobWNxlbdcNdC23
   QA_DRAIN_JOB: knowledge-ledger-drain-qa-job
+  QA_SWEEP_JOB: daily-memory-sweep-qa-job
   QA_RUNTIME_SERVICE_ACCOUNT: jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com
   QA_PYTHON: backend/.venv/bin/python
 
@@ -82,16 +84,16 @@ jobs:
             echo "ERROR: source_sha must not be the all-zero SHA." >&2
             exit 1
           fi
-          if [[ "$OPERATION" != bootstrap && "$OPERATION" != ensure-infrastructure-api && "$OPERATION" != indexes-plan && "$OPERATION" != indexes-apply && ! "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,47}$ ]]; then
+          if [[ "$OPERATION" != bootstrap && "$OPERATION" != ensure-infrastructure-api && "$OPERATION" != indexes-plan && "$OPERATION" != indexes-apply && "$OPERATION" != sweep-verify && ! "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,47}$ ]]; then
             echo "ERROR: run_id is required and must match [a-z0-9][a-z0-9_-]{0,47}." >&2
             exit 1
           fi
-          if [[ "$OPERATION" == bootstrap && -n "$RUN_ID" && ! "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,47}$ ]]; then
-            echo "ERROR: an optional bootstrap run_id must match [a-z0-9][a-z0-9_-]{0,47}." >&2
+          if [[ ("$OPERATION" == bootstrap || "$OPERATION" == sweep-verify) && -n "$RUN_ID" && ! "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,47}$ ]]; then
+            echo "ERROR: an optional bootstrap/sweep run_id must match [a-z0-9][a-z0-9_-]{0,47}." >&2
             exit 1
           fi
           case "$OPERATION:$CONFIRMATION" in
-            bootstrap:PREPARE_QA|ensure-infrastructure-api:ENABLE_QA_API|indexes-plan:|indexes-apply:APPLY_JIT_QA_INDEXES|prepare:PREPARE_QA|inspect:|drain-verify:DRAIN_VERIFY_QA|rollforward:ROLLFORWARD_QA|rollback:ROLLBACK_QA) ;;
+            bootstrap:PREPARE_QA|ensure-infrastructure-api:ENABLE_QA_API|indexes-plan:|indexes-apply:APPLY_JIT_QA_INDEXES|prepare:PREPARE_QA|inspect:|drain-verify:DRAIN_VERIFY_QA|sweep-verify:SWEEP_VERIFY_QA|rollforward:ROLLFORWARD_QA|rollback:ROLLBACK_QA) ;;
             *)
               echo "ERROR: confirmation does not match the selected QA operation." >&2
               exit 1
@@ -168,6 +170,7 @@ jobs:
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
           .venv/bin/python scripts/jit_qa_manual_operator.py --help >/dev/null
           PYTHONPATH=. .venv/bin/python scripts/jit_qa_firestore_index_operator.py --help >/dev/null
+          PYTHONPATH=. .venv/bin/python scripts/jit_qa_sweep_operator.py --help >/dev/null
 
       - name: Authenticate to the development project
         id: auth
@@ -419,6 +422,133 @@ jobs:
           PY
           unset ENCRYPTION_SECRET
           rm -f "$operator_dir/operation.json"
+
+      - name: Execute one bounded QA sweep and verify durable output
+        if: ${{ inputs.operation == 'sweep-verify' }}
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RUN_ID: ${{ inputs.run_id }}
+          GOOGLE_CLOUD_PROJECT: ${{ env.QA_PROJECT }}
+          GCLOUD_PROJECT: ${{ env.QA_PROJECT }}
+          OMI_ENV_STAGE: dev
+          OMI_FIRESTORE_DATA_PLANE_PROJECT: ${{ env.QA_PROJECT }}
+          FIRESTORE_DATABASE_ID: ${{ env.QA_DATABASE }}
+          FIREBASE_AUTH_PROJECT_ID: based-hardware
+          MEMORY_ENABLED: "on"
+          OMI_JIT_QA_AUTH_ONLY: "true"
+          OMI_JIT_QA_UID_ALLOWLIST: ${{ env.QA_UID }}
+          OMI_JIT_QA_SWEEP_RUN_ID: ${{ inputs.run_id }}
+          OMI_JIT_QA_SWEEP_ADMISSION: "true"
+          MEMORY_DAILY_MEMORY_SWEEP_ENABLED: "true"
+          MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH: "false"
+          MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED: "true"
+          MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME: gpt-5.6-luna
+          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES: "1"
+          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD: "0.05"
+          MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED: "true"
+          MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG: jit-qa-sweep-v1
+          MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED: "false"
+        run: |
+          set -euo pipefail
+          unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH
+          [[ "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ ]] || {
+            echo "ERROR: GitHub did not provide a numeric server run id." >&2
+            exit 1
+          }
+          server_run_id="qa-sweep-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}"
+          export OMI_JIT_QA_SWEEP_RUN_ID="$server_run_id"
+          operator_dir="$RUNNER_TEMP/jit-qa-operator"
+          mkdir -p "$operator_dir/artifacts"
+          gcloud_bounded() {
+            timeout --foreground --kill-after=5s 60s gcloud "$@"
+          }
+          image_tag="gcr.io/$QA_PROJECT/daily-memory-sweep-qa-job:$SOURCE_SHA"
+          image_digest="$(gcloud_bounded container images describe "$image_tag" --format='value(image_summary.digest)')"
+          [[ "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+            echo "ERROR: admitted QA sweep source tag did not resolve to an immutable digest." >&2
+            exit 1
+          }
+          resolved_image="gcr.io/$QA_PROJECT/daily-memory-sweep-qa-job@$image_digest"
+          gcloud_bounded run jobs describe "$QA_SWEEP_JOB" \
+            --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$operator_dir/sweep-job.json"
+          "$QA_PYTHON" backend/scripts/jit_qa_cloud_run_contract.py resource \
+            --kind job --profile sweep --expected-image "$resolved_image" \
+            --resource-json "$operator_dir/sweep-job.json" --expected-name "$QA_SWEEP_JOB" \
+            > "$operator_dir/sweep-job-before-contract.json"
+          PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_sweep_operator.py validate-job \
+            --source-sha "$SOURCE_SHA" --expected-image "$resolved_image" \
+            --resource-json "$operator_dir/sweep-job.json" \
+            > "$operator_dir/sweep-job-before-source-contract.json"
+          gcloud_bounded run jobs execute "$QA_SWEEP_JOB" \
+            --project "$QA_PROJECT" \
+            --region "$QA_REGION" \
+            --update-env-vars "OMI_JIT_QA_SWEEP_RUN_ID=$server_run_id,OMI_JIT_QA_SWEEP_ADMISSION=true,MEMORY_DAILY_MEMORY_SWEEP_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=gpt-5.6-luna,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=1,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0.05,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=jit-qa-sweep-v1,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED=false" \
+            --format=json > "$operator_dir/sweep.launch.json"
+          execution="$("$QA_PYTHON" - "$operator_dir/sweep.launch.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          name = payload.get("metadata", {}).get("name")
+          if not isinstance(name, str) or not name.startswith("daily-memory-sweep-qa-job-"):
+              raise SystemExit("Cloud Run returned an unexpected QA sweep execution name")
+          print(name)
+          PY
+          )"
+          state=running
+          for _ in $(seq 1 90); do
+            gcloud_bounded run jobs executions describe "$execution" \
+              --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$operator_dir/sweep.state.json"
+            state="$("$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py execution-state \
+              --execution-json "$operator_dir/sweep.state.json")"
+            if [[ "$state" == succeeded || "$state" == failed ]]; then
+              break
+            fi
+            sleep 10
+          done
+          [[ "$state" == succeeded ]] || {
+            echo "ERROR: QA sweep execution $execution ended in state $state." >&2
+            exit 1
+          }
+          printf '%s\n' "$execution" > "$operator_dir/sweep.execution"
+          PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_sweep_operator.py \
+            --run-id "$server_run_id" verify > "$operator_dir/sweep-proof.json"
+          gcloud_bounded run jobs describe "$QA_SWEEP_JOB" \
+            --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$operator_dir/sweep-job-after.json"
+          "$QA_PYTHON" backend/scripts/jit_qa_cloud_run_contract.py resource \
+            --kind job --profile sweep --expected-image "$resolved_image" \
+            --resource-json "$operator_dir/sweep-job-after.json" --expected-name "$QA_SWEEP_JOB" \
+            > "$operator_dir/sweep-job-contract.json"
+          PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_sweep_operator.py validate-job \
+            --source-sha "$SOURCE_SHA" --expected-image "$resolved_image" \
+            --resource-json "$operator_dir/sweep-job-after.json" \
+            > "$operator_dir/sweep-job-source-contract.json"
+          "$QA_PYTHON" - "$SOURCE_SHA" "$server_run_id" "$execution" "$resolved_image" "$operator_dir/sweep-proof.json" <<'PY' \
+            > "$operator_dir/artifacts/operator-receipt.json"
+          import json
+          import sys
+          from pathlib import Path
+
+          proof = json.loads(Path(sys.argv[5]).read_text(encoding="utf-8"))
+          print(json.dumps({
+              "schema_version": "omi.jit.qa.manual.operator.v1",
+              "status": "PASS",
+              "operation": "sweep-verify",
+              "source_sha": sys.argv[1],
+              "run_id": sys.argv[2],
+              "project": "based-hardware-dev",
+              "database": "jit-qa",
+              "uid": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
+              "job": "daily-memory-sweep-qa-job",
+              "execution": sys.argv[3],
+              "image": sys.argv[4],
+              "consumer_proof": proof,
+              "model_calls": "bounded_by_QA_override_policy",
+              "scheduler_mutation": False,
+          }, sort_keys=True))
+          PY
+          rm -f "$operator_dir"/*.json "$operator_dir"/sweep.execution
 
       - name: Execute three bounded drain pages and verify durable proof
         if: ${{ inputs.operation == 'drain-verify' || inputs.operation == 'rollforward' }}

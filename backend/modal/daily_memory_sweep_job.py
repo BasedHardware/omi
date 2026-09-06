@@ -24,6 +24,10 @@ from utils.memory.daily_memory_sweep import (
     firestore_daily_sweep_source_provider,
     reconcile_daily_memory_sweep_timezone,
     run_daily_memory_sweep_scheduler,
+    qa_sweep_cohort_authorizer,
+    qa_sweep_run_id_from_environment,
+    validate_qa_sweep_environment,
+    write_qa_sweep_run_receipt,
 )
 from utils.memory.daily_memory_sweep_inventory import (
     DailySweepUIDInventoryPage,
@@ -72,6 +76,9 @@ def run_daily_memory_sweep_job() -> None:
     if not authority_open:
         logger.info("daily-memory-sweep job closed by backend authority; exiting before inventory")
         return
+    qa_run_id = qa_sweep_run_id_from_environment()
+    if qa_run_id is not None:
+        validate_qa_sweep_environment()
     qa_allowlist = os.getenv("OMI_JIT_QA_UID_ALLOWLIST", "").strip()
     if os.getenv("OMI_JIT_QA_AUTH_ONLY", "false").strip().casefold() in truthy:
         page = explicit_jit_qa_daily_sweep_uid_inventory(qa_allowlist.split(","))
@@ -102,10 +109,11 @@ def run_daily_memory_sweep_job() -> None:
             uid, local_date, control, db_client=default_db_client, timezone_name=kwargs.get("timezone_name", "UTC")
         ),
         timezone_resolver=lambda uid: get_user_time_zone(uid) or "UTC",
-        cohort_authorizer=jit_admission_cohort_authorizer,
+        cohort_authorizer=qa_sweep_cohort_authorizer if qa_run_id is not None else jit_admission_cohort_authorizer,
         timezone_reconciler=timezone_reconciler,
         authority=authority,
         max_users=400,
+        qa_run_id=qa_run_id,
     )
     commit_daily_memory_sweep_uid_inventory(
         default_db_client,
@@ -121,7 +129,11 @@ def run_daily_memory_sweep_job() -> None:
         # job reports only a count, and a single account failing every hourly
         # run is undiagnosable from logs.
         logger.error("daily-memory-sweep errors: %s", ", ".join(summary.errors))
+        if qa_run_id is not None:
+            write_qa_sweep_run_receipt(default_db_client, run_id=qa_run_id, summary=summary)
         raise RuntimeError(f"daily-memory-sweep completed with {len(summary.errors)} error(s)")
+    if qa_run_id is not None:
+        write_qa_sweep_run_receipt(default_db_client, run_id=qa_run_id, summary=summary)
 
 
 def main() -> None:
