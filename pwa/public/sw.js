@@ -46,6 +46,30 @@ self.addEventListener("fetch", (event) => {
   ) {
     return;
   }
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            event.waitUntil(
+              caches.open(cacheName).then((cache) => cache.put("/", copy))
+            );
+          }
+          return response;
+        })
+        .catch(() =>
+          caches.match("/").then((cached) => {
+            if (cached) return cached;
+            throw new Error("PWA shell is unavailable offline");
+          })
+        )
+    );
+    return;
+  }
+  if (!shell.includes(url.pathname) && !url.pathname.startsWith("/assets/")) {
+    return;
+  }
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
@@ -53,14 +77,14 @@ self.addEventListener("fetch", (event) => {
         .then((response) => {
           if (response.ok) {
             const copy = response.clone();
-            caches.open(cacheName).then((cache) => cache.put(request, copy));
+            event.waitUntil(
+              caches.open(cacheName).then((cache) => cache.put(request, copy))
+            );
           }
           return response;
         })
         .catch(() =>
-          request.mode === "navigate"
-            ? caches.match("/")
-            : Promise.reject(new Error("PWA resource is unavailable offline"))
+          Promise.reject(new Error("PWA resource is unavailable offline"))
         );
     })
   );

@@ -14,6 +14,19 @@ const reactNativeWebPath = fileURLToPath(
   new URL("../node_modules/react-native-web", import.meta.url)
 );
 
+const extensions = [
+  ".web.ts",
+  ".web.tsx",
+  ".web.js",
+  ".web.jsx",
+  ".mjs",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".json",
+];
+
 type LocalProxyEnvironment = Record<string, string | undefined>;
 
 const unavailableBackendResponse = JSON.stringify({
@@ -101,11 +114,13 @@ export default ({
       ? { [LOCAL_PROXY_PREFIX]: serverProxy(env ?? process.env) }
       : undefined;
   return {
+    define: { global: "globalThis" },
     build: {
       emptyOutDir: true,
       outDir: "dist",
       target: "es2022",
     },
+    optimizeDeps: { esbuildOptions: { resolveExtensions: extensions } },
     preview: {
       host: "127.0.0.1",
       ...(proxy === undefined ? {} : { proxy }),
@@ -115,21 +130,11 @@ export default ({
       dedupe: [
         "@react-native/assets-registry",
         "react",
+        "react-native-safe-area-context",
         "react-native-svg",
         "react-native-web",
       ],
-      extensions: [
-        ".web.ts",
-        ".web.tsx",
-        ".web.js",
-        ".web.jsx",
-        ".mjs",
-        ".ts",
-        ".tsx",
-        ".js",
-        ".jsx",
-        ".json",
-      ],
+      extensions,
       preserveSymlinks: true,
     },
     server: {

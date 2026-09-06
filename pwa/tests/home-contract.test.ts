@@ -46,7 +46,7 @@ test("web entry renders the canonical React Native App", async () => {
   expect(entry).not.toContain("renderApp");
 });
 
-test("browser root gives the canonical RN surface the full viewport", async () => {
+test("static viewport contract keeps scrolling inside the canonical RN surface", async () => {
   const entry = await readFile(resolve(root, "src/main.ts"), "utf8");
   const styles = await readFile(resolve(root, "src/root.css"), "utf8");
 
@@ -58,7 +58,8 @@ test("browser root gives the canonical RN surface the full viewport", async () =
   expect(styles).toContain("--omi-web-canvas: #0f0f0f");
   expect(styles).toContain("--omi-web-surface: #1a1a1a");
   expect(styles).toContain("--omi-web-accent: #ffffff");
-  expect(styles).toContain("overflow: auto");
+  expect(styles).toContain("overflow: hidden");
+  expect(styles).toContain("#app > div {\n  height: 100%;\n  min-height: 0;");
   expect(styles).not.toContain("radial-gradient");
   expect(styles).not.toContain("linear-gradient");
   expect(styles).not.toContain("#6c8eef");

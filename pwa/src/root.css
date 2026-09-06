@@ -35,7 +35,7 @@ body {
   min-width: 320px;
   background: var(--omi-web-canvas);
   color: var(--omi-web-text);
-  overflow: auto;
+  overflow: hidden;
   overscroll-behavior: none;
 }
 
@@ -67,7 +67,8 @@ button,
 }
 
 #app > div {
-  min-height: 100dvh;
+  height: 100%;
+  min-height: 0;
 }
 
 ::-webkit-scrollbar {
