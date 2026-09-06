@@ -1079,12 +1079,16 @@ private struct CanonicalMemoryAtlasSurface: View {
     plan: MemoryAtlasRenderPlan
   ) {
     let paintBounds = canvasPaintBounds(for: size)
+    // An entity with a glass ring is marked by the ring alone. Painting the
+    // canvas dot under it as well put a small bubble inside the big one and
+    // made the lines look as if they ended at the small one.
+    let ringed = Set(plan.interactiveNodes.map(\.id))
 
     for cluster in snapshot.activeClusters {
       var primaryPath = Path()
       var mutedPath = Path()
       for placement in plan.visibleNodes where placement.cluster == cluster {
-        guard placement.id != selectedNodeID else { continue }
+        guard placement.id != selectedNodeID, !ringed.contains(placement.id) else { continue }
         let related = selectedNodeID == nil || plan.relatedNodeIDs.contains(placement.id)
         let matches = matchingNodeIDs == nil || matchingNodeIDs?.contains(placement.id) == true
         let radius = nodeRadius(for: placement)
@@ -1130,47 +1134,9 @@ private struct CanonicalMemoryAtlasSurface: View {
       }
     }
 
-    if let anchorNodeID = snapshot.anchorNodeID,
-      let anchor = plan.visibleNodes.first(where: { $0.id == anchorNodeID })
-    {
-      drawSpecialNode(
-        anchor,
-        radius: compact ? 6 : (isInspectMode ? 18 : (isFocusMode ? 12 : 7)),
-        color: Ink.primary,
-        opacity: selectedNodeID == nil || plan.relatedNodeIDs.contains(anchor.id) ? 0.86 : 0.16,
-        context: &context,
-        size: size
-      )
-    }
-
-    if let selectedNode {
-      drawSpecialNode(
-        selectedNode,
-        radius: compact ? 7 : (isInspectMode ? 26 : (isFocusMode ? 18 : 9)),
-        color: Ink.primary,
-        opacity: 0.95,
-        context: &context,
-        size: size
-      )
-    }
-  }
-
-  private func drawSpecialNode(
-    _ placement: MemoryAtlasNodePlacement,
-    radius: CGFloat,
-    color: Color,
-    opacity: Double,
-    context: inout GraphicsContext,
-    size: CGSize
-  ) {
-    let center = point(for: placement.normalizedPosition, in: size)
-    let rect = CGRect(
-      x: center.x - radius,
-      y: center.y - radius,
-      width: radius * 2,
-      height: radius * 2
-    )
-    context.fill(Path(ellipseIn: rect), with: .color(color.opacity(opacity)))
+    // The account holder and the selection are marked by their glass rings
+    // alone. The canvas used to paint a dark disc under each as well, and it
+    // showed through the translucent glass as a shadow behind the person.
   }
 
   private func drawCanvasLabels(
