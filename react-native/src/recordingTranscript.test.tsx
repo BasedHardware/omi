@@ -305,6 +305,27 @@ test('opens a recording row into the full transcript detail and retires it on ba
     expect(textOf(renderer)).toContain(
       'Actual full transcript beyond the summary',
     );
+    expect(textOf(renderer)).not.toContain('Unlocked record');
+    expect(textOf(renderer)).not.toContain('Active record');
+    expect(textOf(renderer)).not.toContain('Locked');
+    expect(textOf(renderer)).not.toContain('Discarded');
+    await act(async () => {
+      renderer.update(
+        <ConversationsPage
+          outcome={{
+            ...outcome,
+            value: {
+              ...outcome.value,
+              items: [{...item, locked: true, discarded: true}],
+            },
+          }}
+          loading={false}
+          embedded
+        />,
+      );
+    });
+    expect(textOf(renderer)).toContain('Locked');
+    expect(textOf(renderer)).toContain('Discarded');
     expect(
       renderer.root.findAll(
         node => node.props.accessibilityLabel === 'Search loaded conversations',
