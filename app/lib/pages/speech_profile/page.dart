@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 
@@ -113,9 +112,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
     return icon != null ? button : SizedBox(width: double.infinity, child: button);
   }
 
-  /// The last three lines the user said. Shown while recording and kept on
-  /// screen through the upload and the All done state, so the final sentence
-  /// lingers instead of vanishing the moment the target is reached.
+  /// The last three lines the user said while recording. The 2 s grace before
+  /// finalizing keeps the final sentence visible before this fades out.
   Widget _transcript(SpeechProfileProvider provider) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(32, 0, 32, 48),
@@ -598,74 +596,54 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                               // this section (recording/question/complete UI) doesn't
                               // apply yet.
                               ? const SizedBox.shrink()
-                              : provider.profileCompleted
-                                  ? Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (provider.text.isNotEmpty) _transcript(provider),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                          decoration: BoxDecoration(
-                                            border: const GradientBoxBorder(
-                                              gradient: LinearGradient(
-                                                colors: [
-                                                  Color.fromARGB(127, 208, 208, 208),
-                                                  Color.fromARGB(127, 188, 99, 121),
-                                                  Color.fromARGB(127, 86, 101, 182),
-                                                  Color.fromARGB(127, 126, 190, 236),
-                                                ],
-                                              ),
-                                              width: 2,
-                                            ),
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: TextButton(
+                              // Recording UI -> All done cross-fades: the transcript, card
+                              // and bar fade out and the button fades in. Nothing is shown
+                              // while the profile uploads.
+                              : AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 450),
+                                  switchInCurve: Curves.easeIn,
+                                  switchOutCurve: Curves.easeOut,
+                                  child: provider.profileCompleted
+                                      ? Padding(
+                                          key: const ValueKey('speech-profile-done'),
+                                          padding: const EdgeInsets.symmetric(horizontal: 40),
+                                          child: _capsuleButton(
+                                            text: context.l10n.allDone,
                                             onPressed: () {
                                               // Conversation processing already triggered in finalize()
                                               Navigator.pop(context);
                                             },
-                                            child: Text(
-                                              context.l10n.allDone,
-                                              style: const TextStyle(color: Colors.white, fontSize: 16),
-                                            ),
                                           ),
-                                        ),
-                                      ],
-                                    )
-                                  : provider.uploadingProfile
-                                      ? Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            if (provider.text.isNotEmpty) _transcript(provider),
-                                            const CircularProgressIndicator(
-                                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                                          ],
                                         )
-                                      : Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            if (provider.text.isNotEmpty) _transcript(provider),
-                                            Padding(
-                                              padding: const EdgeInsets.symmetric(horizontal: 24),
-                                              child: Column(
-                                                children: [
-                                                  const SpeechTopicsCard(),
-                                                  const SizedBox(height: 12),
-                                                  SpeechProgressBar(progress: provider.sentenceProgress),
-                                                ],
-                                              ),
-                                            ),
-                                            if (provider.device == null)
-                                              Padding(
-                                                padding: const EdgeInsets.only(top: 16),
-                                                child: Text(
-                                                  context.l10n.noDeviceConnectedUseMic,
-                                                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                                                  textAlign: TextAlign.center,
+                                      : provider.uploadingProfile
+                                          ? const SizedBox.shrink(key: ValueKey('speech-profile-uploading'))
+                                          : Column(
+                                              key: const ValueKey('speech-profile-recording'),
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                if (provider.text.isNotEmpty) _transcript(provider),
+                                                Padding(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                                                  child: Column(
+                                                    children: [
+                                                      const SpeechTopicsCard(),
+                                                      const SizedBox(height: 12),
+                                                      SpeechProgressBar(progress: provider.sentenceProgress),
+                                                    ],
+                                                  ),
                                                 ),
-                                              ),
-                                          ],
-                                        ),
+                                                if (provider.device == null)
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(top: 16),
+                                                    child: Text(
+                                                      context.l10n.noDeviceConnectedUseMic,
+                                                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                                                      textAlign: TextAlign.center,
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                ),
                     ),
                   ),
                 ],

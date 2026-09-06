@@ -99,9 +99,8 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
     }
   }
 
-  /// The last three lines the user said. Shown while recording and kept on
-  /// screen through the upload and the All done state, so the final sentence
-  /// lingers instead of vanishing the moment the target is reached.
+  /// The last three lines the user said while recording. The 2 s grace before
+  /// finalizing keeps the final sentence visible before the state changes.
   List<Widget> _transcript(BuildContext context, SpeechProfileProvider provider) {
     if (provider.text.isEmpty) return const [];
     return [
@@ -499,7 +498,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                             ),
                         ] else if (provider.profileCompleted) ...[
                           // All Done state
-                          ..._transcript(context, provider),
                           const SizedBox(height: 16),
                           SizedBox(
                             width: double.infinity,
@@ -524,7 +522,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                           ),
                         ] else if (provider.uploadingProfile) ...[
                           // Uploading state
-                          ..._transcript(context, provider),
                           const SizedBox(height: 16),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
