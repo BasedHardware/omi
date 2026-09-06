@@ -8,6 +8,8 @@ Migration `0005_device_session_uploads.sql` adds a persisted successful-upload c
 
 Chat generation sends at most 40 earlier messages and 32 KiB of UTF-8 history to either configured provider, restricted to the current account, chat session, app, and message position. Cancelled assistant responses are excluded. The current message and its bounded text attachments follow that history.
 
+Account Durable Objects serialize D1 admissions across external database awaits so simultaneous retries return the same generation and parallel requests cannot exceed the chat limit.
+
 ## Required operator inputs
 
 - `STAGING_D1_MIGRATION_EVIDENCE_URL`: an HTTPS URL that returns the current migration evidence envelope.

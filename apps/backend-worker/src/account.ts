@@ -33,11 +33,18 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
     input: ChatCreate,
     chatLimit: number | null
   ): Promise<Admission | "conflict" | "entitlement" | "attachment_rejected"> {
-    const result = await admitMessage(this.env.DB, accountId, input, chatLimit);
-    if (result !== "conflict" && result !== "entitlement") {
-      await this.ensureGenerationAlarm(accountId);
-    }
-    return result;
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const result = await admitMessage(
+        this.env.DB,
+        accountId,
+        input,
+        chatLimit
+      );
+      if (typeof result !== "string") {
+        await this.ensureGenerationAlarm(accountId);
+      }
+      return result;
+    });
   }
 
   async cancel(
