@@ -5,6 +5,21 @@ import { createMemoryServiceApp } from "./memory-service-app";
 import { defineMemoryRouteReadPort } from "./routes/memory-read-port";
 
 describe("canonical memory service composition", () => {
+  test("passes HTTP disconnect cancellation through the canonical memory route", async () => {
+    const controller = new AbortController();
+    let signal: AbortSignal | undefined;
+    const app = createMemoryServiceApp(() => new Response(null, { status: 503 }), {
+      readPort: defineMemoryRouteReadPort(async () => true, async (input) => {
+        signal = input.signal;
+        return { kind: "unavailable" };
+      }),
+      nowEpochSeconds: () => 123,
+      counter: createServedCounter(),
+    });
+    await app.fetch(new Request("https://service.example/v1/memories", { headers: { authorization: "Bearer token" }, signal: controller.signal }));
+    controller.abort();
+    expect(signal?.aborted).toBe(true);
+  });
   test("serves the existing REST route and delegates MCP from one Hono root", async () => {
     const counter = createServedCounter();
     const app = createMemoryServiceApp(

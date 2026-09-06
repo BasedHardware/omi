@@ -15,6 +15,7 @@ export const POSTGRES_JS_VERSION = "3.4.9" as const;
 export interface PostgresJsPoolOptions {
   /** Explicit by design: the adapter never reads DATABASE_URL or another ambient URL. */
   readonly connectionString: string;
+  readonly databaseSocketDirectory?: string;
   readonly maxConnections?: number;
   readonly idleTimeoutSeconds?: number;
   readonly connectTimeoutSeconds?: number;
@@ -253,10 +254,17 @@ export const createPostgresJsTransactionPool = (
   if (typeof options.connectionString !== "string" || options.connectionString.length === 0) {
     throw new TypeError("invalid_postgres_connection_string");
   }
+  const socketDirectory = options.databaseSocketDirectory;
+  if (socketDirectory !== undefined && (typeof socketDirectory !== "string" ||
+      !/^\/(?:[a-zA-Z0-9._:-]+\/)*[a-zA-Z0-9._:-]+$/.test(socketDirectory) ||
+      socketDirectory.split("/").some(part => part === "." || part === ".."))) {
+    throw new TypeError("invalid_database_socket_directory");
+  }
   const maxConnections = boundedInteger(options.maxConnections, 10, 1, 100);
   let leaseGeneration = 0;
   const leaseLossListeners = new Set<() => void>();
   const sql = postgres(options.connectionString, {
+    ...(socketDirectory === undefined ? {} : { host: socketDirectory }),
     max: maxConnections,
     idle_timeout: boundedInteger(options.idleTimeoutSeconds, 20, 1, 600),
     connect_timeout: boundedInteger(options.connectTimeoutSeconds, 10, 1, 60),

@@ -1,3 +1,4 @@
+import type { AuthorizedLedgerWriteContext } from "../../apps/service/auth/authorized-context";
 import { isProxy } from "node:util/types";
 
 import { isWellFormedAccountId } from "../../core/control/account-control";
@@ -18,6 +19,7 @@ import {
 } from "../../apps/service/composition/memory-read";
 import {
   createPostgresFirebaseAuthorizedGraphSnapshotRuntime,
+  firebaseAuthorizedGraphContext,
   projectFirebaseAuthorizedGraphSnapshotLoad,
   type PostgresFirebaseAuthorizedGraphSnapshotRuntimeOptions,
 } from "./firebase-authorized-graph-snapshot-runtime";
@@ -37,6 +39,7 @@ export interface FirebaseAuthorizedMemoryProductOptions {
   readonly codec_root_secret: Uint8Array;
   readonly produce_renders: (
     projected: ApplicationGrantProjectedTreeInputSnapshot,
+    caller: Readonly<{ firebase_uid: string; authority_context: AuthorizedLedgerWriteContext; signal?: AbortSignal }>,
   ) => Promise<readonly RenderNode[]>;
   readonly verify_cursor: ApplicationReadPorts["verifyCursor"];
   readonly issue_cursor: ApplicationReadPorts["issueCursor"];
@@ -67,6 +70,7 @@ export interface PostgresFirebaseAuthorizedMemoryReadRuntime {
     idToken: string,
     nowEpochSeconds: number,
     request: ApplicationSynthesizedPageRequest,
+    signal?: AbortSignal,
   ): Promise<FirebaseAuthorizedMemoryReadOutcome>;
   /** Internal consumer read that additionally binds the credential to an admitted owner. */
   readForAccount(
@@ -74,6 +78,7 @@ export interface PostgresFirebaseAuthorizedMemoryReadRuntime {
     nowEpochSeconds: number,
     expectedAccountId: string,
     request: ApplicationSynthesizedPageRequest,
+    signal?: AbortSignal,
   ): Promise<FirebaseAuthorizedMemoryReadOutcome>;
 }
 
@@ -156,12 +161,21 @@ export const createPostgresFirebaseAuthorizedMemoryReadRuntime = (
     nowEpochSeconds: number,
     expectedAccountId: string | null,
     request: ApplicationSynthesizedPageRequest,
+    signal?: AbortSignal,
   ): Promise<FirebaseAuthorizedMemoryReadOutcome> => {
     if (expectedAccountId !== null && !isWellFormedAccountId(expectedAccountId)) {
       return Object.freeze({ kind: "denied" as const, outcome: "authorization" as const });
     }
+    const requestGraph = signal === undefined ? graph : createPostgresFirebaseAuthorizedGraphSnapshotRuntime({
+      ...authorization,
+      pool: Object.freeze<typeof authorization.pool>({
+        withTransaction: (options, callback) => authorization.pool.withTransaction({ ...options, signal }, callback),
+      }),
+    });
+    let renderAuthority: AuthorizedLedgerWriteContext | undefined;
     const loadAuthorized = async () => {
-      const loaded = await graph.load(idToken, nowEpochSeconds);
+      signal?.throwIfAborted();
+      const loaded = await requestGraph.load(idToken, nowEpochSeconds);
       if (loaded.kind === "denied") {
         throw new ClosedGraphLoad(Object.freeze({
           kind: "denied" as const,
@@ -178,12 +192,21 @@ export const createPostgresFirebaseAuthorizedMemoryReadRuntime = (
           outcome: "authorization" as const,
         }));
       }
+      renderAuthority = firebaseAuthorizedGraphContext(loaded);
       return projectFirebaseAuthorizedGraphSnapshotLoad(loaded, timezone as string);
     };
     try {
+      signal?.throwIfAborted();
+      const identity = await identityVerifier.resolve(idToken, nowEpochSeconds);
+      if (identity === null) return Object.freeze({ kind: "denied" as const, outcome: "authentication" as const });
+      if (isFirebaseIdentityRefreshUnavailable(identity)) return Object.freeze({ kind: "unavailable" as const });
       const page = await readDirectAuthorizedMemoryPage(request, {
         loadAuthorized,
-        produceRenders,
+        produceRenders: (projected) => {
+          signal?.throwIfAborted();
+          if (renderAuthority === undefined) throw new Error("render_authority_unavailable");
+          return produceRenders(projected, { firebase_uid: identity.firebase_uid, authority_context: renderAuthority, ...(signal ? { signal } : {}) });
+        },
         codecRootSecret: stableSecret,
         verifyCursor,
         issueCursor,
@@ -191,6 +214,7 @@ export const createPostgresFirebaseAuthorizedMemoryReadRuntime = (
         acceptedCoverageState: product.accepted_coverage_state as AcceptedCoverageState,
         stmCoverageState: product.stm_coverage_state as StmCoverageState,
       });
+      signal?.throwIfAborted();
       return Object.freeze({ kind: "loaded" as const, canonical_json: page.canonical_json });
     } catch (error) {
       if (error instanceof ClosedGraphLoad) return error.outcome;
@@ -214,16 +238,18 @@ export const createPostgresFirebaseAuthorizedMemoryReadRuntime = (
       idToken: string,
       nowEpochSeconds: number,
       request: ApplicationSynthesizedPageRequest,
+      signal?: AbortSignal,
     ) {
-      return readPage(idToken, nowEpochSeconds, null, request);
+      return readPage(idToken, nowEpochSeconds, null, request, signal);
     },
     async readForAccount(
       idToken: string,
       nowEpochSeconds: number,
       expectedAccountId: string,
       request: ApplicationSynthesizedPageRequest,
+      signal?: AbortSignal,
     ) {
-      return readPage(idToken, nowEpochSeconds, expectedAccountId, request);
+      return readPage(idToken, nowEpochSeconds, expectedAccountId, request, signal);
     },
   });
 };

@@ -263,3 +263,33 @@ describe("Postgres.js transaction adapter", () => {
     ]);
   });
 });
+
+test("explicit socket directory overrides a URL localhost host through the real driver", async () => {
+  const {mkdtempSync, rmSync} = await import("node:fs");
+  const {createServer} = await import("node:net");
+  const directory = mkdtempSync("/tmp/omi-pg-socket-");
+  let reachedSocket = false;
+  const server = createServer(socket => {
+    reachedSocket = true;
+    socket.destroy();
+  });
+  const pool = createPostgresJsTransactionPool({
+    connectionString: "postgres://test:test@localhost:5432/test",
+    databaseSocketDirectory: directory,
+    maxConnections: 1,
+    connectTimeoutSeconds: 1,
+  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(`${directory}/.s.PGSQL.5432`, resolve);
+    });
+    await expect(pool.withTransaction({isolationLevel: "serializable", accessMode: "read only"}, async () => null)).rejects.toBeDefined();
+    expect(reachedSocket).toBe(true);
+  } finally {
+    await pool.close();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    rmSync(directory, {recursive: true, force: true});
+  }
+  expect(() => createPostgresJsTransactionPool({connectionString: "postgres://localhost/test", databaseSocketDirectory: "localhost"})).toThrow("invalid_database_socket_directory");
+});

@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { tmpdir } from "node:os";
+import { relative } from "node:path";
 
 import {
   POSTGRES_TEST_IMAGE,
+  POSTGRES_TEST_ROOT,
   POSTGRES_TEST_BUN_IMAGE,
   POSTGRES_TEST_NODE_IMAGE,
   POSTGRES_TEST_PLATFORM,
@@ -37,7 +40,8 @@ describe("hermetic PostgreSQL lifecycle plan", () => {
   test("derives exact per-worktree resources and rejects drifted cleanup state", () => {
     const value = state();
     expect(parsePostgresTestState(JSON.parse(JSON.stringify(value)), projectRoot)).toEqual(value);
-    expect(value.runDirectory).toBe("/Volumes/Ephemeral/scratch/omi-postgres-tests/runs/abababababababababababab");
+    expect(value.runDirectory).toBe(`${POSTGRES_TEST_ROOT}/runs/abababababababababababab`);
+    expect(relative(tmpdir(), value.runDirectory)).toBe("omi-postgres-tests/runs/abababababababababababab");
     expect(value.containerName).toBe("omi-memory-postgres-abababababababababababab");
     expect(postgresTestPaths(projectRoot).stateFile).toMatch(/\/state\/[a-f0-9]{16}\.json$/);
     expect(() => parsePostgresTestState({ ...value, runDirectory: "/tmp" }, projectRoot))

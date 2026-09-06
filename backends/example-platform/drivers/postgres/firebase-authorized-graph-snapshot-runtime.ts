@@ -49,6 +49,14 @@ const AUTHORITY_FAILURES = new Set([
 
 const loadedAuthorities = new WeakMap<object, AuthorizedLedgerWriteContext>();
 
+export const firebaseAuthorizedGraphContext = (
+  loaded: Extract<FirebaseAuthorizedGraphSnapshotOutcome, { kind: "loaded" }>,
+): AuthorizedLedgerWriteContext => {
+  const context = loadedAuthorities.get(loaded);
+  if (context === undefined) throw new TypeError("unrecognized_authorized_graph_load");
+  return context;
+};
+
 export interface FirebaseAuthorizedApplicationProjection {
   readonly projected: ApplicationGrantProjectedTreeInputSnapshot;
   readonly owner_identity_digest: string;

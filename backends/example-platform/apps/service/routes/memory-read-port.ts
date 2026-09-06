@@ -14,6 +14,7 @@ export interface MemoryRouteReadInput {
   readonly bearer_token: string;
   readonly now_epoch_seconds: number;
   readonly request: ApplicationSynthesizedPageRequest;
+  readonly signal?: AbortSignal;
 }
 
 export interface MemoryRouteReadPort {

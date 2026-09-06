@@ -277,4 +277,5 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0045-product-projection-row-level-security.sql",
     sha256: "01ee0462f89bbae065603c3f9e9490917d748d511715af67896a26e8cf81f234",
   }),
+  Object.freeze({ version: 46, name: "memory-render-responses", fileName: "0046-memory-render-responses.sql", sha256: "3004273b10a6cbc55992295b7df0b1d02daff97952fcade30e9b52b65e9abf6a" }),
 ]);

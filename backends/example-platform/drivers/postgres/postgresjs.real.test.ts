@@ -1,3 +1,4 @@
+import { createPostgresRenderResponseRepository } from "./product-projection-repository";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash, randomUUID } from "node:crypto";
@@ -4015,6 +4016,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     expect(authorizedProjection.authorization_generation_digest).toMatch(/^[a-f0-9]{64}$/);
     expect(authorizedProjection.db_now_epoch_seconds).toBe(authorizedGraph.db_now_epoch_seconds);
     let productReadTraces = 0;
+    let renderContext: Parameters<ReturnType<typeof createPostgresRenderResponseRepository>["read"]>[0] | undefined;
     const firebaseProductRead = createPostgresFirebaseAuthorizedMemoryReadRuntime({
       authorization: {
         pool: appRolePool,
@@ -4031,7 +4033,12 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       product: {
         account_timezone: "UTC",
         codec_root_secret: new Uint8Array(32).fill(0x55),
-        produce_renders: produceQaRenders,
+        produce_renders: async (projected, caller) => {
+          expect(caller.firebase_uid).toBe(firebaseUid);
+          expect(caller.firebase_uid).not.toBe(projected.owner_account_id);
+          renderContext = caller.authority_context;
+          return produceQaRenders(projected);
+        },
         verify_cursor: () => { throw new Error("first page must not verify a cursor"); },
         issue_cursor: () => { throw new Error("bounded qualification page must not issue a cursor"); },
         trace_sink: () => { productReadTraces += 1; },
@@ -4052,6 +4059,40 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     expect(productPage!.items.every((item) => item.citations.length > 0)).toBe(true);
     expect(isTrustedRecallCompletenessHonest(productPage!)).toBe(true);
     expect(productReadTraces).toBe(1);
+    if (renderContext === undefined) throw new Error("expected render authority");
+    const cacheContext = renderContext;
+    let cacheConnections = createPostgresJsTransactionPool({ connectionString: explicitTestUrl!, maxConnections: 2 });
+    const cachePool = Object.freeze<PostgresTransactionPool>({
+      withTransaction: (options, callback) => cacheConnections.withTransaction(options, async (connection) => {
+        await connection.query({ name: "render.test_role", text: "SET LOCAL ROLE omi_platform_application", values: [] });
+        return callback(connection);
+      }),
+    });
+    const cache = createPostgresRenderResponseRepository(cachePool);
+    const cacheKey = sha256CanonicalContent({ test: "durable-render", accountId });
+    const responseA = JSON.stringify({ summary_text: "First valid response", citations: ["evidence-a"] });
+    const responseB = JSON.stringify({ summary_text: "Another valid response", citations: ["evidence-a"] });
+    try {
+      expect(await cache.read(cacheContext, cacheKey)).toBeNull();
+      const winners = await Promise.all([cache.publish(cacheContext, cacheKey, responseA), cache.publish(cacheContext, cacheKey, responseB)]);
+      expect(winners[0]).toBe(winners[1]);
+      expect([responseA, responseB]).toContain(winners[0]);
+      await cacheConnections.close();
+      cacheConnections = createPostgresJsTransactionPool({ connectionString: explicitTestUrl!, maxConnections: 2 });
+      expect(await createPostgresRenderResponseRepository(cachePool).read(cacheContext, cacheKey)).toBe(winners[0]);
+      await cachePool.withTransaction({ isolationLevel: "serializable", accessMode: "read only" }, async (connection) => {
+        expect(await connection.query({ name: "render.unscoped", text: "SELECT response_json FROM omi_memory.memory_render_responses", values: [] })).toEqual([]);
+      });
+      const cleanup = await ownerSql.unsafe<{ table_name: string }[]>("SELECT table_name FROM omi_memory.cleanup_surface_tables('product_projections')");
+      expect(cleanup.some(row => row.table_name === "memory_render_responses")).toBe(true);
+      const [activation] = await ownerSql.unsafe<{ activated_epoch: number; activation_control_revision: number }[]>("SELECT activated_epoch, activation_control_revision FROM omi_memory.account_control_heads WHERE account_id = $1", [accountId]);
+      await ownerSql.unsafe("UPDATE omi_memory.account_control_heads SET activated_epoch = NULL, activation_control_revision = NULL WHERE account_id = $1", [accountId]);
+      await expect(cache.read(cacheContext, cacheKey)).rejects.toBeDefined();
+      await expect(cache.publish(cacheContext, cacheKey, responseA)).rejects.toBeDefined();
+      await ownerSql.unsafe("UPDATE omi_memory.account_control_heads SET activated_epoch = $2, activation_control_revision = $3 WHERE account_id = $1", [accountId, activation!.activated_epoch, activation!.activation_control_revision]);
+    } finally {
+      await cacheConnections.close();
+    }
     const chatMemoryContext = createPostgresFirebaseChatGenerationContextSource({
       memory: firebaseProductRead,
       now_epoch_seconds: () => now,
