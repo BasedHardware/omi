@@ -1,5 +1,10 @@
 import importlib.util
 import json
+import os
+import subprocess
+import sys
+import tempfile
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -182,6 +187,46 @@ def test_cloud_run_resource_rejects_inherited_cache_or_customer_binding():
             expected_image=image,
             expected_environment=CONTRACT.resource_environment("drain")[0],
             expected_secret_bindings=CONTRACT.resource_environment("drain")[1],
+        )
+
+
+def test_cloud_run_resource_accepts_rest_omitted_value_for_explicitly_empty_sweep_flag():
+    image = "gcr.io/based-hardware-dev/daily-memory-sweep-qa-job@sha256:" + "e" * 64
+    resource = _resource("sweep", "job", image)
+    resource["metadata"]["name"] = CONTRACT.DAILY_SWEEP_JOB
+    env = resource["spec"]["template"]["template"]["containers"][0]["env"]
+    env.remove(next(entry for entry in env if entry["name"] == "MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG"))
+    env.append({"name": "MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG"})
+
+    CONTRACT.validate_cloud_run_resource(
+        resource,
+        kind="job",
+        expected_image=image,
+        expected_environment=CONTRACT.resource_environment("sweep")[0],
+        expected_secret_bindings=CONTRACT.resource_environment("sweep")[1],
+        expected_name=CONTRACT.DAILY_SWEEP_JOB,
+    )
+
+
+def test_cloud_run_resource_rejects_null_for_explicitly_empty_sweep_flag():
+    image = "gcr.io/based-hardware-dev/daily-memory-sweep-qa-job@sha256:" + "f" * 64
+    resource = _resource("sweep", "job", image)
+    resource["metadata"]["name"] = CONTRACT.DAILY_SWEEP_JOB
+    cohort_flag = next(
+        entry
+        for entry in resource["spec"]["template"]["template"]["containers"][0]["env"]
+        if entry["name"] == "MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG"
+    )
+    cohort_flag["value"] = None
+
+    with pytest.raises(CONTRACT.JITQAContractError, match="unexpected value"):
+        CONTRACT.validate_cloud_run_resource(
+            resource,
+            kind="job",
+            expected_image=image,
+            expected_environment=CONTRACT.resource_environment("sweep")[0],
+            expected_secret_bindings=CONTRACT.resource_environment("sweep")[1],
+            expected_name=CONTRACT.DAILY_SWEEP_JOB,
         )
 
 
@@ -388,3 +433,73 @@ def test_typesense_workflow_smokes_images_before_publish_and_has_unready_bootstr
     assert "if: ${{ inputs.mode == 'bootstrap' }}" in text
     assert '"status": "not_qualified"' in text
     assert '"readiness_marker": "absent"' in text
+
+
+def test_bounded_proactivity_capability_is_required_on_qa_http_and_gateway_only():
+    key = "OMI_JIT_PROACTIVITY_BUDGET_CONTRACT"
+    for profile in ("backend", "desktop", "gateway"):
+        literals, _ = CONTRACT.resource_environment(profile)
+        assert literals[key] == "jit-cloud-qa-v1"
+    for profile in ("drain", "sweep"):
+        literals, _ = CONTRACT.resource_environment(profile)
+        assert key not in literals
+
+
+def test_qa_cloud_run_rendered_typesense_shell_accepts_real_host_and_digest():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    start = 'typesense_image="$(python3 - "$typesense_resource" "$SOURCE_SHA" "$typesense_host" <<\'PY\''
+    rendered = text.split(start, 1)[1].split("\n          PY", 1)[0]
+    rendered = textwrap.dedent(rendered.lstrip("\n"))
+    image = "gcr.io/based-hardware-dev/typesense-jit-qa@sha256:" + "a" * 64
+    resource = {
+        "metadata": {"labels": {"managed-by": "github-actions", "jit-qa": "true", "source-sha": "b" * 40}},
+        "spec": {
+            "template": {
+                "spec": {"containers": [{"image": image}]},
+            }
+        },
+    }
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8") as file:
+        json.dump(resource, file)
+        file.flush()
+        result = subprocess.run(
+            [sys.executable, "-", file.name, "b" * 40, "typesense-jit-qa-abc.run.app"],
+            input=rendered,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == image
+
+
+def test_qa_cloud_run_renders_typesense_host_and_key_into_both_http_services():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    common_line = next(line.strip() for line in text.splitlines() if line.strip().startswith("common=\"^@^"))
+    env = {
+        "QA_PROJECT": "based-hardware-dev",
+        "QA_FIRESTORE_DATABASE": "jit-qa",
+        "QA_AUTH_PROJECT": "based-hardware",
+        "QA_UID": CONTRACT.QA_UID,
+        "QA_TYPESENSE_COLLECTION": CONTRACT.TYPESENSE_COLLECTION,
+        "QA_TYPESENSE_READINESS_COLLECTION": CONTRACT.TYPESENSE_READINESS_COLLECTION,
+        "GATEWAY_URL": "https://llm-gateway-jit-qa-abc.run.app",
+        "REDIS_HOST": "10.0.0.10",
+        "TYPESENSE_HOST": "typesense-jit-qa-abc.run.app",
+        "SOURCE_SHA": "b" * 40,
+    }
+    rendered = subprocess.run(
+        ["bash", "-c", f"set -euo pipefail\n{common_line}\nprintf '%s' \"$common\""],
+        env={**os.environ, **env},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    common = rendered.stdout
+    assert "@TYPESENSE_HOST=typesense-jit-qa-abc.run.app@" in common
+    assert "@MEMORY_TYPESENSE_COLLECTION=jit_qa_canonical_memory_atoms@" in common
+    assert "@MEMORY_TYPESENSE_READINESS_SOURCE_SHA=" + "b" * 40 in common
+    deploy_line = next(line for line in text.splitlines() if "--set-secrets" in line and "TYPESENSE_API_KEY" in line)
+    assert 'for pair in "$QA_SERVICE:$BACKEND_IMAGE" "$QA_DESKTOP_SERVICE:$DESKTOP_IMAGE"' in text
+    assert "TYPESENSE_API_KEY=${QA_TYPESENSE_SECRET}:latest" in deploy_line

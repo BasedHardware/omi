@@ -31,6 +31,10 @@ env:
   QA_SWEEP_JOB: daily-memory-sweep-qa-job
   QA_REDIS_INSTANCE: jit-qa-redis
   QA_REDIS_SECRET: jit-qa-redis-password
+  QA_TYPESENSE_SERVICE: typesense-jit-qa
+  QA_TYPESENSE_SECRET: jit-qa-typesense-api-key
+  QA_TYPESENSE_COLLECTION: jit_qa_canonical_memory_atoms
+  QA_TYPESENSE_READINESS_COLLECTION: jit_qa_typesense_readiness
   QA_GATEWAY_TOKEN_SECRET: jit-qa-gateway-token
   QA_ANTHROPIC_SECRET: ANTHROPIC_API_KEY
   QA_PERPLEXITY_SECRET: PERPLEXITY_API_KEY
@@ -153,6 +157,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       redis_host: ${{ steps.redis.outputs.redis_host }}
+      typesense_url: ${{ steps.typesense.outputs.typesense_url }}
+      typesense_host: ${{ steps.typesense.outputs.typesense_host }}
+      typesense_image: ${{ steps.typesense.outputs.typesense_image }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -167,13 +174,13 @@ jobs:
           set -euo pipefail
           service="redis.googleapis.com"
           enabled_service="$(timeout --foreground --kill-after=5s 60s gcloud services list --enabled \
-            --project "$QA_PROJECT" --filter="config.name=${service}" --format='value(config.name)' --limit=1)"
+            --project "$QA_PROJECT" --filter="config.name=${service}" --format='value(config.name)')"
           if [[ "$enabled_service" != "$service" ]]; then
             timeout --foreground --kill-after=5s 60s gcloud services enable "$service" \
               --project "$QA_PROJECT" --quiet
           fi
           enabled_service="$(timeout --foreground --kill-after=5s 60s gcloud services list --enabled \
-            --project "$QA_PROJECT" --filter="config.name=${service}" --format='value(config.name)' --limit=1)"
+            --project "$QA_PROJECT" --filter="config.name=${service}" --format='value(config.name)')"
           [[ "$enabled_service" == "$service" ]] || {
             echo "ERROR: $service is not enabled in $QA_PROJECT." >&2
             exit 1
@@ -210,6 +217,62 @@ jobs:
           if database.get("type") != "FIRESTORE_NATIVE":
               raise SystemExit("Firestore QA database is not native mode")
           PY
+      - name: Verify dedicated Typesense projection service and key metadata
+        id: typesense
+        env:
+          SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          typesense_resource="$RUNNER_TEMP/jit-qa-typesense-resource.json"
+          gcloud run services describe "$QA_TYPESENSE_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$typesense_resource"
+          typesense_url="$(gcloud run services describe "$QA_TYPESENSE_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format='value(status.url)')"
+          typesense_host="${typesense_url#https://}"
+          typesense_image="$(python3 - "$typesense_resource" "$SOURCE_SHA" "$typesense_host" <<'PY'
+          import json
+          import re
+          import sys
+
+          resource = json.load(open(sys.argv[1], encoding="utf-8"))
+          source_sha, expected_host = sys.argv[2:]
+          metadata = resource.get("metadata", {})
+          labels = metadata.get("labels", {}) if isinstance(metadata, dict) else {}
+          if labels.get("managed-by") != "github-actions" or labels.get("jit-qa") != "true":
+              raise SystemExit("Typesense service is not owned by the isolated QA workflow")
+          if labels.get("source-sha") != source_sha:
+              raise SystemExit("Typesense service source SHA does not match the admitted QA source")
+          if not re.fullmatch(r"typesense-jit-qa-[a-z0-9-]+\.run\.app", expected_host):
+              raise SystemExit("Typesense service URL is outside the named QA Cloud Run service")
+          spec = resource.get("spec", {})
+          template = spec.get("template", {}) if isinstance(spec, dict) else {}
+          service_spec = template.get("spec", template) if isinstance(template, dict) else {}
+          containers = service_spec.get("containers", []) if isinstance(service_spec, dict) else []
+          if len(containers) != 1 or not isinstance(containers[0], dict):
+              raise SystemExit("Typesense service must have exactly one container")
+          image = containers[0].get("image")
+          if not isinstance(image, str) or not re.fullmatch(
+              r"gcr\.io/based-hardware-dev/typesense-jit-qa@sha256:[0-9a-f]{64}", image
+          ):
+              raise SystemExit("Typesense service image is not an immutable QA digest")
+          print(image)
+          PY
+          )"
+          gcloud secrets describe "$QA_TYPESENSE_SECRET" --project "$QA_PROJECT" --format=json > "$RUNNER_TEMP/jit-qa-typesense-secret.json"
+          python3 - "$RUNNER_TEMP/jit-qa-typesense-secret.json" <<'PY'
+          import json
+          import sys
+
+          secret = json.load(open(sys.argv[1], encoding="utf-8"))
+          labels = secret.get("labels", {})
+          if labels.get("jit-qa") != "true" or labels.get("managed-by") != "github-actions":
+              raise SystemExit("Typesense API key secret is not explicitly owned by the isolated QA plane")
+          PY
+          state="$(gcloud secrets versions describe latest --secret "$QA_TYPESENSE_SECRET" --project "$QA_PROJECT" --format='value(state)')"
+          [[ "$state" == "ENABLED" ]] || { echo "dedicated Typesense key has no enabled latest version" >&2; exit 1; }
+          python3 backend/scripts/jit_qa_cloud_run_contract.py typesense-resource \
+            --resource-json "$typesense_resource" --expected-image "$typesense_image"
+          echo "typesense_url=$typesense_url" >> "$GITHUB_OUTPUT"
+          echo "typesense_host=$typesense_host" >> "$GITHUB_OUTPUT"
+          echo "typesense_image=$typesense_image" >> "$GITHUB_OUTPUT"
       - name: Create or verify the 1 GiB Basic Redis dependency
         id: redis
         run: |
@@ -296,7 +359,7 @@ jobs:
           IMAGE: ${{ needs.build.outputs.gateway_image }}
         run: |
           set -euo pipefail
-          gateway_env="^@^OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@OMI_LLM_GATEWAY_PROD=false@LLM_GATEWAY_ALLOWED_CALLERS=backend,desktop@OMI_LLM_GATEWAY_BUILD_IDENTITY=jit-qa"
+          gateway_env="^@^OMI_JIT_PROACTIVITY_BUDGET_CONTRACT=jit-cloud-qa-v1@OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@OMI_LLM_GATEWAY_PROD=false@LLM_GATEWAY_ALLOWED_CALLERS=backend,desktop@OMI_LLM_GATEWAY_BUILD_IDENTITY=jit-qa"
           gcloud run deploy "$QA_GATEWAY_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --image "$IMAGE" --command uvicorn --args 'llm_gateway.main:app,--host=0.0.0.0,--port=8080' --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --set-env-vars "$gateway_env" --set-secrets "OPENAI_API_KEY=OPENAI_API_KEY:latest,ANTHROPIC_API_KEY=${QA_ANTHROPIC_SECRET}:latest,PERPLEXITY_API_KEY=${QA_PERPLEXITY_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
       - name: Resolve exact gateway URL
         id: gateway
@@ -311,12 +374,15 @@ jobs:
           DESKTOP_IMAGE: ${{ needs.build.outputs.desktop_image }}
           REDIS_HOST: ${{ needs.provision.outputs.redis_host }}
           GATEWAY_URL: ${{ steps.gateway.outputs.gateway_url }}
+          TYPESENSE_HOST: ${{ needs.provision.outputs.typesense_host }}
+          SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
         run: |
           set -euo pipefail
-          common="^@^OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@MEMORY_ENABLED=on@MEMORY_BELIEF_MODEL_ENABLED=true@OMI_LLM_GATEWAY_FEATURE_MODE=gateway@OMI_LLM_CHAT_AGENT_ROUTE=gateway@OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false@OMI_LLM_GATEWAY_URL=${GATEWAY_URL}@REDIS_DB_HOST=${REDIS_HOST}@REDIS_DB_PORT=6379"
+          [[ "$TYPESENSE_HOST" =~ ^typesense-jit-qa-[a-z0-9-]+\.run\.app$ ]]
+          common="^@^OMI_JIT_PROACTIVITY_BUDGET_CONTRACT=jit-cloud-qa-v1@OMI_ENV_STAGE=dev@GOOGLE_CLOUD_PROJECT=${QA_PROJECT}@OMI_FIRESTORE_DATA_PLANE_PROJECT=${QA_PROJECT}@FIRESTORE_DATABASE_ID=${QA_FIRESTORE_DATABASE}@FIREBASE_AUTH_PROJECT_ID=${QA_AUTH_PROJECT}@OMI_JIT_QA_AUTH_ONLY=true@OMI_JIT_QA_UID_ALLOWLIST=${QA_UID}@MEMORY_ENABLED=on@MEMORY_BELIEF_MODEL_ENABLED=true@OMI_LLM_GATEWAY_FEATURE_MODE=gateway@OMI_LLM_CHAT_AGENT_ROUTE=gateway@OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false@OMI_LLM_GATEWAY_URL=${GATEWAY_URL}@REDIS_DB_HOST=${REDIS_HOST}@REDIS_DB_PORT=6379@TYPESENSE_HOST=${TYPESENSE_HOST}@TYPESENSE_HOST_PORT=443@TYPESENSE_PROTOCOL=https@MEMORY_TYPESENSE_COLLECTION=${QA_TYPESENSE_COLLECTION}@MEMORY_TYPESENSE_READINESS_REQUIRED=true@MEMORY_TYPESENSE_READINESS_COLLECTION=${QA_TYPESENSE_READINESS_COLLECTION}@MEMORY_TYPESENSE_READINESS_SOURCE_SHA=${SOURCE_SHA}"
           for pair in "$QA_SERVICE:$BACKEND_IMAGE" "$QA_DESKTOP_SERVICE:$DESKTOP_IMAGE"; do
             service="${pair%%:*}"; image="${pair#*:}"
-            gcloud run deploy "$service" --project "$QA_PROJECT" --region "$QA_REGION" --image "$image" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --network "$QA_NETWORK" --vpc-egress private-ranges-only --set-env-vars "$common" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest,REDIS_DB_PASSWORD=${QA_REDIS_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
+            gcloud run deploy "$service" --project "$QA_PROJECT" --region "$QA_REGION" --image "$image" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --network "$QA_NETWORK" --vpc-egress private-ranges-only --set-env-vars "$common" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest,REDIS_DB_PASSWORD=${QA_REDIS_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest,TYPESENSE_API_KEY=${QA_TYPESENSE_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
           done
       - name: Deploy gates-closed maintenance jobs
         env:
@@ -381,17 +447,22 @@ jobs:
           SWEEP_IMAGE: ${{ needs.build.outputs.sweep_image }}
           GATEWAY_URL: ${{ needs.deploy.outputs.gateway_url }}
           REDIS_HOST: ${{ needs.provision.outputs.redis_host }}
+          TYPESENSE_HOST: ${{ needs.provision.outputs.typesense_host }}
+          TYPESENSE_IMAGE: ${{ needs.provision.outputs.typesense_image }}
+          SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/jit-qa-contract"; install -d -m 700 "$out"
           gcloud run services describe "$QA_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$out/backend.json"
           gcloud run services describe "$QA_DESKTOP_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$out/desktop.json"
           gcloud run services describe "$QA_GATEWAY_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$out/gateway.json"
+          gcloud run services describe "$QA_TYPESENSE_SERVICE" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$out/typesense.json"
           gcloud run jobs describe "$QA_DRAIN_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$out/drain.json"
           gcloud run jobs describe "$QA_SWEEP_JOB" --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$out/sweep.json"
-          python3 backend/scripts/jit_qa_cloud_run_contract.py resource --kind service --profile backend --expected-image "$BACKEND_IMAGE" --resource-json "$out/backend.json" --expected-name "$QA_SERVICE" --gateway-url "$GATEWAY_URL" --redis-host "$REDIS_HOST"
-          python3 backend/scripts/jit_qa_cloud_run_contract.py resource --kind service --profile desktop --expected-image "$DESKTOP_IMAGE" --resource-json "$out/desktop.json" --expected-name "$QA_DESKTOP_SERVICE" --gateway-url "$GATEWAY_URL" --redis-host "$REDIS_HOST"
+          python3 backend/scripts/jit_qa_cloud_run_contract.py resource --kind service --profile backend --expected-image "$BACKEND_IMAGE" --resource-json "$out/backend.json" --expected-name "$QA_SERVICE" --gateway-url "$GATEWAY_URL" --redis-host "$REDIS_HOST" --typesense-host "$TYPESENSE_HOST" --source-sha "$SOURCE_SHA"
+          python3 backend/scripts/jit_qa_cloud_run_contract.py resource --kind service --profile desktop --expected-image "$DESKTOP_IMAGE" --resource-json "$out/desktop.json" --expected-name "$QA_DESKTOP_SERVICE" --gateway-url "$GATEWAY_URL" --redis-host "$REDIS_HOST" --typesense-host "$TYPESENSE_HOST" --source-sha "$SOURCE_SHA"
           python3 backend/scripts/jit_qa_cloud_run_contract.py resource --kind service --profile gateway --expected-image "$GATEWAY_IMAGE" --resource-json "$out/gateway.json" --expected-name "$QA_GATEWAY_SERVICE"
+          python3 backend/scripts/jit_qa_cloud_run_contract.py typesense-resource --resource-json "$out/typesense.json" --expected-image "$TYPESENSE_IMAGE"
           python3 backend/scripts/jit_qa_cloud_run_contract.py resource --kind job --profile drain --expected-image "$DRAIN_IMAGE" --resource-json "$out/drain.json" --expected-name "$QA_DRAIN_JOB"
           python3 backend/scripts/jit_qa_cloud_run_contract.py resource --kind job --profile sweep --expected-image "$SWEEP_IMAGE" --resource-json "$out/sweep.json" --expected-name "$QA_SWEEP_JOB" --gateway-url "$GATEWAY_URL" --redis-host "$REDIS_HOST"
       - name: Probe gateway and app routes without customer data

@@ -10,6 +10,8 @@ on:
         options:
           - bootstrap
           - ensure-infrastructure-api
+          - indexes-plan
+          - indexes-apply
           - prepare
           - inspect
           - drain-verify
@@ -24,7 +26,7 @@ on:
         required: false
         type: string
       confirmation:
-        description: Use ENABLE_QA_API, PREPARE_QA, DRAIN_VERIFY_QA, ROLLFORWARD_QA, or ROLLBACK_QA for mutating operations
+        description: Use ENABLE_QA_API, APPLY_JIT_QA_INDEXES, PREPARE_QA, DRAIN_VERIFY_QA, ROLLFORWARD_QA, or ROLLBACK_QA for mutating operations
         required: false
         type: string
 
@@ -80,7 +82,7 @@ jobs:
             echo "ERROR: source_sha must not be the all-zero SHA." >&2
             exit 1
           fi
-          if [[ "$OPERATION" != bootstrap && "$OPERATION" != ensure-infrastructure-api && ! "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,47}$ ]]; then
+          if [[ "$OPERATION" != bootstrap && "$OPERATION" != ensure-infrastructure-api && "$OPERATION" != indexes-plan && "$OPERATION" != indexes-apply && ! "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,47}$ ]]; then
             echo "ERROR: run_id is required and must match [a-z0-9][a-z0-9_-]{0,47}." >&2
             exit 1
           fi
@@ -89,7 +91,7 @@ jobs:
             exit 1
           fi
           case "$OPERATION:$CONFIRMATION" in
-            bootstrap:PREPARE_QA|ensure-infrastructure-api:ENABLE_QA_API|prepare:PREPARE_QA|inspect:|drain-verify:DRAIN_VERIFY_QA|rollforward:ROLLFORWARD_QA|rollback:ROLLBACK_QA) ;;
+            bootstrap:PREPARE_QA|ensure-infrastructure-api:ENABLE_QA_API|indexes-plan:|indexes-apply:APPLY_JIT_QA_INDEXES|prepare:PREPARE_QA|inspect:|drain-verify:DRAIN_VERIFY_QA|rollforward:ROLLFORWARD_QA|rollback:ROLLBACK_QA) ;;
             *)
               echo "ERROR: confirmation does not match the selected QA operation." >&2
               exit 1
@@ -165,7 +167,7 @@ jobs:
           uv pip sync pylock.runtime.toml --python .venv/bin/python
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
           .venv/bin/python scripts/jit_qa_manual_operator.py --help >/dev/null
-          PYTHONPATH=. .venv/bin/python scripts/jit_qa_seed_and_verify.py --help >/dev/null
+          PYTHONPATH=. .venv/bin/python scripts/jit_qa_firestore_index_operator.py --help >/dev/null
 
       - name: Authenticate to the development project
         id: auth
@@ -237,6 +239,33 @@ jobs:
           }
           timeout --foreground --kill-after=5s 60s gcloud projects describe "$QA_PROJECT" --format='value(projectId)' | grep -Fx "$QA_PROJECT" >/dev/null
 
+      - name: Verify seed runtime imports with the named QA secret
+        if: ${{ inputs.operation == 'bootstrap' || inputs.operation == 'prepare' || inputs.operation == 'inspect' || inputs.operation == 'drain-verify' || inputs.operation == 'rollback' || inputs.operation == 'rollforward' }}
+        env:
+          GOOGLE_CLOUD_PROJECT: ${{ env.QA_PROJECT }}
+          GCLOUD_PROJECT: ${{ env.QA_PROJECT }}
+          OMI_ENV_STAGE: dev
+          OMI_FIRESTORE_DATA_PLANE_PROJECT: ${{ env.QA_PROJECT }}
+          FIRESTORE_DATABASE_ID: ${{ env.QA_DATABASE }}
+          FIREBASE_AUTH_PROJECT_ID: based-hardware
+          MEMORY_ENABLED: "on"
+          OMI_JIT_QA_AUTH_ONLY: "true"
+          OMI_JIT_QA_UID_ALLOWLIST: ${{ env.QA_UID }}
+          KNOWLEDGE_LEDGER_DRAIN_ENABLED: "false"
+          KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST: ${{ env.QA_UID }}
+        run: |
+          set -euo pipefail
+          unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH
+          ENCRYPTION_SECRET="$(timeout --foreground --kill-after=5s 60s gcloud secrets versions access latest \
+            --secret=ENCRYPTION_SECRET --project "$QA_PROJECT")"
+          [[ "${#ENCRYPTION_SECRET}" -ge 32 ]] || {
+            echo "ERROR: named QA encryption secret is unavailable or too short." >&2
+            exit 1
+          }
+          export ENCRYPTION_SECRET
+          PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_seed_and_verify.py --help >/dev/null
+          unset ENCRYPTION_SECRET
+
       - name: Ensure named development Redis API is enabled
         if: ${{ inputs.operation == 'ensure-infrastructure-api' }}
         env:
@@ -246,7 +275,7 @@ jobs:
           set -euo pipefail
           service="redis.googleapis.com"
           enabled_service="$(timeout --foreground --kill-after=5s 60s gcloud services list --enabled \
-            --project "$QA_PROJECT" --filter="config.name=${service}" --format='value(config.name)' --limit=1)"
+            --project "$QA_PROJECT" --filter="config.name=${service}" --format='value(config.name)')"
           mutation="false"
           if [[ "$enabled_service" != "$service" ]]; then
             timeout --foreground --kill-after=5s 60s gcloud services enable "$service" \
@@ -254,7 +283,7 @@ jobs:
             mutation="true"
           fi
           enabled_service="$(timeout --foreground --kill-after=5s 60s gcloud services list --enabled \
-            --project "$QA_PROJECT" --filter="config.name=${service}" --format='value(config.name)' --limit=1)"
+            --project "$QA_PROJECT" --filter="config.name=${service}" --format='value(config.name)')"
           [[ "$enabled_service" == "$service" ]] || {
             echo "ERROR: $service is not enabled in $QA_PROJECT." >&2
             exit 1
@@ -307,7 +336,7 @@ jobs:
             > "$RUNNER_TEMP/jit-qa-operator/job-contract.json"
 
       - name: Run read-only or seed operator action
-        if: ${{ inputs.operation == 'bootstrap' || inputs.operation == 'prepare' || inputs.operation == 'inspect' || inputs.operation == 'rollback' }}
+        if: ${{ inputs.operation == 'bootstrap' || inputs.operation == 'indexes-plan' || inputs.operation == 'indexes-apply' || inputs.operation == 'prepare' || inputs.operation == 'inspect' || inputs.operation == 'rollback' }}
         env:
           OPERATION: ${{ inputs.operation }}
           RUN_ID: ${{ inputs.run_id }}
@@ -328,9 +357,29 @@ jobs:
           set -euo pipefail
           unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH
           operator_dir="$RUNNER_TEMP/jit-qa-operator"
+          if [[ "$OPERATION" == bootstrap || "$OPERATION" == prepare || "$OPERATION" == inspect || "$OPERATION" == rollback ]]; then
+            ENCRYPTION_SECRET="$(timeout --foreground --kill-after=5s 60s gcloud secrets versions access latest \
+              --secret=ENCRYPTION_SECRET --project "$QA_PROJECT")"
+            [[ "${#ENCRYPTION_SECRET}" -ge 32 ]] || {
+              echo "ERROR: named QA encryption secret is unavailable or too short." >&2
+              exit 1
+            }
+            export ENCRYPTION_SECRET
+          fi
           case "$OPERATION" in
             bootstrap)
               PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_seed_and_verify.py bootstrap \
+                > "$operator_dir/operation.json"
+              ;;
+            indexes-plan)
+              PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_firestore_index_operator.py \
+                --project "$QA_PROJECT" --database "$QA_DATABASE" plan \
+                > "$operator_dir/operation.json"
+              ;;
+            indexes-apply)
+              PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_firestore_index_operator.py \
+                --project "$QA_PROJECT" --database "$QA_DATABASE" apply \
+                --confirmation "$CONFIRMATION" \
                 > "$operator_dir/operation.json"
               ;;
             prepare)
@@ -368,6 +417,7 @@ jobs:
               "result": payload,
           }, sort_keys=True))
           PY
+          unset ENCRYPTION_SECRET
           rm -f "$operator_dir/operation.json"
 
       - name: Execute three bounded drain pages and verify durable proof
@@ -391,6 +441,13 @@ jobs:
           set -euo pipefail
           unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH
           operator_dir="$RUNNER_TEMP/jit-qa-operator"
+          ENCRYPTION_SECRET="$(timeout --foreground --kill-after=5s 60s gcloud secrets versions access latest \
+            --secret=ENCRYPTION_SECRET --project "$QA_PROJECT")"
+          [[ "${#ENCRYPTION_SECRET}" -ge 32 ]] || {
+            echo "ERROR: named QA encryption secret is unavailable or too short." >&2
+            exit 1
+          }
+          export ENCRYPTION_SECRET
           gcloud_bounded() {
             timeout --foreground --kill-after=5s 60s gcloud "$@"
           }
@@ -531,6 +588,7 @@ jobs:
           }
           print(json.dumps(receipt, sort_keys=True))
           PY
+          unset ENCRYPTION_SECRET
           rm -f "$operator_dir"/*.json "$operator_dir"/*.logs.json "$operator_dir"/*.state.json "$operator_dir"/*.launch.json
 
       - name: Upload content-free operator receipt

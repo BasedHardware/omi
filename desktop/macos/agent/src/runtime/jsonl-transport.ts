@@ -39,6 +39,9 @@ export interface McpServerBuildContext {
   screenContext?: boolean;
   /** See `QueryMessage.jitKnowledgeToolsEnabled` — relayed opaquely, client-side UX gate only. */
   jitKnowledgeToolsEnabled?: boolean;
+  /** Presence of the qualification-only JIT budget selects the bounded
+   * read-only proactive tool projection. */
+  jitProactivity?: boolean;
   executionRole?: "coordinator" | "leaf";
   /** Server-authoritative projection admitted into this exact run snapshot. */
   chatFirstUi?: boolean;
@@ -124,6 +127,7 @@ const QUERY_WIRE_FIELDS = new Set([
   "expectedCapabilityVersion",
   "reasoningEffort",
   "jitKnowledgeToolsEnabled",
+  "jitBudget",
 ]);
 
 export class JsonlTransport {
@@ -199,6 +203,17 @@ export class JsonlTransport {
       context.adapterSessionId = result.adapterSessionId ?? undefined;
       if (context.revoked) return;
 
+      let adapterReceipt: {
+        jitCostStatus?: "estimated" | "unknown";
+        jitEstimatedCostUsd?: number | null;
+        jitProviderAttempts?: number;
+        jitReceiptAttemptIDs?: string[];
+      } | undefined;
+      try {
+        const parsed = result.run.resultJson ? JSON.parse(result.run.resultJson) as unknown : undefined;
+        if (parsed && typeof parsed === "object") adapterReceipt = parsed as typeof adapterReceipt;
+      } catch { /* result JSON is optional diagnostic data */ }
+
       const resultMessage = {
         type: "result" as const,
         text: result.text,
@@ -211,6 +226,17 @@ export class JsonlTransport {
         outputTokens: result.run.outputTokens ?? Math.ceil(result.text.length / 4),
         cacheReadTokens: result.run.cacheReadTokens ?? 0,
         cacheWriteTokens: result.run.cacheWriteTokens ?? 0,
+        // executeRun terminalizes cancellations/failures as a result. A JIT
+        // provider may have been billed before that terminal status, so never
+        // relay a successful estimate for a non-successful run.
+        jitCostStatus: result.terminalStatus === "succeeded"
+          ? adapterReceipt?.jitCostStatus
+          : (input.metadata?.jitBudget ? "unknown" as const : undefined),
+        jitEstimatedCostUsd: result.terminalStatus === "succeeded"
+          ? adapterReceipt?.jitEstimatedCostUsd
+          : (input.metadata?.jitBudget ? null : undefined),
+        jitProviderAttempts: adapterReceipt?.jitProviderAttempts,
+        jitReceiptAttemptIDs: adapterReceipt?.jitReceiptAttemptIDs,
         modelsUsed: context.modelsUsed ? [...context.modelsUsed] : undefined,
         artifacts: result.artifacts.map(serializeArtifact),
         completionDeltaArtifacts: result.completionDeltaArtifacts?.map(serializeArtifact),
@@ -227,7 +253,12 @@ export class JsonlTransport {
       const errorMessage = {
         type: "error" as const,
         message: failure.userMessage,
-        failure,
+        failure: input.metadata?.jitBudget
+          ? { ...failure, jitCostStatus: "unknown" as const, jitEstimatedCostUsd: null }
+          : failure,
+        ...(input.metadata?.jitBudget
+          ? { jitCostStatus: "unknown" as const, jitEstimatedCostUsd: null }
+          : {}),
       };
       this.send(this.withCorrelation(errorMessage, context));
     } finally {
@@ -508,6 +539,7 @@ export class JsonlTransport {
           (source) => source.source === "screen" && source.outcome === "available",
         ),
         jitKnowledgeToolsEnabled: message.jitKnowledgeToolsEnabled === true,
+        ...(message.jitBudget ? { jitProactivity: true } : {}),
         chatFirstUi: snapshot.capabilities.chatFirstUi === true,
         chatFirstControlGeneration: snapshot.capabilities.chatFirstControlGeneration,
       }),
@@ -528,6 +560,7 @@ export class JsonlTransport {
         contextCapabilityVersion: snapshot.capabilityVersion,
         ...(message.reasoningEffort ? { reasoningEffort: message.reasoningEffort } : {}),
         ...(message.jitKnowledgeToolsEnabled === true ? { jitKnowledgeToolsEnabled: true } : {}),
+        ...(message.jitBudget ? { jitBudget: message.jitBudget } : {}),
       },
     };
   }

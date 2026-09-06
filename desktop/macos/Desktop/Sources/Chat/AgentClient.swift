@@ -78,6 +78,10 @@ enum AgentClient {
     let modelsUsed: [String]
     let artifacts: [AgentArtifactProjection]
     let completionDeltaArtifacts: [AgentArtifactProjection]
+    let jitCostStatus: String?
+    let jitEstimatedCostUsd: Double?
+    let jitProviderAttempts: Int?
+    let jitReceiptAttemptIDs: [String]
 
     init(_ result: AgentBridge.QueryResult) {
       text = result.text
@@ -95,6 +99,10 @@ enum AgentClient {
       modelsUsed = result.modelsUsed
       artifacts = result.artifacts
       completionDeltaArtifacts = result.completionDeltaArtifacts
+      jitCostStatus = result.jitCostStatus
+      jitEstimatedCostUsd = result.jitEstimatedCostUsd
+      jitProviderAttempts = result.jitProviderAttempts
+      jitReceiptAttemptIDs = result.jitReceiptAttemptIDs
     }
 
     @discardableResult
@@ -630,6 +638,7 @@ enum AgentClient {
     harnessMode: String = "piMono",
     mode: String? = nil,
     cwd: String? = nil,
+    jitBudget: JITProactivityAgentBudget? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler = { _ in },
     onToolCall _: @escaping ToolCallHandler = { _, _, _ in "" },
@@ -708,6 +717,7 @@ enum AgentClient {
         surface: surface,
         mode: mode,
         expectedContext: snapshot.freshness,
+        jitBudget: jitBudget,
         authorizationSnapshot: authorization,
         onTextDelta: onTextDelta,
         onToolActivity: onToolActivity,

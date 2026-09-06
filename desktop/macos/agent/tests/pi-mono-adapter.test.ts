@@ -823,6 +823,68 @@ describe("PiMonoAdapter prompt correlation", () => {
     expect((adapter as any).activePromptGeneration).toBe(0);
   });
 
+  it("marks an aborted JIT turn unknown while preserving observed receipt ids", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const executionID = "jit-abort-execution";
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "abort a metered turn" }],
+      [],
+      "act",
+      () => {},
+      async () => "",
+      undefined,
+      {
+        capabilityRef: "cap-jit-abort",
+        requestId: "request-jit-abort",
+        builtInToolPolicy: "read_only",
+        jitBudget: {
+          contractVersion: "jit-cloud-qa-v1",
+          executionID,
+          maxProviderAttempts: 3,
+          maxOutputTokensPerAttempt: 2048,
+          maxNormalizedInputTokensPerAttempt: 32768,
+          maxEstimatedSpendMicroUSD: 50000,
+        },
+      },
+    );
+    writeFileSync((adapter as any).jitReceiptFilePath, JSON.stringify({
+      schema_version: "jit-gateway-receipt-v1",
+      run_id: executionID,
+      contract_version: "jit-cloud-qa-v1",
+      attempts: [{
+        attempt_id: "provider-attempt-aborted",
+        normalized_uncached_input_tokens: 3,
+        cached_input_tokens: 0,
+        cache_write_tokens: 0,
+        output_tokens: 2,
+        cost_status: "estimated",
+        estimated_cost_micro_usd: 5,
+      }],
+      aggregate: {
+        attempt_count: 1,
+        normalized_uncached_input_tokens: 3,
+        cached_input_tokens: 0,
+        cache_write_tokens: 0,
+        output_tokens: 2,
+        estimated_cost_micro_usd: 5,
+        cost_status: "estimated",
+      },
+    }));
+
+    adapter.abort("session-1");
+
+    await expect(prompt).resolves.toMatchObject({
+      inputTokens: 3,
+      outputTokens: 2,
+      jitCostStatus: "unknown",
+      jitEstimatedCostUsd: null,
+      jitProviderAttempts: 1,
+      jitReceiptAttemptIDs: ["provider-attempt-aborted"],
+    });
+  });
+
   it("drops stray turn_end events when no prompt is in flight", () => {
     const { adapter, events } = createAdapter();
 
@@ -925,6 +987,20 @@ describe("PiMonoAdapter source-level invariants", () => {
     expect(toolProjectionFromMetadata({
       surfaceKind: "main_chat",
     }).jitKnowledgeToolsEnabled).toBe(false);
+  });
+
+  it("derives the bounded proactive projection only from a valid JIT budget", () => {
+    const budget = {
+      contractVersion: "jit-cloud-qa-v1",
+      executionID: "execution-1",
+      maxProviderAttempts: 3,
+      maxOutputTokensPerAttempt: 2048,
+      maxNormalizedInputTokensPerAttempt: 32768,
+      maxEstimatedSpendMicroUSD: 50000,
+    };
+    expect(toolProjectionFromMetadata({ jitBudget: budget }).jitProactivity).toBe(true);
+    expect(toolProjectionFromMetadata({ jitBudget: { ...budget, maxProviderAttempts: 0 } }).jitProactivity).toBe(false);
+    expect(toolProjectionFromMetadata({ jitBudget: budget, jitKnowledgeToolsEnabled: false }).jitKnowledgeToolsEnabled).toBe(false);
   });
 
   it("keeps the real failed JIT save attempt as an exact regression fixture", () => {

@@ -2490,6 +2490,7 @@ export interface JITProactivityReservationRequest {
 }
 
 export interface JITRolloutDecisionEnvelope {
+  budget_contract_version?: string | null;
   cache_hit: boolean;
   cache_ttl_seconds: number;
   effective: TriState;

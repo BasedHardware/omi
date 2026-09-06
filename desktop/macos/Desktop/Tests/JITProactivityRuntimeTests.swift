@@ -175,6 +175,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
     let runtime = try wiredRuntime(
       triggers: [],
       budgetTimezone: "America/Los_Angeles",
+      evaluationTime: Date(timeIntervalSince1970: 1_787_549_400),
       ambientNanoUsage: { day, _ in
         await usageReads.record(day)
         return JITAmbientNanoUsage(used: 8, lastSpentAt: nil)
@@ -189,6 +190,28 @@ final class JITProactivityRuntimeTests: XCTestCase {
     XCTAssertEqual(decision, .suppressed(reason: "ambient_nano_budget"))
     let days = await usageReads.days
     XCTAssertEqual(days, ["2026-08-23"])
+  }
+
+  func testAmbientAdmissionUsesOneEvaluationInstantAcrossMidnight() async throws {
+    let beforeMidnight = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-06T03:59:59Z"))
+    let clock = AdvancingEvaluationClock(beforeMidnight)
+    let usageReads = UsageReadProbe()
+    let runtime = try wiredRuntime(
+      triggers: [],
+      budgetTimezone: "America/New_York",
+      ambientNanoUsage: { day, _ in
+        await usageReads.record(day)
+        return JITAmbientNanoUsage(used: 8, lastSpentAt: nil)
+      },
+      evaluationNow: { clock.next() })
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(text: "deadline", occurredAt: beforeMidnight),
+      ambient: validAmbient())
+    XCTAssertEqual(decision, .suppressed(reason: "ambient_nano_budget"))
+    let days = await usageReads.days
+    XCTAssertEqual(days, ["2026-09-05"])
+    XCTAssertEqual(clock.count, 1)
   }
 
   func testMalformedAuthoritativeTimezoneFailsClosedBeforeAmbientSpend() async throws {
@@ -215,6 +238,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
     let now = Date(timeIntervalSince1970: 1_777_248_000)
     let runtime = try wiredRuntime(
       triggers: [],
+      evaluationTime: now,
       ambientNanoUsage: { _, _ in
         JITAmbientNanoUsage(used: 2, lastSpentAt: now.addingTimeInterval(-600))
       })
@@ -234,6 +258,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
     ])
     let insideSpacing = try wiredRuntime(
       triggers: [],
+      evaluationTime: now,
       ambientNanoUsage: { _, _ in JITAmbientNanoUsage(used: 2, lastSpentAt: now.addingTimeInterval(-600)) },
       derivedIntent: { _, _ in match })
     let paced = await insideSpacing.admission(
@@ -244,6 +269,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
 
     let exhausted = try wiredRuntime(
       triggers: [],
+      evaluationTime: now,
       ambientNanoUsage: { _, _ in JITAmbientNanoUsage(used: 8, lastSpentAt: now.addingTimeInterval(-600)) },
       derivedIntent: { _, _ in match })
     let capped = await exhausted.admission(
@@ -256,6 +282,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
   func testServerNanoDenialBacksOffInsteadOfRetryingEveryVisit() async throws {
     let reserves = ReservationRecorder()
     let now = Date(timeIntervalSince1970: 1_777_248_000)
+    let clock = MutableDateBox(now)
     let runtime = try wiredRuntime(
       triggers: [],
       reserve: { reservation, _ in
@@ -267,7 +294,8 @@ final class JITProactivityRuntimeTests: XCTestCase {
         JITTriggerWakeupClaim(
           continuityKey: "jit-nano:\(request.contextID):\(request.semanticFingerprint)",
           triggerID: "ambient-nano", leaseToken: "lease")
-      })
+      },
+      evaluationNow: { clock.value })
 
     let first = await runtime.admission(
       authorizationSnapshot: try snapshot(),
@@ -283,6 +311,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
     let recorded = await reserves.values
     XCTAssertEqual(recorded.count, 1, "a denied day must not re-reserve on the next visit")
 
+    clock.value = now.addingTimeInterval(JITProactivityRuntime.ambientServerDenialBackoff + 1)
     let later = await runtime.admission(
       authorizationSnapshot: try snapshot(),
       observation: .init(
@@ -748,6 +777,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
     receiptOwner: String = "owner",
     receiptRevision: String = "revision",
     budgetTimezone: String? = nil,
+    evaluationTime: Date? = nil,
     authorizationCurrent: Bool = true,
     claim: JITProactivityRuntime.ClaimWakeup? = nil,
     begin: JITProactivityRuntime.BeginPlannedExecution? = nil,
@@ -757,7 +787,8 @@ final class JITProactivityRuntimeTests: XCTestCase {
       JITAmbientNanoUsage(used: 0, lastSpentAt: nil)
     },
     derivedIntent: @escaping JITProactivityRuntime.DerivedIntentResolver = { _, _ in .none },
-    claimAmbientNano: JITProactivityRuntime.ClaimAmbientNano? = nil
+    claimAmbientNano: JITProactivityRuntime.ClaimAmbientNano? = nil,
+    evaluationNow: @escaping @Sendable () -> Date = Date.init
   ) throws -> JITProactivityRuntime {
     let rows = try triggers.map { try snapshotRow(for: $0) }
     let serverSnapshot = serverSnapshot(
@@ -768,6 +799,12 @@ final class JITProactivityRuntimeTests: XCTestCase {
       commitSequence: 4,
       snapshotRevision: receiptRevision,
       rowCount: rows.count)
+    let resolvedEvaluationNow: @Sendable () -> Date
+    if let evaluationTime {
+      resolvedEvaluationNow = { evaluationTime }
+    } else {
+      resolvedEvaluationNow = evaluationNow
+    }
     return JITProactivityRuntime(
       flags: { _ in JITProactivityFlags(rollout: .enabled, killSwitch: .disabled) },
       snapshots: { _ in serverSnapshot },
@@ -784,7 +821,31 @@ final class JITProactivityRuntimeTests: XCTestCase {
       authorizationCurrent: { _ in authorizationCurrent },
       derivedIntent: derivedIntent,
       ambientNanoUsage: ambientNanoUsage,
-      claimAmbientNano: claimAmbientNano)
+      claimAmbientNano: claimAmbientNano,
+      evaluationNow: resolvedEvaluationNow)
+  }
+
+  private final class AdvancingEvaluationClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private let initial: Date
+    private var reads = 0
+    init(_ initial: Date) { self.initial = initial }
+    func next() -> Date {
+      lock.lock()
+      defer { lock.unlock() }
+      defer { reads += 1 }
+      return initial.addingTimeInterval(TimeInterval(reads * 2))
+    }
+    var count: Int {
+      lock.lock()
+      defer { lock.unlock() }
+      return reads
+    }
+  }
+
+  private final class MutableDateBox: @unchecked Sendable {
+    var value: Date
+    init(_ value: Date) { self.value = value }
   }
 
   private func compiledTrigger(

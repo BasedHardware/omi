@@ -451,6 +451,41 @@ describe("JsonlTransport kernel-owned query contract", () => {
     }
   });
 
+  it("marks a terminally cancelled JIT result unknown while retaining receipt ids", async () => {
+    const { store, adapter, session, sent, transport } = fixture();
+    adapter.deferResult();
+    const running = transport.handleQuery(query(session.sessionId, {
+      requestId: "request-jit-cancelled",
+      jitBudget: {
+        contractVersion: "jit-cloud-qa-v1",
+        executionID: "execution-jit-cancelled",
+        maxProviderAttempts: 3,
+        maxOutputTokensPerAttempt: 2048,
+        maxNormalizedInputTokensPerAttempt: 32768,
+        maxEstimatedSpendMicroUSD: 50000,
+      },
+    }));
+    await waitUntil(() => adapter.executed.length === 1);
+    adapter.resolveDeferred({
+      terminalStatus: "cancelled",
+      adapterSessionId: "native-1",
+      jitCostStatus: "estimated",
+      jitEstimatedCostUsd: 0.01,
+      jitProviderAttempts: 1,
+      jitReceiptAttemptIDs: ["attempt-before-cancel"],
+    });
+    await running;
+
+    expect(sent.findLast((message) => message.type === "result")).toMatchObject({
+      terminalStatus: "cancelled",
+      jitCostStatus: "unknown",
+      jitEstimatedCostUsd: null,
+      jitProviderAttempts: 1,
+      jitReceiptAttemptIDs: ["attempt-before-cancel"],
+    });
+    store.close();
+  });
+
   it("emits one authoritative failed result when an adapter reports an error before throwing", async () => {
     const { store, adapter, session, sent, transport } = fixture();
     const conversationId = "conv-adapter-error-terminal";
@@ -984,8 +1019,17 @@ describe("JsonlTransport kernel-owned query contract", () => {
     await transport.handleQuery(query(session.sessionId, {
       requestId: "jit-on",
       jitKnowledgeToolsEnabled: true,
+      jitBudget: {
+        contractVersion: "jit-cloud-qa-v1",
+        executionID: "execution-1",
+        maxProviderAttempts: 3,
+        maxOutputTokensPerAttempt: 2048,
+        maxNormalizedInputTokensPerAttempt: 32768,
+        maxEstimatedSpendMicroUSD: 50000,
+      },
     }));
     expect(capturedContext?.jitKnowledgeToolsEnabled).toBe(true);
+    expect(capturedContext?.jitProactivity).toBe(true);
     const onMetadata = JSON.parse(String(store.getRow(
       "SELECT input_json FROM runs WHERE request_id = ?",
       ["jit-on"],

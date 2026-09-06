@@ -53,10 +53,10 @@ and compare the new content-free receipt's projection digest/count against the
 authoritative Firestore-backed result. Do not hand-inject a document or treat
 an empty search as readiness.
 
-The workflow deliberately does not modify the existing
-`.github/workflows/jit_qa_cloud_run.yml`. After this service is ready, its
-application integration needs the following narrow additions in that workflow's
-QA backend and desktop deployment path:
+The projection workflow deliberately does not deploy application services. The
+existing `.github/workflows/jit_qa_cloud_run.yml` resolves and validates this
+service before deploying the QA backend and desktop services, then applies the
+following narrow environment and secret bindings to both:
 
 ```sh
 # Resolve and validate the service in the existing deploy/verify job.

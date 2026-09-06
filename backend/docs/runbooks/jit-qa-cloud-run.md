@@ -84,3 +84,7 @@ The local functional fallback is
 `scripts/dev-harness/jit_qa_local_stack.py`. It is useful for emulator contract
 proofs but is not evidence that the isolated cloud companion, gateway, Redis,
 or real Firebase identity path is serving.
+
+The QA HTTP services advertise `jit-cloud-qa-v1`; the dedicated gateway enforces
+that same provider-attempt budget. This capability is confined to these named
+QA services. It does not alter rollout enrollment or open either maintenance job.

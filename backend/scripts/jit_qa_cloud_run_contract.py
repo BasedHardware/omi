@@ -53,10 +53,12 @@ LEDGER_DRAIN_DOCKERFILE = "backend/modal/Dockerfile.knowledge_ledger_drain_job"
 DAILY_SWEEP_DOCKERFILE = "backend/modal/Dockerfile.daily_memory_sweep_job"
 DEFAULT_GATEWAY_URL = "https://llm-gateway-jit-qa.invalid"
 DEFAULT_REDIS_HOST = "10.0.0.10"
+DEFAULT_TYPESENSE_HOST = "typesense-jit-qa-abc.run.app"
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _DIGEST_IMAGE_RE = re.compile(r"^gcr\.io/based-hardware-dev/[a-z0-9-]+@sha256:[0-9a-f]{64}$")
 _TYPESENSE_BASE_IMAGE_RE = re.compile(r"^docker\.io/typesense/typesense@sha256:[0-9a-f]{64}$")
+_TYPESENSE_HOST_RE = re.compile(r"^typesense-jit-qa-[a-z0-9-]+\.run\.app$")
 # Cloud Run's QA service is linux/amd64. This is the reviewed 27.1
 # manifest-list digest, so a dispatch cannot silently select another release.
 TYPESENSE_BASE_IMAGE_27_1 = (
@@ -82,6 +84,7 @@ _ALLOWED_SECRET_BINDINGS = {
     "POSTHOG_PROJECT_API_KEY": "POSTHOG_PROJECT_API_KEY:latest",
     "REDIS_DB_PASSWORD": "jit-qa-redis-password:latest",
     "OMI_LLM_GATEWAY_SERVICE_TOKEN": "jit-qa-gateway-token:latest",
+    "TYPESENSE_API_KEY": "jit-qa-typesense-api-key:latest",
 }
 _GATEWAY_SECRET_BINDINGS = {
     "OPENAI_API_KEY": "OPENAI_API_KEY:latest",
@@ -223,9 +226,20 @@ def validate_environment(environment: Mapping[str, str], *, profile: str) -> Non
         raise JITQAContractError(f"environment does not match the {profile} QA profile")
 
 
-def validate_qa_http_environment(environment: Mapping[str, str], *, gateway_url: str, redis_host: str) -> None:
+def validate_qa_http_environment(
+    environment: Mapping[str, str],
+    *,
+    gateway_url: str,
+    redis_host: str,
+    typesense_host: str = DEFAULT_TYPESENSE_HOST,
+    typesense_source_sha: str = "",
+) -> None:
     """Require the isolated HTTP service to use the QA auth, gateway and cache."""
 
+    if not _TYPESENSE_HOST_RE.fullmatch(typesense_host):
+        raise JITQAContractError("TYPESENSE_HOST must be the named isolated QA Cloud Run host")
+    if typesense_source_sha:
+        require_sha(typesense_source_sha, label="MEMORY_TYPESENSE_READINESS_SOURCE_SHA")
     expected = {
         "OMI_JIT_QA_AUTH_ONLY": "true",
         "OMI_JIT_QA_UID_ALLOWLIST": QA_UID,
@@ -235,7 +249,15 @@ def validate_qa_http_environment(environment: Mapping[str, str], *, gateway_url:
         "OMI_LLM_GATEWAY_URL": gateway_url,
         "REDIS_DB_HOST": redis_host,
         "REDIS_DB_PORT": "6379",
+        "TYPESENSE_HOST": typesense_host,
+        "TYPESENSE_HOST_PORT": "443",
+        "TYPESENSE_PROTOCOL": "https",
+        "MEMORY_TYPESENSE_COLLECTION": TYPESENSE_COLLECTION,
+        "MEMORY_TYPESENSE_READINESS_REQUIRED": "true",
+        "MEMORY_TYPESENSE_READINESS_COLLECTION": TYPESENSE_READINESS_COLLECTION,
     }
+    if typesense_source_sha:
+        expected["MEMORY_TYPESENSE_READINESS_SOURCE_SHA"] = typesense_source_sha
     for name, value in expected.items():
         if environment.get(name) != value:
             raise JITQAContractError(f"{name} must be the isolated QA value")
@@ -293,6 +315,8 @@ def validate_cloud_run_resource(
     expected_service_account: str = RUNTIME_SERVICE_ACCOUNT,
     gateway_url: str | None = None,
     redis_host: str | None = None,
+    typesense_host: str | None = None,
+    typesense_source_sha: str = "",
 ) -> None:
     """Validate a post-deploy Cloud Run describe result without printing secrets."""
 
@@ -340,7 +364,14 @@ def validate_cloud_run_resource(
             if actual_binding != expected_secret_bindings[name]:
                 raise JITQAContractError(f"Cloud Run resource has an unexpected secret binding for {name}")
         elif name in expected_environment:
-            if set(entry) != {"name", "value"} or entry.get("value") != expected_environment[name]:
+            # Cloud Run's REST representation omits the protobuf scalar for
+            # an explicitly configured empty environment value. Accept that
+            # representation only for an expected empty literal; retain
+            # exact matching for every value and reject null values.
+            expected_value = expected_environment[name]
+            if expected_value == "" and set(entry) == {"name"}:
+                continue
+            if set(entry) != {"name", "value"} or entry["value"] != expected_value:
                 raise JITQAContractError(f"Cloud Run resource has an unexpected value for {name}")
         else:
             # A replacement env update is intentional: silently retaining a
@@ -355,7 +386,13 @@ def validate_cloud_run_resource(
             for entry in container.get("env", [])
             if isinstance(entry, dict) and "name" in entry and "value" in entry
         }
-        validate_qa_http_environment(actual_environment, gateway_url=gateway_url, redis_host=redis_host)
+        validate_qa_http_environment(
+            actual_environment,
+            gateway_url=gateway_url,
+            redis_host=redis_host,
+            typesense_host=typesense_host or DEFAULT_TYPESENSE_HOST,
+            typesense_source_sha=typesense_source_sha,
+        )
 
     spec = resource.get("spec")
     if not isinstance(spec, Mapping):
@@ -510,6 +547,8 @@ def resource_environment(
     *,
     gateway_url: str = DEFAULT_GATEWAY_URL,
     redis_host: str = DEFAULT_REDIS_HOST,
+    typesense_host: str = DEFAULT_TYPESENSE_HOST,
+    typesense_source_sha: str = "",
 ) -> tuple[dict[str, str], dict[str, str]]:
     """Return the exact literal and Secret Manager bindings for a QA profile."""
 
@@ -521,11 +560,26 @@ def resource_environment(
         "FIREBASE_AUTH_PROJECT_ID": AUTH_PROJECT_ID,
     }
     if profile in {"backend", "desktop"}:
+        if not _TYPESENSE_HOST_RE.fullmatch(typesense_host):
+            raise JITQAContractError("TYPESENSE_HOST must be the named isolated QA Cloud Run host")
+        if typesense_source_sha:
+            require_sha(typesense_source_sha, label="MEMORY_TYPESENSE_READINESS_SOURCE_SHA")
+        typesense_environment = {
+            "TYPESENSE_HOST": typesense_host,
+            "TYPESENSE_HOST_PORT": "443",
+            "TYPESENSE_PROTOCOL": "https",
+            "MEMORY_TYPESENSE_COLLECTION": TYPESENSE_COLLECTION,
+            "MEMORY_TYPESENSE_READINESS_REQUIRED": "true",
+            "MEMORY_TYPESENSE_READINESS_COLLECTION": TYPESENSE_READINESS_COLLECTION,
+        }
+        if typesense_source_sha:
+            typesense_environment["MEMORY_TYPESENSE_READINESS_SOURCE_SHA"] = typesense_source_sha
         return (
             {
                 **identity,
                 "MEMORY_ENABLED": "on",
                 "MEMORY_BELIEF_MODEL_ENABLED": "true",
+                "OMI_JIT_PROACTIVITY_BUDGET_CONTRACT": "jit-cloud-qa-v1",
                 "OMI_JIT_QA_AUTH_ONLY": "true",
                 "OMI_JIT_QA_UID_ALLOWLIST": QA_UID,
                 "OMI_LLM_GATEWAY_FEATURE_MODE": "gateway",
@@ -534,8 +588,7 @@ def resource_environment(
                 "OMI_LLM_GATEWAY_URL": gateway_url,
                 "REDIS_DB_HOST": redis_host,
                 "REDIS_DB_PORT": "6379",
-                "MEMORY_TYPESENSE_READINESS_REQUIRED": "true",
-                "MEMORY_TYPESENSE_READINESS_COLLECTION": TYPESENSE_READINESS_COLLECTION,
+                **typesense_environment,
             },
             dict(_ALLOWED_SECRET_BINDINGS),
         )
@@ -548,6 +601,7 @@ def resource_environment(
                 "OMI_LLM_GATEWAY_PROD": "false",
                 "LLM_GATEWAY_ALLOWED_CALLERS": "backend,desktop",
                 "OMI_LLM_GATEWAY_BUILD_IDENTITY": "jit-qa",
+                "OMI_JIT_PROACTIVITY_BUDGET_CONTRACT": "jit-cloud-qa-v1",
             },
             {
                 **_GATEWAY_SECRET_BINDINGS,
@@ -627,6 +681,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--source-sha")
     parser.add_argument("--gateway-url", default=DEFAULT_GATEWAY_URL)
     parser.add_argument("--redis-host", default=DEFAULT_REDIS_HOST)
+    parser.add_argument("--typesense-host", default=DEFAULT_TYPESENSE_HOST)
     return parser.parse_args()
 
 
@@ -695,7 +750,11 @@ def main() -> int:
             if args.profile is None:
                 raise JITQAContractError("resource validation requires --profile")
             expected_environment, expected_secret_bindings = resource_environment(
-                args.profile, gateway_url=args.gateway_url, redis_host=args.redis_host
+                args.profile,
+                gateway_url=args.gateway_url,
+                redis_host=args.redis_host,
+                typesense_host=args.typesense_host,
+                typesense_source_sha=args.source_sha or "",
             )
             validate_cloud_run_resource(
                 resource,
@@ -706,6 +765,8 @@ def main() -> int:
                 expected_name=args.expected_name,
                 gateway_url=args.gateway_url if args.profile in {"backend", "desktop"} else None,
                 redis_host=args.redis_host if args.profile in {"backend", "desktop"} else None,
+                typesense_host=args.typesense_host if args.profile in {"backend", "desktop"} else None,
+                typesense_source_sha=args.source_sha or "",
             )
     except (JITQAContractError, OSError, json.JSONDecodeError) as exc:
         print(f"JIT QA contract failed: {exc}", file=sys.stderr)

@@ -16,6 +16,9 @@ struct JITPlannedExecution: Equatable, Sendable {
   /// Standing intent the ambient context matched at admission. Grounds the
   /// full turn and is recorded in local provenance; planned turns carry none.
   var derivedIntent: JITDerivedIntentMatch = .none
+  /// Captured before asynchronous delivery and never recomputed later.
+  var temporalContext: JITProactivityTemporalContext? = nil
+  var agentBudget: JITProactivityAgentBudget? = nil
 }
 
 struct JITAmbientNanoClaimRequest: Equatable, Sendable {
@@ -37,6 +40,7 @@ struct JITAmbientRuntimeContext: Equatable, Sendable {
   let semanticFingerprint: String
   let locallyRelevant: Bool
   let boundedEvidence: String
+  var temporalContext: JITProactivityTemporalContext? = nil
 
   var permitsNanoTriage: Bool {
     !id.isEmpty && semanticFingerprint.count == 64 && locallyRelevant && !boundedEvidence.isEmpty
@@ -96,6 +100,10 @@ actor JITProactivityRuntime {
   private let derivedIntent: DerivedIntentResolver
   private let ambientNanoUsage: AmbientNanoUsageReader?
   private let claimAmbientNano: ClaimAmbientNano?
+  /// Trusted evaluation clock. Production uses the process clock; tests inject
+  /// a fixed value so budget-day and pacing decisions remain hermetic. This is
+  /// deliberately separate from an observation's captured event time.
+  private let evaluationNow: @Sendable () -> Date
   private var pending: [String: JITPlannedExecution] = [:]
   private struct ExecutionHeartbeat {
     let leaseToken: String
@@ -133,6 +141,8 @@ actor JITProactivityRuntime {
 
             QUOTED CURRENT EVIDENCE:
             \(context.boundedEvidence)
+
+            \(context.temporalContext?.promptSection() ?? "Trusted temporal context: unavailable. Do not make a time-specific claim.")
             """,
           imageData: nil,
           jsonSchema: [
@@ -170,12 +180,14 @@ actor JITProactivityRuntime {
         observation: observation, ownerID: snapshot.ownerID, now: observation.occurredAt ?? Date())
     },
     ambientNanoUsage: AmbientNanoUsageReader? = nil,
-    claimAmbientNano: ClaimAmbientNano? = nil
+    claimAmbientNano: ClaimAmbientNano? = nil,
+    evaluationNow: @escaping @Sendable () -> Date = Date.init
   ) {
     self.flags = flags
     self.derivedIntent = derivedIntent
     self.ambientNanoUsage = ambientNanoUsage
     self.claimAmbientNano = claimAmbientNano
+    self.evaluationNow = evaluationNow
     self.snapshots = snapshots
     self.nanoTriage = nanoTriage
     self.mirror = mirror
@@ -218,19 +230,20 @@ actor JITProactivityRuntime {
       let receipt = try await reconcile(snapshot, authorizationSnapshot: authorizationSnapshot)
       let allTriggers = try await compiledSnapshot(
         receipt: receipt, authorizationSnapshot: authorizationSnapshot)
-      let now = observation.occurredAt ?? Date()
+      let evaluationTime = evaluationNow()
+      let eventTime = observation.occurredAt
       // Snooze eligibility is evaluated inside the watchlist runtime so a
       // snoozed-only snapshot stays a standing watchlist (ambient after miss),
       // not an empty one. Wakeup counters still skip ineligible IDs.
       let eligibleTriggers = allTriggers.filter { trigger in
         guard let snoozedUntil = trigger.snoozedUntil else { return true }
-        return now >= snoozedUntil
+        return evaluationTime >= snoozedUntil
       }
-      guard let day = day(for: now, budgetTimezone: snapshot.budgetTimezone) else {
+      guard let day = day(for: evaluationTime, budgetTimezone: snapshot.budgetTimezone) else {
         return .suppressed(reason: "budget_authority_unavailable")
       }
       let counts = try await wakeupCounts(
-        triggerIDs: eligibleTriggers.map(\.id), budgetDay: day, now: now)
+        triggerIDs: eligibleTriggers.map(\.id), budgetDay: day, now: evaluationTime)
       let receiptMatchesSnapshot =
         snapshot.complete
         && receipt.ownerID == snapshot.ownerID
@@ -269,11 +282,16 @@ actor JITProactivityRuntime {
           observation: observation,
           receipt: receipt,
           budgetTimezone: snapshot.budgetTimezone,
+          budgetContractVersion: resolved.budgetContractVersion,
+          evaluationTime: evaluationTime,
           authorizationSnapshot: authorizationSnapshot)
       case .boundedPlannedTriage:
         guard let ambiguous = runtimeResult.ambiguous.first,
           await approvePlannedAmbiguity(
             ambiguous, observation: observation, snapshot: snapshot,
+            temporalContext: Self.temporalContext(
+              capturedAt: eventTime, evaluatedAt: evaluationTime,
+              timezoneIdentifier: snapshot.budgetTimezone),
             authorizationSnapshot: authorizationSnapshot)
         else { return .suppressed(reason: "planned_match_ambiguous") }
         winner = ambiguous
@@ -287,6 +305,8 @@ actor JITProactivityRuntime {
             observation: observation,
             receipt: receipt,
             budgetTimezone: snapshot.budgetTimezone,
+            budgetContractVersion: resolved.budgetContractVersion,
+            evaluationTime: evaluationTime,
             authorizationSnapshot: authorizationSnapshot)
         }
         return .suppressed(reason: "planned_runtime_rejected")
@@ -330,10 +350,12 @@ actor JITProactivityRuntime {
           snapshotRevision: receipt.snapshotRevision,
           observationFingerprint: continuityFingerprint,
           budget: trigger.metadata.wakeupBudgetPerDay,
-          now: now,
+          now: evaluationTime,
           authority: receipt,
           triggerRow: triggerRow)
       else { return .suppressed(reason: "planned_duplicate_or_budget") }
+      let candidateID = JITProactivityReservation.identifier(
+        "planned", trigger.id, continuityFingerprint, day)
       pending[continuityKey] = JITPlannedExecution(
         lane: .planned,
         triggerID: trigger.id,
@@ -341,10 +363,14 @@ actor JITProactivityRuntime {
         prompt: action.prompt,
         claim: claim,
         plannedAuthority: JITPlannedExecutionAuthority(receipt: receipt, triggerRow: triggerRow),
-        candidateID: JITProactivityReservation.identifier(
-          "planned", trigger.id, continuityFingerprint, day),
+        candidateID: candidateID,
         accountGeneration: snapshot.accountGeneration,
-        policy: snapshot.policy)
+        policy: snapshot.policy,
+        temporalContext: Self.temporalContext(
+          capturedAt: eventTime, evaluatedAt: evaluationTime,
+          timezoneIdentifier: snapshot.budgetTimezone),
+        agentBudget: JITProactivityAgentBudget(
+          contractVersion: resolved.budgetContractVersion, executionID: candidateID))
       return .deliver(lane: .planned, id: trigger.id, continuityKey: continuityKey)
     } catch {
       return .suppressed(reason: "authoritative_snapshot_unavailable")
@@ -382,6 +408,7 @@ actor JITProactivityRuntime {
     _ ambiguous: KnowledgeLedgerTriggerRuntimeEntryResult,
     observation: KnowledgeLedgerTriggerObservation,
     snapshot: JITTriggerSnapshot,
+    temporalContext: JITProactivityTemporalContext,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async -> Bool {
     let opaqueFingerprint = Self.opaqueObservationFingerprint(
@@ -401,7 +428,8 @@ actor JITProactivityRuntime {
       id: "planned:\(ambiguous.triggerID)",
       semanticFingerprint: opaqueFingerprint,
       locallyRelevant: true,
-      boundedEvidence: String(observation.text.prefix(8_000)))
+      boundedEvidence: String(observation.text.prefix(8_000)),
+      temporalContext: temporalContext)
     return await nanoTriage(context, authorizationSnapshot) == .approved
   }
 
@@ -463,24 +491,33 @@ actor JITProactivityRuntime {
     observation: KnowledgeLedgerTriggerObservation,
     receipt: JITTriggerMirrorReceipt,
     budgetTimezone: String?,
+    budgetContractVersion: String?,
+    evaluationTime: Date,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async -> JITProactivityDecision {
     guard let context, context.permitsNanoTriage else {
       return .suppressed(reason: "ambient_local_gate")
     }
+    let eventTime = observation.occurredAt
+    let temporalContext =
+      context.temporalContext
+      ?? Self.temporalContext(
+        capturedAt: eventTime,
+        evaluatedAt: evaluationTime,
+        timezoneIdentifier: budgetTimezone)
     let opaqueContextID = Self.opaqueAmbientContextID(context.id)
     let opaqueSemanticFingerprint = Self.opaqueObservationFingerprint(context.semanticFingerprint)
     let retainedContext = JITAmbientRuntimeContext(
       id: opaqueContextID,
       semanticFingerprint: opaqueSemanticFingerprint,
       locallyRelevant: context.locallyRelevant,
-      boundedEvidence: context.boundedEvidence)
-    let now = observation.occurredAt ?? Date()
-    guard let day = day(for: now, budgetTimezone: budgetTimezone) else {
+      boundedEvidence: context.boundedEvidence,
+      temporalContext: temporalContext)
+    guard let day = day(for: evaluationTime, budgetTimezone: budgetTimezone) else {
       return .suppressed(reason: "budget_authority_unavailable")
     }
     if let deniedAt = ambientServerDenials[day],
-      now.timeIntervalSince(deniedAt) < Self.ambientServerDenialBackoff
+      evaluationTime.timeIntervalSince(deniedAt) < Self.ambientServerDenialBackoff
     {
       return .suppressed(reason: "ambient_server_denied")
     }
@@ -489,7 +526,7 @@ actor JITProactivityRuntime {
     let derived = await derivedIntent(observation, authorizationSnapshot)
     let usage: JITAmbientNanoUsage
     do {
-      usage = try await readAmbientNanoUsage(budgetDay: day, now: now)
+      usage = try await readAmbientNanoUsage(budgetDay: day, now: evaluationTime)
     } catch {
       return .suppressed(reason: "ambient_nano_receipt_unavailable")
     }
@@ -498,7 +535,7 @@ actor JITProactivityRuntime {
         usedToday: usage.used,
         budget: receipt.policy.ambiguousNanoTriagesPerDay,
         lastSpentAt: usage.lastSpentAt,
-        now: now,
+        now: evaluationTime,
         derivedIntentMatched: !derived.isEmpty))
     {
     case .spend:
@@ -519,7 +556,7 @@ actor JITProactivityRuntime {
           budgetDay: day,
           snapshotRevision: receipt.snapshotRevision,
           budget: receipt.policy.ambiguousNanoTriagesPerDay,
-          now: now))
+          now: evaluationTime))
     } catch {
       return .suppressed(reason: "ambient_nano_receipt_unavailable")
     }
@@ -536,7 +573,7 @@ actor JITProactivityRuntime {
         authorizationSnapshot)
     else {
       await mirror.finishWakeup(nanoClaim, delivered: false)
-      ambientServerDenials[day] = now
+      ambientServerDenials[day] = evaluationTime
       return .suppressed(reason: "ambient_nano_budget")
     }
     let triage = await nanoTriage(retainedContext, authorizationSnapshot)
@@ -567,7 +604,7 @@ actor JITProactivityRuntime {
         // One ambient full turn per stable semantic context/day. Planned
         // triggers retain their explicit ledger budget and always arbitrate first.
         budget: receipt.policy.fullAgentTurnsPerCandidate,
-        now: now)
+        now: evaluationTime)
     } catch {
       return .suppressed(reason: "ambient_receipt_unavailable")
     }
@@ -586,7 +623,10 @@ actor JITProactivityRuntime {
       candidateID: candidateID,
       accountGeneration: receipt.accountGeneration,
       policy: receipt.policy,
-      derivedIntent: derived)
+      derivedIntent: derived,
+      temporalContext: temporalContext,
+      agentBudget: JITProactivityAgentBudget(
+        contractVersion: budgetContractVersion, executionID: candidateID))
     return .deliver(lane: .ambient, id: context.id, continuityKey: continuityKey)
   }
 
@@ -683,6 +723,15 @@ actor JITProactivityRuntime {
 
   private static func opaqueAmbientContextID(_ contextID: String) -> String {
     JITProactivityReservation.identifier("ambient-context", contextID)
+  }
+
+  private static func temporalContext(
+    capturedAt: Date?, evaluatedAt: Date?, timezoneIdentifier: String?
+  ) -> JITProactivityTemporalContext {
+    JITProactivityTemporalContext(
+      capturedAt: capturedAt,
+      evaluatedAt: evaluatedAt,
+      timezoneIdentifier: timezoneIdentifier.flatMap { TimeZone(identifier: $0) != nil ? $0 : nil })
   }
 
   private func day(for date: Date, budgetTimezone: String? = nil) -> String? {

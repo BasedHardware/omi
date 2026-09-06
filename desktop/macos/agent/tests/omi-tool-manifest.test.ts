@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildToolAvailabilitySnapshot,
   chatFirstToolManifest,
+  JIT_PROACTIVITY_READ_TOOL_NAMES,
   mcpToolDefinitionsForAdapter,
   normalizeOmiToolName,
   omiToolManifest,
@@ -417,6 +418,20 @@ describe("omi tool manifest", () => {
           expect(names, `${adapterId} should advertise ${toolName} when gated on`).toContain(toolName);
         }
       }
+    });
+
+    it("projects only read-only ledger retrieval for a bounded proactive turn", () => {
+      const tools = mcpToolDefinitionsForAdapter("omi-tools-stdio", {
+        surfaceKind: "service",
+        executionRole: "coordinator",
+        jitKnowledgeToolsEnabled: true,
+        jitProactivity: true,
+      });
+
+      expect(tools.map((tool) => tool.name)).toEqual([...JIT_PROACTIVITY_READ_TOOL_NAMES]);
+      expect(JSON.stringify(tools)).not.toContain("create_standing_trigger");
+      expect(JSON.stringify(tools)).not.toContain("create_memory");
+      expect(tools.every((tool) => READ_TOOLS.includes(tool.name))).toBe(true);
     });
 
     it("declares a swiftTool/chatToolExecutor dispatch for every ledger tool", () => {
