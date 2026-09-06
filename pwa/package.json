@@ -18,7 +18,7 @@
     "format:check": "bun x prettier --check 'src/**/*.{ts,css}' 'tests/**/*.ts' 'public/**/*.{json,js}' 'index.html' 'vite.config.ts'",
     "lint": "bun run typecheck",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "bun test",
+    "test": "bun test && bun ../scripts/test-metro-startup.ts",
     "typecheck": "bun x tsc --noEmit"
   },
   "devDependencies": {
