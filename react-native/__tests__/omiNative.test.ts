@@ -48,7 +48,8 @@ test('android registers a credential-bearing OmiBackend transport', () => {
   expect(backend).toContain('OMI_LOCAL_API_CLIENT_ID');
   expect(backend).toContain('OMI_V5_BACKEND_URL');
   expect(backend).toContain('validatedV5URL');
-  expect(backend).toContain('isCaptureBackendPath');
+  expect(backend).toContain('isV5BackendPath(path)');
+  expect(backend).toContain('OmiBackendTransport.openConnection(url)');
   expect(backend).toContain('x-omi-client-id');
   expect(backend).toContain('Bearer ');
   expect(backend).toContain('.workers.dev');

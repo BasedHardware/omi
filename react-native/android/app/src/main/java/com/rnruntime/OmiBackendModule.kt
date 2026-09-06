@@ -6,7 +6,6 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
-import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
 import java.nio.charset.StandardCharsets
@@ -86,7 +85,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     if (!sameOrigin(url, base.toURL())) {
       throw TransportException("OMI_HTTP_INVALID_REQUEST", "Native HTTP request is unavailable or invalid")
     }
-    val connection = (url.openConnection() as HttpURLConnection).apply {
+    val connection = OmiBackendTransport.openConnection(url).apply {
       requestMethod = method
       connectTimeout = 15_000
       readTimeout = 30_000
@@ -164,13 +163,8 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     return normalized.endsWith(".workers.dev") && normalized.length > ".workers.dev".length
   }
 
-  private fun isCaptureBackendPath(path: String): Boolean {
-    val route = runCatching { URI(path).path }.getOrNull() ?: path
-    return route == "/v1/device-sessions" || route.startsWith("/v1/device-sessions/")
-  }
-
   private fun requestBaseURL(policy: BackendPolicy, path: String): URI? {
-    if (isCaptureBackendPath(path) && policy.captureOriginRequired) {
+    if (OmiBackendTransport.isV5BackendPath(path) && policy.captureOriginRequired) {
       return policy.captureUrl
     }
     return policy.url
