@@ -2114,8 +2114,10 @@ def run_canonical_consolidation(
                 now=current_time,
                 db_client=client,
             )
-            offset += effective_batch_cap
-            continue
+            # Cron stops the page and leaves the registry cursor on this UID.
+            # Continuing here scanned the rest of the 400-user hour after Flex
+            # budget was already exhausted (dest timeout-kill class).
+            raise
         batches_run += 1
         pending_by_id = {item.memory_id: item for item in llm_pending_batch}
 
@@ -2177,8 +2179,7 @@ def run_canonical_consolidation(
                     now=current_time,
                     db_client=client,
                 )
-                offset += effective_batch_cap
-                continue
+                raise
 
         for signal in agent_batch.recurrence_signals:
             recurrence_signals_by_id[signal.stable_loop_key] = signal
