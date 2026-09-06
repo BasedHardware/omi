@@ -361,6 +361,52 @@ final class DictationFormatterTests: XCTestCase {
     XCTAssertEqual(DictationFormatter.format("Nathan is here"), "Nathan is here")
     XCTAssertEqual(DictationFormatter.format("   "), "")
   }
+
+  func testSentenceStartsAndThePronounIAreCapitalized() {
+    // Verbatim from a live dictation the backend recognizer returned in
+    // lowercase while the polisher was unavailable; this is what was pasted.
+    XCTAssertEqual(
+      DictationFormatter.format(
+        "beat came for real. first of all, i'm typing right now and i think this will work. "
+          + "i'm just talking a lot. i think supreme board is pretty cool. there's i got a laptop. "
+          + "loki got a pack. i'm gonna get this bread. let's go."),
+      "Beat came for real. First of all, I'm typing right now and I think this will work. "
+        + "I'm just talking a lot. I think supreme board is pretty cool. There's I got a laptop. "
+        + "Loki got a pack. I'm gonna get this bread. Let's go.")
+    XCTAssertEqual(
+      DictationFormatter.format("yes, i’m here and i’ll go! are you?"), "Yes, I’m here and I’ll go! Are you?")
+    XCTAssertEqual(DictationFormatter.format("so do i. so does he"), "So do I. So does he")
+    XCTAssertEqual(DictationFormatter.format("wait, i"), "Wait, I")
+  }
+
+  func testALetterIInsideAnotherTokenIsNotThePronoun() {
+    XCTAssertEqual(DictationFormatter.format("say hi to him"), "Say hi to him")
+    XCTAssertEqual(DictationFormatter.format("the wi-fi is down"), "The wi-fi is down")
+    XCTAssertEqual(DictationFormatter.format("mail i@example.com now"), "Mail i@example.com now")
+    XCTAssertEqual(DictationFormatter.format("that is i.e. the one"), "That is i.e. the one")
+    XCTAssertEqual(DictationFormatter.format("see (i) and (ii)"), "See (i) and (ii)")
+    XCTAssertEqual(DictationFormatter.format("open /usr/i/notes"), "Open /usr/i/notes")
+  }
+
+  func testAbbreviationsInitialsAndEllipsesDoNotStartASentence() {
+    XCTAssertEqual(DictationFormatter.format("see e.g. the docs. it works"), "See e.g. the docs. It works")
+    XCTAssertEqual(DictationFormatter.format("ask dr. smith at 3.5 pm"), "Ask dr. smith at 3.5 pm")
+    XCTAssertEqual(DictationFormatter.format("meet J. smith. then go"), "Meet J. smith. Then go")
+    XCTAssertEqual(DictationFormatter.format("wait... maybe not"), "Wait... maybe not")
+    XCTAssertEqual(DictationFormatter.format("she said \"no.\" then left"), "She said \"no.\" Then left")
+    XCTAssertEqual(DictationFormatter.format("visit example.com. it loads"), "Visit example.com. It loads")
+  }
+
+  func testThePronounIIsOnlyCapitalizedInEnglish() {
+    // Italian "i" is an article; capitalizing it would rewrite the sentence.
+    XCTAssertEqual(DictationFormatter.format("guarda i ragazzi", language: "it"), "Guarda i ragazzi")
+    XCTAssertEqual(DictationFormatter.format("guarda i ragazzi", language: "multi"), "Guarda i ragazzi")
+    // Auto-detected language, English text: the text itself decides.
+    XCTAssertEqual(
+      DictationFormatter.format("so i think this is the one", language: "multi"), "So I think this is the one")
+    // Sentence starts are capitalized in every cased language.
+    XCTAssertEqual(DictationFormatter.format("er kommt. sie auch", language: "de"), "Er kommt. Sie auch")
+  }
 }
 
 final class DictationPolisherTests: XCTestCase {

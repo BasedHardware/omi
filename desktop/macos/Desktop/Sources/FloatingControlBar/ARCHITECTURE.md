@@ -76,7 +76,10 @@ owns the dictate-or-ask decision and the delivery, and nothing else does.
      from on-screen text; live it turned "So, this is a test" into "Sil, …"
      and "hello there" into "hello then". Names are the polisher's job.
   3. **Format** (`DictationFormatter`, always): spoken fillers out, the
-     punctuation they leave behind repaired, first letter capitalized.
+     punctuation they leave behind repaired, sentence starts and the
+     pronoun "I" capitalized. The backend recognizer can return a whole
+     dictation in lowercase, and this is the only case pass that runs when
+     the polisher below is unavailable (offline, plan-gated, timed out).
      English-only fillers ("er") are stripped only for English.
   4. **Polish** (`DictationPolisher`, online only): the lightweight Gemini
      model through the backend proxy (`GeminiClient`, thinking off, 6 s cap)

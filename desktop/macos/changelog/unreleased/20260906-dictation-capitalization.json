@@ -1,0 +1,3 @@
+{
+  "change": "Voice typing now capitalizes sentence starts and the pronoun \"I\" even when the AI cleanup is unavailable"
+}
