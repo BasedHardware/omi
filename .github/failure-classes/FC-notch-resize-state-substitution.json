@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-notch-resize-state-substitution",
+  "violated_contract": "Every FloatingControlBarWindow resize must compose the closed surface from the state that is actually showing (mounted notification card, PTT status banner, listening/thinking island, open conversation); substituting the size of one transient state for the whole surface crushes the content that outlives it.",
+  "canonical_prevention": "Route every closed-surface resize through the composed sizing authorities (closedSurfaceSize / collapsedChromeSurfaceSize / notificationPreservingSurfaceSize) instead of re-deriving a bare state size at the call site, and behaviorally assert on the live resize paths that a mounted card and active voice state survive every surface transition.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/FloatingBarNotchCardSizingTests.swift",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift"
+  ],
+  "evidence_prs": [12630],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/**"
+  ],
+  "status": "open"
+}

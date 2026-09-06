@@ -1475,7 +1475,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     // so the window center shifts — anchoring from center would land in the wrong spot).
     // Draggable + preChatCenter set: restore to where the bar was before chat opened.
     // Draggable + no preChatCenter: fall back to current center-anchor (best effort).
-    let surfaceSize = notchModeEnabled ? notchCollapsedSize : collapsedBarSize
+    // The close lands on the whole composed closed surface — the notification
+    // card, the status banner, and the listening/thinking island that may
+    // still be running underneath the conversation. Substituting the bare
+    // idle lobe here crushed a card that outlived the chat (agent chat opens
+    // over a mounted card without dismissing it) and scrunched a PTT hold
+    // still active at close time.
+    let surfaceSize = closedSurfaceSize(usesNotchIsland: notchModeEnabled)
     let size = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: surfaceSize)
     let restoreOrigin: NSPoint
     if !ShortcutSettings.shared.draggableBarEnabled || notchModeEnabled {
@@ -1506,6 +1512,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       // Without this guard, a rapid PTT query that fires while close settles gets collapsed
       // back to the pill position by this stale completion block.
       guard !self.state.showingAIConversation else { return }
+      // A card or voice presentation that surfaced during the settle window
+      // now owns the composed surface; snapping to the precomputed close frame
+      // would crush it (the same substitution the close target above stopped
+      // making). The arrival path already resized correctly.
+      let settledSize = self.responseGlowWindowSizeForCurrentScreen(
+        forSurfaceSize: self.closedSurfaceSize(usesNotchIsland: self.notchModeEnabled))
+      guard NSEqualSizes(size, settledSize) else { return }
       if !NSEqualRects(self.frame, targetFrame) {
         self.setFrame(targetFrame, display: true, animate: false)
       }
@@ -2203,15 +2216,23 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// island, grown to keep any mounted notification card whole.
   func pushToTalkSurfaceSize(expanded: Bool) -> NSSize {
     let usesNotchIsland = notchModeEnabled
+    if !expanded {
+      // The release edge lands on the *composed* closed surface: thinking or
+      // response-waiting keeps the wider island, and a mounted card and the
+      // status banner keep their budgets. Collapsing straight to the idle lobe
+      // here made the notch dip to hardware-lobe width between the release and
+      // the lifecycle-driven `syncActiveIsland` resize — two competing
+      // animated resizes in opposite directions.
+      return closedSurfaceSize(usesNotchIsland: usesNotchIsland)
+    }
     let voiceSize: NSSize
     if usesNotchIsland {
-      voiceSize = expanded ? notchSize(active: true) : notchCollapsedSize
+      voiceSize = notchSize(active: true)
     } else {
-      // On legacy displays, when the voice-response glow is still active
-      // (e.g. realtime audio received this turn), collapse to the glow-adjusted
-      // compact size so the white glow/stroke is not clipped until the idle
-      // timer clears it.
-      voiceSize = expanded ? Self.voiceBarSize : Self.minBarSize
+      // Legacy (non-notch) listening island. The collapse arm is handled
+      // above; resizeSurfaceTransition still applies the response-glow outset
+      // on top of whatever size lands.
+      voiceSize = Self.voiceBarSize
     }
     return FloatingControlBarGeometry.notificationPreservingSurfaceSize(
       transientSize: voiceSize,
@@ -2336,9 +2357,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     )
   }
 
-  func dismissNotification(animated: Bool = true) {
+  func dismissNotification(animated: Bool = true, resize: Bool = true) {
     guard state.currentNotification != nil else { return }
     state.currentNotification = nil
+
+    // The conversation surface owns the window frame while it is open: a card
+    // auto-dismissing (or being displaced) underneath an open chat must not
+    // drag that chat down to the closed island. closeAIConversation
+    // re-composes the surface from live state when the conversation actually
+    // closes. Callers that pass `resize: false` unmount a card ahead of a
+    // replacement and owe the window the replacement's single resize.
+    guard resize, !state.showingAIConversation else { return }
 
     let targetSize: NSSize
     if notchModeEnabled {
@@ -2347,12 +2376,27 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       // banner. Collapsing straight to the idle lobe is the same substitution
       // bug in the other direction.
       targetSize = closedSurfaceSize(usesNotchIsland: true)
+    } else if state.isNotchHoverMenuVisible {
+      targetSize = pillAgentListWindowSize(agentCount: AgentPillsManager.shared.pills.count)
     } else if state.isVoiceListening {
       targetSize = Self.voiceBarSize
     } else {
       targetSize = state.isHoveringBar ? Self.expandedBarSize : collapsedBarSize
     }
     resizeAnchored(to: targetSize, makeResizable: false, animated: animated, anchorTop: true)
+  }
+
+  /// Resize to the composed closed surface without touching presentation
+  /// state. Escape hatch for callers that mutate notification or conversation
+  /// state directly (replacement swaps, owner resets) and must land the window
+  /// on the surface the new state implies.
+  func resizeToClosedSurface(animated: Bool = true) {
+    resizeAnchored(
+      to: closedSurfaceSize(usesNotchIsland: notchModeEnabled),
+      makeResizable: false,
+      animated: animated,
+      anchorTop: true
+    )
   }
 
   /// Restore the compact pill size when we temporarily surface the bar outside
@@ -2376,7 +2420,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     return !state.showingAIConversation
       && !suppressHoverResize
       && pendingRestoreFrame == nil
-      && NSEqualSizes(frame.size, settledSize)
+      // A mounted card is a settled close: the conversation surface finished
+      // collapsing into the card that outlived it, and the close no longer
+      // crushes that card to the bare island.
+      && (state.currentNotification != nil || NSEqualSizes(frame.size, settledSize))
   }
 
   private func resizeToResponseHeight(animated: Bool = false) {
@@ -3061,6 +3108,10 @@ class FloatingControlBarManager {
       window?.dismissNotification(animated: false)
     }
     window?.state.clearVisibleConversation()
+    // dismissNotification skips its resize while a conversation is open (the
+    // chat surface owns the frame until it closes). The conversation state is
+    // gone now, so land the window on the surface that is actually showing.
+    window?.resizeToClosedSurface(animated: false)
   }
   var notificationProjectionSnapshot: NotificationProjectionSnapshot {
     NotificationProjectionSnapshot(
@@ -3606,8 +3657,11 @@ class FloatingControlBarManager {
       // while it was visible presents before it returns — still awaiting its
       // Copy/Send/close decision. Its authorization snapshot stays registered
       // for the re-present, and no dismissal is tracked because the user
-      // never acted on it.
-      window.dismissNotification(animated: false)
+      // never acted on it. The unmount skips its resize so the replacement's
+      // presentation is the single transition — dismissing with a resize
+      // snapped the panel to the bare island before the newcomer animated
+      // back out, the visible scrunch pulse.
+      window.dismissNotification(animated: false, resize: false)
       pendingNotifications.insert(
         current,
         at: FloatingBarNotificationQueuePolicy.requeueIndex(queueCount: pendingNotifications.count))
@@ -3618,6 +3672,9 @@ class FloatingControlBarManager {
         )
       }
       guard presentNotification(notification, in: window) else {
+        // The replacement was rejected after its predecessor left the queue;
+        // land the window on the surface that is actually showing now.
+        window.resizeToClosedSurface(animated: false)
         return .rejectedOwnerChange
       }
       return .presented
@@ -4590,7 +4647,11 @@ class FloatingControlBarManager {
       )
       notificationPresentationCallbacks.removeValue(forKey: existing.id)?.onDropped()
       notificationAuthorizationSnapshots.removeValue(forKey: existing.id)
-      window.dismissNotification(animated: false)
+      // Skip the dismissal resize: the showNotification below mounts the
+      // replacement and performs the single composed resize. Snapping to the
+      // bare island in between made every card replacement pulse the notch
+      // down to lobe width and animate back out.
+      window.dismissNotification(animated: false, resize: false)
     }
 
     // A live voice session has no eyes. Hand it the card as silent context so a spoken

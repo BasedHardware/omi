@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the remaining scrunched-notch states: closing a conversation over a notification card, a card auto-dismissing under an open chat, card replacements, and the moment a voice hold releases no longer collapse the notch to its resting width while wider content is still showing."
+}
