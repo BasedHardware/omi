@@ -15,6 +15,8 @@ so a delayed write rolls back rather than committing after its authority expires
 | `POST /v1/device-sessions/:id/audio` with `chunkIndex` and `bytesBase64` | 200 `{session}` after the exact indexed bytes and counters commit together |
 | `POST /v1/device-sessions/:id/complete` | 200 `{session}` after upload completion commits; exact replay retains the original completion timestamp |
 | `GET /v1/device-sessions/:id` | 200 `{session}`, or 404 for an unknown session in the authenticated account |
+| Bodyless `POST /v1/device-sessions/:id/transcribe` | 202 `{transcription}` while queued/running; 200 for completed/failed; requires a fresh authenticated request and sealed upload |
+| `GET /v1/device-sessions/:id/transcript` | 200 `{transcription}` showing durable processing status without starting paid work |
 
 Changed immutable creation fields, different bytes at an existing index, skipped
 indices, and new bytes after completion return 409. Matching chunk replay remains
@@ -22,7 +24,8 @@ valid after completion. Limits match the existing client/Worker protocol: 1 MiB
 per chunk, 8 MiB per recording, and 65,536 contiguous zero-based chunks. Invalid
 JSON, noncanonical base64, substituted transcript fields, and invalid UUIDs fail
 before mutation. Errors retain the client `{error:{code}}` envelope. Timestamps
-are Unix seconds.
+are Unix seconds on the session; transcript `updatedAt` retains the existing
+client's Unix milliseconds wire.
 
 Migration 0048 attaches immutable device metadata and bytea chunks to canonical
 `listen_capture_sessions`. Application credentials receive fixed operations,
@@ -34,12 +37,52 @@ account-deletion surface and its dependency-ordered cleanup.
 
 `session.state = complete` means all accepted upload bytes are durably sealed.
 It does not mean transcription, conversation processing, or memory formation has
-completed. The canonical Listen session remains available for genuine transcript
-segments and its existing finalizer; this adapter never writes transcript text or
-fabricates a formation result. A deployed transcription consumer and its existing
-capture authority must be composed before claiming end-to-end speech processing.
-The Worker already has a real Whisper inference port and a pure BLE WAV/Ogg
-assembler; those are separate from its Cloudflare-specific storage/claim loop.
+completed. The portable transcription path uses the shared BLE WAV/Ogg assembler
+and an explicitly configured Deepgram prerecorded source. The Worker accepts the
+same explicit request using its existing Whisper queue and lease. Missing provider
+configuration returns 503. Neither path treats a completed upload as recognized
+speech.
+
+Migration 0049 stores the portable transcription claim and validated provider
+result under the same account/session ownership and deletion surface. A 180-second
+lease permits one provider attempt, bounded to 120 seconds. Retryable provider
+failures wait 30 seconds; at most five attempts are accepted. A stale lease cannot
+replace another attempt's result. Successful provider text is persisted before
+canonical publication; interruption after persistence resumes from that exact
+result without invoking the provider again. Publication uses batches of up to 128
+canonical segments and the existing atomic finalizer/outbox. Segment IDs and
+timestamps remain stable on replay. Speech is not attributed to the account owner
+without speaker evidence (`is_user` remains false). This seals a genuine formation
+input; it does not claim downstream memory processing has run.
+
+Validation enforces the existing canonical limit of 1,000,000 UTF-8 text bytes as
+well as the code-unit and segment limits before saving any provider result. NUL
+and unpaired UTF-16 surrogates are rejected because PostgreSQL cannot persist
+them. Text is never silently truncated to fit.
+
+The request reauthorizes before each storage/publication boundary, and each
+transaction checks the database clock before committing. No Firebase bearer is
+stored for a background worker. Expired tokens, revoked grants, account changes,
+and cancellation stop processing. Once a complete valid paid response has arrived,
+its durable save has a separate ten-second deadline and still requires fresh
+same-account Firebase authorization and current database authority. A client
+disconnect therefore does not discard an already received response when that
+bounded save succeeds. Original cancellation stops canonical publication; a later
+authenticated request may resume it. If authorization expires after the provider
+has charged but before its result can be stored, another provider call may be
+necessary; exact paid-call deduplication is not guaranteed across that boundary.
+There is no autonomous post-signout transcription worker in this composition.
+The app explicitly starts processing after upload and may resume with a fresh
+credential. Successful no-speech returns `completed`, empty text/segments, and no
+error, without inventing a canonical transcript or formation.
+
+The provider uses the service-owned `OMI_TRANSCRIPTION_API_KEY`, explicit
+`OMI_TRANSCRIPTION_MODEL`, and Deepgram's `mip_opt_out=true`. Raw WAV/Ogg is sent
+only to the fixed HTTPS prerecorded endpoint; errors expose sanitized codes.
+[Deepgram prerecorded API](https://developers.deepgram.com/reference/speech-to-text/listen-pre-recorded)
+defines the timed utterance response. The model adapter and container tests do not
+by themselves prove live provider credentials, physical-device audio, or deployed
+end-to-end transcription.
 
 The listener must accept the encoded 1-MiB audio request (up to 1,398,256 bytes);
 the route independently bounds its streamed JSON body and propagates cancellation

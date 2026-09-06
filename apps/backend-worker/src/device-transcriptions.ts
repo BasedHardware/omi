@@ -1,5 +1,8 @@
 import { Buffer } from "node:buffer";
-import { buildDeviceAudio, DeviceAudioError } from "./device-audio";
+import {
+  buildDeviceAudio,
+  DeviceAudioError,
+} from "../../../backends/example-platform/drivers/model/device-audio";
 
 export const TRANSCRIPTION_MODEL = "@cf/openai/whisper-large-v3-turbo";
 export type TranscriptionAI = {
@@ -29,14 +32,17 @@ export async function processDeviceTranscriptions(
   db: D1Database,
   r2: R2Bucket,
   ai: TranscriptionAI,
-  now = Date.now()
+  now = Date.now(),
+  target?: { accountId: string; sessionId: string }
 ): Promise<void> {
   // ponytail: one claim per minute; use a queue above 60 recordings per hour.
   const due = await db
     .prepare(
-      "SELECT session_id, account_id, attempts FROM device_transcriptions WHERE state IN ('queued', 'running') AND available_at <= ? ORDER BY available_at, session_id LIMIT 1"
+      "SELECT session_id, account_id, attempts FROM device_transcriptions WHERE state IN ('queued', 'running') AND available_at <= ?" +
+        (target ? " AND account_id = ? AND session_id = ?" : "") +
+        " ORDER BY available_at, session_id LIMIT 1"
     )
-    .bind(now)
+    .bind(...(target ? [now, target.accountId, target.sessionId] : [now]))
     .all<Job>();
   for (const candidate of due.results) {
     const token = crypto.randomUUID();

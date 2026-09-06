@@ -69,6 +69,7 @@ export function useRecordingTranscript(
   });
   const [reload, setReload] = useState(0);
   const epoch = useRef(0);
+  const resume = useRef<string | null>(null);
   useEffect(
     () =>
       subscribeOmiBackendSessionInvalidated(() => {
@@ -83,6 +84,8 @@ export function useRecordingTranscript(
   );
   useEffect(() => {
     const current = ++epoch.current;
+    const resuming = sessionId !== null && resume.current === sessionId;
+    resume.current = null;
     let active = true;
     if (sessionId === null) {
       setResult({status: 'idle', sessionId: null});
@@ -98,13 +101,13 @@ export function useRecordingTranscript(
         }
         const response = await omiBackend.request({
           id: `recording-transcript:${sessionId}:${current}`,
-          method: 'GET',
-          path: `/v1/device-sessions/${encodeURIComponent(
-            sessionId,
-          )}/transcript`,
+          method: resuming ? 'POST' : 'GET',
+          path: `/v1/device-sessions/${encodeURIComponent(sessionId)}/${
+            resuming ? 'transcribe' : 'transcript'
+          }`,
         });
         const value =
-          response.status === 200
+          response.status === 200 || (resuming && response.status === 202)
             ? parseRecordingTranscript(response.body, sessionId)
             : null;
         if (!active || epoch.current !== current) {
@@ -131,6 +134,9 @@ export function useRecordingTranscript(
       result.sessionId === sessionId
         ? result
         : ({status: 'idle', sessionId: null} as const),
-    reload: () => setReload(value => value + 1),
+    reload: () => {
+      resume.current = sessionId;
+      setReload(value => value + 1);
+    },
   };
 }

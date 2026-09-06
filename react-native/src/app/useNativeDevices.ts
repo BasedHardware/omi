@@ -4,6 +4,7 @@ import {
   completeDeviceSession,
   isTransientDeviceSessionError,
   openDeviceSession,
+  transcribeDeviceSession,
 } from '../deviceSessionClient';
 import {
   browserScanErrorMessage,
@@ -61,6 +62,7 @@ export const DEVICE_UPLOAD_LIMITS = {
 } as const;
 
 type CaptureSession = {
+  transcriptionRevision: number;
   captureId: string | null;
   id: string | null;
   deviceId: string;
@@ -90,6 +92,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
   const capturesRef = useRef(new Set<CaptureSession>());
   const retryWaitsRef = useRef(new Set<() => void>());
   const epochRef = useRef(0);
+  const transcriptionRevisionRef = useRef(0);
   const enabledRef = useRef(enabled);
 
   enabledRef.current = enabled;
@@ -218,7 +221,42 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
                 'Audio was uploaded, but the recording could not be finalized. Its saved status is unconfirmed.',
               );
             }
+            return;
           }
+          if (!current()) return;
+          const revision = capture.transcriptionRevision;
+          const canReport = () =>
+            current() && revision === transcriptionRevisionRef.current;
+          if (canReport())
+            setDeviceScanMessage(
+              'Recording saved. Transcription is in progress.',
+            );
+          void (async () => {
+            try {
+              const transcript = await transcribeDeviceSession(
+                backend,
+                capture.id!,
+              );
+              if (!canReport()) return;
+              if (transcript.state === 'failed') {
+                setDeviceScanMessage(
+                  'Recording saved, but transcription failed. Open its transcript to retry.',
+                );
+              } else if (transcript.state !== 'completed') {
+                setDeviceScanMessage(
+                  'Recording saved. Transcription is pending; open its transcript to check or resume.',
+                );
+              } else {
+                setDeviceScanMessage(null);
+              }
+            } catch {
+              if (canReport()) {
+                setDeviceScanMessage(
+                  'Recording saved, but transcription could not finish. Open its transcript to retry.',
+                );
+              }
+            }
+          })();
         }
       })();
       capture.work = work;
@@ -262,7 +300,9 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       }
       let capture = captureRef.current;
       if (capture === null) {
+        transcriptionRevisionRef.current++;
         capture = {
+          transcriptionRevision: transcriptionRevisionRef.current,
           captureId: null,
           id: null,
           deviceId: event.deviceId,

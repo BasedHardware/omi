@@ -36,6 +36,7 @@ export function prepareCandidate(
     "accountTimezone",
     "gatewayUrl",
     "renderLane",
+    "transcriptionModel",
     "secretVersions",
     "residentRevisions",
   ];
@@ -67,11 +68,13 @@ export function prepareCandidate(
     /^omi:auto:[a-z0-9][a-z0-9-]{0,95}$/
   );
   const secretVersions = object(input.secretVersions);
+  const transcriptionModel = text(input.transcriptionModel, /^[a-z0-9][a-z0-9.-]{0,63}$/);
   const secretNames = {
     OMI_DATABASE_URL: "omi-platform-dev-database-url",
     OMI_CODEC_KEY_HEX: "omi-platform-dev-codec-key",
     OMI_CURSOR_KEY_HEX: "omi-platform-dev-cursor-key",
     OMI_LLM_GATEWAY_SERVICE_TOKEN: "jit-qa-gateway-token",
+    OMI_TRANSCRIPTION_API_KEY: "DEEPGRAM_API_KEY",
   };
   if (Object.keys(secretVersions).length !== Object.keys(secretNames).length)
     fail();
@@ -94,6 +97,7 @@ export function prepareCandidate(
         accountTimezone,
         gatewayUrl: gatewayUrl.href,
         renderLane,
+        transcriptionModel,
         secrets,
       })
     )
@@ -182,6 +186,7 @@ export function prepareCandidate(
     OMI_ACCOUNT_TIMEZONE: accountTimezone,
     OMI_LLM_GATEWAY_URL: gatewayUrl.href,
     OMI_MEMORY_RENDER_LANE: renderLane,
+    OMI_TRANSCRIPTION_MODEL: transcriptionModel,
     OMI_DATABASE_SOCKET_DIRECTORY: `/cloudsql/${sqlConnection}`,
   };
   return {
@@ -229,7 +234,7 @@ export function prepareCandidate(
             serviceAccountName:
               "omi-platform-dev-runtime@based-hardware-dev.iam.gserviceaccount.com",
             containerConcurrency: 2,
-            timeoutSeconds: 120,
+            timeoutSeconds: 150,
             containers: [
               {
                 image,

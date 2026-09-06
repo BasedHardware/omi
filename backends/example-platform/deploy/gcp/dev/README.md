@@ -84,7 +84,8 @@ Supply an operator-reviewed JSON file with these required fields:
 | `accountTimezone` | Explicit validated IANA timezone |
 | `gatewayUrl` | Approved HTTPS gateway URL without credentials, query parameters or fragments |
 | `renderLane` | Registered `omi:auto:` semantic lane |
-| `secretVersions` | Numeric immutable version strings for exactly `OMI_DATABASE_URL`, `OMI_CODEC_KEY_HEX`, `OMI_CURSOR_KEY_HEX`, `OMI_LLM_GATEWAY_SERVICE_TOKEN`; no payloads or `latest` aliases |
+| `transcriptionModel` | Explicit Deepgram model, such as `nova-3` |
+| `secretVersions` | Numeric immutable version strings for exactly `OMI_DATABASE_URL`, `OMI_CODEC_KEY_HEX`, `OMI_CURSOR_KEY_HEX`, `OMI_LLM_GATEWAY_SERVICE_TOKEN`, `OMI_TRANSCRIPTION_API_KEY`; no payloads or `latest` aliases |
 | `residentRevisions` | Every revision that can concurrently hold connections, including rollback and zero-traffic revisions, each with actual `name`, `maxInstances`, and `poolMax`; empty only for initial mode |
 
 Revision capacity declarations must come from the current release inventory and observed revision configuration. The script checks their shape, ceiling, coverage of observed traffic, and aggregate budget; it cannot establish that an operator omitted no dormant revision. Reconcile all resident revisions before preparing the input.
