@@ -67,6 +67,39 @@ beforeEach(async () => {
 });
 
 describe("AccountBackend D1-backed coordination", () => {
+  test("concurrent retries admit one message and replay the same generation", async () => {
+    const responses = await Promise.all(
+      [1, 2].map(() =>
+        fetchWorker("/v1/chat-messages", {
+          method: "POST",
+          headers: authenticatedHeaders,
+          body: JSON.stringify(create("concurrent-retry")),
+        })
+      )
+    );
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      200, 201,
+    ]);
+    const bodies = (await Promise.all(
+      responses.map((response) => response.json())
+    )) as Array<{ generation: { id: string } }>;
+    expect(bodies[0]?.generation.id).toBe(bodies[1]?.generation.id);
+  });
+
+  test("concurrent admissions cannot exceed the account chat limit", async () => {
+    const stub = env.ACCOUNTS.getByName("test-account");
+    const results = await Promise.all([
+      stub.admit("test-account", create("limit-first"), 1),
+      stub.admit("test-account", create("limit-second"), 1),
+    ]);
+    expect(results.filter((result) => typeof result !== "string")).toHaveLength(
+      1
+    );
+    expect(results.filter((result) => result === "entitlement")).toHaveLength(
+      1
+    );
+  });
+
   test("Workers AI receives the previous turn before the current user message", async () => {
     const first = await fetchWorker("/v1/chat-messages", {
       method: "POST",
