@@ -713,10 +713,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// Unhandled keys stop here. This panel has no window controller, so `super.keyDown` has no next
   /// responder to pass to and answers with `noResponderFor(_:)` — the alert sound — every time the
   /// user types while the input field is not first responder (hover menu open, response showing).
-  /// Escape is the one key the window itself acts on; everything else is deliberately absorbed.
+  /// Escape and Tab are the keys the window itself acts on (Tab so Full Keyboard Access can still
+  /// step into the panel's controls, which `NSWindow.keyDown` used to do); everything else is
+  /// deliberately absorbed.
   override func keyDown(with event: NSEvent) {
-    if event.keyCode == 53 {  // Escape
+    switch event.keyCode {
+    case 53:  // Escape
       handleEscapeKey()
+    case 48:  // Tab
+      if event.modifierFlags.contains(.shift) { selectPreviousKeyView(nil) } else { selectNextKeyView(nil) }
+    default:
+      break
     }
   }
 

@@ -70,5 +70,9 @@ final class UnhandledKeystrokeSilenceTests: XCTestCase {
     window.keyDown(with: try plainKey("\u{1B}", keyCode: 53))
     XCTAssertEqual(window.state.aiInputText, "", "Escape is still the panel's own key")
     XCTAssertEqual(probe.forwardedKeys, 0)
+
+    // Tab is answered by the window itself (key-view navigation) rather than forwarded.
+    window.keyDown(with: try plainKey("\t", keyCode: 48))
+    XCTAssertEqual(probe.forwardedKeys, 0)
   }
 }

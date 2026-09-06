@@ -279,6 +279,9 @@ struct QueryShellHome: View {
       references: chatProvider.pendingComposerReferences,
       onReferenceRemoved: { chatProvider.removeComposerReference(id: $0) }
     )
+    // Chat is the one page with two fields on it. Typing here means talking to Omi, so the composer
+    // outranks the search bar above it; when the composer is unmounted (`.results`) the bar takes over.
+    .straysTypingHere(priority: .primary) { claimCaret() }
     // The footer unit (quota banner + composer) is measured where it is
     // composed, so the bar itself carries no height reporting of its own.
   }

@@ -492,6 +492,7 @@ struct SettingsSidebar: View {
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.primary)
         .focused($isSearchFocused)
+        .straysTypingHere($isSearchFocused)
 
       if !searchQuery.isEmpty {
         Button {
