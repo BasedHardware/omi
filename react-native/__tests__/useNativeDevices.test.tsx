@@ -677,3 +677,136 @@ test.each([false, true])(
     }
   },
 );
+
+test.each(['open', 'audio', 'complete'] as const)(
+  'user reconnect after natural disconnect isolates a pending %s',
+  async stage => {
+    const firstId = '11111111-2222-3333-4444-555555555555';
+    const secondId = '22222222-2222-3333-4444-555555555555';
+    let opens = 0;
+    let release: () => void = () => undefined;
+    let blocked = false;
+    mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+    mockBackend.request.mockImplementation(async request => {
+      const opening = request.path === '/v1/device-sessions';
+      const id = opening
+        ? ++opens === 1
+          ? firstId
+          : secondId
+        : request.path.split('/')[3];
+      const action = opening ? 'open' : request.path.split('/')[4];
+      if (id === firstId && action === stage && !blocked) {
+        blocked = true;
+        await new Promise<void>(resolve => {
+          release = resolve;
+        });
+      }
+      return sessionResponse(opening ? 201 : 200, {
+        id,
+        state: action === 'complete' ? 'complete' : 'open',
+        endedAt: action === 'complete' ? 2 : null,
+      });
+    });
+    const hook = await renderHook();
+    const audio = {
+      type: 'audio' as const,
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'AQID',
+    };
+    await ReactTestRenderer.act(async () => {
+      emitNative(audio);
+    });
+    await ReactTestRenderer.act(async () => {
+      emitNative({type: 'snapshot', snapshot: snapshot()});
+    });
+    expect(blocked).toBe(true);
+    await ReactTestRenderer.act(async () => {
+      await hook.latest().toggleDevice('omi-1', false);
+      emitNative({...audio, payloadBase64: 'BAUG'});
+    });
+    expect(opens).toBe(2);
+    await ReactTestRenderer.act(async () => {
+      release();
+    });
+    const appends = mockBackend.request.mock.calls.filter(([request]) =>
+      request.path.endsWith('/audio'),
+    );
+    expect(
+      appends.map(([request]) => [
+        request.path.split('/')[3],
+        JSON.parse(request.body!).bytesBase64,
+      ]),
+    ).toEqual(
+      stage === 'open'
+        ? [
+            [secondId, 'BAUG'],
+            [firstId, 'AQID'],
+          ]
+        : [
+            [firstId, 'AQID'],
+            [secondId, 'BAUG'],
+          ],
+    );
+    expect(
+      mockBackend.request.mock.calls
+        .filter(([request]) => request.path.endsWith('/complete'))
+        .map(([request]) => request.path),
+    ).toEqual([`/v1/device-sessions/${firstId}/complete`]);
+    await ReactTestRenderer.act(async () => {
+      emitNative({type: 'snapshot', snapshot: snapshot()});
+    });
+    expect(
+      mockBackend.request.mock.calls.filter(([request]) =>
+        request.path.endsWith('/complete'),
+      ),
+    ).toHaveLength(2);
+    expect(hook.latest().deviceScanMessage).toBeNull();
+    await hook.unmount();
+  },
+);
+
+test.each([false, true])(
+  'completion failure is visible unless auth retired: %s',
+  async retired => {
+    let rejectComplete: () => void = () => undefined;
+    mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+    mockBackend.request.mockImplementation(async request => {
+      if (request.path.endsWith('/complete')) {
+        await new Promise<void>((_resolve, reject) => {
+          rejectComplete = () => reject(new Error('Completion unavailable'));
+        });
+      }
+      return sessionResponse(
+        request.path === '/v1/device-sessions' ? 201 : 200,
+      );
+    });
+    const hook = await renderHook();
+    await ReactTestRenderer.act(async () => {
+      emitNative({
+        type: 'audio',
+        deviceId: 'omi-1',
+        codec: 21,
+        payloadBase64: 'AQID',
+      });
+    });
+    await ReactTestRenderer.act(async () => {
+      emitNative({type: 'snapshot', snapshot: snapshot()});
+    });
+    if (retired) await hook.setEnabled(false);
+    await ReactTestRenderer.act(async () => {
+      rejectComplete();
+    });
+    if (retired) expect(hook.latest().deviceScanMessage).toBeNull();
+    else
+      expect(hook.latest().deviceScanMessage).toContain(
+        'saved status is unconfirmed',
+      );
+    expect(
+      mockBackend.request.mock.calls.filter(([request]) =>
+        request.path.endsWith('/complete'),
+      ),
+    ).toHaveLength(1);
+    await hook.unmount();
+  },
+);

@@ -52,6 +52,17 @@ function mergeBattery(
   };
 }
 
+type CaptureSession = {
+  id: string | null;
+  deviceId: string;
+  codec: number;
+  pending: Uint8Array[];
+  work: Promise<void> | null;
+  stopped: boolean;
+  failed: boolean;
+  completed: boolean;
+};
+
 export function useNativeDevices(options?: {enabled?: boolean}) {
   const enabled = options?.enabled ?? true;
   const [nativeSnapshot, setNativeSnapshot] =
@@ -61,185 +72,142 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
     null,
   );
   const nativeSnapshotRef = useRef<PlatformNativeSnapshot | null>(null);
-  const sessionRef = useRef<string | null>(null);
-  const openingRef = useRef(false);
-  const flushPromiseRef = useRef<Promise<void> | null>(null);
+  const captureRef = useRef<CaptureSession | null>(null);
   const cancelledRef = useRef(false);
-  const pendingAudioRef = useRef<Uint8Array[]>([]);
-  const uploadFailedRef = useRef(false);
   const epochRef = useRef(0);
   const enabledRef = useRef(enabled);
 
   enabledRef.current = enabled;
-
   nativeSnapshotRef.current = nativeSnapshot;
 
-  const flushPendingAudio = useCallback(
-    async (sessionId: string, epoch: number) => {
-      if (!enabledRef.current || epoch !== epochRef.current) {
-        return;
+  const processCapture = useCallback(
+    (capture: CaptureSession, epoch: number): Promise<void> => {
+      if (capture.work !== null) return capture.work;
+      if (
+        capture.failed ||
+        capture.completed ||
+        !enabledRef.current ||
+        epoch !== epochRef.current ||
+        omiBackend == null
+      ) {
+        return Promise.resolve();
       }
-      if (uploadFailedRef.current) {
-        throw new Error('Device audio upload failed');
-      }
-      if (omiBackend === undefined || omiBackend === null) {
-        return;
-      }
-      if (flushPromiseRef.current !== null) {
-        await flushPromiseRef.current;
-        if (
-          enabledRef.current &&
-          epoch === epochRef.current &&
-          pendingAudioRef.current.length > 0 &&
-          sessionRef.current === sessionId
-        ) {
-          await flushPendingAudio(sessionId, epoch);
-        }
-        return;
-      }
+      const backend = omiBackend;
+      const current = () => enabledRef.current && epoch === epochRef.current;
       const work = (async () => {
-        while (
-          enabledRef.current &&
-          epoch === epochRef.current &&
-          pendingAudioRef.current.length > 0 &&
-          sessionRef.current === sessionId
-        ) {
-          const chunk = pendingAudioRef.current.shift();
-          if (chunk === undefined) {
-            break;
+        try {
+          if (capture.id === null) {
+            const device = nativeSnapshotRef.current?.devices.find(
+              item => item.id === capture.deviceId,
+            );
+            const session = await openDeviceSession(backend, {
+              deviceId: capture.deviceId,
+              deviceName: device?.name,
+              codec: capture.codec,
+            });
+            if (!current()) return;
+            capture.id = session.id;
           }
-          await appendDeviceSessionAudio(omiBackend, sessionId, chunk);
-        }
-      })();
-      flushPromiseRef.current = work;
-      try {
-        await work;
-      } catch (error) {
-        if (!enabledRef.current || epoch !== epochRef.current) {
+          while (current() && capture.pending.length > 0) {
+            const chunk = capture.pending.shift()!;
+            await appendDeviceSessionAudio(backend, capture.id, chunk);
+          }
+        } catch {
+          if (!current()) return;
+          capture.failed = true;
+          capture.pending = [];
+          setDeviceScanMessage(
+            capture.id === null
+              ? 'Audio upload could not start. Reconnect your Omi to start a new recording.'
+              : 'Audio upload was interrupted. This recording could not be saved completely. Reconnect your Omi to start a new recording.',
+          );
           return;
         }
-        uploadFailedRef.current = true;
-        pendingAudioRef.current = [];
-        setDeviceScanMessage(
-          'Audio upload was interrupted. This recording could not be saved completely. Reconnect your Omi to start a new recording.',
-        );
-        throw error;
-      } finally {
-        if (flushPromiseRef.current === work) {
-          flushPromiseRef.current = null;
+        if (current() && capture.stopped) {
+          capture.completed = true;
+          try {
+            await completeDeviceSession(backend, capture.id!);
+          } catch {
+            if (current()) {
+              setDeviceScanMessage(
+                'Audio was uploaded, but the recording could not be finalized. Its saved status is unconfirmed.',
+              );
+            }
+          }
         }
-      }
-      if (
-        enabledRef.current &&
-        epoch === epochRef.current &&
-        pendingAudioRef.current.length > 0 &&
-        sessionRef.current === sessionId
-      ) {
-        await flushPendingAudio(sessionId, epoch);
-      }
+      })();
+      capture.work = work;
+      void work.finally(() => {
+        capture.work = null;
+        if (
+          current() &&
+          !capture.failed &&
+          !capture.completed &&
+          (capture.pending.length > 0 || capture.stopped)
+        ) {
+          void processCapture(capture, epoch);
+        }
+      });
+      return work;
     },
     [],
   );
 
   const finishSession = useCallback(async () => {
-    const epoch = epochRef.current;
-    if (!enabledRef.current) {
-      return;
-    }
-    if (omiBackend === undefined || omiBackend === null) {
-      cancelledRef.current = true;
-      sessionRef.current = null;
-      pendingAudioRef.current = [];
-      return;
-    }
-    const sessionId = sessionRef.current;
-    if (sessionId === null) {
-      cancelledRef.current = true;
-      return;
-    }
-    try {
-      await flushPendingAudio(sessionId, epoch);
-    } catch {
-      return;
-    }
-    if (
-      !enabledRef.current ||
-      epoch !== epochRef.current ||
-      sessionRef.current !== sessionId
-    ) {
-      return;
-    }
-    sessionRef.current = null;
-    pendingAudioRef.current = [];
     cancelledRef.current = true;
-    try {
-      await completeDeviceSession(omiBackend, sessionId);
-    } catch {
-      return;
-    }
-  }, [flushPendingAudio]);
+    const capture = captureRef.current;
+    captureRef.current = null;
+    if (capture === null) return;
+    capture.stopped = true;
+    const work = processCapture(capture, epochRef.current);
+    if (capture.id !== null) await work;
+  }, [processCapture]);
 
   const persistAudio = useCallback(
     async (event: Extract<OmiNativeEvent, {type: 'audio'}>) => {
-      const epoch = epochRef.current;
+      if (!enabledRef.current || omiBackend == null || cancelledRef.current)
+        return;
+      let capture = captureRef.current;
+      if (capture === null) {
+        capture = {
+          id: null,
+          deviceId: event.deviceId,
+          codec: event.codec,
+          pending: [],
+          work: null,
+          stopped: false,
+          failed: false,
+          completed: false,
+        };
+        captureRef.current = capture;
+      }
       if (
-        !enabledRef.current ||
-        omiBackend === undefined ||
-        omiBackend === null ||
-        uploadFailedRef.current
-      ) {
+        capture.failed ||
+        capture.deviceId !== event.deviceId ||
+        capture.codec !== event.codec
+      )
         return;
-      }
-      if (
-        cancelledRef.current &&
-        sessionRef.current === null &&
-        !openingRef.current
-      ) {
-        return;
-      }
-      pendingAudioRef.current.push(bytesFromBase64(event.payloadBase64));
-      if (sessionRef.current === null && !openingRef.current) {
-        cancelledRef.current = false;
-        openingRef.current = true;
-        try {
-          const snapshot = nativeSnapshotRef.current;
-          const device = snapshot?.devices.find(
-            item => item.id === event.deviceId,
-          );
-          const session = await openDeviceSession(omiBackend, {
-            deviceId: event.deviceId,
-            deviceName: device?.name,
-            codec: event.codec,
-          });
-          if (!enabledRef.current || epoch !== epochRef.current) {
-            return;
-          }
-          sessionRef.current = session.id;
-        } catch {
-          if (!enabledRef.current || epoch !== epochRef.current) {
-            return;
-          }
-          pendingAudioRef.current = [];
-          openingRef.current = false;
-          uploadFailedRef.current = true;
-          setDeviceScanMessage(
-            'Audio upload could not start. Reconnect your Omi to start a new recording.',
-          );
-          return;
-        }
-        openingRef.current = false;
-        if (cancelledRef.current) {
-          await finishSession();
-          return;
-        }
-      }
-      const sessionId = sessionRef.current;
-      if (sessionId === null) {
-        return;
-      }
-      await flushPendingAudio(sessionId, epoch);
+      capture.pending.push(bytesFromBase64(event.payloadBase64));
+      await processCapture(capture, epochRef.current);
     },
-    [finishSession, flushPendingAudio],
+    [processCapture],
+  );
+
+  const applySnapshot = useCallback(
+    (snapshot: PlatformNativeSnapshot) => {
+      const previous = nativeSnapshotRef.current;
+      nativeSnapshotRef.current = snapshot;
+      if (snapshot.capture !== 'recording' && captureRef.current !== null) {
+        void finishSession();
+      } else if (
+        snapshot.capture === 'recording' &&
+        previous?.capture !== 'recording'
+      ) {
+        cancelledRef.current = false;
+      }
+      setNativeSnapshot(snapshot);
+    },
+    [finishSession],
   );
 
   useEffect(() => {
@@ -251,12 +219,8 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
     const retireSession = () => {
       active = false;
       epochRef.current += 1;
-      sessionRef.current = null;
-      openingRef.current = false;
-      flushPromiseRef.current = null;
+      captureRef.current = null;
       cancelledRef.current = true;
-      pendingAudioRef.current = [];
-      uploadFailedRef.current = false;
       nativeSnapshotRef.current = null;
     };
     if (!enabled || omiNative === undefined || omiNative === null) {
@@ -266,7 +230,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       .getSnapshot()
       .then(snapshot => {
         if (active) {
-          setNativeSnapshot(snapshot);
+          applySnapshot(snapshot);
         }
       })
       .catch(() => undefined);
@@ -275,7 +239,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
         return;
       }
       if (event.type === 'snapshot') {
-        setNativeSnapshot(event.snapshot);
+        applySnapshot(event.snapshot);
         return;
       }
       if (event.type === 'discovery') {
@@ -309,17 +273,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       retireSession();
       unsubscribe();
     };
-  }, [enabled, persistAudio]);
-
-  useEffect(() => {
-    if (
-      nativeSnapshot !== null &&
-      nativeSnapshot.capture !== 'recording' &&
-      sessionRef.current !== null
-    ) {
-      finishSession().catch(() => undefined);
-    }
-  }, [finishSession, nativeSnapshot]);
+  }, [applySnapshot, enabled, persistAudio]);
 
   const scanForOmi = useCallback(async () => {
     const epoch = epochRef.current;
@@ -347,7 +301,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       if (!enabledRef.current || epoch !== epochRef.current) {
         return;
       }
-      setNativeSnapshot({...snapshot, devices});
+      applySnapshot({...snapshot, devices});
     } catch (error) {
       if (!enabledRef.current || epoch !== epochRef.current) {
         return;
@@ -365,7 +319,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
         setDeviceBusy(false);
       }
     }
-  }, []);
+  }, [applySnapshot]);
 
   const toggleDevice = useCallback(
     async (id: string, connected: boolean) => {
@@ -390,11 +344,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
           if (!enabledRef.current || epoch !== epochRef.current) {
             return;
           }
-          if (uploadFailedRef.current) {
-            uploadFailedRef.current = false;
-            sessionRef.current = null;
-            pendingAudioRef.current = [];
-          }
+          if (captureRef.current?.failed) captureRef.current = null;
           cancelledRef.current = false;
         }
         if (!enabledRef.current || epoch !== epochRef.current) {
@@ -404,7 +354,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
         if (!enabledRef.current || epoch !== epochRef.current) {
           return;
         }
-        setNativeSnapshot(snapshot);
+        applySnapshot(snapshot);
       } catch {
         if (!enabledRef.current || epoch !== epochRef.current) {
           return;
@@ -421,7 +371,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
         }
       }
     },
-    [finishSession],
+    [applySnapshot, finishSession],
   );
 
   return {
