@@ -1,9 +1,11 @@
 'use client';
 
+import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Bell, CheckCheck, Trash2 } from 'lucide-react';
 import { useNotificationContext } from './NotificationContext';
-import { NotificationList } from './NotificationList';
+import { NotificationPermissionBanner } from './NotificationPermissionBanner';
+import { NotificationItem } from './NotificationItem';
 import { cn } from '@/lib/utils';
 import type { OmiNotification } from '@/types/notification';
 import { PanelReveal } from '@/components/ui/PanelReveal';
@@ -42,16 +44,28 @@ function groupNotificationsByDate(notifications: OmiNotification[]) {
   // Filter out empty groups
   return groups.filter((g) => g.notifications.length > 0);
 }
-
 export function NotificationCenter() {
   const {
     isOpen,
     closeNotificationCenter,
     notifications,
     unreadCount,
+    permission,
+    isSupported,
     markAllAsRead,
     clearAllNotifications,
+    navigateToNotification,
+    markAsRead,
+    clearNotification,
+    getAppImage,
   } = useNotificationContext();
+
+  const groupedNotifications = useMemo(
+    () => groupNotificationsByDate(notifications),
+    [notifications],
+  );
+  const showPermissionBanner =
+    isSupported && (permission === 'default' || permission === 'denied');
 
   return (
     <AnimatePresence>
@@ -79,7 +93,9 @@ export function NotificationCenter() {
               'max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full',
             )}
           >
-            <PanelReveal className={cn('w-[400px] h-full flex flex-col', 'max-sm:w-full')}>
+            <PanelReveal
+              className={cn('w-[400px] h-full flex flex-col', 'max-sm:w-full')}
+            >
               {/* Header */}
               <div className="flex items-center justify-between border-b border-bg-tertiary p-4">
                 <div className="flex items-center gap-3">
