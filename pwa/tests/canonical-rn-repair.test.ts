@@ -154,3 +154,15 @@ test("web platform ownership stays in the React Native boundary", async () => {
     'from "../../react-native/App"'
   );
 });
+
+test("Vite dependency optimization resolves web modules before native modules", () => {
+  const config = viteConfig({ command: "serve", env: {} });
+
+  expect(config.optimizeDeps.esbuildOptions.resolveExtensions).toEqual(
+    config.resolve.extensions
+  );
+  expect(config.resolve.extensions.indexOf(".web.js")).toBeLessThan(
+    config.resolve.extensions.indexOf(".js")
+  );
+  expect(config.resolve.dedupe).toContain("react-native-safe-area-context");
+});
