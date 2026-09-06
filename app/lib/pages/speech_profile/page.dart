@@ -113,6 +113,37 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
     return icon != null ? button : SizedBox(width: double.infinity, child: button);
   }
 
+  /// The last three lines the user said. Shown while recording and kept on
+  /// screen through the upload and the All done state, so the final sentence
+  /// lingers instead of vanishing the moment the target is reached.
+  Widget _transcript(SpeechProfileProvider provider) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 0, 32, 48),
+      // The widget keeps only the last three whole lines, so
+      // the area is never clipped: it is at least three lines
+      // tall (so the card below stays put) and grows if the
+      // rendered lines run taller than that estimate.
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: MediaQuery.textScalerOf(context).scale(18) * 1.4 * 3,
+        ),
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: FadeInWordsText(
+            text: provider.text,
+            visibleLines: 3,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w400,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _toggleProfilePlayback() async {
     if (_profilePlaying) {
       await _stopProfilePlayback();
@@ -568,65 +599,52 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                               // apply yet.
                               ? const SizedBox.shrink()
                               : provider.profileCompleted
-                                  ? Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                      decoration: BoxDecoration(
-                                        border: const GradientBoxBorder(
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              Color.fromARGB(127, 208, 208, 208),
-                                              Color.fromARGB(127, 188, 99, 121),
-                                              Color.fromARGB(127, 86, 101, 182),
-                                              Color.fromARGB(127, 126, 190, 236),
-                                            ],
+                                  ? Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (provider.text.isNotEmpty) _transcript(provider),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                          decoration: BoxDecoration(
+                                            border: const GradientBoxBorder(
+                                              gradient: LinearGradient(
+                                                colors: [
+                                                  Color.fromARGB(127, 208, 208, 208),
+                                                  Color.fromARGB(127, 188, 99, 121),
+                                                  Color.fromARGB(127, 86, 101, 182),
+                                                  Color.fromARGB(127, 126, 190, 236),
+                                                ],
+                                              ),
+                                              width: 2,
+                                            ),
+                                            borderRadius: BorderRadius.circular(12),
                                           ),
-                                          width: 2,
+                                          child: TextButton(
+                                            onPressed: () {
+                                              // Conversation processing already triggered in finalize()
+                                              Navigator.pop(context);
+                                            },
+                                            child: Text(
+                                              context.l10n.allDone,
+                                              style: const TextStyle(color: Colors.white, fontSize: 16),
+                                            ),
+                                          ),
                                         ),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: TextButton(
-                                        onPressed: () {
-                                          // Conversation processing already triggered in finalize()
-                                          Navigator.pop(context);
-                                        },
-                                        child: Text(
-                                          context.l10n.allDone,
-                                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                                        ),
-                                      ),
+                                      ],
                                     )
                                   : provider.uploadingProfile
-                                      ? const CircularProgressIndicator(
-                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white))
+                                      ? Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (provider.text.isNotEmpty) _transcript(provider),
+                                            const CircularProgressIndicator(
+                                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                                          ],
+                                        )
                                       : Column(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            if (provider.text.isNotEmpty)
-                                              Padding(
-                                                padding: const EdgeInsets.fromLTRB(32, 0, 32, 48),
-                                                // The widget keeps only the last three whole lines, so
-                                                // the area is never clipped: it is at least three lines
-                                                // tall (so the card below stays put) and grows if the
-                                                // rendered lines run taller than that estimate.
-                                                child: ConstrainedBox(
-                                                  constraints: BoxConstraints(
-                                                    minHeight: MediaQuery.textScalerOf(context).scale(18) * 1.4 * 3,
-                                                  ),
-                                                  child: Align(
-                                                    alignment: Alignment.bottomCenter,
-                                                    child: FadeInWordsText(
-                                                      text: provider.text,
-                                                      visibleLines: 3,
-                                                      style: const TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 18,
-                                                        fontWeight: FontWeight.w400,
-                                                        height: 1.4,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
+                                            if (provider.text.isNotEmpty) _transcript(provider),
                                             Padding(
                                               padding: const EdgeInsets.symmetric(horizontal: 24),
                                               child: Column(

@@ -99,6 +99,38 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
     }
   }
 
+  /// The last three lines the user said. Shown while recording and kept on
+  /// screen through the upload and the All done state, so the final sentence
+  /// lingers instead of vanishing the moment the target is reached.
+  List<Widget> _transcript(BuildContext context, SpeechProfileProvider provider) {
+    if (provider.text.isEmpty) return const [];
+    return [
+      // The widget keeps only the last three whole lines, so the
+      // area is never clipped: at least three lines tall (so the
+      // card below stays put), growing if rendered lines run taller.
+      ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: MediaQuery.textScalerOf(context).scale(20) * 1.5 * 3,
+        ),
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: FadeInWordsText(
+            text: provider.text,
+            visibleLines: 3,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w400,
+              height: 1.5,
+              fontFamily: 'Manrope',
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 36),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     Future restartDeviceRecording() async {
@@ -467,6 +499,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                             ),
                         ] else if (provider.profileCompleted) ...[
                           // All Done state
+                          ..._transcript(context, provider),
                           const SizedBox(height: 16),
                           SizedBox(
                             width: double.infinity,
@@ -491,6 +524,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                           ),
                         ] else if (provider.uploadingProfile) ...[
                           // Uploading state
+                          ..._transcript(context, provider),
                           const SizedBox(height: 16),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -517,31 +551,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                           // Transcript styling matches the Settings speech-profile page
                           // exactly (fontSize 20, full-white, taller viewport), hidden
                           // entirely until the first words arrive.
-                          if (provider.text.isNotEmpty) ...[
-                            // The widget keeps only the last three whole lines, so the
-                            // area is never clipped: at least three lines tall (so the
-                            // card below stays put), growing if rendered lines run taller.
-                            ConstrainedBox(
-                              constraints: BoxConstraints(
-                                minHeight: MediaQuery.textScalerOf(context).scale(20) * 1.5 * 3,
-                              ),
-                              child: Align(
-                                alignment: Alignment.bottomCenter,
-                                child: FadeInWordsText(
-                                  text: provider.text,
-                                  visibleLines: 3,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w400,
-                                    height: 1.5,
-                                    fontFamily: 'Manrope',
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 36),
-                          ],
+                          ..._transcript(context, provider),
 
                           const SpeechTopicsCard(),
 

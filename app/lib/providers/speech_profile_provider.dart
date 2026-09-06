@@ -62,6 +62,16 @@ class SpeechProfileProvider extends ChangeNotifier
   /// on-device recognizers punctuate their output.
   static const int targetSentenceCount = 3;
   bool _sentenceTargetReached = false;
+
+  /// Once the target is reached the recording is not cut off mid-sentence:
+  /// it finalizes after [completionGrace] without new speech (each new
+  /// segment restarts the wait), or at [completionCap] after the target at
+  /// the latest.
+  static const Duration completionGrace = Duration(seconds: 2);
+  static const Duration completionCap = Duration(seconds: 8);
+  Timer? _completionGraceTimer;
+  Timer? _completionCapTimer;
+  bool _completionFired = false;
   static final RegExp _sentenceEnd = RegExp(r'[.!?]+(?=\s|$)');
 
   int get spokenSentenceCount => _sentenceEnd.allMatches(text).length;
@@ -604,6 +614,8 @@ class SpeechProfileProvider extends ChangeNotifier
   /// instead of showing and counting what was said last time. Does not touch
   /// audio storage, which initialise() recreates.
   void resetTranscript() {
+    _cancelCompletionTimers();
+    _completionFired = false;
     segments.clear();
     streamStartedAtSecond = null;
     text = '';
@@ -642,6 +654,7 @@ class SpeechProfileProvider extends ChangeNotifier
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
+    _cancelCompletionTimers();
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
 
@@ -675,6 +688,7 @@ class SpeechProfileProvider extends ChangeNotifier
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
+    _cancelCompletionTimers();
     _reconnectTimer?.cancel();
     _finalizedCallback = null;
     _socket?.unsubscribe(this);
@@ -847,11 +861,30 @@ class SpeechProfileProvider extends ChangeNotifier
   void updateSpokenText() {
     text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
     percentageCompleted = sentenceProgress;
-    if (!_sentenceTargetReached && spokenSentenceCount >= targetSentenceCount) {
+    if (_completionFired || spokenSentenceCount < targetSentenceCount) return;
+
+    if (!_sentenceTargetReached) {
       _sentenceTargetReached = true;
-      Logger.debug('Spoken sentence target reached ($spokenSentenceCount/$targetSentenceCount); finalizing');
-      finalize();
+      Logger.debug(
+          'Spoken sentence target reached ($spokenSentenceCount/$targetSentenceCount); finalizing after a pause');
+      _completionCapTimer = Timer(completionCap, _completeOnTarget);
     }
+    // Still talking: wait for a pause so the last sentence is not cut off.
+    _completionGraceTimer?.cancel();
+    _completionGraceTimer = Timer(completionGrace, _completeOnTarget);
+  }
+
+  void _completeOnTarget() {
+    _cancelCompletionTimers();
+    _completionFired = true;
+    finalize();
+  }
+
+  void _cancelCompletionTimers() {
+    _completionGraceTimer?.cancel();
+    _completionCapTimer?.cancel();
+    _completionGraceTimer = null;
+    _completionCapTimer = null;
   }
 
   @override

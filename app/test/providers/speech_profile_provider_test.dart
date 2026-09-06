@@ -485,27 +485,55 @@ void main() {
   // UI shows a bar filling toward the target), not when the backend decides
   // the "Answer with your voice" topics were covered.
   group('completes on the spoken sentence target', () {
-    test('fills the bar per sentence and finalizes once at the target', () {
-      final provider = _FinalizeCountingProvider();
-      provider.updateStartedRecording(true);
+    test('fills the bar per sentence and finalizes once after a pause at the target', () {
+      fakeAsync((async) {
+        final provider = _FinalizeCountingProvider();
+        provider.updateStartedRecording(true);
 
-      provider.segments.add(_userSegment('1', 'I live in Austin.'));
-      provider.updateSpokenText();
-      expect(provider.spokenSentenceCount, 1);
-      expect(provider.sentenceProgress, closeTo(1 / 3, 0.01));
-      expect(provider.finalizeCalls, 0);
+        provider.segments.add(_userSegment('1', 'I live in Austin.'));
+        provider.updateSpokenText();
+        expect(provider.spokenSentenceCount, 1);
+        expect(provider.sentenceProgress, closeTo(1 / 3, 0.01));
+        expect(provider.finalizeCalls, 0);
 
-      provider.segments.add(_userSegment('2', 'I work on hardware! My goal is 3.5 million users?'));
-      provider.updateSpokenText();
-      expect(provider.spokenSentenceCount, 3, reason: '"3.5" is not a sentence boundary');
-      expect(provider.sentenceProgress, 1.0);
-      expect(provider.finalizeCalls, 1);
+        provider.segments.add(_userSegment('2', 'I work on hardware! My goal is 3.5 million users?'));
+        provider.updateSpokenText();
+        expect(provider.spokenSentenceCount, 3, reason: '"3.5" is not a sentence boundary');
+        expect(provider.sentenceProgress, 1.0);
+        expect(provider.finalizeCalls, 0, reason: 'the target does not cut the user off mid-sentence');
 
-      provider.segments.add(_userSegment('3', 'And more.'));
-      provider.updateSpokenText();
-      expect(provider.finalizeCalls, 1, reason: 'later segments must not finalize again');
+        async.elapse(SpeechProfileProvider.completionGrace);
+        expect(provider.finalizeCalls, 1, reason: 'finalizes once the user pauses');
 
-      provider.dispose();
+        provider.segments.add(_userSegment('3', 'And more.'));
+        provider.updateSpokenText();
+        async.elapse(SpeechProfileProvider.completionCap);
+        expect(provider.finalizeCalls, 1, reason: 'later segments must not finalize again');
+
+        provider.dispose();
+      });
+    });
+
+    test('keeps recording while the user is still talking, up to the cap', () {
+      fakeAsync((async) {
+        final provider = _FinalizeCountingProvider();
+        provider.updateStartedRecording(true);
+        provider.segments.add(_userSegment('1', 'One. Two. Three.'));
+        provider.updateSpokenText();
+
+        // New speech every second keeps deferring the grace period...
+        for (var i = 0; i < 5; i++) {
+          async.elapse(const Duration(seconds: 1));
+          provider.segments.add(_userSegment('more$i', 'still talking'));
+          provider.updateSpokenText();
+          expect(provider.finalizeCalls, 0);
+        }
+        // ...but the cap after the target finalizes regardless.
+        async.elapse(SpeechProfileProvider.completionCap);
+        expect(provider.finalizeCalls, 1);
+
+        provider.dispose();
+      });
     });
 
     test("ignores Omi's own question segments and the backend's completion event", () {
@@ -532,24 +560,28 @@ void main() {
     test('resetTranscript forgets the previous words, progress and completion', () {
       final provider = _FinalizeCountingProvider();
       provider.updateStartedRecording(true);
-      provider.segments.add(_userSegment('1', 'I live in Austin. I build hardware. I want to ship!'));
-      provider.updateSpokenText();
-      expect(provider.finalizeCalls, 1);
-      provider.profileCompleted = true;
+      fakeAsync((async) {
+        provider.segments.add(_userSegment('1', 'I live in Austin. I build hardware. I want to ship!'));
+        provider.updateSpokenText();
+        async.elapse(SpeechProfileProvider.completionGrace);
+        expect(provider.finalizeCalls, 1);
+        provider.profileCompleted = true;
 
-      provider.resetTranscript();
+        provider.resetTranscript();
 
-      expect(provider.text, isEmpty);
-      expect(provider.segments, isEmpty);
-      expect(provider.sentenceProgress, 0.0);
-      expect(provider.profileCompleted, isFalse);
+        expect(provider.text, isEmpty);
+        expect(provider.segments, isEmpty);
+        expect(provider.sentenceProgress, 0.0);
+        expect(provider.profileCompleted, isFalse);
 
-      // The fresh session counts from zero and can finalize again.
-      provider.segments.add(_userSegment('2', 'One. Two. Three.'));
-      provider.updateSpokenText();
-      expect(provider.finalizeCalls, 2);
+        // The fresh session counts from zero and can finalize again.
+        provider.segments.add(_userSegment('2', 'One. Two. Three.'));
+        provider.updateSpokenText();
+        async.elapse(SpeechProfileProvider.completionGrace);
+        expect(provider.finalizeCalls, 2);
 
-      provider.dispose();
+        provider.dispose();
+      });
     });
   });
 }
