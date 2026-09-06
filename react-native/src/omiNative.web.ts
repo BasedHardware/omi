@@ -4,6 +4,10 @@ import {
   type BrowserCapabilitySnapshot,
   type BrowserEnvironment,
 } from './browser-adapters.web';
+
+export async function requestBluetoothScanPermission(): Promise<boolean> {
+  return true;
+}
 import {
   readBrowserGenerationEvents,
   type BrowserGenerationStreamResult,
@@ -142,8 +146,8 @@ function browserSnapshot(
       snapshot.bluetooth === 'unsupported'
         ? 'Web Bluetooth is unavailable in this browser.'
         : snapshot.bluetooth === 'selected'
-        ? 'Browser Bluetooth selection recorded. Omi capture is not wired.'
-        : 'Omi device capture is not wired in the browser.',
+        ? 'Device selected. Recording is unavailable in this browser.'
+        : 'Device recording is unavailable in this browser.',
     microphone:
       snapshot.microphone === 'granted'
         ? 'granted'
