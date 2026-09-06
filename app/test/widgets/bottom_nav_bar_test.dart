@@ -70,8 +70,12 @@ void main() {
     // A 3-button Android navigation bar is roughly this tall and fully opaque.
     const systemNavBarHeight = 48.0;
 
-    final withoutInset = await _layoutForBottomInset(tester, 0);
-    final withInset = await _layoutForBottomInset(tester, systemNavBarHeight);
+    final withoutInset = await _layoutForBottomInset(tester, viewPadding: 0, padding: 0);
+    final withInset = await _layoutForBottomInset(
+      tester,
+      viewPadding: systemNavBarHeight,
+      padding: systemNavBarHeight,
+    );
 
     final safeBottom = withInset.screenBottom - systemNavBarHeight;
     for (final entry in withInset.iconBottoms.entries) {
@@ -92,6 +96,31 @@ void main() {
       );
     }
   });
+
+  testWidgets('reserves viewPadding, which a keyboard does not collapse', (tester) async {
+    // The home Scaffold sets resizeToAvoidBottomInset: false, so an open
+    // keyboard leaves the system bar exactly where it was while driving
+    // padding.bottom to zero. Reading padding instead of viewPadding would put
+    // the tab row back under the navigation bar in precisely this state, so
+    // pin the distinction rather than the value: padding is zero here and only
+    // viewPadding is set.
+    const systemNavBarHeight = 48.0;
+
+    final keyboardOpen = await _layoutForBottomInset(
+      tester,
+      viewPadding: systemNavBarHeight,
+      padding: 0,
+    );
+
+    final safeBottom = keyboardOpen.screenBottom - systemNavBarHeight;
+    for (final entry in keyboardOpen.iconBottoms.entries) {
+      expect(
+        entry.value,
+        lessThanOrEqualTo(safeBottom),
+        reason: 'the ${entry.key} tab must reserve viewPadding, not padding',
+      );
+    }
+  });
 }
 
 final _tabIcons = <(String, FaIconData)>[
@@ -101,12 +130,14 @@ final _tabIcons = <(String, FaIconData)>[
   ('Apps', FontAwesomeIcons.puzzlePiece),
 ];
 
-/// Pumps the bar under a bottom view padding of [bottomInset] and reports where
-/// the tab icons landed relative to the bottom of the screen.
+/// Pumps the bar under the given bottom [viewPadding] and [padding] and reports
+/// where the tab icons landed relative to the bottom of the screen. The two are
+/// separate so a test can pin which inset the bar actually reads.
 Future<({double screenBottom, Map<String, double> iconBottoms})> _layoutForBottomInset(
-  WidgetTester tester,
-  double bottomInset,
-) async {
+  WidgetTester tester, {
+  required double viewPadding,
+  required double padding,
+}) async {
   final provider = HomeProvider();
   addTearDown(provider.dispose);
 
@@ -120,11 +151,11 @@ Future<({double screenBottom, Map<String, double> iconBottoms})> _layoutForBotto
             // resizeToAvoidBottomInset: false, so that is the inset the bar
             // has to respect.
             data: MediaQuery.of(context).copyWith(
-              viewPadding: EdgeInsets.only(bottom: bottomInset),
-              padding: EdgeInsets.only(bottom: bottomInset),
+              viewPadding: EdgeInsets.only(bottom: viewPadding),
+              padding: EdgeInsets.only(bottom: padding),
             ),
             child: Scaffold(
-              body: BottomNavBar(key: ValueKey(bottomInset), onTabTap: (_, __) {}),
+              body: BottomNavBar(key: ValueKey('$viewPadding/$padding'), onTabTap: (_, __) {}),
             ),
           ),
         ),
