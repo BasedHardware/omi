@@ -1,0 +1,3 @@
+{
+  "change": "Free-plan screen proactivity now stops on the plan gate instead of retrying paid Gemini calls, and a mid-session voice quota close shows the usage-limit prompt."
+}
