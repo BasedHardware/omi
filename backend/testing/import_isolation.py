@@ -144,8 +144,20 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
                 spec = getattr(extra_mod, "__spec__", None)
                 origin = getattr(spec, "origin", None) if spec else None
                 is_backend = any(extra == p.rstrip(".") or extra.startswith(p) for p in _backend_prefixes)
+                # Skip C extensions themselves — they cannot be safely
+                # re-imported once evicted. But if the extension is a
+                # submodule (``rpds.rpds``, ``_openssl``), its parent package
+                # must be kept too: evicting the parent while keeping the
+                # child makes the next ``import parent`` re-exec
+                # ``parent/__init__.py``, where ``from .child import *`` is a
+                # no-op (the child is still in ``sys.modules``) and names the
+                # ``__init__`` expects to have bound (``rpds.__doc__`` etc.)
+                # are gone — every later file dies with NameError
+                # mid-import (jsonschema → referencing → rpds).
                 if not is_backend and (spec is None or (origin and origin.endswith((".so", ".pyd")))):
-                    continue
+                    keep_parent = spec is not None and origin and origin.endswith((".so", ".pyd")) and "." in extra
+                    if not keep_parent:
+                        continue
             _clear_parent_attr_if_added(extra, saved_submodule_attrs)
             sys.modules.pop(extra, None)
         # 3. Restore existing keys whose object was swapped in place (load_module_fresh

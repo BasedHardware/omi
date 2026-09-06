@@ -113,6 +113,7 @@ struct OmiHTTPTransport {
     // BYOK: attach user-provided keys so the backend uses them for LLM/STT
     // calls this request triggers. Sent per-request; never stored server-side.
     if includeBYOK, APIKeyService.isByokActive {
+      headers["X-BYOK-LLM-Provider"] = APIKeyService.selectedBYOKLLMSelection.rawValue
       let health = await MainActor.run { CredentialHealthManager.shared }
       let snapshot = APIKeyService.activeBYOKSnapshot
       for (provider, entry) in snapshot {

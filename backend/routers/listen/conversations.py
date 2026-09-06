@@ -12,7 +12,7 @@ from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.message_event import ConversationEvent, ConversationSessionEvent, LastConversationEvent
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
-from utils.byok import get_byok_keys
+from utils.byok import has_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
@@ -130,7 +130,7 @@ class LiveConversationController:
             lifecycle_service.request_finalization,
             self.host.request.uid,
             conversation_id,
-            has_byok_keys=bool(get_byok_keys()),
+            has_byok_keys=has_byok_keys(),
             client_kind=self.host.client_kind,
         )
         route = finalization['route']

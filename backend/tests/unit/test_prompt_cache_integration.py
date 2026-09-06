@@ -198,6 +198,9 @@ gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
 gateway_mod.is_auto_lane_id = lambda value: isinstance(value, str) and value.startswith('omi:auto:')
 gateway_mod.record_chat_extraction_gateway_result = MagicMock()
 gateway_mod.raise_if_gateway_feature_mode_blocks_direct_model_surface = MagicMock()
+gateway_mod.feature_auto_lane_id = lambda feature: f"omi:auto:{feature.replace('_', '-')}"
+gateway_mod.get_llm_gateway_base_url = MagicMock(return_value='https://gateway.test')
+gateway_mod.llm_gateway_headers = MagicMock(return_value={})
 
 gateway_shadow_mod = _stub_module("utils.llm.gateway_shadow")
 gateway_shadow_mod.maybe_wrap_dev_gateway_shadow = MagicMock(side_effect=lambda legacy_model, **_kwargs: legacy_model)

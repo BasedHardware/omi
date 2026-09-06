@@ -58,6 +58,8 @@ enum BYOKLLMProvider: String, CaseIterable, Identifiable {
   case openai
   case gemini
   case anthropic
+  case chatgpt
+  case grok
 
   var id: String { rawValue }
 
@@ -67,15 +69,26 @@ enum BYOKLLMProvider: String, CaseIterable, Identifiable {
     case .openai: return "OpenAI Direct"
     case .gemini: return "Gemini"
     case .anthropic: return "Anthropic"
+    case .chatgpt: return "ChatGPT"
+    case .grok: return "Grok"
     }
   }
 
-  var provider: BYOKProvider {
+  var provider: BYOKProvider? {
     switch self {
     case .openrouter: return .openrouter
     case .openai: return .openai
     case .gemini: return .gemini
     case .anthropic: return .anthropic
+    case .chatgpt, .grok: return nil
+    }
+  }
+
+  var oauthProvider: LLMOAuthProvider? {
+    switch self {
+    case .chatgpt: return .chatgpt
+    case .grok: return .grok
+    default: return nil
     }
   }
 }
@@ -190,6 +203,8 @@ final class APIKeyService: ObservableObject {
     // NOTE: Do NOT unset FIREBASE_API_KEY — it's needed for the next sign-in
     // (auth bootstrap requires Firebase key before backend is reachable)
     unsetenv("GOOGLE_CALENDAR_API_KEY")
+    UserDefaults.standard.removeObject(forKey: DefaultsKey.chatGPTLLMOAuthConnected.rawValue)
+    UserDefaults.standard.removeObject(forKey: DefaultsKey.grokLLMOAuthConnected.rawValue)
   }
 
   /// Push effective keys into the process environment for backward compatibility.
@@ -241,8 +256,11 @@ final class APIKeyService: ObservableObject {
   /// The subscription-bypass gate: when this is true, the user is on the free
   /// plan and we attach their selected LLM key to every backend request.
   nonisolated static var isByokActive: Bool {
-    guard let provider = selectedBYOKLLMProvider, let key = byokKey(provider) else { return false }
-    return enrolledFingerprints()[provider.rawValue] == byokFingerprint(key)
+    if let provider = selectedBYOKLLMProvider, let key = byokKey(provider) {
+      return enrolledFingerprints()[provider.rawValue] == byokFingerprint(key)
+    }
+    guard let oauthProvider = selectedBYOKLLMSelection.oauthProvider else { return false }
+    return UserDefaults.standard.bool(forKey: oauthProvider.connectionStorageKey)
   }
 
   nonisolated static var hasTranscriptionBYOK: Bool {
@@ -257,6 +275,8 @@ final class APIKeyService: ObservableObject {
       defaults.removeObject(forKey: provider.storageKey)
     }
     defaults.removeObject(forKey: DefaultsKey.byokLLMProvider.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.chatGPTLLMOAuthConnected.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.grokLLMOAuthConnected.rawValue)
     persistEnrolledFingerprints([:])
   }
 
@@ -264,7 +284,7 @@ final class APIKeyService: ObservableObject {
     guard let uid, !uid.isEmpty else { return }
     let last = UserDefaults.standard.string(forKey: DefaultsKey.byokOwnerUid.rawValue)
     if last != uid {
-      // Unowned pre-upgrade keys (last == nil) are unsafe to inherit: the next
+      // Unowned pre-upgrade keys/flags (last == nil) are unsafe to inherit: the next
       // signed-in account would otherwise enroll someone else's credentials.
       clearPersistedBYOKKeys()
       UserDefaults.standard.set(uid, forKey: DefaultsKey.byokOwnerUid.rawValue)
@@ -290,18 +310,21 @@ final class APIKeyService: ObservableObject {
     return byokKey(provider)
   }
 
-  nonisolated static var selectedBYOKLLMProvider: BYOKProvider? {
-    let requested: BYOKLLMProvider
+  nonisolated static var selectedBYOKLLMSelection: BYOKLLMProvider {
     if let stored = UserDefaults.standard.string(forKey: .byokLLMProvider),
       let selected = BYOKLLMProvider(rawValue: stored)
     {
-      requested = selected
-    } else if let legacy = BYOKLLMProvider.allCases.first(where: { byokKey($0.provider) != nil }) {
-      requested = legacy
-    } else {
-      requested = .openrouter
+      return selected
     }
-    return byokKey(requested.provider) == nil ? nil : requested.provider
+    return BYOKLLMProvider.allCases.first { selection in
+      guard let provider = selection.provider else { return false }
+      return byokKey(provider) != nil
+    } ?? .openrouter
+  }
+
+  nonisolated static var selectedBYOKLLMProvider: BYOKProvider? {
+    guard let provider = selectedBYOKLLMSelection.provider else { return nil }
+    return byokKey(provider) == nil ? nil : provider
   }
 
   /// SHA-256 fingerprint of a key, used by the backend to detect when the
