@@ -873,6 +873,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   });
 
   const prepareConversationsReadFor = (principal: DevPrincipal) => prepareConversationsRead({
+    authorityBinding: {kind: "local_qa"},
     store: conversations,
     resolveAuthorization: () => ({
       owner_account_id: principal.uid,

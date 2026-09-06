@@ -1825,7 +1825,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           "memory_strategy_definitions",
           "listen_formation_outbox", "listen_conversation_finalization_intents",
           "listen_formation_finalizations", "listen_capture_segments",
-          "listen_audio_transcriptions", "listen_capture_audio_chunks", "listen_capture_audio_uploads",
+          "listen_conversation_read_revisions", "listen_audio_transcriptions", "listen_capture_audio_chunks", "listen_capture_audio_uploads",
           "listen_capture_session_state_revisions", "listen_capture_sessions",
         ]) {
           await transaction.unsafe(`DELETE FROM omi_memory.${table} WHERE account_id = $1`, [accountId]);
