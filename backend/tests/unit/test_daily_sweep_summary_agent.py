@@ -37,12 +37,27 @@ class _ScriptedLlm:
         self.prompts = []
         self.invoke_kwargs = []
 
+    def _get_request_payload(self, prompt_value, **kwargs):
+        prompt_text = prompt_value.to_string() if hasattr(prompt_value, "to_string") else str(prompt_value)
+        return {"messages": [{"role": "user", "content": prompt_text}], **kwargs}
+
     def invoke(self, prompt_value, **kwargs):
         self.prompts.append(str(prompt_value))
         self.invoke_kwargs.append(kwargs)
         if not self.responses:
             raise AssertionError("unexpected extra model call")
         return self.responses.pop(0)
+
+
+class _NoPayloadBuilderLlm(_ScriptedLlm):
+    _get_request_payload = None
+
+
+class _ProviderFailureLlm(_ScriptedLlm):
+    def invoke(self, prompt_value, **kwargs):
+        self.prompts.append(str(prompt_value))
+        self.invoke_kwargs.append(kwargs)
+        raise RuntimeError("provider unavailable")
 
 
 def _response(memories=(), transcript_requests=(), folder_assignments=()):
@@ -233,6 +248,44 @@ def test_qa_dispatch_evidence_is_recorded_before_parser_failure():
     assert dispatch["requests"][0]["usage_observed"] is True
 
 
+def test_qa_dispatch_evidence_is_recorded_before_provider_failure():
+    dispatch = {}
+    with pytest.raises(MemoryExtractionError):
+        run_daily_sweep_summary_agent(
+            "uid-1",
+            _ROWS,
+            dict(_TRANSCRIPTS),
+            llm=_ProviderFailureLlm([]),
+            max_provider_retries=0,
+            max_input_tokens=QA_SWEEP_MAX_INPUT_TOKENS,
+            max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS,
+            jit_run_id="qa-sweep-run-1",
+            jit_max_spend_micro_usd=QA_SWEEP_MAX_SPEND_MICRO_USD,
+            dispatch_evidence=dispatch,
+        )
+    assert len(dispatch["requests"]) == 1
+    assert dispatch["requests"][0]["request_id"]
+    assert dispatch["requests"][0]["usage_observed"] is False
+
+
+def test_qa_dispatch_fails_closed_without_serialized_request_builder():
+    dispatch = {}
+    with pytest.raises(MemoryExtractionError):
+        run_daily_sweep_summary_agent(
+            "uid-1",
+            _ROWS,
+            dict(_TRANSCRIPTS),
+            llm=_NoPayloadBuilderLlm([_response()]),
+            max_provider_retries=0,
+            max_input_tokens=QA_SWEEP_MAX_INPUT_TOKENS,
+            max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS,
+            jit_run_id="qa-sweep-run-1",
+            jit_max_spend_micro_usd=QA_SWEEP_MAX_SPEND_MICRO_USD,
+            dispatch_evidence=dispatch,
+        )
+    assert dispatch["requests"] == []
+
+
 def test_empty_day_returns_empty_without_model_call():
     llm = _ScriptedLlm([])
     output = run_daily_sweep_summary_agent("uid-1", (), {}, llm=llm)
@@ -267,7 +320,7 @@ def test_qa_budget_is_sent_to_gateway_and_accounting_stays_outside_model_schema(
     assert [memory.content for memory in output.memories] == ["Dave lifts on Tuesdays"]
     assert "dispatch_evidence" not in memories_module.DailySweepAgentPassOutput.model_fields
     kwargs = llm.invoke_kwargs[0]
-    assert kwargs["max_completion_tokens"] == 256
+    assert kwargs["max_completion_tokens"] == QA_SWEEP_MAX_OUTPUT_TOKENS
     headers = kwargs["extra_headers"]
     assert headers["x-omi-jit-contract-version"] == "jit-cloud-qa-v1"
     assert headers["x-omi-jit-run-id"] == "qa-sweep-run-1"
@@ -279,6 +332,7 @@ def test_qa_budget_is_sent_to_gateway_and_accounting_stays_outside_model_schema(
     request = dispatch["requests"][0]
     assert request["request_id"] == headers["x-omi-request-id"]
     assert 0 < request["input_bytes"] <= 12_288
+    assert request["input_bytes"] > len(llm.prompts[0].encode("utf-8"))
     assert request["max_input_tokens"] == 12_288
     assert request["max_output_tokens"] == 256
     assert request["max_spend_micro_usd"] == 50_000

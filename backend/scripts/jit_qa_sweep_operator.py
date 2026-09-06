@@ -581,6 +581,7 @@ def verify_qa_sweep_run(db_client: Any, *, run_id: str, minimum_output_rows: int
     committed_candidates = output_payload.get("committed_candidates")
     if (
         not isinstance(committed_candidates, int)
+        or isinstance(committed_candidates, bool)
         or committed_candidates < minimum_output_rows
         or committed_candidates > QA_SWEEP_MAX_MODEL_CANDIDATES
     ):

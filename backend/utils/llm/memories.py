@@ -710,27 +710,39 @@ def _daily_sweep_folder_task(folder_options: Sequence[tuple[str, str]], needs_fo
     return _DAILY_SWEEP_FOLDER_TASK.format(unfiled=", ".join(needs_folder_ids), folders=folders)
 
 
-def _daily_sweep_request_body_bytes(model: Any, prompt_value: Any, invoke_kwargs: Mapping[str, Any]) -> int:
+def _daily_sweep_request_body_bytes(
+    model: Any,
+    prompt_value: Any,
+    invoke_kwargs: Mapping[str, Any],
+    *,
+    require_payload_builder: bool = False,
+) -> int:
     """Measure the JSON body sent by the OpenAI-compatible client.
 
     The QA gateway's input budget covers the serialized request envelope, not
     only the rendered prompt. Keep the fallback for scripted/direct test
-    models that do not expose LangChain's payload builder; the real gateway
-    model always takes the exact payload path.
+    models outside the QA path; a bounded QA invocation must take the exact
+    payload path or fail closed.
     """
 
     prompt_text = prompt_value.to_string() if hasattr(prompt_value, "to_string") else str(prompt_value)
     fallback = len(prompt_text.encode("utf-8"))
     payload_builder = getattr(model, "_get_request_payload", None)
     if not callable(payload_builder):
+        if require_payload_builder:
+            raise MemoryExtractionError("daily_sweep_summary_request_serialization")
         return fallback
     try:
         payload = payload_builder(prompt_value, **dict(invoke_kwargs))
         if not isinstance(payload, Mapping):
+            if require_payload_builder:
+                raise MemoryExtractionError("daily_sweep_summary_request_serialization")
             return fallback
         body = {key: value for key, value in payload.items() if key != "extra_headers"}
         return len(json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
-    except (TypeError, ValueError, OverflowError):
+    except (TypeError, ValueError, OverflowError) as error:
+        if require_payload_builder:
+            raise MemoryExtractionError("daily_sweep_summary_request_serialization") from error
         return fallback
 
 
@@ -819,7 +831,12 @@ def run_daily_sweep_summary_agent(
                 'x-omi-jit-max-input-tokens': str(max_input_tokens),
                 'x-omi-jit-max-spend-micro-usd': str(jit_max_spend_micro_usd),
             }
-        input_bytes = _daily_sweep_request_body_bytes(model, prompt_value, invoke_kwargs)
+        input_bytes = _daily_sweep_request_body_bytes(
+            model,
+            prompt_value,
+            invoke_kwargs,
+            require_payload_builder=jit_run_id is not None,
+        )
         if max_input_tokens is not None and input_bytes > max_input_tokens:
             raise MemoryExtractionError('daily_sweep_summary_input_budget')
         request_evidence: Dict[str, Any] | None = None
@@ -832,6 +849,15 @@ def run_daily_sweep_summary_agent(
                 'max_spend_micro_usd': jit_max_spend_micro_usd,
                 'usage_observed': False,
             }
+            if dispatch_evidence is None:
+                raise RuntimeError('daily sweep dispatch evidence was not initialized')
+            casted_requests = dispatch_evidence.setdefault('requests', [])
+            if not isinstance(casted_requests, list):
+                raise RuntimeError('daily sweep dispatch evidence requests is malformed')
+            # Persist the request identity before the provider call. A provider
+            # failure still consumed an admitted request and must remain
+            # joinable without claiming usage or a successful result.
+            casted_requests.append(request_evidence)
         response = model.invoke(prompt_value, **invoke_kwargs)
         usage = getattr(response, 'usage_metadata', None)
         if isinstance(usage, Mapping):
@@ -844,13 +870,6 @@ def run_daily_sweep_summary_agent(
                 if request_evidence is not None:
                     request_evidence['usage_observed'] = True
                     request_evidence['usage_tokens'] = numeric
-        if request_evidence is not None:
-            if dispatch_evidence is None:
-                raise RuntimeError('daily sweep dispatch evidence was not initialized')
-            casted_requests = dispatch_evidence.setdefault('requests', [])
-            if not isinstance(casted_requests, list):
-                raise RuntimeError('daily sweep dispatch evidence requests is malformed')
-            casted_requests.append(request_evidence)
         # Record the durable request before parsing. A malformed structured
         # response still consumed a gateway attempt and must remain visible to
         # the QA consumer instead of disappearing behind parser failure.

@@ -319,6 +319,13 @@ def test_consumer_requires_projection_and_bounded_inventory():
     with pytest.raises(OPERATOR.JITQASweepOperatorError, match="more than eight"):
         OPERATOR.verify_qa_sweep_run(db, run_id=RUN_ID, minimum_output_rows=1)
 
+    db = _db(_source_row())
+    db.documents[f"{OPERATOR.QA_SWEEP_RUN_COLLECTION}/{RUN_ID}/outputs/{OPERATOR.QA_SWEEP_UID}"][
+        "committed_candidates"
+    ] = True
+    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="outside the admitted bound"):
+        OPERATOR.verify_qa_sweep_run(db, run_id=RUN_ID, minimum_output_rows=1)
+
 
 def test_consumer_reads_source_and_canonical_outputs_by_metadata_projection():
     db = _db(_source_row())
