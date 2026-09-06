@@ -947,6 +947,12 @@ export const publicRoutes: readonly CoreRoute[] = [
 
 export const v1Routes: readonly CoreRoute[] = [
   {
+    method: "GET",
+    path: "/v1/device-sessions/ownership",
+    handle: () =>
+      backendError("capture_ownership_unavailable", "retry", 503, true),
+  },
+  {
     method: "POST",
     path: "/v1/device-sessions/:id/transcribe",
     handle: handleTranscribe,
