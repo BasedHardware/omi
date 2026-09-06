@@ -48,6 +48,7 @@ class LockContract:
 # new deploy writer cannot silently bypass the audited lock graph.
 LOCK_CONTRACTS = {
     "jit_qa_cloud_run.yml": LockContract("jit-isolated-qa-cloud-run-development"),
+    "jit_qa_typesense_projection.yml": LockContract("jit-qa-typesense-projection"),
     "desktop_backend_auto_dev.yml": LockContract("desktop-backend-auto-dev"),
     "desktop_backend_prod.yml": LockContract("desktop-backend-prod"),
     "desktop_backend_recover_prod.yml": LockContract("desktop-backend-prod"),
