@@ -7,3 +7,6 @@ xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
   "$repo_root/react-native/macos/Tests/OmiAuthMobileCallbackTest.mm" \
   -o "$build_dir/test"
 "$build_dir/test"
+xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
+  "$repo_root/react-native/apple/OmiDeviceInformationTest.mm" -o "$build_dir/device-information"
+"$build_dir/device-information"

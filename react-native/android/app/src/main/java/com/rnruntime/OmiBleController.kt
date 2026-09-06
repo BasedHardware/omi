@@ -33,7 +33,7 @@ private const val BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb"
 private const val BATTERY_LEVEL_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
 private val CLIENT_CONFIG_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
-private data class OmiDevice(val id: String, val name: String, val rssi: Int, val battery: Int? = null)
+private data class OmiDevice(val id: String, val name: String, val rssi: Int, val battery: Int? = null, val information: Map<String, String> = emptyMap())
 
 private sealed class GattOp {
   data class Read(val characteristic: BluetoothGattCharacteristic) : GattOp()
@@ -69,6 +69,7 @@ class OmiBleController(
         name = result.scanRecord?.deviceName ?: device.name ?: "Omi",
         rssi = result.rssi,
         battery = results[device.address]?.battery,
+        information = results[device.address]?.information ?: emptyMap(),
       )
       results[device.address] = discovered
       lastEvent = "Found ${results.size} Omi device${if (results.size == 1) "" else "s"}"
@@ -192,6 +193,7 @@ class OmiBleController(
     }
     stopScanInternal()
     gatt?.close()
+    results[id]?.let { results[id] = it.copy(information = emptyMap()) }
     clearGattQueue()
     audioNotifying = false
     codec = null
@@ -225,6 +227,12 @@ class OmiBleController(
         if (codecChar != null) enqueueGatt(gatt, GattOp.Read(codecChar))
         if (battery != null) enqueueGatt(gatt, GattOp.Read(battery))
         if (audio != null) enqueueGatt(gatt, GattOp.EnableNotify(audio))
+        val information = gatt.getService(UUID.fromString("0000180a-0000-1000-8000-00805f9b34fb"))
+        OmiDeviceInformation.fields.keys.forEach { uuid ->
+          information?.getCharacteristic(uuid)?.let { characteristic ->
+            if (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) enqueueGatt(gatt, GattOp.Read(characteristic))
+          }
+        }
       }
 
       override fun onCharacteristicRead(
@@ -345,6 +353,11 @@ class OmiBleController(
 
   private fun handleValue(characteristic: BluetoothGattCharacteristic, value: ByteArray) {
     val id = connectedDeviceId ?: return
+    OmiDeviceInformation.decode(characteristic.uuid, value)?.let { (field, decoded) ->
+      results[id]?.let { results[id] = it.copy(information = it.information + (field to decoded)) }
+      emitSnapshot()
+      return
+    }
     when (characteristic.uuid) {
       UUID.fromString(OMI_CODEC_UUID) -> if (value.isNotEmpty()) {
         codec = value[0].toInt() and 0xff
@@ -400,6 +413,9 @@ class OmiBleController(
     putInt("rssi", device.rssi)
     putBoolean("connected", connectionState == "connected" && connectedDeviceId == device.id)
     device.battery?.let { putInt("battery", it) }
+    if (device.information.isNotEmpty()) putMap("information", Arguments.createMap().apply {
+      device.information.forEach { (field, value) -> putString(field, value) }
+    })
   }
 
   private fun canScan(): Boolean {
