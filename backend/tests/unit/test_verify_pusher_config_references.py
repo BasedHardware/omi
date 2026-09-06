@@ -179,6 +179,9 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
+        "CONVERSATION_NOTES_V2_ENABLED": "true",
+        "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
         "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
         "MEMORY_BELIEF_MODEL_ENABLED": "true",
