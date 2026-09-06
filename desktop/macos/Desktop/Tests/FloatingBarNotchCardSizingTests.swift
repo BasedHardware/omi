@@ -217,6 +217,10 @@ final class FloatingBarNotchCardSizingTests: XCTestCase {
       window.closeAIConversation(intent: .voiceHandoff)
 
       // The close animates and its settle snap lands one settle delay later.
+      // omi-test-quality: wall-clock-wait -- the close settle is a real
+      // main-queue asyncAfter + NSAnimationContext completion on the window
+      // with no injectable clock; the 0.4s wait is enqueued after the 0.16s
+      // settle on the same main queue, so the signal is sequenced, not raced.
       let settled = expectation(description: "close settle snap")
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { settled.fulfill() }
       wait(for: [settled], timeout: 2)

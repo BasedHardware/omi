@@ -2391,6 +2391,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// state directly (replacement swaps, owner resets) and must land the window
   /// on the surface the new state implies.
   func resizeToClosedSurface(animated: Bool = true) {
+    // A nonanimated landing must win over any in-flight animated resize: the
+    // old animation's completion still holds a matching frameAnimationToken
+    // and would restore its obsolete target after this resize. Invalidate it
+    // and drop the pending target so the direct setFrame below is final.
+    if !animated {
+      frameAnimationToken += 1
+      pendingFrameAnimationTarget = nil
+    }
     resizeAnchored(
       to: closedSurfaceSize(usesNotchIsland: notchModeEnabled),
       makeResizable: false,
