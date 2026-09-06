@@ -359,7 +359,7 @@ actor ProactiveLaneClient {
     self.managedPixelDecision =
       managedPixelDecision
       ?? {
-        await ManagedProactivityDecisionSource.shared.current()
+        await ManagedProactivityDecisionSource.current()
       }
   }
 

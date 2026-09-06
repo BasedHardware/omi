@@ -44,11 +44,12 @@ enum SubscriptionEntitlement {
 /// Refresh on TTL and on auth/owner change. Fetch failure is unknown plan
 /// (allow; server decides). BYOK is re-read on every decision so a key change
 /// does not wait for the subscription TTL.
-actor SubscriptionEntitlementService {
+final class SubscriptionEntitlementService: @unchecked Sendable {
   static let shared = SubscriptionEntitlementService()
 
   static let defaultTTL: TimeInterval = 5 * 60
 
+  private let lock = NSLock()
   private var cached: (response: UserSubscriptionResponse, expiresAt: Date)?
   private var inflight: Task<UserSubscriptionResponse?, Never>?
   private var observers: [NSObjectProtocol] = []
@@ -75,13 +76,11 @@ actor SubscriptionEntitlementService {
       let center = NotificationCenter.default
       observers.append(
         center.addObserver(forName: .userDidSignOut, object: nil, queue: nil) { [weak self] _ in
-          guard let self else { return }
-          Task { await self.invalidate() }
+          self?.invalidate()
         })
       observers.append(
         center.addObserver(forName: .runtimeOwnerDidChange, object: nil, queue: nil) { [weak self] _ in
-          guard let self else { return }
-          Task { await self.invalidate() }
+          self?.invalidate()
         })
     }
   }
@@ -92,14 +91,22 @@ actor SubscriptionEntitlementService {
     }
   }
 
-  func invalidate() {
-    cached = nil
-    inflight?.cancel()
-    inflight = nil
+  private func withLock<T>(_ body: () -> T) -> T {
+    lock.lock()
+    defer { lock.unlock() }
+    return body()
   }
 
-  func cachedSnapshot() -> UserSubscriptionResponse? {
-    cached?.response
+  func invalidate() {
+    withLock {
+      cached = nil
+      inflight?.cancel()
+      inflight = nil
+    }
+  }
+
+  var cachedSnapshot: UserSubscriptionResponse? {
+    withLock { cached?.response }
   }
 
   func decisionForManagedProactivity() async -> SubscriptionEntitlementDecision {
@@ -111,14 +118,17 @@ actor SubscriptionEntitlementService {
   }
 
   func snapshot() async -> UserSubscriptionResponse? {
-    if let cached, cached.expiresAt > now() {
+    if let response = withLock({
+      guard let cached, cached.expiresAt > now() else { return nil as UserSubscriptionResponse? }
       return cached.response
+    }) {
+      return response
     }
-    if let inflight {
+    if let inflight = withLock({ inflight }) {
       return await inflight.value
     }
     let task = Task { await self.refresh() }
-    inflight = task
+    withLock { inflight = task }
     return await task.value
   }
 
@@ -129,9 +139,11 @@ actor SubscriptionEntitlementService {
     } catch {
       response = nil
     }
-    inflight = nil
-    if let response {
-      cached = (response, now().addingTimeInterval(ttl))
+    withLock {
+      inflight = nil
+      if let response {
+        cached = (response, now().addingTimeInterval(ttl))
+      }
     }
     return response
   }
@@ -139,20 +151,26 @@ actor SubscriptionEntitlementService {
 
 /// Test seam so Gemini / lane clients can pin a decision without touching
 /// `SubscriptionEntitlementService.shared`.
-actor ManagedProactivityDecisionSource {
-  static let shared = ManagedProactivityDecisionSource()
+enum ManagedProactivityDecisionSource {
+  private static let lock = NSLock()
+  nonisolated(unsafe) private static var override: (@Sendable () async -> SubscriptionEntitlementDecision)?
 
-  private var override: (@Sendable () async -> SubscriptionEntitlementDecision)?
+  private static func withLock<T>(_ body: () -> T) -> T {
+    lock.lock()
+    defer { lock.unlock() }
+    return body()
+  }
 
-  func current() async -> SubscriptionEntitlementDecision {
-    if let override {
-      return await override()
+  static func current() async -> SubscriptionEntitlementDecision {
+    let pinned = withLock { override }
+    if let pinned {
+      return await pinned()
     }
     return await SubscriptionEntitlementService.shared.decisionForManagedProactivity()
   }
 
-  func setOverride(_ resolve: (@Sendable () async -> SubscriptionEntitlementDecision)?) {
-    override = resolve
+  static func setOverride(_ resolve: (@Sendable () async -> SubscriptionEntitlementDecision)?) {
+    withLock { override = resolve }
   }
 }
 

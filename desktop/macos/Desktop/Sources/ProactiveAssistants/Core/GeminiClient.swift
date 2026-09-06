@@ -589,7 +589,7 @@ actor GeminiClient {
   }
 
   static func enforceManagedProactivity() async throws {
-    try requireManagedProactivity(await ManagedProactivityDecisionSource.shared.current())
+    try requireManagedProactivity(await ManagedProactivityDecisionSource.current())
   }
 
   /// Send a request to the Gemini API with an image
