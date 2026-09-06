@@ -37,10 +37,11 @@ approved ledger path. Pinecone is absent from QA, so this receipt qualifies
 lexical retrieval only and records semantic/vector retrieval as unavailable.
 
 Each prove run deletes the prior readiness marker before purging or rebuilding
-the projection. It publishes a new marker only for the consumer proof window;
-if `search_knowledge` fails or receipt validation fails, the marker is deleted
-again. The application therefore remains fail-closed during rebuilds and after
-incomplete consumer verification.
+the projection. It writes a new marker only after the complete Firestore
+rebuild, projection count/digest, and producer keyword proof have succeeded,
+immediately before the consumer proof. If `search_knowledge` fails or receipt
+validation fails, the marker is deleted again. The application therefore
+remains fail-closed during rebuilds and after incomplete consumer verification.
 
 ## Dispatch and restart proof
 
