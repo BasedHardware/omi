@@ -2,9 +2,8 @@ import { isProxy } from "node:util/types";
 
 import { isWellFormedAccountId } from "../../core/control/account-control";
 import {
-  loadedChatGenerationMemoryContext,
-  unavailableChatGenerationMemoryContext,
-  type ChatGenerationContextLoadInput,
+  createMemoryReadChatGenerationContextSource,
+  type ChatGenerationContextSourceInput,
   type ChatGenerationContextSource,
 } from "../../apps/service/chat/generation-context";
 import type { PostgresFirebaseAuthorizedMemoryReadRuntime } from
@@ -40,8 +39,11 @@ const safeNow = (value: unknown): value is number =>
 const snapshotInput = (value: unknown): Readonly<{
   account_id: string;
   bearer_token: string;
+  source_input: ChatGenerationContextSourceInput;
 }> | null => {
-  const fields = exactData(value, ["accountId", "admitted", "bearerToken"]);
+  if (value === null || typeof value !== "object" || isProxy(value)) return null;
+  const optional = ["generationId", "nowEpochMilliseconds", "history"].filter((key) => Object.hasOwn(value, key));
+  const fields = exactData(value, ["accountId", "admitted", "bearerToken", ...optional]);
   if (fields === null || !isWellFormedAccountId(fields.accountId!.value)
     || typeof fields.bearerToken!.value !== "string"
     || fields.bearerToken!.value.length < 1
@@ -58,6 +60,7 @@ const snapshotInput = (value: unknown): Readonly<{
   return Object.freeze({
     account_id: fields.accountId!.value,
     bearer_token: fields.bearerToken!.value,
+    source_input: Object.freeze(Object.fromEntries(Object.entries(fields).map(([key, descriptor]) => [key, descriptor.value]))) as unknown as ChatGenerationContextSourceInput,
   });
 };
 
@@ -97,17 +100,17 @@ export const createPostgresFirebaseChatGenerationContextSource = (
     PostgresFirebaseAuthorizedMemoryReadRuntime["readForAccount"];
   const now = options.now_epoch_seconds!.value as () => number;
 
-  return Object.freeze({
-    async load(inputValue: ChatGenerationContextLoadInput) {
+  const source = createMemoryReadChatGenerationContextSource({
+    async readCanonicalPage(inputValue) {
       const input = snapshotInput(inputValue);
-      if (input === null) return unavailableChatGenerationMemoryContext();
+      if (input === null) return null;
       let at: unknown;
       try {
         at = Reflect.apply(now, undefined, []);
       } catch {
-        return unavailableChatGenerationMemoryContext();
+        return null;
       }
-      if (!safeNow(at)) return unavailableChatGenerationMemoryContext();
+      if (!safeNow(at)) return null;
       let raw: unknown;
       try {
         raw = await Reflect.apply(readForAccount, undefined, [
@@ -117,15 +120,18 @@ export const createPostgresFirebaseChatGenerationContextSource = (
           Object.freeze({ limit: 25, cursor: null }),
         ]);
       } catch {
-        return unavailableChatGenerationMemoryContext();
+        return null;
       }
       const outcome = snapshotReadOutcome(raw);
-      if (outcome.kind !== "loaded") return unavailableChatGenerationMemoryContext();
-      try {
-        return loadedChatGenerationMemoryContext(outcome.canonical_json);
-      } catch {
-        return unavailableChatGenerationMemoryContext();
-      }
+      if (outcome.kind !== "loaded") return null;
+      return outcome.canonical_json;
+    },
+  });
+  return Object.freeze({
+    async load(inputValue: ChatGenerationContextSourceInput) {
+      const input = snapshotInput(inputValue);
+      if (input === null) return Object.freeze([]);
+      return source.load(input.source_input);
     },
   });
 };
