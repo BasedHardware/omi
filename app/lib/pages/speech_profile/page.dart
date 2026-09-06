@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:just_audio/just_audio.dart';
@@ -122,6 +123,22 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
     try {
       final url = await getUserSpeechProfile();
       if (url == null || url.isEmpty) throw StateError('no speech profile url');
+      // The app's audio session is normally set up for recording, which routes
+      // playback to the quiet earpiece. Play the profile as ordinary media:
+      // playback category -> loudspeaker at media volume.
+      final session = await AudioSession.instance;
+      await session.configure(
+        const AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playback,
+          avAudioSessionMode: AVAudioSessionMode.defaultMode,
+          androidAudioAttributes: AndroidAudioAttributes(
+            contentType: AndroidAudioContentType.speech,
+            usage: AndroidAudioUsage.media,
+          ),
+        ),
+      );
+      await session.setActive(true);
+      await _profilePlayer.setVolume(1.0);
       await _profilePlayer.setUrl(url);
       if (!mounted) return;
       setState(() => _profilePlaying = true);
