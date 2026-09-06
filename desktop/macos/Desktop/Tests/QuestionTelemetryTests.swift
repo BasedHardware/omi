@@ -47,6 +47,46 @@ final class QuestionTelemetryTests: XCTestCase {
     XCTAssertEqual(asked.first?.1["attempt_id"] as? String, "typed-attempt-1")
   }
 
+  @MainActor
+  func testAcceptedChatCallbackJoinsTerminalAnswerByTheSameAttemptID() {
+    var acceptedAttemptID: String?
+    let attempt = ChatQueryTelemetryAttempt(
+      attemptId: "accepted-turn-1",
+      surface: "main_chat",
+      harness: "piMono"
+    )
+
+    ChatProvider.notifyAccepted(
+      telemetryAttempt: attempt,
+      onAccepted: nil,
+      onAcceptedWithAttemptID: { attemptID in
+        acceptedAttemptID = attemptID
+        AnalyticsManager.shared.chatMessageSent(
+          messageLength: 12, source: "query_shell", attemptID: attemptID)
+      }
+    )
+
+    let metrics = ChatQueryCompletionMetrics(
+      toolCallCount: 0,
+      toolNames: [],
+      costUsd: 0,
+      responseLength: 8,
+      screenToolRequested: false,
+      screenToolSucceeded: false,
+      screenToolApprovalRequired: false,
+      screenToolFailureCodes: []
+    )
+    XCTAssertTrue(attempt.complete(metrics: metrics))
+
+    let asked = captured.filter { $0.0 == "question_asked" }
+    let answered = captured.filter { $0.0 == "question_answered" }
+    XCTAssertEqual(acceptedAttemptID, "accepted-turn-1")
+    XCTAssertEqual(asked.count, 1)
+    XCTAssertEqual(answered.count, 1)
+    XCTAssertEqual(asked.first?.1["attempt_id"] as? String, acceptedAttemptID)
+    XCTAssertEqual(answered.first?.1["attempt_id"] as? String, acceptedAttemptID)
+  }
+
   func testEveryFloatingBarSourceMapsToASurface() {
     let mapped = Dictionary(
       FloatingBarQuerySource.allCases.map { ($0, AnalyticsManager.QuestionSurface($0)) },

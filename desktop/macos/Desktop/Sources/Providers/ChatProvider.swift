@@ -4989,8 +4989,11 @@ class ChatProvider: ObservableObject {
     // turn. Clearing composer state keeps it out of the next draft without
     // removing the pill from this message or a later journal replay.
     pendingComposerReferences.removeAll()
-    onAccepted?()
-    onAcceptedWithAttemptID?(turnAttemptId)
+    Self.notifyAccepted(
+      telemetryAttempt: telemetryAttempt,
+      onAccepted: onAccepted,
+      onAcceptedWithAttemptID: onAcceptedWithAttemptID
+    )
 
     // Track onboarding user-message shape without content.
     if isOnboarding {
@@ -6127,6 +6130,18 @@ class ChatProvider: ObservableObject {
     stagedImageAttachmentPresent: Bool
   ) -> Bool {
     explicitImagePresent || stagedImageAttachmentPresent
+  }
+
+  /// Runs acceptance callbacks from the same attempt object that emits the
+  /// terminal `question_answered` event. Keeping the ID lookup here prevents
+  /// an acceptance caller from accidentally substituting a second turn ID.
+  static func notifyAccepted(
+    telemetryAttempt: ChatQueryTelemetryAttempt,
+    onAccepted: (@MainActor () -> Void)?,
+    onAcceptedWithAttemptID: (@MainActor (_ attemptID: String) -> Void)?
+  ) {
+    onAccepted?()
+    onAcceptedWithAttemptID?(telemetryAttempt.context.attemptId)
   }
 
   nonisolated static func messageIds(forAttemptId attemptId: String) -> (
