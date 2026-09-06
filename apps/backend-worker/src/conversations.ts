@@ -1,13 +1,10 @@
-import type { ChatMessage } from "./wire";
-
-type StoredMessage = {
-  id: string;
-  text: string;
-  sender: "human" | "ai";
+type StoredConversation = {
+  id: number[];
+  title: number[];
+  overview: number[];
   createdAt: number;
-  generationOutcome: "completed" | "cancelled" | null;
-  position: number;
-  payload: string | null;
+  updatedAt: number;
+  completed: number;
 };
 
 export const CONVERSATIONS_READ_CONTRACT_VERSION = "1.0.0" as const;
@@ -76,27 +73,41 @@ export async function readConversations(
   db: D1Database,
   accountId: string
 ): Promise<ConversationProjection[]> {
+  // ponytail: summaries scale with conversation count; paginate in SQL for larger accounts.
   const result = await db
     .prepare(
-      `SELECT id, text, sender, created_at AS createdAt, generation_outcome AS generationOutcome, position, payload
-       FROM chat_messages
-       WHERE account_id = ?
-       ORDER BY position ASC`
+      `WITH normalized AS (
+         SELECT position, sender, created_at, generation_outcome, text,
+           (SELECT CASE WHEN type = 'text' THEN value END FROM json_each(CASE WHEN json_valid(payload) THEN payload ELSE '{}' END)
+            WHERE key = 'chatSessionId' ORDER BY id DESC LIMIT 1) AS session_key
+         FROM chat_messages WHERE account_id = ?
+       ), sessions AS (
+         SELECT position, sender, created_at, generation_outcome, text,
+           CASE WHEN typeof(session_key) = 'text' AND length(CAST(session_key AS BLOB)) > 0
+             THEN 'chat:' || session_key ELSE 'chat:chat-main' END AS session_id
+         FROM normalized
+       ), ranked AS (
+         SELECT *,
+           row_number() OVER (PARTITION BY session_id ORDER BY position) AS first_rank,
+           row_number() OVER (PARTITION BY session_id ORDER BY position DESC) AS last_rank,
+           row_number() OVER (PARTITION BY session_id ORDER BY sender = 'human' DESC, position) AS title_rank
+         FROM sessions
+       ), selected AS (
+         SELECT *, trim(text, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279)) AS display_text
+         FROM ranked WHERE first_rank = 1 OR last_rank = 1 OR title_rank = 1
+       )
+       SELECT CAST(session_id AS BLOB) AS id,
+         max(CASE WHEN title_rank = 1 THEN substr(CAST(display_text AS BLOB), 1, 964) END) AS title,
+         max(CASE WHEN last_rank = 1 THEN substr(CAST(display_text AS BLOB), 1, 964) END) AS overview,
+         max(CASE WHEN first_rank = 1 THEN created_at END) AS createdAt,
+         max(CASE WHEN last_rank = 1 THEN created_at END) AS updatedAt,
+         max(CASE WHEN last_rank = 1 THEN sender = 'ai' AND generation_outcome = 'completed' ELSE 0 END) AS completed
+       FROM selected GROUP BY session_id`
     )
     .bind(accountId)
-    .all<StoredMessage>();
+    .all<StoredConversation>();
 
-  const groups = new Map<string, StoredMessage[]>();
-  for (const row of result.results) {
-    const sessionId = sessionIdOf(row);
-    const rows = groups.get(sessionId);
-    if (rows === undefined) groups.set(sessionId, [row]);
-    else rows.push(row);
-  }
-
-  const conversations = [...groups.entries()].map(([id, rows]) =>
-    projectConversation(id, rows)
-  );
+  const conversations = result.results.map(projectConversation);
   const recordings = await db
     .prepare(
       "SELECT s.id, s.started_at, s.ended_at, t.state, substr(trim(t.text), 1, 241) AS text, t.updated_at FROM device_transcriptions t JOIN device_sessions s ON s.id = t.session_id AND s.account_id = t.account_id WHERE t.account_id = ? ORDER BY s.started_at DESC"
@@ -213,38 +224,17 @@ export function toLegacyConversation(
   };
 }
 
-function sessionIdOf(row: StoredMessage): string {
-  if (row.payload === null) return MAIN_CONVERSATION_ID;
-  try {
-    const payload = JSON.parse(row.payload) as Partial<ChatMessage>;
-    return typeof payload.chatSessionId === "string" &&
-      payload.chatSessionId.length > 0
-      ? `chat:${payload.chatSessionId}`
-      : MAIN_CONVERSATION_ID;
-  } catch {
-    return MAIN_CONVERSATION_ID;
-  }
-}
-
-function projectConversation(
-  id: string,
-  rows: StoredMessage[]
-): ConversationProjection {
-  const first = rows[0]!;
-  const last = rows[rows.length - 1]!;
-  const titleSource = rows.find((row) => row.sender === "human") ?? first;
-  const completed =
-    last.sender === "ai" && last.generationOutcome === "completed";
+function projectConversation(row: StoredConversation): ConversationProjection {
   return {
-    id,
-    title: displayText(titleSource.text),
-    overview: displayText(last.text),
-    createdAt: first.createdAt,
-    updatedAt: last.createdAt,
-    startedAt: first.createdAt,
-    finishedAt: completed ? last.createdAt : null,
+    id: decodeSessionId(row.id),
+    title: boundedDisplayText(row.title),
+    overview: boundedDisplayText(row.overview),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    startedAt: row.createdAt,
+    finishedAt: row.completed ? row.updatedAt : null,
     source: "chat",
-    status: completed ? "completed" : "in_progress",
+    status: row.completed ? "completed" : "in_progress",
     discarded: false,
     starred: false,
     visibility: "private",
@@ -252,6 +242,40 @@ function projectConversation(
     folderId: null,
     revision: null,
   };
+}
+
+function decodeSessionId(bytes: number[]): string {
+  const input = new Uint8Array(bytes);
+  const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+  let result = "";
+  let start = 0;
+  for (let index = 0; index + 2 < input.length; index++) {
+    const middle = input[index + 1]!;
+    const last = input[index + 2]!;
+    if (
+      input[index] === 0xed &&
+      middle >= 0xa0 &&
+      middle <= 0xbf &&
+      last >= 0x80 &&
+      last <= 0xbf
+    ) {
+      result += decoder.decode(input.subarray(start, index));
+      result += String.fromCharCode(
+        0xd000 | ((middle & 0x3f) << 6) | (last & 0x3f)
+      );
+      index += 2;
+      start = index + 1;
+    }
+  }
+  return result + decoder.decode(input.subarray(start));
+}
+
+function boundedDisplayText(bytes: number[]): string {
+  const text = new TextDecoder().decode(new Uint8Array(bytes), {
+    stream: true,
+  });
+  if (text.length === 0) return "Chat";
+  return text.length > 240 ? `${text.slice(0, 237)}...` : text;
 }
 
 function displayText(text: string): string {
