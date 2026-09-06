@@ -70,7 +70,10 @@ enum MemoryAtlasRenderPlanner {
     // These budgets exist to keep a multi-thousand-entity graph legible. An
     // atlas small enough to name in full needs no rationing: withholding
     // labels there just leaves unreadable dots on an empty canvas. Collision
-    // admission still decides what actually fits.
+    // admission still decides what actually fits, which is why the budgets
+    // past overview are generous: zooming in is asking for names, and the
+    // smaller circles should get theirs as soon as there is room beside them
+    // rather than at the last level.
     let isSmallAtlas = !compact && snapshot.nodes.count <= MemoryAtlasZoomPolicy.smallAtlasCeiling
     let labelsPerCluster: Int =
       if isSmallAtlas {
@@ -78,10 +81,10 @@ enum MemoryAtlasRenderPlanner {
       } else {
         switch detailLevel {
         case .overview: compact ? 2 : 3
-        case .neighborhood: compact ? 4 : 7
-        case .detail: compact ? 5 : 11
-        case .focus: compact ? 5 : 24
-        case .inspect: compact ? 5 : 96
+        case .neighborhood: compact ? 4 : 16
+        case .detail: compact ? 5 : 40
+        case .focus: compact ? 5 : 96
+        case .inspect: compact ? 5 : 200
         }
       }
     let labelLimit: Int =
@@ -90,10 +93,10 @@ enum MemoryAtlasRenderPlanner {
       } else {
         switch detailLevel {
         case .overview: 12
-        case .neighborhood: 24
-        case .detail: 36
-        case .focus: 72
-        case .inspect: 96
+        case .neighborhood: 48
+        case .detail: 110
+        case .focus: 180
+        case .inspect: 240
         }
       }
 

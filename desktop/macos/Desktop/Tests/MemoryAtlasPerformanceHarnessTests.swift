@@ -60,7 +60,7 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     let plan = makePlan(snapshot: snapshot, zoom: 1.5)
 
     XCTAssertEqual(plan.detailLevel, .neighborhood)
-    assertWorkBudgets(plan, nodes: 1_600, edges: 2_400, labels: 24)
+    assertWorkBudgets(plan, nodes: 1_600, edges: 2_400, labels: 48)
     XCTAssertEqual(plan.visibleNodes.count, 1_600)
   }
 
@@ -69,7 +69,7 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     let plan = makePlan(snapshot: snapshot, zoom: 2.2)
 
     XCTAssertEqual(plan.detailLevel, .detail)
-    assertWorkBudgets(plan, nodes: 2_400, edges: 3_000, labels: 36)
+    assertWorkBudgets(plan, nodes: 2_400, edges: 3_000, labels: 110)
     XCTAssertEqual(plan.visibleNodes.count, snapshot.nodes.count)
   }
 
@@ -84,7 +84,7 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     XCTAssertEqual(MemoryAtlasZoomPolicy.maximumZoom(nodeCount: snapshot.nodes.count, compact: true), 1.35)
     XCTAssertEqual(automaticCanvasLabelZoom, 45)
     XCTAssertEqual(plan.detailLevel, .inspect)
-    assertWorkBudgets(plan, nodes: 3_200, edges: 4_200, labels: 96)
+    assertWorkBudgets(plan, nodes: 3_200, edges: 4_200, labels: 240)
     XCTAssertEqual(plan.visibleNodes.count, snapshot.nodes.count)
     XCTAssertLessThan(plan.interactiveNodes.count, plan.visibleNodes.count)
     XCTAssertTrue(plan.labelNodeIDs.isEmpty)
@@ -136,7 +136,7 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     XCTAssertEqual(plan.visibleNodes.count, snapshot.nodes.count)
     XCTAssertEqual(Set(plan.canvasLabelNodes.map(\.id)), Set(plan.visibleNodes.map(\.id)))
     XCTAssertTrue(plan.labelNodeIDs.isEmpty)
-    XCTAssertLessThanOrEqual(plan.interactiveNodes.count, 96)
+    XCTAssertLessThanOrEqual(plan.interactiveNodes.count, 240)
   }
 
   func testCenterAnchoredDeepZoomKeepsTheFocusedEntityInView() {
@@ -261,8 +261,13 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
       let edgeLimit = frame.isMultiple(of: 3) ? min(baseEdgeLimit, 80) : baseEdgeLimit
       XCTAssertLessThanOrEqual(plan.visibleNodes.count, nodeLimit)
       XCTAssertLessThanOrEqual(plan.visibleEdges.count, edgeLimit)
+      // The SwiftUI label overlay is what these bound; the planner's budgets
+      // past overview are deliberately generous so smaller circles are named
+      // as soon as there is room (collision admission decides the rest).
       let labelLimit =
-        zoom >= MemoryAtlasZoomPolicy.inspectModeZoom ? 96 : (zoom >= MemoryAtlasZoomPolicy.focusModeZoom ? 72 : 36)
+        zoom >= MemoryAtlasZoomPolicy.inspectModeZoom
+        ? 240
+        : (zoom >= MemoryAtlasZoomPolicy.focusModeZoom ? 180 : (zoom >= 1.9 ? 110 : (zoom >= 1.35 ? 48 : 12)))
       XCTAssertLessThanOrEqual(plan.interactiveNodes.count, labelLimit)
     }
   }
