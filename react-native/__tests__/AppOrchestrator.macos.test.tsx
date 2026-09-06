@@ -621,6 +621,59 @@ test('a stale older-history recovery cannot overwrite a newer desktop send', asy
   expect(textOf(renderer)).toContain('fresh answer');
 });
 
+test.each(['', 'next question'])(
+  'a rejected admission preserves the draft when the next draft is %j',
+  async nextDraft => {
+    mockBackend.generationEvents.mockClear();
+    mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+    mockAuth.hasCloudSession.mockResolvedValue(true);
+    let rejectAdmission: ((error: Error) => void) | undefined;
+    mockBackend.request.mockImplementation(async (value: {id: string}) => {
+      if (value.id === 'chat-history') {
+        return {id: value.id, status: 200, body: historyBody([])};
+      }
+      if (value.id.startsWith('admit-')) {
+        return new Promise((_resolve, reject) => {
+          rejectAdmission = reject;
+        });
+      }
+      return {id: value.id, status: 501, body: null};
+    });
+    const renderer = await renderApp();
+    const omnibar = renderer.root
+      .findAllByType(TextInput)
+      .find(
+        node => node.props.placeholder === "Search what you've seen and heard…",
+      )!;
+    act(() => {
+      omnibar.props.onChangeText('unsent question');
+    });
+    await act(async () => {
+      omnibar.props.onSubmitEditing();
+      await flushAsyncQueue();
+    });
+    const composer = renderer.root
+      .findAllByType(TextInput)
+      .find(node => node.props.onChangeText !== undefined)!;
+    act(() => {
+      composer.props.onChangeText(nextDraft);
+    });
+    await act(async () => {
+      rejectAdmission!(new Error('offline'));
+      await flushAsyncQueue();
+    });
+    expect(
+      renderer.root
+        .findAllByType(TextInput)
+        .some(node => node.props.value === (nextDraft || 'unsent question')),
+    ).toBe(true);
+    expect(textOf(renderer)).toContain(
+      'Message not sent. Check your connection and try again.',
+    );
+    expect(mockBackend.generationEvents).not.toHaveBeenCalled();
+  },
+);
+
 test('an admitted stream failure keeps its uncertain interruption visible', async () => {
   mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
   mockAuth.hasCloudSession.mockResolvedValue(true);

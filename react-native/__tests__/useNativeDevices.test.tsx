@@ -478,3 +478,50 @@ test('completes a session that opens after disconnect', async () => {
     ),
   );
 });
+
+test('an ambiguous audio failure stays visible and never completes or retries the recording', async () => {
+  mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+  mockBackend.request.mockImplementation(async (request: {path: string}) => {
+    if (request.path.endsWith('/audio')) {
+      throw new Error('Connection lost after upload');
+    }
+    return sessionResponse(201);
+  });
+  const hook = await renderHook();
+  const audio = {
+    type: 'audio' as const,
+    deviceId: 'omi-1',
+    codec: 21,
+    payloadBase64: 'AQID',
+  };
+  await ReactTestRenderer.act(async () => {
+    emitNative(audio);
+  });
+  expect(hook.latest().deviceScanMessage).toContain(
+    'could not be saved completely',
+  );
+  await ReactTestRenderer.act(async () => {
+    emitNative(audio);
+    await hook.latest().toggleDevice('omi-1', true);
+  });
+  expect(
+    mockBackend.request.mock.calls.filter(([request]) =>
+      request.path.endsWith('/audio'),
+    ),
+  ).toHaveLength(1);
+  expect(
+    mockBackend.request.mock.calls.some(([request]) =>
+      request.path.endsWith('/complete'),
+    ),
+  ).toBe(false);
+
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().toggleDevice('omi-1', false);
+    emitNative(audio);
+  });
+  expect(
+    mockBackend.request.mock.calls.filter(
+      ([request]) => request.path === '/v1/device-sessions',
+    ),
+  ).toHaveLength(2);
+});
