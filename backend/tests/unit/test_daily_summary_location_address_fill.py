@@ -165,3 +165,22 @@ def test_geocoder_exception_keeps_the_pin_without_an_address(ext):
 
     assert len(result["locations"]) == 1
     assert result["locations"][0]["address"] is None
+
+
+def test_geocode_attempts_are_capped_per_summary(ext):
+    """11 empty-address pins -> 10 geocode attempts; the 11th pin keeps 'Unknown'."""
+    geocoder = MagicMock(side_effect=lambda lat, lng: _Geo(lat, lng, address=f"{lat:.0f} Filled St, San Francisco"))
+    _configure(ext, geocoder)
+    started = datetime(2026, 8, 30, 14, 0, tzinfo=timezone.utc)
+    convos = [
+        _Convo(f"c-{i}", _Geo(37.0 + i / 10.0, -122.4), started_at=started) for i in range(1, 12)
+    ]  # 11 pins, all address-less
+
+    result = ext.generate_comprehensive_daily_summary("uid", convos, "2026-08-30")
+
+    assert geocoder.call_count == ext._DAILY_SUMMARY_GEOCODE_ATTEMPT_CAP == 10
+    assert len(result["locations"]) == 11  # every pin stays
+    filled = [pin for pin in result["locations"] if pin["address"]]
+    unfilled = [pin for pin in result["locations"] if not pin["address"]]
+    assert len(filled) == 10
+    assert len(unfilled) == 1  # the pin past the cap falls back to "Unknown" in the app
