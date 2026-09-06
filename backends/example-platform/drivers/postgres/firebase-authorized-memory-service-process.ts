@@ -113,12 +113,20 @@ const nestedAuthorization = (serviceOptions: unknown): Readonly<{
 }> => {
   const service = exactRecordWithOptional(serviceOptions, [
     "counter", "mcp_handler", "memory_read", "now_epoch_seconds",
-  ], ["observability"]);
+  ], ["observability", "tasks", "device_sessions"]);
   const memoryRead = exactRecord(service["memory_read"], ["authorization", "product"]);
   const authorization = exactRecord(memoryRead["authorization"], [
     "application_id", "context_ttl_seconds", "database_generation_digest",
     "id_token_adapter", "pool", "project_id", "runtime_mode",
   ]);
+  for (const key of ["tasks", "device_sessions"]) {
+    if (!Object.hasOwn(service, key)) continue;
+    const candidate = key === "tasks"
+      ? exactRecord(service[key], ["authorization", "codecRootSecret", "cursorSigningKeyset"])["authorization"]
+      : service[key];
+    const paired = exactRecord(candidate, Object.keys(authorization));
+    if (Object.keys(authorization).some(field => paired[field] !== authorization[field])) fail();
+  }
   return Object.freeze({
     pool: authorization["pool"],
     databaseGenerationDigest: authorization["database_generation_digest"],

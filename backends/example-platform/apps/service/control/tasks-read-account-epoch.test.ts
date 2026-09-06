@@ -104,6 +104,7 @@ const recordingStore = (): {
 const preparedRead = (principal: DevPrincipal): PreparedTasksRead => {
   const tasks = createInMemoryTasksStore();
   return prepareTasksRead({
+    authorityBinding: { kind: "local_qa" },
     store: tasks,
     resolveAuthorization: () => ({
       owner_account_id: principal.uid,

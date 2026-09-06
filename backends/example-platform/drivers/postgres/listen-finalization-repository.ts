@@ -1,7 +1,10 @@
+import { randomUUID } from "node:crypto";
+import { parseDeviceSessionUploadCreate, DEVICE_UPLOAD_SESSION_ID, type DeviceSessionUpload, type DeviceSessionUploadRepository } from "../../apps/service/stores/device-session-upload";
 import { isProxy } from "node:util/types";
 
 import {
   assertAuthorizedLedgerWriteContext,
+  assertAuthorizedLedgerWriteContextCurrentAt,
   type AuthorizedLedgerWriteContext,
 } from "../../apps/service/auth/authorized-context";
 import {
@@ -474,3 +477,57 @@ export const createPostgresListenFinalizationRepository = (
     finalize,
   });
 };
+
+export function createPostgresDeviceSessionUploadRepository(options: PostgresListenFinalizationRepositoryOptions): DeviceSessionUploadRepository {
+  const parse = (value: unknown): DeviceSessionUpload | null => {
+    if (value === null) return null;
+    const row = exactRow(value, ["id", "deviceId", "deviceName", "codec", "state", "byteCount", "chunkCount", "startedAt", "endedAt"]);
+    if (typeof row.id !== "string" || !DEVICE_UPLOAD_SESSION_ID.test(row.id)
+      || typeof row.deviceId !== "string" || (row.deviceName !== null && typeof row.deviceName !== "string")
+      || (row.state !== "open" && row.state !== "complete")) fail("persistence_failed");
+    return Object.freeze({ id: row.id as string, deviceId: row.deviceId as string, deviceName: row.deviceName as string | null,
+      codec: integer(row.codec), state: row.state as "open" | "complete", byteCount: integer(row.byteCount),
+      chunkCount: integer(row.chunkCount), startedAt: integer(row.startedAt), endedAt: row.endedAt === null ? null : integer(row.endedAt) });
+  };
+  const query = (context: AuthorizedLedgerWriteContext, statement: import("./connection").SqlStatement) =>
+    withAuthorizedSerializableConnectionTransaction(options.pool, preflight(context), async ({ connection }) => {
+      const rows = await connection.query<{ session: unknown }>(statement);
+      if (rows.length !== 1) fail("persistence_failed");
+      const session = parse(rows[0]!.session);
+      const clocks = await connection.query({ name: "listen.audio.final_clock",
+        text: "SELECT floor(extract(epoch FROM clock_timestamp()))::bigint AS now", values: [] });
+      if (clocks.length !== 1) fail("persistence_failed");
+      const now = integer(clocks[0]!.now);
+      try { assertAuthorizedLedgerWriteContextCurrentAt(context, now); }
+      catch { fail("expired_context"); }
+      return session;
+    }, options.observability ?? {});
+  const id = (value: string) => { if (!DEVICE_UPLOAD_SESSION_ID.test(value)) throw new TypeError("invalid_device_request"); return value; };
+  return Object.freeze<DeviceSessionUploadRepository>({
+    async open(context, value) {
+      const input = parseDeviceSessionUploadCreate(value);
+      const sessionId = randomUUID();
+      const request = normalizeOpen(parseListenCaptureOpenRequest({
+        version: LISTEN_CAPTURE_OPEN_VERSION, session_id: sessionId, conversation_id: randomUUID(),
+        client_conversation_id: input.captureId, started_at: new Date().toISOString(), source: "omi-device",
+        codec: input.codec === 1 ? "pcm8" : input.codec === 20 || input.codec === 21 ? "opus" : String(input.codec),
+        sample_rate: 16000, channels: 1,
+      }));
+      const result = await query(context, {
+        name: "listen.audio.open", text: "SELECT omi_memory.open_listen_audio_upload($1::uuid,$2,$3,$4,$5,$6,$7::timestamptz,$8,$9,$10,$11) AS session",
+        values: [input.captureId, input.deviceId, input.deviceName, input.codec, request.session_id, request.conversation_id,
+          request.started_at, request.codec, request.sample_rate, sessionHash(context.account_id, request, request.started_at),
+          stateHash(context.account_id, request.session_id, LISTEN_CAPTURE_OPEN_VERSION, "active", request.started_at)],
+      });
+      if (result === null) fail("persistence_failed");
+      return result as DeviceSessionUpload;
+    },
+    read: (context, sessionId) => query(context, { name: "listen.audio.read", text: "SELECT omi_memory.read_listen_audio_upload($1) AS session", values: [id(sessionId)] }),
+    append(context, sessionId, index, bytes) {
+      if (!Number.isSafeInteger(index) || index < 0 || index > 65535 || !(bytes instanceof Uint8Array)
+        || bytes.length < 1 || bytes.length > 1048576) throw new TypeError("invalid_device_request");
+      return query(context, { name: "listen.audio.append", text: "SELECT omi_memory.append_listen_audio_upload($1,$2,$3::bytea) AS session", values: [id(sessionId), index, new Uint8Array(bytes)] });
+    },
+    complete: (context, sessionId) => query(context, { name: "listen.audio.complete", text: "SELECT omi_memory.complete_listen_audio_upload($1) AS session", values: [id(sessionId)] }),
+  });
+}

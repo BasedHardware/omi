@@ -856,6 +856,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
    * not something the composition works out for itself.
    */
   const prepareTasksReadFor = (principal: DevPrincipal) => prepareTasksRead({
+    authorityBinding: { kind: "local_qa" },
     store: tasks as TasksReadStore,
     resolveAuthorization: () => ({
       owner_account_id: principal.uid,

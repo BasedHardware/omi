@@ -14,7 +14,7 @@ import type {
   SerializableTransactionOptions,
   SqlStatement,
 } from "./connection";
-import { createPostgresListenFinalizationRepository } from "./listen-finalization-repository";
+import { createPostgresListenFinalizationRepository, createPostgresDeviceSessionUploadRepository } from "./listen-finalization-repository";
 import { authorizationStateDigest, type AuthorityStateRow } from "./transaction";
 
 const hash = (character: string): string => character.repeat(64);
@@ -105,6 +105,41 @@ class FakePool implements PostgresTransactionPool {
 }
 
 describe("PostgreSQL Listen finalization repository", () => {
+  test("upload completion rechecks authority after a delayed mutation before transaction commit", async () => {
+    for (const finalTime of [499, 500]) {
+      let release!: () => void, began!: () => void;
+      const waiting = new Promise<void>(resolve => { release = resolve; });
+      const started = new Promise<void>(resolve => { began = resolve; });
+      const id = "ad99598c-36a8-4e12-a428-63d0a3e06170";
+      class DelayedConnection extends FakeConnection {
+        override async query<Row extends Record<string, unknown>>(statement: SqlStatement): Promise<readonly Row[]> {
+          if (statement.name === "listen.audio.complete") { began(); await waiting; }
+          return super.query<Row>(statement);
+        }
+      }
+      const connection = new DelayedConnection({
+        "listen.audio.complete": [{ session: { id, deviceId: "omi", deviceName: null, codec: 20,
+          state: "complete", byteCount: 3, chunkCount: 1, startedAt: 100, endedAt: finalTime } }],
+        "listen.audio.final_clock": [{ now: String(finalTime) }],
+      });
+      let committed = false, rolledBack = false;
+      const pool: PostgresTransactionPool = {
+        async withTransaction(_options, operation) {
+          try { const result = await operation(connection); committed = true; return result; }
+          catch (error) { rolledBack = true; throw error; }
+        },
+      };
+      const completion = createPostgresDeviceSessionUploadRepository({ pool }).complete(context(), id);
+      await started;
+      expect(committed).toBe(false);
+      release();
+      if (finalTime < 500) await expect(completion).resolves.toMatchObject({ id, state: "complete" });
+      else await expect(completion).rejects.toMatchObject({ code: "expired_context" });
+      expect(committed).toBe(finalTime < 500);
+      expect(rolledBack).toBe(finalTime >= 500);
+    }
+  });
+
   test("preflights capability before checking out a pool connection", async () => {
     const pool = new FakePool(new FakeConnection());
     const repository = createPostgresListenFinalizationRepository({ pool });

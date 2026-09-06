@@ -121,3 +121,21 @@ describe("PostgreSQL Firebase canonical memory service app", () => {
     } as never)).toThrow("invalid PostgreSQL Firebase memory service options");
   });
 });
+
+test("configured task reads and writes use the canonical shell and reject invalid Firebase identity before storage", async () => {
+  const base = options();
+  const app = createPostgresFirebaseAuthorizedMemoryServiceApp({
+    ...base,
+    tasks: {
+      authorization: base.memory_read.authorization,
+      codecRootSecret: new Uint8Array(32).fill(1),
+      cursorSigningKeyset: { active_key_id: "test", keys: [{ key_id: "test", secret: new Uint8Array(32).fill(2) }] },
+    },
+  });
+  const read = await app.request("/v1/tasks", {headers:{authorization:"Bearer invalid"}});
+  expect(read.status).toBe(401);
+  expect(await read.text()).toBe('{"error":"unauthorized"}');
+  const write = await app.request("/v1/tasks/ops", {method:"POST",headers:{authorization:"Bearer invalid"},body:"{}"});
+  expect(write.status).toBe(401);
+  expect(await write.text()).toBe('{"error":"unauthorized","refusal_outcome":"authentication"}');
+});

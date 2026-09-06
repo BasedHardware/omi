@@ -648,7 +648,7 @@ realTest("derived group dream PostgreSQL one-shot runtime", () => {
       work_kind: "derived_group_dream",
       execution_contract_digest: assignment.authority.execution_contract_digest,
       max_attempts: 2,
-      lease_duration_seconds: 1,
+      lease_duration_seconds: 10,
       retry_delays_seconds: [1],
     });
 
@@ -721,7 +721,7 @@ realTest("derived group dream PostgreSQL one-shot runtime", () => {
     }]);
 
     // --- explicit lease recovery, then one healthy execution ---
-    await sleep(2_000);
+    await sleep(11_000);
     await expect(healthyRuntime.recoverExpired(executeContext, jobId)).resolves.toMatchObject({
       kind: "recovered",
     });

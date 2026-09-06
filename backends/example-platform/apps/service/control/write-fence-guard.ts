@@ -30,7 +30,7 @@ import type { EntitlementProjectionReader } from "./settings-projection";
 import type { WriteEnforcementDecision } from "./write-enforcement-decision";
 
 export interface WriteFenceDependencies {
-  readonly store: AccountControlProjectionStore;
+  readonly store: Pick<AccountControlProjectionStore, "read">;
   /** The same entitlement projection rendered by Settings. */
   readonly entitlement: EntitlementProjectionReader;
   readonly counter: WriteFenceCounter;

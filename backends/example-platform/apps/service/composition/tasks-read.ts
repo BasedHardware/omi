@@ -144,6 +144,7 @@ export interface TasksReadAuthorization {
 }
 
 export interface TasksReadCompositionConfig {
+  readonly authorityBinding: { readonly kind: "local_qa" } | { readonly kind: "persisted"; readonly authorizationDigest: string; readonly grantDigest: string; readonly accountEpoch: number };
   /** The store's READ interface. OPS owns the module; this is a read-only consumer. */
   readonly store: TasksReadStore;
   /**
@@ -264,17 +265,17 @@ export const prepareTasksRead = (config: TasksReadCompositionConfig): PreparedTa
     owner_digest: digestOf("owner", authorization.owner_account_id),
     app_digest: digestOf("app", authorization.app_id),
     credential_key_digest: digestOf("credential", authorization.key_id),
-    authorization_generation_digest: digestOf("authorization-generation", {
+    authorization_generation_digest: config.authorityBinding.kind === "persisted" ? config.authorityBinding.authorizationDigest : digestOf("authorization-generation", {
       owner: authorization.owner_account_id,
       app: authorization.app_id,
       key: authorization.key_id,
     }),
-    grant_generation_digest: digestOf("grant-generation", { grant: "dev-local" }),
+    grant_generation_digest: config.authorityBinding.kind === "persisted" ? config.authorityBinding.grantDigest : digestOf("grant-generation", { grant: "dev-local" }),
     // AUTHORIZATION-SCOPED, never the ledger head. The store is per-account by
     // construction (`listRecords(accountId)` cannot reach another account), so
     // binding the account rather than a global sequence is what keeps a hidden
     // row in another account from moving this reader's cursor.
-    account_generation_digest: digestOf("account-generation", authorization.owner_account_id),
+    account_generation_digest: digestOf("account-generation", config.authorityBinding.kind === "persisted" ? { owner: authorization.owner_account_id, epoch: config.authorityBinding.accountEpoch } : authorization.owner_account_id),
     graph_generation_digest: digestOf("graph-generation", authorization.owner_account_id),
     projection_generation_digest: digestOf("projection-generation", {
       applied_frontier: config.appliedFrontierState,

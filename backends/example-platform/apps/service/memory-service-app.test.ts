@@ -128,3 +128,24 @@ describe("canonical memory service composition", () => {
     expect(dependencyGetterCalls).toBe(0);
   });
 });
+
+test("device upload routes preserve original body and cancellation through the canonical shell", async () => {
+  const controller = new AbortController();
+  let seenBody = "", seenSignal: AbortSignal | undefined;
+  const app = createMemoryServiceApp(() => new Response(null, { status: 503 }), {
+    readPort: defineMemoryRouteReadPort(async () => false, async () => ({ kind: "unavailable" })),
+    nowEpochSeconds: () => 100, counter: createServedCounter(),
+  }, {}, undefined, { async fetch(request) {
+    seenBody = await request.text(); seenSignal = request.signal;
+    return Response.json({ error: { code: "forbidden" } }, { status: 403 });
+  } });
+  const raw = ' { "chunkIndex":0, "bytesBase64":"AQ==" } ';
+  const response = await app.fetch(new Request("https://service.example/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/audio", {
+    method: "POST", body: raw, signal: controller.signal,
+  }));
+  expect(response.status).toBe(403);
+  expect(seenBody).toBe(raw);
+  controller.abort();
+  expect(seenSignal?.aborted).toBe(true);
+  expect((await app.request("/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/transcript")).status).toBe(404);
+});

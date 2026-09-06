@@ -103,10 +103,10 @@ export interface TasksOpsRouteDependencies {
   /** Resolves a bearer token to a principal, or null. Never throws for bad input. */
   readonly resolvePrincipal: (token: string) => DevPrincipal | null;
   readonly unitOfWork: WriteUnitOfWork;
-  readonly stragglers: StragglerTable;
+  readonly stragglers: Pick<StragglerTable, "preserve">;
   /** The fence's store and producer-side counter — its one composition. */
   readonly fence: {
-    readonly store: AccountControlProjectionStore;
+    readonly store: Pick<AccountControlProjectionStore, "read">;
     readonly entitlement: EntitlementProjectionReader;
     readonly counter: WriteFenceCounter;
   };
@@ -155,7 +155,11 @@ const opFingerprint = (envelope: WriteOpEnvelope): unknown => ({
  */
 const INTERNAL_BODY = JSON.stringify({ error: "internal_server_error" });
 
-export const registerTasksOpsRoutes = (app: Hono, deps: TasksOpsRouteDependencies): void => {
+export const registerTasksOpsRoutes = (app: Hono, deps: TasksOpsRouteDependencies | { readonly executeRequest: (request: Request) => Promise<Response> }): void => {
+  if ("executeRequest" in deps) {
+    app.post(WRITE_OPS_ROUTE_PATTERN, context => deps.executeRequest(context.req.raw));
+    return;
+  }
   const handler = async (context: {
     req: {
       param: (name: string) => string | undefined;
