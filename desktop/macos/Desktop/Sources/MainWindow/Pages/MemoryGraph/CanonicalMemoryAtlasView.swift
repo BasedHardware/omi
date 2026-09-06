@@ -779,6 +779,12 @@ private struct CanonicalMemoryAtlasSurface: View {
   private func territory(
     in size: CGSize, plan: MemoryAtlasRenderPlan
   ) -> (islands: [MemoryAtlasNeighbourhoodLabels.Placed], quietened: Set<String>) {
+    // The territory layer is off: the redesign says what matters about an
+    // entity with its size — how connected it is — and the ground under it
+    // was a second, competing way of saying where it belongs. The layer stays
+    // in the code behind this switch; entering a region still moves the
+    // camera and still names the region's entities.
+    guard Self.drawsTerritories else { return ([], []) }
     // A coastline that disappears while you pan is the map losing the very
     // shape you were following, so territories stay up through a gesture —
     // but they are not re-solved for it. The layer solved when the camera
@@ -1236,6 +1242,9 @@ private struct CanonicalMemoryAtlasSurface: View {
     }
   }
 
+  /// Whether the map paints neighbourhood territories and their captions.
+  static let drawsTerritories = false
+
   private var isSmallAtlas: Bool {
     !compact && snapshot.nodes.count <= MemoryAtlasZoomPolicy.smallAtlasCeiling
   }
@@ -1249,7 +1258,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       isInspect: isInspectMode,
       isFocus: isFocusMode,
       isSmallAtlas: isSmallAtlas
-    )
+    ) * MemoryAtlasNodeVisualPolicy.degreeScale(placement.degree)
   }
 
   private func nodeLabel(
@@ -1663,19 +1672,18 @@ private struct CanonicalMemoryAtlasSurface: View {
     CGRect(x: -28, y: -28, width: size.width + 56, height: size.height + 56)
   }
 
+  /// A ring's size says how connected the entity is: one connection is the
+  /// base, and each level of zoom has its own base. The account holder is
+  /// fixed at a landmark size — its connections are the map — and a selected
+  /// entity is drawn a step larger than it would be otherwise.
   private func nodeDiameter(_ placement: MemoryAtlasNodePlacement, selected: Bool) -> CGFloat {
-    if isInspectMode {
-      if selected { return 64 }
-      if placement.id == snapshot.anchorNodeID { return 50 }
-      if placement.isCatalog { return 34 }
-      if placement.clusterRank == 0 { return 42 }
-      return 34
+    if placement.id == snapshot.anchorNodeID {
+      if isInspectMode { return selected ? 64 : 50 }
+      return compact ? 24 : (isFocusMode ? (selected ? 50 : 38) : (selected ? 34 : 29))
     }
-    if selected { return compact ? 28 : (isFocusMode ? 50 : 34) }
-    if placement.id == snapshot.anchorNodeID { return compact ? 24 : (isFocusMode ? 38 : 29) }
-    if placement.isCatalog { return compact ? 10 : (isFocusMode ? 22 : 13) }
-    if placement.clusterRank == 0 { return compact ? 19 : (isFocusMode ? 32 : 23) }
-    return compact ? 10 : (isFocusMode ? 22 : 13)
+    let base: CGFloat = isInspectMode ? 30 : (compact ? 10 : (isFocusMode ? 20 : 12))
+    let scaled = base * MemoryAtlasNodeVisualPolicy.degreeScale(placement.degree)
+    return selected ? scaled * 1.4 : scaled
   }
 
   private func nodeMatchesSearch(_ node: KnowledgeGraphNode) -> Bool {
