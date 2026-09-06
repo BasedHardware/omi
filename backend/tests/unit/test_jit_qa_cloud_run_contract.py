@@ -269,13 +269,3 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "gcr.io/${QA_PROJECT}" in text
     assert "vars.GCP_PROJECT_ID" not in text
     assert "environment: prod" not in text
-
-
-def test_bounded_proactivity_capability_is_required_on_qa_http_and_gateway_only():
-    key = "OMI_JIT_PROACTIVITY_BUDGET_CONTRACT"
-    for profile in ("backend", "desktop", "gateway"):
-        literals, _ = CONTRACT.resource_environment(profile)
-        assert literals[key] == "jit-cloud-qa-v1"
-    for profile in ("drain", "sweep"):
-        literals, _ = CONTRACT.resource_environment(profile)
-        assert key not in literals

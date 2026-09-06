@@ -349,7 +349,6 @@ def resource_environment(
                 **identity,
                 "MEMORY_ENABLED": "on",
                 "MEMORY_BELIEF_MODEL_ENABLED": "true",
-                "OMI_JIT_PROACTIVITY_BUDGET_CONTRACT": "jit-cloud-qa-v1",
                 "OMI_JIT_QA_AUTH_ONLY": "true",
                 "OMI_JIT_QA_UID_ALLOWLIST": QA_UID,
                 "OMI_LLM_GATEWAY_FEATURE_MODE": "gateway",
@@ -370,7 +369,6 @@ def resource_environment(
                 "OMI_LLM_GATEWAY_PROD": "false",
                 "LLM_GATEWAY_ALLOWED_CALLERS": "backend,desktop",
                 "OMI_LLM_GATEWAY_BUILD_IDENTITY": "jit-qa",
-                "OMI_JIT_PROACTIVITY_BUDGET_CONTRACT": "jit-cloud-qa-v1",
             },
             {
                 **_GATEWAY_SECRET_BINDINGS,
