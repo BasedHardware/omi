@@ -90,7 +90,7 @@ android {
         versionName "1.0"
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17"
+                cppFlags "-std=c++20"
             }
         }
     }
