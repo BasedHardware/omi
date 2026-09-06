@@ -83,20 +83,7 @@ export const verifyOwnedContainerConfiguration = (
   if (mount.stdout !== `volume|${state.volumeName}|/var/lib/postgresql`) {
     return fail("postgres_test_container_configuration_mismatch");
   }
-  // The containerd image store keeps the pinned multi-architecture index as the
-  // visible image object. Select the frozen child platform explicitly so the
-  // check proves the executable manifest rather than inspecting the index.
-  const driver = run(["docker", "info", "--format", "{{json .DriverStatus}}"]);
-  let driverStatus: unknown;
-  try { driverStatus = JSON.parse(driver.stdout); } catch { return fail("postgres_test_container_configuration_mismatch"); }
-  if (driver.exitCode !== 0 || (driverStatus !== null && !Array.isArray(driverStatus))) return fail("postgres_test_container_configuration_mismatch");
-  const containerd = Array.isArray(driverStatus) && driverStatus.some(row =>
-    Array.isArray(row) && row[0] === "driver-type" && row[1] === "io.containerd.snapshotter.v1");
-  const image = run([
-    "docker", "image", "inspect", ...(containerd ? ["--platform", "linux/amd64"] : []),
-    "--format", "{{.Os}}/{{.Architecture}}", state.image,
-  ]);
-  if (image.exitCode !== 0 || image.stdout !== "linux/amd64") return fail("postgres_test_container_configuration_mismatch");
+  if (!isLinuxAmd64Image(run, state.image)) return fail("postgres_test_container_configuration_mismatch");
   const pgdata = run(["docker", "exec", state.containerName, "printenv", "PGDATA"]);
   if (pgdata.stdout !== "/var/lib/postgresql/18/docker") {
     return fail("postgres_test_container_configuration_mismatch");
@@ -119,4 +106,21 @@ export const removeOwnedVolume = (
   if (inspectOwnedVolume(run, state) === "missing") return;
   const removed = run(["docker", "volume", "rm", state.volumeName]);
   if (removed.exitCode !== 0) return fail("postgres_test_volume_remove_failed");
+};
+
+export const isLinuxAmd64Image = (run: PostgresTestCommandRunner, reference: string): boolean => {
+  // The containerd image store keeps the pinned multi-architecture index as the
+  // visible image object. Select the frozen child platform explicitly so the
+  // check proves the executable manifest rather than inspecting the index.
+  const driver = run(["docker", "info", "--format", "{{json .DriverStatus}}"]);
+  let driverStatus: unknown;
+  try { driverStatus = JSON.parse(driver.stdout); } catch { return false; }
+  if (driver.exitCode !== 0 || (driverStatus !== null && !Array.isArray(driverStatus))) return false;
+  const containerd = Array.isArray(driverStatus) && driverStatus.some(row =>
+    Array.isArray(row) && row[0] === "driver-type" && row[1] === "io.containerd.snapshotter.v1");
+  const image = run([
+    "docker", "image", "inspect", ...(containerd ? ["--platform", "linux/amd64"] : []),
+    "--format", "{{.Os}}/{{.Architecture}}", reference,
+  ]);
+  return image.exitCode === 0 && image.stdout === "linux/amd64";
 };
