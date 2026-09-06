@@ -59,6 +59,7 @@ from utils.memory.daily_memory_sweep import (
     read_daily_memory_sweep_cohort_assignment,
     run_daily_memory_sweep_scheduler,
     produce_completed_day_daily_summary_sources,
+    firestore_daily_sweep_source_provider,
 )
 from models.product_memory import normalized_memory_content_key
 from utils.llm.usage_tracker import get_current_context
@@ -1440,6 +1441,67 @@ def test_completed_day_model_candidates_are_staged_before_apply_and_reused(monke
     )
     assert second.daily_summary == first.daily_summary
     assert len(calls) == 1
+
+
+def test_qa_completed_day_rejects_a_stage_from_another_run(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    local_date = date(2026, 8, 23)
+    window = completed_local_day_window(local_date, "UTC")
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
+        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+    )
+    model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
+
+    def agent(_uid, _rows, _lookup, **_kwargs):
+        return _agent_output(
+            memories=[SimpleNamespace(content="fact from prior run", conversation_ids=["conversation-1"])]
+        )
+
+    first = produce_completed_day_daily_summary_sources(
+        "user-1",
+        local_date,
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=model,
+        agent_runner=agent,
+        window_override=window,
+    )
+    assert first.source_status == "complete"
+    second = produce_completed_day_daily_summary_sources(
+        "user-1",
+        local_date,
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=model,
+        agent_runner=agent,
+        window_override=window,
+        qa_run_id="qa-run-1",
+    )
+    assert second.source_status == "incomplete"
+
+
+def test_qa_source_provider_rejects_a_preexisting_packet(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    local_date = date(2026, 8, 23)
+    db.document(f"users/user-1/daily_memory_sweep_sources/{local_date.isoformat()}").set(
+        {"schema_version": "daily_memory_sweep.v1", "uid": "user-1", "complete": True}
+    )
+    with pytest.raises(ValueError, match="pre-existing source packet"):
+        firestore_daily_sweep_source_provider(
+            "user-1",
+            local_date,
+            control,
+            db_client=db,
+            timezone_name="UTC",
+            qa_run_id="qa-run-1",
+        )
 
 
 def test_qa_completed_day_uses_tight_real_input_and_provider_envelope(monkeypatch):

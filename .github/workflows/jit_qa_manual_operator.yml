@@ -38,6 +38,8 @@ env:
   QA_UID: vi7SA9ckQCe4ccobWNxlbdcNdC23
   QA_DRAIN_JOB: knowledge-ledger-drain-qa-job
   QA_SWEEP_JOB: daily-memory-sweep-qa-job
+  QA_GATEWAY_SERVICE: llm-gateway-jit-qa
+  QA_REDIS_INSTANCE: jit-qa-redis
   QA_RUNTIME_SERVICE_ACCOUNT: jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com
   QA_PYTHON: backend/.venv/bin/python
 
@@ -448,6 +450,7 @@ jobs:
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED: "true"
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG: jit-qa-sweep-v1
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED: "false"
+          OMI_JIT_QA_OPERATOR_APPROVED_ADC: "true"
         run: |
           set -euo pipefail
           unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH
@@ -462,6 +465,14 @@ jobs:
           gcloud_bounded() {
             timeout --foreground --kill-after=5s 60s gcloud "$@"
           }
+          gateway_url="$(gcloud_bounded run services describe "$QA_GATEWAY_SERVICE" \
+            --project "$QA_PROJECT" --region "$QA_REGION" --format='value(status.url)')"
+          redis_host="$(gcloud_bounded redis instances describe "$QA_REDIS_INSTANCE" \
+            --project "$QA_PROJECT" --region "$QA_REGION" --format='value(host)')"
+          [[ "$gateway_url" == https://* && -n "$redis_host" ]] || {
+            echo "ERROR: named QA gateway/cache endpoints are unavailable." >&2
+            exit 1
+          }
           image_tag="gcr.io/$QA_PROJECT/daily-memory-sweep-qa-job:$SOURCE_SHA"
           image_digest="$(gcloud_bounded container images describe "$image_tag" --format='value(image_summary.digest)')"
           [[ "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || {
@@ -474,6 +485,7 @@ jobs:
           "$QA_PYTHON" backend/scripts/jit_qa_cloud_run_contract.py resource \
             --kind job --profile sweep --expected-image "$resolved_image" \
             --resource-json "$operator_dir/sweep-job.json" --expected-name "$QA_SWEEP_JOB" \
+            --gateway-url "$gateway_url" --redis-host "$redis_host" \
             > "$operator_dir/sweep-job-before-contract.json"
           PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_sweep_operator.py validate-job \
             --source-sha "$SOURCE_SHA" --expected-image "$resolved_image" \
@@ -482,7 +494,8 @@ jobs:
           gcloud_bounded run jobs execute "$QA_SWEEP_JOB" \
             --project "$QA_PROJECT" \
             --region "$QA_REGION" \
-            --update-env-vars "OMI_JIT_QA_SWEEP_RUN_ID=$server_run_id,OMI_JIT_QA_SWEEP_ADMISSION=true,MEMORY_DAILY_MEMORY_SWEEP_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=gpt-5.6-luna,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=1,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0.05,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=jit-qa-sweep-v1,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED=false" \
+            --async \
+            --update-env-vars "GCLOUD_PROJECT=$QA_PROJECT,OMI_JIT_QA_SWEEP_RUN_ID=$server_run_id,OMI_JIT_QA_SWEEP_ADMISSION=true,MEMORY_DAILY_MEMORY_SWEEP_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=gpt-5.6-luna,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=1,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0.05,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=jit-qa-sweep-v1,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED=false" \
             --format=json > "$operator_dir/sweep.launch.json"
           execution="$("$QA_PYTHON" - "$operator_dir/sweep.launch.json" <<'PY'
           import json
@@ -497,7 +510,11 @@ jobs:
           PY
           )"
           state=running
-          for _ in $(seq 1 90); do
+          # Cloud Run permits 1200s per task. Keep a small control-plane grace
+          # period and use a wall-clock deadline so polling is not shortened by
+          # a fixed iteration count or lengthened indefinitely by API lag.
+          poll_deadline=$((SECONDS + 1260))
+          while (( SECONDS < poll_deadline )); do
             gcloud_bounded run jobs executions describe "$execution" \
               --project "$QA_PROJECT" --region "$QA_REGION" --format=json > "$operator_dir/sweep.state.json"
             state="$("$QA_PYTHON" backend/scripts/jit_qa_manual_operator.py execution-state \
@@ -505,7 +522,10 @@ jobs:
             if [[ "$state" == succeeded || "$state" == failed ]]; then
               break
             fi
-            sleep 10
+            remaining=$((poll_deadline - SECONDS))
+            if (( remaining > 0 )); then
+              (( remaining > 10 )) && sleep 10 || sleep "$remaining"
+            fi
           done
           [[ "$state" == succeeded ]] || {
             echo "ERROR: QA sweep execution $execution ended in state $state." >&2
@@ -519,6 +539,7 @@ jobs:
           "$QA_PYTHON" backend/scripts/jit_qa_cloud_run_contract.py resource \
             --kind job --profile sweep --expected-image "$resolved_image" \
             --resource-json "$operator_dir/sweep-job-after.json" --expected-name "$QA_SWEEP_JOB" \
+            --gateway-url "$gateway_url" --redis-host "$redis_host" \
             > "$operator_dir/sweep-job-contract.json"
           PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_sweep_operator.py validate-job \
             --source-sha "$SOURCE_SHA" --expected-image "$resolved_image" \

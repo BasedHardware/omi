@@ -402,6 +402,7 @@ def resource_environment(
         return (
             {
                 **identity,
+                "GCLOUD_PROJECT": PROJECT_ID,
                 "MEMORY_ENABLED": "on",
                 "MEMORY_DAILY_MEMORY_SWEEP_ENABLED": "false",
                 "MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH": "false",

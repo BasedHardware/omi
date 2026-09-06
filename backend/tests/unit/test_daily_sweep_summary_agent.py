@@ -206,6 +206,33 @@ def test_unparseable_model_output_raises_strict_error():
         run_daily_sweep_summary_agent("uid-1", _ROWS, dict(_TRANSCRIPTS), llm=llm)
 
 
+def test_qa_dispatch_evidence_is_recorded_before_parser_failure():
+    llm = _ScriptedLlm(
+        [
+            AIMessage(
+                content="not json",
+                usage_metadata={"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
+            )
+        ]
+    )
+    dispatch = {}
+    with pytest.raises(MemoryExtractionError):
+        run_daily_sweep_summary_agent(
+            "uid-1",
+            _ROWS,
+            dict(_TRANSCRIPTS),
+            llm=llm,
+            max_provider_retries=0,
+            max_input_tokens=QA_SWEEP_MAX_INPUT_TOKENS,
+            max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS,
+            jit_run_id="qa-sweep-run-1",
+            jit_max_spend_micro_usd=QA_SWEEP_MAX_SPEND_MICRO_USD,
+            dispatch_evidence=dispatch,
+        )
+    assert len(dispatch["requests"]) == 1
+    assert dispatch["requests"][0]["usage_observed"] is True
+
+
 def test_empty_day_returns_empty_without_model_call():
     llm = _ScriptedLlm([])
     output = run_daily_sweep_summary_agent("uid-1", (), {}, llm=llm)
@@ -231,7 +258,7 @@ def test_qa_budget_is_sent_to_gateway_and_accounting_stays_outside_model_schema(
         llm=llm,
         max_provider_retries=0,
         max_input_tokens=12_288,
-        max_output_tokens=256,
+        max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS,
         jit_run_id="qa-sweep-run-1",
         jit_max_spend_micro_usd=50_000,
         dispatch_evidence=dispatch,
@@ -274,7 +301,7 @@ def test_gateway_payload_has_server_owner_and_full_qa_budget_envelope(_qa_prompt
 
     with track_usage(uid, Features.MEMORIES):
         payload = _qa_gateway_model._get_request_payload(
-            _qa_prompt_value, max_completion_tokens=256, extra_headers=headers
+            _qa_prompt_value, max_completion_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS, extra_headers=headers
         )
 
     payload_headers = payload["extra_headers"]

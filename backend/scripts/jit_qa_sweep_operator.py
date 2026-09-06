@@ -15,6 +15,7 @@ import json
 import os
 import re
 import sys
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -49,6 +50,8 @@ QA_SWEEP_MAX_PROVIDER_CALLS = 1
 QA_SWEEP_MAX_INPUT_TOKENS = 12_288
 QA_SWEEP_MAX_OUTPUT_TOKENS = 256
 QA_SWEEP_MAX_SPEND_MICRO_USD = 50_000
+QA_SWEEP_ACCOUNTING_READ_RETRIES = 2
+QA_SWEEP_ACCOUNTING_RETRY_DELAY_SECONDS = 1.0
 QA_SWEEP_JIT_CONTRACT_VERSION = "jit-cloud-qa-v1"
 QA_SWEEP_ROUTE_ARTIFACT_ID = "route.memories.model_config.001"
 QA_SWEEP_RECEIPT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-run.v1"
@@ -151,8 +154,19 @@ def validate_qa_sweep_environment(environ: Mapping[str, str] | None = None) -> s
             raise ValueError(f"QA sweep requires {name}={expected!r}")
     if env.get("FIRESTORE_EMULATOR_HOST", "").strip():
         raise ValueError("QA sweep proof must use named Cloud Firestore")
+    # Cloud Run uses its named QA workload identity and the resource contract
+    # rejects GOOGLE_APPLICATION_CREDENTIALS there. The manual GitHub
+    # operator is different: google-github-actions/auth has already validated
+    # an ADC file scoped to based-hardware-dev, and needs it to read Firestore.
+    # Require an explicit marker for that reviewed operator boundary rather than
+    # accepting an arbitrary customer credential in a locally-invoked proof.
     if env.get("SERVICE_ACCOUNT_JSON", "").strip() or env.get("FIREBASE_AUTH_CREDENTIALS_PATH", "").strip():
         raise ValueError("QA sweep proof cannot select customer Firebase credentials")
+    if (
+        env.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+        and env.get("OMI_JIT_QA_OPERATOR_APPROVED_ADC", "").strip().casefold() != "true"
+    ):
+        raise ValueError("QA sweep proof requires an explicitly validated development ADC")
     return run_id
 
 
@@ -266,7 +280,15 @@ def _read_gateway_attempt(db_client: Any, *, request_id: str, run_id: str) -> di
     streamer = getattr(query, "stream", None)
     if not callable(limiter) or not callable(streamer):
         raise JITQASweepOperatorError("QA sweep consumer cannot bound gateway accounting inventory")
-    snapshots = list(limiter(2).stream())
+    snapshots: list[Any] = []
+    for retry in range(QA_SWEEP_ACCOUNTING_READ_RETRIES + 1):
+        snapshots = list(limiter(2).stream())
+        if snapshots or retry == QA_SWEEP_ACCOUNTING_READ_RETRIES:
+            break
+        # Accounting is written by the gateway's durable completion path and
+        # can lag the producer receipt. Retry absence only; a foreign or
+        # malformed row is an immediate proof failure.
+        time.sleep(QA_SWEEP_ACCOUNTING_RETRY_DELAY_SECONDS)
     if len(snapshots) != 1:
         raise JITQASweepOperatorError(
             "QA sweep gateway accounting must contain exactly one attempt for each dispatched request"
@@ -278,6 +300,7 @@ def _read_gateway_attempt(db_client: Any, *, request_id: str, run_id: str) -> di
         or attempt.get("jit_run_id") != run_id
         or attempt.get("jit_contract_version") != QA_SWEEP_JIT_CONTRACT_VERSION
         or attempt.get("provider") != "openai"
+        or attempt.get("feature") != "memories"
         or attempt.get("configured_model") != QA_SWEEP_MODEL_NAME
         or attempt.get("route_artifact_id") != QA_SWEEP_ROUTE_ARTIFACT_ID
         or attempt.get("outcome") != "success"
@@ -556,8 +579,12 @@ def verify_qa_sweep_run(db_client: Any, *, run_id: str, minimum_output_rows: int
     if dispatched_requests != QA_SWEEP_MAX_PROVIDER_CALLS:
         raise JITQASweepOperatorError("QA sweep did not produce the admitted number of gateway requests")
     committed_candidates = output_payload.get("committed_candidates")
-    if not isinstance(committed_candidates, int) or committed_candidates < minimum_output_rows:
-        raise JITQASweepOperatorError("QA sweep produced fewer durable candidates than required")
+    if (
+        not isinstance(committed_candidates, int)
+        or committed_candidates < minimum_output_rows
+        or committed_candidates > QA_SWEEP_MAX_MODEL_CANDIDATES
+    ):
+        raise JITQASweepOperatorError("QA sweep durable candidates are outside the admitted bound")
 
     rows = _read_output_rows(db_client, run_id)
     if len(rows) != committed_candidates:

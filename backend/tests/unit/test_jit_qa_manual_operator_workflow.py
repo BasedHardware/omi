@@ -80,6 +80,10 @@ def test_sweep_verify_joins_server_run_to_real_job_and_content_free_output():
     assert "server_run_id=\"qa-sweep-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}\"" in command
     assert 'OMI_JIT_QA_SWEEP_RUN_ID="$server_run_id"' in command
     assert "run jobs execute \"$QA_SWEEP_JOB\"" in command
+    assert "--async" in command
+    assert "GCLOUD_PROJECT=$QA_PROJECT" in command
+    assert "gcloud_bounded run services describe \"$QA_GATEWAY_SERVICE\"" in command
+    assert "gcloud_bounded redis instances describe \"$QA_REDIS_INSTANCE\"" in command
     assert '--run-id "$server_run_id" verify' in command
     assert "validate-job" in command
     assert "--expected-image \"$resolved_image\"" in command
@@ -87,6 +91,7 @@ def test_sweep_verify_joins_server_run_to_real_job_and_content_free_output():
     assert 'rm -f "$operator_dir"/*.json' in command
     assert "notification" not in command.casefold()
     assert '"scheduler_mutation": False' in command
+    assert "poll_deadline" in command
 
 
 def test_every_workflow_shell_block_is_valid_bash():

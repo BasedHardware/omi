@@ -4178,6 +4178,25 @@ def _load_or_stage_daily_summary_candidates(
         )
         if payload.get("candidate_digest") != expected_digest:
             return None
+        if jit_run_id is not None:
+            # A QA run may reuse only a stage created by this exact server run.
+            # A pre-existing stage has no trustworthy relationship to the
+            # current gateway request, so treating it as a cache hit would
+            # bypass the one-request QA proof and could double-apply stale
+            # candidates.
+            if payload.get("jit_run_id") != jit_run_id:
+                return None
+            staged_dispatch = payload.get("dispatch_evidence")
+            if not isinstance(staged_dispatch, Mapping):
+                return None
+            requests = staged_dispatch.get("requests")
+            if (
+                staged_dispatch.get("feature") != "memories"
+                or staged_dispatch.get("jit_run_id") != jit_run_id
+                or not isinstance(requests, list)
+                or len(requests) != 1
+            ):
+                return None
         if dispatch_evidence is not None and isinstance(payload.get("dispatch_evidence"), Mapping):
             dispatch_evidence.update(dict(payload["dispatch_evidence"]))
         return staged, assignments
@@ -4333,6 +4352,8 @@ def _load_or_stage_daily_summary_candidates(
             "model_invocation_id": invocation_id,
             "dispatch_evidence": dict(dispatch_evidence or {}),
         }
+        if jit_run_id is not None:
+            stage_payload["jit_run_id"] = jit_run_id
 
         def stage_if_open(transaction: Any) -> bool:
             deletion_ref, control_ref = _live_fence_refs(db_client, uid)
@@ -4533,11 +4554,17 @@ def produce_completed_day_daily_summary_sources(
 
     model = model_authority or daily_memory_sweep_model_authority_from_environment()
 
+    is_qa_run = qa_run_id is not None
     # A persisted candidate list is accepted only when the model authority is
     # open.  In particular, a missing key is not interpreted as []: older
     # summary writers did not produce this field and must not advance the new
     # cursor without a producer proof.
     if "memory_candidates" in payload:
+        if is_qa_run:
+            # QA must observe a fresh, bounded gateway request. A historical
+            # summary cache is a producer artifact from another run and cannot
+            # prove this run's request, usage, or spend.
+            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
         raw_candidates = payload.get("memory_candidates")
         if (
             raw_candidates is None
@@ -4565,7 +4592,6 @@ def produce_completed_day_daily_summary_sources(
             model_cost_usd=0.0,
         )
 
-    is_qa_run = qa_run_id is not None
     max_summary_conversations = (
         QA_SWEEP_MAX_SUMMARY_CONVERSATIONS if is_qa_run else MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS
     )
@@ -4842,6 +4868,12 @@ def firestore_daily_sweep_source_provider(
             model_cost_usd=summary_sources.model_cost_usd,
             model_dispatch_evidence=summary_sources.model_dispatch_evidence,
         )
+    if qa_run_id is not None:
+        # The QA producer must read the completed conversation source and make
+        # its bounded gateway request in this run. A pre-existing adapter
+        # packet can contain ordinary production-sized candidates and has no
+        # trustworthy request/usage join, even when its generations match.
+        raise ValueError("QA sweep cannot reuse a pre-existing source packet")
     raw_payload = snapshot.to_dict() or {}
     payload: Dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
     # A staged packet is an immutable producer artifact.  Missing identity is
