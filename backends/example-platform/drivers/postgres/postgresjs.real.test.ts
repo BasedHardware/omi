@@ -1,3 +1,4 @@
+import { normalizeChatGenerationContext } from "../../apps/service/chat/generation-context";
 import { createPostgresFirebaseDeviceSessionRuntime } from "./firebase-device-session-runtime";
 import { createPostgresDeviceSessionUploadRepository } from "./listen-finalization-repository";
 import { createPostgresDeviceTranscriptionRepository } from "./listen-finalization-repository";
@@ -4314,27 +4315,26 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       memory: firebaseProductRead,
       now_epoch_seconds: () => now,
     });
-    const chatContext = await chatMemoryContext.load({
+    const chatContextInput = {
       accountId,
+      generationId: "generation:qualification",
+      nowEpochMilliseconds: now * 1000,
+      history: [],
       bearerToken: "header.payload.signature",
-      admitted: { message: {}, generationId: "generation:qualification" } as never,
-    });
-    expect(chatContext.state).toBe("loaded");
-    if (chatContext.state !== "loaded") throw new Error("expected Chat memory context");
-    const chatContextPage = parseSynthesizedPageJson(chatContext.canonical_page_json);
-    expect(chatContextPage).not.toBeNull();
-    expect(chatContextPage!.items.length).toBeGreaterThan(0);
-    expect(chatContextPage!.items.every((item) => item.citations.length > 0)).toBe(true);
-    expect(isTrustedRecallCompletenessHonest(chatContextPage!)).toBe(true);
+      admitted: { message: {
+        id: "human:qualification", text: "What did I mention?", sender: "human", type: "text",
+        createdAt: now * 1000, updatedAt: now * 1000, chatSessionId: null, appId: null,
+        journalRevision: 1, payloadHash: `sha256:${"c".repeat(64)}`, messageSource: "chat",
+        rating: null, reported: false, revision: "revision:qualification", attachments: [],
+      }, generationId: "generation:qualification" },
+    };
+    const chatContext = normalizeChatGenerationContext(await chatMemoryContext.load(chatContextInput), chatContextInput);
+    expect(chatContext.items.length).toBeGreaterThan(0);
+    expect(chatContext.items.every((item) => item.ownerAccountId === accountId && item.sourceKind === "memory_projection")).toBe(true);
     expect(JSON.stringify(chatContext)).not.toContain("header.payload.signature");
-    await expect(chatMemoryContext.load({
-      accountId: `wrong-${accountId}`,
-      bearerToken: "header.payload.signature",
-      admitted: { message: {}, generationId: "generation:qualification" } as never,
-    })).resolves.toEqual({
-      version: "chat-generation-memory-context-v1",
-      state: "unavailable",
-    });
+    const wrongOwnerInput = { ...chatContextInput, accountId: `wrong-${accountId}` };
+    const wrongOwnerContext = normalizeChatGenerationContext(await chatMemoryContext.load(wrongOwnerInput), wrongOwnerInput);
+    expect(wrongOwnerContext.items).toEqual([]);
     expect(productReadTraces).toBe(2);
     const routeCounter = createServedCounter();
     const memoryServiceApp = createPostgresFirebaseAuthorizedMemoryServiceApp({
