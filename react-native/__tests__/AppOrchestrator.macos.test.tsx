@@ -19,6 +19,21 @@ const mockBackend = {
   cancelGenerationEvents: jest.fn(async () => undefined),
 };
 
+const mockNative = {
+  getSnapshot: jest.fn(async () => ({
+    bluetooth: 'unknown',
+    devices: [],
+    connectedDeviceId: null,
+    phase: 'disconnected',
+    capture: 'idle',
+    lastEvent: null,
+    microphone: 'unknown',
+    notifications: 'unknown',
+  })),
+  startScan: jest.fn(async () => []),
+};
+const mockScanPermission = jest.fn(async () => true);
+
 type TestMessage = {
   id: string;
   text: string;
@@ -74,8 +89,11 @@ function admissionBody(message: TestMessage, generationId: string) {
 jest.mock('../src/omiNative', () => ({
   omiAuth: mockAuth,
   omiBackend: mockBackend,
-  omiNative: undefined,
-  isNativeModuleInstalled: false,
+  omiNative: mockNative,
+  isNativeModuleInstalled: true,
+  isBluetoothScanAvailable: () => true,
+  requestBluetoothScanPermission: mockScanPermission,
+  browserScanErrorMessage: () => null,
   isNativeBackendInstalled: true,
   subscribeOmiBackendSessionInvalidated: () => () => undefined,
   subscribeOmiNativeEvents: () => () => undefined,
@@ -123,6 +141,9 @@ beforeEach(() => {
   mockAuth.signIn.mockReset();
   mockAuth.signOut.mockReset();
   mockBackend.request.mockClear();
+  mockNative.getSnapshot.mockClear();
+  mockNative.startScan.mockClear();
+  mockScanPermission.mockClear();
 });
 
 afterEach(() => {
@@ -265,6 +286,9 @@ test('Welcome and the session probe keep the cloud network idle', async () => {
   // phase for the session that signs in next.
   expect(labelsOf(renderer)).toContain('First-run onboarding');
   expect(mockBackend.request).not.toHaveBeenCalled();
+  expect(mockNative.getSnapshot).not.toHaveBeenCalled();
+  expect(mockNative.startScan).not.toHaveBeenCalled();
+  expect(mockScanPermission).not.toHaveBeenCalled();
 });
 
 test('a send still in flight when the session dies never seeds the next session', async () => {
@@ -1006,4 +1030,31 @@ test('a send during an older-history load still keeps the earlier page', async (
   expect(textOf(renderer)).toContain('sent while older loading');
   expect(textOf(renderer)).toContain('reply while older pending');
   expect(labelsOf(renderer)).toContain('Load earlier messages');
+});
+
+test('signed-in macOS Settings exposes device scanning only after an explicit action', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  const renderer = await renderApp();
+  expect(mockNative.getSnapshot).toHaveBeenCalled();
+  expect(mockNative.startScan).not.toHaveBeenCalled();
+  expect(mockScanPermission).not.toHaveBeenCalled();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+  });
+  expect(textOf(renderer)).toContain('Devices');
+  expect(mockNative.startScan).not.toHaveBeenCalled();
+  expect(mockScanPermission).not.toHaveBeenCalled();
+  await act(async () => {
+    renderer.root
+      .findAll(
+        node => node.props.accessibilityLabel === 'Scan for Omi devices',
+      )[0]
+      .props.onPress();
+  });
+  expect(mockScanPermission).toHaveBeenCalledTimes(1);
+  expect(mockNative.startScan).toHaveBeenCalledTimes(1);
+  expect(mockNative.startScan).toHaveBeenCalledWith(8);
 });

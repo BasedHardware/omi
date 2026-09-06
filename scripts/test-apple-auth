@@ -13,3 +13,9 @@ xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
 xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
   "$repo_root/react-native/apple/OmiBleSessionTest.mm" -o "$build_dir/ble-session"
 "$build_dir/ble-session"
+xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
+  "$repo_root/react-native/apple/OmiDeviceControlsTest.mm" -o "$build_dir/device-controls"
+"$build_dir/device-controls"
+xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
+  "$repo_root/react-native/apple/OmiRequestTimeoutTest.mm" -o "$build_dir/request-timeout"
+"$build_dir/request-timeout"
