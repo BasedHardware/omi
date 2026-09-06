@@ -64,7 +64,18 @@ export function browserScanErrorMessage(_error: unknown): string | null {
 }
 
 export function resolveOmiNative(nativeModule: OmiNative | null | undefined) {
-  return {adapter: nativeModule, installed: nativeModule != null};
+  return {
+    adapter:
+      nativeModule == null
+        ? nativeModule
+        : (Object.create(nativeModule, {
+            startScan: {
+              value: (timeoutSeconds = 8, serviceUuids: string[] = []) =>
+                nativeModule.startScan(timeoutSeconds, serviceUuids),
+            },
+          }) as OmiNative),
+    installed: nativeModule != null,
+  };
 }
 
 export function subscribeOmiNativeEvents(
