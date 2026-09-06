@@ -348,6 +348,7 @@ function installOmiJitFetchGuard(): void {
     try {
       const response = await upstreamFetch(input, init);
       let receipt = omiJitGatewayReceiptFromHeader(response.headers.get("x-omi-jit-gateway-receipt") || undefined);
+      let receiptAccepted = false;
       const recordReceipt = async (candidate: OmiJitGatewayReceipt | undefined): Promise<void> => {
         const relayContext = await omiRelayContextRaw();
         if (!candidate || candidate.runID !== budget.executionID || candidate.contractVersion !== budget.contractVersion
@@ -367,6 +368,7 @@ function installOmiJitFetchGuard(): void {
           state.costMicroUSD = null;
           state.invalid = true;
         }
+        if (!state.invalid) receiptAccepted = true;
         await appendOmiJitReceipt(omiJitReceiptPathFromRelayContext(relayContext), candidate);
       };
       if (receipt) {
@@ -385,12 +387,15 @@ function installOmiJitFetchGuard(): void {
       let lineBuffer = "";
       let bodyReceipt: OmiJitGatewayReceipt | undefined;
       let receiptRecorded = false;
+      let bodyTerminal = false;
+      let bodyCancelled = false;
       const inspect = (chunk: Uint8Array, flush = false): OmiJitGatewayReceipt | undefined => {
         let newlyObserved: OmiJitGatewayReceipt | undefined;
         lineBuffer += decoder.decode(chunk, { stream: !flush });
         const lines = lineBuffer.split(/\r\n|\n|\r/);
         lineBuffer = lines.pop() ?? "";
         for (const line of lines) {
+          if (line.trim() === "data: [DONE]" || line.trim() === "data:[DONE]") bodyTerminal = true;
           if (!line.startsWith("data:")) continue;
           try {
             const parsed = JSON.parse(line.slice(5).trim()) as { omi_jit_receipt?: unknown };
@@ -402,6 +407,7 @@ function installOmiJitFetchGuard(): void {
           } catch { /* provider frames are not necessarily JSON */ }
         }
         if (flush && lineBuffer.startsWith("data:")) {
+          if (lineBuffer.trim() === "data: [DONE]" || lineBuffer.trim() === "data:[DONE]") bodyTerminal = true;
           try {
             const parsed = JSON.parse(lineBuffer.slice(5).trim()) as { omi_jit_receipt?: unknown };
             const parsedReceipt = parseOmiJitGatewayReceipt(parsed.omi_jit_receipt);
@@ -429,6 +435,7 @@ function installOmiJitFetchGuard(): void {
         async pull(controller) {
           try {
             const { done, value } = await sourceReader.read();
+            if (bodyCancelled) return;
             if (done) {
               await finalizeBody();
               controller.close();
@@ -446,6 +453,7 @@ function installOmiJitFetchGuard(): void {
             // provider; only the side-channel inspection is transformed.
             controller.enqueue(value);
           } catch (error) {
+            if (bodyCancelled) return;
             state.invalid = true;
             controller.error(error);
           }
@@ -453,7 +461,11 @@ function installOmiJitFetchGuard(): void {
         async cancel(reason) {
           // A consumer abort before EOF makes the receipt incomplete. Keep
           // the execution blocked rather than allowing a later round to spend.
-          state.invalid = true;
+          // Pi normally cancels immediately after consuming [DONE], though;
+          // once that terminal marker and a validated receipt were both seen,
+          // the run is complete and its known budget may continue.
+          bodyCancelled = true;
+          if (!(bodyTerminal && receiptAccepted)) state.invalid = true;
           await sourceReader.cancel(reason);
         },
       });

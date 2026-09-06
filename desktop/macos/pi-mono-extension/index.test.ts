@@ -184,6 +184,7 @@ test("JIT fetch guard forwards streaming bytes before the receipt arrives", asyn
     "x-omi-jit-max-spend-micro-usd": "50000",
   };
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  let upstreamCalls = 0;
   const firstChunk = new TextEncoder().encode("data: {");
   const secondChunk = new TextEncoder().encode(
     `\"choices\":[]}${"\n\n"}data: ${JSON.stringify({ omi_jit_receipt: receipt })}\n\ndata: [DONE]\n\n`,
@@ -192,12 +193,22 @@ test("JIT fetch guard forwards streaming bytes before the receipt arrives", asyn
     await writeFile(contextPath, JSON.stringify({ jitReceiptPath: receiptPath }), "utf8");
     process.env.OMI_CONTEXT_FILE = contextPath;
     __resetOmiJitFetchGuardForTest();
-    globalThis.fetch = (async () => new Response(new ReadableStream<Uint8Array>({
-      start(streamController) {
-        controller = streamController;
-        streamController.enqueue(firstChunk);
-      },
-    }))) as typeof globalThis.fetch;
+    globalThis.fetch = (async () => {
+      upstreamCalls += 1;
+      if (upstreamCalls > 1) {
+        return new Response("second", {
+          headers: {
+            "x-omi-jit-gateway-receipt": Buffer.from(JSON.stringify(receipt)).toString("base64url"),
+          },
+        });
+      }
+      return new Response(new ReadableStream<Uint8Array>({
+        start(streamController) {
+          controller = streamController;
+          streamController.enqueue(firstChunk);
+        },
+      }));
+    }) as typeof globalThis.fetch;
     __installOmiJitFetchGuardForTest();
 
     const response = await globalThis.fetch("https://qa.example/v1/chat", { headers: budgetHeaders });
@@ -211,6 +222,8 @@ test("JIT fetch guard forwards streaming bytes before the receipt arrives", asyn
     // receipt must already be durable at this point.
     assert.match(await readFile(receiptPath, "utf8"), new RegExp(executionID));
     await reader.cancel("provider done");
+    const secondResponse = await globalThis.fetch("https://qa.example/v1/chat", { headers: budgetHeaders });
+    assert.equal(await secondResponse.text(), "second");
   } finally {
     __resetOmiJitFetchGuardForTest();
     globalThis.fetch = originalFetch;
@@ -276,6 +289,50 @@ test("JIT fetch guard permanently blocks a run after unknown receipt cost", asyn
       globalThis.fetch("https://qa.example/v1/chat", { headers }),
       /receipt missing or qualification budget exhausted/,
     );
+  } finally {
+    __resetOmiJitFetchGuardForTest();
+    globalThis.fetch = originalFetch;
+    if (previousContextFile === undefined) delete process.env.OMI_CONTEXT_FILE;
+    else process.env.OMI_CONTEXT_FILE = previousContextFile;
+    await rm(contextPath, { force: true });
+    await rm(`${contextPath}.receipts`, { force: true });
+  }
+});
+
+test("JIT fetch guard blocks later rounds when a body is cancelled before terminal receipt", async () => {
+  const originalFetch = globalThis.fetch;
+  const previousContextFile = process.env.OMI_CONTEXT_FILE;
+  const executionID = "d".repeat(64);
+  const contextPath = pathJoin(tmpdir(), `omi-jit-context-${process.pid}-${Date.now()}.json`);
+  const headers = {
+    "x-omi-jit-contract-version": "jit-cloud-qa-v1",
+    "x-omi-jit-run-id": executionID,
+    "x-omi-jit-max-attempts": "3",
+    "x-omi-jit-max-output-tokens": "2048",
+    "x-omi-jit-max-input-tokens": "32768",
+    "x-omi-jit-max-spend-micro-usd": "50000",
+  };
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  try {
+    await writeFile(contextPath, JSON.stringify({ jitReceiptPath: `${contextPath}.receipts` }), "utf8");
+    process.env.OMI_CONTEXT_FILE = contextPath;
+    __resetOmiJitFetchGuardForTest();
+    globalThis.fetch = (async () => new Response(new ReadableStream<Uint8Array>({
+      start(streamController) {
+        controller = streamController;
+        streamController.enqueue(new TextEncoder().encode("data: {\"choices\":[]}\n\n"));
+      },
+    }))) as typeof globalThis.fetch;
+    __installOmiJitFetchGuardForTest();
+    const response = await globalThis.fetch("https://qa.example/v1/chat", { headers });
+    const reader = response.body!.getReader();
+    await reader.read();
+    await reader.cancel("provider aborted before receipt");
+    await assert.rejects(
+      globalThis.fetch("https://qa.example/v1/chat", { headers }),
+      /receipt missing or qualification budget exhausted/,
+    );
+    assert.ok(controller, "the source stream was exercised");
   } finally {
     __resetOmiJitFetchGuardForTest();
     globalThis.fetch = originalFetch;
