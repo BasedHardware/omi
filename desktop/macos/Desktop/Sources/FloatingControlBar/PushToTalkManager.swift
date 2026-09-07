@@ -1997,6 +1997,14 @@ class PushToTalkManager: ObservableObject {
 
   private func finishMicrophonePermissionDeniedAttempt(turnID: VoiceTurnID) {
     guard voiceTurnCoordinator.activeTurnID == turnID else { return }
+    // Matching the granted branch's guard, and for the same reason. The turn can leave
+    // recording while the system permission dialog is still up -- the user releases the
+    // key, finalization starts -- and the denial then resolves against a turn that is
+    // already terminating. `activeTurnID` still matches there, so it alone does not
+    // catch this: without the phase check the attempt emits a second floatingBarPTTEnded,
+    // a second lifecycle terminate, and a second `.finish`, which is precisely the
+    // doubled terminal event INV-VOICE-1 says a denied attempt must not produce.
+    guard voiceTurnCoordinator.activeTurn?.phase.isRecording == true else { return }
     pttLifecycle.noteRelease()
     AnalyticsManager.shared.floatingBarPTTEnded(
       mode: currentPTTMode(),
