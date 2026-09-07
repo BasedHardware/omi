@@ -360,9 +360,18 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                 opacity: _spinnerVisible ? 1 : 0,
                 duration: _backdropFadeDuration,
                 curve: Curves.easeInOut,
-                child: OmiLogoSpinner(
-                  burstTrigger: _controller!.index,
-                  visible: _spinnerVisible,
+                // Shrink the ring in place while the keyboard is up (the name
+                // step) so the bottom block, pushed up by the inset, never runs
+                // into it.
+                child: AnimatedScale(
+                  scale: MediaQuery.viewInsetsOf(context).bottom > 0 ? 0.5 : 1,
+                  alignment: const Alignment(0, -0.32),
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOut,
+                  child: OmiLogoSpinner(
+                    burstTrigger: _controller!.index,
+                    visible: _spinnerVisible,
+                  ),
                 ),
               ),
             ),

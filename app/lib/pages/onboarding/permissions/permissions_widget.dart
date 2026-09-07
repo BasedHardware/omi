@@ -50,17 +50,21 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                             children: [
                               const SizedBox(height: 12),
 
-                              // Main title
-                              Text(
-                                context.l10n.grantPermissions,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                  height: 1.2,
-                                  fontFamily: 'Manrope',
+                              // Main title — always a single line.
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  context.l10n.grantPermissions,
+                                  maxLines: 1,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.bold,
+                                    height: 1.2,
+                                    fontFamily: 'Manrope',
+                                  ),
+                                  textAlign: TextAlign.center,
                                 ),
-                                textAlign: TextAlign.center,
                               ),
 
                               const SizedBox(height: 16),
