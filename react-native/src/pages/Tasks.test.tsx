@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
+import {Text} from 'react-native';
 import {TasksPage} from './Tasks';
 import {TaskPagination} from '../ui/TaskPagination';
 import type {TaskMutationProps} from '../ui/TaskEditor';
@@ -168,6 +169,29 @@ test('conflict refresh preserves dirty description while untouched descriptions 
   expect(control(renderer, 'Task description').props.value).toBe(
     'My unsaved description',
   );
+});
+
+test('task grant denial shows the typed error instead of an empty library', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          status: 'error',
+          error: 'This saved data is not available for this account.',
+        }}
+        loading={false}
+      />,
+    );
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('This saved data is not available for this account.');
+  expect(copy).not.toContain('No tasks yet.');
+  expect(copy).not.toContain('Saved tasks could not be loaded.');
 });
 
 test('task pagination stays available when loaded task search has no matches', () => {
