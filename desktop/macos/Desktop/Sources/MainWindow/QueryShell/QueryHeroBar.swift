@@ -318,18 +318,24 @@ struct QueryHeroBar: View {
     action: @escaping () -> Void
   ) -> some View {
     Button(action: action) {
-      Image(systemName: systemImage)
-        .scaledFont(size: glyphSize, weight: .semibold)
-        .foregroundStyle(Ink.surface)
-        .frame(width: diameter, height: diameter)
-        .background(Circle().fill(Ink.primary))
-        .contentShape(Circle())
+      ZStack {
+        if isStopping {
+          ProgressView()
+            .controlSize(.small)
+            .environment(\.colorScheme, .dark)
+        } else {
+          Image(systemName: systemImage)
+            .scaledFont(size: glyphSize, weight: .semibold)
+        }
+      }
+      .frame(width: diameter, height: diameter)
+      .contentShape(Circle())
     }
-    .buttonStyle(.plain)
+    .buttonStyle(ChatComposerActionStyle(isBusy: isStopping))
     // Never `.disabled` on an empty field: `⌘⏎` is this button's `keyboardShortcut`, and a disabled
     // button swallows it — the key would stop resolving through `QueryShellSubmission` at all.
     // Dimmed instead, which is what "nothing to send yet" actually looks like.
-    .opacity(isProminent ? 1 : 0.4)
+    .opacity(isProminent || isStopping ? 1 : 0.4)
     .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isProminent)
   }
 
