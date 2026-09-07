@@ -228,6 +228,10 @@ omi
     └── delete <id> [-y]
 ```
 
+`action-item get` searches successive API pages until it finds the ID or
+reaches the end of the results. It can retrieve items beyond the first 1,000;
+looking up an older or missing item may require several API requests.
+
 ## Global flags
 
 ```text
