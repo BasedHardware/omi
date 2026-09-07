@@ -23,6 +23,7 @@ class OmiBackgroundAudioStreamer internal constructor(
     private val flutterAlive: () -> Boolean,
     private val nowMs: () -> Long,
     private val log: (Int, String) -> Unit,
+    private val lock: Any = Any(),
 ) {
     constructor(context: Context) : this(
         SharedPreferencesValues(context.getSharedPreferences(FLUTTER_PREFS, Context.MODE_PRIVATE)),
@@ -41,6 +42,7 @@ class OmiBackgroundAudioStreamer internal constructor(
         private const val MAX_CACHED_TRANSCRIPT_MESSAGES = 200
         private val transcriptCacheLock = Any()
         private val cachedTranscriptMessages = ArrayDeque<String>()
+        @Volatile
         private var cachedTranscriptUid: String? = null
 
         fun drainCachedTranscriptMessages(): List<String> =
@@ -57,7 +59,8 @@ class OmiBackgroundAudioStreamer internal constructor(
 
     private val settingsReader = NativeBleStreamSettingsReader(preferences)
 
-    private val lock = Any()
+    @Volatile
+    private var hasNativeState = false
     private val pendingFrames = ArrayDeque<ByteArray>()
     private var socket: WebSocket? = null
     private var connecting = false
@@ -90,18 +93,36 @@ class OmiBackgroundAudioStreamer internal constructor(
             connected = false
             activeSettings = null
             pendingFrames.clear()
-            if (reason == "disabled") {
-                val uid = preferences.string("uid")
-                synchronized(transcriptCacheLock) {
-                    if (cachedTranscriptUid != uid) cachedTranscriptMessages.clear()
-                }
-            }
+            clearTranscriptsIfAccountChanged()
+            hasNativeState = false
         }
         socketToClose?.close(1000, reason)
     }
 
     fun handleCharacteristic(address: String, serviceUuid: String, characteristicUuid: String, value: ByteArray) {
+        val inactiveReason = when {
+            flutterAlive() && preferences.boolean("nativeBleForegroundReady") -> "foreground_ready"
+            !preferences.boolean("nativeBleStreamingEnabled") -> "disabled"
+            else -> null
+        }
+        if (inactiveReason != null) {
+            clearTranscriptsIfAccountChanged()
+            if (hasNativeState) {
+                synchronized(lock) {
+                    // A stale gate read must not tear down a newly enabled session.
+                    if (flutterAlive() && preferences.boolean("nativeBleForegroundReady")) {
+                        stop("foreground_ready")
+                    } else if (!preferences.boolean("nativeBleStreamingEnabled")) {
+                        stop("disabled")
+                    }
+                }
+            }
+            return
+        }
         synchronized(lock) {
+            // Publish activation before re-reading gates. A racing disabled callback either
+            // stops this state, or this callback observes the gate before opening a socket.
+            hasNativeState = true
             if (flutterAlive() && preferences.boolean("nativeBleForegroundReady")) {
                 stop("foreground_ready")
                 return
@@ -112,13 +133,30 @@ class OmiBackgroundAudioStreamer internal constructor(
                 return
             }
             val config = settings.config
-            if (!config.deviceId.equals(address, ignoreCase = true)) return
-            if (!matches(config, serviceUuid, characteristicUuid)) return
+            if (!config.deviceId.equals(address, ignoreCase = true) ||
+                !matches(config, serviceUuid, characteristicUuid)) {
+                hasNativeState = activeSettings != null
+                return
+            }
 
             val frames = transformFrames(config, value)
-            if (frames.isEmpty()) return
+            if (frames.isEmpty()) {
+                hasNativeState = activeSettings != null
+                return
+            }
             ensureSocket(settings)
             for (frame in frames) sendOrQueue(frame)
+        }
+    }
+
+    private fun clearTranscriptsIfAccountChanged() {
+        val uid = preferences.string("uid")
+        if (cachedTranscriptUid == uid) return
+        synchronized(transcriptCacheLock) {
+            if (cachedTranscriptUid != uid) {
+                cachedTranscriptMessages.clear()
+                cachedTranscriptUid = uid
+            }
         }
     }
 

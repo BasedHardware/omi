@@ -71,4 +71,15 @@ class BatteryHistoryRecorderTest {
         assertEquals(1, JSONArray(stored).getJSONObject(0).getInt("ts"))
     }
 
+    @Test fun `shared retention includes exact cutoff and excludes older samples`() {
+        assertEquals(7L * 24 * 3600 * 1000, BatteryHistoryRecorder.RETENTION_MS)
+        assertEquals(2000, BatteryHistoryRecorder.MAX_POINTS)
+        var stored = """[{"ts":99,"level":80},{"ts":100,"level":80}]"""
+        val recorder = BatteryHistoryRecorder({ stored }, { _, value -> stored = value })
+        recorder.record("device", 80, BatteryHistoryRecorder.RETENTION_MS + 100)
+        val history = JSONArray(stored)
+        assertEquals(2, history.length())
+        assertEquals(100L, history.getJSONObject(0).getLong("ts"))
+    }
+
 }

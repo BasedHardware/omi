@@ -8,6 +8,11 @@ internal class BatteryHistoryRecorder(
     private val read: (String) -> String,
     private val write: (String, String) -> Unit,
 ) {
+    companion object {
+        const val RETENTION_MS = 7L * 24 * 3600 * 1000
+        const val MAX_POINTS = 2000
+    }
+
     private data class Point(val level: Int, val timestamp: Long)
     private val baselines = mutableMapOf<String, Point?>()
 
@@ -29,14 +34,14 @@ internal class BatteryHistoryRecorder(
 
         val source = history ?: history(key)
         val pruned = JSONArray()
-        val cutoff = nowMs - 7L * 24 * 3600 * 1000
+        val cutoff = nowMs - RETENTION_MS
         for (index in 0 until source.length()) {
             val entry = source.optJSONObject(index) ?: continue
             val sample = point(entry) ?: continue
             if (sample.timestamp >= cutoff) pruned.put(entry)
         }
         pruned.put(JSONObject().put("ts", nowMs).put("level", level))
-        while (pruned.length() > 2000) pruned.remove(0)
+        while (pruned.length() > MAX_POINTS) pruned.remove(0)
         write(key, pruned.toString())
         // Advance only after the persistence call succeeds; retries keep the last submitted baseline.
         baselines[key] = Point(level, nowMs)

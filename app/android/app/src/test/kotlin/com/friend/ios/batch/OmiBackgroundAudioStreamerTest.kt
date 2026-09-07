@@ -8,16 +8,25 @@ import okhttp3.WebSocketListener
 import okio.ByteString
 import org.junit.Assert.*
 import org.junit.Test
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class OmiBackgroundAudioStreamerTest {
     private class Preferences : NativeBlePreferences {
-        val values = mutableMapOf<String, Any>(
+        val values = ConcurrentHashMap<String, Any>(mapOf(
             "nativeBleStreamingEnabled" to true,
             "nativeBleStreamConfig" to """{"deviceId":"device","serviceUuid":"service","characteristicUuid":"audio","deviceType":"omi"}""",
             "uid" to "account-a", "nativeAuthToken" to "token-a",
-        )
+        ))
+        @Volatile var afterBooleanRead: ((String) -> Unit)? = null
         override fun string(key: String, defaultValue: String) = values[key] as? String ?: defaultValue
-        override fun boolean(key: String, defaultValue: Boolean) = values[key] as? Boolean ?: defaultValue
+        override fun boolean(key: String, defaultValue: Boolean): Boolean {
+            val result = values[key] as? Boolean ?: defaultValue
+            afterBooleanRead?.invoke(key)
+            return result
+        }
         override fun integer(key: String, defaultValue: Int) = values[key] as? Int ?: defaultValue
     }
 
@@ -38,12 +47,13 @@ class OmiBackgroundAudioStreamerTest {
 
     private class Harness {
         val prefs = Preferences()
+        val stateLock = Any()
         var foreground = false
         var time = 10_000L
         val sockets = mutableListOf<Socket>()
         val streamer = OmiBackgroundAudioStreamer(prefs,
             { request, listener -> Socket(request, listener).also { sockets.add(it) } },
-            { foreground }, { time }, { _, _ -> })
+            { foreground }, { time }, { _, _ -> }, stateLock)
         fun frame(value: Int = 1) = streamer.handleCharacteristic("device", "service", "audio", byteArrayOf(0, 0, 0, value.toByte()))
     }
 
@@ -206,6 +216,106 @@ class OmiBackgroundAudioStreamerTest {
         h.prefs.values["nativeBleStreamingEnabled"] = false
         h.frame()
         assertEquals(listOf("{\"text\":\"captured\"}"), OmiBackgroundAudioStreamer.drainCachedTranscriptMessages())
+    }
+
+    @Test fun `inactive gates never wait for streamer state lock`() {
+        for (foreground in listOf(false, true)) {
+            val h = Harness()
+            h.foreground = foreground
+            h.prefs.values["nativeBleForegroundReady"] = foreground
+            h.prefs.values["nativeBleStreamingEnabled"] = foreground
+            h.streamer.stop("prime")
+            val executor = Executors.newSingleThreadExecutor()
+            try {
+                synchronized(h.stateLock) {
+                    executor.submit { repeat(1000) { h.frame() } }.get(5, TimeUnit.SECONDS)
+                }
+                assertTrue(h.sockets.isEmpty())
+            } finally { executor.shutdownNow() }
+        }
+    }
+
+    @Test fun `activation rechecks gates after waiting for state lock`() {
+        val h = Harness()
+        val read = CountDownLatch(1)
+        h.prefs.afterBooleanRead = { key ->
+            if (key == "nativeBleStreamingEnabled") {
+                h.prefs.afterBooleanRead = null
+                read.countDown()
+            }
+        }
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            val future = synchronized(h.stateLock) {
+                val pending = executor.submit { h.frame() }
+                assertTrue(read.await(5, TimeUnit.SECONDS))
+                h.prefs.values["nativeBleStreamingEnabled"] = false
+                h.frame() // inactive and no state yet, so this need not wait for pending activation
+                pending
+            }
+            future.get(5, TimeUnit.SECONDS)
+            assertTrue(h.sockets.isEmpty())
+        } finally { executor.shutdownNow() }
+    }
+
+    @Test fun `stale inactive gate does not stop newly enabled session`() {
+        val h = Harness()
+        h.prefs.values["nativeBleStreamingEnabled"] = false
+        h.prefs.afterBooleanRead = { key ->
+            if (key == "nativeBleStreamingEnabled") {
+                h.prefs.afterBooleanRead = null
+                h.prefs.values["nativeBleStreamingEnabled"] = true
+                h.frame(2)
+            }
+        }
+        h.frame(1)
+        assertFalse(h.sockets.single().closed)
+        h.sockets.single().open()
+        assertEquals(listOf(2), h.sockets.single().values())
+    }
+
+    @Test fun `inactive gate clears queued native frames during reconnect backoff`() {
+        val h = Harness()
+        h.frame(1)
+        h.sockets.single().listener.onFailure(h.sockets.single(), IllegalStateException("offline"), null)
+        h.time += 1000
+        h.frame(2)
+        h.prefs.values["nativeBleStreamingEnabled"] = false
+        h.frame(3)
+        h.prefs.values["nativeBleStreamingEnabled"] = true
+        h.time += 3000
+        h.frame(4)
+        h.sockets.last().open()
+        assertEquals(listOf(4), h.sockets.last().values())
+    }
+
+    @Test fun `every stop reason clears cached transcripts after account change`() {
+        for (reason in listOf("service_destroyed", "foreground_ready", "disabled")) {
+            OmiBackgroundAudioStreamer.drainCachedTranscriptMessages()
+            val h = Harness()
+            h.frame()
+            val socket = h.sockets.single()
+            socket.listener.onMessage(socket, "{\"text\":\"old\"}")
+            h.prefs.values["uid"] = "account-b"
+            h.streamer.stop(reason)
+            assertTrue(OmiBackgroundAudioStreamer.drainCachedTranscriptMessages().isEmpty())
+        }
+    }
+
+    @Test fun `inactive gate clears previous account transcripts without native state`() {
+        OmiBackgroundAudioStreamer.drainCachedTranscriptMessages()
+        val h = Harness()
+        h.frame()
+        val socket = h.sockets.single()
+        socket.listener.onMessage(socket, "{\"text\":\"old\"}")
+        h.streamer.stop("service_destroyed") // still same UID: retain legitimate transcript
+        h.prefs.values["uid"] = "account-b"
+        h.prefs.values["nativeBleStreamingEnabled"] = false
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            synchronized(h.stateLock) { executor.submit { h.frame() }.get(5, TimeUnit.SECONDS) }
+            assertTrue(OmiBackgroundAudioStreamer.drainCachedTranscriptMessages().isEmpty())
+        } finally { executor.shutdownNow() }
     }
 
 }
