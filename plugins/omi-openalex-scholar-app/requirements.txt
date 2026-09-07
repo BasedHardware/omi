@@ -1,0 +1,4 @@
+fastapi>=0.100.0
+uvicorn>=0.23.0
+httpx>=0.24.0
+pydantic>=2.0.0
