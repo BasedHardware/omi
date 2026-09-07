@@ -313,3 +313,13 @@ const serveConversationsEnvelope = (
 const isInvalidCursor = (error: unknown): boolean =>
   typeof error === "object" && error !== null
   && (error as { code?: unknown }).code === "invalid_cursor";
+
+export function parseConversationReadWindow(request: Request): {limit: number; cursor: string | null; legacy: boolean; readLimit: number} | null {
+  const url = new URL(request.url);
+  if (url.searchParams.has("offset")) {
+    const limit = parseLimit(url.searchParams.get("limit"), DEFAULT_LIMIT);
+    return {limit, cursor: null, legacy: true, readLimit: parseLimit(url.searchParams.get("offset"), 0) + limit};
+  }
+  const page = parseEnvelopeQuery(url.searchParams.get("limit") ?? undefined, url.searchParams.get("cursor") ?? undefined, hasDuplicateQueryParameters(request.url));
+  return page === null ? null : {...page, legacy: false, readLimit: page.limit + (page.cursor === null ? 1 : 2)};
+}

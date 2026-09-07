@@ -25,10 +25,25 @@ The signed cursor is bound to the real credential, grant, account epoch and acco
 read revision. A changed recording state, newly visible upload or finalization
 invalidates an earlier cursor; clients must refresh instead of silently omitting a
 session that opened earlier but only became visible between pages. Account order
-survives process restarts. The SQL result is limited to 10,001 bounded summaries;
-the reader fails closed above 10,000 records rather than claiming a truncated list
-is complete. SQL keyset pagination with a persisted snapshot is the next scaling
-step when an account exceeds this bound.
+survives process restarts. Migration 0053 retains opaque cursor positions in an
+account-owned table; the public signed cursor never contains the internal sequence.
+Each envelope read selects at most the requested limit plus two anchor/lookahead
+records before loading transcript excerpts. The existing explicit offset mode
+retains its bounded 5,000 offset and 5,000 limit. Account history size no longer
+causes all reads to fail at 10,000 records.
+
+Cursor positions bind the exact signed token hash, canonical reader/grant/epoch
+bindings and account revision. They expire with the 900-second signed cursor.
+Issuance prunes up to 256 expired positions and caps retained metadata at 10,000
+positions per account; capacity returns unavailable rather than evicting an active
+cursor. This is an operational request-volume ceiling, not a conversation-count
+limit. Account deletion disposes these rows with product projections. Signature,
+authorization and expiry validation precede position lookup; the complete read and
+cursor save remain in the authorized transaction with its final clock and abort
+checks. Pre-migration cursors without a retained position require a fresh first page.
+Migration 0053 removes the old whole-account function and introduces a distinct
+metadata read; an old process calling the retired function fails unavailable rather
+than returning an empty successful history during a mixed-revision rollout.
 
 This is the persisted Listen/recording list, not a production chat history store.
 Chat conversations, editable metadata, folders and star mutations still need their
@@ -38,6 +53,7 @@ existing account-scoped device-session transcript route.
 Verification uses `bun run check:deployed` for projection, expiry/cancellation,
 route and shell contracts, and `bun run test:postgres` for actual application-role
 reads, queued/failed/completed records, cursor invalidation, grant revocation and
-account isolation. The PostgreSQL harness also verifies schema backup/restore and
+account isolation, histories above 10,000 records, bounded page materialization,
+restart-safe continuation, cursor expiry and metadata disposal. The PostgreSQL harness also verifies schema backup/restore and
 Bun/Node driver parity. These tests use isolated synthetic identities; they do not
 activate a deployed user or prove physical-device capture.
