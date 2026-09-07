@@ -16,9 +16,6 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 
-import type { TreeInputSnapshot } from "../core/retrieve/index";
-import { buildDeterministicAnchors } from "../core/retrieve/tree";
-import { renderStructuralTree } from "../core/retrieve/render";
 import { InvalidMcpCursorError } from "../apps/mcp/cursor";
 import { createServedCounter } from "../apps/service/observability/served-count";
 import { createFirebaseAdminIdTokenAdapter } from "../drivers/firebase/admin-id-token";
@@ -38,6 +35,8 @@ import {
 } from "./prod-local-identity";
 import {
   LOCAL_APPLICATION_ID,
+  closeLocalMemoryProcess,
+  produceLocalEmptyRenders,
   LOCAL_FIREBASE_PROJECT_ID,
   LOCAL_QUALIFICATION_DATABASE_GENERATION_DIGEST,
   interpretManagedPostgresState,
@@ -73,32 +72,6 @@ export const runOwnedIdentityAcceptance = async (
   finally {
     try { await stop(); } catch (cause) { if (!failed) throw cause; }
   }
-};
-
-export const closeIdentityAcceptance = async (
-  stopServer: () => unknown | Promise<unknown>,
-  stopProcess: () => Promise<{ kind: string; drained?: boolean } | undefined>,
-  closeIdentity: () => unknown | Promise<unknown>, closePool: () => unknown | Promise<unknown>,
-): Promise<void> => {
-  let failed = false;
-  try { await stopServer(); } catch { failed = true; }
-  try {
-    const outcome = await stopProcess();
-    if (outcome && (outcome.kind !== "stopped" || outcome.drained !== true)) failed = true;
-  } catch { failed = true; }
-  const closed = await Promise.allSettled([
-    Promise.resolve().then(closeIdentity), Promise.resolve().then(closePool),
-  ]);
-  if (failed || closed.some(result => result.status === "rejected"))
-    throw new Error("identity acceptance resource cleanup failed");
-};
-
-export const produceIdentityAcceptanceRenders = async (projected: TreeInputSnapshot) => {
-            if (projected.claims.length !== 0) throw new Error("identity acceptance requires an empty account");
-            return renderStructuralTree(buildDeterministicAnchors(projected), projected, {
-              render: async () => { throw new Error("identity acceptance must not invoke a model"); },
-            }, { strategy: "application-memory-render", model_version: "identity-acceptance-no-model",
-              prompt_version: "grounded-memory-v1", policy_version: "authorized-claims-v1", schema_version: "summary-citations-v1" });
 };
 
 const proveViaOwnedHttp = async (
@@ -171,7 +144,7 @@ const proveViaOwnedHttp = async (
         product: {
           account_timezone: "UTC",
           codec_root_secret: randomBytes(32),
-          produce_renders: produceIdentityAcceptanceRenders,
+          produce_renders: produceLocalEmptyRenders,
           verify_cursor: () => { throw new InvalidMcpCursorError(); },
           issue_cursor: () => { throw new InvalidMcpCursorError(); },
           trace_sink: () => undefined,
@@ -206,7 +179,7 @@ const proveViaOwnedHttp = async (
     };
   } catch (cause) { failed = true; throw cause; } finally {
     try {
-      await closeIdentityAcceptance(() => server?.stop(true), async () => memoryProcess?.stop(),
+      await closeLocalMemoryProcess(() => server?.stop(true), async () => memoryProcess?.stop(),
         () => identity?.close(), () => ownerPool.close());
     } catch (cause) { if (!failed) throw cause; }
 
