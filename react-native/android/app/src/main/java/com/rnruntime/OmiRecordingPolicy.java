@@ -26,6 +26,10 @@ final class OmiRecordingPolicy {
   static boolean retryableOwnershipStatus(int status) {
     return status == 408 || status == 429 || (status >= 500 && status <= 599);
   }
+  static boolean retryableOwnershipFailure(int status, Boolean nestedRetryable) {
+    if (nestedRetryable != null && !nestedRetryable.booleanValue()) return false;
+    return retryableOwnershipStatus(status);
+  }
   static boolean offline(Throwable error) {
     return error instanceof ConnectException || error instanceof NoRouteToHostException
       || error instanceof SocketTimeoutException || error instanceof UnknownHostException;

@@ -868,12 +868,13 @@ RCT_REMAP_METHOD(createWriteId,
   };
   [self performNativeRequest:@{@"id":@"recording-ownership", @"method":@"GET", @"path":@"/v1/device-sessions/ownership"} receipt:nil expectedOrigin:origin expectedLogin:login resolver:^(NSDictionary *response) {
     if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
-    if ([response[@"status"] integerValue] == 503 && [response[@"body"] isKindOfClass:NSString.class]) {
-      id envelope = [NSJSONSerialization JSONObjectWithData:[response[@"body"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+    NSString *ownershipBody = [response[@"body"] isKindOfClass:NSString.class] ? response[@"body"] : nil;
+    if ([response[@"status"] integerValue] == 503 && ownershipBody != nil) {
+      id envelope = [NSJSONSerialization JSONObjectWithData:[ownershipBody dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
       id failure = [envelope isKindOfClass:NSDictionary.class] ? envelope[@"error"] : nil;
       if ([failure isKindOfClass:NSDictionary.class] && [failure[@"code"] isEqual:@"capture_ownership_unavailable"]) { reject(@"OMI_CAPTURE_OWNERSHIP_UNAVAILABLE", @"Recording ownership is unavailable from this backend", nil); return; }
     }
-    if (OmiRecordingRetryableOwnershipStatus([response[@"status"] integerValue])) { reject(@"OMI_HTTP_TRANSPORT", @"Recording ownership could not be refreshed", nil); return; }
+    if (OmiRecordingRetryableOwnershipFailure([response[@"status"] integerValue], ownershipBody)) { reject(@"OMI_HTTP_TRANSPORT", @"Recording ownership could not be refreshed", nil); return; }
     if ([response[@"status"] integerValue] != 200 || ![login isEqual:OmiRecordingLogin()]) { reject(@"OMI_RECORDING_OWNERSHIP", @"Recording ownership is unavailable from this backend", nil); return; }
     NSString *body = [response[@"body"] isKindOfClass:NSString.class] ? response[@"body"] : nil;
     id parsed = body == nil ? nil : [NSJSONSerialization JSONObjectWithData:body == nil ? nil : [body dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];

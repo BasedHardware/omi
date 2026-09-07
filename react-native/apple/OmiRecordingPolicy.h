@@ -16,6 +16,19 @@ static BOOL OmiRecordingRetryableOwnershipStatus(NSInteger status) {
   return status == 408 || status == 429 || (status >= 500 && status <= 599);
 }
 
+static BOOL OmiRecordingRetryableOwnershipFailure(NSInteger status, NSString *body) {
+  if (!OmiRecordingRetryableOwnershipStatus(status)) return NO;
+  if (![body isKindOfClass:NSString.class]) return YES;
+  NSData *data = [body dataUsingEncoding:NSUTF8StringEncoding];
+  if (data == nil) return YES;
+  id parsed = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+  id error = [parsed isKindOfClass:NSDictionary.class] ? parsed[@"error"] : nil;
+  id retryable = [error isKindOfClass:NSDictionary.class] ? error[@"retryable"] : nil;
+  if ([retryable isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)retryable) == CFBooleanGetTypeID()
+      && ![retryable boolValue]) return NO;
+  return YES;
+}
+
 static BOOL OmiRecordingOffline(NSError *error) {
   if (![error.domain isEqual:NSURLErrorDomain]) return NO;
   switch (error.code) {

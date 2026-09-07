@@ -19,6 +19,14 @@ int main() {
     require(OmiRecordingLocalIdentity(legacy, claims) == nil);
     for (NSNumber *status in @[@408, @429, @500, @503, @599]) require(OmiRecordingRetryableOwnershipStatus(status.integerValue));
     for (NSNumber *status in @[@200, @400, @401, @403, @409, @600]) require(!OmiRecordingRetryableOwnershipStatus(status.integerValue));
+    require(OmiRecordingRetryableOwnershipFailure(503, nil));
+    require(OmiRecordingRetryableOwnershipFailure(503, @"{\"error\":\"service_unavailable\"}"));
+    require(OmiRecordingRetryableOwnershipFailure(503, @"{\"error\":{\"code\":\"unavailable\"}}"));
+    require(OmiRecordingRetryableOwnershipFailure(503, @"{\"error\":{\"code\":\"unavailable\",\"retryable\":true}}"));
+    require(!OmiRecordingRetryableOwnershipFailure(503, @"{\"error\":{\"code\":\"development_backend_unsupported\",\"retryable\":false,\"action\":\"none\"}}"));
+    require(!OmiRecordingRetryableOwnershipFailure(503, @"{\"error\":{\"code\":\"capture_ownership_unavailable\",\"retryable\":false,\"action\":\"none\"}}"));
+    require(!OmiRecordingRetryableOwnershipFailure(408, @"{\"error\":{\"retryable\":false}}"));
+    require(!OmiRecordingRetryableOwnershipFailure(403, @"{\"error\":{\"retryable\":true}}"));
     NSDictionary *beforeForget = @{@"idToken":@"new-token", @"rememberedDevice":@{@"id":@"old-device"}};
     require(OmiRememberedRefreshSession(beforeForget, @{})[@"rememberedDevice"] == nil);
     NSDictionary *replacement = @{@"rememberedDevice":@{@"id":@"new-device"}};

@@ -177,9 +177,11 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
       val response = performRequest(Arguments.createMap().apply {
         putString("id", "recording-ownership"); putString("method", "GET"); putString("path", "/v1/device-sessions/ownership")
       }, policy)
-      if (response.getInt("status") == 503 && runCatching { JSONObject(response.getString("body").orEmpty()).optJSONObject("error")?.optString("code") }.getOrNull() == "capture_ownership_unavailable")
+      val ownershipError = runCatching { JSONObject(response.getString("body").orEmpty()).optJSONObject("error") }.getOrNull()
+      if (response.getInt("status") == 503 && ownershipError?.optString("code") == "capture_ownership_unavailable")
         throw TransportException("OMI_CAPTURE_OWNERSHIP_UNAVAILABLE", "Recording ownership is unavailable from this backend")
-      if (OmiRecordingPolicy.retryableOwnershipStatus(response.getInt("status"))) throw TransportException("OMI_HTTP_TRANSPORT", "Recording ownership could not be refreshed")
+      val nestedRetryable = ownershipError?.takeIf { it.has("retryable") && !it.isNull("retryable") }?.opt("retryable") as? Boolean
+      if (OmiRecordingPolicy.retryableOwnershipFailure(response.getInt("status"), nestedRetryable)) throw TransportException("OMI_HTTP_TRANSPORT", "Recording ownership could not be refreshed")
       if (response.getInt("status") != 200) throw TransportException("OMI_RECORDING_OWNERSHIP", "Recording ownership is unavailable from this backend")
       val ownership = JSONObject(response.getString("body").orEmpty()).getJSONObject("ownership")
       if (login != OmiCloudSession.journalLogin(reactApplicationContext)) throw TransportException("OMI_RECORDING_OWNERSHIP", "Recording login changed")
