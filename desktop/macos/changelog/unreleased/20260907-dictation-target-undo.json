@@ -1,0 +1,3 @@
+{
+  "change": "Dictation checks the original text field and caret before inserting, with Undo last dictation available for verified insertions in supported editors"
+}
