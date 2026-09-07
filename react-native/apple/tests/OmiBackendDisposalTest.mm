@@ -111,9 +111,35 @@ static void testOmiFrames(void) {
   assert(accepted == 0 && rejected == 1);
 }
 
+static void testCaptureQueryRoutes(void) {
+  assert(OmiIsCaptureBackendPath(@"/v1/conversations"));
+  assert(OmiIsCaptureBackendPath(@"/v1/conversations?limit=50&offset=0"));
+  assert(OmiIsCaptureBackendPath(@"/v1/memories?limit=50"));
+  assert(OmiIsCaptureBackendPath(@"/v1/tasks?limit=50&cursor=abc"));
+  assert(OmiIsCaptureBackendPath(@"/v1/chat-messages?limit=50"));
+  assert(OmiIsCaptureBackendPath(@"/v1/conversations#keep"));
+  assert(!OmiIsCaptureBackendPath(@"/v1/apps?limit=50"));
+  assert(!OmiIsCaptureBackendPath(@"/v1/conversations-extra?limit=50"));
+  assert(OmiExamplePlatformRequestSupported(@"GET", @"/v1/conversations?limit=50"));
+  assert(OmiExamplePlatformRequestSupported(@"GET", @"/v1/tasks?limit=2"));
+  assert(!OmiExamplePlatformRequestSupported(@"POST", @"/v1/tasks"));
+  OmiBackendPolicy *policy = [OmiBackendPolicy new];
+  policy.url = [NSURL URLWithString:@"https://api.omi.me"];
+  policy.captureURL = [NSURL URLWithString:@"https://synthetic.workers.dev"];
+  policy.captureOriginRequired = YES;
+  policy.token = @"synthetic-test";
+  policy.clientId = @"test";
+  policy.kind = OmiBackendCredentialKindCloud;
+  assert([OmiRequestBaseURL(policy, @"/v1/conversations?limit=50").host isEqualToString:@"synthetic.workers.dev"]);
+  assert([OmiRequestBaseURL(policy, @"/v1/apps").host isEqualToString:@"api.omi.me"]);
+  policy.captureOriginRequired = NO;
+  assert([OmiRequestBaseURL(policy, @"/v1/conversations?limit=50").host isEqualToString:@"api.omi.me"]);
+}
+
 int main() {
   @autoreleasepool {
     testSelectedContract();
+    testCaptureQueryRoutes();
     testOmiFrames();
     testPendingOmiCancellation();
     NSString *identifier = NSUUID.UUID.UUIDString;
