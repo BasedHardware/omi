@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -14,11 +15,13 @@ import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/found_omi/found_omi_widget.dart';
+import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
+import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
@@ -61,6 +64,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   late Animation<double> _backgroundFadeAnimation;
   String _currentBackgroundImage = Assets.images.onboardingBg2.path;
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
+  Future<void>? _knowledgeGraphPrebuildFuture;
 
   @override
   void initState() {
@@ -75,6 +79,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       _updateBackgroundImage(_controller!.index);
       // Precache next image for smoother transitions
       _precacheNextImage(_controller!.index);
+      if (_controller!.index == kSpeechProfilePage && _knowledgeGraphPrebuildFuture == null) {
+        _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError((_) {});
+      }
     });
 
     // Initialize animation controllers
@@ -144,6 +151,24 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     if (_controller!.index < _controller!.length - 1) {
       _controller!.animateTo(_controller!.index + 1);
     }
+  }
+
+  Future<void> _prebuildKnowledgeGraph() async {
+    try {
+      final current = await KnowledgeGraphApi.getKnowledgeGraph();
+      final nodes = current['nodes'] as List<dynamic>? ?? const [];
+      final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
+      if (hasGraph) return;
+    } catch (_) {
+      // Continue to rebuild below.
+    }
+
+    await KnowledgeGraphApi.rebuildKnowledgeGraph();
+    await KnowledgeGraphApi.waitForGraphStability(
+      timeout: const Duration(seconds: 25),
+      interval: const Duration(seconds: 2),
+      stabilityChecks: 1,
+    );
   }
 
   void _updateBackgroundImage(int pageIndex) {
@@ -302,11 +327,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       PermissionsWidget(
         goNext: () {
-          // Go directly to the completion screen. The device steps, the review
-          // step (App Store Guideline 5.6.3: no rating prompts during onboarding),
-          // the speech-profile step and the memory-graph preview are all out of
-          // first-run onboarding; the speech profile is recorded from Settings.
-          _controller!.animateTo(kCompletePage);
+          // Go directly to Speech Profile (skip device steps - we use phone mic now).
+          // The review step was removed from onboarding to comply with App Store
+          // Guideline 5.6.3 (no rating prompts during onboarding).
+          _controller!.animateTo(kSpeechProfilePage);
           PlatformManager.instance.analytics.onboardingStepCompleted('Permissions');
         },
       ),
@@ -314,8 +338,28 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       Container(), // UserReviewPage placeholder (removed for App Store Guideline 5.6.3)
       Container(), // WelcomePage placeholder
       Container(), // FindDevicesPage placeholder
-      Container(), // SpeechProfilePage placeholder (recorded from Settings, not during onboarding)
-      Container(), // KnowledgeGraphPage placeholder (memory-graph preview removed from onboarding)
+      widget.forceAuthPage
+          ? const SizedBox.shrink()
+          // Reuses the app-root SpeechProfileProvider (see main.dart) instead of a
+          // second, independently-constructed instance, so onboarding and the
+          // Settings speech profile page share one connection/recording state
+          // and setProviders(deviceProvider) actually gets called on it.
+          : SpeechProfileWidget(
+              goNext: () {
+                PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile');
+                _controller!.animateTo(kKnowledgeGraphPage);
+              },
+              onSkip: () {
+                PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile Skipped');
+                _controller!.animateTo(kKnowledgeGraphPage);
+              },
+            ),
+      OnboardingKnowledgeGraphStep(
+        onContinue: () {
+          PlatformManager.instance.analytics.onboardingStepCompleted('Knowledge Graph');
+          _controller!.animateTo(kCompletePage);
+        },
+      ),
       OnboardingCompleteScreen(
         onComplete: () {
           SharedPreferencesUtil().onboardingCompleted = true;
