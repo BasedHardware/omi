@@ -127,7 +127,8 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
         r"\b(Sóc|sóc|Em dic|em dic|El meu nom és|el meu nom és)\s+([A-Z][a-zA-Z]*)\b",
     ],
     'zh': [  # Chinese
-        r"(我是|我叫|我的名字是)\s*([\u4e00-\u9fa5]+)",
+        r"(我的名字是|我叫)\s*([\u4e00-\u9fa5]{2,5}?)(?:[，。！？、,.!?\s]|$)",
+        r"(我是)\s*([\u4e00-\u9fa5]{2,4}?)(?:[，。！？、,.!?\s]|$)",
     ],
     'cs': [  # Czech
         r"\b(Jsem|jsem|Jmenuji se|jmenuji se)\s+([A-Z][a-zA-Z]*)\b",
@@ -172,10 +173,11 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
         r"\b(Sono|sono|Mi chiamo|mi chiamo|Il mio nome è|il mio nome è)\s+([A-Z][a-zA-Z]*)\b",
     ],
     'ja': [  # Japanese
-        r"(私は|わたしは|私の名前は|わたしのなまえは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)",
+        r"(私の名前は|わたしのなまえは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]{2,6}?)(?:です|だ|でーす|だよ|と申します|ともうします|と言います|といいます|[、。，．！？!?\s]|$)",
+        r"(私は|わたしは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]{2,6}?)(?:です|だ|でーす|だよ|と申します|ともうします|と言います|といいます|[、，,]\s*(?:よろしく|どうぞ)|$)",
     ],
     'ko': [  # Korean
-        r"(저는|제 이름은)\s*([\uac00-\ud7a3]+)",
+        r"(저는|제\s*이름은)\s*([\uac00-\ud7a3]{2,5}?)(?:입니다|이에요|예요|이라고\s*합니다|라고\s*합니다|이야|야|[.,!?\s]|$)",
     ],
     'lt': [  # Lithuanian
         r"\b(Aš esu|aš esu|Mano vardas yra|mano vardas yra)\s+([A-Z][a-zA-Z]*)\b",
@@ -228,6 +230,219 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
 patterns_to_check: List[str] = []
 for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
     patterns_to_check.extend(lang_patterns)
+
+# CJK stopwords and grammatical elements to avoid false-positive speaker creation
+# from ordinary conversational sentences (#12900).
+JA_NAME_STOPWORDS = frozenset(
+    {
+        'そう',
+        'これ',
+        'それ',
+        'あれ',
+        'どれ',
+        'ここ',
+        'そこ',
+        'あそこ',
+        'どこ',
+        '私',
+        'わたし',
+        'わたくし',
+        '僕',
+        'ぼく',
+        '俺',
+        'おれ',
+        '自分',
+        'じぶん',
+        '日本人',
+        '外国人',
+        '学生',
+        '先生',
+        '医者',
+        '友達',
+        '人間',
+        '大人',
+        '子供',
+        '大丈夫',
+        'ちょっと',
+        'お腹',
+        '元気',
+        '誰',
+        'だれ',
+        '何',
+        'なに',
+        'なん',
+        '本当',
+        'ほんとう',
+        '無理',
+        'むり',
+        '好き',
+        'すき',
+        '嫌い',
+        'きらい',
+        '思う',
+        'おもう',
+        '行く',
+        'いく',
+        '来る',
+        'くる',
+        '見る',
+        'みる',
+        '食べる',
+        '飲む',
+        '知る',
+        'わかる',
+        '今日',
+        'きょう',
+        '明日',
+        'あした',
+        '今',
+        'いま',
+        '日本',
+        '東京',
+        '会社',
+        '仕事',
+        '学校',
+    }
+)
+
+JA_PARTICLES_AND_VERB_ENDINGS = (
+    'が',
+    'を',
+    'に',
+    'へ',
+    'で',
+    'から',
+    'より',
+    'まで',
+    'ます',
+    'ました',
+    'ません',
+    'たい',
+    'たく',
+    'ている',
+    'てます',
+    'てる',
+    'すいた',
+    'すいて',
+)
+
+ZH_NAME_STOPWORDS = frozenset(
+    {
+        '这个',
+        '那个',
+        '这些',
+        '那些',
+        '这里',
+        '那里',
+        '我们',
+        '你们',
+        '他们',
+        '她们',
+        '它们',
+        '大家',
+        '自己',
+        '别人',
+        '什么',
+        '谁',
+        '哪',
+        '哪个',
+        '哪里',
+        '怎么',
+        '怎样',
+        '一个',
+        '不是',
+        '就是',
+        '也是',
+        '都是',
+        '只是',
+        '还是',
+        '真的',
+        '觉得',
+        '认为',
+        '以为',
+        '知道',
+        '不知道',
+        '想',
+        '要',
+        '可以',
+        '应该',
+        '能够',
+        '没有',
+        '不行',
+        '中国人',
+        '外国人',
+        '学生',
+        '老师',
+        '医生',
+        '朋友',
+        '同事',
+        '老板',
+        '大人',
+        '小孩',
+        '孩子',
+        '男人',
+        '女人',
+        '人类',
+        '新人',
+        '成员',
+        '今天',
+        '明天',
+        '现在',
+        '中国',
+        '北京',
+        '公司',
+        '工作',
+        '学校',
+        '我们的这个',
+    }
+)
+
+ZH_INVALID_CHARS = frozenset('的了着得地')
+
+KO_NAME_STOPWORDS = frozenset(
+    {
+        '학생',
+        '선생님',
+        '한국인',
+        '외국인',
+        '친구',
+        '사람',
+        '사람들',
+        '이것',
+        '그것',
+        '저것',
+        '여기',
+        '거기',
+        '저기',
+        '우리',
+        '저희',
+        '누구',
+        '무엇',
+        '생각',
+        '진짜',
+        '정말',
+        '오늘',
+        '내일',
+        '지금',
+        '회사',
+        '학교',
+        '일',
+    }
+)
+
+KO_VERB_ENDINGS = (
+    '합니다',
+    '입니다',
+    '갑니다',
+    '옵니다',
+    '습니다',
+    'ㅂ니다',
+    '있습니다',
+    '없습니다',
+    '해요',
+    '가요',
+    '와요',
+)
 
 # Pronouns and filler words the introduction patterns can capture from run-on
 # transcripts (e.g. "I'm It was great", "I'm You know...") — never real names (#5223).
@@ -308,16 +523,92 @@ SPEAKER_NAME_STOPWORDS = frozenset(
         'all',
         'some',
     }
+    | JA_NAME_STOPWORDS
+    | ZH_NAME_STOPWORDS
+    | KO_NAME_STOPWORDS
 )
 
 
-def detect_speaker_from_text(text: str) -> Optional[str]:
-    for pattern in patterns_to_check:
+def _is_valid_cjk_speaker_name(name: str) -> bool:
+    """Validate that candidate CJK name is plausible and not a full sentence or clause."""
+    has_cjk = bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7A3]', name))
+    if not has_cjk:
+        return True
+
+    # CJK names are typically 2-4 characters, rarely 5-6 (compound or transliterated names)
+    if len(name) > 6:
+        return False
+
+    # Japanese kana/kanji validation
+    if re.search(r'[\u3040-\u309F\u30A0-\u30FF]', name):
+        for ending in JA_PARTICLES_AND_VERB_ENDINGS:
+            if ending in name:
+                return False
+        for word in JA_NAME_STOPWORDS:
+            if name == word or name.startswith(word) or name.endswith(word):
+                return False
+
+    # Chinese Han characters validation
+    if re.search(r'^[\u4E00-\u9FAF]+$', name):
+        if len(name) > 5:
+            return False
+        if name in ZH_NAME_STOPWORDS:
+            return False
+        for char in ZH_INVALID_CHARS:
+            if char in name:
+                return False
+
+    # Korean Hangul validation
+    if re.search(r'[\uAC00-\uD7A3]', name):
+        if len(name) > 5:
+            return False
+        if name in KO_NAME_STOPWORDS:
+            return False
+        for ending in KO_VERB_ENDINGS:
+            if name.endswith(ending):
+                return False
+
+    return True
+
+
+def detect_speaker_from_text(text: str, language: Optional[str] = None) -> Optional[str]:
+    if language and language in SPEAKER_IDENTIFICATION_PATTERNS:
+        patterns = list(SPEAKER_IDENTIFICATION_PATTERNS[language])
+        if language != 'en' and 'en' in SPEAKER_IDENTIFICATION_PATTERNS:
+            patterns.extend(SPEAKER_IDENTIFICATION_PATTERNS['en'])
+    else:
+        patterns = patterns_to_check
+
+    for pattern in patterns:
         match = re.search(pattern, text)
         if match:
             name = match.groups()[-1]
-            if name and len(name) >= 2 and name.lower() not in SPEAKER_NAME_STOPWORDS:
-                return name.capitalize()
+            if not name:
+                continue
+
+            # Strip trailing Japanese copulas if captured
+            if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', name):
+                name = re.sub(r'(?:です|だ|でーす|だよ)$', '', name).strip()
+            # Strip trailing Korean copulas if captured
+            if re.search(r'[\uAC00-\uD7A3]', name):
+                name = re.sub(r'(?:입니다|이에요|예요|이야|야)$', '', name).strip()
+
+            name = name.strip(' \t\r\n、。，．！？!?.,')
+
+            if len(name) < 2:
+                continue
+
+            if name.lower() in SPEAKER_NAME_STOPWORDS:
+                continue
+
+            if not _is_valid_cjk_speaker_name(name):
+                continue
+
+            return (
+                name
+                if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7A3]', name)
+                else name.capitalize()
+            )
     return None
 
 
