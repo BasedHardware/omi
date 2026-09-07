@@ -293,3 +293,128 @@ test('browser Apps does not offer an unusable native sign-in or installation ret
     });
   }
 });
+
+test.each(['failure', 'signed-out'])(
+  'older Settings session probe %s cannot replace the latest successful load',
+  async outcome => {
+    mockAuth.hasCloudSession.mockRejectedValueOnce(new Error('offline'));
+    const renderer = await renderPage(SettingsPage);
+    const retry = renderer.root.find(
+      node => node.props.accessibilityLabel === 'Retry settings',
+    ).props.onPress;
+    let resolveOld!: (value: boolean) => void;
+    let rejectOld!: (error: Error) => void;
+    mockAuth.hasCloudSession
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            resolveOld = resolve;
+            rejectOld = reject;
+          }),
+      )
+      .mockResolvedValue(true);
+    mockBackend.request.mockImplementation(async request => ({
+      id: request.id,
+      status: 200,
+      body: JSON.stringify({uid: 'current-user', name: 'Current account'}),
+    }));
+    await act(async () => {
+      retry();
+    });
+    expect(textOf(renderer)).toContain('Loading account…');
+    expect(labelsOf(renderer)).not.toContain('Retry settings');
+    await act(async () => {
+      retry();
+    });
+    expect(textOf(renderer)).toContain('Current account');
+    await act(async () => {
+      if (outcome === 'failure') {
+        rejectOld(new Error('older failure'));
+      } else {
+        resolveOld(false);
+      }
+    });
+    expect(textOf(renderer)).toContain('Current account');
+    expect(labelsOf(renderer)).not.toContain('Retry settings');
+  },
+);
+
+test('unmounted Settings session probes cannot start reads for the next account', async () => {
+  let resolveOld!: (value: boolean) => void;
+  mockAuth.hasCloudSession
+    .mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveOld = resolve;
+        }),
+    )
+    .mockResolvedValue(true);
+  const retired = await renderPage(SettingsPage);
+  await act(async () => {
+    retired.unmount();
+  });
+  mockBackend.request.mockImplementation(async request => ({
+    id: request.id,
+    status: 200,
+    body: JSON.stringify({uid: 'next-user', name: 'Next account'}),
+  }));
+  const current = await renderPage(SettingsPage);
+  const requests = mockBackend.request.mock.calls.length;
+  await act(async () => {
+    resolveOld(true);
+  });
+  expect(mockBackend.request).toHaveBeenCalledTimes(requests);
+  expect(textOf(current)).toContain('Next account');
+});
+
+test('older browser Settings response cannot overwrite a newer response', async () => {
+  const originalPlatform = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+  try {
+    mockBackend.request.mockRejectedValueOnce(new Error('offline'));
+    const renderer = await renderPage(SettingsPage);
+    const retry = renderer.root.find(
+      node => node.props.accessibilityLabel === 'Retry settings',
+    ).props.onPress;
+    let resolveOld!: (value: unknown) => void;
+    mockBackend.request
+      .mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            resolveOld = resolve;
+          }),
+      )
+      .mockResolvedValue({
+        id: 'service-settings-read',
+        status: 200,
+        body: JSON.stringify({
+          identity: {displayName: 'Latest identity', email: ''},
+          entitlement: null,
+        }),
+      });
+    await act(async () => {
+      retry();
+    });
+    await act(async () => {
+      retry();
+    });
+    expect(textOf(renderer)).toContain('Latest identity');
+    await act(async () => {
+      resolveOld({
+        id: 'service-settings-read',
+        status: 200,
+        body: JSON.stringify({
+          identity: {displayName: 'Older identity', email: ''},
+          entitlement: null,
+        }),
+      });
+    });
+    expect(textOf(renderer)).toContain('Latest identity');
+    expect(textOf(renderer)).not.toContain('Older identity');
+  } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatform,
+    });
+  }
+});
