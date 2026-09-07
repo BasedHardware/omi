@@ -18,6 +18,8 @@ import {
   PROD_LOCAL_PG_NOT_RUNNING,
   interpretManagedPostgresState,
   resolveProdLocalIdentity,
+  closeLocalMemoryProcess,
+  runLocalMemoryProcess,
 } from "./prod-local";
 import { createPostgresTestState, withPostgresTestPort } from "./postgres-test-lifecycle";
 
@@ -147,4 +149,60 @@ test("unknown OMI_PROD_LOCAL_IDENTITY values refuse instead of opting in", () =>
   if (decided.kind !== "refuse") throw new Error("expected refuse");
   expect(decided.message).toContain(PROD_LOCAL_LOCAL_IDENTITY_ENV_INVALID);
   expect(decided.message).not.toContain(PROD_LOCAL_EMULATOR_FORBIDDEN);
+});
+
+
+test("normal local process unwinds a startup failure and preserves it if cleanup also fails", async () => {
+  const calls: string[] = [];
+  await expect(runLocalMemoryProcess(async () => {
+    calls.push("acquired"); throw new Error("process construction failed");
+  }, async () => {
+    await closeLocalMemoryProcess(() => { calls.push("listener"); }, async () => {
+      calls.push("process"); return undefined;
+    }, () => { calls.push("identity"); throw new Error("close failed"); }, () => { calls.push("pool"); });
+  }, new AbortController().signal)).rejects.toThrow("process construction failed");
+  expect(calls).toEqual(["acquired", "listener", "process", "identity", "pool"]);
+});
+
+test("normal local shutdown during startup waits for owned work then closes exactly once", async () => {
+  const controller = new AbortController();
+  let release!: () => void;
+  const starting = new Promise<void>(resolve => { release = resolve; });
+  const calls: string[] = [];
+  const running = runLocalMemoryProcess(async () => {
+    calls.push("starting"); await starting; calls.push("started");
+  }, async () => { calls.push("closed"); }, controller.signal);
+  controller.abort(); controller.abort();
+  expect(calls).toEqual(["starting"]);
+  release(); await running;
+  expect(calls).toEqual(["starting", "started", "closed"]);
+});
+
+test("normal local process surfaces cleanup failure after a signal", async () => {
+  const controller = new AbortController();
+  const running = runLocalMemoryProcess(async () => { controller.abort(); }, async () => {
+    throw new Error("drain failed");
+  }, controller.signal);
+  await expect(running).rejects.toThrow("drain failed");
+});
+
+test("normal local bind collision releases its resources and leaves the other listener serving", async () => {
+  const listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("owned fixture") });
+  let closed = false;
+  try {
+    await expect(runLocalMemoryProcess(async () => {
+      const unexpected = Bun.serve({ hostname: "127.0.0.1", port: listener.port, fetch: () => new Response("unexpected") });
+      unexpected.stop(true);
+    }, async () => { closed = true; }, new AbortController().signal)).rejects.toMatchObject({ code: "EADDRINUSE" });
+    expect(closed).toBe(true);
+    const response = await fetch(`http://127.0.0.1:${listener.port}`, { signal: AbortSignal.timeout(2000) });
+    expect(await response.text()).toBe("owned fixture");
+  } finally { listener.stop(true); }
+});
+
+test("normal local pre-abort skips acquisition and runs only empty cleanup", async () => {
+  const controller = new AbortController(); controller.abort();
+  const calls: string[] = [];
+  await runLocalMemoryProcess(async () => { calls.push("acquired"); }, async () => { calls.push("closed"); }, controller.signal);
+  expect(calls).toEqual(["closed"]);
 });

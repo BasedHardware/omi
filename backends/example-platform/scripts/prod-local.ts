@@ -45,6 +45,10 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 
+import type { TreeInputSnapshot } from "../core/retrieve/index";
+import { buildDeterministicAnchors } from "../core/retrieve/tree";
+import { renderStructuralTree } from "../core/retrieve/render";
+import { portHeld } from "./prod-local-identity";
 import { InvalidMcpCursorError } from "../apps/mcp/cursor";
 import { createServedCounter } from "../apps/service/observability/served-count";
 import { LOOPBACK_HOST, loopbackServeOptions } from "../apps/service/net/loopback";
@@ -170,8 +174,7 @@ export const interpretManagedPostgresState = (
 };
 
 const fail = (message: string): never => {
-  process.stderr.write(`\n${message}\n\n`);
-  process.exit(1);
+  throw new Error(message);
 };
 
 const closedError = (message: string): never => fail(message);
@@ -193,12 +196,49 @@ const passwordFrom = (state: PostgresTestState): string => {
   return line.slice("POSTGRES_PASSWORD=".length);
 };
 
-const portHeld = (port: number): boolean => {
-  const result = Bun.spawnSync(["lsof", "-nP", `-iTCP:${port}`, "-sTCP:LISTEN"], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  return result.exitCode === 0 && result.stdout.toString().includes("(LISTEN)");
+export const closeLocalMemoryProcess = async (
+  stopServer: () => unknown | Promise<unknown>,
+  stopProcess: () => Promise<{ kind: string; drained?: boolean } | undefined>,
+  closeIdentity: () => unknown | Promise<unknown>, closePool: () => unknown | Promise<unknown>,
+): Promise<void> => {
+  let failed = false;
+  try { await stopServer(); } catch { /* closed failure stays closed */ failed = true; }
+  try {
+    const outcome = await stopProcess();
+    if (outcome && (outcome.kind !== "stopped" || outcome.drained !== true)) failed = true;
+  } catch { failed = true; }
+  const closed = await Promise.allSettled([
+    Promise.resolve().then(closeIdentity), Promise.resolve().then(closePool),
+  ]);
+  if (failed || closed.some(result => result.status === "rejected"))
+    throw new Error("prod-local resource cleanup failed");
+};
+
+export const produceLocalEmptyRenders = async (projected: TreeInputSnapshot) => {
+  if (projected.claims.length !== 0) throw new Error("prod-local nonempty memory rendering is unsupported");
+  return renderStructuralTree(buildDeterministicAnchors(projected), projected, {
+    render: async () => { throw new Error("prod-local model rendering is unsupported"); },
+  }, { strategy: "application-memory-render", model_version: "identity-acceptance-no-model",
+    prompt_version: "grounded-memory-v1", policy_version: "authorized-claims-v1", schema_version: "summary-citations-v1" });
+};
+
+export const runLocalMemoryProcess = async (
+  start: () => Promise<void>, close: () => Promise<void>, signal: AbortSignal,
+): Promise<void> => {
+  let stopped!: () => void;
+  const stopping = new Promise<void>(resolve => { stopped = resolve; });
+  signal.addEventListener("abort", stopped, { once: true });
+  let failed = false;
+  try {
+    signal.throwIfAborted();
+    await start();
+    if (!signal.aborted) await stopping;
+  } catch (cause) {
+    if (!(signal.aborted && cause === signal.reason)) { failed = true; throw cause; }
+  } finally {
+    signal.removeEventListener("abort", stopped);
+    try { await close(); } catch (cause) { if (!failed) throw cause; }
+  }
 };
 
 const withApplicationRole = (
@@ -304,138 +344,140 @@ const main = async (): Promise<void> => {
   if (portHeld(LISTEN_PORT)) {
     return fail(
       `omi prod-local: port ${LISTEN_PORT} is already in use. Something else is listening.\n`
-      + `  Find it:  lsof -nP -iTCP:${LISTEN_PORT} -sTCP:LISTEN\n`
       + "  Stop the existing listener before booting the production process.",
     );
   }
 
-  const ownerPool = createPostgresJsTransactionPool({
-    connectionString,
-    maxConnections: 4,
-  });
-  const pool = withApplicationRole(ownerPool);
-
-  let identityHandle;
+  let ownerPool: CloseablePostgresTransactionPool | undefined;
+  let identityHandle: Awaited<ReturnType<typeof createFirebaseAdminIdTokenAdapter>> | undefined;
+  let memoryProcess: ReturnType<typeof createPostgresFirebaseAuthorizedMemoryServiceProcess> | undefined;
+  let server: ReturnType<typeof Bun.serve> | undefined;
+  const shutdown = new AbortController();
+  const stop = () => shutdown.abort();
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
   try {
-    identityHandle = await createFirebaseAdminIdTokenAdapter({
-      project_id: LOCAL_FIREBASE_PROJECT_ID,
-      app_name: `omi-prod-local-${process.pid}`,
-      runtime_mode: identity.runtime_mode,
-    });
-  } catch {
-    await ownerPool.close();
-    return fail(
-      `${PROD_LOCAL_IDENTITY_ADAPTER_UNAVAILABLE}\n`
-      + "  Application Default Credentials are required to construct the official\n"
-      + "  Firebase Admin verifier. This script will not install a stub verifier.",
-    );
-  }
+    await runLocalMemoryProcess(async () => {
+      ownerPool = createPostgresJsTransactionPool({
+        connectionString,
+        maxConnections: 4,
+      });
+      const pool = withApplicationRole(ownerPool);
 
-  const codecRootSecret = randomBytes(32);
-  const service_options = {
-    mcp_handler: async () => jsonUnavailable(),
-    memory_read: {
-      authorization: {
+      try {
+        identityHandle = await createFirebaseAdminIdTokenAdapter({
+          project_id: LOCAL_FIREBASE_PROJECT_ID,
+          app_name: `omi-prod-local-${process.pid}`,
+          runtime_mode: identity.runtime_mode,
+        });
+      } catch {
+        return fail(
+          `${PROD_LOCAL_IDENTITY_ADAPTER_UNAVAILABLE}\n`
+          + "  Application Default Credentials are required to construct the official\n"
+          + "  Firebase Admin verifier. This script will not install a stub verifier.",
+        );
+      }
+
+      const codecRootSecret = randomBytes(32);
+      const service_options = {
+        mcp_handler: async () => jsonUnavailable(),
+        memory_read: {
+          authorization: {
+            pool,
+            project_id: LOCAL_FIREBASE_PROJECT_ID,
+            runtime_mode: identity.runtime_mode,
+            id_token_adapter: identityHandle.adapter,
+            application_id: LOCAL_APPLICATION_ID,
+            context_ttl_seconds: 60,
+            database_generation_digest: LOCAL_QUALIFICATION_DATABASE_GENERATION_DIGEST,
+          },
+          product: {
+            account_timezone: "UTC",
+            codec_root_secret: codecRootSecret,
+            produce_renders: produceLocalEmptyRenders,
+            verify_cursor: () => { throw new InvalidMcpCursorError(); },
+            issue_cursor: () => { throw new InvalidMcpCursorError(); },
+            trace_sink: () => undefined,
+            accepted_coverage_state: "bypassed" as const,
+            stm_coverage_state: "bypassed" as const,
+          },
+        },
+        now_epoch_seconds: () => Math.floor(Date.now() / 1_000),
+        counter: createServedCounter(),
+      };
+
+      memoryProcess = createPostgresFirebaseAuthorizedMemoryServiceProcess({
         pool,
-        project_id: LOCAL_FIREBASE_PROJECT_ID,
-        runtime_mode: identity.runtime_mode,
-        id_token_adapter: identityHandle.adapter,
-        application_id: LOCAL_APPLICATION_ID,
-        context_ttl_seconds: 60,
-        database_generation_digest: LOCAL_QUALIFICATION_DATABASE_GENERATION_DIGEST,
-      },
-      product: {
-        account_timezone: "UTC",
-        codec_root_secret: codecRootSecret,
-        produce_renders: async () => [],
-        verify_cursor: () => { throw new InvalidMcpCursorError(); },
-        issue_cursor: () => { throw new InvalidMcpCursorError(); },
-        trace_sink: () => undefined,
-        accepted_coverage_state: "bypassed" as const,
-        stm_coverage_state: "bypassed" as const,
-      },
-    },
-    now_epoch_seconds: () => Math.floor(Date.now() / 1_000),
-    counter: createServedCounter(),
-  };
+        service_options,
+        readiness: createPostgresProductionRuntimeReadiness(
+          pool,
+          LOCAL_QUALIFICATION_DATABASE_GENERATION_DIGEST,
+        ),
+        graceful_shutdown_ms: GRACEFUL_SHUTDOWN_MS,
+      });
 
-  const memoryProcess = createPostgresFirebaseAuthorizedMemoryServiceProcess({
-    pool,
-    service_options,
-    readiness: createPostgresProductionRuntimeReadiness(
-      pool,
-      LOCAL_QUALIFICATION_DATABASE_GENERATION_DIGEST,
-    ),
-    graceful_shutdown_ms: GRACEFUL_SHUTDOWN_MS,
-  });
+      shutdown.signal.throwIfAborted();
+      const started = await memoryProcess.start();
+      shutdown.signal.throwIfAborted();
+      const bind = loopbackServeOptions(LISTEN_PORT);
+      try {
+        server = Bun.serve({
+          ...bind,
+          fetch: (request) => memoryProcess!.fetch(request),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (/EADDRINUSE|address already in use/i.test(message)) {
+          return fail(
+            `omi prod-local: port ${LISTEN_PORT} is already in use. Something else is listening.\n`
+              + "  Stop the existing listener before booting the production process.",
+          );
+        }
+        return fail(`omi prod-local: failed to bind ${LOOPBACK_HOST}:${LISTEN_PORT}.`);
+      }
 
-  const started = await memoryProcess.start();
-  const bind = loopbackServeOptions(LISTEN_PORT);
-  let server: ReturnType<typeof Bun.serve>;
-  try {
-    server = Bun.serve({
-      ...bind,
-      fetch: (request) => memoryProcess.fetch(request),
-    });
-  } catch (error) {
-    await memoryProcess.stop();
-    try { await identityHandle.close(); } catch { /* closed failure stays closed */ }
-    const message = error instanceof Error ? error.message : "";
-    if (/EADDRINUSE|address already in use/i.test(message)) {
-      return fail(
-        `omi prod-local: port ${LISTEN_PORT} is already in use. Something else is listening.\n`
-        + `  Find it:  lsof -nP -iTCP:${LISTEN_PORT} -sTCP:LISTEN\n`
-        + "  Stop the existing listener before booting the production process.",
+      const baseUrl = `http://${LOOPBACK_HOST}:${LISTEN_PORT}`;
+      const ready = started.kind === "ready";
+      const identityBanner = identity.kind === "local_test"
+        ? `  ${PROD_LOCAL_IDENTITY_EMULATOR_NOT_PRODUCTION}\n`
+          + "  runtime_mode=local_test with the official Admin verifier against the Auth\n"
+          + "  emulator. This is not production. Mint a user with\n"
+          + "  bun run scripts/prod-local-identity.ts --mint, then seed authorization\n"
+          + "  rows with bun run scripts/prod-local-identity-seed.ts --uid <uid>.\n\n"
+        : `  ${PROD_LOCAL_IDENTITY_CANNOT_MINT}\n`
+          + "  David has not granted a token-minting credential. This process will not\n"
+          + "  install a stub verifier, a dev token, or the Auth emulator. Present a\n"
+          + "  real Firebase ID token to exercise verification; this script cannot issue one.\n\n";
+      process.stdout.write(
+        `\nomi prod-local is up\n\n`
+        + `  base URL      ${baseUrl}\n`
+        + `  bound to      ${LOOPBACK_HOST} (loopback only - not reachable from the LAN)\n`
+        + `  composition   PostgreSQL Firebase production memory process\n`
+        + `  process phase ${ready ? "ready" : "unavailable"}\n`
+        + `  postgres      127.0.0.1 (managed harness; credentials not printed)\n\n`
+        + identityBanner
+        + "  MCP credentials, production codec key material, and a production\n"
+        + "  synthesizer are also not granted. MCP answers 503. Only empty-account\n"
+        + "  memory reads are supported; nonempty rendering fails closed.\n\n"
+        + "  try it\n"
+        + `    curl -s ${baseUrl}/health\n`
+        + `    curl -s ${baseUrl}/ready\n\n`,
       );
-    }
-    return fail(`omi prod-local: failed to bind ${LOOPBACK_HOST}:${LISTEN_PORT}.`);
+
+    }, async () => {
+      await closeLocalMemoryProcess(() => server?.stop(true), async () => memoryProcess?.stop(),
+        () => identityHandle?.close(), () => ownerPool?.close());
+      process.stdout.write("\nomi prod-local: stopped\n");
+    }, shutdown.signal);
+  } finally {
+    process.off("SIGINT", stop);
+    process.off("SIGTERM", stop);
   }
-
-  const baseUrl = `http://${LOOPBACK_HOST}:${LISTEN_PORT}`;
-  const ready = started.kind === "ready";
-  const identityBanner = identity.kind === "local_test"
-    ? `  ${PROD_LOCAL_IDENTITY_EMULATOR_NOT_PRODUCTION}\n`
-      + "  runtime_mode=local_test with the official Admin verifier against the Auth\n"
-      + "  emulator. This is not production. Mint a user with\n"
-      + "  bun run scripts/prod-local-identity.ts --mint, then seed authorization\n"
-      + "  rows with bun run scripts/prod-local-identity-seed.ts --uid <uid>.\n\n"
-    : `  ${PROD_LOCAL_IDENTITY_CANNOT_MINT}\n`
-      + "  David has not granted a token-minting credential. This process will not\n"
-      + "  install a stub verifier, a dev token, or the Auth emulator. Present a\n"
-      + "  real Firebase ID token to exercise verification; this script cannot issue one.\n\n";
-  process.stdout.write(
-    `\nomi prod-local is up\n\n`
-    + `  base URL      ${baseUrl}\n`
-    + `  bound to      ${LOOPBACK_HOST} (loopback only - not reachable from the LAN)\n`
-    + `  composition   PostgreSQL Firebase production memory process\n`
-    + `  process phase ${ready ? "ready" : "unavailable"}\n`
-    + `  postgres      127.0.0.1 (managed harness; credentials not printed)\n\n`
-    + identityBanner
-    + "  MCP credentials, production codec key material, and a production\n"
-    + "  synthesizer are also not granted. MCP answers 503. Renders are empty\n"
-    + "  rather than QA-synthesized.\n\n"
-    + "  try it\n"
-    + `    curl -s ${baseUrl}/health\n`
-    + `    curl -s ${baseUrl}/ready\n\n`,
-  );
-
-  let stopping = false;
-  const shutdown = async (): Promise<void> => {
-    if (stopping) return;
-    stopping = true;
-    server.stop(true);
-    const stopped = await memoryProcess.stop();
-    try { await identityHandle.close(); } catch { /* closed failure stays closed */ }
-    process.stdout.write(
-      `\nomi prod-local: stopped (${stopped.kind}`
-      + `${stopped.kind === "stopped" ? `, drained=${stopped.drained}` : ""})\n`,
-    );
-    process.exit(stopped.kind === "failed" ? 1 : 0);
-  };
-  process.on("SIGINT", () => { void shutdown(); });
-  process.on("SIGTERM", () => { void shutdown(); });
 };
 
 if (import.meta.main) {
-  await main();
+  try { await main(); } catch (cause) { /* closed failure stays closed */
+    process.stderr.write(`${cause instanceof Error ? cause.message : "omi prod-local: startup or shutdown failed."}\n`);
+    process.exitCode = 1;
+  }
 }

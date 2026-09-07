@@ -1,7 +1,8 @@
 import { projectTreeInputSnapshot } from "../core/retrieve/index";
 import { snapshot } from "../core/retrieve/tree.fixture";
 import { expect, test } from "bun:test";
-import { assertIdentityAcceptance, closeIdentityAcceptance, produceIdentityAcceptanceRenders, runOwnedIdentityAcceptance } from "./prod-local-identity-e2e";
+import { assertIdentityAcceptance, runOwnedIdentityAcceptance } from "./prod-local-identity-e2e";
+import { closeLocalMemoryProcess, produceLocalEmptyRenders } from "./prod-local";
 
 test("identity acceptance rejects unavailable identity and readiness instead of passing denial", () => {
   const valid = { health: 200, ready: 200, authorized: 200, denied: 403 };
@@ -34,7 +35,7 @@ test("identity acceptance awaits teardown after both startup and proof failure",
 test("identity cleanup drains the process before closing storage and attempts all releases", async () => {
   for (const outcome of [{ kind: "failed" }, { kind: "stopped", drained: false }]) {
     const calls: string[] = [];
-    await expect(closeIdentityAcceptance(() => { calls.push("server"); }, async () => {
+    await expect(closeLocalMemoryProcess(() => { calls.push("server"); }, async () => {
       calls.push("process"); return outcome;
     }, () => { calls.push("identity"); throw new Error("identity close"); }, () => { calls.push("pool"); }))
       .rejects.toThrow("cleanup failed");
@@ -45,7 +46,7 @@ test("identity cleanup drains the process before closing storage and attempts al
 
 test("identity acceptance executes the actual empty structural renderer and refuses nonempty sources", async () => {
   const empty = projectTreeInputSnapshot({ ...snapshot(), claims: [], entities: [], events: [], evidence: [], adjacency: [] }, { account_timezone: "UTC" });
-  expect(await produceIdentityAcceptanceRenders(empty)).toEqual([]);
+  expect(await produceLocalEmptyRenders(empty)).toEqual([]);
   const nonempty = projectTreeInputSnapshot(snapshot(), { account_timezone: "UTC" });
-  await expect(produceIdentityAcceptanceRenders(nonempty)).rejects.toThrow("requires an empty account");
+  await expect(produceLocalEmptyRenders(nonempty)).rejects.toThrow("nonempty memory rendering is unsupported");
 });

@@ -5,8 +5,10 @@ PostgreSQL account/grant admission through the mounted production memory process
 It is **not** model-rendering, production Firebase, DEV deployment, or full app
 acceptance. The account is explicitly required to be empty. The actual structural renderer
 runs; its model port throws if any inference is requested.
-Normal `bun run prod-local` rendering behavior is unchanged and still needs its
-separate rendering qualification.
+Normal `bun run prod-local` now shares this real empty structural-render path.
+Nonempty memory rendering remains unsupported and fails closed; it never reports
+an invented empty history. Full rendering still needs separate configuration and
+qualification.
 
 Without explicit `--local-identity` (or `OMI_PROD_LOCAL_IDENTITY=emulator`),
 `prod-local` rejects an ambient emulator host. The identity acceptance process
@@ -51,8 +53,11 @@ Startup, HTTP probes and child commands have deadlines. Failure unwinds service
 and emulator cleanup before the command exits unsuccessfully. An exclusive private lifecycle lease spans startup, proof and shutdown. Existing emulator
 state is refused rather than adopted or stopped by the acceptance command.
 There is no port-4851 fallback and no process-enumeration dependency for socket
-checks. The direct `prod-local` launcher still uses its fixed port and is outside
-this bounded acceptance repair.
+checks. The direct `prod-local` launcher retains its fixed, allowlisted port 4851. It
+uses a real socket bind check and refuses an occupied port without touching the
+existing listener. Startup and bind failures, SIGINT and SIGTERM share one cleanup
+path: stop the listener, drain the production process, then release identity and
+storage. Cleanup failures cannot silently produce a successful exit.
 
 The standalone lifecycle commands remain available:
 
@@ -95,3 +100,9 @@ Bun 1.3.14 completed four consecutive owned emulator start/stop cycles. Bun 1.4.
 had an intermittent upstream emulator-startup timeout after its socket probes;
 this path therefore enforces the existing project runtime pin. This observation
 does not attribute a broader application failure to Bun 1.4.0.
+
+The normal launcher lifecycle is covered through its production lifetime helper,
+including pre-abort, cancellation during pending startup, constructor failure,
+cleanup failure, and a real socket collision on an owned ephemeral test port.
+The existing service on port 4851 was not stopped, restarted, or used for these
+checks; this is not an additional live fixed-port launcher certification.
