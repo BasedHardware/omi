@@ -80,17 +80,19 @@ class LocationAlertRequest(BaseModel):
         ...,
         ge=-90.0,
         le=90.0,
+        allow_inf_nan=False,
         description="WGS84 Latitude coordinate (e.g. 32.7767 for Dallas, TX).",
     )
     longitude: float = Field(
         ...,
         ge=-180.0,
         le=180.0,
+        allow_inf_nan=False,
         description="WGS84 Longitude coordinate (e.g. -96.7970 for Dallas, TX).",
     )
     severity: Optional[str] = Field(
         default=None,
-        description="Optional severity filter: 'Extreme', 'Severe', 'Moderate', or 'Minor'.",
+        description="Optional severity filter: 'Extreme', 'Severe', 'Moderate', 'Minor', or 'Unknown'.",
     )
 
     @field_validator("severity")
@@ -120,7 +122,7 @@ class StateAlertRequest(BaseModel):
     )
     severity: Optional[str] = Field(
         default=None,
-        description="Optional severity filter: 'Extreme', 'Severe', 'Moderate', or 'Minor'.",
+        description="Optional severity filter: 'Extreme', 'Severe', 'Moderate', 'Minor', or 'Unknown'.",
     )
     limit: int = Field(
         default=5,

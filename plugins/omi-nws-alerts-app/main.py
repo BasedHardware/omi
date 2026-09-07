@@ -11,11 +11,15 @@ import copy
 from datetime import datetime
 import ipaddress
 import logging
+import math
 import os
 import time
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 import httpx
 
 from models import (
@@ -210,6 +214,26 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    def sanitize(obj: Any) -> Any:
+        if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+            return str(obj)
+        if isinstance(obj, dict):
+            return {k: sanitize(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [sanitize(v) for v in obj]
+        return obj
+
+    encoded = jsonable_encoder(exc.errors())
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": sanitize(encoded)},
+    )
+
+
 def get_event_emoji(event_name: str) -> str:
     """Returns a context-appropriate warning emoji based on the meteorological hazard type."""
     ev = event_name.lower()
@@ -381,7 +405,7 @@ async def omi_tools_manifest() -> Dict[str, Any]:
                         },
                         "severity": {
                             "type": "string",
-                            "description": "Optional minimum severity filter ('Extreme', 'Severe', 'Moderate', 'Minor').",
+                            "description": "Optional minimum severity filter ('Extreme', 'Severe', 'Moderate', 'Minor', 'Unknown').",
                         },
                     },
                     "required": ["latitude", "longitude"],
@@ -403,7 +427,7 @@ async def omi_tools_manifest() -> Dict[str, Any]:
                         },
                         "severity": {
                             "type": "string",
-                            "description": "Optional severity filter ('Extreme', 'Severe', 'Moderate', 'Minor').",
+                            "description": "Optional severity filter ('Extreme', 'Severe', 'Moderate', 'Minor', 'Unknown').",
                         },
                         "limit": {
                             "type": "integer",
@@ -485,12 +509,17 @@ async def get_active_alerts_by_location(
 
     features = cached.get("features", [])
     if not features:
-        return ChatToolResponse(
-            result=(
+        if payload.severity:
+            msg = (
+                f"✅ **No Active '{payload.severity}' Weather Alerts** for coordinates ({payload.latitude:.4f}, {payload.longitude:.4f}).\n"
+                f"There are currently no active {payload.severity.lower()}-severity warnings or advisories in effect for this location."
+            )
+        else:
+            msg = (
                 f"✅ **No Active Weather Alerts** for coordinates ({payload.latitude:.4f}, {payload.longitude:.4f}).\n"
                 "There are currently no active warnings, watches, or advisories issued by the National Weather Service for this location."
             )
-        )
+        return ChatToolResponse(result=msg)
 
     alerts: List[WeatherAlertItem] = []
     for f in features:
@@ -548,9 +577,17 @@ async def get_active_alerts_by_state(payload: StateAlertRequest) -> ChatToolResp
 
     features = cached.get("features", [])
     if not features:
-        return ChatToolResponse(
-            result=f"✅ **No Active Weather Alerts** for **{state_name} ({state_code})**.\nThere are currently no active NWS warnings or watches in effect."
-        )
+        if payload.severity:
+            msg = (
+                f"✅ **No Active '{payload.severity}' Weather Alerts** for **{state_name} ({state_code})**.\n"
+                f"There are currently no active {payload.severity.lower()}-severity warnings or watches in effect."
+            )
+        else:
+            msg = (
+                f"✅ **No Active Weather Alerts** for **{state_name} ({state_code})**.\n"
+                "There are currently no active NWS warnings or watches in effect."
+            )
+        return ChatToolResponse(result=msg)
 
     alerts: List[WeatherAlertItem] = []
     for f in features:
@@ -587,38 +624,50 @@ async def get_national_severe_weather_summary(
         try:
             count_task = client.get(
                 f"{NWS_API_BASE_URL}/alerts/active/count",
-                timeout=4.0,
+                timeout=5.0,
             )
-            # Fetch severe/extreme alerts
-            sev_params = (
-                {"severity": "Extreme"}
-                if payload.severity_threshold == "Extreme"
-                else {"severity": "Extreme,Severe"}
-            )
+            # Fetch both Extreme and Severe alerts so statistics remain accurate
             alerts_task = client.get(
                 f"{NWS_API_BASE_URL}/alerts/active",
-                params=sev_params,
-                timeout=6.0,
+                params={"severity": "Extreme,Severe"},
+                timeout=7.0,
             )
             count_resp, alerts_resp = await asyncio.gather(
                 count_task, alerts_task, return_exceptions=True
             )
 
-            if isinstance(count_resp, Exception) or count_resp.status_code != 200:
-                total_active = 0
-            else:
-                total_active = count_resp.json().get("total", 0)
+            if isinstance(count_resp, Exception):
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Failed to fetch active alerts count from NWS API: {count_resp}",
+                )
+            if count_resp.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"NWS API count endpoint returned HTTP {count_resp.status_code}: {count_resp.text}",
+                )
 
-            if isinstance(alerts_resp, Exception) or alerts_resp.status_code != 200:
-                features = []
-            else:
-                features = alerts_resp.json().get("features", [])
+            if isinstance(alerts_resp, Exception):
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Failed to fetch active alerts from NWS API: {alerts_resp}",
+                )
+            if alerts_resp.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"NWS API alerts endpoint returned HTTP {alerts_resp.status_code}: {alerts_resp.text}",
+                )
+
+            total_active = count_resp.json().get("total", 0)
+            features = alerts_resp.json().get("features", [])
 
             cached = {
                 "total_active": total_active,
                 "features": features,
             }
             cache.set(cache_key, cached, ttl_seconds=120.0)
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error("Error fetching NWS national summary: %s", e)
             raise HTTPException(
@@ -646,16 +695,27 @@ async def get_national_severe_weather_summary(
         "",
     ]
 
-    if not alerts:
+    # Filter alerts according to requested threshold for display
+    if payload.severity_threshold == "Extreme":
+        display_alerts = [a for a in alerts if a.severity == "Extreme"]
+    else:
+        display_alerts = [a for a in alerts if a.severity in {"Extreme", "Severe"}]
+
+    if not display_alerts:
         header_lines.append(
             f"✅ No {payload.severity_threshold.lower()} or higher weather emergencies currently active nationwide."
         )
         return ChatToolResponse(result="\n".join(header_lines))
 
+    # Sort display alerts by severity: Extreme first, then Severe
+    severity_rank = {"Extreme": 0, "Severe": 1, "Moderate": 2, "Minor": 3, "Unknown": 4}
+    display_alerts.sort(key=lambda a: severity_rank.get(a.severity, 5))
+
+    shown_alerts = display_alerts[: payload.limit]
     header_lines.append(
-        f"Top **{min(len(alerts), payload.limit)}** critical hazard warnings in effect:"
+        f"Top **{len(shown_alerts)}** critical hazard warnings in effect:"
     )
-    cards = [format_alert_card(a) for a in alerts[: payload.limit]]
+    cards = [format_alert_card(a) for a in shown_alerts]
     return ChatToolResponse(
         result="\n".join(header_lines) + "\n\n" + "\n\n---\n\n".join(cards)
     )

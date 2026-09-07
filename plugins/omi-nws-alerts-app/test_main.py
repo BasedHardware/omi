@@ -235,6 +235,23 @@ def test_get_active_alerts_by_location_empty(monkeypatch):
         assert "37.7749" in result
 
 
+def test_get_active_alerts_by_location_empty_with_severity_filter(monkeypatch):
+    mock_client = httpx.AsyncClient(
+        transport=MockNwsTransport(empty_features=True),
+        headers={"User-Agent": "OmiTestApp/1.0"},
+    )
+    monkeypatch.setattr("main.http_client", mock_client)
+    with TestClient(app) as c:
+        response = c.post(
+            "/tools/get-active-alerts-by-location",
+            json={"latitude": 37.7749, "longitude": -122.4194, "severity": "Extreme"},
+        )
+        assert response.status_code == 200
+        result = response.json()["result"]
+        assert "No Active 'Extreme' Weather Alerts" in result
+        assert "active extreme-severity warnings or advisories" in result
+
+
 def test_get_active_alerts_by_location_with_severity_filter(client):
     payload = {
         "latitude": 32.7767,
@@ -262,6 +279,27 @@ def test_get_active_alerts_by_location_invalid_coords(client):
         json={"latitude": 32.0, "longitude": -195.0},
     )
     assert resp2.status_code == 422
+
+    # Non-finite NaN coordinates rejected with 422 (allow_inf_nan=False)
+    resp3 = client.post(
+        "/tools/get-active-alerts-by-location",
+        content='{"latitude": NaN, "longitude": -96.0}',
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp3.status_code == 422
+
+    resp4 = client.post(
+        "/tools/get-active-alerts-by-location",
+        content='{"latitude": 32.0, "longitude": NaN}',
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp4.status_code == 422
+
+    # Direct model validation also rejects float('nan')
+    with pytest.raises(Exception):
+        LocationAlertRequest(latitude=float("nan"), longitude=-96.0)
+    with pytest.raises(Exception):
+        LocationAlertRequest(latitude=32.0, longitude=float("nan"))
 
 
 def test_get_active_alerts_by_location_invalid_severity(client):
@@ -342,6 +380,23 @@ def test_get_active_alerts_by_state_empty(monkeypatch):
         assert "HAWAII (HI)" in result
 
 
+def test_get_active_alerts_by_state_empty_with_severity_filter(monkeypatch):
+    mock_client = httpx.AsyncClient(
+        transport=MockNwsTransport(empty_features=True),
+        headers={"User-Agent": "OmiTestApp/1.0"},
+    )
+    monkeypatch.setattr("main.http_client", mock_client)
+    with TestClient(app) as c:
+        response = c.post(
+            "/tools/get-active-alerts-by-state",
+            json={"state": "HI", "severity": "Extreme"},
+        )
+        assert response.status_code == 200
+        result = response.json()["result"]
+        assert "No Active 'Extreme' Weather Alerts" in result
+        assert "active extreme-severity warnings or watches" in result
+
+
 def test_get_active_alerts_by_state_invalid_state(client):
     response = client.post(
         "/tools/get-active-alerts-by-state",
@@ -416,6 +471,54 @@ def test_get_national_severe_weather_summary_invalid_threshold(client):
     assert response.status_code == 422
 
 
+def test_get_national_severe_weather_summary_extreme_threshold_preserves_counts(client):
+    response = client.post(
+        "/tools/get-national-severe-weather-summary",
+        json={"severity_threshold": "Extreme"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    result = data["result"]
+    assert "**Life-Threatening (Extreme):** 1" in result
+    assert "**Severe Hazards:** 1" in result
+    assert "Tornado Warning" in result
+    assert "Flash Flood Warning" not in result
+
+
+def test_get_national_severe_weather_summary_upstream_count_failure(monkeypatch):
+    class MockCountFailTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            if "/alerts/active/count" in str(request.url):
+                return httpx.Response(500, text="Count Server Error")
+            return httpx.Response(200, json={"features": []})
+
+    mock_client = httpx.AsyncClient(
+        transport=MockCountFailTransport(),
+        headers={"User-Agent": "OmiTestApp/1.0"},
+    )
+    monkeypatch.setattr("main.http_client", mock_client)
+    with TestClient(app) as c:
+        response = c.post("/tools/get-national-severe-weather-summary", json={})
+        assert response.status_code == 502
+
+
+def test_get_national_severe_weather_summary_upstream_alerts_failure(monkeypatch):
+    class MockAlertsFailTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            if "/alerts/active/count" in str(request.url):
+                return httpx.Response(200, json={"total": 10})
+            return httpx.Response(502, text="Alerts Gateway Timeout")
+
+    mock_client = httpx.AsyncClient(
+        transport=MockAlertsFailTransport(),
+        headers={"User-Agent": "OmiTestApp/1.0"},
+    )
+    monkeypatch.setattr("main.http_client", mock_client)
+    with TestClient(app) as c:
+        response = c.post("/tools/get-national-severe-weather-summary", json={})
+        assert response.status_code == 502
+
+
 def test_lru_cache_operations():
     lru = LRUCache(max_size=2)
     lru.set("k1", "v1", ttl_seconds=100.0)
@@ -487,13 +590,29 @@ def test_rate_limiter_blocks_via_api(client, monkeypatch):
 
 
 def test_trusted_proxy_forwarded_ip_used(client):
+    """Verify that when requests arrive via a trusted proxy, rate limiting isolates the forwarded IP."""
     payload = {"latitude": 32.7767, "longitude": -96.7970}
-    # Direct testclient host is 127.0.0.1 (trusted proxy), so X-Forwarded-For is extracted
-    headers = {"X-Forwarded-For": "203.0.113.195"}
-    resp = client.post(
-        "/tools/get-active-alerts-by-location", json=payload, headers=headers
+    ip_a_headers = {"X-Forwarded-For": "203.0.113.195"}
+    ip_b_headers = {"X-Forwarded-For": "198.51.100.42"}
+
+    # Exhaust rate limit window for IP A (60 requests)
+    for _ in range(60):
+        resp = client.post(
+            "/tools/get-active-alerts-by-location", json=payload, headers=ip_a_headers
+        )
+        assert resp.status_code == 200
+
+    # 61st request from IP A is blocked with 429
+    resp_blocked = client.post(
+        "/tools/get-active-alerts-by-location", json=payload, headers=ip_a_headers
     )
-    assert resp.status_code == 200
+    assert resp_blocked.status_code == 429
+
+    # Request from IP B through the same proxy connection is still permitted
+    resp_allowed = client.post(
+        "/tools/get-active-alerts-by-location", json=payload, headers=ip_b_headers
+    )
+    assert resp_allowed.status_code == 200
 
 
 def test_rate_limiter_spoof_prevention(client, monkeypatch):
