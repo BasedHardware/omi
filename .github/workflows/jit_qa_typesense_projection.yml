@@ -414,6 +414,8 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
       - uses: google-github-actions/setup-gcloud@v3
+      - name: Authenticate Docker to Artifact Registry
+        run: gcloud auth configure-docker gcr.io --quiet
       - name: Run canonical rebuild and real search_knowledge proof
         env:
           SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
