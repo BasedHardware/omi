@@ -709,7 +709,26 @@ enum ScreenContextWorkContextBuilder {
       guard let candidate = fallbackCandidate, let frameAge else {
         return (nil, stamped(selfFrontmostUnavailablePayload(reason: .noAttachableFrame)))
       }
-      guard let data = await candidate.provide() else {
+      // Candidate first (summon-boundary capture or newest store row). A
+      // transient decode failure on the newest store row must not fail the
+      // turn when an older attachable row is still loadable: fall through
+      // to the loader, which skips unreadable rows under the same freshness
+      // bound the policy just applied.
+      var data = await candidate.provide()
+      var served = candidate
+      if data == nil {
+        if let frame = await loader.loadLatestAttachableFrame(
+          maxAgeSeconds: ScreenContextFallbackPolicy.maxFallbackFrameAgeSeconds,
+          now: now
+        ) {
+          data = frame.data
+          served = (
+            frame.timestamp, "last_external_frame", frame.appName, frame.windowTitle,
+            { nil }
+          )
+        }
+      }
+      guard let data else {
         return (
           nil,
           stamped(
@@ -725,11 +744,11 @@ enum ScreenContextWorkContextBuilder {
         data,
         stamped(
           explicitLastExternalFramePayload(
-            source: candidate.source,
-            appName: candidate.appName,
-            windowTitle: candidate.windowTitle,
-            frameAgeSeconds: Int(frameAge.rounded()),
-            capturedAt: candidate.timestamp
+            source: served.source,
+            appName: served.appName,
+            windowTitle: served.windowTitle,
+            frameAgeSeconds: Int(max(0, now.timeIntervalSince(served.timestamp)).rounded()),
+            capturedAt: served.timestamp
           )
         )
       )

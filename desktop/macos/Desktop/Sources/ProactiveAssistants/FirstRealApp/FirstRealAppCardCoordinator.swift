@@ -160,6 +160,12 @@ final class FirstRealAppCardCoordinator {
       // notification is consumed synchronously on composer mount, so an
       // attachment staged after `request` would miss the composer that takes
       // the draft.
+      //
+      // The reservation is taken synchronously at tap time: the capture and
+      // frame decode below can be overtaken by any other open-chat request
+      // (floating bar, a second card), and a stale handoff must not
+      // overwrite the newer request's draft and attachment.
+      let generation = MainChatNavigationRequestStore.shared.reserve()
       Task { @MainActor in
         var attachment: ChatAttachment?
         if CGPreflightScreenCaptureAccess() {
@@ -186,7 +192,11 @@ final class FirstRealAppCardCoordinator {
             )
           }
         }
-        AppDelegate.summonWindowTarget()?.openMainAppChat(prefilledDraft: prompt, attachedFrame: attachment)
+        guard
+          let target = AppDelegate.summonWindowTarget(),
+          generation == MainChatNavigationRequestStore.shared.currentGeneration
+        else { return }
+        target.openMainAppChat(prefilledDraft: prompt, attachedFrame: attachment)
       }
     },
     scheduler: any FirstRealAppCardScheduling = FirstRealAppCardMainQueueScheduler()

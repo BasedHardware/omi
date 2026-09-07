@@ -1882,6 +1882,8 @@ class ChatProvider: ObservableObject {
     lastFailedPrompt = nil
     messages.removeAll()
     resetMessagesPagination()
+    // Dropped-without-sending staged frames take their app-owned files with them.
+    RecentFrameStagingLifecycle.discardAppOwnedFiles(pendingAttachments)
     pendingAttachments.removeAll()
     pendingComposerReferences.removeAll()
     sessions.removeAll()
@@ -4052,6 +4054,9 @@ class ChatProvider: ObservableObject {
   }
 
   func removePendingAttachment(id: String) {
+    // An app-owned staged frame the user removed was never sent; its file goes
+    // with it. User-picked files (`appOwnedFileURL == nil`) are never touched.
+    RecentFrameStagingLifecycle.discardAppOwnedFile(id: id, in: pendingAttachments)
     pendingAttachments.removeAll { $0.id == id }
   }
 
@@ -4149,6 +4154,10 @@ class ChatProvider: ObservableObject {
     else { return nil }
     return str
   }
+
+  /// Send-time gate for in-flight frame stagings; see
+  /// `ChatProvider+RecentFrameStaging.swift`.
+  let recentFrameStagingGate = RecentFrameStagingGate()
 
   /// Block until all currently-uploading attachments either succeed or fail.
   /// Returns `false` if any failed — caller surfaces an error and aborts.
@@ -4821,6 +4830,9 @@ class ChatProvider: ObservableObject {
     // settles so persistence stays consistent across sessions.
     var attachmentsForMessage: [ChatAttachment] = []
     let composerReferencesForMessage = pendingComposerReferences
+    // Wait — bounded — for in-flight frame staging to land before the snapshot
+    // below decides what this message carries (picked-frame-then-send race).
+    await recentFrameStagingGate.settle()
     if !pendingAttachments.isEmpty {
       let ok = await awaitPendingUploads()
       guard
@@ -4847,6 +4859,8 @@ class ChatProvider: ObservableObject {
       attachmentsForMessage = pendingAttachments
       pendingAttachments.removeAll()
     }
+    // Deletion waits for function exit — the turn may still read `local_path`.
+    defer { RecentFrameStagingLifecycle.discardAppOwnedFiles(attachmentsForMessage) }
     // The row and the journal carry a caption (both require non-empty user text); the model is told
     // separately that the attachments are the whole message — see `modelPrompt` at the query.
     if isAttachmentOnlySend {

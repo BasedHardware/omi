@@ -109,6 +109,60 @@ final class RewindFrameLoaderTests: XCTestCase {
     XCTAssertEqual(frame?.appName, "Safari")
   }
 
+  func testLoadDataRejectsARowExcludedWhileTheDecodeRan() async {
+    // The picker resolved the row when it was attachable; the user then
+    // excluded its app. The bytes that come back must not ship. The exclusion
+    // flips between the pick (attachableRows) and the load (loadData), which
+    // is exactly the suspended-decode window the revalidation covers.
+    final class Exclusions: @unchecked Sendable {
+      let lock = NSLock()
+      private var apps: Set<String> = []
+      func set(_ apps: Set<String>) { lock.withLock { self.apps = apps } }
+      func get() -> Set<String> { lock.withLock { apps } }
+    }
+    let exclusions = Exclusions()
+    // Locals, not self members: the environment's closures are @Sendable and
+    // must not capture the non-Sendable test case.
+    let jpeg = omiJPEG
+    let pickedRow = row(id: 5, appName: "1Password", ageSeconds: 5)
+    let environment = RewindFrameLoader.Environment(
+      recentScreenshots: { _ in [pickedRow] },
+      activeChunkPath: { nil },
+      loadData: { _ in jpeg },
+      excludedApps: { exclusions.get() }
+    )
+    let loader = RewindFrameLoader(environment: environment)
+    let picked = await loader.attachableRows(limit: 25)
+    XCTAssertEqual(picked.map(\.appName), ["1Password"], "precondition: row was attachable at pick time")
+    exclusions.set(["1Password"])
+    let data = await loader.loadData(for: picked[0])
+    XCTAssertNil(data)
+  }
+
+  func testLoadDataRejectsARowWhoseChunkBecameActiveWhileTheDecodeRan() async {
+    final class ActiveChunk: @unchecked Sendable {
+      let lock = NSLock()
+      private var path: String?
+      func set(_ path: String?) { lock.withLock { self.path = path } }
+      func get() -> String? { lock.withLock { path } }
+    }
+    let activeChunk = ActiveChunk()
+    let jpeg = omiJPEG
+    let theRow = row(id: 6, appName: "ChatGPT", ageSeconds: 5, videoChunkPath: "chunk-1", frameOffset: 2)
+    let environment = RewindFrameLoader.Environment(
+      recentScreenshots: { _ in [theRow] },
+      activeChunkPath: { activeChunk.get() },
+      loadData: { _ in jpeg },
+      excludedApps: { [] }
+    )
+    let loader = RewindFrameLoader(environment: environment)
+    let picked = await loader.attachableRows(limit: 25)
+    XCTAssertEqual(picked.count, 1, "precondition: row was attachable before its chunk went active")
+    activeChunk.set("chunk-1")
+    let data = await loader.loadData(for: picked[0])
+    XCTAssertNil(data)
+  }
+
   func testAgeBoundStopsTheSearchAtTheNewestRow() async {
     // Rows are newest-first, so the first row past the bound ends the search —
     // there is nothing younger left to find.
@@ -160,6 +214,12 @@ final class RewindFrameLoaderTests: XCTestCase {
     let url = try XCTUnwrap(attachment?.localFileURL)
     defer { try? FileManager.default.removeItem(at: url) }
     XCTAssertTrue(url.lastPathComponent.contains("Code-Editor- Pro"))
-    XCTAssertFalse(url.lastPathComponent.contains("/"))
+    // Directory traversal: an unsanitized appName would create a nested
+    // directory instead of a file directly inside the frames directory.
+    XCTAssertEqual(
+      url.deletingLastPathComponent().standardizedFileURL.path,
+      RecentScreenFrameStaging.framesDirectoryForTesting.standardizedFileURL.path)
+    // App-owned: staged frames are cleaned up by the attachment lifecycle.
+    XCTAssertEqual(attachment?.appOwnedFileURL, url)
   }
 }

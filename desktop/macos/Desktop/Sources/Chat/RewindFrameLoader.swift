@@ -181,8 +181,17 @@ final class RewindFrameLoader {
   }
 
   /// Bytes for a row the user picked.
+  ///
+  /// The decode suspends, and exclusion is re-applied at read time because it
+  /// is not retroactive in the store — so the row must still be attachable
+  /// *after* the bytes arrive, not just when the caller picked it. A row whose
+  /// app the user excluded (or whose chunk became active) while the decode ran
+  /// yields no pixels.
   func loadData(for row: Screenshot) async -> Data? {
-    try? await environment.loadData(row)
+    guard let data = try? await environment.loadData(row) else { return nil }
+    let activeChunk = await environment.activeChunkPath()
+    guard isAttachable(row, activeChunkPath: activeChunk) else { return nil }
+    return data
   }
 
   /// Bytes for a row the picker offered by id. Re-reads the newest rows to

@@ -60,7 +60,13 @@ enum RecentScreenFrameStaging {
     } catch {
       return nil
     }
-    return ChatAttachment.from(url: url)
+    guard var attachment = ChatAttachment.from(url: url) else { return nil }
+    // The JPEG is app-owned: every drop path that never sends it (removal,
+    // clear-chat, dismissal) and the turn that did send it both delete it,
+    // so staged screen frames cannot accumulate private screenshots in the
+    // temp directory.
+    attachment.appOwnedFileURL = url
+    return attachment
   }
 
   /// Created on demand; the OS reaps it like any temp content. A staged frame
@@ -73,6 +79,11 @@ enum RecentScreenFrameStaging {
     try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url
   }
+
+  /// The staging directory, for tests asserting that a sanitized file name
+  /// lands directly inside it (no nested directory from an unsanitized
+  /// appName).
+  static var framesDirectoryForTesting: URL { framesDirectory }
 
   private static let fileNameFormatter: DateFormatter = {
     let formatter = DateFormatter()

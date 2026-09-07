@@ -24,8 +24,15 @@ final class MainChatNavigationRequestStore {
   /// rule as the draft: every request replaces the slot, and exactly one
   /// composer takes what it finds.
   private(set) var pendingAttachment: ChatAttachment?
+  /// Monotonic request generation. A requester that must suspend before it
+  /// can commit (the card's frame decode) reserves a generation up front; if
+  /// any other request lands in the meantime, the reservation goes stale and
+  /// the older requester's commit is dropped — a slow card handoff can never
+  /// overwrite a newer request's draft and attachment.
+  private var requestGeneration = 0
 
   func request(draft: String? = nil, attachment: ChatAttachment? = nil) {
+    requestGeneration &+= 1
     isPending = true
     // Every request owns the draft slot: a plain "Continue in Omi" must never
     // surface a suggestion left over from an earlier, unconsumed request.
@@ -34,6 +41,22 @@ final class MainChatNavigationRequestStore {
     pendingAttachment = attachment
     NotificationCenter.default.post(name: .openMainChatRequested, object: nil)
   }
+
+  /// Reserve the request slot without posting the open-chat notification.
+  /// Pair with `commit(draft:attachment:generation:)` once the suspended work
+  /// (e.g. the frame decode) finishes. Any `request()` or later `reserve()`
+  /// invalidates the returned generation.
+  @discardableResult
+  func reserve() -> Int {
+    requestGeneration &+= 1
+    return requestGeneration
+  }
+
+  /// The current request generation — what `reserve()` last returned, unless
+  /// a newer `request()` or `reserve()` has since overtaken it. A requester
+  /// that reserved before suspending re-checks this before committing through
+  /// its normal `request` seam.
+  var currentGeneration: Int { requestGeneration }
 
   /// Returns whether a request was pending, and clears it. The draft survives
   /// this call so a shell that consumes the navigation before its composer is

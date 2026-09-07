@@ -419,7 +419,12 @@ struct QueryShellHome: View {
   /// as every other attachment — the picker offers files, it is not a second
   /// attachment list.
   private func stageRecentFrame(_ row: RecentScreenFrameRow) {
+    // The staging is async (store decode → temp JPEG); the marker keeps a
+    // concurrent `sendMessage` from snapshotting `pendingAttachments` before
+    // this lands — the "picked a frame and immediately sent" race.
+    chatProvider.beginRecentFrameStaging()
     Task { @MainActor in
+      defer { chatProvider.endRecentFrameStaging() }
       guard let data = await RewindFrameLoader.shared.loadData(forRowID: row.id) else { return }
       guard
         let attachment = RecentScreenFrameStaging.attachment(

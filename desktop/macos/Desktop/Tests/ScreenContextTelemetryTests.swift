@@ -620,6 +620,49 @@ final class ScreenContextTelemetryTests: XCTestCase {
   }
 
   @MainActor
+  func testMainChatExplicitRequestUnreadableNewestFrameFallsThroughToOlderFrame() async {
+    // A transient decode failure on the newest row must not fail the turn
+    // when an older attachable row inside the freshness bound still loads —
+    // the honest no-frame payload is for "nothing loadable", not "newest row
+    // corrupt".
+    let olderData = Data([0xFF, 0xD8, 0xFF, 0xE1])
+    let newest = Screenshot(
+      id: 1, timestamp: Date().addingTimeInterval(-10), appName: "ChatGPT",
+      windowTitle: "ChatGPT window")
+    let older = Screenshot(
+      id: 2, timestamp: Date().addingTimeInterval(-40), appName: "Safari",
+      windowTitle: "Safari window")
+    let loader = RewindFrameLoader(
+      environment: .init(
+        recentScreenshots: { _ in [newest, older] },
+        activeChunkPath: { nil },
+        loadData: { row in
+          // The newest row is corrupt; every older row decodes.
+          if row.id == 1 { throw RewindError.screenshotNotFound }
+          return olderData
+        },
+        excludedApps: { [] }
+      ))
+    let evidence = await ScreenContextWorkContextBuilder.explicitScreenEvidence(
+      turnOwner: .mainChat,
+      now: Date(),
+      frontmostBundleIdentifier: "com.omi.computer-macos",
+      omiBundleIdentifier: "com.omi.computer-macos",
+      loader: loader,
+      isScreenRecordingGranted: { true },
+      captureNow: {
+        XCTFail("no live capture may be taken for a main-chat explicit ask")
+        return nil
+      }
+    )
+
+    XCTAssertEqual(evidence.imageData, olderData)
+    let screenNow = evidence.payload["screen_now"] as? [String: Any]
+    XCTAssertEqual(screenNow?["source"] as? String, "last_external_frame")
+    XCTAssertEqual(screenNow?["app_name"] as? String, "Safari")
+  }
+
+  @MainActor
   func testNonMainChatExplicitRequestStillCapturesLive() async {
     let liveJPEG = Data([0xFF, 0xD8, 0xFF, 0xDB])
     let evidence = await ScreenContextWorkContextBuilder.explicitScreenEvidence(
