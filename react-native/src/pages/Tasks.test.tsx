@@ -4,7 +4,10 @@ import {Text} from 'react-native';
 import {TasksPage} from './Tasks';
 import {TaskPagination} from '../ui/TaskPagination';
 import type {TaskMutationProps} from '../ui/TaskEditor';
-import type {TaskProjection} from '../desktopReadClient';
+import {
+  desktopBackendUnavailableCopy,
+  type TaskProjection,
+} from '../desktopReadClient';
 
 const task: TaskProjection = {
   kind: 'task',
@@ -306,6 +309,89 @@ test('task pagination stays available when loaded task search has no matches', (
       />,
     );
   });
+  act(() => control(renderer, 'Load more tasks')!.props.onPress());
+  expect(onLoadMore).toHaveBeenCalledTimes(1);
+  act(() => renderer.unmount());
+});
+
+const pagedOutcome = {
+  status: 'success' as const,
+  value: {
+    items: [task],
+    page: {
+      windowStatus: 'more' as const,
+      complete: false,
+      hasMore: true,
+      nextCursor: 'tasks-next',
+      completenessStatus: 'complete' as const,
+      reasons: [],
+    },
+  },
+};
+
+function taskPageText(renderer: ReactTestRenderer.ReactTestRenderer): string {
+  return renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+}
+
+test('nested non-retryable later task pages do not claim more are available', () => {
+  const onLoadMore = jest.fn();
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={pagedOutcome}
+        loading={false}
+        taskNotice={desktopBackendUnavailableCopy}
+        taskPagination={
+          <TaskPagination
+            hasMore={false}
+            busy={false}
+            notice={desktopBackendUnavailableCopy}
+            onLoadMore={onLoadMore}
+          />
+        }
+      />,
+    );
+  });
+  const copy = taskPageText(renderer);
+  expect(copy).toContain('Prepare demo');
+  expect(copy).toContain(desktopBackendUnavailableCopy);
+  expect(copy).not.toContain('More tasks are available.');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more tasks',
+    ),
+  ).toHaveLength(0);
+  act(() => renderer.unmount());
+});
+
+test('retryable later task pages still claim more are available', () => {
+  const onLoadMore = jest.fn();
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={pagedOutcome}
+        loading={false}
+        taskNotice="More tasks could not be loaded. Try again."
+        taskPagination={
+          <TaskPagination
+            hasMore
+            busy={false}
+            notice="More tasks could not be loaded. Try again."
+            onLoadMore={onLoadMore}
+          />
+        }
+      />,
+    );
+  });
+  const copy = taskPageText(renderer);
+  expect(copy).toContain('More tasks are available.');
+  expect(copy).toContain('More tasks could not be loaded. Try again.');
   act(() => control(renderer, 'Load more tasks')!.props.onPress());
   expect(onLoadMore).toHaveBeenCalledTimes(1);
   act(() => renderer.unmount());

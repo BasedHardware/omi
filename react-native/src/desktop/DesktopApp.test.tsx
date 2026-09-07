@@ -2188,6 +2188,112 @@ test('actual desktop task page exposes the shared pagination action', () => {
   expect(onLoadMore).toHaveBeenCalledTimes(1);
 });
 
+function pagedTaskOutcomes() {
+  return {
+    ...outcomes,
+    tasks: {
+      ...outcomes.tasks,
+      value: {
+        ...outcomes.tasks.value,
+        page: {
+          ...outcomes.tasks.value.page,
+          hasMore: true,
+          nextCursor: 'tasks-next',
+          complete: false,
+          windowStatus: 'more' as const,
+        },
+      },
+    },
+  };
+}
+
+test('actual desktop task page exposes Load more when more pages exist', () => {
+  const onLoadMore = jest.fn();
+  const renderer = renderDesktop({
+    outcomes: pagedTaskOutcomes(),
+    taskPagination: (
+      <TaskPagination
+        hasMore
+        busy={false}
+        notice={null}
+        onLoadMore={onLoadMore}
+      />
+    ),
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('More tasks are available.');
+  expect(visibleButtonCopy(renderer, 'Load more tasks')).toEqual([
+    'Load more tasks',
+  ]);
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load more tasks')
+      .props.onPress(),
+  );
+  expect(onLoadMore).toHaveBeenCalledTimes(1);
+});
+
+test('nested non-retryable later task pages keep rows and omit Load more', () => {
+  const renderer = renderDesktop({
+    taskNotice: desktopBackendUnavailableCopy,
+    outcomes: pagedTaskOutcomes(),
+    taskPagination: (
+      <TaskPagination
+        hasMore={false}
+        busy={false}
+        notice={desktopBackendUnavailableCopy}
+        onLoadMore={jest.fn()}
+      />
+    ),
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress(),
+  );
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Ship the desktop chrome');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more tasks',
+    ),
+  ).toHaveLength(0);
+  expect(tree).not.toContain('More tasks are available.');
+});
+
+test('generic later-page task failures keep Load more', () => {
+  const onLoadMore = jest.fn();
+  const renderer = renderDesktop({
+    taskNotice: 'More tasks could not be loaded. Try again.',
+    outcomes: pagedTaskOutcomes(),
+    taskPagination: (
+      <TaskPagination
+        hasMore
+        busy={false}
+        notice="More tasks could not be loaded. Try again."
+        onLoadMore={onLoadMore}
+      />
+    ),
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain(
+    'More tasks could not be loaded. Try again.',
+  );
+  expect(renderedText(renderer)).toContain('More tasks are available.');
+  expect(visibleButtonCopy(renderer, 'Load more tasks')).toEqual([
+    'Load more tasks',
+  ]);
+});
+
 function pagedConversationOutcomes() {
   return {
     ...outcomes,

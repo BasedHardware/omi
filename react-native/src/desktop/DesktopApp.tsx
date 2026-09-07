@@ -46,6 +46,7 @@ type Props = TaskMutationProps & {
   conversationNotice?: string | null;
   conversationsLoadingMore?: boolean;
   onLoadMoreConversations?: () => void;
+  taskNotice?: string | null;
   memoryNotice?: string | null;
   memoriesLoadingMore?: boolean;
   onLoadMoreMemories?: () => void;
@@ -86,6 +87,7 @@ export function DesktopApp({
   loadingOlderChat,
   memoryNotice = null,
   memoriesLoadingMore = false,
+  taskNotice = null,
   messages,
   onDraftChange,
   onLoadMoreConversations,
@@ -201,7 +203,11 @@ export function DesktopApp({
         ) : route === 'Rewind' ? (
           <DesktopRewind capture={capture} captureRevision={captureRevision} />
         ) : route === 'Tasks' ? (
-          <TasksPage outcomes={outcomes} {...taskMutations} />
+          <TasksPage
+            outcomes={outcomes}
+            taskNotice={taskNotice}
+            {...taskMutations}
+          />
         ) : route === 'Apps' ? (
           <AppsPage session={session} />
         ) : (

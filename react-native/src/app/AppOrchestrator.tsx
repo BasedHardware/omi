@@ -998,6 +998,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           onWorkspaceReload={reloadWorkspace}
           conversationNotice={conversationNotice}
           conversationsLoadingMore={conversationsLoadingMore}
+          taskNotice={taskNotice}
           onLoadMoreConversations={
             conversationsPageRetryable
               ? () => {
@@ -1594,6 +1595,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                 ) : route === 'Tasks' ? (
                   <TasksPage
                     taskPagination={taskPagination}
+                    taskNotice={taskNotice}
                     {...taskMutations}
                     loading={readsPhase === 'initial-loading'}
                     outcome={routeOutcome}

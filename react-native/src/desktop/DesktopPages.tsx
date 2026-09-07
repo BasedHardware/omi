@@ -102,6 +102,7 @@ export function LibraryPage({
 export function TasksPage({
   outcomes,
   taskPagination,
+  taskNotice = null,
   onTaskToggle,
   onTaskEdit,
   busyTaskId = null,
@@ -112,6 +113,7 @@ export function TasksPage({
 }: TaskMutationProps & {
   outcomes: DesktopReadOutcomes | null;
   taskPagination?: React.ReactNode;
+  taskNotice?: string | null;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const outcome = outcomes?.tasks ?? null;
@@ -198,7 +200,12 @@ export function TasksPage({
         )}
         {taskPagination}
         {outcome?.status === 'success' && tasks.length > 0 ? (
-          <ReadStatus label="Tasks" mac page={outcome.value.page} />
+          <ReadStatus
+            continueUnavailable={taskNotice === desktopBackendUnavailableCopy}
+            label="Tasks"
+            mac
+            page={outcome.value.page}
+          />
         ) : null}
       </ScrollView>
     </View>

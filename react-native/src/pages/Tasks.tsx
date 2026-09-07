@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
 import {
+  desktopBackendUnavailableCopy,
   taskGroup,
   type DesktopReadProjection,
   type DomainReadOutcome,
@@ -49,10 +50,12 @@ export function TasksPage({
   onRetryTaskMutation,
   onDismissTaskMutation,
   writesAvailable,
+  taskNotice = null,
 }: TaskMutationProps & {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
   taskPagination?: React.ReactNode;
+  taskNotice?: string | null;
 }) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -237,7 +240,11 @@ export function TasksPage({
             ),
           )}
           {outcome?.status === 'success' && (
-            <ReadStatus label="Tasks" page={outcome.value.page} />
+            <ReadStatus
+              continueUnavailable={taskNotice === desktopBackendUnavailableCopy}
+              label="Tasks"
+              page={outcome.value.page}
+            />
           )}
         </ScrollView>
       )}
