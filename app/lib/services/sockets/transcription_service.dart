@@ -71,7 +71,8 @@ class CustomSttTranscriptSegmentSocketService extends TranscriptSegmentSocketSer
     super.source,
     super.geolocation,
     super.clientConversationId,
-  }) : super.create(includeSpeechProfile: true, customSttMode: true);
+    bool includeSpeechProfile = true,
+  }) : super.create(includeSpeechProfile: includeSpeechProfile, customSttMode: true);
 }
 
 enum SocketServiceState { connected, disconnected }
@@ -421,6 +422,12 @@ class TranscriptSocketServiceFactory {
     );
   }
 
+  /// S19: synthesized freemium local mode is unnamed. User Custom STT keeps
+  /// today's speech-profile request on the Omi secondary socket.
+  static bool includeSpeechProfileForCustomSecondary(String? sttConfigId) {
+    return sttConfigId != 'freemium:on-device';
+  }
+
   /// Create streaming WebSocket for live STT
   static IPureSocket _createStreamingSocket(int sampleRate, BleAudioCodec codec, CustomSttConfig config) {
     final transcoder = AudioTranscoderFactory.createToRawPcm(sourceCodec: codec, sampleRate: sampleRate);
@@ -555,6 +562,7 @@ class TranscriptSocketServiceFactory {
       source: source,
       geolocation: geolocation,
       clientConversationId: clientConversationId,
+      includeSpeechProfile: includeSpeechProfileForCustomSecondary(sttConfigId),
     );
     final compositeSocket = CompositeTranscriptionSocket(
       primarySocket: primarySocket,
