@@ -6,6 +6,7 @@ import {desktopEaseSmoothOut} from './desktopMotion';
 import {
   cloudErrorCanRetry,
   loadAccountSettings,
+  optInTrainingData,
   setPrivateCloudSync,
   setStoreRecordingPermission,
   type AccountSettingsSnapshot,
@@ -595,6 +596,33 @@ export function DesktopSettings({
             : undefined
         }
         actionLabel="Update"
+      />
+      <Row
+        copy={
+          session !== 'ready'
+            ? 'Sign in to load this account setting.'
+            : account === null
+            ? 'Loading training data…'
+            : account.trainingOptedIn === null
+            ? account.trainingError ?? 'Training opt-in is unavailable.'
+            : account.trainingOptedIn
+            ? 'This account has opted in to training data. The API does not expose an opt-out from here.'
+            : 'This account has not opted in to training data.'
+        }
+        title="Training Data"
+        action={
+          session === 'ready' &&
+          backend != null &&
+          account?.trainingOptedIn === false
+            ? () => {
+                runAction(async () => {
+                  await optInTrainingData(backend);
+                  await reload();
+                });
+              }
+            : undefined
+        }
+        actionLabel="Opt in"
       />
     </>
   );

@@ -107,6 +107,7 @@ jest.mock('../desktopCloudClient', () => ({
     enabledIds: [],
     ownerUid: null,
   })),
+  optInTrainingData: jest.fn(),
   setPrivateCloudSync: jest.fn(),
   setStoreRecordingPermission: jest.fn(),
 }));
@@ -1397,14 +1398,21 @@ test('Settings Alerts does not claim privacy slices unavailable while account is
   });
   expect(renderedText(renderer)).toContain('Loading recording storage…');
   expect(renderedText(renderer)).toContain('Loading private cloud sync…');
+  expect(renderedText(renderer)).toContain('Loading training data…');
   expect(renderedText(renderer)).not.toContain(
     'Cloud recording storage status is unavailable.',
   );
   expect(renderedText(renderer)).not.toContain(
     'Private cloud sync status is unavailable.',
   );
+  expect(renderedText(renderer)).not.toContain(
+    'Training opt-in is unavailable.',
+  );
   expect(
     renderer.root.findAll(node => node.props.accessibilityLabel === 'Update'),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Opt in'),
   ).toHaveLength(0);
 });
 
@@ -1437,8 +1445,12 @@ test('Settings does not expose cloud mutations when account values failed to loa
   );
   expect(renderedText(renderer)).not.toContain('Loading recording storage…');
   expect(renderedText(renderer)).not.toContain('Loading private cloud sync…');
+  expect(renderedText(renderer)).not.toContain('Loading training data…');
   expect(
     renderer.root.findAll(node => node.props.accessibilityLabel === 'Update'),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Opt in'),
   ).toHaveLength(0);
 });
 
@@ -1454,7 +1466,7 @@ test('Settings reports a nested non-retryable recording-storage read as unavaila
     storeRecordingPermission: null,
     storeRecordingError: desktopAccountSettingUnavailableCopy,
     trainingOptedIn: null,
-    trainingError: null,
+    trainingError: desktopAccountSettingUnavailableCopy,
     privateCloudSync: null,
     privateCloudSyncError: desktopAccountSettingUnavailableCopy,
     webhooks: null,
@@ -1482,8 +1494,14 @@ test('Settings reports a nested non-retryable recording-storage read as unavaila
   expect(renderedText(renderer)).not.toContain(
     'Private cloud sync status is unavailable.',
   );
+  expect(renderedText(renderer)).not.toContain(
+    'Training opt-in is unavailable.',
+  );
   expect(
     renderer.root.findAll(node => node.props.accessibilityLabel === 'Update'),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Opt in'),
   ).toHaveLength(0);
 });
 
@@ -1529,6 +1547,60 @@ test('nested non-retryable account setting writes omit Try again', async () => {
   await act(async () => {
     renderer.root
       .findAll(node => node.props.accessibilityLabel === 'Update')[0]!
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(renderedText(renderer)).toContain(
+    desktopAccountSettingUnavailableCopy,
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Settings change could not be saved. Try again.',
+  );
+});
+
+test('nested non-retryable training opt-in writes omit Try again', async () => {
+  const {loadAccountSettings, optInTrainingData} = jest.requireMock(
+    '../desktopCloudClient',
+  ) as {
+    loadAccountSettings: jest.Mock;
+    optInTrainingData: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValue({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: false,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  optInTrainingData.mockRejectedValueOnce(
+    Object.assign(new Error(desktopAccountSettingUnavailableCopy), {
+      retryable: false,
+    }),
+  );
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Alerts & Privacy')
+      .props.onPress();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Opt in')
       .props.onPress();
     await Promise.resolve();
     await Promise.resolve();

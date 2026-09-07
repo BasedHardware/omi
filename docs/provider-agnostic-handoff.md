@@ -128,7 +128,9 @@ Cloud Linux after `96328b6ff9`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `f5637cf962`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. A nested non-retryable `/v1/users/profile` read shows account-setting unavailable copy instead of "Signed in to Omi." Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the desktop Settings privacy loading slice: Alerts does not claim recording storage or private cloud sync unavailable while the account snapshot is still loading. A page-level `loadAccountSettings` failure surfaces the mapped error instead of leaving Account on "Loading account…". Nested non-retryable privacy-slice reads keep account-setting unavailable copy and omit Update. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `528e1e2d74`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Alerts does not claim recording storage or private cloud sync unavailable while the account snapshot is still loading. A page-level `loadAccountSettings` failure surfaces the mapped error instead of leaving Account on "Loading account…". Nested non-retryable privacy-slice reads keep account-setting unavailable copy and omit Update. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the desktop Settings training slice: Alerts now shows the already-loaded training opt-in slice instead of omitting that closed `/v1/users/training-data-opt-in` door. Loading, page-level failure, nested non-retryable reads, and nested non-retryable Opt in writes use the same honesty as recording storage and private cloud sync. This does not invent a Settings identity producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
