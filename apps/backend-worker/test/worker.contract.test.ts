@@ -12,6 +12,11 @@ import {
   CONVERSATIONS_READ_CONTRACT_VERSION,
   MAIN_CONVERSATION_ID,
 } from "../src/conversations";
+import {
+  coreContext,
+  handleConversations,
+  handleTasks,
+} from "../src/http-core";
 import { CHAT_CAPABILITIES, isChatCreate } from "../src/wire";
 import { createD1Mock } from "./d1-mock";
 
@@ -787,6 +792,58 @@ describe("worker request contract", () => {
       absence: { kind: "query_gap" },
     });
     expect(parseTaskPageJson(tasksBody)).not.toBeNull();
+  });
+
+  test("conversation and task reads fail closed when D1 is unbound", async () => {
+    const missingDb = { ...env, DB: undefined };
+    const unavailable = {
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    };
+    const unbound = (url: string) =>
+      coreContext({
+        env: missingDb as never,
+        request: new Request(url),
+        routePath: new URL(url).pathname,
+        params: {},
+        values: { accountId: "test-account", requestId: "test-request" },
+      });
+    const conversations = await handleConversations(
+      unbound("https://worker.test/v1/conversations?limit=50")
+    );
+    const legacy = await handleConversations(
+      unbound("https://worker.test/v1/conversations?limit=50&offset=0")
+    );
+    const tasks = await handleTasks(
+      unbound("https://worker.test/v1/tasks?limit=10")
+    );
+    const ready = await handler.fetch(
+      new Request("https://worker.test/ready"),
+      missingDb as never,
+      executionContext as never
+    );
+    const refused = await handler.fetch(
+      new Request("https://worker.test/v1/conversations?limit=50", {
+        headers: authenticatedHeaders,
+      }),
+      missingDb as never,
+      executionContext as never
+    );
+
+    expect(conversations.status).toBe(503);
+    expect(legacy.status).toBe(503);
+    expect(tasks.status).toBe(503);
+    expect((await conversations.json()) as unknown).toEqual(unavailable);
+    expect((await legacy.json()) as unknown).toEqual(unavailable);
+    expect((await tasks.json()) as unknown).toEqual(unavailable);
+    expect(ready.status).toBe(503);
+    expect(refused.status).not.toBe(200);
+    expect((await refused.json()) as unknown).not.toEqual(
+      emptyConversationPage()
+    );
   });
 
   test("conversations project grouped D1 chat sessions, not a 503", async () => {

@@ -758,7 +758,8 @@ export async function handleConversations(
     if (limit === null || offset === null)
       return backendError("bad_request", "edit_request", 400);
     const db = context.env.DB;
-    if (db === undefined) return json([]);
+    if (db === undefined)
+      return backendError("service_unavailable", "retry", 503, true);
     const items = await readConversations(db, context.get("accountId"));
     return json(
       items
@@ -778,7 +779,8 @@ export async function handleConversations(
   if (limit === null || cursor === "")
     return backendError("bad_request", "edit_request", 400);
   const db = context.env.DB;
-  if (db === undefined) return json(conversationPage([], false, null));
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
   const page = paginateConversations(
     await readConversations(db, context.get("accountId")),
     limit,
@@ -859,7 +861,8 @@ export async function handleTasks(context: CoreContext): Promise<Response> {
     return backendError("bad_request", "edit_request", 400);
   }
   const db = context.env.DB;
-  if (db === undefined) return json(emptyPage("tasks-completeness-v1"));
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
   const limit = parseTaskLimit(query.get("limit"));
   const cursor = query.get("cursor") ?? undefined;
   // Match conversations/memories: empty cursor / invalid limit are bad requests.
