@@ -394,7 +394,7 @@ realTest(
 );
 
 realTest(
-  "real conversation reads compose granted chat sessions without inventing empty chat:chat-main",
+  "real conversation reads page granted chat sessions with listen by updatedAt without inventing empty chat:chat-main",
   async () => {
     const endpoint = new URL(url!);
     if (endpoint.hostname !== "127.0.0.1" || endpoint.protocol !== "postgres:")
@@ -555,22 +555,60 @@ realTest(
         items: Array<{ id: string }>;
         window: { nextCursor: string | null; hasMore: boolean };
       };
-      expect(ids(firstPage)).toContain("chat:chat-main");
-      expect(firstPage.items).toHaveLength(2);
+      expect(firstPage.items).toHaveLength(1);
+      expect(ids(firstPage)[0]).toMatch(/^recording:/);
+      expect(ids(firstPage)).not.toContain("chat:chat-main");
       expect(firstPage.window.hasMore).toBe(true);
       expect(firstPage.window.nextCursor).not.toBeNull();
       const secondPage = (await (
         await call(`?limit=1&cursor=${encodeURIComponent(firstPage.window.nextCursor!)}`)
-      ).json()) as { items: Array<{ id: string }> };
-      expect(ids(secondPage)).not.toContain("chat:chat-main");
+      ).json()) as {
+        items: Array<{ id: string }>;
+        window: { nextCursor: string | null; hasMore: boolean };
+      };
       expect(secondPage.items).toHaveLength(1);
+      expect(ids(secondPage)[0]).toMatch(/^recording:/);
+      expect(ids(secondPage)).not.toContain("chat:chat-main");
+      expect(ids(secondPage)[0]).not.toBe(ids(firstPage)[0]);
+      expect(secondPage.window.hasMore).toBe(true);
+      expect(secondPage.window.nextCursor).not.toBeNull();
+      const thirdPage = (await (
+        await call(`?limit=1&cursor=${encodeURIComponent(secondPage.window.nextCursor!)}`)
+      ).json()) as {
+        items: Array<{ id: string }>;
+        window: { nextCursor: string | null; hasMore: boolean };
+      };
+      expect(ids(thirdPage)).toEqual(["chat:chat-main"]);
+      expect(thirdPage.window.hasMore).toBe(false);
+      expect(thirdPage.window.nextCursor).toBeNull();
       await owner.unsafe(
-        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'named prompt','human','text',4000,4000,'session-alpha',NULL,0,'sha256:named','desktop_chat',NULL,false,'rev-named','[]'::jsonb,'gen_named')`,
-        [account, "22222222-2222-4222-8222-222222222222"]
+        "DELETE FROM omi_memory.application_grant_heads WHERE account_id=$1 AND capability='chat.read'",
+        [account]
       );
-      const namedPage = (await (await call()).json()) as { items: Array<{ id: string }> };
-      expect(ids(namedPage)).toContain("chat:chat-main");
-      expect(ids(namedPage)).toContain("chat:session-alpha");
+      const listenOnly = (await (await call("?limit=1")).json()) as {
+        items: Array<{ id: string }>;
+        window: { nextCursor: string | null };
+      };
+      expect(ids(listenOnly)).not.toContain("chat:chat-main");
+      expect(listenOnly.window.nextCursor).not.toBeNull();
+      await owner.unsafe(
+        `INSERT INTO omi_memory.application_grant_heads(account_id,application_id,credential_id,credential_generation,capability,grant_id,grant_version) VALUES($1,$2,$3,1,$4,$5,1)`,
+        [account, app, credential, "chat.read", `chat.read-${suffix}`]
+      );
+      const rejected = await call(
+        `?limit=1&cursor=${encodeURIComponent(listenOnly.window.nextCursor!)}`
+      );
+      expect(rejected.status).toBe(400);
+      const namedAt = Date.now() + 60_000;
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'named prompt','human','text',$3,$3,'session-alpha',NULL,0,'sha256:named','desktop_chat',NULL,false,'rev-named','[]'::jsonb,'gen_named')`,
+        [account, "22222222-2222-4222-8222-222222222222", namedAt]
+      );
+      const namedPage = (await (await call("?limit=1")).json()) as { items: Array<{ id: string }> };
+      expect(ids(namedPage)).toEqual(["chat:session-alpha"]);
+      const allNamed = (await (await call()).json()) as { items: Array<{ id: string }> };
+      expect(ids(allNamed)).toContain("chat:chat-main");
+      expect(ids(allNamed)).toContain("chat:session-alpha");
       await owner.unsafe(
         "DELETE FROM omi_memory.application_grant_heads WHERE account_id=$1 AND capability='chat.read'",
         [account]

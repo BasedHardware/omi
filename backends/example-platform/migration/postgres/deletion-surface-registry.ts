@@ -56,6 +56,7 @@ export const POSTGRES_DELETION_SURFACE_TABLES = Object.freeze({
   ]),
   product_projections: Object.freeze([
     "memory_render_responses", "listen_conversation_read_revisions", "listen_conversation_cursor_positions",
+    "conversation_union_cursor_positions",
     "chat_messages", "chat_generation_events",
     "task_records", "task_sequences", "task_write_receipts", "task_stragglers",
     "memory_product_membership_claim_lineages", "memory_product_membership_revisions",

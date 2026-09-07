@@ -54,6 +54,8 @@ Cloud Linux after the Home task search honesty slice: Desktop Home search hid un
 
 Cloud Linux after the Rewind empty-page honesty slice: Rewind treated an empty first page as "No captures saved yet" / "No captures match this search" even when a continuation cursor remained. Empty claims now require a terminal page; more history still offers Load more. Live ScreenCaptureKit and physical Mac capture remain unverified on Linux.
 
+Cloud Linux after the Listen+chat union pagination slice: production `GET /v1/conversations` with `chat.read` pages Listen and granted `chat:` rows together by `updatedAt` descending then `id` ascending, matching Worker `readConversations` / `paginateConversations`. Pages keep the requested `limit`. A Listen-sequence cursor cannot continue on that union path. Missing `chat.read` keeps the Listen sequence reader. Migration 0058 is in the checksummed manifest and is not applied to DEV from this VM. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.

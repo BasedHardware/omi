@@ -46,14 +46,19 @@ metadata read; an old process calling the retired function fails unavailable rat
 than returning an empty successful history during a mixed-revision rollout.
 
 This is the persisted Listen/recording list, plus granted chat sessions.
-First-page envelope reads that also hold `chat.read` include `chat:chat-main` when
-that account actually has main-session messages, and named `chat:` rows when those
-sessions have messages. Missing `chat.read`, revoked grants, and empty chat history
-never invent `chat:chat-main`. Later cursor pages keep the
-Listen sequence and do not repeat the chat sessions. Chat writes, editable
-metadata, folders and star mutations still need their own persisted domain
-composition. Full recording transcript data remains on the existing
-account-scoped device-session transcript route.
+Envelope reads that also hold `chat.read` merge those sessions with Listen rows by
+`updatedAt` descending then `id` ascending, matching Worker
+`readConversations` / `paginateConversations`. Each page returns at most the
+requested `limit`. The signed union cursor is a distinct policy from the Listen
+sequence cursor; it binds the chat snapshot sequence as well as the Listen
+revision so a chat write or recording-state change invalidates continuation.
+A Listen-sequence cursor cannot continue on the union path. The last item may be
+a `chat:` or Listen row; the position table stores that identity instead of a
+fake Listen sequence. Missing `chat.read`, revoked grants, and empty chat history
+never invent `chat:chat-main`. Without `chat.read`, later pages keep the Listen
+sequence path. Chat writes, editable metadata, folders and star mutations still
+need their own persisted domain composition. Full recording transcript data
+remains on the existing account-scoped device-session transcript route.
 
 Verification uses `bun run check:deployed` for projection, expiry/cancellation,
 route and shell contracts, and `bun run test:postgres` for actual application-role
