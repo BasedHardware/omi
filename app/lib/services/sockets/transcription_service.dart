@@ -328,8 +328,15 @@ class TranscriptSocketServiceFactory {
     return _customSttSupportedCodecs.contains(codec);
   }
 
-  static bool shouldBlockUnsupportedCodecFallback(BleAudioCodec codec, CustomSttConfig config) {
-    return config.isEnabled && !isCodecSupportedForCustomStt(codec) && !config.sendRawAudioToOmi;
+  static bool shouldBlockUnsupportedCodecFallback(
+    BleAudioCodec codec,
+    CustomSttConfig? config, {
+    bool allowanceOnDevice = false,
+  }) {
+    if (isCodecSupportedForCustomStt(codec)) return false;
+    if (allowanceOnDevice) return true;
+    if (config == null || !config.isEnabled) return false;
+    return !config.sendRawAudioToOmi;
   }
 
   /// Create default Omi transcription service
