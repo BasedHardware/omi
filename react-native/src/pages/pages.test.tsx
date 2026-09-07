@@ -260,6 +260,7 @@ test('web Settings maps unauthorized credentials without inventing a signed-in p
 
 test.each([
   [null, null, 'Usage allowance is unavailable'],
+  [{displayName: '', email: ''}, null, 'Identity unavailable'],
   [
     null,
     {limitKey: 'transcription_seconds', used: 1.5, limit: 3600.5},

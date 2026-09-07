@@ -215,7 +215,6 @@ export async function readHistory(
 export async function readSettings(
   db: D1Database,
   accountId: string,
-  identity: SettingsIdentity,
   planLabel: string,
   chatLimit: number | null
 ): Promise<SettingsSnapshot> {
@@ -227,7 +226,7 @@ export async function readSettings(
     .first<{ count: number }>();
   const used = usedRow?.count ?? 0;
   return {
-    identity,
+    identity: { displayName: "", email: "" },
     entitlement: {
       planLabel,
       limitKey: "chat",

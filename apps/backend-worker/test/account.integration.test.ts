@@ -185,10 +185,7 @@ describe("AccountBackend D1-backed coordination", () => {
       headers: authenticatedHeaders,
     });
     expect((await before.json()) as unknown).toMatchObject({
-      identity: {
-        displayName: "Test Account",
-        email: "test@example.invalid",
-      },
+      identity: { displayName: "", email: "" },
       entitlement: { used: 0, limit: 10, limitReached: false },
     });
 
@@ -203,10 +200,7 @@ describe("AccountBackend D1-backed coordination", () => {
       headers: authenticatedHeaders,
     });
     expect((await after.json()) as unknown).toMatchObject({
-      identity: {
-        displayName: "Test Account",
-        email: "test@example.invalid",
-      },
+      identity: { displayName: "", email: "" },
       entitlement: { used: 1, limit: 10, limitReached: false },
     });
   });

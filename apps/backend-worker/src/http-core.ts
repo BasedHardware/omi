@@ -441,10 +441,6 @@ export async function handleSettings(context: CoreContext): Promise<Response> {
     await readSettings(
       db,
       context.get("accountId"),
-      {
-        displayName: context.env.STAGING_DISPLAY_NAME,
-        email: context.env.STAGING_EMAIL,
-      },
       context.env.STAGING_PLAN_LABEL,
       context.env.STAGING_CHAT_LIMIT
     )

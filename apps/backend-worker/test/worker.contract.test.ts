@@ -29,6 +29,7 @@ beforeAll(async () => {
 
 const accountCalls: string[] = [];
 const identity = { displayName: "Test Account", email: "test@example.invalid" };
+const unavailableIdentity = { displayName: "", email: "" };
 const initialEntitlement = {
   planLabel: "Metered",
   limitKey: "chat",
@@ -718,7 +719,7 @@ describe("worker request contract", () => {
     });
     expect(alphaSettings.status).toBe(200);
     expect((await alphaSettings.json()) as unknown).toMatchObject({
-      identity,
+      identity: unavailableIdentity,
       entitlement: { used: 0, planLabel: initialEntitlement.planLabel },
     });
   });
@@ -1187,15 +1188,18 @@ describe("settings entitlement admission contract", () => {
     });
 
     expect(before.status).toBe(200);
-    expect((await before.json()) as unknown).toEqual({
-      identity,
+    const beforeBody = (await before.json()) as unknown;
+    expect(beforeBody).toEqual({
+      identity: unavailableIdentity,
       entitlement: initialEntitlement,
     });
     expect(admitted.status).toBe(201);
     expect((await after.json()) as unknown).toEqual({
-      identity,
+      identity: unavailableIdentity,
       entitlement: { ...initialEntitlement, used: 1, limitReached: true },
     });
+    expect(JSON.stringify(beforeBody)).not.toContain(identity.displayName);
+    expect(JSON.stringify(beforeBody)).not.toContain(identity.email);
   });
 
   test("an identical replay consumes quota exactly once", async () => {
