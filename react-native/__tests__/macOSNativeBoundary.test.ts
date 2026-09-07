@@ -172,6 +172,17 @@ test('pairs the macOS backend origin and credentials in one validated policy', (
   expect(source).toContain(
     'policy.kind == OmiBackendCredentialKindExamplePlatform && !OmiExamplePlatformRequestSupported(method, path)',
   );
+  const examplePlatformSelector = source.slice(
+    source.indexOf('static BOOL OmiExamplePlatformTranscriptPath'),
+    source.indexOf(
+      'static NSDictionary *OmiDevelopmentBackendUnsupportedResponse',
+    ),
+  );
+  expect(examplePlatformSelector).toContain('"/v1/settings"');
+  expect(examplePlatformSelector).toContain('"/v1/chat-messages"');
+  expect(examplePlatformSelector).toContain(
+    '/v1/device-sessions/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/transcript',
+  );
   expect(source).toContain('omi.backend.softwarePlane');
   expect(source).toContain('OmiSoftwarePlaneIsNew');
   expect(source).toContain(

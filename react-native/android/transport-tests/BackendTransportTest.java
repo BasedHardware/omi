@@ -36,10 +36,31 @@ public final class BackendTransportTest {
     assert "old".equals(OmiBackendTransport.resolvedSoftwarePlane("unexpected", true));
     assert OmiBackendTransport.softwarePlaneIsNew("new");
     assert !OmiBackendTransport.softwarePlaneIsNew("old");
+    assert OmiBackendTransport.examplePlatformSupported("GET", "/v1/settings");
+    assert OmiBackendTransport.examplePlatformSupported("GET", "/v1/conversations?limit=50&offset=0");
+    assert OmiBackendTransport.examplePlatformSupported("GET", "/v1/memories?limit=50&cursor=next");
     assert OmiBackendTransport.examplePlatformSupported("GET", "/v1/tasks?limit=2");
     assert OmiBackendTransport.examplePlatformSupported("POST", "/v1/tasks/ops");
+    assert OmiBackendTransport.examplePlatformSupported("GET", "/v1/chat-messages?limit=50");
+    assert OmiBackendTransport.examplePlatformSupported("GET", "/v1/chat-messages?limit=50&olderCursor=older-1");
+    assert OmiBackendTransport.examplePlatformSupported(
+      "GET", "/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/transcript");
     assert !OmiBackendTransport.examplePlatformSupported("DELETE", "/v1/tasks/ops");
     assert !OmiBackendTransport.examplePlatformSupported("POST", "/v1/tasks");
+    assert !OmiBackendTransport.examplePlatformSupported("POST", "/v1/chat-messages");
+    assert !OmiBackendTransport.examplePlatformSupported("POST", "/v1/settings");
+    assert !OmiBackendTransport.examplePlatformSupported("POST", "/v1/chat-attachments");
+    assert !OmiBackendTransport.examplePlatformSupported("GET", "/v1/chat-generations/one/events");
+    assert !OmiBackendTransport.examplePlatformSupported("DELETE", "/v1/chat-generations/one");
+    assert !OmiBackendTransport.examplePlatformSupported("POST", "/v1/conversations");
+    assert !OmiBackendTransport.examplePlatformSupported("GET", "/v1/conversations/one");
+    assert !OmiBackendTransport.examplePlatformSupported("GET", "/v1/device-sessions/ownership");
+    assert !OmiBackendTransport.examplePlatformSupported(
+      "GET", "/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170");
+    assert !OmiBackendTransport.examplePlatformSupported(
+      "GET", "/v1/device-sessions/ad99598c-36a8-1e12-a428-63d0a3e06170/transcript");
+    assert !OmiBackendTransport.examplePlatformSupported(
+      "POST", "/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/transcribe");
     AtomicInteger redirects = new AtomicInteger();
     HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     server.createContext("/target", exchange -> {

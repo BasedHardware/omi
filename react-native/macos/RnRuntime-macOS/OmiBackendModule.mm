@@ -455,12 +455,28 @@ static BOOL OmiApplyAuthorization(NSMutableURLRequest *request, OmiBackendPolicy
   return YES;
 }
 
+static BOOL OmiExamplePlatformTranscriptPath(NSString *route) {
+  static NSRegularExpression *pattern;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    pattern = [NSRegularExpression regularExpressionWithPattern:
+      @"^/v1/device-sessions/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/transcript$"
+      options:0
+      error:nil];
+  });
+  return pattern != nil &&
+      [pattern numberOfMatchesInString:route options:0 range:NSMakeRange(0, route.length)] == 1;
+}
+
 static BOOL OmiExamplePlatformRequestSupported(NSString *method, NSString *path) {
   NSString *route = OmiBackendRoute(path);
   return ([method isEqualToString:@"GET"] &&
-      ([route isEqualToString:@"/v1/conversations"] ||
+      ([route isEqualToString:@"/v1/settings"] ||
+       [route isEqualToString:@"/v1/conversations"] ||
        [route isEqualToString:@"/v1/memories"] ||
-       [route isEqualToString:@"/v1/tasks"])) ||
+       [route isEqualToString:@"/v1/tasks"] ||
+       [route isEqualToString:@"/v1/chat-messages"] ||
+       OmiExamplePlatformTranscriptPath(route))) ||
       ([method isEqualToString:@"POST"] && [route isEqualToString:@"/v1/tasks/ops"]);
 }
 
