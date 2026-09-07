@@ -175,6 +175,9 @@ test("vite selects only the allowlisted example platform without browser credent
 
 test("example platform permits candidate reads and task operations", () => {
   expect(
+    isExamplePlatformRequestSupported("GET", "/__omi/api/v1/settings")
+  ).toBe(true);
+  expect(
     isExamplePlatformRequestSupported(
       "GET",
       "/__omi/api/v1/conversations?limit=50&offset=0"
@@ -196,7 +199,7 @@ test("example platform permits candidate reads and task operations", () => {
     ["DELETE", "/__omi/api/v1/tasks/ops"],
     ["POST", "/__omi/api/v1/tasks"],
     ["GET", "/__omi/api/v1/chat-messages?limit=50"],
-    ["GET", "/__omi/api/v1/settings"],
+    ["POST", "/__omi/api/v1/settings"],
     ["POST", "/__omi/api/v1/chat-attachments"],
     ["GET", "/__omi/api/v1/chat-generations/one/events"],
     ["DELETE", "/__omi/api/v1/chat-generations/one"],
