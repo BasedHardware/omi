@@ -409,7 +409,7 @@ jobs:
             else
               service_secrets="$service_secrets,GEMINI_API_KEY=GEMINI_API_KEY:latest"
             fi
-            gcloud run deploy "$service" --project "$QA_PROJECT" --region "$QA_REGION" --image "$image" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --network "$QA_NETWORK" --vpc-egress private-ranges-only "${resource_flags[@]}" --set-env-vars "$common" --set-secrets "$service_secrets" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
+            gcloud run deploy "$service" --project "$QA_PROJECT" --region "$QA_REGION" --image "$image" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --network "$QA_NETWORK" --vpc-egress private-ranges-only ${resource_flags[@]+"${resource_flags[@]}"} --set-env-vars "$common" --set-secrets "$service_secrets" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
           done
       - name: Deploy gates-closed maintenance jobs
         env:
