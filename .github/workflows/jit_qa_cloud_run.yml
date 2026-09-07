@@ -196,7 +196,7 @@ jobs:
       - name: Preflight required development secret metadata before resource mutation
         run: |
           set -euo pipefail
-          for secret in ENCRYPTION_SECRET OPENAI_API_KEY POSTHOG_PROJECT_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET"; do
+          for secret in ENCRYPTION_SECRET OPENAI_API_KEY POSTHOG_PROJECT_API_KEY GEMINI_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET"; do
             gcloud secrets describe "$secret" --project "$QA_PROJECT" >/dev/null
             gcloud secrets versions describe latest --secret "$secret" --project "$QA_PROJECT" >/dev/null
           done
@@ -332,7 +332,10 @@ jobs:
           if [[ "$token_state" != "ENABLED" ]]; then
             openssl rand -hex 32 | gcloud secrets versions add "$QA_GATEWAY_TOKEN_SECRET" --project "$QA_PROJECT" --data-file=- >/dev/null
           fi
-          for secret in ENCRYPTION_SECRET OPENAI_API_KEY POSTHOG_PROJECT_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET" "$QA_REDIS_SECRET" "$QA_GATEWAY_TOKEN_SECRET"; do
+          # The shared QA identity needs secret access for its existing
+          # bindings. GEMINI_API_KEY is intentionally granted here without
+          # being bound into backend or gateway below.
+          for secret in ENCRYPTION_SECRET OPENAI_API_KEY POSTHOG_PROJECT_API_KEY GEMINI_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET" "$QA_REDIS_SECRET" "$QA_GATEWAY_TOKEN_SECRET"; do
             gcloud secrets describe "$secret" --project "$QA_PROJECT" >/dev/null
             gcloud secrets add-iam-policy-binding "$secret" --project "$QA_PROJECT" --member="serviceAccount:${QA_RUNTIME_SERVICE_ACCOUNT}" --role=roles/secretmanager.secretAccessor --condition=None --quiet >/dev/null
           done
@@ -400,10 +403,13 @@ jobs:
           for pair in "$QA_SERVICE:$BACKEND_IMAGE" "$QA_DESKTOP_SERVICE:$DESKTOP_IMAGE"; do
             service="${pair%%:*}"; image="${pair#*:}"
             resource_flags=()
+            service_secrets="ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest,REDIS_DB_PASSWORD=${QA_REDIS_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest,TYPESENSE_API_KEY=${QA_TYPESENSE_SECRET}:latest"
             if [[ "$service" == "$QA_SERVICE" ]]; then
               resource_flags+=(--memory=4Gi)
+            else
+              service_secrets="$service_secrets,GEMINI_API_KEY=GEMINI_API_KEY:latest"
             fi
-            gcloud run deploy "$service" --project "$QA_PROJECT" --region "$QA_REGION" --image "$image" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --network "$QA_NETWORK" --vpc-egress private-ranges-only "${resource_flags[@]}" --set-env-vars "$common" --set-secrets "ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest,REDIS_DB_PASSWORD=${QA_REDIS_SECRET}:latest,OMI_LLM_GATEWAY_SERVICE_TOKEN=${QA_GATEWAY_TOKEN_SECRET}:latest,TYPESENSE_API_KEY=${QA_TYPESENSE_SECRET}:latest" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
+            gcloud run deploy "$service" --project "$QA_PROJECT" --region "$QA_REGION" --image "$image" --service-account "$QA_RUNTIME_SERVICE_ACCOUNT" --allow-unauthenticated --network "$QA_NETWORK" --vpc-egress private-ranges-only "${resource_flags[@]}" --set-env-vars "$common" --set-secrets "$service_secrets" --labels "managed-by=github-actions,jit-qa=true,source-sha=${{ needs.admit.outputs.source_sha }}" --quiet
           done
       - name: Deploy gates-closed maintenance jobs
         env:

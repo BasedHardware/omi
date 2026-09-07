@@ -155,6 +155,47 @@ def test_environment_requires_profile_specific_drain_allowlist():
         )
 
 
+def test_desktop_profile_requires_ai_studio_batch_embedding_key_without_leaking_it_to_backend_or_gateway():
+    _, desktop_secrets = CONTRACT.resource_environment("desktop")
+    _, backend_secrets = CONTRACT.resource_environment("backend")
+    _, gateway_secrets = CONTRACT.resource_environment("gateway")
+
+    assert desktop_secrets["GEMINI_API_KEY"] == "GEMINI_API_KEY:latest"
+    assert "GEMINI_API_KEY" not in backend_secrets
+    assert "GEMINI_API_KEY" not in gateway_secrets
+    assert CONTRACT.RUNTIME_SERVICE_ACCOUNT.endswith("@based-hardware-dev.iam.gserviceaccount.com")
+
+
+def test_desktop_resource_rejects_missing_batch_embedding_key():
+    image = "gcr.io/based-hardware-dev/desktop-backend-jit-qa@sha256:" + "a" * 64
+    resource = _resource("desktop", "service", image)
+    resource["metadata"]["name"] = CONTRACT.DESKTOP_BACKEND_SERVICE
+    expected_environment, expected_secret_bindings = CONTRACT.resource_environment("desktop")
+
+    CONTRACT.validate_cloud_run_resource(
+        resource,
+        kind="service",
+        expected_image=image,
+        expected_environment=expected_environment,
+        expected_secret_bindings=expected_secret_bindings,
+        expected_name=CONTRACT.DESKTOP_BACKEND_SERVICE,
+        gateway_url=CONTRACT.DEFAULT_GATEWAY_URL,
+        redis_host=CONTRACT.DEFAULT_REDIS_HOST,
+    )
+
+    env = resource["spec"]["template"]["spec"]["containers"][0]["env"]
+    env.remove(next(entry for entry in env if entry["name"] == "GEMINI_API_KEY"))
+    with pytest.raises(CONTRACT.JITQAContractError, match="missing required environment"):
+        CONTRACT.validate_cloud_run_resource(
+            resource,
+            kind="service",
+            expected_image=image,
+            expected_environment=expected_environment,
+            expected_secret_bindings=expected_secret_bindings,
+            expected_name=CONTRACT.DESKTOP_BACKEND_SERVICE,
+        )
+
+
 def test_cloud_run_resource_requires_exact_image_env_secrets_name_and_identity():
     image = "gcr.io/based-hardware-dev/backend-jit-qa@sha256:" + "b" * 64
     resource = _resource("backend", "service", image)
@@ -513,6 +554,17 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert 'gcloud firestore databases describe --database "$QA_FIRESTORE_DATABASE"' in text
     assert 'gcloud redis instances describe "$QA_REDIS_INSTANCE"' in text
     assert "POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest" in text
+    assert 'gcloud secrets versions describe latest --secret "$secret"' in text
+    assert "GEMINI_API_KEY \"$QA_ANTHROPIC_SECRET\"" in text
+    assert (
+        'for secret in ENCRYPTION_SECRET OPENAI_API_KEY POSTHOG_PROJECT_API_KEY GEMINI_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET" "$QA_REDIS_SECRET" "$QA_GATEWAY_TOKEN_SECRET";'
+        in text
+    )
+    assert (
+        'gcloud secrets add-iam-policy-binding "$secret" --project "$QA_PROJECT" --member="serviceAccount:${QA_RUNTIME_SERVICE_ACCOUNT}"'
+        in text
+    )
+    assert 'service_secrets="$service_secrets,GEMINI_API_KEY=GEMINI_API_KEY:latest"' in text
     assert "RUN_MODEL_EXPERIMENT" not in text
     assert "MODEL_CONFIRMATION_INPUT" not in text
     assert "gcr.io/${QA_PROJECT}" in text
@@ -664,9 +716,9 @@ def test_qa_cloud_run_renders_typesense_host_and_key_into_both_http_services():
     assert "@TYPESENSE_HOST=typesense-jit-qa-1031333818730.us-central1.run.app@" in common
     assert "@MEMORY_TYPESENSE_COLLECTION=jit_qa_canonical_memory_atoms@" in common
     assert "@MEMORY_TYPESENSE_READINESS_SOURCE_SHA=" + "b" * 40 in common
-    deploy_line = next(line for line in text.splitlines() if "--set-secrets" in line and "TYPESENSE_API_KEY" in line)
     assert 'for pair in "$QA_SERVICE:$BACKEND_IMAGE" "$QA_DESKTOP_SERVICE:$DESKTOP_IMAGE"' in text
-    assert "TYPESENSE_API_KEY=${QA_TYPESENSE_SECRET}:latest" in deploy_line
+    assert "TYPESENSE_API_KEY=${QA_TYPESENSE_SECRET}:latest" in text
+    assert "GEMINI_API_KEY=GEMINI_API_KEY:latest" in text
 
 
 def test_typesense_entrypoint_uses_environment_key_without_secret_argument():
