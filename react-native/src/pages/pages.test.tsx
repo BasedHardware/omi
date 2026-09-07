@@ -273,3 +273,23 @@ test.each([-1, 1.5])(
     }
   },
 );
+
+test('browser Apps does not offer an unusable native sign-in or installation retry', async () => {
+  const previous = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {value: 'web', configurable: true});
+  try {
+    const renderer = await renderPage(ConnectorsPage);
+    expect(textOf(renderer)).toContain(
+      'Apps are not available for this browser connection yet.',
+    );
+    expect(labelsOf(renderer)).not.toContain('Sign in');
+    expect(labelsOf(renderer)).not.toContain('Retry apps');
+    expect(mockAuth.hasCloudSession).not.toHaveBeenCalled();
+    expect(mockBackend.request).not.toHaveBeenCalled();
+  } finally {
+    Object.defineProperty(Platform, 'OS', {
+      value: previous,
+      configurable: true,
+    });
+  }
+});
