@@ -202,8 +202,12 @@ describe("device session request validators", () => {
             method: "POST",
             headers: authenticatedHeaders,
             body: JSON.stringify({
-              chunkIndex: 0,
-              bytesBase64: btoa(String.fromCharCode(0, 0, 0, 128, 129)),
+              chunks: [
+                {
+                  chunkIndex: 0,
+                  bytesBase64: btoa(String.fromCharCode(0, 0, 0, 128, 129)),
+                },
+              ],
             }),
           },
           bindings
@@ -325,8 +329,12 @@ describe("device session ingest", () => {
         method: "POST",
         headers: authenticatedHeaders,
         body: JSON.stringify({
-          chunkIndex: 0,
-          bytesBase64: btoa(String.fromCharCode(...payload)),
+          chunks: [
+            {
+              chunkIndex: 0,
+              bytesBase64: btoa(String.fromCharCode(...payload)),
+            },
+          ],
         }),
       }
     );
@@ -392,7 +400,9 @@ describe("device session ingest", () => {
           authorization: "Bearer test-token",
           "x-omi-client-id": "other-account",
         },
-        body: JSON.stringify({ chunkIndex: 0, bytesBase64: btoa("abc") }),
+        body: JSON.stringify({
+          chunks: [{ chunkIndex: 0, bytesBase64: btoa("abc") }],
+        }),
       }
     );
     expect(stolen.status).toBe(404);
@@ -447,14 +457,34 @@ describe("device session ingest", () => {
     const created = (await opened.json()) as { session: { id: string } };
     const first = new Uint8Array([1, 0, 0, 1]);
     const second = new Uint8Array([1, 0, 0, 2]);
+    expect(
+      (
+        await fetchWorker(`/v1/device-sessions/${created.session.id}/audio`, {
+          method: "POST",
+          headers: authenticatedHeaders,
+          body: JSON.stringify({
+            chunkIndex: 0,
+            bytesBase64: btoa(String.fromCharCode(...first)),
+          }),
+        })
+      ).status
+    ).toBe(422);
     const left = await fetchWorker(
       `/v1/device-sessions/${created.session.id}/audio`,
       {
         method: "POST",
         headers: authenticatedHeaders,
         body: JSON.stringify({
-          chunkIndex: 0,
-          bytesBase64: btoa(String.fromCharCode(...first)),
+          chunks: [
+            {
+              chunkIndex: 0,
+              bytesBase64: btoa(String.fromCharCode(...first)),
+            },
+            {
+              chunkIndex: 1,
+              bytesBase64: btoa(String.fromCharCode(...second)),
+            },
+          ],
         }),
       }
     );
@@ -464,8 +494,12 @@ describe("device session ingest", () => {
         method: "POST",
         headers: authenticatedHeaders,
         body: JSON.stringify({
-          chunkIndex: 1,
-          bytesBase64: btoa(String.fromCharCode(...second)),
+          chunks: [
+            {
+              chunkIndex: 1,
+              bytesBase64: btoa(String.fromCharCode(...second)),
+            },
+          ],
         }),
       }
     );
@@ -491,7 +525,9 @@ describe("device session ingest", () => {
       {
         method: "POST",
         headers: authenticatedHeaders,
-        body: JSON.stringify({ chunkIndex: 0, bytesBase64: btoa("late") }),
+        body: JSON.stringify({
+          chunks: [{ chunkIndex: 0, bytesBase64: btoa("late") }],
+        }),
       }
     );
     expect(late.status).toBe(409);
@@ -530,7 +566,9 @@ describe("device session ingest", () => {
       {
         method: "POST",
         headers: authenticatedHeaders,
-        body: JSON.stringify({ chunkIndex: 0, bytesBase64: btoa("audio") }),
+        body: JSON.stringify({
+          chunks: [{ chunkIndex: 0, bytesBase64: btoa("audio") }],
+        }),
       }
     );
     await started;
@@ -576,7 +614,9 @@ describe("device session ingest", () => {
       {
         method: "POST",
         headers: authenticatedHeaders,
-        body: JSON.stringify({ chunkIndex: 0, bytesBase64: btoa("audio") }),
+        body: JSON.stringify({
+          chunks: [{ chunkIndex: 0, bytesBase64: btoa("audio") }],
+        }),
       }
     );
     expect(appended.status).toBe(503);
@@ -596,7 +636,9 @@ describe("device session ingest", () => {
       {
         method: "POST",
         headers: authenticatedHeaders,
-        body: JSON.stringify({ chunkIndex: 0, bytesBase64: btoa("retry") }),
+        body: JSON.stringify({
+          chunks: [{ chunkIndex: 0, bytesBase64: btoa("retry") }],
+        }),
       }
     );
     expect(late.status).toBe(409);

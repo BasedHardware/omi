@@ -22,7 +22,34 @@ export type NativeHttpResponse = {
   retryAfterSeconds?: number | null;
 };
 
+export type RecordingJournalInput = {
+  deviceId: string;
+  deviceName?: string;
+  codec: number;
+};
+
+export type RecordingJournal = {
+  handle: string;
+  captureId: string;
+  deviceId: string;
+  deviceName: string | null;
+  codec: number;
+  sessionId: string | null;
+  entries: string[];
+};
+
 export type OmiBackend = {
+  createRecordingJournal?(
+    input: RecordingJournalInput,
+  ): Promise<RecordingJournal>;
+  listRecordingJournals?(): Promise<RecordingJournal[]>;
+  readRecordingJournal?(handle: string): Promise<RecordingJournal>;
+  appendRecordingJournal?(handle: string, entry: string): Promise<number>;
+  requestRecordingJournal?(
+    handle: string,
+    request: NativeHttpRequest,
+  ): Promise<NativeHttpResponse>;
+  removeRecordingJournal?(handle: string): Promise<void>;
   createWriteId?(): Promise<string>;
   createRecordingId?(): Promise<string>;
   request(request: NativeHttpRequest): Promise<NativeHttpResponse>;

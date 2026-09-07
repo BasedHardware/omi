@@ -19,3 +19,12 @@ xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
 xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
   "$repo_root/react-native/apple/OmiRequestTimeoutTest.mm" -o "$build_dir/request-timeout"
 "$build_dir/request-timeout"
+xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation -framework Security \
+  "$repo_root/react-native/apple/OmiRecordingLogTest.mm" -o "$build_dir/recording-log"
+"$build_dir/recording-log"
+xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation -framework Security \
+  "$repo_root/react-native/apple/OmiRecordingJournalsTest.mm" -o "$build_dir/recording-journals"
+"$build_dir/recording-journals"
+xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
+  "$repo_root/react-native/apple/OmiRecordingPolicyTest.mm" -o "$build_dir/recording-policy"
+"$build_dir/recording-policy"

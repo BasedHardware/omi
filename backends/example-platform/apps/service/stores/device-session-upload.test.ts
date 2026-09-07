@@ -1,5 +1,19 @@
 import { expect, test } from "bun:test";
-import { parseDeviceSessionUploadAudio, parseDeviceSessionUploadCreate } from "./device-session-upload";
+import { parseDeviceSessionUploadAudio, parseDeviceSessionUploadBatch, parseDeviceSessionUploadCreate } from "./device-session-upload";
+
+test("audio batches preserve packet boundaries and reject gaps and aggregate limits", () => {
+  const chunks = Array.from({ length: 128 }, (_, index) => ({ chunkIndex: 65408 + index, bytesBase64: Buffer.alloc(8192, index).toString("base64") }));
+  const parsed = parseDeviceSessionUploadBatch({ chunks });
+  expect(parsed.length).toBe(128);
+  expect(parsed.at(-1)?.index).toBe(65535);
+  expect(parsed.at(-1)?.bytes).toEqual(Buffer.alloc(8192, 127));
+  for (const value of [
+    { chunks: [] }, { chunks: [...chunks, chunks[0]] },
+    { chunks: [chunks[0], chunks[0]] }, { chunks: [chunks[0], chunks[2]] },
+    { chunks: [{ chunkIndex: 0, bytesBase64: Buffer.alloc(1048576).toString("base64") }, { chunkIndex: 1, bytesBase64: "AQ==" }] },
+    { chunks: [chunks[0]], text: "substituted" },
+  ]) expect(() => parseDeviceSessionUploadBatch(value)).toThrow();
+});
 
 const create = { captureId: "ad99598c-36a8-4e12-a428-63d0a3e06170", deviceId: "omi-device", codec: 20 };
 test("device capture wire preserves stable UUID and accepts the native indexed byte envelope", () => {

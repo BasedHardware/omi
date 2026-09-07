@@ -148,31 +148,44 @@ export async function openDeviceSession(
 export async function appendDeviceSessionAudio(
   backend: OmiBackend,
   sessionId: string,
-  bytes: Uint8Array,
+  packets: readonly Uint8Array[],
   chunkIndex: number,
 ): Promise<DeviceSessionRecord> {
+  const byteCount = packets.reduce((total, packet) => total + packet.length, 0);
   if (
     !Number.isSafeInteger(chunkIndex) ||
     chunkIndex < 0 ||
-    chunkIndex > 65535
+    packets.length < 1 ||
+    packets.length > 128 ||
+    chunkIndex + packets.length > 65536 ||
+    byteCount > 1048576 ||
+    packets.some(packet => packet.length === 0)
   ) {
-    throw new Error('Invalid audio chunk index');
+    throw new Error('Invalid audio packet batch');
   }
+  const body = JSON.stringify({
+    chunks: packets.map((bytes, offset) => ({
+      chunkIndex: chunkIndex + offset,
+      bytesBase64: bytesToBase64(bytes),
+    })),
+  });
+  if (body.length > 2097152)
+    throw new Error('Audio packet batch exceeds request limit');
   const response = await backend.request({
-    id: `device-session-audio-${sessionId}-${chunkIndex}`,
+    id: `device-session-audio-${sessionId}-${chunkIndex}-${packets.length}`,
     method: 'POST',
     path: `/v1/device-sessions/${sessionId}/audio`,
-    body: JSON.stringify({bytesBase64: bytesToBase64(bytes), chunkIndex}),
+    body,
   });
   rejectIfUnusable(response);
   const session = parseSession(parseObject(response.body).session);
   if (
     session.id !== sessionId ||
-    session.chunkCount <= chunkIndex ||
-    session.byteCount < bytes.length ||
+    session.chunkCount < chunkIndex + packets.length ||
+    session.byteCount < byteCount ||
     session.state === 'failed'
   ) {
-    throw new Error('Backend did not acknowledge the audio chunk');
+    throw new Error('Backend did not acknowledge the audio batch');
   }
   return session;
 }
