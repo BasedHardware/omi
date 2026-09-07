@@ -76,6 +76,8 @@ Cloud Linux after `9c231cb7ca`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after the Home combined-search tasks slice: Home search empty titles include task-page completeness, so complete conversation and memory pages cannot claim "No results" / "Nothing saved yet" over incomplete tasks. Desktop Home already kept tasks on a separate completeness path.
 
+Cloud Linux after the Settings producer-missing retryability slice: production `GET /v1/settings` after a verified Firebase identity still does not invent a profile. That 503 is now nested `{error:{code:"service_unavailable",retryable:false,action:"none"}}` without `retry-after`, so Browser Settings does not keep a live Retry for a door that cannot succeed until an owner-backed producer exists. A Firebase verification outage stays the existing retryable 503 with `retry-after: 60`.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.

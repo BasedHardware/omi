@@ -58,8 +58,10 @@ test("signed-out settings stay null and verified identity stays unavailable with
   }));
   const body = await verified.text();
   expect(verified.status).toBe(503);
-  expect(verified.headers.get("retry-after")).toBe("60");
-  expect(body).toBe('{"error":"service_unavailable"}');
+  expect(verified.headers.get("retry-after")).toBeNull();
+  expect(body).toBe(
+    '{"error":{"code":"service_unavailable","retryable":false,"action":"none"}}',
+  );
   expect(body).not.toContain("private@example.invalid");
   expect(body).not.toContain("Invented Profile");
   expect(calls).toEqual([false, true]);
@@ -88,5 +90,6 @@ test("Firebase verification outage is unavailable rather than a signed-out envel
     headers: { authorization: `Bearer ${SIGNED_TOKEN}` },
   }));
   expect(result.status).toBe(503);
+  expect(result.headers.get("retry-after")).toBe("60");
   expect(await result.text()).toBe('{"error":"service_unavailable"}');
 });

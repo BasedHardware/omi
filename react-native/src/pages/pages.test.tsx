@@ -236,26 +236,60 @@ test('web Settings hides request details and offers a real retry after failure',
   }
 });
 
-test('web Settings nested non-retryable 503s do not offer Retry', async () => {
+test.each([
+  [
+    {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  ],
+  [
+    {
+      code: 'service_unavailable',
+      retryable: false,
+      action: 'none',
+    },
+  ],
+])(
+  'web Settings nested non-retryable 503s do not offer Retry (%j)',
+  async error => {
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+    mockBackend.request.mockResolvedValue({
+      id: 'service-settings-read',
+      status: 503,
+      body: JSON.stringify({error}),
+    });
+    try {
+      const renderer = await renderPage(SettingsPage);
+      expect(textOf(renderer)).toContain(
+        'Account profile and usage are not available from this service yet.',
+      );
+      expect(labelsOf(renderer)).not.toContain('Retry settings');
+    } finally {
+      Object.defineProperty(Platform, 'OS', {
+        configurable: true,
+        value: originalPlatform,
+      });
+    }
+  },
+);
+
+test('web Settings omitted 503 retryable still offers Retry', async () => {
   const originalPlatform = Platform.OS;
   Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
   mockBackend.request.mockResolvedValue({
     id: 'service-settings-read',
     status: 503,
-    body: JSON.stringify({
-      error: {
-        code: 'development_backend_unsupported',
-        retryable: false,
-        action: 'none',
-      },
-    }),
+    body: '{"error":"service_unavailable"}',
   });
   try {
     const renderer = await renderPage(SettingsPage);
     expect(textOf(renderer)).toContain(
       'Account profile and usage are not available from this service yet.',
     );
-    expect(labelsOf(renderer)).not.toContain('Retry settings');
+    expect(labelsOf(renderer)).toContain('Retry settings');
   } finally {
     Object.defineProperty(Platform, 'OS', {
       configurable: true,
