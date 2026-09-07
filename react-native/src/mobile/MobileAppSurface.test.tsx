@@ -156,7 +156,7 @@ describe('MobileAppSurface', () => {
   test.each([
     ['chat', 'Conversation content'],
     ['tasks', 'Prepare product demo'],
-    ['apps', 'No apps connected yet'],
+    ['apps', 'Couldn’t load apps'],
   ] as const)('renders the shipping %s destination', (route, copy) => {
     const tree = renderedText(
       render({
@@ -189,6 +189,22 @@ test('missing conversation content reports unavailable instead of rendering noni
   expect(renderedText(renderer)).toContain('Couldn’t load conversations');
   expect(renderedText(renderer)).not.toContain('Omi gets simpler');
   expect(renderedText(renderer)).not.toContain('Your timeline is empty');
+});
+
+test('missing apps content reports unavailable instead of an empty catalogue', () => {
+  const renderer = render({activeRoute: 'apps'});
+  expect(renderedText(renderer)).toContain('Couldn’t load apps');
+  expect(renderedText(renderer)).not.toContain('No apps connected yet');
+});
+
+test('mounted apps content is not replaced by an empty catalogue', () => {
+  const renderer = render({
+    activeRoute: 'apps',
+    appsContent: <Text>Catalogue loaded</Text>,
+  });
+  expect(renderedText(renderer)).toContain('Catalogue loaded');
+  expect(renderedText(renderer)).not.toContain('Couldn’t load apps');
+  expect(renderedText(renderer)).not.toContain('No apps connected yet');
 });
 
 test('task edits wait for authoritative props and preserve a failed draft for retry', () => {

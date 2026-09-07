@@ -481,10 +481,14 @@ export function MobileAppSurface({
             <View accessibilityLabel="Settings stage" style={styles.flex}>
               {settingsContent}
             </View>
-          ) : activeRoute === 'apps' && appsContent ? (
-            <View accessibilityLabel="Connectors stage" style={styles.flex}>
-              {appsContent}
-            </View>
+          ) : activeRoute === 'apps' ? (
+            appsContent ? (
+              <View accessibilityLabel="Connectors stage" style={styles.flex}>
+                {appsContent}
+              </View>
+            ) : (
+              <StatePanel noun="apps" status="error" />
+            )
           ) : activeRoute === 'tasks' ? (
             taskStatus === 'ready' ? (
               <FlatList
@@ -517,11 +521,7 @@ export function MobileAppSurface({
             conversationContent ?? (
               <StatePanel noun="conversations" status="error" />
             )
-          ) : (
-            <View style={styles.secondaryEmpty}>
-              <Text style={styles.secondaryPrompt}>No apps connected yet</Text>
-            </View>
-          )}
+          ) : null}
           <MobileTabBar
             activeRoute={activeRoute}
             onRouteChange={onRouteChange}
