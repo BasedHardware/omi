@@ -147,8 +147,7 @@ class TestFlightTrackerApp(unittest.TestCase):
         response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["status"], "healthy")
-        self.assertEqual(data["service"], "omi-flight-tracker-app")
+        self.assertEqual(data["status"], "ok")
 
     @patch("httpx.AsyncClient.get")
     def test_health_upstream_healthy(self, mock_get):

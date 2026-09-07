@@ -641,12 +641,8 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Local, I/O-free deployment health check probe for Railway and Docker."""
-    return {
-        "status": "healthy",
-        "service": "omi-flight-tracker-app",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+    """Fast, local, I/O-free deployment health check probe for Railway and Docker."""
+    return {"status": "ok"}
 
 
 @app.get("/health/upstream")

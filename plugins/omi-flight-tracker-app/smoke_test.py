@@ -39,7 +39,7 @@ def run_smoke_tests():
     resp = client.get("/health")
     assert resp.status_code == 200, f"Local health check failed with {resp.status_code}"
     health_data = resp.json()
-    assert health_data.get("status") == "healthy"
+    assert health_data.get("status") == "ok"
     print(f"  ✓ Status: {health_data.get('status')}")
     tests_passed += 1
 
