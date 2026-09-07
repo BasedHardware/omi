@@ -86,10 +86,12 @@ omi auth logout                 # wipe the credential
 ```
 
 You can also set a non-empty `OMI_API_KEY` in the environment to override the
-saved authentication for that invocation - handy in containers and CI. The
+saved authentication for cloud API requests - handy in containers and CI. The
 key is validated even when the selected profile already has credentials;
-an invalid override fails before any API request. Saved credentials are not
-changed, and profile settings such as the API base URL still apply:
+an invalid override fails before any cloud API request. Local Desktop commands
+use their separate local token, and `auth status` reports the saved profile.
+Saved credentials are not changed, and profile settings such as the API base
+URL still apply:
 
 ```bash
 export OMI_API_KEY=omi_dev_...
