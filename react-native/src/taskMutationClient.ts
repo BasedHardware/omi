@@ -201,13 +201,16 @@ function nestedNonRetryableBody(json: unknown): boolean {
     (error as {retryable?: unknown}).retryable === false
   );
 }
+export const TASK_WRITE_UNAVAILABLE_DETAIL =
+  'Task edit is not available on this backend yet';
+
 function taskUnavailable(): TaskPatchResult {
   return {
     ok: false,
     failure: {
       kind: 'permanent',
       reason: 'gone',
-      detail: 'Task edit is not available on this backend yet',
+      detail: TASK_WRITE_UNAVAILABLE_DETAIL,
     },
     controlUnavailable: false,
   };

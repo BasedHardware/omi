@@ -9,9 +9,15 @@ jest.mock('../src/omiNative', () => ({
 jest.mock('../src/taskMutationClient', () => ({
   prepareTaskPatch: jest.fn(),
   sendTaskPatch: jest.fn(),
+  TASK_WRITE_UNAVAILABLE_DETAIL:
+    'Task edit is not available on this backend yet',
 }));
 
-import {prepareTaskPatch, sendTaskPatch} from '../src/taskMutationClient';
+import {
+  prepareTaskPatch,
+  sendTaskPatch,
+  TASK_WRITE_UNAVAILABLE_DETAIL,
+} from '../src/taskMutationClient';
 import {useTaskMutations} from '../src/app/useTaskMutations';
 
 const prepare = prepareTaskPatch as jest.Mock;
@@ -190,6 +196,29 @@ test.each([false, true])(
     await ReactTestRenderer.act(async () => app.renderer.unmount());
   },
 );
+
+test('closed task-write doors use unavailable copy without retry', async () => {
+  send.mockResolvedValue({
+    ok: false,
+    failure: {
+      kind: 'permanent',
+      reason: 'gone',
+      detail: TASK_WRITE_UNAVAILABLE_DETAIL,
+    },
+    controlUnavailable: false,
+  });
+  const app = await mount();
+  await ReactTestRenderer.act(async () => {
+    app.state.onTaskEdit('task', 'Call Jo');
+  });
+  expect(app.state.onRetryTaskMutation).toBeUndefined();
+  expect(app.state.taskMutationError).toBe(
+    'Task editing is not available from this backend yet.',
+  );
+  expect(app.state.taskMutationError).not.toContain('not accepted');
+  expect(app.refreshTasks).not.toHaveBeenCalled();
+  await ReactTestRenderer.act(async () => app.renderer.unmount());
+});
 
 test('permanent epoch refusal keeps the edit visible without retry', async () => {
   send.mockResolvedValue({

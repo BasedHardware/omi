@@ -110,7 +110,9 @@ Cloud Linux after `83dae78a57`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `05b6a00930`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Native transcript GET throws of `OMI_DEV_BACKEND_UNSUPPORTED` or nested `retryable:false` omit Check again and use unavailable copy instead of "Transcript could not be loaded." Transport throws still offer Check again. Nested non-retryable HTTP 503s already did.
 
-Cloud Linux after the capture-door copy slice: nested non-retryable capture opens, `OMI_DEV_BACKEND_UNSUPPORTED`, and `capture_ownership_unavailable` no longer ask to reconnect. Ownership preflight that is `OMI_CAPTURE_OWNERSHIP_UNAVAILABLE` or native "unavailable from this backend" no longer asks to reopen the app. Transport ownership failures still ask to reopen. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `d65bcf3fcb`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Nested non-retryable capture opens, `OMI_DEV_BACKEND_UNSUPPORTED`, and `capture_ownership_unavailable` no longer ask to reconnect. Ownership preflight that is `OMI_CAPTURE_OWNERSHIP_UNAVAILABLE` or native "unavailable from this backend" no longer asks to reopen the app. Transport ownership failures still ask to reopen.
+
+Cloud Linux after the task-write unavailable copy slice: nested non-retryable and native unsupported task writes still omit Retry, and now say task editing is unavailable instead of "This change was not accepted." Conflict, stale-epoch, and generic permanent refusals keep their current copy. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
