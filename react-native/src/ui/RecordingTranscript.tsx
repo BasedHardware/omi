@@ -28,7 +28,9 @@ export function RecordingTranscript({
         <Text
           accessibilityRole="alert"
           style={styles.conversationDetailSummary}>
-          Transcript could not be loaded.
+          {result.retryable
+            ? 'Transcript could not be loaded.'
+            : 'Transcript is not available from this backend yet.'}
         </Text>
       ) : result.value.state === 'completed' ? (
         <>
@@ -59,7 +61,7 @@ export function RecordingTranscript({
             : 'Transcription is in progress.'}
         </Text>
       )}
-      {(result.status === 'error' ||
+      {((result.status === 'error' && result.retryable) ||
         (result.status === 'loaded' && result.value.state !== 'completed')) && (
         <FocusPressable
           accessibilityRole="button"

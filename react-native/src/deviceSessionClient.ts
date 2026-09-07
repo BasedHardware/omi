@@ -27,7 +27,8 @@ export class DeviceSessionBackendError extends Error {
     retryable?: boolean,
   ) {
     super(`Device session backend failed (${status}:${backendCode})`);
-    this.retryable = retryable ?? status === 503;
+    this.retryable =
+      retryable ?? [0, 408, 429, 500, 502, 503, 504].includes(status);
   }
 }
 
@@ -93,7 +94,7 @@ function rejectIfUnusable(response: NativeHttpResponse): void {
     return;
   }
   let backendCode = 'unknown';
-  let retryable = response.status === 503;
+  let retryable = [0, 408, 429, 500, 502, 503, 504].includes(response.status);
   try {
     const body = parseObject(response.body);
     const error = body.error;

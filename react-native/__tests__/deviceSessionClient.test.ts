@@ -227,6 +227,9 @@ test('does not treat nested non-retryable capture 503s as transient', async () =
   expect(
     isTransientDeviceSessionError(new DeviceSessionBackendError(503, 'unknown')),
   ).toBe(true);
+  expect(
+    isTransientDeviceSessionError(new DeviceSessionBackendError(500, 'unknown')),
+  ).toBe(true);
 });
 
 test.each([

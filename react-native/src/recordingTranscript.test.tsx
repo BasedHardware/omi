@@ -450,6 +450,31 @@ test('a failed historical transcript read retries GET without requiring capture 
   expect(textOf(renderer)).toContain('Historical transcript');
 });
 
+test('nested non-retryable transcript 503s do not offer Check again', async () => {
+  mockRequest.mockResolvedValueOnce({
+    id: 'read',
+    status: 503,
+    body: JSON.stringify({
+      error: {
+        code: 'development_backend_unsupported',
+        retryable: false,
+        action: 'none',
+      },
+    }),
+  });
+  const renderer = await render('blocked-session');
+  expect(textOf(renderer)).toContain(
+    'Transcript is not available from this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain('Transcript could not be loaded.');
+  expect(textOf(renderer)).not.toContain('Check again');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Reload recording transcript',
+    ),
+  ).toHaveLength(0);
+});
+
 test.each([
   'attempt_limit',
   'invalid_audio',
