@@ -1863,9 +1863,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get openSettings => 'Mở cài đặt';
 
   @override
-  String get wantDifferentName => 'Muốn được gọi bằng tên khác?';
-
-  @override
   String get whatsYourName => 'Tên bạn là gì?';
 
   @override
@@ -9909,6 +9906,29 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
+  String get answerWithYourVoice => 'Answer with your voice:';
+
+  @override
+  String get speechProfileTopicLocation => 'Where do you live?';
+
+  @override
+  String get speechProfileTopicWork => 'What do you do for work?';
+
+  @override
+  String get speechProfileTopicGoal => 'What is your long-term goal?';
+
+  @override
   String get transcriptionNoAudio => 'Bản ghi âm không nhận được âm thanh';
 
   @override
@@ -9949,4 +9969,8 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Không thể tải đồ thị tri thức';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from routers.listen.contracts import ListenRequest
+from routers.listen.conversations import resolve_onboarding_provenance_marker
 from routers.listen.runtime import ListenSessionRuntime
 from routers.listen.transcripts import TranscriptProcessor
 from utils.async_tasks import WebSocketTaskSupervisor
@@ -300,6 +301,155 @@ async def test_bootstrap_sends_first_onboarding_question_before_any_audio(monkey
     assert first_question['question_index'] == 0
     assert first_question['total_questions'] == len(ONBOARDING_QUESTIONS)
     assert enqueued_segments and enqueued_segments[0]['speaker_id'] == OnboardingHandler.OMI_SPEAKER_ID
+    # Real onboarding must still be tagged: the conversation-tagging seam
+    # reads the runtime's own admission id, which here is a real one.
+    assert resolve_onboarding_provenance_marker(runtime) == 'a' * 32
+
+
+@pytest.mark.anyio
+async def test_bootstrap_admits_speech_profile_redo_despite_completed_onboarding(monkeypatch):
+    """Re-recording an existing speech profile from Settings must always work,
+    even though the account has already completed onboarding — that account
+    state is exactly what the strict onboarding-provenance admission check
+    (ensure_backend_onboarding_admission) exists to reject. speech_profile_redo
+    is the signal that this connection isn't claiming that provenance."""
+    import routers.listen.runtime as runtime_module
+
+    sent_events = []
+
+    async def send_json(event):
+        sent_events.append(event)
+
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=WebSocketState.CONNECTED, send_json=send_json),
+        uid='redo-user',
+        language='en',
+        onboarding_mode=True,
+        speech_profile_redo=True,
+    )
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.use_custom_stt = False
+    runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None, active=True)
+    runtime.task_supervisor = WebSocketTaskSupervisor(uid=request.uid, label='listen')
+
+    async def bootstrap_persistence_call(*_args, **_kwargs):
+        return False
+
+    runtime.persistence = SimpleNamespace(call=bootstrap_persistence_call)
+    runtime.is_multi_channel = False
+    runtime.has_speech_profile = False
+    enqueued_segments = []
+    runtime.transcripts = SimpleNamespace(enqueue=enqueued_segments.extend)
+    runtime._build_components = lambda: None
+
+    base = ListenConnectBase(
+        user_exists=True,
+        user_has_credits=True,
+        transcription_prefs={'single_language_mode': False, 'uses_custom_stt': False},
+        fair_use_init_stage=None,
+        fair_use_track_dg_usage=False,
+        fair_use_dg_budget_exhausted=False,
+    )
+    monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+
+    # The account has already completed onboarding: the strict admission path
+    # would refuse it (mirrors ensure_backend_onboarding_admission's real
+    # "completed" check). Fail the test if speech_profile_redo's bypass ever
+    # calls into it instead of skipping it outright.
+    def refuse_onboarding_provenance(_uid):
+        raise AssertionError('speech_profile_redo must not go through the onboarding-provenance admission path')
+
+    monkeypatch.setattr(runtime_module.user_db, 'ensure_backend_onboarding_admission', refuse_onboarding_provenance)
+    monkeypatch.setattr(runtime_module.user_db, 'get_backend_onboarding_admission', refuse_onboarding_provenance)
+    monkeypatch.setattr(
+        runtime_module, 'get_stt_service_for_language', lambda language, **_kwargs: ('test-stt', 'en', 'test-model')
+    )
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
+    monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
+
+    assert await runtime._bootstrap() is True
+    await runtime.task_supervisor.drain_all(timeout=2.0, cancel=False)
+
+    assert runtime.onboarding_admitted is True
+    assert runtime.onboarding_session_id is None
+    # OnboardingHandler still mints its own internal session id when none is
+    # supplied (it needs one for its own question/answer bookkeeping) — this
+    # asserts that fact so the next line's tagging check can't pass vacuously.
+    assert isinstance(runtime.onboarding_handler.session_id, str)
+    assert len(runtime.onboarding_handler.session_id) >= 16
+    # The conversation-tagging seam must read the runtime's own admission
+    # decision, not the handler's minted id, or every redo conversation would
+    # be re-tagged as onboarding provenance (see routers/listen/conversations.py).
+    assert resolve_onboarding_provenance_marker(runtime) is None
+    assert [event['type'] for event in sent_events] == ['onboarding_question']
+    assert enqueued_segments and enqueued_segments[0]['speaker_id'] == OnboardingHandler.OMI_SPEAKER_ID
+
+
+@pytest.mark.anyio
+async def test_bootstrap_still_rejects_completed_account_without_speech_profile_redo(monkeypatch):
+    """Regression guard for the actual onboarding-provenance security property:
+    without speech_profile_redo, a completed account is still refused
+    admission and receives no question at all."""
+    import routers.listen.runtime as runtime_module
+
+    sent_events = []
+
+    async def send_json(event):
+        sent_events.append(event)
+
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=WebSocketState.CONNECTED, send_json=send_json),
+        uid='completed-user',
+        language='en',
+        onboarding_mode=True,
+        speech_profile_redo=False,
+    )
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.use_custom_stt = False
+    runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None, active=True)
+    runtime.task_supervisor = WebSocketTaskSupervisor(uid=request.uid, label='listen')
+
+    async def bootstrap_persistence_call(*_args, **_kwargs):
+        return False
+
+    runtime.persistence = SimpleNamespace(call=bootstrap_persistence_call)
+    runtime.is_multi_channel = False
+    runtime.has_speech_profile = False
+    enqueued_segments = []
+    runtime.transcripts = SimpleNamespace(enqueue=enqueued_segments.extend)
+    runtime._build_components = lambda: None
+
+    base = ListenConnectBase(
+        user_exists=True,
+        user_has_credits=True,
+        transcription_prefs={'single_language_mode': False, 'uses_custom_stt': False},
+        fair_use_init_stage=None,
+        fair_use_track_dg_usage=False,
+        fair_use_dg_budget_exhausted=False,
+    )
+    monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+    # Simulates the real ensure_backend_onboarding_admission behavior for an
+    # account with onboarding.completed=True: admission refused.
+    monkeypatch.setattr(
+        runtime_module.user_db, 'ensure_backend_onboarding_admission', lambda _uid: False, raising=False
+    )
+    monkeypatch.setattr(runtime_module.user_db, 'get_backend_onboarding_admission', lambda _uid: None)
+    monkeypatch.setattr(
+        runtime_module, 'get_stt_service_for_language', lambda language, **_kwargs: ('test-stt', 'en', 'test-model')
+    )
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
+    monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
+
+    assert await runtime._bootstrap() is True
+    await runtime.task_supervisor.drain_all(timeout=2.0, cancel=False)
+
+    assert runtime.onboarding_admitted is False
+    assert sent_events == []
+    assert enqueued_segments == []
 
 
 def test_allocator_sentinel_matches_the_onboarding_handler_reservation():

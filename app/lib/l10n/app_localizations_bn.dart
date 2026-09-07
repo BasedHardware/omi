@@ -1857,9 +1857,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get openSettings => 'সেটিংস খুলুন';
 
   @override
-  String get wantDifferentName => 'অন্য কিছু নাম পেতে চান?';
-
-  @override
   String get whatsYourName => 'আপনার নাম কি?';
 
   @override
@@ -9919,6 +9916,29 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
+  String get answerWithYourVoice => 'Answer with your voice:';
+
+  @override
+  String get speechProfileTopicLocation => 'Where do you live?';
+
+  @override
+  String get speechProfileTopicWork => 'What do you do for work?';
+
+  @override
+  String get speechProfileTopicGoal => 'What is your long-term goal?';
+
+  @override
   String get transcriptionNoAudio => 'ট্রান্সক্রিপশন অডিও গ্রহণ করছে না';
 
   @override
@@ -9959,4 +9979,8 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'নলেজ গ্রাফ লোড করা যায়নি';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

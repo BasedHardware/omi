@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:opus_dart/opus_dart.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/speech_profile.dart';
@@ -14,9 +16,12 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/constants.dart';
@@ -26,7 +31,6 @@ import 'package:omi/utils/logger.dart';
 enum SpeechProfileLoadingState { uploading, memorizing, personalizing, allSet }
 
 /// Enum for progress message states in speech profile
-enum SpeechProfileProgressState { keepSpeaking, keepGoing, almostThere, soClose }
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
@@ -48,7 +52,28 @@ class SpeechProfileProvider extends ChangeNotifier
   TranscriptSegmentSocketService? _socket;
 
   bool startedRecording = false;
-  double percentageCompleted = 0;
+
+  /// Sentences the user must speak before the profile is finalized. The UI
+  /// shows a bar filling toward it; reaching it is what completes the
+  /// recording. A sentence ends at ., ! or ? followed by a space or the end
+  /// of the text (so "3.5" is not a boundary); both server STT and the
+  /// on-device recognizers punctuate their output.
+  static const int targetSentenceCount = 3;
+  bool _sentenceTargetReached = false;
+
+  /// Once the target is reached the recording is not cut off mid-sentence:
+  /// it finalizes after [completionGrace] without new speech (each new
+  /// segment restarts the wait), or at [completionCap] after the target at
+  /// the latest.
+  static const Duration completionGrace = Duration(seconds: 2);
+  static const Duration completionCap = Duration(seconds: 8);
+  Timer? _completionGraceTimer;
+  Timer? _completionCapTimer;
+  bool _completionFired = false;
+  static final RegExp _sentenceEnd = RegExp(r'[.!?]+(?=\s|$)');
+
+  int get spokenSentenceCount => _sentenceEnd.allMatches(text).length;
+  double get sentenceProgress => (spokenSentenceCount / targetSentenceCount).clamp(0.0, 1.0);
   bool uploadingProfile = false;
   bool profileCompleted = false;
   Timer? forceCompletionTimer;
@@ -66,7 +91,6 @@ class SpeechProfileProvider extends ChangeNotifier
   bool isInitialised = false;
 
   String text = '';
-  SpeechProfileProgressState progressState = SpeechProfileProgressState.keepSpeaking;
 
   Function? _finalizedCallback;
   Function? _processConversationCallback;
@@ -77,15 +101,106 @@ class SpeechProfileProvider extends ChangeNotifier
 
   // Onboarding state (questions from server)
   bool usePhoneMic = false;
+  // True only for the real onboarding flow (see wrapper.dart), which claims
+  // onboarding provenance server-side. Every other caller (Settings' "redo
+  // speech profile") sends speech_profile_redo=enabled instead so an already-
+  // onboarded account still gets the question flow — see
+  // routers/listen/runtime.py's _bootstrap for why that distinction exists.
+  bool _isOnboardingFlow = false;
+
+  /// True while the question flow is transcribed on-device instead of by the
+  /// backend's streaming STT — entered up front when the pre-flight
+  /// availability check fails, or mid-session after repeated 1011 closes with
+  /// no captured speech. The voice print is unaffected either way: it is
+  /// computed server-side from the WAV uploaded at finalize(), never from the
+  /// transcript, so a locally transcribed session yields the same profile.
+  bool usingLocalStt = false;
+  CustomSttConfig? _localSttConfig;
   String currentQuestion = '';
   int currentQuestionIndex = 0;
   int totalQuestions = 0;
 
-  double get questionProgress => totalQuestions == 0 ? 0.0 : (currentQuestionIndex / totalQuestions).clamp(0.0, 1.0);
+  /// Live mic input level in [0.0, 1.0], computed straight from the outgoing
+  /// PCM16 audio so the recording UI can give the user visible confirmation
+  /// their voice is actually being picked up — no native amplitude API
+  /// dependency, and it reflects the real audio being sent in production.
+  double micLevel = 0.0;
+  DateTime? _lastMicLevelNotify;
+  // Separate from audioStorage.opusDecoder: that one decodes the full
+  // recording once at finalize() time, this one decodes the same live frames
+  // independently (Opus packets decode independently of each other) purely
+  // for the meter, so neither interferes with the other.
+  SimpleOpusDecoder? _micLevelOpusDecoder;
+
+  void _updateMicLevel(Uint8List bytes) {
+    final sampleCount = bytes.length ~/ 2;
+    if (sampleCount == 0) return;
+
+    final byteData = ByteData.sublistView(bytes);
+    final samples = List<int>.generate(sampleCount, (i) => byteData.getInt16(i * 2, Endian.little));
+    _updateMicLevelFromSamples(samples);
+  }
+
+  void _updateMicLevelFromSamples(List<int> samples) {
+    if (samples.isEmpty) return;
+
+    double sumSquares = 0;
+    for (final sample in samples) {
+      sumSquares += sample * sample;
+    }
+    final rms = sqrt(sumSquares / samples.length);
+    // 16-bit PCM full-scale is 32768; normal speech rarely gets close to
+    // that, so scale against a much lower reference to keep the meter
+    // visibly responsive to a normal speaking voice, even a quiet one.
+    final normalized = (rms / 1200).clamp(0.0, 1.0);
+    // Exponential smoothing so the bars don't flicker chunk to chunk, weighted
+    // toward the new sample so the meter still reacts quickly.
+    micLevel = micLevel * 0.5 + normalized * 0.5;
+
+    // Mic bytes arrive many times a second; throttle notifyListeners so this
+    // doesn't rebuild the whole page on every ~10ms audio chunk.
+    final now = DateTime.now();
+    if (_lastMicLevelNotify == null || now.difference(_lastMicLevelNotify!) > const Duration(milliseconds: 80)) {
+      _lastMicLevelNotify = now;
+      notifyListeners();
+    }
+  }
+
+  /// Feeds the mic-level meter from a connected device's audio frame
+  /// (post header-stripping). Omi devices default to Opus, which has to be
+  /// decoded before an amplitude can be computed at all — pcm16 needs no
+  /// decode. Other, rarer device codecs (pcm8/mulaw/aac/lc3) aren't decoded
+  /// live for this meter; the glow just stays at its idle level for those.
+  void _updateMicLevelFromDeviceFrame(List<int> frame) {
+    if (frame.isEmpty) return;
+    switch (audioStorage.codec) {
+      case BleAudioCodec.pcm16:
+        _updateMicLevel(Uint8List.fromList(frame));
+        break;
+      case BleAudioCodec.opus:
+      case BleAudioCodec.opusFS320:
+        try {
+          _micLevelOpusDecoder ??= SimpleOpusDecoder(sampleRate: 16000, channels: 1);
+          final decoded = _micLevelOpusDecoder!.decode(input: Uint8List.fromList(frame));
+          _updateMicLevelFromSamples(decoded);
+        } catch (e) {
+          // A dropped/out-of-order BLE packet can produce an undecodable
+          // frame; that's fine for a meter-only concern — just skip it.
+          Logger.debug('Speech profile: mic-level opus decode skipped: $e');
+        }
+        break;
+      default:
+        break;
+    }
+  }
 
   void skipCurrentQuestion() {
     if (_socket?.state == SocketServiceState.connected) {
       _socket?.sendText('{"type": "skip_question"}');
+    } else {
+      // Previously a silent no-op while the socket was mid-reconnect (see
+      // _scheduleReconnect), so tapping Skip looked like it did nothing.
+      notifyInfo('SKIP_UNAVAILABLE');
     }
   }
 
@@ -121,11 +236,14 @@ class SpeechProfileProvider extends ChangeNotifier
     Function? finalizedCallback,
     Function? processConversationCallback,
     bool usePhoneMic = false,
+    bool isOnboardingFlow = false,
   }) async {
     _finalizedCallback = finalizedCallback;
     _processConversationCallback = processConversationCallback;
+    resetTranscript();
     setInitialising(true);
     this.usePhoneMic = usePhoneMic;
+    _isOnboardingFlow = isOnboardingFlow;
 
     try {
       if (usePhoneMic) {
@@ -186,7 +304,14 @@ class SpeechProfileProvider extends ChangeNotifier
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     int rate = sampleRate ?? (codec.isOpusSupported() ? 16000 : 8000);
 
-    _socket = await openSpeechProfileSocket(codec: codec, sampleRate: rate, language: language, force: force);
+    _socket = await openSpeechProfileSocket(
+      codec: codec,
+      sampleRate: rate,
+      language: language,
+      force: force,
+      speechProfileRedo: !_isOnboardingFlow,
+      customSttConfig: usingLocalStt ? _localSttConfig : null,
+    );
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }
@@ -203,13 +328,63 @@ class SpeechProfileProvider extends ChangeNotifier
     required int sampleRate,
     required String language,
     required bool force,
+    bool speechProfileRedo = false,
+    CustomSttConfig? customSttConfig,
   }) {
     return ServiceManager.instance().socket.speechProfile(
           codec: codec,
           sampleRate: sampleRate,
           language: language,
+          speechProfileRedo: speechProfileRedo,
           force: force,
+          customSttConfig: customSttConfig,
         );
+  }
+
+  /// Switches this session to on-device transcription. Returns false, leaving
+  /// the session untouched, when this platform has no usable local model
+  /// (Apple speech on iOS is always available; Android needs a downloaded
+  /// Whisper model). Safe to call before initialise() (pre-flight) or while a
+  /// session is live (the next socket attempt picks the new mode up).
+  Future<bool> enableLocalStt() async {
+    final config = await resolveLocalSttConfig();
+    if (config == null) return false;
+    _localSttConfig = config;
+    usingLocalStt = true;
+    notifyListeners();
+    return true;
+  }
+
+  /// Resolves the on-device STT config. Overridden in tests so the fallback
+  /// path can be exercised without a real model or platform channel.
+  @visibleForTesting
+  Future<CustomSttConfig?> resolveLocalSttConfig() async {
+    final freemium = FreemiumTranscriptionService();
+    if (await freemium.checkReadiness() != FreemiumReadiness.ready) return null;
+    final config = freemium.getFreemiumConfig();
+    if (config == null) return null;
+    // The readiness check treats iOS as always ready, but on-device
+    // recognition only works once the language model for the locale is
+    // installed; ask the OS so the fallback is never entered blind.
+    if (Platform.isIOS && !await OnDeviceAppleProvider.isOnDeviceAvailable(config.language ?? 'en')) {
+      Logger.debug('On-device speech recognition unavailable for ${config.language}; no local STT fallback');
+      return null;
+    }
+    return config;
+  }
+
+  /// Backend STT is down mid-session: keep the flow alive on on-device
+  /// transcription instead of dead-ending in STT_UNAVAILABLE, when we can.
+  void _fallBackToLocalStt() {
+    unawaited(() async {
+      if (await enableLocalStt()) {
+        _sttUnavailableCloseCount = 0;
+        notifyInfo('LOCAL_STT_FALLBACK');
+        _scheduleReconnect();
+      } else {
+        notifyError('STT_UNAVAILABLE');
+      }
+    }());
   }
 
   /// Uploads the recorded speech-profile audio. Overridden in tests to avoid
@@ -234,6 +409,8 @@ class SpeechProfileProvider extends ChangeNotifier
 
           // Store audio frames for speech profile upload
           audioStorage.frames.add(bytes.toList());
+
+          _updateMicLevel(bytes);
 
           // Send to transcription socket
           if (_socket?.state == SocketServiceState.connected) {
@@ -394,6 +571,9 @@ class SpeechProfileProvider extends ChangeNotifier
         }
 
         final trimmedValue = paddingLeft > 0 ? value.sublist(paddingLeft) : value;
+
+        _updateMicLevelFromDeviceFrame(trimmedValue);
+
         if (_socket?.state == SocketServiceState.connected) {
           _socket?.send(trimmedValue);
         }
@@ -420,11 +600,23 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   void resetSegments() {
+    audioStorage.clearAudioBytes();
+    resetTranscript();
+  }
+
+  /// Forgets the previous recording's transcript and progress so a new
+  /// recording (Redo, or onboarding after a Settings redo) starts empty
+  /// instead of showing and counting what was said last time. Does not touch
+  /// audio storage, which initialise() recreates.
+  void resetTranscript() {
+    _cancelCompletionTimers();
+    _completionFired = false;
     segments.clear();
     streamStartedAtSecond = null;
-    audioStorage.clearAudioBytes();
     text = '';
-    percentageCompleted = 0;
+    _sentenceTargetReached = false;
+    profileCompleted = false;
+    uploadingProfile = false;
     notifyListeners();
   }
 
@@ -437,25 +629,11 @@ class SpeechProfileProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void updateProgressMessage() {
-    // Only show user's speech, not Omi questions
-    text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
-    int wordsCount = text.split(' ').length;
-    progressState = SpeechProfileProgressState.keepSpeaking;
-    if (wordsCount > 10) {
-      progressState = SpeechProfileProgressState.keepGoing;
-    } else if (wordsCount > 25) {
-      progressState = SpeechProfileProgressState.almostThere;
-    } else if (wordsCount > 40) {
-      progressState = SpeechProfileProgressState.soClose;
-    }
-    notifyListeners();
-  }
-
   Future close() async {
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
+    _cancelCompletionTimers();
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
 
@@ -467,10 +645,16 @@ class SpeechProfileProvider extends ChangeNotifier
     currentQuestionIndex = 0;
     totalQuestions = 0;
     startedRecording = false;
-    percentageCompleted = 0;
+    _sentenceTargetReached = false;
     uploadingProfile = false;
     profileCompleted = false;
     usePhoneMic = false;
+    _isOnboardingFlow = false;
+    usingLocalStt = false;
+    _localSttConfig = null;
+    micLevel = 0.0;
+    isInitialised = false;
+    _sttUnavailableCloseCount = 0;
     _processConversationCallback = null;
 
     await _socket?.stop(reason: 'closing');
@@ -482,6 +666,7 @@ class SpeechProfileProvider extends ChangeNotifier
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
+    _cancelCompletionTimers();
     _reconnectTimer?.cancel();
     _finalizedCallback = null;
     _socket?.unsubscribe(this);
@@ -528,6 +713,10 @@ class SpeechProfileProvider extends ChangeNotifier
       if (sttUnavailable && _sttUnavailableCloseCount >= _maxSttUnavailableCloses) {
         _reconnectTimer?.cancel();
         _reconnectTimer = null;
+        if (!usingLocalStt) {
+          _fallBackToLocalStt();
+          return;
+        }
         notifyError('STT_UNAVAILABLE');
         return;
       }
@@ -609,8 +798,9 @@ class SpeechProfileProvider extends ChangeNotifier
       Logger.debug('Question ${event.questionIndex} answered');
       notifyInfo('NEXT_QUESTION');
     } else if (event is OnboardingCompleteEvent) {
-      Logger.debug('Onboarding complete from backend: conversationId=${event.conversationId}');
-      finalize();
+      // Completion is driven by the spoken word target (onSegmentReceived);
+      // the backend finishing its topic checks only means it stops asking.
+      Logger.debug('Onboarding topics complete from backend: conversationId=${event.conversationId}');
     }
   }
 
@@ -636,12 +826,41 @@ class SpeechProfileProvider extends ChangeNotifier
     // Validate single speaker (exclude Omi segments)
     _validateSingleSpeaker();
 
-    // Display only user's speech, not Omi's questions
-    text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
-    percentageCompleted = questionProgress;
-
-    notifyInfo('SCROLL_DOWN');
+    updateSpokenText();
     notifyListeners();
+  }
+
+  /// Recomputes what the user has said (Omi's own question segments are
+  /// excluded), the sentence-target progress, and finalizes the recording
+  /// once the target is reached. Split from onSegmentReceived so it can be
+  /// exercised without the audio storage that method also touches.
+  @visibleForTesting
+  void updateSpokenText() {
+    text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
+    if (_completionFired || spokenSentenceCount < targetSentenceCount) return;
+
+    if (!_sentenceTargetReached) {
+      _sentenceTargetReached = true;
+      Logger.debug(
+          'Spoken sentence target reached ($spokenSentenceCount/$targetSentenceCount); finalizing after a pause');
+      _completionCapTimer = Timer(completionCap, _completeOnTarget);
+    }
+    // Still talking: wait for a pause so the last sentence is not cut off.
+    _completionGraceTimer?.cancel();
+    _completionGraceTimer = Timer(completionGrace, _completeOnTarget);
+  }
+
+  void _completeOnTarget() {
+    _cancelCompletionTimers();
+    _completionFired = true;
+    finalize();
+  }
+
+  void _cancelCompletionTimers() {
+    _completionGraceTimer?.cancel();
+    _completionCapTimer?.cancel();
+    _completionGraceTimer = null;
+    _completionCapTimer = null;
   }
 
   @override

@@ -1874,9 +1874,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get openSettings => 'Άνοιγμα Ρυθμίσεων';
 
   @override
-  String get wantDifferentName => 'Θέλετε να αποκαλείστε διαφορετικά;';
-
-  @override
   String get whatsYourName => 'Πώς σε λένε;';
 
   @override
@@ -9984,6 +9981,29 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
+  String get answerWithYourVoice => 'Answer with your voice:';
+
+  @override
+  String get speechProfileTopicLocation => 'Where do you live?';
+
+  @override
+  String get speechProfileTopicWork => 'What do you do for work?';
+
+  @override
+  String get speechProfileTopicGoal => 'What is your long-term goal?';
+
+  @override
   String get transcriptionNoAudio => 'Η μεταγραφή δεν λαμβάνει ήχο';
 
   @override
@@ -10024,4 +10044,8 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Δεν ήταν δυνατή η φόρτωση του γραφήματος γνώσης';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }

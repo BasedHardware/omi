@@ -12,13 +12,13 @@ from utils.llm.conversation_processing import _word_count  # type: ignore[report
 
 logger = logging.getLogger(__name__)
 
+# The app shows these three together as "Talk About" topics rather than one at
+# a time, so the user speaks freely; the handler still walks them in order
+# against the accumulated transcript (see _check_answer).
 ONBOARDING_QUESTIONS: List[Dict[str, str]] = [
-    {'question': "How old are you?", 'category': 'age'},
     {'question': "Where do you live?", 'category': 'location'},
     {'question': "What do you do for work?", 'category': 'work'},
     {'question': "What is your long-term goal?", 'category': 'long_term_goal'},
-    {'question': "What are your goals this month?", 'category': 'monthly_goals'},
-    {'question': "What do you have planned for today?", 'category': 'daily_plans'},
 ]
 
 
@@ -193,18 +193,19 @@ class OnboardingHandler:
         self.is_checking_answer = True
 
         try:
-            question = self.current_question['question']
             transcript = self.current_transcript.strip()
 
-            # Check with AI if enough content
-            word_count = _word_count(transcript)
-            answered = False
+            # The topics are shown to the user all at once, so one stretch of
+            # speech may cover several of them. Keep the transcript across
+            # questions and advance through every question it answers.
+            while self.current_question and not self.completed:
+                question = self.current_question['question']
+                answered = False
+                if _word_count(transcript) >= 2:
+                    answered = await self._ai_check_answer(question, transcript)
+                if not answered:
+                    break
 
-            if word_count >= 2:
-                answered = await self._ai_check_answer(question, transcript)
-
-            if answered:
-                # Save answer
                 self.answers.append(
                     {
                         'question': question,
@@ -212,8 +213,6 @@ class OnboardingHandler:
                         'category': self.current_question['category'],
                     }
                 )
-
-                # Send event to app
                 await self._send_event(
                     'question_answered',
                     {
@@ -221,11 +220,7 @@ class OnboardingHandler:
                         'answered': True,
                     },
                 )
-
-                # Move to next question
                 self.current_question_index += 1
-                self.current_transcript = ''
-
                 if self.current_question_index >= len(self.questions):
                     await self._complete_onboarding()
                 else:

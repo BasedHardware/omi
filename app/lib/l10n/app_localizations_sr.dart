@@ -1859,9 +1859,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get openSettings => 'Отвори подешавања';
 
   @override
-  String get wantDifferentName => 'Желиш да идеш под неким другим именом?';
-
-  @override
   String get whatsYourName => 'Како се зовеш?';
 
   @override
@@ -9930,6 +9927,29 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
+  String get answerWithYourVoice => 'Answer with your voice:';
+
+  @override
+  String get speechProfileTopicLocation => 'Where do you live?';
+
+  @override
+  String get speechProfileTopicWork => 'What do you do for work?';
+
+  @override
+  String get speechProfileTopicGoal => 'What is your long-term goal?';
+
+  @override
   String get transcriptionNoAudio => 'Транскрипција не прима аудио';
 
   @override
@@ -9970,4 +9990,8 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Није могуће учитати граф знања';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
 }
