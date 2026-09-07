@@ -1,5 +1,11 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, ScrollView, Text, View} from 'react-native';
+import {
+  ActivityIndicator,
+  Platform,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import {
   disableCloudApp,
   enableCloudApp,
@@ -38,6 +44,12 @@ export function ConnectorsPage({
   const [actionError, setActionError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      setSnapshot(null);
+      setError('Apps are not available for this browser connection yet.');
+      setPhase('error');
+      return;
+    }
     const backend = omiBackend;
     const auth = omiAuth;
     setActionError(null);
@@ -183,20 +195,22 @@ export function ConnectorsPage({
                 </Text>
               </FocusPressable>
             )}
-            {phase === 'error' && error !== desktopBackendConfigurationCopy && (
-              <FocusPressable
-                accessibilityLabel="Retry apps"
-                accessibilityRole="button"
-                onPress={() => {
-                  reload().catch(() => undefined);
-                }}
-                style={({pressed}) => [
-                  styles.cloudAction,
-                  pressed && styles.pressed,
-                ]}>
-                <Text style={styles.cloudActionText}>Retry</Text>
-              </FocusPressable>
-            )}
+            {phase === 'error' &&
+              Platform.OS !== 'web' &&
+              error !== desktopBackendConfigurationCopy && (
+                <FocusPressable
+                  accessibilityLabel="Retry apps"
+                  accessibilityRole="button"
+                  onPress={() => {
+                    reload().catch(() => undefined);
+                  }}
+                  style={({pressed}) => [
+                    styles.cloudAction,
+                    pressed && styles.pressed,
+                  ]}>
+                  <Text style={styles.cloudActionText}>Retry</Text>
+                </FocusPressable>
+              )}
           </View>
         ) : (
           sections.map(section => (
