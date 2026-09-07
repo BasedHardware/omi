@@ -34,6 +34,8 @@ private const val OMI_AUDIO_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214"
 private const val OMI_CODEC_UUID = "19b10002-e8f2-537e-4f6c-d104768a1214"
 private const val BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb"
 private const val BATTERY_LEVEL_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
+private val STORAGE_SERVICE_UUID = UUID.fromString("30295780-4301-eabd-2904-2849adfeae43")
+private val STORAGE_STATUS_UUID = UUID.fromString("30295782-4301-eabd-2904-2849adfeae43")
 private val HAPTIC_SERVICE_UUID = UUID.fromString("cab1ab95-2ea5-4f4d-bb56-874b72cfc984")
 private val HAPTIC_UUID = UUID.fromString("cab1ab96-2ea5-4f4d-bb56-874b72cfc984")
 private val FEATURES_SERVICE_UUID = UUID.fromString("19b10020-e8f2-537e-4f6c-d104768a1214")
@@ -77,6 +79,7 @@ class OmiBleController(
   private var gattBusy = false
   private val lease = OmiBleLease()
   private var currentGeneration = 0L
+  private var storageDone: ((WritableMap?, String?) -> Unit)? = null
   private val findPattern = OmiDeviceControls.FindPattern()
   private var findTicket = 0L
   private var pendingSetting: String? = null
@@ -363,6 +366,7 @@ class OmiBleController(
             retireConnection("Omi codec read failed: $status")
             return
           }
+          if (status != BluetoothGatt.GATT_SUCCESS && characteristic.uuid == STORAGE_STATUS_UUID) finishStorage(null, "Storage status read failed")
           if (status != BluetoothGatt.GATT_SUCCESS && settingWritten &&
               characteristic.uuid == settingUuid(pendingSetting)) finishSetting(null, "Device setting read-back failed")
           if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
@@ -387,6 +391,7 @@ class OmiBleController(
             retireConnection("Omi codec read failed: $status")
             return
           }
+          if (status != BluetoothGatt.GATT_SUCCESS && characteristic.uuid == STORAGE_STATUS_UUID) finishStorage(null, "Storage status read failed")
           if (status != BluetoothGatt.GATT_SUCCESS && settingWritten &&
               characteristic.uuid == settingUuid(pendingSetting)) finishSetting(null, "Device setting read-back failed")
           if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
@@ -583,6 +588,16 @@ class OmiBleController(
         }
         emitSnapshot()
       }
+      STORAGE_STATUS_UUID -> {
+        val decoded = OmiDeviceControls.storage(value)
+        val status = decoded?.let { Arguments.createMap().apply {
+          putDouble("usedBytes", it[0].toDouble())
+          putDouble("unreadPackets", it[1].toDouble())
+          putDouble("freeBytes", it[2].toDouble())
+          putBoolean("clockValid", it[3] == 1L)
+        } }
+        finishStorage(status, if (status == null) "Storage status format is unavailable" else null)
+      }
       LED_UUID, MIC_GAIN_UUID -> {
         val setting = if (characteristic.uuid == LED_UUID) "ledBrightness" else "microphoneGain"
         val device = results[id] ?: return
@@ -628,6 +643,7 @@ class OmiBleController(
   private fun retireConnection(message: String) {
     lease.retire()
     finishSetting(null, message)
+    finishStorage(null, message)
     val previous = gatt
     gatt = null
     clearGattQueue()
@@ -686,7 +702,7 @@ class OmiBleController(
     val characteristic = if (uuid == null) null else current?.getService(SETTINGS_SERVICE_UUID)?.getCharacteristic(uuid)
     val observed = if (setting == "ledBrightness") device?.ledBrightness else device?.microphoneGain
     if (id != connectedDeviceId || connectionState != "connected" || current == null || device == null ||
-        settingDone != null || observed == null || !OmiDeviceControls.validWrite(device.features, setting, value) || characteristic == null ||
+        settingDone != null || storageDone != null || observed == null || !OmiDeviceControls.validWrite(device.features, setting, value) || characteristic == null ||
         characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE == 0 ||
         characteristic.properties and BluetoothGattCharacteristic.PROPERTY_READ == 0) {
       done(null, "Device setting is unavailable")
@@ -704,7 +720,7 @@ class OmiBleController(
     val current = gatt
     val characteristic = current?.getService(HAPTIC_SERVICE_UUID)?.getCharacteristic(HAPTIC_UUID)
     if (id != connectedDeviceId || connectionState != "connected" || current == null ||
-        settingDone != null || characteristic == null ||
+        settingDone != null || storageDone != null || characteristic == null ||
         characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE == 0) {
       done(null, "Find device is unavailable")
       return
@@ -713,6 +729,26 @@ class OmiBleController(
     settingDone = done
     findTicket = findPattern.begin()
     if (findPattern.send(findTicket)) enqueueGatt(current, GattOp.Write(characteristic, OmiDeviceControls.FindPattern.LEVEL))
+  }
+
+  @Synchronized
+  fun readStorageStatus(id: String, done: (WritableMap?, String?) -> Unit) {
+    val current = gatt
+    val characteristic = current?.getService(STORAGE_SERVICE_UUID)?.getCharacteristic(STORAGE_STATUS_UUID)
+    if (id != connectedDeviceId || connectionState != "connected" || current == null || settingDone != null || storageDone != null ||
+        !OmiDeviceControls.storageSupported(results[id]?.features) || characteristic == null ||
+        characteristic.properties and BluetoothGattCharacteristic.PROPERTY_READ == 0) {
+      done(null, "Storage status is unavailable")
+      return
+    }
+    storageDone = done
+    enqueueGatt(current, GattOp.Read(characteristic))
+  }
+
+  private fun finishStorage(value: WritableMap?, error: String?) {
+    val done = storageDone
+    storageDone = null
+    done?.invoke(value, error)
   }
 
   private fun finishSetting(value: Int?, error: String?) {
@@ -757,6 +793,8 @@ class OmiBleController(
     putBoolean("connected", connectionState == "connected" && connectedDeviceId == device.id)
     val haptic = if (connectionState == "connected" && connectedDeviceId == device.id) gatt?.getService(HAPTIC_SERVICE_UUID)?.getCharacteristic(HAPTIC_UUID) else null
     putBoolean("findDeviceSupported", haptic != null && haptic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE != 0)
+    val storage = if (connectionState == "connected" && connectedDeviceId == device.id) gatt?.getService(STORAGE_SERVICE_UUID)?.getCharacteristic(STORAGE_STATUS_UUID) else null
+    putBoolean("storageStatusSupported", OmiDeviceControls.storageSupported(device.features) && storage != null && storage.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0)
     device.battery?.let { putInt("battery", it) }
     device.features?.let { putDouble("features", it.toDouble()) }
     device.ledBrightness?.let { putInt("ledBrightness", it) }

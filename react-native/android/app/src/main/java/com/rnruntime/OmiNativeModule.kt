@@ -73,6 +73,13 @@ class OmiNativeModule(private val context: ReactApplicationContext) : ReactConte
   }
 
   @ReactMethod
+  fun readStorageStatus(id: String, promise: Promise) {
+    ble.readStorageStatus(id) { status, error ->
+      if (status != null) promise.resolve(status) else promise.reject("OMI_STORAGE_STATUS_FAILED", error ?: "Storage status failed")
+    }
+  }
+
+  @ReactMethod
   fun findDevice(id: String, promise: Promise) {
     ble.findDevice(id) { confirmed, error ->
       if (confirmed != null) promise.resolve(null) else promise.reject("OMI_FIND_DEVICE_FAILED", error ?: "Find device failed")

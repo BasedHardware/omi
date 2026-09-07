@@ -11,6 +11,8 @@
 #import <UserNotifications/UserNotifications.h>
 #endif
 
+static NSString *const OmiStorageServiceUUID = @"30295780-4301-eabd-2904-2849adfeae43";
+static NSString *const OmiStorageStatusUUID = @"30295782-4301-eabd-2904-2849adfeae43";
 static NSString *const OmiHapticServiceUUID = @"cab1ab95-2ea5-4f4d-bb56-874b72cfc984";
 static NSString *const OmiHapticUUID = @"cab1ab96-2ea5-4f4d-bb56-874b72cfc984";
 static NSString *const OmiServiceUUID = @"19b10000-e8f2-537e-4f6c-d104768a1214";
@@ -55,6 +57,8 @@ static NSString *const OmiChargingUUID = @"19b10013-e8f2-537e-4f6c-d104768a1214"
 @property(nonatomic) NSUInteger settingGeneration;
 @property(nonatomic) OmiFindPattern findPattern;
 @property(nonatomic) NSUInteger findTicket;
+@property(nonatomic, copy) RCTPromiseResolveBlock storageResolve;
+@property(nonatomic, copy) RCTPromiseRejectBlock storageReject;
 @property(nonatomic, strong) NSMutableSet<CBPeripheral *> *retiringPeripherals;
 @end
 
@@ -301,7 +305,7 @@ RCT_REMAP_METHOD(disconnectDevice,
   self.connectionState = @"connected";
   self.lastEvent = @"Connected to Omi";
   peripheral.delegate = self;
-  [peripheral discoverServices:@[ [CBUUID UUIDWithString:OmiServiceUUID], [CBUUID UUIDWithString:OmiBatteryServiceUUID], [CBUUID UUIDWithString:OmiInformationServiceUUID], [CBUUID UUIDWithString:OmiFeaturesServiceUUID], [CBUUID UUIDWithString:OmiSettingsServiceUUID], [CBUUID UUIDWithString:OmiHapticServiceUUID] ]];
+  [peripheral discoverServices:@[ [CBUUID UUIDWithString:OmiServiceUUID], [CBUUID UUIDWithString:OmiBatteryServiceUUID], [CBUUID UUIDWithString:OmiInformationServiceUUID], [CBUUID UUIDWithString:OmiFeaturesServiceUUID], [CBUUID UUIDWithString:OmiSettingsServiceUUID], [CBUUID UUIDWithString:OmiHapticServiceUUID], [CBUUID UUIDWithString:OmiStorageServiceUUID] ]];
   [self emitSnapshot];
 }
 
@@ -337,6 +341,8 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
     if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiServiceUUID]]) {
       [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiAudioUUID], [CBUUID UUIDWithString:OmiCodecUUID] ]
                                forService:service];
+    } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiStorageServiceUUID]]) {
+      [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiStorageStatusUUID] ] forService:service];
     } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiHapticServiceUUID]]) {
       [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiHapticUUID] ] forService:service];
     } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiFeaturesServiceUUID]]) {
@@ -359,6 +365,10 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
     return;
   }
   for (CBCharacteristic *characteristic in service.characteristics) {
+    if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiStorageServiceUUID]] && [characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiStorageStatusUUID]]) {
+      self.settingCharacteristics[OmiStorageStatusUUID] = characteristic;
+      [self emitSnapshot];
+    }
     if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiHapticServiceUUID]] && [characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiHapticUUID]]) {
       self.settingCharacteristics[OmiHapticUUID] = characteristic;
       [self emitSnapshot];
@@ -396,6 +406,11 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
 
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error {
   if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) return;
+  if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiStorageStatusUUID]] && self.storageResolve != nil) {
+    NSDictionary *status = error == nil ? OmiStorageStatus(characteristic.value) : nil;
+    [self finishStorage:status];
+    return;
+  }
   if (error != nil || characteristic.value == nil) {
     if (self.settingWritten && self.pendingSettingCharacteristic == characteristic) [self finishSetting:nil error:@"Device setting read-back failed"];
     return;
@@ -522,6 +537,8 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     if (battery != nil) {
       device[@"battery"] = battery;
     }
+    CBCharacteristic *storage = self.settingCharacteristics[OmiStorageStatusUUID];
+    device[@"storageStatusSupported"] = @([device[@"connected"] boolValue] && OmiStorageSupported(device[@"features"]) && storage != nil && (storage.properties & CBCharacteristicPropertyRead) != 0);
     CBCharacteristic *haptic = self.settingCharacteristics[OmiHapticUUID];
     device[@"findDeviceSupported"] = @([device[@"connected"] boolValue] && haptic != nil && (haptic.properties & CBCharacteristicPropertyWrite) != 0);
     [devices addObject:[device copy]];
@@ -564,6 +581,38 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
   if ((charging.properties & CBCharacteristicPropertyNotify) != 0) [peripheral setNotifyValue:YES forCharacteristic:charging];
 }
 
+RCT_REMAP_METHOD(readStorageStatus,
+                 readStorageStatusWithId:(NSString *)identifier
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  CBPeripheral *peripheral = self.connectedPeripheral;
+  CBCharacteristic *characteristic = self.settingCharacteristics[OmiStorageStatusUUID];
+  if (peripheral == nil || ![peripheral.identifier.UUIDString isEqualToString:identifier] ||
+      ![self.connectionState isEqualToString:@"connected"] || self.settingResolve != nil || self.storageResolve != nil ||
+      !OmiStorageSupported(self.devices[identifier][@"features"]) || characteristic == nil ||
+      (characteristic.properties & CBCharacteristicPropertyRead) == 0) {
+    reject(@"OMI_STORAGE_STATUS_FAILED", @"Storage status is unavailable", nil);
+    return;
+  }
+  self.storageResolve = resolve;
+  self.storageReject = reject;
+  NSUInteger generation = ++self.settingGeneration;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    if (self.storageResolve != nil && self.settingGeneration == generation) [self retireConnection:@"Storage status read timed out"];
+  });
+  [peripheral readValueForCharacteristic:characteristic];
+}
+
+- (void)finishStorage:(NSDictionary *)status {
+  RCTPromiseResolveBlock resolve = self.storageResolve;
+  RCTPromiseRejectBlock reject = self.storageReject;
+  self.storageResolve = nil;
+  self.storageReject = nil;
+  self.settingGeneration += 1;
+  if (status != nil && resolve != nil) resolve(status);
+  else if (reject != nil) reject(@"OMI_STORAGE_STATUS_FAILED", @"Storage status is unavailable", nil);
+}
+
 RCT_REMAP_METHOD(findDevice,
                  findDeviceWithId:(NSString *)identifier
                  resolver:(RCTPromiseResolveBlock)resolve
@@ -571,7 +620,7 @@ RCT_REMAP_METHOD(findDevice,
   CBPeripheral *peripheral = self.connectedPeripheral;
   CBCharacteristic *characteristic = self.settingCharacteristics[OmiHapticUUID];
   if (peripheral == nil || ![peripheral.identifier.UUIDString isEqualToString:identifier] ||
-      ![self.connectionState isEqualToString:@"connected"] || self.settingResolve != nil ||
+      ![self.connectionState isEqualToString:@"connected"] || self.settingResolve != nil || self.storageResolve != nil ||
       characteristic == nil || (characteristic.properties & CBCharacteristicPropertyWrite) == 0) {
     reject(@"OMI_FIND_DEVICE_FAILED", @"Find device is unavailable", nil);
     return;
@@ -605,7 +654,7 @@ RCT_REMAP_METHOD(setDeviceSetting,
   NSString *uuid = [setting isEqualToString:@"ledBrightness"] ? OmiLedUUID : [setting isEqualToString:@"microphoneGain"] ? OmiGainUUID : nil;
   CBCharacteristic *characteristic = uuid == nil ? nil : self.settingCharacteristics[uuid];
   if (peripheral == nil || ![peripheral.identifier.UUIDString isEqualToString:identifier] ||
-      ![self.connectionState isEqualToString:@"connected"] || self.settingResolve != nil ||
+      ![self.connectionState isEqualToString:@"connected"] || self.settingResolve != nil || self.storageResolve != nil ||
       !OmiDeviceSettingSupported(device[@"features"], setting) || device[setting] == nil ||
       !isfinite(value) || value != floor(value) || value < 0 || value > OmiDeviceSettingMaximum(setting) ||
       characteristic == nil || (characteristic.properties & CBCharacteristicPropertyRead) == 0 ||
@@ -677,6 +726,7 @@ RCT_REMAP_METHOD(setDeviceSetting,
 - (void)retireConnection:(NSString *)message {
   self.connectionGeneration += 1;
   [self finishSetting:nil error:message];
+  [self finishStorage:nil];
   [self.settingCharacteristics removeAllObjects];
   CBPeripheral *previous = self.connectedPeripheral;
   self.connectedPeripheral = nil;
