@@ -9768,24 +9768,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get couldNotLoadKnowledgeGraph => '无法加载知识图谱';
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count short conversations',
-      one: '$count short conversation',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return '$name的语音配置文件';
   }
 
   @override
-  String get play => 'Play';
+  String get play => '播放';
 
   @override
-  String get redo => 'Redo';
+  String get redo => '重新录制';
 }

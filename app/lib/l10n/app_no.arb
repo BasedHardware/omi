@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "Ikke lenger tilgjengelig",
     "chatBlockRecommendedNextSteps": "Anbefalte neste trinn",
     "couldNotLoadMemories": "Kunne ikke laste minner",
-    "couldNotLoadKnowledgeGraph": "Kunne ikke laste kunnskapsgrafen"
+    "couldNotLoadKnowledgeGraph": "Kunne ikke laste kunnskapsgrafen",
+    "play": "Spill av",
+    "redo": "Gjør på nytt",
+    "speechProfileOwnerTitle": "Stemmeprofilen til {name}"
 }

@@ -10813,5 +10813,8 @@
     "chatBlockUnavailable": "אינו זמין עוד",
     "chatBlockRecommendedNextSteps": "השלבים הבאים המומלצים",
     "couldNotLoadMemories": "לא ניתן לטעון את הזיכרונות",
-    "couldNotLoadKnowledgeGraph": "לא ניתן לטעון את גרף הידע"
+    "couldNotLoadKnowledgeGraph": "לא ניתן לטעון את גרף הידע",
+    "play": "הפעל",
+    "redo": "מחדש",
+    "speechProfileOwnerTitle": "פרופיל הקול של {name}"
 }

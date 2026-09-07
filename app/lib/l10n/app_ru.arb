@@ -3282,5 +3282,8 @@
     "chatBlockUnavailable": "Больше недоступно",
     "chatBlockRecommendedNextSteps": "Рекомендуемые следующие шаги",
     "couldNotLoadMemories": "Не удалось загрузить воспоминания",
-    "couldNotLoadKnowledgeGraph": "Не удалось загрузить граф знаний"
+    "couldNotLoadKnowledgeGraph": "Не удалось загрузить граф знаний",
+    "play": "Воспроизвести",
+    "redo": "Заново",
+    "speechProfileOwnerTitle": "Голосовой профиль: {name}"
 }

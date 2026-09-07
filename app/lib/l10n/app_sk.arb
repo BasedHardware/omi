@@ -3252,5 +3252,8 @@
     "chatBlockUnavailable": "Už nie je k dispozícii",
     "chatBlockRecommendedNextSteps": "Odporúčané ďalšie kroky",
     "couldNotLoadMemories": "Nepodarilo sa načítať spomienky",
-    "couldNotLoadKnowledgeGraph": "Nepodarilo sa načítať graf znalostí"
+    "couldNotLoadKnowledgeGraph": "Nepodarilo sa načítať graf znalostí",
+    "play": "Prehrať",
+    "redo": "Znova",
+    "speechProfileOwnerTitle": "Hlasový profil: {name}"
 }

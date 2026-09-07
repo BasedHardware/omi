@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "Nebepasiekiama",
     "chatBlockRecommendedNextSteps": "Rekomenduojami tolesni veiksmai",
     "couldNotLoadMemories": "Nepavyko įkelti prisiminimų",
-    "couldNotLoadKnowledgeGraph": "Nepavyko įkelti žinių grafo"
+    "couldNotLoadKnowledgeGraph": "Nepavyko įkelti žinių grafo",
+    "play": "Leisti",
+    "redo": "Iš naujo",
+    "speechProfileOwnerTitle": "{name} balso profilis"
 }

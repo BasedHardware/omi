@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "Inte längre tillgänglig",
     "chatBlockRecommendedNextSteps": "Rekommenderade nästa steg",
     "couldNotLoadMemories": "Kunde inte läsa in minnen",
-    "couldNotLoadKnowledgeGraph": "Kunde inte läsa in kunskapsgrafen"
+    "couldNotLoadKnowledgeGraph": "Kunde inte läsa in kunskapsgrafen",
+    "play": "Spela upp",
+    "redo": "Gör om",
+    "speechProfileOwnerTitle": "{name}s röstprofil"
 }

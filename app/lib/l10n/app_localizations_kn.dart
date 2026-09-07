@@ -9988,24 +9988,13 @@ class AppLocalizationsKn extends AppLocalizations {
   String get couldNotLoadKnowledgeGraph => 'ಜ್ಞಾನ ಗ್ರಾಫ್ ಅನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count short conversations',
-      one: '$count short conversation',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return '$name ಅವರ ಧ್ವನಿ ಪ್ರೊಫೈಲ್';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'ಪ್ಲೇ ಮಾಡಿ';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'ಮತ್ತೆ ಮಾಡಿ';
 }

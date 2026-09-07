@@ -9940,24 +9940,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String get couldNotLoadKnowledgeGraph => 'Kunne ikke indlæse vidensgrafen';
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count short conversations',
-      one: '$count short conversation',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return '${name}s stemmeprofil';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Afspil';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Gør om';
 }

@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "Nu mai este disponibil",
     "chatBlockRecommendedNextSteps": "Pașii următori recomandați",
     "couldNotLoadMemories": "Nu s-au putut încărca amintirile",
-    "couldNotLoadKnowledgeGraph": "Nu s-a putut încărca graful de cunoștințe"
+    "couldNotLoadKnowledgeGraph": "Nu s-a putut încărca graful de cunoștințe",
+    "play": "Redă",
+    "redo": "Reia",
+    "speechProfileOwnerTitle": "Profilul vocal al lui {name}"
 }

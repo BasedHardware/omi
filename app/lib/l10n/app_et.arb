@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "Pole enam saadaval",
     "chatBlockRecommendedNextSteps": "Soovitatud järgmised sammud",
     "couldNotLoadMemories": "Mälestusi ei õnnestunud laadida",
-    "couldNotLoadKnowledgeGraph": "Teadmiste graafi ei õnnestunud laadida"
+    "couldNotLoadKnowledgeGraph": "Teadmiste graafi ei õnnestunud laadida",
+    "play": "Esita",
+    "redo": "Uuesti",
+    "speechProfileOwnerTitle": "{name} hääleprofiil"
 }

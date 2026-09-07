@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "Niet langer beschikbaar",
     "chatBlockRecommendedNextSteps": "Aanbevolen volgende stappen",
     "couldNotLoadMemories": "Herinneringen konden niet worden geladen",
-    "couldNotLoadKnowledgeGraph": "Kennisgrafiek kon niet worden geladen"
+    "couldNotLoadKnowledgeGraph": "Kennisgrafiek kon niet worden geladen",
+    "play": "Afspelen",
+    "redo": "Opnieuw",
+    "speechProfileOwnerTitle": "Stemprofiel van {name}"
 }

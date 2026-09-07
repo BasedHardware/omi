@@ -10813,5 +10813,8 @@
     "chatBlockUnavailable": "আর উপলব্ধ নেই",
     "chatBlockRecommendedNextSteps": "প্রস্তাবিত পরবর্তী পদক্ষেপ",
     "couldNotLoadMemories": "স্মৃতি লোড করা যায়নি",
-    "couldNotLoadKnowledgeGraph": "নলেজ গ্রাফ লোড করা যায়নি"
+    "couldNotLoadKnowledgeGraph": "নলেজ গ্রাফ লোড করা যায়নি",
+    "play": "চালান",
+    "redo": "আবার করুন",
+    "speechProfileOwnerTitle": "{name}-এর ভয়েস প্রোফাইল"
 }

@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "Non è più disponibile",
     "chatBlockRecommendedNextSteps": "Prossimi passi consigliati",
     "couldNotLoadMemories": "Impossibile caricare i ricordi",
-    "couldNotLoadKnowledgeGraph": "Impossibile caricare il grafo della conoscenza"
+    "couldNotLoadKnowledgeGraph": "Impossibile caricare il grafo della conoscenza",
+    "play": "Riproduci",
+    "redo": "Rifai",
+    "speechProfileOwnerTitle": "Profilo vocale di {name}"
 }

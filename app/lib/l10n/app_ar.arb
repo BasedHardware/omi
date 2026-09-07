@@ -3223,5 +3223,8 @@
     "chatBlockUnavailable": "لم يعد متاحًا",
     "chatBlockRecommendedNextSteps": "الخطوات التالية الموصى بها",
     "couldNotLoadMemories": "تعذر تحميل الذكريات",
-    "couldNotLoadKnowledgeGraph": "تعذر تحميل الرسم البياني للمعرفة"
+    "couldNotLoadKnowledgeGraph": "تعذر تحميل الرسم البياني للمعرفة",
+    "play": "تشغيل",
+    "redo": "إعادة",
+    "speechProfileOwnerTitle": "الملف الصوتي لـ {name}"
 }

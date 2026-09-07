@@ -3282,5 +3282,8 @@
     "chatBlockUnavailable": "Już niedostępne",
     "chatBlockRecommendedNextSteps": "Zalecane kolejne kroki",
     "couldNotLoadMemories": "Nie udało się wczytać wspomnień",
-    "couldNotLoadKnowledgeGraph": "Nie udało się wczytać grafu wiedzy"
+    "couldNotLoadKnowledgeGraph": "Nie udało się wczytać grafu wiedzy",
+    "play": "Odtwórz",
+    "redo": "Ponów",
+    "speechProfileOwnerTitle": "Profil głosu: {name}"
 }

@@ -10813,5 +10813,8 @@
     "chatBlockUnavailable": "Больш недаступна",
     "chatBlockRecommendedNextSteps": "Рэкамендаваныя наступныя крокі",
     "couldNotLoadMemories": "Не ўдалося загрузіць успаміны",
-    "couldNotLoadKnowledgeGraph": "Не ўдалося загрузіць граф ведаў"
+    "couldNotLoadKnowledgeGraph": "Не ўдалося загрузіць граф ведаў",
+    "play": "Прайграць",
+    "redo": "Перазапісаць",
+    "speechProfileOwnerTitle": "Галасавы профіль {name}"
 }

@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "ไม่พร้อมใช้งานอีกต่อไป",
     "chatBlockRecommendedNextSteps": "ขั้นตอนถัดไปที่แนะนำ",
     "couldNotLoadMemories": "ไม่สามารถโหลดความทรงจำได้",
-    "couldNotLoadKnowledgeGraph": "ไม่สามารถโหลดกราฟความรู้ได้"
+    "couldNotLoadKnowledgeGraph": "ไม่สามารถโหลดกราฟความรู้ได้",
+    "play": "เล่น",
+    "redo": "ทำใหม่",
+    "speechProfileOwnerTitle": "โปรไฟล์เสียงของ {name}"
 }

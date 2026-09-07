@@ -10813,5 +10813,8 @@
     "chatBlockUnavailable": "Hindi na available",
     "chatBlockRecommendedNextSteps": "Mga inirerekomendang susunod na hakbang",
     "couldNotLoadMemories": "Hindi ma-load ang mga alaala",
-    "couldNotLoadKnowledgeGraph": "Hindi ma-load ang knowledge graph"
+    "couldNotLoadKnowledgeGraph": "Hindi ma-load ang knowledge graph",
+    "play": "I-play",
+    "redo": "Ulitin",
+    "speechProfileOwnerTitle": "Voice profile ni {name}"
 }

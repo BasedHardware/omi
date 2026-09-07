@@ -9790,24 +9790,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get couldNotLoadKnowledgeGraph => '지식 그래프를 불러올 수 없습니다';
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count short conversations',
-      one: '$count short conversation',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return '$name님의 음성 프로필';
   }
 
   @override
-  String get play => 'Play';
+  String get play => '재생';
 
   @override
-  String get redo => 'Redo';
+  String get redo => '다시 하기';
 }

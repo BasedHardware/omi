@@ -9993,24 +9993,13 @@ class AppLocalizationsBg extends AppLocalizations {
   String get couldNotLoadKnowledgeGraph => 'Неуспешно зареждане на графа на знанията';
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count short conversations',
-      one: '$count short conversation',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return 'Гласов профил на $name';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Пусни';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Отново';
 }

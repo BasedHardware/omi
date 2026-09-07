@@ -3225,5 +3225,8 @@
     "chatBlockUnavailable": "Ja no està disponible",
     "chatBlockRecommendedNextSteps": "Propers passos recomanats",
     "couldNotLoadMemories": "No s'han pogut carregar els records",
-    "couldNotLoadKnowledgeGraph": "No s'ha pogut carregar el graf de coneixement"
+    "couldNotLoadKnowledgeGraph": "No s'ha pogut carregar el graf de coneixement",
+    "play": "Reprodueix",
+    "redo": "Torna-ho a fer",
+    "speechProfileOwnerTitle": "Perfil de veu de {name}"
 }

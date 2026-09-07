@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "Більше недоступно",
     "chatBlockRecommendedNextSteps": "Рекомендовані наступні кроки",
     "couldNotLoadMemories": "Не вдалося завантажити спогади",
-    "couldNotLoadKnowledgeGraph": "Не вдалося завантажити граф знань"
+    "couldNotLoadKnowledgeGraph": "Не вдалося завантажити граф знань",
+    "play": "Відтворити",
+    "redo": "Заново",
+    "speechProfileOwnerTitle": "Голосовий профіль: {name}"
 }

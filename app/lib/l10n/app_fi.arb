@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "Ei ole enää saatavilla",
     "chatBlockRecommendedNextSteps": "Suositellut seuraavat vaiheet",
     "couldNotLoadMemories": "Muistoja ei voitu ladata",
-    "couldNotLoadKnowledgeGraph": "Tietograafia ei voitu ladata"
+    "couldNotLoadKnowledgeGraph": "Tietograafia ei voitu ladata",
+    "play": "Toista",
+    "redo": "Uudelleen",
+    "speechProfileOwnerTitle": "Käyttäjän {name} ääniprofiili"
 }

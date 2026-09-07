@@ -10813,5 +10813,8 @@
     "chatBlockUnavailable": "Ni več na voljo",
     "chatBlockRecommendedNextSteps": "Priporočeni naslednji koraki",
     "couldNotLoadMemories": "Spominov ni bilo mogoče naložiti",
-    "couldNotLoadKnowledgeGraph": "Grafa znanja ni bilo mogoče naložiti"
+    "couldNotLoadKnowledgeGraph": "Grafa znanja ni bilo mogoče naložiti",
+    "play": "Predvajaj",
+    "redo": "Znova",
+    "speechProfileOwnerTitle": "Glasovni profil: {name}"
 }

@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "Δεν είναι πλέον διαθέσιμο",
     "chatBlockRecommendedNextSteps": "Προτεινόμενα επόμενα βήματα",
     "couldNotLoadMemories": "Δεν ήταν δυνατή η φόρτωση των αναμνήσεων",
-    "couldNotLoadKnowledgeGraph": "Δεν ήταν δυνατή η φόρτωση του γραφήματος γνώσης"
+    "couldNotLoadKnowledgeGraph": "Δεν ήταν δυνατή η φόρτωση του γραφήματος γνώσης",
+    "play": "Αναπαραγωγή",
+    "redo": "Ξανά",
+    "speechProfileOwnerTitle": "Προφίλ φωνής: {name}"
 }

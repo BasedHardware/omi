@@ -10813,5 +10813,8 @@
     "chatBlockUnavailable": "Веќе не е достапно",
     "chatBlockRecommendedNextSteps": "Препорачани следни чекори",
     "couldNotLoadMemories": "Не можеа да се вчитаат спомените",
-    "couldNotLoadKnowledgeGraph": "Не можеше да се вчита графот на знаење"
+    "couldNotLoadKnowledgeGraph": "Не можеше да се вчита графот на знаење",
+    "play": "Пушти",
+    "redo": "Повторно",
+    "speechProfileOwnerTitle": "Гласовен профил на {name}"
 }

@@ -3269,5 +3269,8 @@
     "chatBlockUnavailable": "已不再可用",
     "chatBlockRecommendedNextSteps": "建议的后续步骤",
     "couldNotLoadMemories": "无法加载回忆",
-    "couldNotLoadKnowledgeGraph": "无法加载知识图谱"
+    "couldNotLoadKnowledgeGraph": "无法加载知识图谱",
+    "play": "播放",
+    "redo": "重新录制",
+    "speechProfileOwnerTitle": "{name}的语音配置文件"
 }

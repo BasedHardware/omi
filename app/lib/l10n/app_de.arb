@@ -3224,5 +3224,8 @@
     "chatBlockUnavailable": "Nicht mehr verfügbar",
     "chatBlockRecommendedNextSteps": "Empfohlene nächste Schritte",
     "couldNotLoadMemories": "Erinnerungen konnten nicht geladen werden",
-    "couldNotLoadKnowledgeGraph": "Wissensgraph konnte nicht geladen werden"
+    "couldNotLoadKnowledgeGraph": "Wissensgraph konnte nicht geladen werden",
+    "play": "Abspielen",
+    "redo": "Wiederholen",
+    "speechProfileOwnerTitle": "Sprachprofil von {name}"
 }

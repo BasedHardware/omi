@@ -10003,24 +10003,13 @@ class AppLocalizationsRo extends AppLocalizations {
   String get couldNotLoadKnowledgeGraph => 'Nu s-a putut încărca graful de cunoștințe';
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count short conversations',
-      one: '$count short conversation',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return 'Profilul vocal al lui $name';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Redă';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Reia';
 }

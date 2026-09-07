@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "Vairs nav pieejams",
     "chatBlockRecommendedNextSteps": "Ieteicamie nākamie soļi",
     "couldNotLoadMemories": "Neizdevās ielādēt atmiņas",
-    "couldNotLoadKnowledgeGraph": "Neizdevās ielādēt zināšanu grafu"
+    "couldNotLoadKnowledgeGraph": "Neizdevās ielādēt zināšanu grafu",
+    "play": "Atskaņot",
+    "redo": "Vēlreiz",
+    "speechProfileOwnerTitle": "{name} balss profils"
 }

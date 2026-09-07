@@ -15,13 +15,20 @@ import 'package:omi/utils/l10n_extensions.dart';
 class AuthComponent extends StatefulWidget {
   final VoidCallback onSignIn;
 
-  const AuthComponent({super.key, required this.onSignIn});
+  /// Whether the local-dev hold-to-sign-in-as-Alice path is live. Defaults to
+  /// the build profile (only the Auth-emulator profile enables it); tests pass
+  /// it explicitly to exercise the production tap path.
+  final bool? localEmulatorSignIn;
+
+  const AuthComponent({super.key, required this.onSignIn, this.localEmulatorSignIn});
 
   @override
   State<AuthComponent> createState() => _AuthComponentState();
 }
 
 class _AuthComponentState extends State<AuthComponent> {
+  bool get _emulatorSignInEnabled => widget.localEmulatorSignIn ?? localEmulatorSignInEnabled(Env.profile);
+
   void _onLocalEmulatorSignIn(AuthenticationProvider provider) {
     HapticFeedback.mediumImpact();
     provider.onLocalEmulatorSignIn(widget.onSignIn);
@@ -34,7 +41,7 @@ class _AuthComponentState extends State<AuthComponent> {
   /// which reads as the buttons being dead. Point at the hold instead.
   void _onProviderTap(VoidCallback signIn) {
     HapticFeedback.mediumImpact();
-    if (localEmulatorSignInEnabled(Env.profile)) {
+    if (_emulatorSignInEnabled) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -98,7 +105,7 @@ class _AuthComponentState extends State<AuthComponent> {
                         height: 56,
                         child: _HoldForLocalEmulator(
                           key: const Key('appleSignIn'),
-                          enabled: localEmulatorSignInEnabled(Env.profile),
+                          enabled: _emulatorSignInEnabled,
                           onHoldComplete: () => _onLocalEmulatorSignIn(provider),
                           onPressed: () => _onProviderTap(() => provider.onAppleSignIn(widget.onSignIn)),
                           child: _AuthSignInButtonFace(
@@ -116,7 +123,7 @@ class _AuthComponentState extends State<AuthComponent> {
                       height: 56,
                       child: _HoldForLocalEmulator(
                         key: const Key('googleSignIn'),
-                        enabled: localEmulatorSignInEnabled(Env.profile),
+                        enabled: _emulatorSignInEnabled,
                         onHoldComplete: () => _onLocalEmulatorSignIn(provider),
                         onPressed: () => _onProviderTap(() => provider.onGoogleSignIn(widget.onSignIn)),
                         child: _AuthSignInButtonFace(

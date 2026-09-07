@@ -3225,5 +3225,8 @@
     "chatBlockUnavailable": "Вече не е налично",
     "chatBlockRecommendedNextSteps": "Препоръчани следващи стъпки",
     "couldNotLoadMemories": "Неуспешно зареждане на спомените",
-    "couldNotLoadKnowledgeGraph": "Неуспешно зареждане на графа на знанията"
+    "couldNotLoadKnowledgeGraph": "Неуспешно зареждане на графа на знанията",
+    "play": "Пусни",
+    "redo": "Отново",
+    "speechProfileOwnerTitle": "Гласов профил на {name}"
 }

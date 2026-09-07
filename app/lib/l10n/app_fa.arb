@@ -10813,5 +10813,8 @@
     "chatBlockUnavailable": "دیگر در دسترس نیست",
     "chatBlockRecommendedNextSteps": "گام‌های بعدی پیشنهادی",
     "couldNotLoadMemories": "بارگذاری خاطرات ممکن نشد",
-    "couldNotLoadKnowledgeGraph": "بارگذاری گراف دانش ممکن نشد"
+    "couldNotLoadKnowledgeGraph": "بارگذاری گراف دانش ممکن نشد",
+    "play": "پخش",
+    "redo": "دوباره",
+    "speechProfileOwnerTitle": "پروفایل صوتی {name}"
 }

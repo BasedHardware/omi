@@ -10813,5 +10813,8 @@
     "chatBlockUnavailable": "اب دستیاب نہیں",
     "chatBlockRecommendedNextSteps": "تجویز کردہ اگلے اقدامات",
     "couldNotLoadMemories": "یادیں لوڈ نہیں ہو سکیں",
-    "couldNotLoadKnowledgeGraph": "نالج گراف لوڈ نہیں ہو سکا"
+    "couldNotLoadKnowledgeGraph": "نالج گراف لوڈ نہیں ہو سکا",
+    "play": "چلائیں",
+    "redo": "دوبارہ کریں",
+    "speechProfileOwnerTitle": "{name} کا صوتی پروفائل"
 }

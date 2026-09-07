@@ -11793,15 +11793,6 @@
     "@couldNotLoadKnowledgeGraph": {
         "description": "Short user-facing error when the knowledge graph request is non-200; must not include the response body"
     },
-    "shortConversationsCount": "{count, plural, =1{{count} short conversation} other{{count} short conversations}}",
-    "@shortConversationsCount": {
-        "description": "Collapsed group of the day’s short conversations on the home timeline",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
     "speechProfileOwnerTitle": "{name}'s Speech Profile",
     "@speechProfileOwnerTitle": {
         "description": "Title shown on the speech profile page when the user already has a speech profile set up",

@@ -3223,5 +3223,8 @@
     "chatBlockUnavailable": "現在は利用できません",
     "chatBlockRecommendedNextSteps": "おすすめの次のステップ",
     "couldNotLoadMemories": "記憶を読み込めませんでした",
-    "couldNotLoadKnowledgeGraph": "ナレッジグラフを読み込めませんでした"
+    "couldNotLoadKnowledgeGraph": "ナレッジグラフを読み込めませんでした",
+    "play": "再生",
+    "redo": "やり直す",
+    "speechProfileOwnerTitle": "{name}の音声プロファイル"
 }

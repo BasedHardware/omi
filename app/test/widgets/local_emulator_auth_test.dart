@@ -27,7 +27,7 @@ class _RecordingAuthProvider extends AuthenticationProvider {
 }
 
 Future<void> _pumpAuth(WidgetTester tester, _RecordingAuthProvider authProvider,
-    {required VoidCallback onSignIn}) async {
+    {required VoidCallback onSignIn, bool? localEmulatorSignIn}) async {
   await tester.pumpWidget(
     ChangeNotifierProvider<AuthenticationProvider>.value(
       value: authProvider,
@@ -40,7 +40,7 @@ Future<void> _pumpAuth(WidgetTester tester, _RecordingAuthProvider authProvider,
         ],
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-          body: AuthComponent(onSignIn: onSignIn),
+          body: AuthComponent(onSignIn: onSignIn, localEmulatorSignIn: localEmulatorSignIn),
         ),
       ),
     ),
@@ -119,6 +119,28 @@ void main() {
     await tester.pump();
     await tester.pump(kLocalEmulatorSignInHoldDuration);
 
+    expect(authProvider.localEmulatorSignInCalls, 0);
+    expect(signedIn, isFalse);
+  });
+
+  testWidgets('outside local_dev a tap runs the real Google sign-in and a hold does nothing', (tester) async {
+    final authProvider = _RecordingAuthProvider();
+    addTearDown(authProvider.dispose);
+    var signedIn = false;
+
+    await _pumpAuth(tester, authProvider, onSignIn: () => signedIn = true, localEmulatorSignIn: false);
+
+    await tester.tap(find.byKey(const Key('googleSignIn')));
+    await tester.pump();
+    expect(authProvider.googleSignInCalls, 1);
+    expect(authProvider.localEmulatorSignInCalls, 0);
+    expect(find.textContaining('Hold for'), findsNothing);
+
+    // Google is the button present on every host; Apple only renders on iOS/Android.
+    final gesture = await tester.startGesture(tester.getCenter(find.byKey(const Key('googleSignIn'))));
+    await tester.pump(kLocalEmulatorSignInHoldDuration + const Duration(seconds: 1));
+    await gesture.up();
+    await tester.pump();
     expect(authProvider.localEmulatorSignInCalls, 0);
     expect(signedIn, isFalse);
   });

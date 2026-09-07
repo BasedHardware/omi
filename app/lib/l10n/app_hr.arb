@@ -10813,5 +10813,8 @@
     "chatBlockUnavailable": "Više nije dostupno",
     "chatBlockRecommendedNextSteps": "Preporučeni sljedeći koraci",
     "couldNotLoadMemories": "Nije moguće učitati uspomene",
-    "couldNotLoadKnowledgeGraph": "Nije moguće učitati graf znanja"
+    "couldNotLoadKnowledgeGraph": "Nije moguće učitati graf znanja",
+    "play": "Reproduciraj",
+    "redo": "Ponovi",
+    "speechProfileOwnerTitle": "Glasovni profil: {name}"
 }

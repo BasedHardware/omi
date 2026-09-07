@@ -3225,5 +3225,8 @@
     "chatBlockUnavailable": "Již není k dispozici",
     "chatBlockRecommendedNextSteps": "Doporučené další kroky",
     "couldNotLoadMemories": "Nepodařilo se načíst vzpomínky",
-    "couldNotLoadKnowledgeGraph": "Nepodařilo se načíst graf znalostí"
+    "couldNotLoadKnowledgeGraph": "Nepodařilo se načíst graf znalostí",
+    "play": "Přehrát",
+    "redo": "Znovu",
+    "speechProfileOwnerTitle": "Hlasový profil: {name}"
 }

@@ -3252,5 +3252,8 @@
     "chatBlockUnavailable": "Không còn khả dụng",
     "chatBlockRecommendedNextSteps": "Các bước tiếp theo được đề xuất",
     "couldNotLoadMemories": "Không thể tải ký ức",
-    "couldNotLoadKnowledgeGraph": "Không thể tải đồ thị tri thức"
+    "couldNotLoadKnowledgeGraph": "Không thể tải đồ thị tri thức",
+    "play": "Phát",
+    "redo": "Làm lại",
+    "speechProfileOwnerTitle": "Hồ sơ giọng nói của {name}"
 }

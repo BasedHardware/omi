@@ -10813,5 +10813,8 @@
     "chatBlockUnavailable": "आता उपलब्ध नाही",
     "chatBlockRecommendedNextSteps": "शिफारस केलेली पुढील पावले",
     "couldNotLoadMemories": "आठवणी लोड करता आल्या नाहीत",
-    "couldNotLoadKnowledgeGraph": "ज्ञान आलेख लोड करता आला नाही"
+    "couldNotLoadKnowledgeGraph": "ज्ञान आलेख लोड करता आला नाही",
+    "play": "प्ले करा",
+    "redo": "पुन्हा करा",
+    "speechProfileOwnerTitle": "{name} यांचे व्हॉइस प्रोफाइल"
 }

@@ -9997,24 +9997,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get couldNotLoadKnowledgeGraph => 'Nem sikerült betölteni a tudásgráfot';
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count short conversations',
-      one: '$count short conversation',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return '$name hangprofilja';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Lejátszás';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Újra';
 }

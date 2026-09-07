@@ -3265,5 +3265,8 @@
     "chatBlockUnavailable": "Ikke længere tilgængelig",
     "chatBlockRecommendedNextSteps": "Anbefalede næste trin",
     "couldNotLoadMemories": "Kunne ikke indlæse minder",
-    "couldNotLoadKnowledgeGraph": "Kunne ikke indlæse vidensgrafen"
+    "couldNotLoadKnowledgeGraph": "Kunne ikke indlæse vidensgrafen",
+    "play": "Afspil",
+    "redo": "Gør om",
+    "speechProfileOwnerTitle": "{name}s stemmeprofil"
 }

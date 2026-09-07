@@ -3248,5 +3248,8 @@
     "chatBlockUnavailable": "अब उपलब्ध नहीं है",
     "chatBlockRecommendedNextSteps": "अनुशंसित अगले कदम",
     "couldNotLoadMemories": "यादें लोड नहीं हो सकीं",
-    "couldNotLoadKnowledgeGraph": "नॉलेज ग्राफ़ लोड नहीं हो सका"
+    "couldNotLoadKnowledgeGraph": "नॉलेज ग्राफ़ लोड नहीं हो सका",
+    "play": "चलाएँ",
+    "redo": "फिर से करें",
+    "speechProfileOwnerTitle": "{name} की वॉइस प्रोफ़ाइल"
 }

@@ -9787,24 +9787,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get couldNotLoadKnowledgeGraph => 'ナレッジグラフを読み込めませんでした';
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count short conversations',
-      one: '$count short conversation',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return '$nameの音声プロファイル';
   }
 
   @override
-  String get play => 'Play';
+  String get play => '再生';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'やり直す';
 }

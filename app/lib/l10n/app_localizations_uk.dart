@@ -9978,24 +9978,13 @@ class AppLocalizationsUk extends AppLocalizations {
   String get couldNotLoadKnowledgeGraph => 'Не вдалося завантажити граф знань';
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count short conversations',
-      one: '$count short conversation',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return 'Голосовий профіль: $name';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Відтворити';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Заново';
 }

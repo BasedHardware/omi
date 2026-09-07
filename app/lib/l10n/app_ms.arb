@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "Tidak lagi tersedia",
     "chatBlockRecommendedNextSteps": "Langkah seterusnya yang disyorkan",
     "couldNotLoadMemories": "Tidak dapat memuatkan kenangan",
-    "couldNotLoadKnowledgeGraph": "Tidak dapat memuatkan graf pengetahuan"
+    "couldNotLoadKnowledgeGraph": "Tidak dapat memuatkan graf pengetahuan",
+    "play": "Main",
+    "redo": "Ulang",
+    "speechProfileOwnerTitle": "Profil suara {name}"
 }

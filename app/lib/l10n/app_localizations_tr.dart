@@ -9968,24 +9968,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get couldNotLoadKnowledgeGraph => 'Bilgi grafiği yüklenemedi';
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count short conversations',
-      one: '$count short conversation',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return '$name adlı kişinin ses profili';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Oynat';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Yeniden yap';
 }
