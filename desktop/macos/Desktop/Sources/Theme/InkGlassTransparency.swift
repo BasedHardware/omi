@@ -25,11 +25,19 @@ extension InkGlass {
   ///
   /// 0 is an opaque sheet — the same surface Reduce Transparency produces. 1 is the material's own
   /// ceiling: no scrim at all, the blur alone. Between them the scrim is linear in the slider, which
-  /// is the only mapping a user can predict. Clamped, so a stale or hand-edited preference cannot
-  /// produce a negative alpha or one above opaque.
+  /// is the only mapping a user can predict. Normalised, so a stale or hand-edited preference cannot
+  /// produce a negative alpha, one above opaque, or a NaN the compositor would paint as garbage.
   package static func scrim(forTransparency transparency: CGFloat) -> CGFloat {
-    let clamped = min(max(transparency, 0), 1)
-    return 1 - clamped
+    1 - normalizedTransparency(transparency)
+  }
+
+  /// The one rule for what a transparency may be: a number in `0...1`. Anything outside the range
+  /// is pulled to the nearer end; anything that is not a number at all — `Double("nan")` parses,
+  /// and a preference file can hold anything — falls back to the shipped default rather than to an
+  /// end, because a value that says nothing should change nothing.
+  package static func normalizedTransparency(_ transparency: CGFloat) -> CGFloat {
+    guard transparency.isFinite else { return defaultTransparency }
+    return min(max(transparency, 0), 1)
   }
 
   /// The alpha of the `Ink.surface` ground, given both the accessibility setting and the user's
@@ -59,12 +67,18 @@ package final class InkGlassTransparencySettings: ObservableObject {
   /// The slider's range: an opaque sheet to the bare material.
   package static let range: ClosedRange<CGFloat> = 0...1
 
-  /// How see-through the glass is, `0...1`. Writes are clamped, persisted and announced.
+  /// How see-through the glass is, `0...1`. Writes are normalised, persisted and announced.
+  ///
+  /// A write outside the range (or not a number) is corrected in place. On a `@Published` property
+  /// the assignment re-enters this observer with the corrected value, and that inner pass is the one
+  /// that persists and announces it — once — so mounted panels follow the correction, not the write.
+  /// The correction always lands on a value that needs no further correction, so the re-entry ends
+  /// there; a NaN, which is never equal to itself, would otherwise recurse without end.
   @Published package var transparency: CGFloat {
     didSet {
-      let clamped = min(max(transparency, Self.range.lowerBound), Self.range.upperBound)
-      if clamped != transparency {
-        transparency = clamped
+      let normalized = InkGlass.normalizedTransparency(transparency)
+      if normalized != transparency {
+        transparency = normalized
         return
       }
       defaults.set(Double(transparency), forKey: Self.defaultsKey)
@@ -85,7 +99,7 @@ package final class InkGlassTransparencySettings: ObservableObject {
     self.notificationCenter = notificationCenter
     let stored = defaults.object(forKey: Self.defaultsKey) as? Double
     let initial = stored.map { CGFloat($0) } ?? InkGlass.defaultTransparency
-    self.transparency = min(max(initial, Self.range.lowerBound), Self.range.upperBound)
+    self.transparency = InkGlass.normalizedTransparency(initial)
   }
 
   package var isDefault: Bool {

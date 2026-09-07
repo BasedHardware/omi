@@ -46,6 +46,11 @@ final class InkGlassTransparencyTests: XCTestCase {
     }
     XCTAssertEqual(InkGlass.scrim(forTransparency: -3), 1, accuracy: 0.0001)
     XCTAssertEqual(InkGlass.scrim(forTransparency: 7), 0, accuracy: 0.0001)
+    for notANumber in [CGFloat.nan, .infinity, -.infinity] {
+      XCTAssertEqual(
+        InkGlass.scrim(forTransparency: notANumber), InkGlass.scrim, accuracy: 0.0001,
+        "a value that is not a number says nothing, so the ground stays the shipped one")
+    }
   }
 
   func testReduceTransparencyWinsOverTheSlider() {
@@ -78,18 +83,56 @@ final class InkGlassTransparencyTests: XCTestCase {
     XCTAssertTrue(third.isDefault)
   }
 
-  func testAnOutOfRangeWriteOrStoredValueIsClamped() throws {
+  /// A corrected write is a write: it is persisted and announced like any other, or mounted panels
+  /// keep the previous alpha until the next valid write and the correction dies with the process.
+  func testAnOutOfRangeWriteOrStoredValueIsClampedPersistedAndAnnounced() throws {
     let defaults = try suite()
-    let settings = InkGlassTransparencySettings(defaults: defaults, notificationCenter: NotificationCenter())
+    let center = NotificationCenter()
+    let settings = InkGlassTransparencySettings(defaults: defaults, notificationCenter: center)
+    var announced: [CGFloat] = []
+    let token = center.addObserver(
+      forName: InkGlassTransparencySettings.didChangeNotification, object: nil, queue: nil
+    ) { note in
+      let sender = note.object as? InkGlassTransparencySettings
+      MainActor.assumeIsolated { announced.append(sender?.transparency ?? -1) }
+    }
+    defer { center.removeObserver(token) }
+
     settings.transparency = 4
     XCTAssertEqual(settings.transparency, 1, accuracy: 0.0001)
+    XCTAssertEqual(defaults.double(forKey: InkGlassTransparencySettings.defaultsKey), 1, accuracy: 0.0001)
     settings.transparency = -1
     XCTAssertEqual(settings.transparency, 0, accuracy: 0.0001)
+    XCTAssertEqual(defaults.double(forKey: InkGlassTransparencySettings.defaultsKey), 0, accuracy: 0.0001)
+    XCTAssertEqual(announced.count, 2, "each corrected write is announced once, with the corrected value")
+    XCTAssertEqual(announced.first ?? -1, 1, accuracy: 0.0001)
+    XCTAssertEqual(announced.last ?? -1, 0, accuracy: 0.0001)
 
     defaults.set(-2.0, forKey: InkGlassTransparencySettings.defaultsKey)
     let reloaded = InkGlassTransparencySettings(defaults: defaults, notificationCenter: NotificationCenter())
     XCTAssertEqual(
       reloaded.transparency, 0, accuracy: 0.0001, "a hand-edited preference cannot produce a negative alpha")
+  }
+
+  /// `Double("nan")` parses and a preference file can hold anything, so NaN and the infinities must
+  /// never reach the alpha: they fall back to the shipped default, and that fallback is persisted.
+  func testAValueThatIsNotANumberFallsBackToTheDefault() throws {
+    let defaults = try suite()
+    let settings = InkGlassTransparencySettings(defaults: defaults, notificationCenter: NotificationCenter())
+    for notANumber in [CGFloat.nan, .infinity, -.infinity] {
+      settings.transparency = 0.2
+      settings.transparency = notANumber
+      XCTAssertEqual(settings.transparency, InkGlass.defaultTransparency, accuracy: 0.0001)
+      XCTAssertTrue(settings.transparency.isFinite)
+      XCTAssertEqual(
+        defaults.double(forKey: InkGlassTransparencySettings.defaultsKey), Double(InkGlass.defaultTransparency),
+        accuracy: 0.0001, "the fallback is what survives a relaunch, not the NaN")
+    }
+
+    defaults.set(Double.nan, forKey: InkGlassTransparencySettings.defaultsKey)
+    let reloaded = InkGlassTransparencySettings(defaults: defaults, notificationCenter: NotificationCenter())
+    XCTAssertEqual(reloaded.transparency, InkGlass.defaultTransparency, accuracy: 0.0001)
+    XCTAssertTrue(reloaded.transparency.isFinite)
   }
 
   func testEveryChangeIsAnnouncedOnItsOwnCentre() throws {

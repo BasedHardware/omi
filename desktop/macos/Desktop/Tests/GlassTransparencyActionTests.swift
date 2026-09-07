@@ -25,6 +25,7 @@ final class GlassTransparencyActionTests: XCTestCase {
     let names = Set(registry.descriptors().map(\.name))
     XCTAssertTrue(names.contains("glass_transparency_snapshot"))
     XCTAssertTrue(names.contains("set_glass_transparency"))
+    XCTAssertTrue(names.contains("reset_glass_transparency"))
   }
 
   func testSetWritesTheSlidersValueAndSnapshotReadsItBack() async throws {
@@ -45,17 +46,37 @@ final class GlassTransparencyActionTests: XCTestCase {
     }
   }
 
-  func testSetClampsAndRejectsNonNumbers() async throws {
+  /// The boundary enforces the whole contract its message states: a harness that sends 7 or "nan"
+  /// has a bug, and writing 1 in its place would hide it. The value it found stays untouched.
+  func testSetRejectsNonNumbersAndValuesOutsideTheRange() async throws {
     let restore = prepare()
     defer { restore() }
-    let high = try await registry.perform("set_glass_transparency", params: ["value": "7"])
-    XCTAssertEqual(high?["transparency"], "1.0000")
+    _ = try await registry.perform("set_glass_transparency", params: ["value": "0.3"])
 
-    do {
-      _ = try await registry.perform("set_glass_transparency", params: ["value": "clear"])
-      XCTFail("a non-numeric value must be rejected, not silently ignored")
-    } catch DesktopAutomationActionError.invalidParams {
-      // expected
+    for bad in ["clear", "7", "-0.5", "nan", "inf"] {
+      do {
+        _ = try await registry.perform("set_glass_transparency", params: ["value": bad])
+        XCTFail("\(bad) must be rejected, not silently corrected")
+      } catch DesktopAutomationActionError.invalidParams(let message) {
+        XCTAssertTrue(message.contains("0...1"), "the message states the range for \(bad): \(message)")
+      }
+      XCTAssertEqual(
+        InkGlassTransparencySettings.shared.transparency, 0.3, accuracy: 0.0001,
+        "a rejected write leaves the value alone (\(bad))")
     }
+  }
+
+  func testResetReturnsToTheShippedDefault() async throws {
+    let restore = prepare()
+    defer { restore() }
+    _ = try await registry.perform("set_glass_transparency", params: ["value": "0.9"])
+    XCTAssertFalse(InkGlassTransparencySettings.shared.isDefault)
+
+    let reset = try await registry.perform("reset_glass_transparency", params: [:])
+    XCTAssertEqual(reset?["is_default"], "true")
+    XCTAssertEqual(
+      reset?["transparency"], String(format: "%.4f", Double(InkGlass.defaultTransparency)),
+      "the action is the Reset button's own call")
+    XCTAssertTrue(InkGlassTransparencySettings.shared.isDefault)
   }
 }

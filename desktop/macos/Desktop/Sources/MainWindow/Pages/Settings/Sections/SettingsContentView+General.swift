@@ -276,11 +276,15 @@ extension SettingsContentView {
 
         Spacer()
 
+        // Reset rewrites the same value the slider does, which changes just as little under Reduce
+        // Transparency, so it wears the slider's disabled state rather than contradicting the caption.
         if !glassTransparencySettings.isDefault {
           Button("Reset") {
             glassTransparencySettings.resetToDefault()
           }
           .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+          .disabled(reduced)
+          .opacity(reduced ? 0.45 : 1)
         }
       }
 
@@ -295,6 +299,9 @@ extension SettingsContentView {
           in: InkGlassTransparencySettings.range
         )
         .tint(Ink.accent)
+        // The side icons' tooltips do not attach to the control, so without this VoiceOver reads a
+        // bare percentage with no word for what it is.
+        .accessibilityLabel("Transparency")
 
         Image(systemName: "square.dotted")
           .scaledFont(size: 12)

@@ -15,14 +15,28 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "set_glass_transparency",
-      summary: "Set the glass transparency through the slider's own published value (0…1, clamped)",
+      summary: "Set the glass transparency through the slider's own published value (0…1)",
       params: ["value"]
     ) { params in
-      guard let value = params["value"].flatMap(Double.init) else {
+      // The model would normalise anything, but a harness that asks for 7 or "nan" has a bug, and
+      // a boundary that quietly writes 1 instead hides it. The message states the whole contract.
+      guard let value = params["value"].flatMap(Double.init), value.isFinite,
+        InkGlassTransparencySettings.range.contains(CGFloat(value))
+      else {
         throw DesktopAutomationActionError.invalidParams("value must be a number in 0...1")
       }
       return await MainActor.run {
         InkGlassTransparencySettings.shared.transparency = CGFloat(value)
+        return Self.glassTransparencySnapshot()
+      }
+    }
+
+    register(
+      name: "reset_glass_transparency",
+      summary: "Return the glass transparency to the shipped default, as the card's Reset button does"
+    ) { _ in
+      await MainActor.run {
+        InkGlassTransparencySettings.shared.resetToDefault()
         return Self.glassTransparencySnapshot()
       }
     }

@@ -56,17 +56,25 @@ steps:
       ok: true
       result.detail.transparency: "0.9000"
       result.detail.is_default: "false"
+      # 1 − 0.9: the ground every panel paints. Reduce Transparency is off on the harness Mac; on
+      # it the alpha reads 1.0000 and the caption says so instead of a percentage.
+      result.detail.ground_alpha: "0.1000"
       text_visible:
         - "Glass: 90%"
 
   - id: S2c
     name: Reset transparency to the shipped default
-    do: "In the Transparency card, press 'Reset'. Verify the caption returns to the shipped default and the Reset button disappears."
+    # The action is the Reset button's own call, so the step leaves the preference where S2b found
+    # it without a cursor; the caption and the vanished button are the visible proof.
+    do: "Verify the Transparency caption returns to 'Glass: 54%' and the Reset button disappears."
     bridge.action:
-      name: glass_transparency_snapshot
+      name: reset_glass_transparency
     expect:
       ok: true
       result.detail.is_default: "true"
+      result.detail.transparency: "0.5400"
+      text_visible:
+        - "Glass: 54%"
 
   - id: S3
     name: Navigate to Account & Plan section
