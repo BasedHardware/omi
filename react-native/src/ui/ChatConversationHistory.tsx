@@ -24,13 +24,15 @@ export function ChatConversationHistory() {
             style={styles.conversationDetailSummary}>
             {result.error}
           </Text>
-          <FocusPressable
-            accessibilityRole="button"
-            accessibilityLabel="Reload chat messages"
-            onPress={reload}
-            style={styles.conversationTranscriptAction}>
-            <Text style={styles.conversationDetailField}>Check again</Text>
-          </FocusPressable>
+          {result.canReload && (
+            <FocusPressable
+              accessibilityRole="button"
+              accessibilityLabel="Reload chat messages"
+              onPress={reload}
+              style={styles.conversationTranscriptAction}>
+              <Text style={styles.conversationDetailField}>Check again</Text>
+            </FocusPressable>
+          )}
         </>
       ) : result.messages.length === 0 ? (
         <Text style={styles.conversationDetailSummary}>

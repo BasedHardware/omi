@@ -14,13 +14,23 @@ export const MAIN_CHAT_CONVERSATION_ID = 'chat:chat-main';
 type ChatHistoryRead =
   | {status: 'idle'}
   | {status: 'loading'}
-  | {status: 'error'; error: string}
+  | {status: 'error'; error: string; canReload: boolean}
   | {
       status: 'loaded';
       messages: ChatMessage[];
       olderCursor: string | null;
       hasOlder: boolean;
     };
+
+function chatHistoryCanReload(error: unknown): boolean {
+  if (!(error instanceof ChatBackendError)) {
+    return true;
+  }
+  if (error.status === 403 || error.backendCode === 'forbidden') {
+    return true;
+  }
+  return error.retryable;
+}
 
 export function useChatConversationHistory(active: boolean) {
   const [result, setResult] = useState<ChatHistoryRead>({status: 'idle'});
@@ -40,6 +50,7 @@ export function useChatConversationHistory(active: boolean) {
                 error: chatHistoryErrorCopy({
                   code: 'OMI_HTTP_UNAUTHORIZED',
                 }),
+                canReload: true,
               },
         );
       }),
@@ -74,7 +85,11 @@ export function useChatConversationHistory(active: boolean) {
         });
       } catch (error) {
         if (alive && epoch.current === current) {
-          setResult({status: 'error', error: chatHistoryErrorCopy(error)});
+          setResult({
+            status: 'error',
+            error: chatHistoryErrorCopy(error),
+            canReload: chatHistoryCanReload(error),
+          });
         }
       }
     };
@@ -131,7 +146,11 @@ export function useChatConversationHistory(active: boolean) {
           setReload(value => value + 1);
           return;
         }
-        setResult({status: 'error', error: chatHistoryErrorCopy(error)});
+        setResult({
+          status: 'error',
+          error: chatHistoryErrorCopy(error),
+          canReload: chatHistoryCanReload(error),
+        });
       } finally {
         if (epoch.current === current) {
           setLoadingOlder(false);

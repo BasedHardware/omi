@@ -202,8 +202,40 @@ test('shows typed chat grant denial instead of an empty message list', async () 
   expect(textOf(renderer)).toContain(
     'Chat is not available for this account.',
   );
+  expect(textOf(renderer)).toContain('Check again');
   expect(textOf(renderer)).not.toContain('No messages in this chat yet.');
   expect(textOf(renderer)).not.toContain('You ·');
+});
+
+test('nested non-retryable chat history 503s do not offer Check again', async () => {
+  mockRequest.mockRejectedValue(
+    new ChatBackendError(
+      503,
+      'development_backend_unsupported',
+      false,
+      'none',
+      null,
+    ),
+  );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain(
+    'Chat history is not available on this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain('Check again');
+  expect(textOf(renderer)).not.toContain('No messages in this chat yet.');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Reload chat messages',
+    ),
+  ).toHaveLength(0);
 });
 
 test('keeps an honest empty chat page instead of inventing a completed answer', async () => {
