@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/widgets/omi_device_glow.dart';
-import 'package:omi/widgets/onboarding_page_transition.dart';
 
 void main() {
   testWidgets('completion page is just the title, device graphic, and a button without an arrow', (tester) async {

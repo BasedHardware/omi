@@ -8,19 +8,16 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/found_omi/found_omi_widget.dart';
-import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
-import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/widgets/omi_device_glow.dart';
 import 'package:omi/widgets/onboarding_page_transition.dart';
 import 'package:omi/widgets/onboarding_progress_bar.dart';
@@ -35,21 +32,11 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/omi_logo_spinner.dart';
 
-/// Speech-profile onboarding is a clean black screen — no spinning-dots
-/// backdrop on the quiet-place intro or the voice questions. Keep this in
-/// lockstep with [_OnboardingWrapperState.kSpeechProfilePage].
-@visibleForTesting
-const int kOnboardingSpeechProfilePageIndex = 9;
-
-@visibleForTesting
-const int kOnboardingKnowledgeGraphPageIndex = 10;
-
 @visibleForTesting
 const int kOnboardingCompletePageIndex = 11;
 
-/// Pages that share the spinning-dots backdrop. Speech profile, knowledge
-/// graph, and "you are all set" stay clean black — the 8-dot ring used to
-/// pop back in on the graph step and burst/blink on the way to complete.
+/// Pages that share the spinning-dots backdrop. "You are all set" stays clean
+/// black — the 8-dot ring used to burst/blink on the way to complete.
 @visibleForTesting
 const Set<int> kOnboardingSpinnerBackdropPages = {
   3, // name
@@ -58,19 +45,12 @@ const Set<int> kOnboardingSpinnerBackdropPages = {
   6, // user-review placeholder
 };
 
-@visibleForTesting
-bool onboardingHidesSpinnerBackdrop(int pageIndex) => pageIndex == kOnboardingSpeechProfilePageIndex;
-
-/// Incoming-page hold before fade-in. Speech profile waits for the spinner
-/// to finish leaving; knowledge graph waits for speech profile to finish
-/// fading out; complete waits for the graph (and progress bar) to finish
-/// fading out so nothing flashes through "you are all set".
+/// Incoming-page hold before fade-in. Complete follows permissions, the last
+/// step drawn over the spinner, so it waits for the spinner (and progress
+/// bar) to finish leaving so nothing flashes through "you are all set".
 @visibleForTesting
 Duration onboardingPageEntryDelay(int pageIndex, {Duration spinnerFade = const Duration(milliseconds: 1200)}) {
-  if (onboardingHidesSpinnerBackdrop(pageIndex)) return spinnerFade;
-  if (pageIndex == kOnboardingKnowledgeGraphPageIndex || pageIndex == kOnboardingCompletePageIndex) {
-    return kOnboardingPageFadeDuration;
-  }
+  if (pageIndex == kOnboardingCompletePageIndex) return spinnerFade;
   return Duration.zero;
 }
 
@@ -102,9 +82,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kUserReviewPage = 6; // "Loving Omi?" screen
   static const int kWelcomePage = 7;
   static const int kFindDevicesPage = 8;
-  static const int kSpeechProfilePage =
-      kOnboardingSpeechProfilePageIndex; // Speech profile with questions (requires device)
-  static const int kKnowledgeGraphPage = kOnboardingKnowledgeGraphPageIndex; // Memory graph preview
+  // Indices 9 and 10 are placeholders: the speech-profile step (recorded from
+  // Settings now) and the memory-graph preview were removed from onboarding.
   static const int kCompletePage = kOnboardingCompletePageIndex; // "You're all set" completion screen
 
   // Special index values used in comparisons
@@ -133,30 +112,17 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   // eases on for sign-in without ever being on during the splash itself.
   late final AnimationController _deviceGlowController;
   late final Animation<double> _deviceGlowAnimation;
-  bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
-  Future<void>? _knowledgeGraphPrebuildFuture;
-
-  // Speech profile keeps a clean black screen — no spinner on the quiet-place
-  // intro or the voice questions. Hold the page invisible until the spinner
-  // from permissions has finished fading out.
-  bool get _hidesSpinnerForSpeechProfile => onboardingHidesSpinnerBackdrop(_controller!.index);
-
   @override
   void initState() {
     _controller = TabController(
       length: 12,
       vsync: this,
-    ); // Splash, Auth, AiConsent, Name, FoundOmi, Permissions, Review, Welcome, FindDevices, SpeechProfile, KnowledgeGraph, Complete
+    ); // Splash, Auth, AiConsent, Name, FoundOmi, Permissions, Review, Welcome, FindDevices, (SpeechProfile), (KnowledgeGraph), Complete
     _controller!.addListener(() {
       if (!mounted) return;
       setState(() {});
       if (_controller!.previousIndex == kSplashPage && _controller!.index == kAuthPage) {
         _deviceGlowController.forward();
-      }
-      // Rebuild after speech-profile answers exist — starting this on the
-      // speech-profile page used to bake an empty graph before the user spoke.
-      if (_controller!.index == kKnowledgeGraphPage && _knowledgeGraphPrebuildFuture == null) {
-        _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError((_) {});
       }
       final showsSpinner = _showsSpinnerBackdrop;
       if (showsSpinner != _spinnerVisible) {
@@ -263,17 +229,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     }
   }
 
-  Future<void> _prebuildKnowledgeGraph() async {
-    // Always rebuild on this step so the just-finished speech-profile
-    // conversation is included, not a stale empty graph from earlier.
-    await KnowledgeGraphApi.rebuildKnowledgeGraph();
-    await KnowledgeGraphApi.waitForGraphStability(
-      timeout: const Duration(seconds: 25),
-      interval: const Duration(seconds: 2),
-      stabilityChecks: 1,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     List<Widget> pages = [
@@ -344,10 +299,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       PermissionsWidget(
         goNext: () {
-          // Go directly to Speech Profile (skip device steps - we use phone mic now).
-          // The review step was removed from onboarding to comply with App Store
-          // Guideline 5.6.3 (no rating prompts during onboarding).
-          _controller!.animateTo(kSpeechProfilePage);
+          // Go directly to the completion screen. The device steps, the review
+          // step (App Store Guideline 5.6.3: no rating prompts during
+          // onboarding), the speech-profile step and the memory-graph preview
+          // are all out of first-run onboarding; the speech profile is recorded
+          // from Settings.
+          _controller!.animateTo(kCompletePage);
           PlatformManager.instance.analytics.onboardingStepCompleted('Permissions');
         },
       ),
@@ -355,24 +312,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       Container(), // UserReviewPage placeholder (removed for App Store Guideline 5.6.3)
       Container(), // WelcomePage placeholder
       Container(), // FindDevicesPage placeholder
-      widget.forceAuthPage
-          ? const SizedBox.shrink()
-          : SpeechProfileWidget(
-              goNext: () {
-                PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile');
-                _controller!.animateTo(kKnowledgeGraphPage);
-              },
-              onSkip: () {
-                PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile Skipped');
-                _controller!.animateTo(kKnowledgeGraphPage);
-              },
-            ),
-      OnboardingKnowledgeGraphStep(
-        onContinue: () {
-          PlatformManager.instance.analytics.onboardingStepCompleted('Knowledge Graph');
-          _controller!.animateTo(kCompletePage);
-        },
-      ),
+      Container(), // SpeechProfilePage placeholder (recorded from Settings, not during onboarding)
+      Container(), // KnowledgeGraphPage placeholder (memory-graph preview removed from onboarding)
       OnboardingCompleteScreen(
         onComplete: () {
           SharedPreferencesUtil().onboardingCompleted = true;
@@ -416,12 +357,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             ),
             IgnorePointer(
               child: AnimatedOpacity(
-                opacity: _spinnerVisible && !_hidesSpinnerForSpeechProfile ? 1 : 0,
+                opacity: _spinnerVisible ? 1 : 0,
                 duration: _backdropFadeDuration,
                 curve: Curves.easeInOut,
                 child: OmiLogoSpinner(
                   burstTrigger: _controller!.index,
-                  visible: _spinnerVisible && !_hidesSpinnerForSpeechProfile,
+                  visible: _spinnerVisible,
                 ),
               ),
             ),
@@ -436,8 +377,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                           _controller!.index == kPermissionsPage ||
                           _controller!.index == kUserReviewPage ||
                           _controller!.index == kWelcomePage ||
-                          _controller!.index == kSpeechProfilePage ||
-                          _controller!.index == kKnowledgeGraphPage ||
                           _controller!.index == kCompletePage
                       ? pages[_controller!.index]
                       : SingleChildScrollView(
@@ -471,8 +410,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                             ),
                                           ),
                                     SizedBox(
-                                      height: (_controller!.index == kFindDevicesPage ||
-                                              _controller!.index == kSpeechProfilePage)
+                                      height: _controller!.index == kFindDevicesPage
                                           ? max(
                                               MediaQuery.of(context).size.height - 500 - 10,
                                               maxHeightWithTextScale(context, _controller!.index),
@@ -521,10 +459,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                       onLongPress: kDebugMode ? _goNext : null,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 20),
+                        // One capsule per step the user actually walks (data &
+                        // privacy through permissions); the retired placeholder
+                        // indices between permissions and complete never count.
                         child: OnboardingProgressBar(
-                          currentStep:
-                              (_controller!.index == kCompletePage ? kKnowledgeGraphPage : _controller!.index) - 1,
-                          totalSteps: _controller!.length - 1,
+                          currentStep: (_controller!.index == kCompletePage ? kPermissionsPage : _controller!.index) -
+                              kAiConsentPage,
+                          totalSteps: kPermissionsPage - kAiConsentPage + 1,
                         ),
                       ),
                     ),

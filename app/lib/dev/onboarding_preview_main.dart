@@ -4,8 +4,7 @@
 // Run:  flutter run -d chrome -t lib/dev/onboarding_preview_main.dart
 //
 // Walks the full flow in order: Get Started -> Sign in -> Data privacy ->
-// Name -> Language -> How did you find us -> Permissions -> Find a quiet
-// place -> Answer with voice -> What we know -> You're all set.
+// Name -> Language -> How did you find us -> Permissions -> You're all set.
 //
 // The splash step is the real production widget (it needs no
 // backend/Firebase to render — pulling in almost any other real onboarding
@@ -63,10 +62,7 @@ class _OnboardingPreviewFlowState extends State<_OnboardingPreviewFlow> {
   static const int kLanguage = 4;
   static const int kFoundUs = 5;
   static const int kPermissions = 6;
-  static const int kQuietPlace = 7;
-  static const int kVoice = 8;
-  static const int kKnowledgeGraph = 9;
-  static const int kComplete = 10;
+  static const int kComplete = 7;
   static const int kLast = kComplete;
 
   int _index = kSplash;
@@ -97,12 +93,6 @@ class _OnboardingPreviewFlowState extends State<_OnboardingPreviewFlow> {
         return PreviewFoundUsStep(goNext: _goNext);
       case kPermissions:
         return PreviewPermissionsStep(goNext: _goNext);
-      case kQuietPlace:
-        return PreviewQuietPlaceStep(goNext: _goNext);
-      case kVoice:
-        return PreviewVoiceStep(goNext: _goNext);
-      case kKnowledgeGraph:
-        return PreviewKnowledgeGraphStep(goNext: _goNext);
       case kComplete:
         return PreviewCompleteStep(onComplete: _restart);
       default:

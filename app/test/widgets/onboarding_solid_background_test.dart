@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
-import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/providers/auth_provider.dart';
 
 bool _hasRoundedDrawerCard(Widget widget) {
@@ -47,10 +46,6 @@ void main() {
 
     await pump(OnboardingCompleteScreen(onComplete: () {}));
     await tester.pump(const Duration(milliseconds: 300));
-    expect(tester.widgetList(find.byType(Container)).where(_hasRoundedDrawerCard), isEmpty);
-
-    await pump(OnboardingKnowledgeGraphStep(onContinue: () {}));
-    await tester.pump();
     expect(tester.widgetList(find.byType(Container)).where(_hasRoundedDrawerCard), isEmpty);
   });
 }
