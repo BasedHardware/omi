@@ -437,6 +437,30 @@ test('retryable mind map errors still offer Refresh', () => {
   ).toBeGreaterThan(0);
 });
 
+test('loaded mind map preview keeps incomplete coverage instead of looking complete', () => {
+  const renderer = render({
+    mindMapCoverageCopy: 'Memories are incomplete.',
+  });
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Mind map preview',
+    ),
+  ).toBeDefined();
+  expect(renderedText(renderer)).toContain('Memories are incomplete.');
+});
+
+test('loaded mind map preview omits more-available after a closed later page', () => {
+  const renderer = render({
+    mindMapCoverageCopy: null,
+  });
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Mind map preview',
+    ),
+  ).toBeDefined();
+  expect(renderedText(renderer)).not.toContain('More memories are available.');
+});
+
 test('missing settings content does not offer Refresh', () => {
   const renderer = render({
     activeRoute: 'settings',

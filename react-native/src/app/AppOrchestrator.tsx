@@ -1236,6 +1236,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             ? readOutcomes.memories.error
             : undefined
         }
+        mindMapCoverageCopy={
+          readOutcomes?.memories.status === 'success'
+            ? readStatusCopy(
+                'Memories',
+                readOutcomes.memories.value.page,
+                memoryNotice === desktopBackendUnavailableCopy,
+              )
+            : null
+        }
         onRefresh={() => {
           void refreshReads(false);
         }}

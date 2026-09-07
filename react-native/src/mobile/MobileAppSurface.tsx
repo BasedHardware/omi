@@ -85,6 +85,7 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   taskErrorCopy?: string;
   mindMapStatus: MobileProjectionStatus;
   mindMapErrorCopy?: string;
+  mindMapCoverageCopy?: string | null;
   onRefresh?: () => void;
   askValue: string;
   askUnavailable?: boolean;
@@ -308,6 +309,7 @@ export function MobileAppSurface({
   tasks,
   taskStatus,
   mindMapErrorCopy,
+  mindMapCoverageCopy,
   onRefresh,
 }: MobileAppSurfaceProps): React.JSX.Element {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -488,12 +490,19 @@ export function MobileAppSurface({
             title="Mind Map"
           />
           {mindMapStatus === 'ready' ? (
-            <View accessibilityLabel="Mind map preview" style={styles.mapCard}>
-              <View style={styles.mapNodeLarge} />
-              <View style={[styles.mapNode, styles.mapNodeLeft]} />
-              <View style={[styles.mapNode, styles.mapNodeRight]} />
-              <View style={[styles.mapNode, styles.mapNodeBottom]} />
-            </View>
+            <>
+              <View
+                accessibilityLabel="Mind map preview"
+                style={styles.mapCard}>
+                <View style={styles.mapNodeLarge} />
+                <View style={[styles.mapNode, styles.mapNodeLeft]} />
+                <View style={[styles.mapNode, styles.mapNodeRight]} />
+                <View style={[styles.mapNode, styles.mapNodeBottom]} />
+              </View>
+              {mindMapCoverageCopy ? (
+                <Text style={styles.stateText}>{mindMapCoverageCopy}</Text>
+              ) : null}
+            </>
           ) : (
             <StatePanel
               errorCopy={mindMapErrorCopy}
@@ -527,6 +536,7 @@ export function MobileAppSurface({
       tasks,
       taskStatus,
       mindMapErrorCopy,
+      mindMapCoverageCopy,
       onRefresh,
     ],
   );

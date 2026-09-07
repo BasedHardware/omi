@@ -839,4 +839,5 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(orchestrator).toContain('taskCoverageCopy=');
   expect(orchestrator).toContain("readStatusCopy(\n                'Recaps'");
   expect(orchestrator).toContain("readStatusCopy(\n                'Tasks'");
+  expect(orchestrator).toContain('mindMapCoverageCopy=');
 });
