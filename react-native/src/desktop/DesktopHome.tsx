@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {
+  desktopBackendUnavailableCopy,
   desktopReadsCanRetry,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
@@ -66,9 +67,7 @@ export function DesktopReadBanner({
     if (!canRetry) {
       return (
         <View style={styles.banner}>
-          <Text style={styles.bannerText}>
-            Some of your history isn't loaded yet.
-          </Text>
+          <Text style={styles.bannerText}>{desktopBackendUnavailableCopy}</Text>
         </View>
       );
     }

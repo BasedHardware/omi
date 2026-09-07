@@ -549,8 +549,8 @@ test('nested non-retryable library 503s do not offer Try again', () => {
     readsPhase: 'unavailable',
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain("Some of your history isn't loaded yet.");
   expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(tree).not.toContain("Some of your history isn't loaded yet.");
   expect(tree).not.toContain('Try again');
   expect(
     renderer.root.findAll(
