@@ -98,7 +98,9 @@ Cloud Linux after `ee83ece2a4`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `b3470ebc06`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. An empty composer with a later-history failure no longer treats that as the resting "I'm ready." stage. Nested non-retryable later pages keep the history stage and the unavailable copy instead of "Nothing's waiting on you."
 
-Cloud Linux after the Rewind later-page honesty slice: later Rewind pages that fail with `OMI_REWIND_UNAVAILABLE` or `OMI_REWIND_AUTH` keep already loaded frames, show that unavailable copy, and omit Load more instead of advertising another page against a door that cannot succeed. Generic later-page failures keep Load more. An incomplete empty first page that then hits that capability failure still does not claim "No captures saved yet." Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `2e7944a829`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Later Rewind pages that fail with `OMI_REWIND_UNAVAILABLE` or `OMI_REWIND_AUTH` keep already loaded frames, show that unavailable copy, and omit Load more. Generic later-page failures keep Load more. An incomplete empty first page that then hits that capability failure still does not claim "No captures saved yet."
+
+Cloud Linux after the backend plane-switch workspace reload: switching Old/New drops a stale chat-write latch and reloads chat history and saved-data reads so the previous plane cannot keep Ask disabled or keep its transcript. A failed plane persist does not reload. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

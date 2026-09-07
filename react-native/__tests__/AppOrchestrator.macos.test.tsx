@@ -106,6 +106,36 @@ jest.mock('../src/app/useReduceMotion', () => ({
   useReduceMotion: () => true,
 }));
 
+jest.mock('../src/desktopSettingsClient', () => {
+  const prefs = {
+    audioMode: 'off',
+    floatingBar: true,
+    fontScale: 100,
+    interfaceSounds: true,
+    meetingNoteScreenshots: true,
+    notificationsEnabled: false,
+    openOmiShortcut: true,
+    pushToTalk: true,
+    rewindRetentionDays: 14,
+    screenCapture: false,
+    softwarePlane: 'old',
+    stampedV5Origin: null,
+    transcriptionAutoDetect: true,
+    vadGate: true,
+  };
+  return {
+    defaultDesktopPreferences: () => prefs,
+    loadDesktopPreferences: jest.fn(async () => prefs),
+    loadPermissionStatus: jest.fn(async () => ({
+      microphone: 'unknown',
+      notifications: 'unknown',
+      screen: 'unknown',
+    })),
+    requestDesktopPermission: jest.fn(async () => 'unknown'),
+    setDesktopPreference: jest.fn(async () => prefs),
+  };
+});
+
 // The macOS orchestrator branch keys off Platform.OS, so pin it before the
 // orchestrator module loads.
 const ReactNative = require('react-native');
@@ -1197,6 +1227,95 @@ test('a nested chat write 404 disables Ask instead of leaving it sendable', asyn
       value.id.startsWith('admit-'),
     ),
   ).toHaveLength(admitCalls);
+});
+
+test('a backend plane switch drops a stale chat-write latch', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async (value: {id: string}) => {
+    if (value.id === 'chat-history') {
+      return {id: value.id, status: 200, body: historyBody([])};
+    }
+    if (value.id.startsWith('admit-')) {
+      return {
+        id: value.id,
+        status: 404,
+        body: JSON.stringify({
+          error: {code: 'not_found', retryable: false, action: 'none'},
+        }),
+      };
+    }
+    return {id: value.id, status: 501, body: null};
+  });
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('hello');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(labelsOf(renderer)).toContain('Send unavailable');
+  const admitCalls = mockBackend.request.mock.calls.filter(
+    ([value]: [{id: string}]) => value.id.startsWith('admit-'),
+  ).length;
+
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  await act(async () => {
+    let node: ReactTestRenderer.ReactTestInstance | null =
+      renderer.root
+        .findAllByType(Text)
+        .find(candidate => candidate.props.children === 'New backend') ?? null;
+    while (node !== null && typeof node.props.onPress !== 'function') {
+      node = node.parent;
+    }
+    node!.props.onPress();
+    await flushAsyncQueue();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Home')
+      .props.onPress();
+    await flushAsyncQueue();
+  });
+  expect(labelsOf(renderer)).toContain('Send');
+  expect(labelsOf(renderer)).not.toContain('Send unavailable');
+
+  const omnibarAgain = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibarAgain.props.onChangeText('hello again');
+  });
+  await act(async () => {
+    omnibarAgain.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(
+    mockBackend.request.mock.calls.filter(([value]: [{id: string}]) =>
+      value.id.startsWith('admit-'),
+    ).length,
+  ).toBeGreaterThan(admitCalls);
 });
 
 test.each(['stop', 'unmount', 'signout'])(

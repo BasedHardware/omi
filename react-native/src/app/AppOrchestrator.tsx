@@ -206,6 +206,24 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   useEffect(() => {
     refreshReadsRef.current = refreshReads;
   }, [refreshReads]);
+  const reloadWorkspace = useCallback(() => {
+    chatSessionEpochRef.current += 1;
+    chatMutationSeqRef.current += 1;
+    setChatError(null);
+    setChatWriteDoorClosed(false);
+    setDraft('');
+    setMessages([]);
+    setOlderChatCursor(null);
+    setHasOlderChat(false);
+    setChatBusy(false);
+    setLoadingOlderChat(false);
+    setActiveGenerationId(null);
+    stableChatMessageIds.clear();
+    animatedChatMessageIds.clear();
+    resetReads();
+    refreshReads(true).catch(() => undefined);
+    setChatEpoch(current => current + 1);
+  }, [animatedChatMessageIds, refreshReads, resetReads, stableChatMessageIds]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchArmed, setSearchArmed] = useState(false);
@@ -972,23 +990,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           onSignOut={() => {
             return signOutAndRefresh();
           }}
-          onWorkspaceReload={() => {
-            chatSessionEpochRef.current += 1;
-            chatMutationSeqRef.current += 1;
-            setChatError(null);
-            setDraft('');
-            setMessages([]);
-            setOlderChatCursor(null);
-            setHasOlderChat(false);
-            setChatBusy(false);
-            setLoadingOlderChat(false);
-            setActiveGenerationId(null);
-            stableChatMessageIds.clear();
-            animatedChatMessageIds.clear();
-            resetReads();
-            refreshReads(true).catch(() => undefined);
-            setChatEpoch(current => current + 1);
-          }}
+          onWorkspaceReload={reloadWorkspace}
           outcomes={readOutcomes}
           reads={reads}
           readsPhase={readsPhase}
@@ -1081,6 +1083,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           <SettingsPage
             onSignIn={signInAndRefresh}
             onSignOut={nativeSessionRequired ? signOutAndRefresh : undefined}
+            onWorkspaceReload={reloadWorkspace}
             signingIn={signingIn}
           />
         }
@@ -1576,6 +1579,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                   <SettingsPage
                     onSignIn={signInAndRefresh}
                     onSignOut={signOutAndRefresh}
+                    onWorkspaceReload={reloadWorkspace}
                     signingIn={signingIn}
                   />
                 )}

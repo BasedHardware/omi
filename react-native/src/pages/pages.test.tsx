@@ -65,10 +65,15 @@ afterEach(() => {
   mockBackend.stampedV5BackendOrigin.mockResolvedValue(null);
 });
 
-async function renderPage(Page: typeof ConnectorsPage) {
+async function renderPage(
+  Page: typeof ConnectorsPage | typeof SettingsPage,
+  extra: Record<string, unknown> = {},
+) {
   let renderer: ReactTestRenderer.ReactTestRenderer;
   await act(async () => {
-    renderer = ReactTestRenderer.create(<Page onSignIn={jest.fn()} />);
+    renderer = ReactTestRenderer.create(
+      <Page onSignIn={jest.fn()} {...extra} />,
+    );
   });
   renderers.push(renderer!);
   return renderer!;
@@ -120,7 +125,8 @@ test('Settings keeps Old backend and New backend on the native transport', async
   mockBackend.stampedV5BackendOrigin.mockResolvedValue(
     'https://omi-v5-backend-staging.example.workers.dev',
   );
-  const renderer = await renderPage(SettingsPage);
+  const onWorkspaceReload = jest.fn();
+  const renderer = await renderPage(SettingsPage, {onWorkspaceReload});
   expect(textOf(renderer)).toContain(
     'Old backend uses your existing Omi account',
   );
@@ -132,8 +138,27 @@ test('Settings keeps Old backend and New backend on the native transport', async
       .props.onPress();
   });
   expect(mockBackend.setSoftwarePlane).toHaveBeenCalledWith('new');
+  expect(onWorkspaceReload).toHaveBeenCalledTimes(1);
   expect(textOf(renderer)).toContain(
     'New sends v5 chat, capture, conversations, memories, tasks, and settings',
+  );
+});
+
+test('a failed backend plane switch does not reload the workspace', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  mockBackend.setSoftwarePlane.mockRejectedValueOnce(
+    new Error('plane write failed'),
+  );
+  const onWorkspaceReload = jest.fn();
+  const renderer = await renderPage(SettingsPage, {onWorkspaceReload});
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use New backend')
+      .props.onPress();
+  });
+  expect(onWorkspaceReload).not.toHaveBeenCalled();
+  expect(textOf(renderer)).toContain(
+    'Old backend uses your existing Omi account',
   );
 });
 

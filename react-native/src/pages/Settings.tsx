@@ -125,10 +125,12 @@ function BackendPlaneRow({
 export function SettingsPage({
   onSignIn,
   onSignOut,
+  onWorkspaceReload,
   signingIn = false,
 }: {
   onSignIn?: () => Promise<void>;
   onSignOut?: () => Promise<void>;
+  onWorkspaceReload?: () => void;
   signingIn?: boolean;
 }) {
   const browser = Platform.OS === 'web';
@@ -275,6 +277,7 @@ export function SettingsPage({
     try {
       const next = parseSoftwarePlane(await backend.setSoftwarePlane(plane));
       setSoftwarePlane(next);
+      onWorkspaceReload?.();
       await reload();
     } catch (reason) {
       setActionError(desktopReadErrorCopy(reason));
@@ -586,20 +589,20 @@ export function SettingsPage({
             {phase === 'error' &&
               error !== desktopBackendConfigurationCopy &&
               settingsCanRetry && (
-              <FocusPressable
-                accessibilityLabel="Retry settings"
-                accessibilityRole="button"
-                onPress={() => {
-                  reload().catch(() => undefined);
-                }}
-                style={({pressed}) => [
-                  styles.cloudAction,
-                  settingsStyles.touchAction,
-                  pressed && styles.pressed,
-                ]}>
-                <Text style={styles.cloudActionText}>Retry</Text>
-              </FocusPressable>
-            )}
+                <FocusPressable
+                  accessibilityLabel="Retry settings"
+                  accessibilityRole="button"
+                  onPress={() => {
+                    reload().catch(() => undefined);
+                  }}
+                  style={({pressed}) => [
+                    styles.cloudAction,
+                    settingsStyles.touchAction,
+                    pressed && styles.pressed,
+                  ]}>
+                  <Text style={styles.cloudActionText}>Retry</Text>
+                </FocusPressable>
+              )}
           </>
         ) : browser ? (
           section === 'Account' && serviceSettings ? (
