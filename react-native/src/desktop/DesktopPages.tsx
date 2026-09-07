@@ -2,7 +2,11 @@ import React, {useEffect, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import {loadConnectors, type CloudApp} from '../desktopCloudClient';
-import type {DesktopReadOutcomes} from '../desktopReadClient';
+import {
+  desktopAppsUnavailableCopy,
+  desktopReadErrorCopy,
+  type DesktopReadOutcomes,
+} from '../desktopReadClient';
 import {omiBackend} from '../omiNative';
 import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {FocusPressable} from '../ui/Pressable';
@@ -222,17 +226,21 @@ function AppTile({item}: {item: AppTileModel}) {
 
 export function AppsPage({session}: {session: DesktopSession}) {
   const [tiles, setTiles] = useState<AppTileModel[] | null>();
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (session !== 'ready') {
       setTiles(undefined);
+      setError(null);
       return;
     }
     const backend = omiBackend;
     if (backend === undefined || backend === null) {
       setTiles(null);
+      setError(null);
       return;
     }
     setTiles(undefined);
+    setError(null);
     let active = true;
     loadConnectors(backend)
       .then(snapshot => {
@@ -240,10 +248,12 @@ export function AppsPage({session}: {session: DesktopSession}) {
           return;
         }
         setTiles(tilesFromCatalog(snapshot.apps));
+        setError(null);
       })
-      .catch(() => {
+      .catch(reason => {
         if (active) {
           setTiles(null);
+          setError(desktopReadErrorCopy(reason));
         }
       });
     return () => {
@@ -256,7 +266,11 @@ export function AppsPage({session}: {session: DesktopSession}) {
         {tiles === undefined ? (
           <EmptyCopy>Loading apps…</EmptyCopy>
         ) : tiles === null ? (
-          <EmptyCopy>Apps could not be loaded.</EmptyCopy>
+          <EmptyCopy>
+            {error === desktopAppsUnavailableCopy
+              ? desktopAppsUnavailableCopy
+              : 'Apps could not be loaded.'}
+          </EmptyCopy>
         ) : tiles.length === 0 ? (
           <EmptyCopy>No apps are available.</EmptyCopy>
         ) : (

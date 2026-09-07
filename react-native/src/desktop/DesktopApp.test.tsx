@@ -5,7 +5,10 @@ import ReactTestRenderer, {act} from 'react-test-renderer';
 import {ScrollView, Text, TextInput} from 'react-native';
 import {DesktopApp} from './DesktopApp';
 import {TaskPagination} from '../ui/TaskPagination';
-import {desktopBackendUnavailableCopy} from '../desktopReadClient';
+import {
+  desktopAppsUnavailableCopy,
+  desktopBackendUnavailableCopy,
+} from '../desktopReadClient';
 
 jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => true,
@@ -1114,6 +1117,26 @@ test('Apps reports a catalog failure instead of showing invented data', async ()
     await Promise.resolve();
   });
   expect(renderedText(renderer)).toContain('Apps could not be loaded.');
+  expect(renderedText(renderer)).not.toContain('Google Calendar');
+});
+
+test('nested non-retryable Apps catalogue failures do not claim a load blip', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockRejectedValueOnce(
+    Object.assign(new Error(desktopAppsUnavailableCopy), {retryable: false}),
+  );
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(renderedText(renderer)).toContain(desktopAppsUnavailableCopy);
+  expect(renderedText(renderer)).not.toContain('Apps could not be loaded.');
   expect(renderedText(renderer)).not.toContain('Google Calendar');
 });
 
