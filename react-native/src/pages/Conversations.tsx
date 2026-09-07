@@ -20,7 +20,7 @@ import {FocusPressable} from '../ui/Pressable';
 import {RecordingTranscript} from '../ui/RecordingTranscript';
 import {ChatConversationHistory} from '../ui/ChatConversationHistory';
 import {MAIN_CHAT_CONVERSATION_ID} from '../chatConversationHistory';
-import {ReadStatus} from '../ui/ReadStatus';
+import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 
 function formatConversationDate(value: string | null): string {
@@ -267,9 +267,13 @@ export function ConversationsPage({
             ) : grouped.length === 0 ? (
               <View style={styles.projectionEmpty}>
                 <Text style={styles.projectionEmptyTitle}>
-                  {filtering
-                    ? 'No loaded conversations match.'
-                    : 'No conversations yet.'}
+                  {emptyLibraryCopy(
+                    'Conversations',
+                    outcome?.status === 'success' ? outcome.value.page : null,
+                    filtering,
+                    'No loaded conversations match.',
+                    'No conversations yet.',
+                  )}
                 </Text>
                 {filtering && (
                   <Text style={styles.projectionEmptyCopy}>
@@ -309,9 +313,10 @@ export function ConversationsPage({
                   </Text>
                 </FocusPressable>
               )}
-            {outcome?.status === 'success' && (
-              <ReadStatus label="Conversations" page={outcome.value.page} />
-            )}
+            {outcome?.status === 'success' &&
+              (grouped.length > 0 || filtering) && (
+                <ReadStatus label="Conversations" page={outcome.value.page} />
+              )}
           </ScrollView>
         )}
         {(!compact || selected !== null) && (

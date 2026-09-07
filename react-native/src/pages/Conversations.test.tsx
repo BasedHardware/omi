@@ -18,6 +18,15 @@ function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
     .join(' ');
 }
 
+const incompletePage = {
+  windowStatus: 'incomplete' as const,
+  complete: false,
+  hasMore: false,
+  nextCursor: null,
+  completenessStatus: 'incomplete' as const,
+  reasons: ['accepted_work_pending'],
+};
+
 test('conversation grant denial shows the typed error instead of an empty library', () => {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
@@ -36,4 +45,47 @@ test('conversation grant denial shows the typed error instead of an empty librar
   );
   expect(textOf(renderer)).not.toContain('No conversations yet.');
   expect(textOf(renderer)).not.toContain('Conversations could not be loaded.');
+});
+
+test('incomplete empty conversations do not claim a complete library', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        outcome={{
+          status: 'success',
+          value: {items: [], page: incompletePage},
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(textOf(renderer)).toContain('Conversations are incomplete.');
+  expect(textOf(renderer)).not.toContain('No conversations yet.');
+});
+
+test('complete empty conversations may claim emptiness', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(textOf(renderer)).toContain('No conversations yet.');
+  expect(textOf(renderer)).not.toContain('Conversations are incomplete.');
 });

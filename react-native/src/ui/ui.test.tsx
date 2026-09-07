@@ -77,7 +77,7 @@ jest.mock('../app/useReduceMotion', () => ({
 
 import {Animated} from 'react-native';
 import {Button} from './Button';
-import {ReadStatus} from './ReadStatus';
+import {ReadStatus, emptyLibraryCopy} from './ReadStatus';
 import {Field} from './Field';
 import {Icon} from './Icon';
 import {FocusPressable} from './Pressable';
@@ -533,4 +533,58 @@ test('legacy unknown completeness is not presented as a known incomplete read', 
   expect(JSON.stringify(renderer.toJSON())).toContain(
     'Memories are a partial view.',
   );
+});
+
+test('empty library copy keeps completeness instead of claiming emptiness', () => {
+  const incomplete = {
+    windowStatus: 'incomplete' as const,
+    complete: false,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'incomplete' as const,
+    reasons: ['accepted_work_pending'],
+  };
+  const complete = {
+    ...incomplete,
+    windowStatus: 'complete' as const,
+    complete: true,
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  expect(
+    emptyLibraryCopy(
+      'Memories',
+      incomplete,
+      false,
+      'No loaded memories match.',
+      'No memories yet.',
+    ),
+  ).toBe('Memories are incomplete.');
+  expect(
+    emptyLibraryCopy(
+      'Memories',
+      incomplete,
+      true,
+      'No loaded memories match.',
+      'No memories yet.',
+    ),
+  ).toBe('No loaded memories match.');
+  expect(
+    emptyLibraryCopy(
+      'Memories',
+      complete,
+      false,
+      'No loaded memories match.',
+      'No memories yet.',
+    ),
+  ).toBe('No memories yet.');
+  expect(
+    emptyLibraryCopy(
+      'Memories',
+      null,
+      false,
+      'No loaded memories match.',
+      'No memories yet.',
+    ),
+  ).toBe('No memories yet.');
 });

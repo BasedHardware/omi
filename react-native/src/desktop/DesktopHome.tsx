@@ -15,7 +15,7 @@ import type {
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
-import {ReadStatus} from '../ui/ReadStatus';
+import {ReadStatus, emptyLibraryCopy, readStatusCopy} from '../ui/ReadStatus';
 import {ShippingListInsert} from './ShippingStage';
 import {EmptyCopy, ReadRow, SectionTitle, TaskRow} from './DesktopRows';
 import {desktopTokens as token} from './tokens';
@@ -173,7 +173,13 @@ export function DesktopHome({
       ? 'Tasks load with your day.'
       : tasksOutcome.status === 'error'
       ? tasksOutcome.error
-      : 'No tasks yet';
+      : emptyLibraryCopy(
+          'Tasks',
+          tasksOutcome.value.page,
+          false,
+          'No tasks yet',
+          'No tasks yet',
+        );
   const conversationsOutcome = outcomes?.conversations ?? null;
   const memoriesOutcome = outcomes?.memories ?? null;
   const currentsError = [conversationsOutcome, memoriesOutcome].find(
@@ -186,7 +192,13 @@ export function DesktopHome({
       ? currentsError.error
       : query !== ''
       ? 'Nothing captured matches this search.'
-      : 'Nothing captured yet.';
+      : (conversationsOutcome.status === 'success'
+          ? readStatusCopy('Conversations', conversationsOutcome.value.page)
+          : null) ??
+        (memoriesOutcome.status === 'success'
+          ? readStatusCopy('Memories', memoriesOutcome.value.page)
+          : null) ??
+        'Nothing captured yet.';
   return (
     <View style={styles.home}>
       <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
@@ -236,7 +248,7 @@ export function DesktopHome({
           ) : (
             <EmptyCopy>{tasksEmptyCopy}</EmptyCopy>
           )}
-          {tasksOutcome?.status === 'success' ? (
+          {tasksOutcome?.status === 'success' && visibleTasks.length > 0 ? (
             <ReadStatus label="Tasks" mac page={tasksOutcome.value.page} />
           ) : null}
         </View>
@@ -255,14 +267,14 @@ export function DesktopHome({
           ) : (
             <EmptyCopy>{currentsEmptyCopy}</EmptyCopy>
           )}
-          {conversationsOutcome?.status === 'success' ? (
+          {conversationsOutcome?.status === 'success' && currents.length > 0 ? (
             <ReadStatus
               label="Conversations"
               mac
               page={conversationsOutcome.value.page}
             />
           ) : null}
-          {memoriesOutcome?.status === 'success' ? (
+          {memoriesOutcome?.status === 'success' && currents.length > 0 ? (
             <ReadStatus
               label="Memories"
               mac

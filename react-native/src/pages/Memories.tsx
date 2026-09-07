@@ -17,7 +17,7 @@ import {
 } from '../desktopReadClient';
 import {omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
-import {ReadStatus} from '../ui/ReadStatus';
+import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 
 function formatMemoryDate(timestamp: number | null): string {
@@ -173,7 +173,13 @@ export function MemoriesPage({
           ListEmptyComponent={
             <View style={styles.projectionEmpty}>
               <Text style={styles.projectionEmptyTitle}>
-                {filtering ? 'No loaded memories match.' : 'No memories yet.'}
+                {emptyLibraryCopy(
+                  'Memories',
+                  page,
+                  filtering,
+                  'No loaded memories match.',
+                  'No memories yet.',
+                )}
               </Text>
               {filtering && (
                 <Text style={styles.projectionEmptyCopy}>
@@ -185,7 +191,9 @@ export function MemoriesPage({
           ListFooterComponent={
             page === null ? null : (
               <View style={styles.memoryFooter}>
-                <ReadStatus label="Memories" page={page} />
+                {(results.length > 0 || filtering) && (
+                  <ReadStatus label="Memories" page={page} />
+                )}
                 {page.hasMore && page.nextCursor !== null && (
                   <FocusPressable
                     accessibilityLabel="Load more memories"

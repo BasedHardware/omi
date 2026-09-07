@@ -171,6 +171,15 @@ test('conflict refresh preserves dirty description while untouched descriptions 
   );
 });
 
+const incompletePage = {
+  windowStatus: 'incomplete' as const,
+  complete: false,
+  hasMore: false,
+  nextCursor: null,
+  completenessStatus: 'incomplete' as const,
+  reasons: ['accepted_work_pending'],
+};
+
 test('task grant denial shows the typed error instead of an empty library', () => {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
@@ -192,6 +201,31 @@ test('task grant denial shows the typed error instead of an empty library', () =
   expect(copy).toContain('This saved data is not available for this account.');
   expect(copy).not.toContain('No tasks yet.');
   expect(copy).not.toContain('Saved tasks could not be loaded.');
+});
+
+test('incomplete empty tasks do not claim a complete library', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [],
+            page: incompletePage,
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Tasks are incomplete.');
+  expect(copy).not.toContain('No tasks yet.');
 });
 
 test('task pagination stays available when loaded task search has no matches', () => {

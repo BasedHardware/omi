@@ -860,6 +860,57 @@ test('a successful empty read is the only path to the empty claims', async () =>
   );
 });
 
+test('an incomplete empty read does not claim a complete library', async () => {
+  const incompletePage = {
+    windowStatus: 'incomplete' as const,
+    complete: false,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'incomplete' as const,
+    reasons: ['accepted_work_pending'],
+  };
+  const incompleteOutcomes = {
+    conversations: {
+      status: 'success' as const,
+      value: {items: [], page: incompletePage},
+    },
+    memories: {
+      status: 'success' as const,
+      value: {items: [], page: incompletePage},
+    },
+    tasks: {
+      status: 'success' as const,
+      value: {accountEpoch: null, items: [], page: incompletePage},
+    },
+  };
+  const renderer = renderDesktop({
+    outcomes: incompleteOutcomes,
+    reads: [],
+    readsPhase: 'ready',
+  });
+  let tree = renderedText(renderer);
+  expect(tree).toContain('Conversations are incomplete.');
+  expect(tree).toContain('Tasks are incomplete.');
+  expect(tree).not.toContain('Nothing captured yet.');
+  expect(tree).not.toContain('No tasks yet');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Conversations')
+      .props.onPress();
+  });
+  tree = renderedText(renderer);
+  expect(tree).toContain('Conversations are incomplete.');
+  expect(tree).not.toContain('Nothing captured in this window yet.');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress();
+  });
+  tree = renderedText(renderer);
+  expect(tree).toContain('Tasks are incomplete.');
+  expect(tree).not.toContain('No tasks yet');
+});
+
 test('Apps is a wrapped gallery that does not invent catalog entries', async () => {
   const pages = kitSources['DesktopPages.tsx'];
   expect(pages).toMatch(/appGrid:\s*\{[^}]*flexWrap:\s*'wrap'/);

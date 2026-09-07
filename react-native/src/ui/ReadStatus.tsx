@@ -7,6 +7,46 @@ import type {
 } from '../desktopReadClient';
 import {styles} from './styles';
 
+export function readStatusCopy(
+  label: string,
+  page: ReadPageState,
+): string | null {
+  if (page.complete && page.completenessStatus === 'complete') {
+    return null;
+  }
+  if (!page.hasMore && page.completenessStatus === 'unknown') {
+    return null;
+  }
+  if (page.hasMore) {
+    return page.nextCursor === null
+      ? `Showing the first 50 ${label.toLowerCase()}. More may be available.`
+      : `More ${label.toLowerCase()} are available.`;
+  }
+  if (page.completenessStatus === 'degraded') {
+    return `${label} may be temporarily incomplete.`;
+  }
+  if (page.completenessStatus === 'partial') {
+    return `${label} are a partial view.`;
+  }
+  return `${label} are incomplete.`;
+}
+
+export function emptyLibraryCopy(
+  label: string,
+  page: ReadPageState | null,
+  filtering: boolean,
+  filteredCopy: string,
+  emptyCopy: string,
+): string {
+  if (filtering) {
+    return filteredCopy;
+  }
+  if (page === null) {
+    return emptyCopy;
+  }
+  return readStatusCopy(label, page) ?? emptyCopy;
+}
+
 export function ReadStatus({
   label,
   page,
@@ -16,21 +56,10 @@ export function ReadStatus({
   page: ReadPageState;
   mac?: boolean;
 }) {
-  if (page.complete && page.completenessStatus === 'complete') {
+  const detail = readStatusCopy(label, page);
+  if (detail === null) {
     return null;
   }
-  if (!page.hasMore && page.completenessStatus === 'unknown') {
-    return null;
-  }
-  const detail = page.hasMore
-    ? page.nextCursor === null
-      ? `Showing the first 50 ${label.toLowerCase()}. More may be available.`
-      : `More ${label.toLowerCase()} are available.`
-    : page.completenessStatus === 'degraded'
-    ? `${label} may be temporarily incomplete.`
-    : page.completenessStatus === 'partial'
-    ? `${label} are a partial view.`
-    : `${label} are incomplete.`;
   return (
     <View style={[styles.readStatus, mac && styles.macReadStatus]}>
       <Text style={[styles.readStatusText, mac && styles.macReadStatusText]}>

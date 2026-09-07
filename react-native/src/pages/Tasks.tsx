@@ -22,7 +22,7 @@ import {
   TaskMutationStatus,
   type TaskMutationProps,
 } from '../ui/TaskEditor';
-import {ReadStatus} from '../ui/ReadStatus';
+import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 
 const taskGroups: TaskGroup[] = ['Today', 'Tomorrow', 'Later'];
@@ -124,7 +124,13 @@ export function TasksPage({
       ) : filtered.length === 0 ? (
         <View style={styles.projectionEmpty}>
           <Text style={styles.projectionEmptyTitle}>
-            {filtering ? 'No loaded tasks match.' : 'No tasks yet.'}
+            {emptyLibraryCopy(
+              'Tasks',
+              outcome?.status === 'success' ? outcome.value.page : null,
+              filtering,
+              'No loaded tasks match.',
+              'No tasks yet.',
+            )}
           </Text>
           {filtering && (
             <Text style={styles.projectionEmptyCopy}>

@@ -62,6 +62,27 @@ const ids = (view: Renderer.ReactTestRenderer) =>
   (view.root.findByType(FlatList).props.data as MemoryProjection[]).map(
     item => item.id,
   );
+const incompletePage: ReadPageState = {
+  windowStatus: 'incomplete',
+  complete: false,
+  hasMore: false,
+  nextCursor: null,
+  completenessStatus: 'incomplete',
+  reasons: ['accepted_work_pending'],
+};
+const textOf = (view: Renderer.ReactTestRenderer) =>
+  view.root
+    .findAllByType(Text)
+    .flatMap(node =>
+      Array.isArray(node.props.children)
+        ? node.props.children
+        : [node.props.children],
+    )
+    .filter(
+      (value): value is string | number =>
+        typeof value === 'string' || typeof value === 'number',
+    )
+    .join(' ');
 beforeEach(() => mockLoad.mockReset());
 
 test.each(['resolve', 'reject'] as const)(
@@ -156,4 +177,40 @@ test('retiring the read outcome clears loaded memories and ignores its delayed p
   } finally {
     await act(async () => view.unmount());
   }
+});
+
+test('memory grant denial shows the typed error instead of an empty library', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'error',
+          error: 'This saved data is not available for this account.',
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(textOf(view)).toContain(
+    'This saved data is not available for this account.',
+  );
+  expect(textOf(view)).not.toContain('No memories yet.');
+});
+
+test('incomplete empty memories do not claim a complete library', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {items: [], page: incompletePage},
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(textOf(view)).toContain('Memories are incomplete.');
+  expect(textOf(view)).not.toContain('No memories yet.');
 });

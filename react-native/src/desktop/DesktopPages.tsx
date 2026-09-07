@@ -4,7 +4,7 @@ import Puzzle from 'lucide-react-native/icons/puzzle';
 import {loadConnectors, type CloudApp} from '../desktopCloudClient';
 import type {DesktopReadOutcomes} from '../desktopReadClient';
 import {omiBackend} from '../omiNative';
-import {ReadStatus} from '../ui/ReadStatus';
+import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {FocusPressable} from '../ui/Pressable';
 import {
   TaskEditor,
@@ -31,7 +31,13 @@ export function LibraryPage({
       ? 'Loading conversations…'
       : outcome.status === 'error'
       ? outcome.error
-      : 'Nothing captured in this window yet.';
+      : emptyLibraryCopy(
+          'Conversations',
+          outcome.value.page,
+          false,
+          'Nothing captured in this window yet.',
+          'Nothing captured in this window yet.',
+        );
   return (
     <View style={styles.page}>
       <ScrollView
@@ -46,7 +52,7 @@ export function LibraryPage({
         ) : (
           <EmptyCopy>{emptyCopy}</EmptyCopy>
         )}
-        {outcome?.status === 'success' ? (
+        {outcome?.status === 'success' && conversations.length > 0 ? (
           <ReadStatus label="Conversations" mac page={outcome.value.page} />
         ) : null}
       </ScrollView>
@@ -76,7 +82,13 @@ export function TasksPage({
       ? 'Loading tasks…'
       : outcome.status === 'error'
       ? outcome.error
-      : 'No tasks yet';
+      : emptyLibraryCopy(
+          'Tasks',
+          outcome.value.page,
+          false,
+          'No tasks yet',
+          'No tasks yet',
+        );
   return (
     <View style={styles.page}>
       <TaskMutationStatus
@@ -146,7 +158,7 @@ export function TasksPage({
           <EmptyCopy>{emptyCopy}</EmptyCopy>
         )}
         {taskPagination}
-        {outcome?.status === 'success' ? (
+        {outcome?.status === 'success' && tasks.length > 0 ? (
           <ReadStatus label="Tasks" mac page={outcome.value.page} />
         ) : null}
       </ScrollView>
