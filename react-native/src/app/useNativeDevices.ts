@@ -213,9 +213,6 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
             );
           }
           if (capture.id === null) {
-            const device = nativeSnapshotRef.current?.devices.find(
-              item => item.id === capture.deviceId,
-            );
             if (capture.captureId === null) {
               if (backend.createRecordingId === undefined) {
                 throw new Error('Native recording identity is unavailable');
@@ -241,7 +238,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
                   ? {}
                   : {capturedAtMs: capture.capturedAtMs}),
                 deviceId: capture.deviceId,
-                deviceName: capture.deviceName ?? device?.name,
+                deviceName: capture.deviceName,
                 codec: capture.codec,
               });
               if (current() && !capture.failed) {
