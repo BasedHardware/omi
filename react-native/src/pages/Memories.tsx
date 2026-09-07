@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -54,12 +54,19 @@ export function MemoriesPage({
   const [query, setQuery] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(false);
+  const generation = useRef(0);
+  const activeRequest = useRef(false);
   useEffect(() => {
-    if (outcome?.status === 'success') {
-      setItems(loaded);
-      setPage(outcome.value.page);
-      setLoadMoreError(false);
-    }
+    const currentGeneration = ++generation.current;
+    activeRequest.current = false;
+    setItems(loaded);
+    setPage(outcome?.status === 'success' ? outcome.value.page : null);
+    setLoadingMore(false);
+    setLoadMoreError(false);
+    return () => {
+      generation.current = currentGeneration + 1;
+      activeRequest.current = false;
+    };
   }, [loaded, outcome]);
   const results = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -73,25 +80,36 @@ export function MemoriesPage({
     if (
       omiBackend === null ||
       omiBackend === undefined ||
+      outcome?.status !== 'success' ||
       page?.nextCursor === null ||
       page?.nextCursor === undefined ||
-      loadingMore
+      activeRequest.current
     ) {
       return;
     }
+    const attempt = generation.current;
+    activeRequest.current = true;
     setLoadingMore(true);
     setLoadMoreError(false);
     try {
       const next = await loadMemories(omiBackend, page.nextCursor);
+      if (attempt !== generation.current) {
+        return;
+      }
       setItems(current => {
         const ids = new Set(current.map(item => item.id));
         return [...current, ...next.items.filter(item => !ids.has(item.id))];
       });
       setPage(next.page);
     } catch {
-      setLoadMoreError(true);
+      if (attempt === generation.current) {
+        setLoadMoreError(true);
+      }
     } finally {
-      setLoadingMore(false);
+      if (attempt === generation.current) {
+        activeRequest.current = false;
+        setLoadingMore(false);
+      }
     }
   };
   const renderItem = useCallback(
