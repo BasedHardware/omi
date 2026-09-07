@@ -1378,7 +1378,88 @@ test('Settings reports a nested non-retryable profile read as unavailable', asyn
   expect(renderedText(renderer)).not.toContain('Signed in to Omi');
 });
 
+test('Settings Alerts does not claim privacy slices unavailable while account is loading', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockReturnValueOnce(new Promise(() => {}));
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Alerts & Privacy')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain('Loading recording storage…');
+  expect(renderedText(renderer)).toContain('Loading private cloud sync…');
+  expect(renderedText(renderer)).not.toContain(
+    'Cloud recording storage status is unavailable.',
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Private cloud sync status is unavailable.',
+  );
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Update'),
+  ).toHaveLength(0);
+});
+
 test('Settings does not expose cloud mutations when account values failed to load', async () => {
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'This saved data could not be loaded. Retry without changing it.',
+  );
+  expect(renderedText(renderer)).not.toContain('Loading account…');
+  expect(renderedText(renderer)).not.toContain('Loading plan…');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Alerts & Privacy')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'This saved data could not be loaded. Retry without changing it.',
+  );
+  expect(renderedText(renderer)).not.toContain('Loading recording storage…');
+  expect(renderedText(renderer)).not.toContain('Loading private cloud sync…');
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Update'),
+  ).toHaveLength(0);
+});
+
+test('Settings reports a nested non-retryable recording-storage read as unavailable', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: desktopAccountSettingUnavailableCopy,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: desktopAccountSettingUnavailableCopy,
+    webhooks: null,
+    webhooksError: null,
+  });
   const renderer = renderDesktop();
   await act(async () => {
     renderer.root
@@ -1393,9 +1474,12 @@ test('Settings does not expose cloud mutations when account values failed to loa
       .props.onPress();
   });
   expect(renderedText(renderer)).toContain(
+    desktopAccountSettingUnavailableCopy,
+  );
+  expect(renderedText(renderer)).not.toContain(
     'Cloud recording storage status is unavailable.',
   );
-  expect(renderedText(renderer)).toContain(
+  expect(renderedText(renderer)).not.toContain(
     'Private cloud sync status is unavailable.',
   );
   expect(

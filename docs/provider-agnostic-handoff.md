@@ -126,7 +126,9 @@ Cloud Linux after `fc56024139`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `96328b6ff9`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Conversation-detail and mobile Home Load older controls are labeled Load older messages, matching desktop Home Load earlier messages. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the desktop Settings profile copy slice: a nested non-retryable `/v1/users/profile` read shows account-setting unavailable copy instead of "Signed in to Omi." Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `f5637cf962`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. A nested non-retryable `/v1/users/profile` read shows account-setting unavailable copy instead of "Signed in to Omi." Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the desktop Settings privacy loading slice: Alerts does not claim recording storage or private cloud sync unavailable while the account snapshot is still loading. A page-level `loadAccountSettings` failure surfaces the mapped error instead of leaving Account on "Loading account…". Nested non-retryable privacy-slice reads keep account-setting unavailable copy and omit Update. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

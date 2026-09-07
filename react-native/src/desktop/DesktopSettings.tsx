@@ -44,6 +44,23 @@ type Props = {
   softwarePlaneLocked: boolean;
 };
 
+function failedAccountSettings(error: string): AccountSettingsSnapshot {
+  return {
+    profile: null,
+    profileError: error,
+    subscription: null,
+    subscriptionError: error,
+    storeRecordingPermission: null,
+    storeRecordingError: error,
+    trainingOptedIn: null,
+    trainingError: error,
+    privateCloudSync: null,
+    privateCloudSyncError: error,
+    webhooks: null,
+    webhooksError: error,
+  };
+}
+
 const PANE_ITEM_HEIGHT = 40;
 const PANE_ITEM_GAP = 12;
 const PANE_PILL_RADIUS = 14;
@@ -213,8 +230,8 @@ export function DesktopSettings({
     if (backend !== undefined && backend !== null && session === 'ready') {
       try {
         nextAccount = await loadAccountSettings(backend);
-      } catch {
-        nextAccount = null;
+      } catch (reason) {
+        nextAccount = failedAccountSettings(desktopReadErrorCopy(reason));
       }
     }
     if (seq !== reloadSeqRef.current) {
@@ -519,8 +536,12 @@ export function DesktopSettings({
     <>
       <Row
         copy={
-          account?.storeRecordingPermission === null || account === null
-            ? account?.storeRecordingError ??
+          session !== 'ready'
+            ? 'Sign in to load this account setting.'
+            : account === null
+            ? 'Loading recording storage…'
+            : account.storeRecordingPermission === null
+            ? account.storeRecordingError ??
               'Cloud recording storage status is unavailable.'
             : account.storeRecordingPermission
             ? 'Cloud recording storage is on.'
@@ -546,8 +567,12 @@ export function DesktopSettings({
       />
       <Row
         copy={
-          account?.privateCloudSync === null || account === null
-            ? account?.privateCloudSyncError ??
+          session !== 'ready'
+            ? 'Sign in to load this account setting.'
+            : account === null
+            ? 'Loading private cloud sync…'
+            : account.privateCloudSync === null
+            ? account.privateCloudSyncError ??
               'Private cloud sync status is unavailable.'
             : account.privateCloudSync
             ? 'Private cloud sync is on.'
