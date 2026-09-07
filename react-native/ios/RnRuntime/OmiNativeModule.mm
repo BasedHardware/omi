@@ -261,6 +261,7 @@ RCT_REMAP_METHOD(connectDevice,
   [self.central stopScan];
   self.scanning = NO;
   [self finishSetting:nil error:@"Omi connection was replaced"];
+  [self finishStorage:nil];
   [self.settingCharacteristics removeAllObjects];
   _firstAudio.cancel();
   self.buttonNotifying = NO;
