@@ -1,7 +1,14 @@
 import Foundation
 
 /// App Group identifier shared between the main app and the widget extension.
-let appGroupIdentifier = "group.com.friend-app-with-wearable.ios12"
+/// Reads from Info.plist, which is populated via APP_GROUP_IDENTIFIER in Custom.xcconfig.
+let appGroupIdentifier: String = {
+    guard let id = Bundle.main.object(forInfoDictionaryKey: "AppGroupIdentifier") as? String, !id.isEmpty else {
+        // Fallback to the base identifier if not set (e.g. running without setup.sh)
+        return "group.com.friend-app-with-wearable.ios12"
+    }
+    return id
+}()
 
 /// Keys used to store device battery data in the shared UserDefaults.
 enum BatteryWidgetKeys {
