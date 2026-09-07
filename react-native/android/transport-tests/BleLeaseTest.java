@@ -2,6 +2,30 @@ package com.rnruntime;
 
 public final class BleLeaseTest {
   public static void main(String[] args) {
+    OmiBleLease.Scan<String> scan = new OmiBleLease.Scan<>();
+    int[] scanStops = {0}, scanResults = {0}, scanFailures = {0};
+    scan.begin(value -> { assert value.equals("devices"); scanResults[0]++; }, error -> scanFailures[0]++);
+    long scanTicket = scan.started();
+    assert scan.active() && scan.accepts(scanTicket);
+    scan.stop(() -> scanStops[0]++, () -> "devices");
+    assert !scan.active() && !scan.accepts(scanTicket) && scanStops[0] == 1 && scanResults[0] == 1;
+    scan.stop(() -> scanStops[0]++, () -> "devices");
+    assert scanStops[0] == 1 && scanResults[0] == 1;
+    scan.begin(value -> { assert value.equals("new devices"); scanResults[0]++; }, error -> scanFailures[0]++);
+    long nextScanTicket = scan.started();
+    if (scan.accepts(scanTicket)) scan.stop(() -> scanStops[0]++, () -> "wrong devices");
+    assert scan.active() && scan.accepts(nextScanTicket) && scanResults[0] == 1;
+    assert !scan.stop(() -> { throw new SecurityException(); }, () -> { throw new AssertionError("Failure must not resolve devices"); });
+    assert !scan.active() && scanResults[0] == 1 && scanFailures[0] == 1;
+    scan.begin(value -> { assert value.equals("unavailable"); scanResults[0]++; }, error -> scanFailures[0]++);
+    scan.stop(() -> { throw new AssertionError("Hardware never started"); }, () -> "unavailable");
+    assert scanResults[0] == 2;
+    scan.begin(value -> { throw new AssertionError("Failed start resolved"); }, error -> scanFailures[0]++);
+    scan.fail(new SecurityException());
+    assert !scan.active() && scanFailures[0] == 2;
+    scan.stop(() -> { throw new AssertionError("Failed scan never started"); }, () -> "devices");
+    assert scanFailures[0] == 2;
+
     OmiBleLease.FirstAudio audio = new OmiBleLease.FirstAudio();
     assert OmiBleLease.FirstAudio.WINDOW_MS == 4000;
     assert audio.begin();
