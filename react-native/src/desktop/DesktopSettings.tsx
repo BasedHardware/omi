@@ -458,7 +458,16 @@ export function DesktopSettings({
       ) : null}
       {account?.subscription != null ? (
         <Row
-          copy={`${account.subscription.plan} · ${account.subscription.status}`}
+          copy={[
+            account.subscription.plan,
+            account.subscription.status,
+            account.subscription.transcriptionSecondsUsed !== null &&
+            account.subscription.transcriptionSecondsLimit !== null
+              ? `${account.subscription.transcriptionSecondsUsed} / ${account.subscription.transcriptionSecondsLimit} transcribed seconds`
+              : null,
+          ]
+            .filter(item => item !== null)
+            .join(' · ')}
           title="Current plan"
         />
       ) : (
