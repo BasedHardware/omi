@@ -70,6 +70,7 @@ class OmiBleController(
   private var connectionState = "disconnected"
   private var scanActive = false
   private var lastEvent = "Bluetooth adapter not checked"
+  private val firstAudio = OmiBleLease.FirstAudio()
   private val reconnect = OmiBleLease.Reconnect()
   private var reconnectDeviceId: String? = null
   private var buttonNotifying = false
@@ -179,6 +180,7 @@ class OmiBleController(
       putNull("connectedDeviceId")
     }
     if (connectionState != "disconnected") putString("connectionId", currentGeneration.toString())
+    if (connectionState == "connected") putString("audioStatus", if (firstAudio.observed()) "active" else "waiting")
     putString("phase", connectionState)
     putString("capture", if (OmiBleLease.recordingReady(connectionState == "connected", audioNotifying, codec != null)) "recording" else "idle")
     putString("captureMode", "stream")
@@ -297,6 +299,7 @@ class OmiBleController(
     gatt?.close()
     results[id]?.let { results[id] = it.copy(information = emptyMap(), features = null, ledBrightness = null, microphoneGain = null, charging = null) }
     clearGattQueue()
+    firstAudio.cancel()
     buttonNotifying = false
     audioNotifying = false
     codec = null
@@ -414,6 +417,7 @@ class OmiBleController(
       ) {
         synchronized(this@OmiBleController) {
           if (!lease.accepts(generation)) return
+          if (characteristic.uuid == UUID.fromString(OMI_AUDIO_UUID) && firstAudio.receive(value.size)) emitSnapshot()
           if (characteristic.uuid == BUTTON_UUID) handleButton(value) else handleValue(characteristic, value)
         }
       }
@@ -425,6 +429,7 @@ class OmiBleController(
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             return
           }
+          if (characteristic.uuid == UUID.fromString(OMI_AUDIO_UUID) && firstAudio.receive(characteristic.value?.size ?: 0)) emitSnapshot()
           if (characteristic.uuid == BUTTON_UUID) characteristic.value?.let { handleButton(it) } else handleValue(characteristic)
         }
       }
@@ -479,6 +484,7 @@ class OmiBleController(
           ) {
             audioNotifying = true
             lastEvent = "Omi audio notify is live"
+            if (firstAudio.begin()) watchFirstAudio(gatt, generation)
             reconnectDeviceId = connectedDeviceId
             reconnect.ready()
             OmiWearableService.update(wearableTicket, "Omi connected · Wearable audio available")
@@ -566,6 +572,21 @@ class OmiBleController(
     val descriptor = characteristic.getDescriptor(CLIENT_CONFIG_UUID) ?: return false
     descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
     return gatt.writeDescriptor(descriptor)
+  }
+
+  private fun watchFirstAudio(current: BluetoothGatt, generation: Long) {
+    val ticket = firstAudio.token()
+    handler.postDelayed({ synchronized(this) {
+      if (!lease.acceptsGatt(generation, gatt, current)) return@synchronized
+      when (firstAudio.timeout(ticket)) {
+        1 -> {
+          val audio = current.getService(UUID.fromString(OMI_SERVICE_UUID))?.getCharacteristic(UUID.fromString(OMI_AUDIO_UUID))
+          if (audio == null) retireConnection("Omi audio is unavailable")
+          else { enqueueGatt(current, GattOp.EnableNotify(audio)); watchFirstAudio(current, generation) }
+        }
+        -1 -> { lastEvent = "Omi connected · Waiting for audio"; emitSnapshot() }
+      }
+    } }, OmiBleLease.FirstAudio.WINDOW_MS.toLong())
   }
 
   private fun handleButton(value: ByteArray) {
@@ -671,6 +692,7 @@ class OmiBleController(
     val previous = gatt
     gatt = null
     clearGattQueue()
+    firstAudio.cancel()
     buttonNotifying = false
     audioNotifying = false
     codec = null
