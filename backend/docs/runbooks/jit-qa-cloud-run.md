@@ -46,7 +46,12 @@ and never creates, exports, or prints their values. No shared
 Redis/cache, Typesense, Pinecone, queue, connector, notification, or customer
 credential binding is copied into the plane.
 The desktop QA service also receives the development `GEMINI_API_KEY` binding
-required by its batch OCR path; the gateway does not receive that key.
+required by its batch OCR path; backend and gateway do not receive that
+environment binding. All QA workloads share the runtime identity, so its
+resource-level Secret Manager grants are accessible to every workload using
+that identity. This is a shared QA trust boundary, not per-workload IAM
+isolation; the desktop-only binding does not prevent another QA workload from
+fetching the development key directly.
 
 Memorystore Basic M1 pricing is approximately `$0.049/GiB-hour` in Iowa, or
 about `$35.77` for 730 hours for the 1 GiB instance, before other dev costs.
