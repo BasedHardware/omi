@@ -12,6 +12,10 @@ static BOOL OmiRecordingCapturedAtMatches(id expected, id actual) {
     && (expected == nil ? actual == nil : [expected isEqual:actual]);
 }
 
+static BOOL OmiRecordingRetryableOwnershipStatus(NSInteger status) {
+  return status == 408 || status == 429 || (status >= 500 && status <= 599);
+}
+
 static BOOL OmiRecordingOffline(NSError *error) {
   if (![error.domain isEqual:NSURLErrorDomain]) return NO;
   switch (error.code) {

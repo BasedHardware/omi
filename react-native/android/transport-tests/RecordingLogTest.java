@@ -36,6 +36,15 @@ public final class RecordingLogTest {
         rejects(() -> { try (OmiRecordingLog duplicate = new OmiRecordingLog(path, key, owner, SYNC)) { throw new AssertionError(); } });
         rejects(() -> log.append(new byte[OmiRecordingLog.MAX_ENTRY_BYTES + 1]));
       }
+      OmiRecordingLog retired = new OmiRecordingLog(path, key, owner, SYNC);
+      retired.close();
+      retired.close();
+      rejects(() -> retired.append(new byte[]{9}));
+      try (OmiRecordingLog replacement = new OmiRecordingLog(path, key, owner, SYNC)) {
+        assert replacement.readAll().size() == 2;
+        rejects(() -> retired.append(new byte[]{9}));
+        assert replacement.readAll().size() == 2;
+      }
       byte[] original = Files.readAllBytes(path.toPath());
       assert !new String(original, java.nio.charset.StandardCharsets.ISO_8859_1).contains("Synthetic speech");
       Process crashed = new ProcessBuilder(new File(System.getProperty("java.home"), "bin/java").getPath(),

@@ -16,6 +16,7 @@ static BOOL OmiRecordingMatches(NSString *value, NSString *pattern) {
 static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$";
 
 @interface OmiRecordingJournals : NSObject {
+  BOOL _disposed;
   NSString *_root;
   NSString *_keyTag;
   NSString *(^_currentLogin)(void);
@@ -30,6 +31,7 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
 - (BOOL)acknowledgeOpen:(NSString *)handle request:(NSDictionary *)request response:(NSDictionary *)response error:(NSError **)error;
 - (BOOL)remove:(NSString *)handle error:(NSError **)error;
 - (void)close;
+- (void)dispose;
 @end
 
 @implementation OmiRecordingJournals
@@ -39,7 +41,7 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
   return self;
 }
 - (BOOL)valid:(NSDictionary *)owner error:(NSError **)error {
-  if (![owner[@"login"] isEqual:_currentLogin()] || !OmiRecordingMatches(owner[@"ownerKey"], @"^capture-owner-v1:[0-9a-f]{64}$")
+  if (_disposed || ![owner[@"login"] isEqual:_currentLogin()] || !OmiRecordingMatches(owner[@"ownerKey"], @"^capture-owner-v1:[0-9a-f]{64}$")
       || !OmiRecordingMatches(owner[@"receipt"], @"^capture1\\.[0-9a-f]{64}\\.[0-9a-f]{64}$")) return OmiRecordingError(error);
   return YES;
 }
@@ -249,5 +251,6 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
   [_entries removeObjectForKey:handle];
   return YES;
 }
+- (void)dispose { _disposed = YES; [self close]; }
 - (void)close { for (NSDictionary *entry in _entries.allValues) [entry[@"log"] close]; [_entries removeAllObjects]; }
 @end

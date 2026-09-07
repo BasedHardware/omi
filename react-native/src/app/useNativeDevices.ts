@@ -60,11 +60,15 @@ function mergeBattery(
   };
 }
 
+const pausedUploadMessage =
+  'Recording is saved on this device. Upload is paused and will retry automatically.';
+
 export const DEVICE_UPLOAD_LIMITS = {
   maxPendingBytes: 8_388_608,
   maxSessionBytes: 8_388_608,
   maxChunks: 65_536,
   retryDelaysMs: [500, 1000, 2000],
+  resumeDelaysMs: [5000, 10000, 20000, 30000],
 } as const;
 
 type CaptureSession = {
@@ -76,6 +80,7 @@ type CaptureSession = {
   uploadPaused: boolean;
   journal: RecordingJournal | null;
   journalWork: Promise<void>;
+  bufferRelease: Promise<void>;
   deviceName?: string;
   transcriptionRevision: number;
   captureId: string | null;
@@ -115,6 +120,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
   const pendingBytesRef = useRef(0);
   const capturesRef = useRef(new Set<CaptureSession>());
   const retryWaitsRef = useRef(new Set<() => void>());
+  const pausedRetryRef = useRef({scheduled: false, running: false, attempt: 0});
   const journalReadyRef = useRef<Promise<void> | null>(null);
   const epochRef = useRef(0);
   const transcriptionRevisionRef = useRef(0);
@@ -133,7 +139,10 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
           pendingBytesRef.current -= retainedBytes;
       };
       if (omiBackend != null && hasRecordingJournal(omiBackend)) {
-        void capture.journalWork.then(release, release);
+        capture.bufferRelease = Promise.all([
+          capture.bufferRelease,
+          capture.journalWork.then(release, release),
+        ]).then(() => undefined);
       } else release();
     },
     [],
@@ -199,6 +208,104 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
             });
           }
         }
+      };
+      const scheduleResume = () => {
+        const state = pausedRetryRef.current;
+        if (
+          !current() ||
+          state.scheduled ||
+          state.running ||
+          ![...capturesRef.current].some(
+            item => item.uploadPaused && !item.failed,
+          )
+        )
+          return;
+        state.scheduled = true;
+        const delays = DEVICE_UPLOAD_LIMITS.resumeDelaysMs;
+        const delay = delays[Math.min(state.attempt++, delays.length - 1)]!;
+        const cancel = () => {
+          clearTimeout(timer);
+          state.scheduled = false;
+          retryWaitsRef.current.delete(cancel);
+        };
+        const timer = setTimeout(() => {
+          cancel();
+          if (!current()) return;
+          state.running = true;
+          void (async () => {
+            for (const paused of [...capturesRef.current]) {
+              if (!current()) return;
+              if (paused.failed || !capturesRef.current.has(paused)) continue;
+              if (
+                !paused.uploadPaused ||
+                paused.failed ||
+                paused.journal === null
+              )
+                continue;
+              try {
+                await paused.journalWork;
+                if (!current()) return;
+                if (paused.failed || !capturesRef.current.has(paused)) continue;
+                if (paused.stopped) {
+                  await paused.journalWork;
+                  await paused.bufferRelease;
+                  if (!current()) return;
+                  if (paused.failed || !capturesRef.current.has(paused))
+                    continue;
+                  const restored = restoreRecording(
+                    await omiBackend!.readRecordingJournal!(
+                      paused.journal.handle,
+                    ),
+                  );
+                  if (!current()) return;
+                  if (paused.failed || !capturesRef.current.has(paused))
+                    continue;
+                  const bytes = restored.pending.reduce(
+                    (sum, packet) => sum + packet.length,
+                    0,
+                  );
+                  if (
+                    pendingBytesRef.current + bytes >
+                    DEVICE_UPLOAD_LIMITS.maxPendingBytes
+                  )
+                    continue;
+                  paused.journal = restored.journal;
+                  paused.id = restored.journal.sessionId;
+                  paused.chunkIndex = restored.acknowledged;
+                  paused.pending = restored.pending;
+                  paused.bufferedBytes = bytes;
+                  pendingBytesRef.current += bytes;
+                }
+                paused.uploadPaused = false;
+                await processCapture(paused, epoch);
+              } catch {
+                if (current()) failJournal(paused, epoch);
+              }
+            }
+          })().finally(() => {
+            state.running = false;
+            if (current()) {
+              if (
+                ![...capturesRef.current].some(
+                  item => item.uploadPaused && !item.failed,
+                )
+              ) {
+                state.attempt = 0;
+                setDeviceScanMessage(message =>
+                  message === pausedUploadMessage ? null : message,
+                );
+              }
+              scheduleResume();
+            }
+          });
+        }, delay);
+        retryWaitsRef.current.add(cancel);
+      };
+      const pauseUpload = () => {
+        capture.uploadPaused = true;
+        if (capture.stopped) releaseCaptureBuffer(capture, epoch);
+        setDeviceScanMessage(pausedUploadMessage);
+        scheduleResume();
       };
       const work = (async () => {
         try {
@@ -302,14 +409,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
             capture.journal !== null &&
             isTransientDeviceSessionError(error)
           ) {
-            capture.uploadPaused = true;
-            if (capture.stopped) {
-              releaseCaptureBuffer(capture, epoch);
-              capturesRef.current.delete(capture);
-            }
-            setDeviceScanMessage(
-              'Recording is saved on this device. Upload is paused; reopen the app online to recover it.',
-            );
+            pauseUpload();
             return;
           }
           capture.failed = true;
@@ -329,24 +429,32 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
           return;
         }
         if (current() && !capture.failed && capture.stopped) {
-          capture.completed = true;
           try {
             await capture.journalWork;
             if (!current()) {
               return;
             }
             await retry(() => completeDeviceSession(backend, capture.id!));
-          } catch {
+          } catch (error) {
             if (current()) {
-              setDeviceScanMessage(
-                'Audio was uploaded, but the recording could not be finalized. Its saved status is unconfirmed.',
-              );
+              if (
+                capture.journal !== null &&
+                isTransientDeviceSessionError(error)
+              )
+                pauseUpload();
+              else {
+                capture.failed = true;
+                setDeviceScanMessage(
+                  'Audio was uploaded, but the recording could not be finalized. Its saved status is unconfirmed.',
+                );
+              }
             }
             return;
           }
           if (!current()) {
             return;
           }
+          capture.completed = true;
           const revision = capture.transcriptionRevision;
           const canReport = () =>
             current() && revision === transcriptionRevisionRef.current;
@@ -417,7 +525,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       });
       return work;
     },
-    [releaseCaptureBuffer],
+    [releaseCaptureBuffer, failJournal],
   );
 
   const finishSession = useCallback(
@@ -446,22 +554,12 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
         void capture.journalWork.catch(() => failJournal(capture, epoch));
       }
       const work = processCapture(capture, epoch);
-      if (capture.uploadPaused) {
-        try {
-          await capture.journalWork;
-          pendingBytesRef.current -= capture.bufferedBytes;
-          capture.bufferedBytes = 0;
-          capture.pending = [];
-          capturesRef.current.delete(capture);
-        } catch {
-          failJournal(capture, epoch);
-        }
-      }
+      if (capture.uploadPaused) releaseCaptureBuffer(capture, epoch);
       if (capture.id !== null) {
         await work;
       }
     },
-    [failJournal, processCapture],
+    [failJournal, processCapture, releaseCaptureBuffer],
   );
 
   const persistAudio = useCallback(
@@ -527,6 +625,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
           uploadPaused: false,
           journal: null,
           journalWork: Promise.resolve(),
+          bufferRelease: Promise.resolve(),
           deviceName: nativeSnapshotRef.current?.devices.find(
             item => item.id === event.deviceId,
           )?.name,
@@ -722,6 +821,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       for (const stop of retryWaitsRef.current) {
         stop();
       }
+      pausedRetryRef.current = {scheduled: false, running: false, attempt: 0};
       cancelledRef.current = true;
       nativeSnapshotRef.current = null;
       const native = omiNative;
@@ -789,6 +889,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
               uploadPaused: false,
               journal: restored.journal,
               journalWork: Promise.resolve(),
+              bufferRelease: Promise.resolve(),
               deviceName: restored.journal.deviceName ?? undefined,
               transcriptionRevision: transcriptionRevisionRef.current,
               captureId: restored.journal.captureId,

@@ -38,6 +38,22 @@ private data class BackendPolicy(
 
 class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
   private val executor = Executors.newCachedThreadPool()
+  private val retirement = Any()
+  @Volatile private var disposed = false
+  private val connections = mutableSetOf<java.net.HttpURLConnection>()
+  private fun requireActive() {
+    if (disposed) throw TransportException("OMI_HTTP_CANCELLED", "Native backend is disposed")
+  }
+  private fun submit(promise: Promise, operation: () -> Unit) {
+    if (disposed) { promise.reject("OMI_HTTP_CANCELLED", "Native backend is disposed"); return }
+    try {
+      executor.execute {
+        if (disposed) promise.reject("OMI_HTTP_CANCELLED", "Native backend is disposed") else operation()
+      }
+    } catch (_: java.util.concurrent.RejectedExecutionException) {
+      promise.reject("OMI_HTTP_CANCELLED", "Native backend is disposed")
+    }
+  }
   private val listeners = AtomicInteger()
   private val recordingJournals = OmiRecordingJournals(context) { OmiCloudSession.journalLogin(context) }
   private data class ActiveGeneration(val stream: OmiGenerationStream, val promise: Promise,
@@ -57,6 +73,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
   }
 
   private fun emitSessionInvalidated() {
+    if (disposed) return
     cancelAllGenerations()
     recordingJournals.close()
     if (listeners.get() > 0) reactApplicationContext
@@ -86,15 +103,18 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
   internal fun rememberedDevice(action: String, id: String?, name: String?, current: () -> Boolean, promise: Promise) {
     val ticket = synchronized(rememberedLock) { ++rememberedGeneration }
     val login = OmiCloudSession.journalLogin(reactApplicationContext)
-    executor.execute {
+    submit(promise) {
       try {
         if (login == null) {
-          if (action == "get" || action == "forget") { promise.resolve(null); return@execute }
+          if (action == "get" || action == "forget") { promise.resolve(null); return@submit }
           error("Native login is unavailable")
         }
         val saved = OmiCloudSession.rememberedDevice(reactApplicationContext)
         val owner = if (action == "save" || (action == "get" && saved != null)) recordingOwner() else null
+        synchronized(OmiCloudSession) {
+        synchronized(retirement) {
         synchronized(rememberedLock) {
+          requireActive()
           check(OmiRecordingPolicy.rememberedCurrent(ticket, rememberedGeneration, login, OmiCloudSession.journalLogin(reactApplicationContext), current()))
           if (owner != null) check(owner.origin == resolvedPolicy(false)?.let { requestBaseURL(it, "/v1/device-sessions/ownership")?.toString() })
           if (action == "forget") { OmiCloudSession.updateRememberedDevice(reactApplicationContext, login, null); promise.resolve(null) }
@@ -107,11 +127,14 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
             promise.resolve(selected?.let { Arguments.createMap().apply { putString("id", it.getString("id")); putString("name", it.getString("name")) } })
           }
         }
+        }
+        }
       } catch (_: Exception) { promise.reject("OMI_REMEMBERED_DEVICE", "Remembered device is unavailable. Check your connection and try again.") }
     }
   }
 
   private fun recordingOwner(allowCached: Boolean = false): OmiRecordingOwner {
+    requireActive()
     val configured = resolvedPolicy(false) ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Recording ownership is unavailable")
     val login = OmiCloudSession.journalLogin(reactApplicationContext)
       ?: throw TransportException("OMI_RECORDING_OWNERSHIP", "A persistent native login is required for recording")
@@ -122,14 +145,17 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
       val response = performRequest(Arguments.createMap().apply {
         putString("id", "recording-ownership"); putString("method", "GET"); putString("path", "/v1/device-sessions/ownership")
       }, policy)
-      if (response.getInt("status") == 503 && JSONObject(response.getString("body").orEmpty()).optJSONObject("error")?.optString("code") == "capture_ownership_unavailable")
+      if (response.getInt("status") == 503 && runCatching { JSONObject(response.getString("body").orEmpty()).optJSONObject("error")?.optString("code") }.getOrNull() == "capture_ownership_unavailable")
         throw TransportException("OMI_CAPTURE_OWNERSHIP_UNAVAILABLE", "Recording ownership is unavailable from this backend")
+      if (OmiRecordingPolicy.retryableOwnershipStatus(response.getInt("status"))) throw TransportException("OMI_HTTP_TRANSPORT", "Recording ownership could not be refreshed")
       if (response.getInt("status") != 200) throw TransportException("OMI_RECORDING_OWNERSHIP", "Recording ownership is unavailable from this backend")
       val ownership = JSONObject(response.getString("body").orEmpty()).getJSONObject("ownership")
       if (login != OmiCloudSession.journalLogin(reactApplicationContext)) throw TransportException("OMI_RECORDING_OWNERSHIP", "Recording login changed")
       val owner = OmiRecordingOwner(ownership.getString("ownerKey"), ownership.getString("receipt"), origin, login)
       require(Regex("capture-owner-v1:[0-9a-f]{64}").matches(owner.ownerKey) && Regex("capture1\\.[0-9a-f]{64}\\.[0-9a-f]{64}").matches(owner.receipt))
-      OmiCloudSession.storeRecordingOwner(reactApplicationContext, owner)
+      synchronized(OmiCloudSession) {
+        synchronized(retirement) { requireActive(); OmiCloudSession.storeRecordingOwner(reactApplicationContext, owner) }
+      }
       return owner
     } catch (failure: java.io.IOException) {
       if (allowCached && OmiRecordingPolicy.offline(failure) && OmiRecordingPolicy.sameContext(login,
@@ -141,8 +167,8 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
   }
 
   private fun journalOperation(promise: Promise, operation: () -> Any?) {
-    executor.execute {
-      try { promise.resolve(operation()) }
+    submit(promise) {
+      try { requireActive(); val result = operation(); requireActive(); promise.resolve(result) }
       catch (error: TransportException) { promise.reject(error.code, error.message) }
       catch (_: Exception) { promise.reject("OMI_RECORDING_JOURNAL", "Recording journal operation failed; saved audio was retained") }
     }
@@ -185,7 +211,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
 
   @ReactMethod
   fun request(value: ReadableMap, promise: Promise) {
-    executor.execute {
+    submit(promise) {
       try {
         val path = value.getString("path").orEmpty()
         val method = value.getString("method").orEmpty()
@@ -194,7 +220,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
           val owner = try { recordingOwner() } catch (failure: TransportException) {
             if (failure.code != "OMI_CAPTURE_OWNERSHIP_UNAVAILABLE") throw failure
             promise.resolve(performRequest(value))
-            return@execute
+            return@submit
           }
           val policy = resolvedPolicy() ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Recording backend is unavailable")
           if (owner.login != OmiCloudSession.journalLogin(reactApplicationContext) || owner.origin != requestBaseURL(policy, path)?.toString())
@@ -221,11 +247,14 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
       return
     }
     val active = ActiveGeneration(stream, promise)
+    synchronized(retirement) {
+    if (disposed) { promise.reject("OMI_HTTP_CANCELLED", "Native backend is disposed"); return }
     if (generations.putIfAbsent(generationId, active) != null) {
       promise.reject("OMI_HTTP_INVALID_REQUEST", "Generation request is already active")
       return
     }
-    executor.execute {
+    }
+    submit(promise) {
       try {
         var currentPolicy: BackendPolicy? = null
         val result = stream.run({ cursor ->
@@ -249,7 +278,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
         }, { data -> JSONObject(data).optString("kind") in setOf("done", "failed", "cancelled") }, { status ->
           val policy = currentPolicy
           if (status == 401 && policy?.kind == CredentialKind.Cloud &&
-            OmiCloudSession.invalidateToken(reactApplicationContext, policy.token)) emitSessionInvalidated()
+            OmiCloudSession.invalidateToken(reactApplicationContext, policy.token, retirement) { !disposed }) emitSessionInvalidated()
         })
         if (active.finished.compareAndSet(false, true)) promise.resolve(Arguments.createMap().apply {
           putString("id", generationId)
@@ -276,7 +305,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
       return
     }
     val active = generations[generationId]
-    executor.execute {
+    submit(promise) {
       try {
         val response = performRequest(Arguments.createMap().apply {
           putString("id", generationId)
@@ -308,12 +337,19 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
   }
 
   override fun invalidate() {
-    recordingJournals.close()
+    val pending = synchronized(retirement) {
+      disposed = true
+      connections.toList().also { connections.clear() }
+    }
+    pending.forEach { runCatching { it.disconnect() } }
+    recordingJournals.dispose()
     cancelAllGenerations()
+    executor.shutdown()
     super.invalidate()
   }
 
   private fun performRequest(value: ReadableMap, resolved: BackendPolicy? = null, receipt: String? = null): com.facebook.react.bridge.WritableMap {
+    requireActive()
     val policy = resolved ?: resolvedPolicy() ?: throw TransportException(
       "OMI_HTTP_UNCONFIGURED",
       "Native HTTP configuration is unavailable",
@@ -340,7 +376,13 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     if (!sameOrigin(url, base.toURL())) {
       throw TransportException("OMI_HTTP_INVALID_REQUEST", "Native HTTP request is unavailable or invalid")
     }
-    val connection = OmiBackendTransport.openConnection(url).apply {
+    val connection = synchronized(retirement) {
+      requireActive()
+      OmiBackendTransport.openConnection(url).also { connections.add(it) }
+    }
+    try {
+      requireActive()
+      connection.apply {
       requestMethod = method
       connectTimeout = 15_000
       readTimeout = OmiBackendTransport.readTimeoutMillis(method, path)
@@ -354,16 +396,20 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
       if (body != null) {
         doOutput = true
         setRequestProperty("content-type", "application/json")
-        outputStream.use { stream -> stream.write(body.toByteArray(StandardCharsets.UTF_8)) }
       }
-    }
-    try {
+      }
+      requireActive()
+      connection.connect()
+      requireActive()
+      if (body != null) connection.outputStream.use { stream -> stream.write(body.toByteArray(StandardCharsets.UTF_8)) }
       val status = connection.responseCode
+      requireActive()
       if (status == 401 && policy.kind == CredentialKind.Cloud &&
-        OmiCloudSession.invalidateToken(reactApplicationContext, policy.token)) emitSessionInvalidated()
+        OmiCloudSession.invalidateToken(reactApplicationContext, policy.token, retirement) { !disposed }) emitSessionInvalidated()
       val responseBytes = (if (status >= 400) connection.errorStream else connection.inputStream)?.readBytes()
       val responseBody = responseBytes?.toString(StandardCharsets.UTF_8)
       val retryAfter = connection.getHeaderField("Retry-After")?.toIntOrNull()
+      requireActive()
       return Arguments.createMap().apply {
         putString("id", requestId)
         putInt("status", status)
@@ -375,11 +421,13 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
         }
       }
     } finally {
+      synchronized(retirement) { connections.remove(connection) }
       connection.disconnect()
     }
   }
 
   private fun resolvedPolicy(refresh: Boolean = true): BackendPolicy? {
+    requireActive()
     val environment = System.getenv()
     val developmentBackend = environment["OMI_DEV_BACKEND"].orEmpty()
     val localURL = environment["OMI_LOCAL_BACKEND_URL"].orEmpty()
@@ -397,7 +445,8 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
         kind = if (developmentBackend.isNotEmpty()) CredentialKind.ExamplePlatform else CredentialKind.Local,
       )
     }
-    val cloud = (if (refresh) OmiCloudSession.token(reactApplicationContext) else OmiCloudSession.cachedToken(reactApplicationContext)).orEmpty()
+    val cloud = (if (refresh) OmiCloudSession.token(reactApplicationContext, retirement) { !disposed } else OmiCloudSession.cachedToken(reactApplicationContext)).orEmpty()
+    requireActive()
     if (cloud.isEmpty()) {
       emitSessionInvalidated()
       return null

@@ -26,6 +26,7 @@ internal class OmiRecordingJournals(
 ) {
   private data class Entry(val id: String, val owner: OmiRecordingOwner, val file: File,
     val log: OmiRecordingLog, val input: JSONObject, var sessionId: String? = null)
+  private var disposed = false
   private val entries = mutableMapOf<String, Entry>()
   private val root = File(context.noBackupFilesDir, "recording-journals")
   private val uuid = Regex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
@@ -49,6 +50,7 @@ internal class OmiRecordingJournals(
     check(files.sumOf { it.length() } + extra <= 134_217_728L && (!creating || files.size < 64)) { "Recording journal storage is full" }
   }
   private fun valid(owner: OmiRecordingOwner) {
+    check(!disposed) { "Recording journals are disposed" }
     check(owner.login == currentLogin()) { "Recording journal login changed" }
     require(Regex("capture-owner-v1:[0-9a-f]{64}").matches(owner.ownerKey)
       && Regex("capture1\\.[0-9a-f]{64}\\.[0-9a-f]{64}").matches(owner.receipt))
@@ -176,6 +178,10 @@ internal class OmiRecordingJournals(
     check(entry.file.delete())
     sync(entry.file.parentFile!!)
     entries.remove(handle)
+  }
+  @Synchronized fun dispose() {
+    disposed = true
+    close()
   }
   @Synchronized fun close() {
     for (entry in entries.values) entry.log.close()
