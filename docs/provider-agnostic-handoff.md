@@ -132,7 +132,9 @@ Cloud Linux after `528e1e2d74`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `a10392f4f6`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Alerts now shows the already-loaded training opt-in slice instead of omitting that closed `/v1/users/training-data-opt-in` door. Loading, page-level failure, nested non-retryable reads, and nested non-retryable Opt in writes use the same honesty as recording storage and private cloud sync. This does not invent a Settings identity producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the desktop Settings webhook slice: AI & Automation now shows the already-loaded `/v1/users/developer/webhooks/status` slice instead of omitting that closed developer door. Loading, nested non-retryable reads, and an honest empty catalogue keep the same claims as mobile Developer settings. This does not invent a webhook producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `0459fda85e`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. AI & Automation now shows the already-loaded `/v1/users/developer/webhooks/status` slice instead of omitting that closed developer door. Loading, nested non-retryable reads, and an honest empty catalogue keep the same claims as mobile Developer settings. This does not invent a webhook producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the Apps owner-profile honesty slice: My Apps no longer says owned apps are unavailable until the account profile loads after a nested non-retryable `/v1/users/profile` read. It uses account-setting unavailable copy instead. This does not invent an Apps owner producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

@@ -123,7 +123,7 @@ export function ConnectorsPage({
       {
         empty:
           snapshot.ownerUid === null
-            ? 'Owned apps are unavailable until the account profile loads.'
+            ? snapshot.ownerError ?? 'Owned apps are unavailable.'
             : 'No apps owned by this account.',
         items: myApps(snapshot, snapshot.ownerUid),
         key: 'My Apps',

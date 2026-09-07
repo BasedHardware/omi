@@ -1067,6 +1067,7 @@ test('loadConnectors merges enabled ids and keeps owner filtering honest', async
   });
   const snapshot = await loadConnectors(backend);
   expect(snapshot.ownerUid).toBe('user-1');
+  expect(snapshot.ownerError).toBeNull();
   expect(exploreApps(snapshot).map(app => app.id)).toEqual([
     'catalog-app-1',
     'catalog-app-2',
@@ -1099,6 +1100,35 @@ test('loadConnectors nested non-retryable 503s are unavailable without retry cop
       }),
     ),
   ).toBe(false);
+});
+
+test('loadConnectors nested non-retryable profile 503s do not claim the owner is still loading', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  });
+  const backend = backendFor(request => {
+    if (request.path === '/v1/apps') {
+      return {
+        status: 200,
+        body: JSON.stringify([{id: 'catalog-app-1', name: 'Owned app'}]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {status: 503, body};
+    }
+    return {status: 404, body: null};
+  });
+  const snapshot = await loadConnectors(backend);
+  expect(snapshot.ownerUid).toBeNull();
+  expect(snapshot.ownerError).toBe(desktopAccountSettingUnavailableCopy);
+  expect(snapshot.ownerError).not.toBe(desktopBackendUnavailableCopy);
 });
 
 test('loadAccountSettings nested non-retryable 503s keep slices independent without retry copy', async () => {

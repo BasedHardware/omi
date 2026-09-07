@@ -29,6 +29,7 @@ export type ConnectorsSnapshot = {
   enabledIds: string[] | null;
   enabledError: string | null;
   ownerUid: string | null;
+  ownerError: string | null;
 };
 
 export type CloudProfile = {
@@ -350,6 +351,7 @@ export async function loadConnectors(
       enabledIds: null,
       enabledError: settledError(enabledResult.reason),
       ownerUid: owner.value?.uid ?? null,
+      ownerError: owner.error,
     };
   }
   const enabledIds = parseEnabledAppIds(
@@ -365,6 +367,7 @@ export async function loadConnectors(
     enabledIds,
     enabledError: null,
     ownerUid: owner.value?.uid ?? null,
+    ownerError: owner.error,
   };
 }
 

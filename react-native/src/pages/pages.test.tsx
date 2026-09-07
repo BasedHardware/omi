@@ -469,6 +469,43 @@ test('omitted Apps 503 retryable still offers Retry', async () => {
   expect(labelsOf(renderer)).toContain('Retry apps');
 });
 
+test('nested non-retryable Apps profile reads do not claim owned apps are still loading', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([{id: 'catalog-app-1', name: 'Owned app'}]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 503,
+        body: JSON.stringify({
+          error: {
+            code: 'development_backend_unsupported',
+            retryable: false,
+            action: 'none',
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(textOf(renderer)).toContain(
+    'This account setting is not available from the selected Omi service yet.',
+  );
+  expect(textOf(renderer)).not.toContain(
+    'Owned apps are unavailable until the account profile loads.',
+  );
+});
+
 test('browser Apps does not offer an unusable native sign-in or installation retry', async () => {
   const previous = Platform.OS;
   Object.defineProperty(Platform, 'OS', {value: 'web', configurable: true});

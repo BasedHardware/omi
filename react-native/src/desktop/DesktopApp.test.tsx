@@ -106,6 +106,7 @@ jest.mock('../desktopCloudClient', () => ({
     enabledError: null,
     enabledIds: [],
     ownerUid: null,
+    ownerError: null,
   })),
   optInTrainingData: jest.fn(),
   setPrivateCloudSync: jest.fn(),
