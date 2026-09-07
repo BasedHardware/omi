@@ -44,6 +44,7 @@ function NavItem({
   return (
     <FocusPressable
       accessibilityRole="tab"
+      accessibilityLabel={label}
       accessibilityState={{selected: active}}
       onPress={onPress}
       style={({pressed}) => [
@@ -52,21 +53,21 @@ function NavItem({
         active && styles.navItemActive,
         pressed && styles.pressed,
       ]}>
-      <Icon
-        accessible={false}
-        color={active ? '#141414' : '#888888'}
-        size={20}
-        strokeWidth={2}
-      />
-      <Text
-        numberOfLines={1}
-        style={[
-          styles.navText,
-          !compact && !expanded && styles.navTextCollapsed,
-          active && styles.navTextActive,
-        ]}>
-        {label}
-      </Text>
+      <View style={styles.navIcon}>
+        <Icon
+          accessible={false}
+          color={active ? '#141414' : '#888888'}
+          size={20}
+          strokeWidth={2}
+        />
+      </View>
+      {(compact || expanded) && (
+        <Text
+          numberOfLines={1}
+          style={[styles.navText, active && styles.navTextActive]}>
+          {label}
+        </Text>
+      )}
     </FocusPressable>
   );
 }
