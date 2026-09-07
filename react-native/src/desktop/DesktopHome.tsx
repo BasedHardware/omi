@@ -194,7 +194,7 @@ export function DesktopHome({
           tasksOutcome.value.page,
           false,
           'No tasks yet',
-          'No tasks yet',
+          query !== '' ? 'No tasks match this search.' : 'No tasks yet',
         );
   const conversationsOutcome = outcomes?.conversations ?? null;
   const memoriesOutcome = outcomes?.memories ?? null;

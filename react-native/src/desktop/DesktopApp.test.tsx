@@ -662,6 +662,8 @@ test('searches real projections instead of a fake timeline', () => {
   const tree = renderedText(renderer);
   expect(tree).toContain('Product review');
   expect(tree).not.toContain('Ship the desktop chrome');
+  expect(tree).toContain('No tasks match this search.');
+  expect(tree).not.toContain('No tasks yet');
   expect(tree).not.toContain('0 screen moments');
   expect(tree).not.toContain('💬');
   expect(tree).not.toContain('🧠');
@@ -968,8 +970,11 @@ test('an incomplete empty search does not claim a complete miss', async () => {
   });
   const tree = renderedText(renderer);
   expect(tree).toContain('Conversations are incomplete.');
+  expect(tree).toContain('Tasks are incomplete.');
   expect(tree).not.toContain('Nothing captured matches this search.');
+  expect(tree).not.toContain('No tasks match this search.');
   expect(tree).not.toContain('Nothing captured yet.');
+  expect(tree).not.toContain('No tasks yet');
 });
 
 test('a complete empty search may claim a search miss', async () => {
@@ -1003,8 +1008,11 @@ test('a complete empty search may claim a search miss', async () => {
   });
   const tree = renderedText(renderer);
   expect(tree).toContain('Nothing captured matches this search.');
+  expect(tree).toContain('No tasks match this search.');
   expect(tree).not.toContain('Conversations are incomplete.');
+  expect(tree).not.toContain('Tasks are incomplete.');
   expect(tree).not.toContain('Nothing captured yet.');
+  expect(tree).not.toContain('No tasks yet');
 });
 
 test('unavailable memory coverage does not claim a complete empty home', async () => {
