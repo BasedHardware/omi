@@ -214,3 +214,27 @@ test('incomplete empty memories do not claim a complete library', () => {
   expect(textOf(view)).toContain('Memories are incomplete.');
   expect(textOf(view)).not.toContain('No memories yet.');
 });
+
+test('degraded empty memories do not claim a complete library', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [],
+            page: {
+              ...incompletePage,
+              completenessStatus: 'degraded',
+              reasons: ['projection_unavailable'],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(textOf(view)).toContain('Memories may be temporarily incomplete.');
+  expect(textOf(view)).not.toContain('No memories yet.');
+});

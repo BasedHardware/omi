@@ -911,6 +911,49 @@ test('an incomplete empty read does not claim a complete library', async () => {
   expect(tree).not.toContain('No tasks yet');
 });
 
+test('unavailable memory coverage does not claim a complete empty home', async () => {
+  const completePage = {
+    windowStatus: 'complete' as const,
+    complete: true,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  const renderer = renderDesktop({
+    outcomes: {
+      conversations: {
+        status: 'success' as const,
+        value: {items: [], page: completePage},
+      },
+      memories: {
+        status: 'success' as const,
+        value: {
+          items: [],
+          page: {
+            windowStatus: 'incomplete' as const,
+            complete: false,
+            hasMore: false,
+            nextCursor: null,
+            completenessStatus: 'degraded' as const,
+            reasons: ['projection_unavailable'],
+          },
+        },
+      },
+      tasks: {
+        status: 'success' as const,
+        value: {accountEpoch: null, items: [], page: completePage},
+      },
+    },
+    reads: [],
+    readsPhase: 'ready',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Memories may be temporarily incomplete.');
+  expect(tree).toContain('No tasks yet');
+  expect(tree).not.toContain('Nothing captured yet.');
+});
+
 test('Apps is a wrapped gallery that does not invent catalog entries', async () => {
   const pages = kitSources['DesktopPages.tsx'];
   expect(pages).toMatch(/appGrid:\s*\{[^}]*flexWrap:\s*'wrap'/);

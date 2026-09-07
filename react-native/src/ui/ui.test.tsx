@@ -587,4 +587,17 @@ test('empty library copy keeps completeness instead of claiming emptiness', () =
       'No memories yet.',
     ),
   ).toBe('No memories yet.');
+  expect(
+    emptyLibraryCopy(
+      'Memories',
+      {
+        ...incomplete,
+        completenessStatus: 'degraded',
+        reasons: ['projection_unavailable'],
+      },
+      false,
+      'No loaded memories match.',
+      'No memories yet.',
+    ),
+  ).toBe('Memories may be temporarily incomplete.');
 });
