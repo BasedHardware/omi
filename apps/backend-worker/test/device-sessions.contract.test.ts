@@ -327,7 +327,7 @@ describe("device session ingest", () => {
       headers: authenticatedHeaders,
     });
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
+    expect((await response.json()) as object).toEqual({
       error: {
         code: "capture_ownership_unavailable",
         retryable: false,
