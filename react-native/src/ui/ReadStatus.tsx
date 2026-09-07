@@ -28,6 +28,8 @@ export function ReadStatus({
       : `More ${label.toLowerCase()} are available.`
     : page.completenessStatus === 'degraded'
     ? `${label} may be temporarily incomplete.`
+    : page.completenessStatus === 'partial'
+    ? `${label} are a partial view.`
     : `${label} are incomplete.`;
   return (
     <View style={[styles.readStatus, mac && styles.macReadStatus]}>

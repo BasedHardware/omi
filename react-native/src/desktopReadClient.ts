@@ -153,7 +153,12 @@ export type ReadPageState = {
   complete: boolean;
   hasMore: boolean;
   nextCursor: string | null;
-  completenessStatus: 'complete' | 'incomplete' | 'degraded' | 'unknown';
+  completenessStatus:
+    | 'complete'
+    | 'incomplete'
+    | 'degraded'
+    | 'partial'
+    | 'unknown';
   reasons: string[];
 };
 
@@ -439,7 +444,11 @@ function validatePage(
     completeness.status,
     `${label} completeness status`,
   );
-  if (!['complete', 'incomplete', 'degraded'].includes(completenessStatus)) {
+  if (
+    !['complete', 'incomplete', 'degraded', 'partial'].includes(
+      completenessStatus,
+    )
+  ) {
     throw new Error(`${label} completeness status is malformed`);
   }
   if (

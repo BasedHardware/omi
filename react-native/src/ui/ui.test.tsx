@@ -522,4 +522,15 @@ test('legacy unknown completeness is not presented as a known incomplete read', 
   expect(JSON.stringify(renderer.toJSON())).toContain(
     'Conversations are incomplete.',
   );
+  act(() =>
+    renderer.update(
+      <ReadStatus
+        label="Memories"
+        page={{...page, completenessStatus: 'partial'}}
+      />,
+    ),
+  );
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'Memories are a partial view.',
+  );
 });

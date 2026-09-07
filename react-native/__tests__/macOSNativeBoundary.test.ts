@@ -138,6 +138,8 @@ test('pairs the macOS backend origin and credentials in one validated policy', (
   expect(source).toContain('environment[@"OMI_V5_BACKEND_URL"]');
   expect(source).toContain('OmiValidatedV5URL');
   expect(source).toContain('OmiIsCaptureBackendPath');
+  expect(source).toContain('OmiBackendRoute');
+  expect(source).toContain('characterSetWithCharactersInString:@"?#"');
   expect(source).toContain('OmiRequestBaseURL');
   expect(source).toContain('.workers.dev');
   expect(source).toContain('environment[@"OMI_DEV_BACKEND"]');
