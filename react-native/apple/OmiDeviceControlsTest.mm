@@ -1,8 +1,17 @@
 #import "OmiDeviceControls.h"
 #include <cassert>
+#include <initializer_list>
 
 int main() {
   @autoreleasepool {
+    assert(!OmiButtonSupported(nil) && !OmiButtonSupported(@0) && OmiButtonSupported(@4));
+    assert(!OmiButtonDoublePress(nil));
+    uint8_t button[9] = {2};
+    assert(OmiButtonDoublePress([NSData dataWithBytes:button length:8]));
+    for (NSUInteger length : {0, 4, 7, 9}) assert(!OmiButtonDoublePress([NSData dataWithBytes:button length:length]));
+    for (uint8_t action : {0, 1, 3, 4, 5, 255}) { button[0] = action; assert(!OmiButtonDoublePress([NSData dataWithBytes:button length:8])); }
+    button[0] = 2;
+    for (NSUInteger index = 1; index < 8; index++) { button[index] = 1; assert(!OmiButtonDoublePress([NSData dataWithBytes:button length:8])); button[index] = 0; }
     OmiFindPattern pattern;
     NSUInteger ticket = pattern.begin();
     assert(OmiFindPattern::level == 3 && OmiFindPattern::delayMs == 750);

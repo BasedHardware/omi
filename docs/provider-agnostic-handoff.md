@@ -20,7 +20,7 @@ Migrations 49 through 52 were applied after their verified commits. The dedicate
 
 ## Active work and verification limits
 
-CI is confirmed green at 249feac743, run 34069451828; the newer journal commit is still running. It previously exposed two classic Docker image-store incompatibilities and Linux ICU's GMT representation for UTC. The fixes are pushed in ade381dab3, 34f7c2fd1d and 4ebe34e863. Exact pinned Linux formation tests reproduced the UTC failure before repair and passed afterward.
+CI is confirmed green at 1563013d22, run 34069521064, including PostgreSQL integration and runtime parity; deployment was skipped. It previously exposed two classic Docker image-store incompatibilities and Linux ICU's GMT representation for UTC. The fixes are pushed in ade381dab3, 34f7c2fd1d and 4ebe34e863. Exact pinned Linux formation tests reproduced the UTC failure before repair and passed afterward.
 
 Physical phones were offline. Compilation and synthetic tests do not prove physical BLE writes, link-loss recovery, background capture or firmware operations. Full hardware scope is in hardware-device-parity.md. Background connection configuration is pushed in 62df56426e, but physical delivery and suspension behavior remain unverified. Encrypted recording recovery is implemented and tested, with physical recovery and Android Keystore instrumentation still open. Persistent pairing, storage transfer, buttons, firmware and supported camera/motion paths remain incomplete. Storage reads do not advance or erase audio; current firmware notification completion is not a durable app acknowledgement.
 

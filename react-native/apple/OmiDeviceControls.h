@@ -1,5 +1,14 @@
 #import <Foundation/Foundation.h>
 
+static BOOL OmiButtonSupported(NSNumber *features) { return features != nil && (features.unsignedIntValue & 4U) != 0; }
+static BOOL OmiButtonDoublePress(NSData *data) {
+  if (data.length != 8) return NO;
+  const uint8_t *bytes = (const uint8_t *)data.bytes;
+  if (bytes[0] != 2) return NO;
+  for (NSUInteger index = 1; index < 8; index++) if (bytes[index] != 0) return NO;
+  return YES;
+}
+
 struct OmiFindPattern {
   static constexpr int level = 3;
   static constexpr int delayMs = 750;

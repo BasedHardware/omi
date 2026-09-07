@@ -64,6 +64,51 @@ function pages(bytes: Uint8Array) {
 }
 
 describe("device audio containers", () => {
+  test.each([1, 20, 21])(
+    "codec %i preserves complete frames when captures split before fragment zero across sequence rollover",
+    (codec) => {
+      const packets = [
+        packet(65535, 0, [0xf8]),
+        packet(0, 1, [0xff, 0xfe]),
+        packet(1, 0, [0xf8]),
+        packet(2, 1, [0xff, 0xfe]),
+      ];
+      const whole = buildDeviceAudio(codec, packets);
+      const left = buildDeviceAudio(codec, packets.slice(0, 2));
+      const right = buildDeviceAudio(codec, packets.slice(2));
+      expect(left.durationSeconds + right.durationSeconds).toBe(
+        whole.durationSeconds
+      );
+      expect([
+        left.discardedLeadingPackets,
+        right.discardedLeadingPackets,
+      ]).toEqual([0, 0]);
+      if (codec === 1) {
+        expect([
+          ...left.bytes.subarray(44),
+          ...right.bytes.subarray(44),
+        ]).toEqual([...whole.bytes.subarray(44)]);
+      } else {
+        const framePayloads = (bytes: Uint8Array) =>
+          pages(bytes)
+            .slice(2)
+            .map((page) => [...page.payload]);
+        expect([
+          ...framePayloads(left.bytes),
+          ...framePayloads(right.bytes),
+        ]).toEqual(framePayloads(whole.bytes));
+      }
+    }
+  );
+
+  test("independent captures cannot establish continuity across their boundary", () => {
+    const left = packet(10, 0, [128]);
+    const right = packet(13, 0, [128]);
+    expectError(1, [left, right], "packet_gap");
+    expect(buildDeviceAudio(1, [left]).durationSeconds).toBe(1 / 16000);
+    expect(buildDeviceAudio(1, [right]).durationSeconds).toBe(1 / 16000);
+  });
+
   test("reassembles fragments including counter rollover into unsigned8 to signed16 PCM WAV", () => {
     const audio = buildDeviceAudio(1, [
       packet(65534, 0, [0]),

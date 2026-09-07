@@ -1,6 +1,12 @@
 package com.rnruntime;
 
 final class OmiDeviceControls {
+  static boolean buttonSupported(Long features) { return features != null && (features & 4L) != 0; }
+  static boolean doublePress(byte[] bytes) {
+    if (bytes == null || bytes.length != 8 || bytes[0] != 2) return false;
+    for (int index = 1; index < 8; index++) if (bytes[index] != 0) return false;
+    return true;
+  }
   static final class FindPattern {
     static final int LEVEL = 3;
     static final int DELAY_MS = 750;
