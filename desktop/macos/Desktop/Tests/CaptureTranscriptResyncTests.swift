@@ -36,7 +36,7 @@ final class CaptureTranscriptResyncTests: XCTestCase {
     XCTAssertEqual(curve.offset(at: 900), 33.3, accuracy: 0.6, "After the last anchor the last shift holds")
   }
 
-  func testDriftBetweenAnchorsInterpolatesAndOutliersAreDropped() throws {
+  func testDriftBetweenAnchorsInterpolatesAndTheNearerRepeatWins() throws {
     let segments = [
       segment("a", "so she said this is something new", start: 100, end: 104),
       segment("b", "my mom went and apparently it was fine", start: 200, end: 205),
@@ -49,8 +49,11 @@ final class CaptureTranscriptResyncTests: XCTestCase {
       (segments[0].text, 110, 114), (segments[1].text, 210, 215),
       (segments[2].text, 340, 344), (segments[3].text, 440, 444), (segments[4].text, 540, 544),
     ]
-    // The same phrase as segment b also occurs 180 s away: a coincidence the
-    // window admits but the neighbourhood consensus must reject.
+    // The same phrase as segment b also occurs 180 s away. Each gram keeps only
+    // the candidate nearest its transcript time, so the 210 s occurrence wins
+    // at the matching stage and the repeat never becomes a match; the
+    // neighbourhood consensus in `offsetCurve` is exercised by the scattered
+    // case in `testTooFewOrContradictoryMatchesProduceNoCurve`, not here.
     heard.append((segments[1].text, 380, 385))
     let words = spoken(heard)
 
@@ -60,6 +63,26 @@ final class CaptureTranscriptResyncTests: XCTestCase {
     XCTAssertEqual(curve.offset(at: 200), 10, accuracy: 0.6, "The nearer occurrence wins for segment b")
     XCTAssertEqual(curve.offset(at: 250), 25, accuracy: 1.5, "Half-way between anchors the shift is half-way")
     XCTAssertEqual(curve.offset(at: 500), 40, accuracy: 0.6)
+  }
+
+  func testTheReportReadsTheEndingShiftWhereTheTranscriptEnds() {
+    let segments = [
+      segment("a", "so she said this is something new", start: 100, end: 104),
+      segment("b", "my mom went and apparently it was fine and then some", start: 200, end: 230),
+    ]
+    // Drift keeps growing through the last sentence: 10 s at its start, 25 s at its end.
+    let curve = CaptureTranscriptOffsetCurve(anchors: [
+      .init(transcriptTime: 100, offset: 10), .init(transcriptTime: 200, offset: 10),
+      .init(transcriptTime: 230, offset: 25),
+    ])
+    let matches = [
+      CaptureTranscriptMatch(segmentIndex: 0, transcriptTime: 100, audioTime: 110),
+      CaptureTranscriptMatch(segmentIndex: 1, transcriptTime: 200, audioTime: 210),
+      CaptureTranscriptMatch(segmentIndex: 1, transcriptTime: 230, audioTime: 255),
+    ]
+    let report = CaptureTranscriptAlignmentPolicy.report(segments: segments, matches: matches, curve: curve)
+    XCTAssertEqual(report.shiftAtStart, 10, accuracy: 0.001)
+    XCTAssertEqual(report.shiftAtEnd, 25, accuracy: 0.001, "The ending shift is the one met at the transcript's end")
   }
 
   func testTooFewOrContradictoryMatchesProduceNoCurve() {

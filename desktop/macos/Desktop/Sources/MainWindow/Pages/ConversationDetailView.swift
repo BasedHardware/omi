@@ -115,6 +115,10 @@ struct ConversationDetailView: View {
   /// True once the displayed transcript's times are seconds into the media
   /// (a stored or fresh sync), so playback must not apply server spans again.
   @State private var transcriptOnMediaClock = false
+  /// The transcript as the server sent it, kept while a sync is on screen so
+  /// the page can fall back to the server's clock when the audio that sync was
+  /// made against is no longer what plays.
+  @State private var serverClockConversation: ServerConversation?
   /// This note's screenshots, owned here rather than inside the summary because both halves of the
   /// note read them: the strip is in the summary, and the banner is the *header's* background.
   /// Constructing it is free — the initialiser only captures closures — and it starts no work
@@ -323,6 +327,7 @@ struct ConversationDetailView: View {
         capturePlayback.clear()
         transcriptResync.reset()
         transcriptOnMediaClock = false
+        serverClockConversation = nil
       }
     }
     .onDisappear {
@@ -333,6 +338,7 @@ struct ConversationDetailView: View {
       capturePlayback.clear()
       transcriptResync.reset()
       transcriptOnMediaClock = false
+      serverClockConversation = nil
     }
     .onChange(of: showTranscriptDrawer) { _, newValue in
       ConversationDetailAutomationState.shared.setTranscriptDrawerOpen(
@@ -742,6 +748,7 @@ struct ConversationDetailView: View {
   /// A freshly loaded detail, with any sync this machine already made for
   /// this audio part applied on top so reopening never regresses the timing.
   private func applyLoadedConversation(_ fetched: ServerConversation) {
+    serverClockConversation = fetched
     if let synced = CaptureTranscriptSyncStore().applied(to: fetched) {
       loadedConversation = synced
       transcriptOnMediaClock = true
@@ -751,10 +758,23 @@ struct ConversationDetailView: View {
     }
   }
 
+  /// A sync is made against the aggregate; while the transport is playing one
+  /// part instead, the aggregate's clock is the wrong one for a multi-part
+  /// transcript, so the page shows the server's timing until an exact
+  /// aggregate is back.
+  private func showServerClockTranscriptIfPlaybackIsAFallback(_ resolution: CapturePlaybackResolution) {
+    guard transcriptOnMediaClock, case .fileFallback = resolution, let serverClockConversation else { return }
+    loadedConversation = serverClockConversation
+    transcriptOnMediaClock = false
+  }
+
   /// Refresh = re-fetch the transcript, then, for a capture with audio, listen
   /// to that audio on-device and move every timestamp onto the audio's clock.
   /// The raw transcript is always what gets aligned, never an already-synced
-  /// one, so repeated presses converge instead of compounding.
+  /// one, so repeated presses converge instead of compounding. Whatever timing
+  /// is on screen stays there until the new sync succeeds: a refresh that
+  /// cannot download, hear, or match the audio must not throw away a sync
+  /// that already lined the bubbles up.
   private func refreshTranscript() {
     guard !isRefreshingTranscript, !transcriptResync.phase.isBusy else { return }
     isRefreshingTranscript = true
@@ -766,17 +786,15 @@ struct ConversationDetailView: View {
         raw = await appState.loadConversationDetail(raw) { _ in }
         guard isCurrentDetailRequest(requestGeneration) else { return }
       }
-      guard Self.showsCapturePlayback(for: raw.source, in: .transcript) else {
-        applyLoadedConversation(raw)
-        return
-      }
-      loadedConversation = raw
-      transcriptOnMediaClock = false
+      applyLoadedConversation(raw)
+      guard Self.showsCapturePlayback(for: raw.source, in: .transcript) else { return }
       transcriptResync.reset()
-      let resolution = await capturePlayback.prepare(for: raw, forceRefresh: true)
+      let resolution = await capturePlayback.prepare(
+        for: raw, forceRefresh: true, transcriptOnMediaClock: transcriptOnMediaClock)
       guard isCurrentDetailRequest(requestGeneration) else { return }
-      guard case .readyAggregate(let artifact) = resolution else {
+      guard case .readyAggregate = resolution, let artifact = capturePlayback.serverClockArtifact else {
         // Nothing exact to align against yet; the transport says why.
+        showServerClockTranscriptIfPlaybackIsAFallback(resolution ?? .unavailable)
         return
       }
       guard let synced = await transcriptResync.resync(conversation: raw, artifact: artifact),
@@ -784,7 +802,7 @@ struct ConversationDetailView: View {
       else { return }
       loadedConversation = synced
       transcriptOnMediaClock = true
-      startCapturePlaybackPreparation(forceRefresh: true)
+      capturePlayback.setTranscriptOnMediaClock(true)
     }
   }
 
@@ -946,6 +964,7 @@ struct ConversationDetailView: View {
       )
     else { return }
     guard isCurrentCaptureFocusRequest(requestGeneration) else { return }
+    showServerClockTranscriptIfPlaybackIsAFallback(resolution)
 
     guard let requestedMoment = initialCaptureMomentTimestamp else {
       reportInitialCaptureFocus(resolved: true)

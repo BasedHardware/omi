@@ -1,3 +1,3 @@
 {
-  "change": "Added a draggable scrubber to conversation audio playback; clicking any transcript bubble jumps the audio to that sentence and starts playing; the transcript header's refresh button re-fetches the transcript and re-syncs it to the audio on this Mac (it listens to the recording with the on-device model and moves each sentence's time onto the audio's clock, keeping speakers and names), so playback starts at 0:00 and bubbles line up with what is heard"
+  "change": "Added a draggable scrubber to conversation audio playback; clicking any transcript bubble jumps the audio to that sentence and starts playing; the transcript header's refresh button re-fetches the transcript and re-syncs it to the audio on this Mac, so playback starts at 0:00 and bubbles line up with what is heard"
 }

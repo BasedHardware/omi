@@ -75,7 +75,7 @@ struct ConversationCapturePlaybackSection: View {
 
         if playback.duration > 0 {
           HStack(spacing: OmiSpacing.sm) {
-            CapturePlaybackScrubber(playback: playback)
+            CapturePlaybackScrubber(playback: playback, resolution: resolution)
             // Counted on the capture's clock, the same one the transcript
             // timestamps use, so the transport and the bubbles agree.
             Text(
@@ -164,7 +164,7 @@ struct ConversationCapturePlaybackSection: View {
       "Transcript synced to the audio (\(shift), \(report.matchedSegments) of \(report.alignableSegments) sentences matched)"
   }
 
-  private static func wallPosition(
+  static func wallPosition(
     _ playback: CapturePlaybackController, _ resolution: CapturePlaybackResolution
   ) -> TimeInterval {
     if let wall = CaptureTranscriptFollowPolicy.wallOffset(
@@ -194,6 +194,10 @@ struct ConversationCapturePlaybackSection: View {
 /// it sits on the glass like the rest of the page chrome.
 private struct CapturePlaybackScrubber: View {
   @ObservedObject var playback: CapturePlaybackController
+  /// So VoiceOver reads the position on the capture's clock, the one the
+  /// transport beside it shows and the bubbles are stamped in, rather than the
+  /// media offset, which differs across collapsed gaps and a sole part's start.
+  let resolution: CapturePlaybackResolution
 
   private static let trackHeight: CGFloat = 4
   private static let thumbDiameter: CGFloat = 12
@@ -236,7 +240,9 @@ private struct CapturePlaybackScrubber: View {
     .frame(height: Self.hitHeight)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel("Capture playback position")
-    .accessibilityValue(Self.accessibilityTimestamp(playback.currentTime))
+    .accessibilityValue(
+      Self.accessibilityTimestamp(ConversationCapturePlaybackSection.wallPosition(playback, resolution))
+    )
     .accessibilityAdjustableAction { direction in
       let delta = direction == .increment ? Self.keyboardStep : -Self.keyboardStep
       let target = playback.currentTime + delta

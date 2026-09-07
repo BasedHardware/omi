@@ -199,8 +199,11 @@ enum CaptureTranscriptAlignmentPolicy {
     curve: CaptureTranscriptOffsetCurve
   ) -> CaptureTranscriptSyncReport {
     let alignable = segments.filter { normalizedTokens($0.text).count >= gramSize }.count
+    // Read at the transcript's ends, not the last segment's start: with drift
+    // through the final sentence the two differ, and the status names the shift
+    // the listener meets at the end.
     let first = segments.first?.start ?? 0
-    let last = segments.last?.start ?? 0
+    let last = segments.last?.end ?? 0
     return CaptureTranscriptSyncReport(
       matchedSegments: matches.count,
       alignableSegments: alignable,

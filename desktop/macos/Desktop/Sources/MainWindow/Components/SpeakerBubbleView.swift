@@ -71,13 +71,7 @@ struct SpeakerBubbleView: View {
           .buttonStyle(.plain)
           .accessibilityIdentifier("transcript_speaker_button_\(segment.id)")
           .accessibilityLabel("Transcript speaker \(speakerLabel)")
-          .onHover { hovering in
-            if hovering {
-              NSCursor.pointingHand.push()
-            } else {
-              NSCursor.pop()
-            }
-          }
+          .modifier(PointingHandOnHover())
         } else {
           Text(speakerLabel)
             .scaledFont(size: OmiType.caption, weight: .medium)
@@ -116,14 +110,7 @@ struct SpeakerBubbleView: View {
           .help("Play from \(formatTime(segment.start))")
           .accessibilityLabel("Play transcript from \(formatTime(segment.start)): \(segment.text)")
           .accessibilityIdentifier("transcript_bubble_button_\(segment.id)")
-          .onHover { hovering in
-            isBubbleHovered = hovering
-            if hovering {
-              NSCursor.pointingHand.push()
-            } else {
-              NSCursor.pop()
-            }
-          }
+          .modifier(PointingHandOnHover(onHoverChange: { isBubbleHovered = $0 }))
         } else {
           messageBubble
         }
@@ -219,3 +206,32 @@ struct SpeakerBubbleView: View {
     .background(Ink.surface)
   }
 #endif
+
+/// The pointing hand while a clickable transcript element is hovered, pushed
+/// and popped in balance. SwiftUI does not deliver `onHover(false)` when a
+/// hovered view leaves the hierarchy — a transcript refresh or re-sync rebuilds
+/// every bubble — so an unpaired push would leave the hand over the whole app;
+/// `onDisappear` is the exit that hover never reports.
+private struct PointingHandOnHover: ViewModifier {
+  var onHoverChange: ((Bool) -> Void)? = nil
+  @State private var didPushCursor = false
+
+  func body(content: Content) -> some View {
+    content
+      .onHover { hovering in
+        onHoverChange?(hovering)
+        setHovered(hovering)
+      }
+      .onDisappear { setHovered(false) }
+  }
+
+  private func setHovered(_ hovering: Bool) {
+    if hovering, !didPushCursor {
+      NSCursor.pointingHand.push()
+      didPushCursor = true
+    } else if !hovering, didPushCursor {
+      NSCursor.pop()
+      didPushCursor = false
+    }
+  }
+}

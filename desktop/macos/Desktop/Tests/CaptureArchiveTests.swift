@@ -564,6 +564,56 @@ final class CaptureArchiveTests: XCTestCase {
     controller.clear()
   }
 
+  /// Two seeks in flight at once: AVFoundation abandons the earlier one with
+  /// `finished == false`. Only the latest seek owns the published position, so
+  /// the abandoned one must not take the transport back to where it started.
+  func testAnAbandonedSeekDoesNotUndoTheOneThatReplacedIt() async throws {
+    let audioURL = try temporaryAudioFile(durationSeconds: 3)
+    defer { try? FileManager.default.removeItem(at: audioURL) }
+    let artifact = CapturePlaybackArtifact(
+      signedURL: audioURL, duration: 3,
+      spans: [CaptureAudioURLSpan(fileID: "local", wallOffset: 0, artifactOffset: 0, length: 3)]
+    )
+    let controller = CapturePlaybackController(
+      provider: CapturePlaybackProviderFake(resolutions: [.readyAggregate(artifact)]))
+    _ = await controller.prepare(for: archiveCapture(id: "omi-two-seeks"))
+
+    // The parent issues its seek first and suspends; the child then issues the
+    // later one, which is the position the transport must end on.
+    async let later = controller.seek(toPlaybackOffset: 1)
+    _ = await controller.seek(toPlaybackOffset: 2)
+    _ = await later
+    XCTAssertEqual(controller.currentTime, 1, accuracy: 0.001, "the latest seek's target is the one that stands")
+    controller.clear()
+  }
+
+  /// The server's spans stay available while the transcript is on the media
+  /// clock, so the alignment can be redone against them without re-resolving,
+  /// and the clock can be swapped without touching the player.
+  func testPlaybackKeepsTheServerClockArtifactBesideTheMediaClockOne() async throws {
+    let artifact = CapturePlaybackArtifact(
+      signedURL: try XCTUnwrap(URL(string: "https://example.test/aggregate.m4a")), duration: 30,
+      spans: [
+        CaptureAudioURLSpan(fileID: "part-1", wallOffset: 5, artifactOffset: 0, length: 10),
+        CaptureAudioURLSpan(fileID: "part-2", wallOffset: 40, artifactOffset: 10, length: 20),
+      ]
+    )
+    let controller = CapturePlaybackController(
+      provider: CapturePlaybackProviderFake(resolutions: [.readyAggregate(artifact)]))
+    let resolution = await controller.prepare(for: archiveCapture(id: "omi-clocks"), transcriptOnMediaClock: true)
+
+    XCTAssertEqual(resolution, .readyAggregate(artifact.onMediaClock))
+    XCTAssertEqual(controller.serverClockArtifact, artifact)
+
+    controller.setTranscriptOnMediaClock(false)
+    XCTAssertEqual(controller.resolution, .readyAggregate(artifact))
+    controller.setTranscriptOnMediaClock(true)
+    XCTAssertEqual(controller.resolution, .readyAggregate(artifact.onMediaClock))
+
+    controller.clear()
+    XCTAssertNil(controller.serverClockArtifact)
+  }
+
 }
 
 private func temporaryAudioFile(durationSeconds: Int) throws -> URL {
