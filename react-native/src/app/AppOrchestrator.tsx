@@ -33,6 +33,7 @@ import {omiBackend} from '../omiNative';
 import {
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
+  desktopReadsCanRetry,
   desktopRecoveryCopy,
 } from '../desktopReadClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
@@ -1249,7 +1250,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                     </Text>
                                   )}
                                   {(readsPhase === 'saved-but-refresh-failed' ||
-                                    readsPhase === 'unavailable') && (
+                                    readsPhase === 'unavailable') &&
+                                    desktopReadsCanRetry(readOutcomes) && (
                                     <FocusPressable
                                       accessibilityLabel="Retry saved data"
                                       accessibilityRole="button"

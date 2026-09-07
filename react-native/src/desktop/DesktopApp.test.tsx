@@ -5,6 +5,7 @@ import ReactTestRenderer, {act} from 'react-test-renderer';
 import {ScrollView, Text, TextInput} from 'react-native';
 import {DesktopApp} from './DesktopApp';
 import {TaskPagination} from '../ui/TaskPagination';
+import {desktopBackendUnavailableCopy} from '../desktopReadClient';
 
 jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => true,
@@ -503,6 +504,31 @@ test('keeps an unavailable read as an inline shell state', () => {
   expect(tree).not.toContain('Saved data unavailable');
   expect(tree).not.toContain('Sign in to Omi cloud');
   expect(tree).not.toContain('Offline · showing what is available on this Mac');
+});
+
+test('nested non-retryable library 503s do not offer Try again', () => {
+  const unavailable = {
+    status: 'error' as const,
+    error: desktopBackendUnavailableCopy,
+  };
+  const renderer = renderDesktop({
+    outcomes: {
+      conversations: unavailable,
+      memories: unavailable,
+      tasks: unavailable,
+    },
+    reads: [],
+    readsPhase: 'unavailable',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain("Some of your history isn't loaded yet.");
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(tree).not.toContain('Try again');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Try again',
+    ),
+  ).toHaveLength(0);
 });
 
 test('keeps degraded read state visible away from Home', () => {

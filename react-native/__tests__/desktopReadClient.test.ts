@@ -11,6 +11,7 @@ import {
   desktopBackendUnavailableCopy,
   desktopBackendServiceCopy,
   desktopReadErrorCopy,
+  desktopReadsCanRetry,
   desktopRecoveryCopy,
   loadConversations,
   loadDesktopReads,
@@ -327,6 +328,58 @@ describe('desktopRecoveryCopy', () => {
         success(),
       ),
     ).toBe(desktopBackendServiceCopy);
+  });
+});
+
+describe('desktopReadsCanRetry', () => {
+  const pageState = {
+    windowStatus: 'complete' as const,
+    complete: true,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'complete' as const,
+    reasons: [] as string[],
+  };
+  const success = {
+    status: 'success' as const,
+    value: {items: [], page: {...pageState}, accountEpoch: null},
+  };
+  const error = (message: string) =>
+    ({
+      status: 'error' as const,
+      error: message,
+    }) as const;
+
+  test('omits retry when every failed library door is nested non-retryable', () => {
+    expect(desktopReadsCanRetry(null)).toBe(true);
+    expect(
+      desktopReadsCanRetry({
+        conversations: success,
+        memories: success,
+        tasks: success,
+      }),
+    ).toBe(true);
+    expect(
+      desktopReadsCanRetry({
+        conversations: error(desktopBackendUnavailableCopy),
+        memories: error(desktopBackendUnavailableCopy),
+        tasks: error(desktopBackendUnavailableCopy),
+      }),
+    ).toBe(false);
+    expect(
+      desktopReadsCanRetry({
+        conversations: error(desktopBackendUnavailableCopy),
+        memories: error(desktopBackendServiceCopy),
+        tasks: success,
+      }),
+    ).toBe(true);
+    expect(
+      desktopReadsCanRetry({
+        conversations: error(desktopBackendForbiddenCopy),
+        memories: error(desktopBackendUnavailableCopy),
+        tasks: error(desktopBackendUnavailableCopy),
+      }),
+    ).toBe(true);
   });
 });
 

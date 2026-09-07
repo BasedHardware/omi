@@ -206,6 +206,26 @@ const desktopReadFailureCopy =
 const desktopRecoveryGenericCopy =
   'Omi could not load saved conversations or memories. Your saved data has not been changed.';
 
+export function desktopReadsCanRetry(
+  outcomes: DesktopReadOutcomes | null,
+): boolean {
+  if (outcomes === null) {
+    return true;
+  }
+  const errors = [
+    outcomes.conversations,
+    outcomes.memories,
+    outcomes.tasks,
+  ].filter(
+    (outcome): outcome is {status: 'error'; error: string} =>
+      outcome.status === 'error',
+  );
+  return (
+    errors.length === 0 ||
+    errors.some(outcome => outcome.error !== desktopBackendUnavailableCopy)
+  );
+}
+
 export function desktopRecoveryCopy(
   conversations: DomainReadOutcome<ConversationProjection>,
   memories: DomainReadOutcome<MemoryProjection>,

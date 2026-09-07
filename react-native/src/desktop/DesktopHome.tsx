@@ -9,9 +9,10 @@ import {
   View,
 } from 'react-native';
 import type {ChatMessage} from '../chatClient';
-import type {
-  DesktopReadOutcomes,
-  DesktopReadProjection,
+import {
+  desktopReadsCanRetry,
+  type DesktopReadOutcomes,
+  type DesktopReadProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
@@ -35,9 +36,11 @@ type Props = {
 };
 
 export function DesktopReadBanner({
+  canRetry = true,
   onRefresh,
   readsPhase,
 }: {
+  canRetry?: boolean;
   onRefresh: () => void;
   readsPhase: ReadsPhase;
 }) {
@@ -53,6 +56,15 @@ export function DesktopReadBanner({
     readsPhase === 'unavailable' ||
     readsPhase === 'saved-but-refresh-failed'
   ) {
+    if (!canRetry) {
+      return (
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>
+            Some of your history isn't loaded yet.
+          </Text>
+        </View>
+      );
+    }
     return (
       <FocusPressable
         accessibilityLabel="Try again"
@@ -201,7 +213,11 @@ export function DesktopHome({
         'Nothing captured yet.';
   return (
     <View style={styles.home}>
-      <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
+      <DesktopReadBanner
+        canRetry={desktopReadsCanRetry(outcomes)}
+        onRefresh={onRefresh}
+        readsPhase={readsPhase}
+      />
       {messages.length > 0 || chatBusy || hasOlderChat ? (
         <ScrollView
           contentContainerStyle={styles.chatContent}

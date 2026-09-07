@@ -2,9 +2,10 @@ import React, {useEffect, useRef, useState} from 'react';
 import {StyleSheet, TextInput, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
-import type {
-  DesktopReadOutcomes,
-  DesktopReadProjection,
+import {
+  desktopReadsCanRetry,
+  type DesktopReadOutcomes,
+  type DesktopReadProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {Onboarding} from '../ui/Onboarding';
@@ -151,7 +152,11 @@ export function DesktopApp({
         route={route}
       />
       {route === 'Conversations' || route === 'Tasks' ? (
-        <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
+        <DesktopReadBanner
+          canRetry={desktopReadsCanRetry(outcomes)}
+          onRefresh={onRefresh}
+          readsPhase={readsPhase}
+        />
       ) : null}
       <ShippingStage stageKey={route} variant="page">
         {route === 'Home' ? (
