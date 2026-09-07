@@ -385,6 +385,7 @@ describe("D1 migration manifest", () => {
       "0006_device_transcriptions.sql",
       "0007_device_audio_chunks.sql",
       "0008_device_capture_id.sql",
+      "0009_device_capture_time.sql",
     ];
     expect(D1_MIGRATIONS.map((migration) => migration.fileName)).toEqual(files);
 
@@ -395,4 +396,37 @@ describe("D1 migration manifest", () => {
       );
     }
   });
+});
+
+test("capture time migration leaves historical chronology unchanged and enforces integer range", () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(
+      readFileSync(new URL("0004_device_sessions.sql", directory), "utf8")
+    );
+    db.exec(
+      "INSERT INTO device_sessions (id,account_id,device_id,codec,state,r2_prefix,started_at,ended_at,created_at,updated_at) VALUES ('old','owner','pendant',1,'complete','old',10,20,10,20)"
+    );
+    db.exec(
+      readFileSync(new URL("0009_device_capture_time.sql", directory), "utf8")
+    );
+    expect(
+      db
+        .query("SELECT started_at,ended_at,captured_at_ms FROM device_sessions")
+        .get()
+    ).toEqual({ started_at: 10, ended_at: 20, captured_at_ms: null });
+    for (const value of [-1, 0.5, 8640000000000001, "invalid"]) {
+      expect(() =>
+        db.prepare("UPDATE device_sessions SET captured_at_ms=?").run(value)
+      ).toThrow();
+    }
+    for (const value of [0, 8640000000000000]) {
+      db.prepare("UPDATE device_sessions SET captured_at_ms=?").run(value);
+      expect(
+        db.query("SELECT captured_at_ms FROM device_sessions").get()
+      ).toEqual({ captured_at_ms: value });
+    }
+  } finally {
+    db.close();
+  }
 });

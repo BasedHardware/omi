@@ -68,6 +68,7 @@ export const DEVICE_UPLOAD_LIMITS = {
 } as const;
 
 type CaptureSession = {
+  capturedAtMs?: number;
   connectionId: string | null;
   frameStarted: boolean;
   lastPacketSequence: number | null;
@@ -236,6 +237,9 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
             await retry(async () => {
               const session = await openDeviceSession(backend, {
                 captureId,
+                ...(capture.capturedAtMs === undefined
+                  ? {}
+                  : {capturedAtMs: capture.capturedAtMs}),
                 deviceId: capture.deviceId,
                 deviceName: capture.deviceName ?? device?.name,
                 codec: capture.codec,
@@ -516,6 +520,9 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       if (capture === null) {
         transcriptionRevisionRef.current++;
         capture = {
+          ...(event.capturedAtMs === undefined
+            ? {}
+            : {capturedAtMs: event.capturedAtMs}),
           connectionId: nativeSnapshotRef.current?.connectionId ?? null,
           frameStarted: false,
           lastPacketSequence: null,
@@ -546,6 +553,9 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
           const target = capture;
           const epoch = epochRef.current;
           target.journalWork = createRecordingJournal(omiBackend, {
+            ...(target.capturedAtMs === undefined
+              ? {}
+              : {capturedAtMs: target.capturedAtMs}),
             deviceId: target.deviceId,
             deviceName: target.deviceName,
             codec: target.codec,
@@ -772,6 +782,9 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
               continue;
             }
             const capture: CaptureSession = {
+              ...(restored.journal.capturedAtMs === undefined
+                ? {}
+                : {capturedAtMs: restored.journal.capturedAtMs}),
               connectionId: null,
               frameStarted: false,
               lastPacketSequence: null,

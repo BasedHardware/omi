@@ -6,6 +6,17 @@ import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 
 final class OmiRecordingPolicy {
+  static Long capturedAt(Object value) {
+    if (value == null) return null;
+    if (!(value instanceof Number)) throw new IllegalArgumentException("Invalid capture timestamp");
+    double number = ((Number) value).doubleValue();
+    if (!Double.isFinite(number) || number < 0 || number > 8640000000000000d || number != Math.floor(number))
+      throw new IllegalArgumentException("Invalid capture timestamp");
+    return (long) number;
+  }
+  static boolean capturedAtMatches(Object expected, Object actual) {
+    return java.util.Objects.equals(capturedAt(expected), capturedAt(actual));
+  }
   static boolean rememberedIdentity(String id, String name) {
     return id != null && !id.isEmpty() && id.length() <= 128 && name != null && !name.isEmpty() && name.length() <= 256;
   }

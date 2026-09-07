@@ -32,3 +32,13 @@ test("invalid identities, substituted transcript text and ambiguous audio encodi
     expect(() => parseDeviceSessionUploadAudio(value)).toThrow();
   }
 });
+
+test("capture provenance preserves absence and exact millisecond bounds", () => {
+  expect(parseDeviceSessionUploadCreate(create)).not.toHaveProperty("capturedAtMs");
+  for (const capturedAtMs of [0, 1, 8640000000000000]) {
+    expect(parseDeviceSessionUploadCreate({ ...create, capturedAtMs }).capturedAtMs).toBe(capturedAtMs);
+  }
+  for (const capturedAtMs of [null, -1, 0.5, NaN, Infinity, "1", 8640000000000001]) {
+    expect(() => parseDeviceSessionUploadCreate({ ...create, capturedAtMs })).toThrow();
+  }
+});

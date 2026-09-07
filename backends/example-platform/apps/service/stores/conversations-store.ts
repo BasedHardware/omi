@@ -34,6 +34,7 @@ export interface ConversationRecord {
   readonly created_at: string;
   readonly updated_at: string;
   readonly started_at: string;
+  readonly captured_at_ms?: number;
   readonly finished_at: string;
   readonly source: string;
   readonly status: string;

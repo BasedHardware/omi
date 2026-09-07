@@ -1,3 +1,4 @@
+import {isOptionalCaptureTimestamp} from './captureTimestamp';
 import type {
   OmiBackend,
   RecordingJournal,
@@ -45,6 +46,7 @@ export type RestoredRecording = {
 
 export function restoreRecording(journal: RecordingJournal): RestoredRecording {
   if (
+    !isOptionalCaptureTimestamp(journal.capturedAtMs) ||
     !uuid.test(journal.captureId) ||
     journal.handle !== journal.captureId ||
     (journal.sessionId !== null && !uuid.test(journal.sessionId)) ||
@@ -124,9 +126,13 @@ export async function createRecordingJournal(
   if (!hasRecordingJournal(backend)) {
     throw new Error('Native recording journal is unavailable');
   }
+  if (!isOptionalCaptureTimestamp(input.capturedAtMs)) {
+    throw new Error('Capture timestamp is invalid');
+  }
   const journal = await backend.createRecordingJournal!(input);
   restoreRecording(journal);
   if (
+    journal.capturedAtMs !== input.capturedAtMs ||
     journal.deviceId !== input.deviceId ||
     journal.deviceName !== (input.deviceName ?? null) ||
     journal.codec !== input.codec ||

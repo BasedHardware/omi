@@ -14,10 +14,12 @@ export interface DeviceSession {
   chunkCount: number;
   startedAt: number;
   endedAt: number | null;
+  capturedAtMs?: number;
 }
 
 export type DeviceSessionCreate = {
   captureId: string;
+  capturedAtMs?: number;
   deviceId: string;
   deviceName?: string;
   codec: DeviceSessionCodecId;

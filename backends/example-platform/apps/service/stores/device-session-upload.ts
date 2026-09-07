@@ -10,9 +10,11 @@ export interface DeviceSessionUpload {
   readonly chunkCount: number;
   readonly startedAt: number;
   readonly endedAt: number | null;
+  readonly capturedAtMs?: number;
 }
 export interface DeviceSessionUploadCreate {
   readonly captureId: string;
+  readonly capturedAtMs?: number;
   readonly deviceId: string;
   readonly deviceName: string | null;
   readonly codec: number;
@@ -40,12 +42,13 @@ const record = (value: unknown): Record<string, unknown> => {
 const bounded = (value: unknown, limit: number): value is string => typeof value === "string" && value.length > 0 && value.length <= limit && !value.includes("\0");
 export function parseDeviceSessionUploadCreate(value: unknown): DeviceSessionUploadCreate {
   const input = record(value);
-  if (Object.keys(input).some(key => !["captureId", "deviceId", "deviceName", "codec"].includes(key))
+  if (Object.keys(input).some(key => !["captureId", "deviceId", "deviceName", "codec", "capturedAtMs"].includes(key))
     || typeof input.captureId !== "string" || !DEVICE_UPLOAD_SESSION_ID.test(input.captureId)
+    || (input.capturedAtMs !== undefined && (!Number.isSafeInteger(input.capturedAtMs) || (input.capturedAtMs as number) < 0 || (input.capturedAtMs as number) > 8_640_000_000_000_000))
     || !bounded(input.deviceId, 128)
     || (input.deviceName !== undefined && input.deviceName !== null && !bounded(input.deviceName, 256))
     || !Number.isInteger(input.codec) || (input.codec as number) < 0 || (input.codec as number) > 255) throw new TypeError("invalid_device_request");
-  return { captureId: input.captureId, deviceId: input.deviceId, deviceName: input.deviceName as string | null ?? null, codec: input.codec as number };
+  return { captureId: input.captureId, ...(input.capturedAtMs === undefined ? {} : { capturedAtMs: input.capturedAtMs as number }), deviceId: input.deviceId, deviceName: input.deviceName as string | null ?? null, codec: input.codec as number };
 }
 export function parseDeviceSessionUploadAudio(value: unknown): { index: number; bytes: Uint8Array } {
   const input = record(value);

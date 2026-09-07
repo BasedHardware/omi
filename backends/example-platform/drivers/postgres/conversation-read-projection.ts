@@ -66,6 +66,13 @@ export function parseConversationReadSnapshot(
       const startedAt = instant(row.started_at),
         endedAt = instant(row.ended_at),
         updatedAt = instant(row.updated_at);
+      const capturedAtMs =
+        row.captured_at_ms == null ? undefined : integer(row.captured_at_ms);
+      if (
+        capturedAtMs !== undefined &&
+        (!row.device || capturedAtMs > 8640000000000000)
+      )
+        throw new TypeError("conversation_snapshot_invalid");
       if (
         Date.parse(endedAt) < Date.parse(startedAt) ||
         Date.parse(updatedAt) < Date.parse(startedAt)
@@ -89,6 +96,7 @@ export function parseConversationReadSnapshot(
         }),
         created_at: startedAt,
         started_at: startedAt,
+        ...(capturedAtMs === undefined ? {} : { captured_at_ms: capturedAtMs }),
         finished_at: endedAt,
         updated_at: updatedAt,
         source: row.device ? "omi" : (row.source as string | null) ?? "listen",
