@@ -11,6 +11,30 @@ final class JITProactivityRuntimeTests: XCTestCase {
     return try XCTUnwrap(authority.capture(ownerID: "owner", expectedOwnerID: "owner"))
   }
 
+  func testFullTurnFailureClassificationPreservesBoundedLedgerProvenance() throws {
+    let classification = JITProactivityDelivery.classifyExecutionFailure(
+      ProactiveLaneClientError.http(status: 502, retryAfterSeconds: nil))
+
+    XCTAssertEqual(classification.failure, "http_error")
+    XCTAssertEqual(classification.status, 502)
+    let provenance = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(classification.provenanceJSON.utf8)) as? [String: Any])
+    XCTAssertEqual(provenance["failure"] as? String, "http_error")
+    XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 502)
+    XCTAssertNil(provenance["error_type"])
+  }
+
+  func testFullTurnFailureClassificationNeverIncludesRawErrorText() throws {
+    struct SensitiveError: Error, LocalizedError {
+      var errorDescription: String? { "secret prompt and provider response" }
+    }
+
+    let classification = JITProactivityDelivery.classifyExecutionFailure(SensitiveError())
+    XCTAssertFalse(classification.provenanceJSON.contains("secret prompt"))
+    XCTAssertFalse(classification.provenanceJSON.contains("provider response"))
+    XCTAssertEqual(classification.failure, "network")
+  }
+
   func testUnknownAuthorityPreservesLegacyLane() async throws {
     let runtime = JITProactivityRuntime { _ in
       JITProactivityFlags(rollout: .unknown, killSwitch: .unknown)
