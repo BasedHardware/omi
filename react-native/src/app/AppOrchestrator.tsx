@@ -1211,6 +1211,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             ? readOutcomes.memories.error
             : undefined
         }
+        onRefresh={() => {
+          void refreshReads(false);
+        }}
         tasks={taskItems}
         taskStatus={
           readOutcomes?.tasks.status === 'success'

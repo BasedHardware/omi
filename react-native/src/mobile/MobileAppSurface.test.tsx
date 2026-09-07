@@ -264,6 +264,7 @@ test('nested non-retryable Home task errors use unavailable copy instead of a lo
     taskStatus: 'error',
     taskErrorCopy:
       'This saved data is not available from the selected Omi service yet.',
+    onRefresh: jest.fn(),
   });
   expect(renderedText(renderer)).toContain(
     'This saved data is not available from the selected Omi service yet.',
@@ -272,6 +273,130 @@ test('nested non-retryable Home task errors use unavailable copy instead of a lo
   expect(renderedText(renderer)).not.toContain(
     'Task editing is unavailable for this connection.',
   );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh tasks',
+    ),
+  ).toHaveLength(0);
+});
+
+test('retryable Home task errors still offer Refresh', () => {
+  const onRefresh = jest.fn();
+  const renderer = render({
+    tasks: [],
+    taskStatus: 'error',
+    taskErrorCopy:
+      'This saved data could not be loaded. Retry without changing it.',
+    onRefresh,
+  });
+  const refresh = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Refresh tasks',
+  );
+  act(() => refresh.props.onPress());
+  expect(onRefresh).toHaveBeenCalledTimes(1);
+});
+
+test('nested non-retryable Tasks tab errors omit Refresh', () => {
+  const renderer = render({
+    activeRoute: 'tasks',
+    tasks: [],
+    taskStatus: 'error',
+    taskErrorCopy:
+      'This saved data is not available from the selected Omi service yet.',
+    onRefresh: jest.fn(),
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh tasks',
+    ),
+  ).toHaveLength(0);
+});
+
+test('retryable Tasks tab errors still offer Refresh', () => {
+  const renderer = render({
+    activeRoute: 'tasks',
+    tasks: [],
+    taskStatus: 'error',
+    taskErrorCopy:
+      'This saved data could not be loaded. Retry without changing it.',
+    onRefresh: jest.fn(),
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh tasks',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
+test('nested non-retryable recap errors omit Refresh', () => {
+  const renderer = render({
+    recaps: [],
+    recapStatus: 'error',
+    recapErrorCopy:
+      'This saved data is not available from the selected Omi service yet.',
+    onRefresh: jest.fn(),
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh recaps',
+    ),
+  ).toHaveLength(0);
+});
+
+test('retryable recap errors still offer Refresh', () => {
+  const renderer = render({
+    recaps: [],
+    recapStatus: 'error',
+    recapErrorCopy:
+      'This saved data could not be loaded. Retry without changing it.',
+    onRefresh: jest.fn(),
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh recaps',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
+test('nested non-retryable mind map errors omit Refresh', () => {
+  const renderer = render({
+    mindMapStatus: 'error',
+    mindMapErrorCopy:
+      'This saved data is not available from the selected Omi service yet.',
+    onRefresh: jest.fn(),
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh mind map',
+    ),
+  ).toHaveLength(0);
+});
+
+test('retryable mind map errors still offer Refresh', () => {
+  const renderer = render({
+    mindMapStatus: 'error',
+    mindMapErrorCopy:
+      'This saved data could not be loaded. Retry without changing it.',
+    onRefresh: jest.fn(),
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh mind map',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
+test('missing settings content does not offer Refresh', () => {
+  const renderer = render({
+    activeRoute: 'settings',
+    onRefresh: jest.fn(),
+  });
+  expect(renderedText(renderer)).toContain('Couldn’t load settings');
+  expect(
+    renderer.root.findAll(node =>
+      String(node.props.accessibilityLabel ?? '').startsWith('Refresh '),
+    ),
+  ).toHaveLength(0);
 });
 
 test('Home does not claim task editing unavailable while tasks are loading', () => {

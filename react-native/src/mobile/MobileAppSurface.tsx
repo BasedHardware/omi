@@ -23,6 +23,7 @@ import Mic from 'lucide-react-native/icons/mic';
 import Phone from 'lucide-react-native/icons/phone';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import Settings from 'lucide-react-native/icons/settings';
+import {desktopBackendUnavailableCopy} from '../desktopReadClient';
 import {
   mobileColor,
   mobileRadius,
@@ -82,6 +83,7 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   taskErrorCopy?: string;
   mindMapStatus: MobileProjectionStatus;
   mindMapErrorCopy?: string;
+  onRefresh?: () => void;
   askValue: string;
   askUnavailable?: boolean;
   onAskChange: (value: string) => void;
@@ -105,10 +107,12 @@ const StatePanel = memo(function StatePanel({
   status,
   noun,
   errorCopy,
+  onRefresh,
 }: {
   status: Exclude<MobileProjectionStatus, 'ready'>;
   noun: string;
   errorCopy?: string;
+  onRefresh?: () => void;
 }) {
   const copy = {
     loading: `Loading ${noun}…`,
@@ -121,6 +125,20 @@ const StatePanel = memo(function StatePanel({
       accessibilityLabel={`${noun} ${status} state`}
       style={styles.statePanel}>
       <Text style={styles.stateText}>{copy}</Text>
+      {onRefresh &&
+        (status === 'error' || status === 'offline') &&
+        errorCopy !== desktopBackendUnavailableCopy && (
+          <Pressable
+            accessibilityLabel={`Refresh ${noun}`}
+            accessibilityRole="button"
+            onPress={onRefresh}
+            style={[
+              styles.quietButton,
+              {minHeight: 44, justifyContent: 'center'},
+            ]}>
+            <Text style={styles.quietButtonText}>Refresh</Text>
+          </Pressable>
+        )}
     </View>
   );
 });
@@ -286,6 +304,7 @@ export function MobileAppSurface({
   tasks,
   taskStatus,
   mindMapErrorCopy,
+  onRefresh,
 }: MobileAppSurfaceProps): React.JSX.Element {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
@@ -405,6 +424,7 @@ export function MobileAppSurface({
               <StatePanel
                 errorCopy={taskErrorCopy}
                 noun="tasks"
+                onRefresh={onRefresh}
                 status={taskStatus}
               />
             )}
@@ -441,6 +461,7 @@ export function MobileAppSurface({
               <StatePanel
                 errorCopy={recapErrorCopy}
                 noun="recaps"
+                onRefresh={onRefresh}
                 status={recapStatus}
               />
             )}
@@ -465,6 +486,7 @@ export function MobileAppSurface({
             <StatePanel
               errorCopy={mindMapErrorCopy}
               noun="mind map"
+              onRefresh={onRefresh}
               status={mindMapStatus}
             />
           )}
@@ -491,6 +513,7 @@ export function MobileAppSurface({
       tasks,
       taskStatus,
       mindMapErrorCopy,
+      onRefresh,
     ],
   );
 
@@ -571,6 +594,7 @@ export function MobileAppSurface({
                 <StatePanel
                   errorCopy={taskErrorCopy}
                   noun="tasks"
+                  onRefresh={onRefresh}
                   status={taskStatus}
                 />
                 {taskPagination}
