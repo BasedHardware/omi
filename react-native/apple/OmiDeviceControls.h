@@ -20,6 +20,20 @@ struct OmiFindPattern {
   bool complete() const { return active && sent == 3 && !awaiting; }
 };
 
+static BOOL OmiStorageSupported(NSNumber *features) {
+  return features != nil && (features.unsignedIntValue & (1U << 6)) != 0;
+}
+
+static NSDictionary *OmiStorageStatus(NSData *data) {
+  if (data.length != 16) return nil;
+  const uint8_t *bytes = (const uint8_t *)data.bytes;
+  uint64_t values[4] = {};
+  for (NSUInteger field = 0; field < 4; field++) for (NSUInteger index = 0; index < 4; index++)
+    values[field] |= (uint64_t)bytes[field * 4 + index] << (index * 8);
+  if (values[3] > 1 || values[0] + values[2] == 0) return nil;
+  return @{ @"usedBytes":@(values[0]), @"unreadPackets":@(values[1]), @"freeBytes":@(values[2]), @"clockValid":@(values[3] == 1) };
+}
+
 static NSNumber *OmiDeviceFeatures(NSData *data) {
   if (data.length != 4) return nil;
   const uint8_t *bytes = (const uint8_t *)data.bytes;
