@@ -151,6 +151,7 @@ struct ConversationDetailView: View {
   @State private var didResolveInitialCaptureFocus = false
   @State private var detailLoadGeneration = 0
   @State private var detailReadyConversationID: String?
+  @State private var isRefreshingTranscript = false
   @State private var captureFocusGeneration = 0
 
   // Speaker naming state
@@ -725,6 +726,27 @@ struct ConversationDetailView: View {
 
   // MARK: - Actions
 
+  /// Re-reads the detail through the repository and re-resolves capture
+  /// playback. Selection identity is unchanged, so the same generation guards
+  /// that protect the initial load also discard a refresh that outlives it.
+  private func refreshTranscript() {
+    guard !isRefreshingTranscript else { return }
+    isRefreshingTranscript = true
+    let requestGeneration = detailLoadGeneration
+    Task {
+      defer { isRefreshingTranscript = false }
+      if let appState = AppState.current {
+        let fetched = await appState.loadConversationDetail(displayConversation) { _ in }
+        guard isCurrentDetailRequest(requestGeneration) else { return }
+        loadedConversation = fetched
+      }
+      guard isCurrentDetailRequest(requestGeneration) else { return }
+      if Self.showsCapturePlayback(for: displayConversation.source, in: .transcript) {
+        startCapturePlaybackPreparation(forceRefresh: true)
+      }
+    }
+  }
+
   private func copyTranscript() {
     guard canCopyTranscript else { return }
 
@@ -963,6 +985,30 @@ struct ConversationDetailView: View {
           )
 
         Spacer()
+
+        // Refresh: re-fetch the transcript and rebuild the audio player from
+        // fresh signed URLs, so a stale detail or an expired link recovers
+        // without leaving and reopening the conversation.
+        Button(action: refreshTranscript) {
+          Image(systemName: "arrow.clockwise")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+            .rotationEffect(.degrees(isRefreshingTranscript ? 360 : 0))
+            .animation(
+              isRefreshingTranscript ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default,
+              value: isRefreshingTranscript
+            )
+            .frame(width: 28, height: 28)
+            .background(
+              Circle()
+                .fill(Ink.rowFillHover)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isRefreshingTranscript)
+        .help("Refresh transcript and audio")
+        .accessibilityLabel("Refresh transcript and audio")
+        .accessibilityIdentifier("conversation-detail-transcript-refresh")
 
         // Copy button
         Button(action: copyTranscript) {

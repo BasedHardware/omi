@@ -1,3 +1,3 @@
 {
-  "change": "Added a draggable scrubber to conversation audio playback; clicking any transcript bubble now jumps the audio to that sentence and starts playing, and single-file device captures line up with their transcript timestamps instead of playing from the wrong moment"
+  "change": "Added a draggable scrubber to conversation audio playback; clicking any transcript bubble now jumps the audio to that sentence and starts playing, and single-file device captures line up with their transcript timestamps instead of playing from the wrong moment; a refresh button on the transcript header re-fetches the transcript and rebuilds the audio player"
 }
