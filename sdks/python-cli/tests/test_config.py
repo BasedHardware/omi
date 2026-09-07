@@ -133,8 +133,9 @@ def test_save_fails_closed_when_windows_dacl_verification_fails(monkeypatch, con
 
 
 def test_save_overwrites_stale_temp_file(config_path: Path) -> None:
-    """A stale temp file left by a crashed save() must not block a new save(),
-    and the new save must never delete a pre-existing file it does not own."""
+    """A temp file left by a crashed save() does not block a new save():
+    save() picks a fresh unique temp name and never deletes a pre-existing
+    file it does not own."""
     tmp = config_path.with_suffix(config_path.suffix + ".tmp")
     config_path.parent.mkdir(parents=True, exist_ok=True)
     tmp.write_text("stale leftover")
@@ -155,48 +156,70 @@ def test_save_overwrites_stale_temp_file(config_path: Path) -> None:
     assert reloaded.api_key == "omi_dev_recovered"
 
 
-def test_save_concurrent_writers_do_not_unlink_each_others_temp(config_path: Path) -> None:
-    """A second concurrent save() must not treat the first writer's temp file
-    as stale and unlink it (issue: first writer then fails at os.replace)."""
+def test_save_retries_when_unique_temp_name_collides(config_path: Path, monkeypatch) -> None:
+    """The retry branch: when open_owner_only() hits FileExistsError on the
+    generated unique name, save() must re-roll the name instead of crashing,
+    and must not unlink the colliding file."""
+    config = cfg.load()
+    profile = config.get_profile()
+    profile.auth_method = "api_key"
+    profile.api_key = "omi_dev_retry"
+    config.set_profile(profile)
+
+    generated_names: list[Path] = []
+    collision_seen = False
+    original_open = cfg.open_owner_only
+
+    def colliding_open(path: Path) -> int:
+        nonlocal collision_seen
+        generated_names.append(path)
+        if not collision_seen:
+            # Simulate another writer having claimed this exact pid+hex path
+            # between generation and open. The planted file must survive.
+            path.write_text("other writer's temp")
+            collision_seen = True
+            raise FileExistsError(path)
+        return original_open(path)
+
+    monkeypatch.setattr(cfg, "open_owner_only", colliding_open)
+    cfg.save(config)
+
+    assert collision_seen
+    assert len(generated_names) == 2  # first name collided, second succeeded
+    colliding = generated_names[0]
+    assert colliding != generated_names[1]
+    # Never unlink a file it doesn't own.
+    assert colliding.exists()
+    assert colliding.read_text() == "other writer's temp"
+
+    reloaded = cfg.load().get_profile()
+    assert reloaded.api_key == "omi_dev_retry"
+
+
+def test_save_concurrent_writers_retry_on_unique_name_collision(config_path: Path) -> None:
+    """Real interleaving: a nested save() inside the first writer's dump
+    claims a temp path; the outer writer's own path cannot collide with it
+    (unique per invocation), so both complete and neither unlinks the other."""
     first = cfg.Config(path=config_path, active_profile="first")
     second = cfg.Config(path=config_path, active_profile="second")
     original_dump = cfg.tomli_w.dump
 
     def interleaved_dump(payload, handle):
-        # While the first writer is serializing, a second writer runs a full
-        # save() — this collides on the shared fixed temp path.
         if payload["active_profile"] == "first":
+            before = set(config_path.parent.glob(config_path.name + ".*.tmp"))
             cfg.save(second)
+            after = set(config_path.parent.glob(config_path.name + ".*.tmp"))
+            # The inner save's temp was already renamed; nothing leaked.
+            assert after - before == set()
         original_dump(payload, handle)
 
     with patch.object(cfg.tomli_w, "dump", interleaved_dump):
-        cfg.save(first)  # FileNotFoundError on the unfixed implementation
+        cfg.save(first)
 
     reloaded = cfg.load()
     assert config_path.exists()
-    assert not config_path.with_suffix(config_path.suffix + ".tmp").exists()
-    # Both writes completed; the last one wins, but no writer crashed.
+    assert not list(config_path.parent.glob(config_path.name + ".*.tmp"))
     assert reloaded.active_profile in {"first", "second"}
-
-
-def test_save_stale_temp_file_is_still_recovered(config_path: Path) -> None:
-    """Recovery from a genuinely stale temp file (no live writer) still works."""
-    tmp = config_path.with_suffix(config_path.suffix + ".tmp")
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp.write_text("stale leftover")
-    assert tmp.exists()
-
-    config = cfg.load()
-    profile = config.get_profile()
-    profile.auth_method = "api_key"
-    profile.api_key = "omi_dev_recovered"
-    config.set_profile(profile)
-    cfg.save(config)
-
-    # The stale file is left untouched (it may belong to another writer).
-    assert tmp.exists()
-    reloaded = cfg.load().get_profile()
-    assert reloaded.api_key == "omi_dev_recovered"
 
 
 def test_masked_credential_for_api_key(config_path: Path) -> None:
