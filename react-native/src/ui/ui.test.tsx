@@ -334,6 +334,29 @@ describe('Onboarding chrome', () => {
     ).toHaveLength(0);
   });
 
+  test('browser setup continues without offering unavailable wearable capture', () => {
+    mockPlatformOS = 'web';
+    const complete = jest.fn();
+    const renderer = render(
+      <Onboarding
+        onSignIn={() => undefined}
+        signingIn={false}
+        setupRequired
+        onCompleteSetup={complete}
+      />,
+    );
+    expect(
+      renderer.root.findAll(
+        node => node.props.accessibilityLabel === 'Agree and connect Omi',
+      ),
+    ).toHaveLength(0);
+    const action = renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Agree and continue',
+    )[0];
+    act(() => action.props.onPress());
+    expect(complete).toHaveBeenCalledWith(false);
+  });
+
   test('macOS onboarding renders dark ink on the light native window', () => {
     mockPlatformOS = 'macos';
     const renderer = render(

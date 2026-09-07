@@ -38,6 +38,7 @@ export function Onboarding({
 }) {
   const reduceMotion = useReduceMotion();
   const desktop = Platform.OS === 'macos';
+  const browser = Platform.OS === 'web';
   const opacity = useRef(new Animated.Value(1)).current;
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -107,8 +108,9 @@ export function Onboarding({
         {setupRequired ? (
           <>
             <Text style={[styles.copy, desktop && styles.desktopCopy]}>
-              Connect an Omi when you are ready to record, or continue with
-              chat. You can connect a device later from Home.
+              {browser
+                ? 'Continue to Omi. Recording from an Omi device requires the native app.'
+                : 'Connect an Omi when you are ready to record, or continue with chat. You can connect a device later from Home.'}
             </Text>
             <View style={styles.links}>
               <Button
@@ -132,7 +134,7 @@ export function Onboarding({
                 Terms of service
               </Button>
             </View>
-            {!desktop && (
+            {!desktop && !browser && (
               <Button
                 accessibilityLabel="Agree and connect Omi"
                 disabled={completingSetup}
@@ -143,16 +145,16 @@ export function Onboarding({
             )}
             <Button
               accessibilityLabel={
-                desktop
+                desktop || browser
                   ? 'Agree and continue'
                   : 'Agree and continue without a device'
               }
               disabled={completingSetup}
               onPress={() => onCompleteSetup?.(false)}
-              variant={desktop ? 'primary' : 'ghost'}>
+              variant={desktop || browser ? 'primary' : 'ghost'}>
               {completingSetup
                 ? 'Saving…'
-                : desktop
+                : desktop || browser
                 ? 'Agree and continue'
                 : 'Agree and continue without a device'}
             </Button>
