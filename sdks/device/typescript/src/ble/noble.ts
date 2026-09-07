@@ -84,13 +84,39 @@ export async function scanForDevices(timeoutMs = 5000): Promise<ScannedDevice[]>
       rssi: Number(peripheral.rssi ?? 0) || 0,
     });
   };
+  let active = false;
+  let restart: Promise<void> = Promise.resolve();
+  let failScan: (error: unknown) => void = () => {};
+  const scanFailure = new Promise<never>((_, reject) => { failScan = reject; });
+  const onScanStop = () => {
+    if (!active || noble.state !== 'poweredOn') return;
+    // Bindings can pause discovery while connecting. Serialize resumes and
+    // recheck ownership so a queued resume cannot outlive this scan window.
+    restart = restart.then(async () => {
+      if (active && noble.state === 'poweredOn') await noble.startScanningAsync([], false);
+    });
+    void restart.catch(failScan);
+  };
   noble.on('discover', onDiscover);
+  noble.on('scanStop', onScanStop);
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await noble.startScanningAsync([], false);
-    await new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, timeoutMs)));
+    active = true;
+    await Promise.race([
+      new Promise<void>((resolve) => { timer = setTimeout(resolve, Math.max(0, timeoutMs)); }),
+      scanFailure,
+    ]);
   } finally {
+    active = false;
+    clearTimeout(timer);
     noble.removeListener('discover', onDiscover);
-    await noble.stopScanningAsync();
+    noble.removeListener('scanStop', onScanStop);
+    try {
+      await restart;
+    } finally {
+      await noble.stopScanningAsync();
+    }
   }
 
   return [...byId.values()];

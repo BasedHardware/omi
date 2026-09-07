@@ -69,4 +69,46 @@ describe('scanForDevices deadline ownership', () => {
     expect(adapter.listenerCount('discover')).toBe(0);
     expect(adapter.stopScanningAsync).toHaveBeenCalledTimes(1);
   });
+
+  test('resumes binding pauses without extending the original deadline', async () => {
+    const result = scanForDevices(20);
+    await started;
+    await Promise.resolve();
+    const originalExpiry = expire;
+    let resumed!: () => void;
+    const didResume = new Promise<void>(resolve => { resumed = resolve; });
+    adapter.startScanningAsync.mockImplementation(async () => {
+      adapter.emit('discover', { id: 'after-pause', rssi: -40 });
+      resumed();
+    });
+    adapter.emit('scanStop');
+    await Promise.resolve();
+    expect(adapter.startScanningAsync).toHaveBeenCalledTimes(2);
+    await didResume;
+    expect(expire).toBe(originalExpiry);
+    expire!();
+    expect(await result).toEqual([{ id: 'after-pause', name: '', rssi: -40 }]);
+    expect(adapter.startScanningAsync).toHaveBeenCalledTimes(2);
+    expect(adapter.stopScanningAsync).toHaveBeenCalledTimes(1);
+    expect(adapter.listenerCount('scanStop')).toBe(0);
+    adapter.emit('scanStop');
+    await Promise.resolve();
+    expect(adapter.startScanningAsync).toHaveBeenCalledTimes(2);
+  });
+
+  test('propagates resume failure and releases both subscriptions', async () => {
+    const result = scanForDevices(20);
+    await started;
+    await Promise.resolve();
+    const failure = new Error('resume rejected');
+    adapter.startScanningAsync.mockRejectedValueOnce(failure);
+    const rejected = result.catch(error => error);
+    adapter.emit('scanStop');
+    await Promise.resolve();
+    expect(adapter.startScanningAsync).toHaveBeenCalledTimes(2);
+    expect(await rejected).toBe(failure);
+    expect(adapter.listenerCount('discover')).toBe(0);
+    expect(adapter.listenerCount('scanStop')).toBe(0);
+    expect(adapter.stopScanningAsync).toHaveBeenCalledTimes(1);
+  });
 });
