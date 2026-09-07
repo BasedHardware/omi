@@ -667,6 +667,7 @@ final class ScreenContextTelemetryTests: XCTestCase {
 
   func testLastExternalFramePayloadIsSelfContained() throws {
     let payload = ScreenContextWorkContextBuilder.explicitLastExternalFramePayload(
+      source: "last_external_frame",
       appName: "ChatGPT",
       windowTitle: "  How do I parse JSON?  ",
       frameAgeSeconds: 42,
@@ -681,6 +682,23 @@ final class ScreenContextTelemetryTests: XCTestCase {
     XCTAssertTrue(json.contains("How do I parse JSON?"))
     XCTAssertTrue(json.contains("Do not describe Omi"))
     XCTAssertTrue(json.contains("42 seconds"))
+  }
+
+  func testSummonBoundaryPayloadNamesTheSummonMoment() throws {
+    let payload = ScreenContextWorkContextBuilder.explicitLastExternalFramePayload(
+      source: "summon_boundary_capture",
+      appName: "ChatGPT",
+      windowTitle: nil,
+      frameAgeSeconds: 7,
+      capturedAt: Date(timeIntervalSince1970: 1_000)
+    )
+    let json =
+      try String(
+        data: JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+        encoding: .utf8
+      ) ?? ""
+    XCTAssertTrue(json.contains(#""source":"summon_boundary_capture""#))
+    XCTAssertTrue(json.contains("at the moment Omi's window came to the front"))
   }
 
   func testSelfFrontmostUnavailablePayloadCarriesStalenessDetail() throws {
@@ -699,5 +717,71 @@ final class ScreenContextTelemetryTests: XCTestCase {
     let staleGuidance = stale["guidance"] as? String ?? ""
     XCTAssertTrue(staleGuidance.contains("300 seconds"))
     XCTAssertFalse((noFrame["guidance"] as? String ?? "").contains("seconds old"))
+  }
+
+  @MainActor
+  func testSummonBoundaryBeatsOlderStoreFrame() async {
+    let loader = fallbackLoader(ageSeconds: 90, frameData: Data([0x01]))
+    let boundaryJPEG = Data([0xBE, 0xEF])
+    loader.storeSummonBoundary(
+      LoadedRewindFrame(
+        data: boundaryJPEG,
+        appName: "ZCode",
+        windowTitle: nil,
+        timestamp: Date().addingTimeInterval(-5)
+      )
+    )
+    let evidence = await ScreenContextWorkContextBuilder.explicitScreenEvidence(
+      turnOwner: .mainChat,
+      now: Date(),
+      frontmostBundleIdentifier: "com.omi.computer-macos",
+      omiBundleIdentifier: "com.omi.computer-macos",
+      loader: loader,
+      isScreenRecordingGranted: { true },
+      captureNow: {
+        XCTFail("no live capture may be taken for a main-chat explicit ask")
+        return nil
+      }
+    )
+
+    // The boundary is seconds old; the store frame is 90. The fresher pixels
+    // of the same referent win.
+    XCTAssertEqual(evidence.imageData, boundaryJPEG)
+    let screenNow = evidence.payload["screen_now"] as? [String: Any]
+    XCTAssertEqual(screenNow?["source"] as? String, "summon_boundary_capture")
+    XCTAssertEqual(screenNow?["app_name"] as? String, "ZCode")
+  }
+
+  @MainActor
+  func testStaleBoundaryFallsBackToFreshStoreFrame() async {
+    let storeJPEG = Data([0x02])
+    let loader = fallbackLoader(ageSeconds: 30, frameData: storeJPEG)
+    loader.storeSummonBoundary(
+      LoadedRewindFrame(
+        data: Data([0x03]),
+        appName: "StaleApp",
+        windowTitle: nil,
+        timestamp: Date().addingTimeInterval(-300)
+      )
+    )
+    let evidence = await ScreenContextWorkContextBuilder.explicitScreenEvidence(
+      turnOwner: .mainChat,
+      now: Date(),
+      frontmostBundleIdentifier: "com.omi.computer-macos",
+      omiBundleIdentifier: "com.omi.computer-macos",
+      loader: loader,
+      isScreenRecordingGranted: { true },
+      captureNow: {
+        XCTFail("no live capture may be taken for a main-chat explicit ask")
+        return nil
+      }
+    )
+
+    // A boundary older than the freshness bound is not "my screen" either;
+    // the fresh store frame stands in.
+    XCTAssertEqual(evidence.imageData, storeJPEG)
+    let screenNow = evidence.payload["screen_now"] as? [String: Any]
+    XCTAssertEqual(screenNow?["source"] as? String, "last_external_frame")
+    XCTAssertEqual(screenNow?["app_name"] as? String, "ChatGPT")
   }
 }

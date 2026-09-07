@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// A Rewind frame with its bytes loaded, ready to hand to a model request or
@@ -68,6 +69,69 @@ final class RewindFrameLoader {
 
   init(environment: Environment = .live) {
     self.environment = environment
+  }
+
+  // MARK: - Summon boundary
+
+  /// The screen as the user left it, captured at the instant Omi's window
+  /// took the front. This is the one frame the Rewind store can never have:
+  /// the periodic capture excludes Omi, so once Omi is frontmost the newest
+  /// stored frame only ages, and frames captured just before the summon sit
+  /// in the active video chunk, which cannot be decoded mid-write. Held in
+  /// memory only — it reaches the model when the user asks a screen question
+  /// from main chat, the same class of evidence as the turn-scoped live
+  /// capture.
+  private var summonBoundary: LoadedRewindFrame?
+  private var summonBoundaryOwnerID: String?
+
+  /// Capture-and-hold the pre-summon screen. Call at the summon boundary,
+  /// *before* Omi's window orders front. The pixels are grabbed synchronously
+  /// (the display still shows the outgoing app); the JPEG encode is off-main
+  /// and the frame is published only if the owner hasn't switched meanwhile.
+  /// Capture and encode are injectable so hermetic tests can arm the
+  /// boundary without a window server.
+  @MainActor
+  func recordSummonBoundary(
+    granted: @escaping @Sendable () -> Bool = { CGPreflightScreenCaptureAccess() },
+    capture: @escaping @Sendable () -> CGImage? = { ScreenCaptureManager.captureScreenImage() },
+    encode: @escaping @Sendable (CGImage) -> Data? = { ScreenCaptureManager.jpegData(from: $0, quality: 0.7) }
+  ) {
+    guard granted() else { return }
+    let outgoingAppName = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
+    let capturedAt = Date()
+    let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+    guard let image = capture() else { return }
+    Task.detached(priority: .userInitiated) { [weak self] in
+      guard let jpeg = encode(image) else { return }
+      await MainActor.run { [weak self] in
+        guard let self, RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+        self.storeSummonBoundary(
+          LoadedRewindFrame(
+            data: jpeg,
+            appName: outgoingAppName,
+            windowTitle: nil,
+            timestamp: capturedAt
+          ),
+          ownerID: ownerID
+        )
+      }
+    }
+  }
+
+  /// Publish point for the boundary frame; also the seam hermetic tests arm.
+  @MainActor
+  func storeSummonBoundary(_ frame: LoadedRewindFrame, ownerID: String? = RuntimeOwnerIdentity.currentOwnerId()) {
+    summonBoundary = frame
+    summonBoundaryOwnerID = ownerID
+  }
+
+  /// The recorded boundary for the *current* owner, if any.
+  @MainActor
+  func currentSummonBoundary() -> LoadedRewindFrame? {
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
+      summonBoundaryOwnerID == ownerID
+    else { return nil }
+    return summonBoundary
   }
 
   /// Whether a row may ever be surfaced: not Omi itself, not a capture-excluded

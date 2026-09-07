@@ -1122,6 +1122,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     DesktopAutomationWindowPresentation.revealForUser()
     // Capture this BEFORE any activate call mutates AppKit's notion of frontmost.
     let alreadyFrontmost = NSWorkspace.shared.frontmostApplication == NSRunningApplication.current
+    // The screen still shows the app the user is leaving; pin it now — once
+    // Omi is front, the periodic capture skips Omi and nothing fresher exists.
+    if !alreadyFrontmost {
+      RewindFrameLoader.shared.recordSummonBoundary()
+    }
     NSApp.activate(ignoringOtherApps: true)
     var foundWindow = revealMainWindowIfAvailable()
     if !foundWindow {

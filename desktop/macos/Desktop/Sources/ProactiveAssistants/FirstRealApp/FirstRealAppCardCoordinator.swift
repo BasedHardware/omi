@@ -152,21 +152,39 @@ final class FirstRealAppCardCoordinator {
       // the main window exists yet — and it never sends.
       //
       // The card names the app that was frontmost when it fired, but the chat
-      // window it summons becomes "the screen" the moment it lands, so the
-      // prefilled question carries the most recent frame of a non-Omi app as
-      // its referent (within the same freshness bound the send-time fallback
-      // applies). Fetched *before* the request: the store's notification is
-      // consumed synchronously on composer mount, so an attachment staged
-      // after `request` would miss the composer that takes the draft.
+      // window it summons becomes "the screen" the moment it lands. Capture
+      // the screen live *now* — the tap still happens while the named app is
+      // frontmost, so the pixels are the referent — falling back to the
+      // newest stored frame if the capture is unavailable (and to nothing
+      // beyond the freshness bound). Done *before* the request: the store's
+      // notification is consumed synchronously on composer mount, so an
+      // attachment staged after `request` would miss the composer that takes
+      // the draft.
       Task { @MainActor in
-        let attachment = await RewindFrameLoader.shared.loadLatestAttachableFrame(
-          maxAgeSeconds: ScreenContextFallbackPolicy.maxFallbackFrameAgeSeconds
-        ).flatMap { frame in
-          RecentScreenFrameStaging.attachment(
-            appName: frame.appName,
-            jpegData: frame.data,
-            capturedAt: frame.timestamp
-          )
+        var attachment: ChatAttachment?
+        if CGPreflightScreenCaptureAccess() {
+          let frontAppName = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
+          let jpeg = await Task.detached(priority: .userInitiated) {
+            ScreenCaptureManager.captureScreenJPEG()
+          }.value
+          if let jpeg, !jpeg.isEmpty {
+            attachment = RecentScreenFrameStaging.attachment(
+              appName: frontAppName,
+              jpegData: jpeg,
+              capturedAt: Date()
+            )
+          }
+        }
+        if attachment == nil {
+          attachment = await RewindFrameLoader.shared.loadLatestAttachableFrame(
+            maxAgeSeconds: ScreenContextFallbackPolicy.maxFallbackFrameAgeSeconds
+          ).flatMap { frame in
+            RecentScreenFrameStaging.attachment(
+              appName: frame.appName,
+              jpegData: frame.data,
+              capturedAt: frame.timestamp
+            )
+          }
         }
         AppDelegate.summonWindowTarget()?.openMainAppChat(prefilledDraft: prompt, attachedFrame: attachment)
       }

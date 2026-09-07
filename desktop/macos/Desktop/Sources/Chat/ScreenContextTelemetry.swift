@@ -535,11 +535,12 @@ enum ScreenContextWorkContextBuilder {
 
   /// The explicit current-screen question was asked from Omi's own window, so
   /// a fresh capture would photograph Omi describing itself. The attached
-  /// image is instead the most recent frame of another app, captured while
-  /// that app was frontmost — shortly before Omi was summoned. The envelope
-  /// names that provenance positively and forbids the substitution in the
-  /// direction the failure actually happens: describing Omi.
+  /// image is instead the screen as the user left it — either the summon-
+  /// boundary capture or the most recent store frame of another app. The
+  /// envelope names that provenance positively and forbids the substitution
+  /// in the direction the failure actually happens: describing Omi.
   static func explicitLastExternalFramePayload(
+    source: String,
     appName: String,
     windowTitle: String?,
     frameAgeSeconds: Int,
@@ -549,12 +550,21 @@ enum ScreenContextWorkContextBuilder {
     let windowPart =
       (windowTitle.map { $0.trimmingCharacters(in: .whitespaces) }.flatMap { $0.isEmpty ? nil : $0 })
       .map { ", \"\($0)\"" } ?? ""
+    let originSentence: String
+    switch source {
+    case "summon_boundary_capture":
+      originSentence =
+        "It was captured \(max(0, frameAgeSeconds)) seconds ago, at the moment Omi's window came to the front."
+    default:
+      originSentence =
+        "It was captured \(max(0, frameAgeSeconds)) seconds before Omi came to the front."
+    }
     return [
       "ok": true,
       "name": "get_work_context",
       "screen_now": [
         "available": true,
-        "source": "last_external_frame",
+        "source": source,
         "app_name": appName,
         "captured_at": formatter.string(from: capturedAt),
         "image_delivered_to_model": true,
@@ -562,7 +572,7 @@ enum ScreenContextWorkContextBuilder {
       ],
       "timeline": [],
       "guidance":
-        "The user asked about their screen from inside Omi's own window, so a capture at send time would show Omi, not what they mean. The attached image is the most recent frame of \(appName)\(windowPart), captured \(max(0, frameAgeSeconds)) seconds before Omi came to the front. Treat it as the screen the user is asking about. Do not describe Omi, its interface, or this conversation. Answer about \(appName) from the attached image only; do not substitute OCR text or stored history.",
+        "The user asked about their screen from inside Omi's own window, so a capture at send time would show Omi, not what they mean. The attached image shows \(appName)\(windowPart). \(originSentence) Treat it as the screen the user is asking about. Do not describe Omi, its interface, or this conversation. Answer about \(appName) from the attached image only; do not substitute OCR text or stored history.",
     ]
   }
 
@@ -636,10 +646,39 @@ enum ScreenContextWorkContextBuilder {
     guard isScreenRecordingGranted() else {
       return (nil, explicitCurrentScreenPayload(screenRecordingGranted: false, imageAttached: false))
     }
-    // The staleness input needs the newest attachable row; non-main-chat
-    // surfaces never consult the store, so no read is paid on their path.
-    let latestRow: Screenshot? = turnOwner == .mainChat ? await loader.latestAttachableRow() : nil
-    let frameAge = latestRow.map { max(0, now.timeIntervalSince($0.timestamp)) }
+    // The staleness input needs the newest honest candidate. Two exist for a
+    // main-chat ask: the newest attachable store row and the summon-boundary
+    // capture (the screen as the user left it when Omi took the front) — the
+    // newest wins, because both depict the same referent at different ages.
+    // Non-main-chat surfaces never fall back, so no work is paid there.
+    var fallbackCandidate:
+      (
+        timestamp: Date, source: String, appName: String, windowTitle: String?,
+        provide: @Sendable () async -> Data?
+      )?
+    if turnOwner == .mainChat {
+      if let row = await loader.latestAttachableRow() {
+        fallbackCandidate = (
+          row.timestamp,
+          "last_external_frame",
+          row.appName,
+          row.windowTitle,
+          { await loader.loadData(for: row) }
+        )
+      }
+      if let boundary = loader.currentSummonBoundary(),
+        fallbackCandidate?.timestamp ?? .distantPast < boundary.timestamp
+      {
+        fallbackCandidate = (
+          boundary.timestamp,
+          "summon_boundary_capture",
+          boundary.appName,
+          boundary.windowTitle,
+          { boundary.data }
+        )
+      }
+    }
+    let frameAge = fallbackCandidate.map { max(0, now.timeIntervalSince($0.timestamp)) }
 
     func stamped(_ payload: [String: Any]) -> [String: Any] {
       var payload = payload
@@ -667,16 +706,16 @@ enum ScreenContextWorkContextBuilder {
         )
       )
     case .lastExternalFrame:
-      guard let row = latestRow, let frameAge else {
+      guard let candidate = fallbackCandidate, let frameAge else {
         return (nil, stamped(selfFrontmostUnavailablePayload(reason: .noAttachableFrame)))
       }
-      guard let data = await loader.loadData(for: row) else {
+      guard let data = await candidate.provide() else {
         return (
           nil,
           stamped(
             selfFrontmostUnavailablePayload(
               reason: .noAttachableFrame,
-              lastExternalAppName: row.appName,
+              lastExternalAppName: candidate.appName,
               lastExternalFrameAgeSeconds: Int(frameAge.rounded())
             )
           )
@@ -686,10 +725,11 @@ enum ScreenContextWorkContextBuilder {
         data,
         stamped(
           explicitLastExternalFramePayload(
-            appName: row.appName,
-            windowTitle: row.windowTitle,
+            source: candidate.source,
+            appName: candidate.appName,
+            windowTitle: candidate.windowTitle,
             frameAgeSeconds: Int(frameAge.rounded()),
-            capturedAt: row.timestamp
+            capturedAt: candidate.timestamp
           )
         )
       )
@@ -699,7 +739,7 @@ enum ScreenContextWorkContextBuilder {
         stamped(
           selfFrontmostUnavailablePayload(
             reason: reason,
-            lastExternalAppName: latestRow?.appName,
+            lastExternalAppName: fallbackCandidate?.appName,
             lastExternalFrameAgeSeconds: frameAge.map { Int($0.rounded()) }
           )
         )

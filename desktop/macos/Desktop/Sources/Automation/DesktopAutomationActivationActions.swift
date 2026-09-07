@@ -13,6 +13,7 @@
 //  Registered from `DesktopAutomationActionRegistry.registerBuiltins()`.
 //
 
+import AppKit
 import Foundation
 
 extension DesktopAutomationActionRegistry {
@@ -134,8 +135,8 @@ extension DesktopAutomationActionRegistry {
     register(
       name: "open_chat_prefilled_with_screen_frame",
       summary:
-        "Drive the first-real-app card's handoff end to end: load the newest screen frame, stage it, "
-        + "and open the chat with the prompt prefilled and the frame attached (not sent)",
+        "Drive the first-real-app card's handoff end to end: capture (or load) the screen referent, "
+        + "stage it, and open the chat with the prompt prefilled and the frame attached (not sent)",
       params: ["prompt"],
       category: "chat",
       surfaces: ["main_chat"]
@@ -146,25 +147,48 @@ extension DesktopAutomationActionRegistry {
       let trimmedPrompt = params["prompt"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       let prompt = trimmedPrompt.isEmpty ? FirstRealAppCardPolicy.prompt : trimmedPrompt
       // The exact chain the card tap's default closure runs, in the same
-      // order: fetch before request, because the store's notification is
-      // consumed synchronously on composer mount.
-      let frame = await RewindFrameLoader.shared.loadLatestAttachableFrame(
-        maxAgeSeconds: ScreenContextFallbackPolicy.maxFallbackFrameAgeSeconds
-      )
-      guard let frame else {
-        return [
-          "error": "no attachable screen frame within the freshness bound",
-          "staged": "false",
-        ]
+      // order: capture the live referent first (the pixels the outgoing app
+      // still owns), fall back to the newest stored frame, and stage before
+      // the request — the store's notification is consumed synchronously on
+      // composer mount.
+      var frameSource = ""
+      var frameAppName = ""
+      var frameAgeSeconds = 0
+      var attachment: ChatAttachment?
+      if CGPreflightScreenCaptureAccess() {
+        frameAppName = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
+        let jpeg = await Task.detached(priority: .userInitiated) {
+          ScreenCaptureManager.captureScreenJPEG()
+        }.value
+        if let jpeg, !jpeg.isEmpty {
+          attachment = RecentScreenFrameStaging.attachment(
+            appName: frameAppName,
+            jpegData: jpeg,
+            capturedAt: Date()
+          )
+          frameSource = "tap_live_capture"
+          frameAgeSeconds = 0
+        }
       }
-      guard
-        let attachment = RecentScreenFrameStaging.attachment(
+      if attachment == nil,
+        let frame = await RewindFrameLoader.shared.loadLatestAttachableFrame(
+          maxAgeSeconds: ScreenContextFallbackPolicy.maxFallbackFrameAgeSeconds
+        )
+      {
+        attachment = RecentScreenFrameStaging.attachment(
           appName: frame.appName,
           jpegData: frame.data,
           capturedAt: frame.timestamp
         )
-      else {
-        return ["error": "frame staging failed", "staged": "false"]
+        frameSource = "last_external_frame"
+        frameAppName = frame.appName
+        frameAgeSeconds = Int(Date().timeIntervalSince(frame.timestamp))
+      }
+      guard let attachment else {
+        return [
+          "error": "no screen referent available (capture unavailable, no fresh frame)",
+          "staged": "false",
+        ]
       }
       guard let target = AppDelegate.summonWindowTarget() else {
         return ["error": "no window target"]
@@ -172,8 +196,9 @@ extension DesktopAutomationActionRegistry {
       target.openMainAppChat(prefilledDraft: prompt, attachedFrame: attachment)
       return [
         "staged": "true",
-        "frameAppName": frame.appName,
-        "frameAgeSeconds": String(Int(Date().timeIntervalSince(frame.timestamp))),
+        "frameSource": frameSource,
+        "frameAppName": frameAppName,
+        "frameAgeSeconds": String(frameAgeSeconds),
         "attachmentBytes": String(attachment.data?.count ?? 0),
       ]
     }
